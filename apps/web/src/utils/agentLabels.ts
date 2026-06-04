@@ -5,6 +5,7 @@ const AGENT_LABELS: Record<string, string> = {
   devin: 'Devin',
   gemini: 'Gemini',
   opencode: 'OpenCode',
+  amr: 'AMR',
   'cursor-agent': 'Cursor',
   cursor: 'Cursor',
   qwen: 'Qwen',
@@ -48,6 +49,28 @@ export function agentDisplayName(
     if (fallback) return fallback;
   }
   return null;
+}
+
+// Canonical icon id for `AgentIcon` (maps to `apps/web/public/agent-icons/`).
+// Returns the agent id whose brand asset should render; falls back to a
+// normalized basename so `AgentIcon`'s letter fallback still reads sensibly.
+export function agentIconId(
+  agentId?: string | null,
+  fallbackName?: string | null,
+): string {
+  for (const raw of [agentId, fallbackName]) {
+    if (!raw) continue;
+    const base = raw.split(' · ')[0]?.trim() || raw;
+    const key = normalizeKey(base);
+    const alias = AGENT_ALIASES[key] ?? key;
+    if (AGENT_LABELS[alias]) return alias;
+    if (alias.includes('cursor-agent')) return 'cursor-agent';
+    for (const id of Object.keys(AGENT_LABELS)) {
+      if (alias.includes(id)) return id;
+    }
+  }
+  const fallback = normalizeKey(agentId ?? fallbackName ?? '');
+  return fallback || 'claude';
 }
 
 export function exactAgentDisplayName(raw: string | null | undefined): string | null {

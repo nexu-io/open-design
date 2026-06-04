@@ -21,7 +21,6 @@ import {
 import {
   imageAsset,
   PRECISE_LAZY_PLACEHOLDER,
-  repositoryAsset,
 } from './image-assets';
 import { getPluginsCopy } from './_lib/plugins-i18n';
 
@@ -322,19 +321,21 @@ export default function Page({
             </div>
             <img
               className='hero-dancer'
-              src='/hero-dancer.png'
+              src={imageAsset('hero-dancer.png', { width: 560, quality: 82 })}
               alt=''
               width={694}
               height={1097}
               aria-hidden='true'
+              loading='lazy'
             />
             <img
               className='hero-angel'
-              src={repositoryAsset('resources/images/landing-page/hero-angel.png')}
+              src={imageAsset('hero-angel.png', { width: 760, quality: 82 })}
               alt=''
               width={1002}
               height={1239}
               aria-hidden='true'
+              loading='lazy'
             />
           </div>
         </section>
@@ -917,7 +918,7 @@ export default function Page({
               </a>
             </div>
             <div className='work-arrows'>
-              <button type='button' className='nav-btn'>
+              <button type='button' className='nav-btn' data-carousel-dir='prev'>
                 <svg
                   width='14'
                   height='14'
@@ -929,7 +930,7 @@ export default function Page({
                   <path d='M14 6l-6 6 6 6' />
                 </svg>
               </button>
-              <button type='button' className='nav-btn active'>
+              <button type='button' className='nav-btn active' data-carousel-dir='next'>
                 <svg
                   width='14'
                   height='14'

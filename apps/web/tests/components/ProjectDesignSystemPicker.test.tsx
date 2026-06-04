@@ -93,13 +93,14 @@ describe('ProjectDesignSystemPicker', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('uses localized picker copy and design-system category labels', async () => {
+  it('uses localized picker copy', async () => {
     renderPicker({}, 'fr');
 
     fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
 
+    // Category chips were removed from the list/preview per design; only the
+    // surrounding picker copy needs to localize.
     expect(screen.getByPlaceholderText('Rechercher des systèmes de design')).toBeTruthy();
-    expect(await screen.findByText('Produit')).toBeTruthy();
     expect(screen.getByText('Aucun système de design')).toBeTruthy();
   });
 });

@@ -6,6 +6,7 @@ import {
   useState,
   type CSSProperties,
 } from 'react';
+import { Button } from '@open-design/components';
 import { Icon, type IconName } from './Icon';
 import { ConnectorLogo, useResolvedTheme } from './ConnectorLogo';
 import { useT } from '../i18n';
@@ -1837,17 +1838,16 @@ export function MemorySection({
                   {t('settings.memorySaveHint')}
                 </span>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button" className="ghost" onClick={cancelEdit}>
+                  <Button variant="ghost" onClick={cancelEdit}>
                     {t('common.cancel')}
-                  </button>
-                  <button
-                    type="button"
-                    className="primary"
+                  </Button>
+                  <Button
+                    variant="primary"
                     onClick={onSave}
                     disabled={busy || !editing.name.trim()}
                   >
                     {editing.id ? t('common.save') : t('common.create')}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>

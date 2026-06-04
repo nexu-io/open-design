@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
 import { memoryDir, writeMemoryConfig } from '../src/memory.js';
+import { resolveLegacyMediaRouteGrant } from '../src/media-routes.js';
 
 type FakeMediaEndpoint = 'tool' | 'legacy';
 
@@ -443,6 +444,76 @@ describe('run-scoped media policy routes', () => {
     expect(response.status).toBe(401);
     const body = await response.json() as { error?: { code?: string } };
     expect(body.error).toMatchObject({ code: 'TOOL_TOKEN_INVALID' });
+  });
+
+  it('requires a run token for the legacy media route only in sandbox mode', () => {
+    const requestProjectOverride = (projectId: string, tokenProjectId: string) =>
+      projectId !== tokenProjectId;
+
+    expect(
+      resolveLegacyMediaRouteGrant({
+        grant: null,
+        projectId: 'project-1',
+        requestProjectOverride,
+        sandboxMode: false,
+      }),
+    ).toEqual({ ok: true, grant: null });
+
+    expect(
+      resolveLegacyMediaRouteGrant({
+        grant: null,
+        projectId: 'project-1',
+        requestProjectOverride,
+        sandboxMode: true,
+      }),
+    ).toMatchObject({
+      code: 'TOOL_TOKEN_MISSING',
+      ok: false,
+      status: 401,
+    });
+  });
+
+  it('rejects project overrides on token-bearing legacy media requests in sandbox mode', () => {
+    const decision = resolveLegacyMediaRouteGrant({
+      grant: {
+        allowedEndpoints: ['/api/tools/media/generate'],
+        allowedOperations: ['media:generate'],
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        issuedAt: new Date().toISOString(),
+        projectId: 'token-project',
+        runId: 'run-1',
+        token: 'token',
+      },
+      projectId: 'other-project',
+      requestProjectOverride: (projectId, tokenProjectId) => projectId !== tokenProjectId,
+      sandboxMode: true,
+    });
+
+    expect(decision).toMatchObject({
+      code: 'FORBIDDEN',
+      details: { suppliedProjectId: 'other-project' },
+      ok: false,
+      status: 403,
+    });
+  });
+
+  it('preserves token-bearing legacy project overrides outside sandbox mode', () => {
+    const decision = resolveLegacyMediaRouteGrant({
+      grant: {
+        allowedEndpoints: ['/api/tools/media/generate'],
+        allowedOperations: ['media:generate'],
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        issuedAt: new Date().toISOString(),
+        projectId: 'token-project',
+        runId: 'run-1',
+        token: 'token',
+      },
+      projectId: 'other-project',
+      requestProjectOverride: (projectId, tokenProjectId) => projectId !== tokenProjectId,
+      sandboxMode: false,
+    });
+
+    expect(decision).toMatchObject({ ok: true });
   });
 
   async function startProjectServer(name: string): Promise<{

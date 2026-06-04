@@ -86,6 +86,31 @@ button.subtle:hover:not(:disabled) { background: var(--bg-muted); }
 button.icon-btn { padding: 6px 10px; font-size: 13px; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 
+.od-tooltip {
+  position: relative;
+}
+.od-tooltip-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 4000;
+  max-width: min(260px, calc(100vw - 16px));
+  padding: 5px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-strong);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  contain: layout paint style;
+  pointer-events: none;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  will-change: transform;
+}
+
 /* -------- Inputs ---------------------------------------------------- */
 input, textarea, select {
   font: inherit;

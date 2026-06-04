@@ -193,6 +193,7 @@ The container always binds `127.0.0.1:<port>:7456` — the daemon is never direc
 | systemd unit not created | `systemd` not found | Omit `--no-systemd` if systemd is available, or manage via Docker CLI |
 | `.env` has wrong port after re-install | Old backup not restored | Edit `deploy/.env` directly or delete it and re-run |
 | Container exits immediately | Image incompatibility | Check `docker compose -f deploy/docker-compose.yml logs` for errors |
+| `Authorization: Bearer <OD_API_TOKEN> required` on macOS | Docker Desktop bridge networking | Enable host networking — see [Docker Desktop on macOS](../deploy/README.md#docker-desktop-on-macos) |
 
 ## References
 

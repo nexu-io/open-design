@@ -69,6 +69,37 @@ function renderSwitcher(
   return { ...view, onAgentModelChange };
 }
 
+function expectVelaLoginWithAttribution(
+  fetchMock: ReturnType<typeof vi.fn>,
+  sourceDetail: string,
+) {
+  const loginCall = fetchMock.mock.calls.find(([input, init]) => (
+    input.toString() === '/api/integrations/vela/login'
+    && (init as RequestInit | undefined)?.method === 'POST'
+  ));
+  expect(loginCall).toBeDefined();
+  const init = loginCall?.[1] as RequestInit | undefined;
+  expect(init).toEqual(expect.objectContaining({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: expect.any(String),
+  }));
+  const body = JSON.parse(String(init?.body)) as {
+    attribution?: {
+      entryId?: string;
+      sourceProduct?: string;
+      sourceDetail?: string;
+      occurredAt?: string;
+    };
+  };
+  expect(body.attribution).toEqual(expect.objectContaining({
+    entryId: expect.stringMatching(/^od-amr-/u),
+    sourceProduct: 'open_design',
+    sourceDetail,
+  }));
+  expect(Number.isFinite(Date.parse(body.attribution?.occurredAt ?? ''))).toBe(true);
+}
+
 describe('InlineModelSwitcher AMR row', () => {
   afterEach(() => {
     cleanup();
@@ -447,7 +478,7 @@ describe('InlineModelSwitcher AMR row', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login', { method: 'POST' });
+    expectVelaLoginWithAttribution(fetchMock, 'inline_model_switcher_amr_row');
     expect(
       within(popover).getByRole('radio', { name: /^AMR\s+Signing in/i }),
     ).toBeTruthy();
@@ -502,7 +533,7 @@ describe('InlineModelSwitcher AMR row', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login', { method: 'POST' });
+    expectVelaLoginWithAttribution(fetchMock, 'inline_model_switcher_amr_row');
     expect(
       within(popover).getByRole('radio', { name: /^AMR\s+Signing in/i }),
     ).toBeTruthy();

@@ -42,6 +42,17 @@ describe('buildAgentGuideMarkdown', () => {
     expect(md).toContain('```yaml');
   });
 
+  it('documents the current project create plus run start CLI flow', () => {
+    const md = buildAgentGuideMarkdown();
+    expect(md).toContain('od project create');
+    expect(md).toContain('od run start');
+    expect(md).toContain('--conversation "$CONVERSATION_ID"');
+    expect(md).toContain('[form answers - discovery]');
+    expect(md).toContain('od files list "$PROJECT_ID"');
+    expect(md).not.toContain('od run \\\n  --plugin');
+    expect(md).not.toContain("--prompt 'A 10-slide investor pitch");
+  });
+
   it('surfaces version and CLI hints in the checklist when supplied', () => {
     const md = buildAgentGuideMarkdown({
       versionHint: '0.42.0',

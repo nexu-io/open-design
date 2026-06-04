@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button } from '@open-design/components';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackDesignSystemsTemplateCardClick,
@@ -543,14 +544,13 @@ export function DesignSystemsTab({
                       <i aria-hidden />
                     </button>
                     {onOpenSystem ? (
-                      <button
-                        type="button"
-                        className="icon-btn"
+                      <Button
+                        size="icon"
                         aria-label={`Open ${system.title}`}
                         onClick={() => onOpenSystem(system.id)}
                       >
                         <Icon name="external-link" />
-                      </button>
+                      </Button>
                     ) : null}
                     <button
                       type="button"

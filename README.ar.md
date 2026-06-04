@@ -1,902 +1,730 @@
 <div dir="rtl">
 
-# Open Design — البديل الرسمي مفتوح المصدر لـ [Claude Design][cd]
+<h1 align="center">Open Design: البديل مفتوح المصدر لـ Claude Design</h1>
 
-> **Open Design هو البديل مفتوح المصدر والمحلي أولاً لـ [Claude Design][cd].** قابل للنشر على Vercel، ويدعم BYOK في كل طبقة — **16 أداة CLI لوكلاء البرمجة** يكتشفها تلقائياً من `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) لتصبح هي محرّك التصميم، مدفوعةً بـ **31 Skill قابلة للتركيب** و**72 نظام تصميم بمستوى الهوية البصرية**. لا توجد لديك CLI؟ بروكسي BYOK متوافق مع OpenAI يقدّم نفس الحلقة بدون عملية الـ spawn.
-
-> [!IMPORTANT]
-> ### 🔥 وصلت النسخة `0.8.0-preview`. عالم التصميم القديم ينتهي هنا.
+> 🔥 **‏Open Design 0.9.0 وصل: أنشئ دون أي إعداد.** [Model Router الرسمي](https://open-design.ai/amr) مدمج مباشرة في التطبيق — لا إعدادات إضافية، ولا CLI لتثبيته، ولا مفتاح API لتجهيزه. ما عليك سوى فتح التطبيق وتسجيل الدخول والبدء فورًا في التصميم والإنشاء. [حمّل 0.9.0](https://github.com/nexu-io/open-design/releases) · [انضم إلى النقاش](https://github.com/nexu-io/open-design/discussions/3524)
 >
-> بديل مفتوح المصدر لـ Claude Design / Figma — 40k نجمة في أسبوعين أوصلتنا إلى هنا. **نحتاجك لدفعنا بقية الطريق.**
->
-> **تكرار سريع على `main`** — 0.8.0 هي المرحلة التالية من Open Design. أرسل PR، اطرح فكرة جامحة، أبلغ عن عُلّة — ما تجلبه أنت هو ما تصير إليه هذه الحركة.
->
-> → [**اقرأ الإعلان · حمّل المثبّت · انضم إلى الحركة**](https://github.com/nexu-io/open-design/discussions/1727) · يعمل جنبًا إلى جنب مع نسخة 0.7 الحالية لديك.
+> 🏅 **برنامج Open Design Fellow مفتوح الآن.** إن كنت تؤمن أنت أيضًا بأن التصميم يجب أن يكون مفتوحًا — كُن Open Design Fellow، وشارك في تشكيل المنتج جنبًا إلى جنب مع الفريق الأساسي، وساعد المزيد من الناس على المشاركة في تحديد مستقبل التصميم. التفاصيل ← [`MAINTAINERS.md`](MAINTAINERS.md) و[Discord](https://discord.gg/qhbcCH8Am4).
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/banner.png" alt="Open Design — غلاف افتتاحي: صمّم مع الوكيل على حاسوبك المحمول" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
 </p>
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/nexu-io/open-design?style=for-the-badge&labelColor=0d1117&color=ffd700&logo=github&logoColor=white" /></a>
-  <a href="https://github.com/nexu-io/open-design/network/members"><img alt="Forks" src="https://img.shields.io/github/forks/nexu-io/open-design?style=for-the-badge&labelColor=0d1117&color=2ecc71&logo=github&logoColor=white" /></a>
-  <a href="https://github.com/nexu-io/open-design/issues"><img alt="Issues" src="https://img.shields.io/github/issues/nexu-io/open-design?style=for-the-badge&labelColor=0d1117&color=ff6b6b&logo=github&logoColor=white" /></a>
-  <a href="https://github.com/nexu-io/open-design/pulls"><img alt="Pull Requests" src="https://img.shields.io/github/issues-pr/nexu-io/open-design?style=for-the-badge&labelColor=0d1117&color=9b59b6&logo=github&logoColor=white" /></a>
-  <a href="https://github.com/nexu-io/open-design/graphs/contributors"><img alt="Contributors" src="https://img.shields.io/github/contributors/nexu-io/open-design?style=for-the-badge&labelColor=0d1117&color=3498db&logo=github&logoColor=white" /></a>
-  <a href="https://github.com/nexu-io/open-design/commits/main"><img alt="Commit activity" src="https://img.shields.io/github/commit-activity/m/nexu-io/open-design?style=for-the-badge&labelColor=0d1117&color=e67e22&logo=git&logoColor=white" /></a>
-  <a href="https://github.com/nexu-io/open-design/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/nexu-io/open-design?style=for-the-badge&labelColor=0d1117&color=8e44ad&logo=git&logoColor=white" /></a>
+  <a href="https://open-design.ai/">الموقع</a> ·
+  <a href="https://open-design.ai/">التنزيل</a> ·
+  <a href="https://discord.gg/qhbcCH8Am4">Discord</a> ·
+  <a href="https://x.com/nexudotio">تابع ‎@nexudotio</a>
 </p>
 
 <p align="center">
-  <a href="https://open-design.ai/"><img alt="تنزيل" src="https://img.shields.io/badge/%D8%AA%D9%86%D8%B2%D9%8A%D9%84-open--design.ai-ff6b35?style=flat-square" /></a>
-  <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
-  <a href="#الوكلاء-المدعومون"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
-  <a href="#أنظمة-التصميم"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-149-orange?style=flat-square" /></a>
-  <a href="#الـ-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-131-teal?style=flat-square" /></a>
-  <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-انضم-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
-  <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
+  <a href="https://github.com/nexu-io/open-design/releases"><img alt="release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat" /></a>
+  <a href="https://discord.gg/qhbcCH8Am4"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
+  <a href="QUICKSTART.md"><img alt="quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <b>العربية</b> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <b>العربية</b> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a></p>
 
 ---
 
-## لماذا وُجد هذا المشروع
+## ما هو Open Design
 
-أظهر [Claude Design][cd] من Anthropic (الذي صدر في 2026-04-17 مبنياً على Opus 4.7) ما يحدث حين يتوقّف الـ LLM عن كتابة النصوص ويبدأ بتسليم منتجات تصميم فعلية. انتشر بسرعة — وبقي **مغلق المصدر**، مدفوعاً، يعمل في السحابة فقط، ومرتبطاً بنماذج Anthropic ومهاراتها الداخلية. لا checkout، لا استضافة ذاتية، لا نشر على Vercel، ولا إمكانية لاستبدال الوكيل.
+🎨 **البديل مفتوح المصدر القائم على الجهاز المحلي أولًا لـ [Claude Design][cd].** &nbsp;🖥️ **تطبيق سطح مكتب أصلي لنظامي macOS وWindows.** &nbsp;⚡ **أكثر من 100 مهارة** · ✨ **150 نظام `DESIGN.md` بجودة العلامة التجارية** · 📦 **261 إضافة جاهزة للاستخدام.** &nbsp;🖼️ يولّد **نماذج أولية للويب · سطح المكتب · الجوال**، و**لوحات معلومات / مخرجات حية**، و**عروضًا تقديمية**، و**صورًا**، و**فيديو**، إضافة إلى رسوميات حركية بـ **HyperFrames**. 🔒 معاينة iframe معزولة · تصدير بصيغ HTML / PDF / PPTX / MP4. &nbsp;🤖 **يعمل على Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity و21 واجهة CLI محلية**، أو أي نقطة نهاية متوافقة مع OpenAI عبر BYOK.
 
-**Open Design (OD) هو البديل مفتوح المصدر.** نفس الحلقة، نفس النموذج الذهني المتمحور حول الـ artifact، بدون أيّ قيود. نحن لا نشحن وكيلاً — أقوى وكلاء البرمجة موجودون أصلاً على حاسوبك. ما نقدّمه هو ربطهم بسير عمل تصميمي مدفوع بالـ Skills يعمل محلياً عبر `pnpm tools-dev`، يمكن نشر طبقة الويب منه على Vercel، ويبقى BYOK في كل طبقة.
+‏Open Design هو ما تحصل عليه حين تتوقف الحلقة **الأصيلة للوكلاء (agent-native)** التي أطلقتها Anthropic مع Claude Design — اكتشاف الموجز، تثبيت الاتجاه، بثّ المخرَج، النقد، التسليم — عن كونها مغلقة وتتحول إلى **نظام ملفات من المهارات وأنظمة التصميم والإضافات** يستطيع وكلاء البرمجة الموجودون أصلًا على حاسوبك المحمول قراءته والكتابة عليه وإعادة مزجه. تصبح واجهة CLI لديك محرك التصميم، ويصبح حاسوبك المحمول هو الاستوديو، ويصبح ملف `DESIGN.md` الخاص بفريقك هو عقد العلامة التجارية.
 
-اكتب `اصنع لي pitch deck بأسلوب مجلّة لجولة seed`. ينبثق نموذج الأسئلة التفاعلي قبل أن يرتجل النموذج بكسلاً واحداً. يختار الوكيل أحد خمسة اتجاهات بصرية منتقاة. تنساب خطّة `TodoWrite` حيّة إلى الواجهة. يبني الـ daemon مجلد مشروع حقيقياً على القرص يحوي قالب seed، مكتبة layouts، و checklist للفحص الذاتي. يقرأها الوكيل — pre-flight إلزامي — ثم يجري تقييماً ذاتياً خماسي الأبعاد على ناتجه، ويُصدر `<artifact>` واحداً يُعرض في iframe معزول خلال ثوانٍ.
+كما أنه **بديل Figma لعصر الوكلاء** — فبدلًا من تحريك البكسلات على لوحة رسم، يسلّم مخرجات من صفحة واحدة بـ CSS حقيقي وخطوط حقيقية ومكونات حقيقية، تُصدَّر مباشرة إلى HTML / PDF / PPTX / MP4 — مصاغة مسبقًا وفق نظام التصميم لديك، وقابلة للتشغيل مباشرة داخل الوكيل الذي تستخدمه كل يوم.
 
-هذا ليس "ذكاء اصطناعي يحاول التصميم". هذا ذكاء اصطناعي دُرِّب — عبر مكدّس البرومبت — ليتصرّف كمصمّم خبير لديه نظام ملفات يعمل، مكتبة ألوان حتميّة، وثقافة checklist — تماماً المستوى الذي حدّده Claude Design، لكنه هذه المرة مفتوح وملك لك.
+[cd]: https://x.com/claudeai/status/2045156267690213649
 
-يرتكز OD على أربعة مشاريع مفتوحة المصدر:
+---
 
-- [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) — بوصلة فلسفة التصميم. سير عمل Junior-Designer، بروتوكول الأصول البصرية المؤلف من 5 خطوات، checklist مكافحة AI-slop، التقييم الذاتي خماسي الأبعاد، وفكرة "5 مدارس × 20 فلسفة تصميم" خلف منتقي الاتجاه — كل ذلك مكثّف في [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts).
-- [**`op7418/guizang-ppt-skill`**](https://github.com/op7418/guizang-ppt-skill) — وضع الـ deck. مُضمَّن حرفياً تحت [`skills/guizang-ppt/`](skills/guizang-ppt/) مع الحفاظ على LICENSE الأصلية؛ تخطيطات بأسلوب المجلّات، WebGL hero، و checklist بمستويات P0/P1/P2.
-- [**`OpenCoworkAI/open-codesign`**](https://github.com/OpenCoworkAI/open-codesign) — نجم UX الشمالي وأقرب أقراننا. أوّل بديل مفتوح المصدر لـ Claude-Design. اقتبسنا منه حلقة الـ artifact المُتدفّق، نمط معاينة iframe المعزول (مع React 18 + Babel مضمّنين)، لوحة الوكيل الحيّة (todos + tool calls + إمكانية المقاطعة)، وقائمة التصدير بخمسة صيغ (HTML / PDF / PPTX / ZIP / Markdown). تعمّدنا التباعد في الشكل العام — هم تطبيق سطح مكتب Electron يضمّ [`pi-ai`][piai]، ونحن تطبيق ويب + daemon محلي يفوّض المهمة لـ CLI الموجودة لديك.
-- [**`multica-ai/multica`**](https://github.com/multica-ai/multica) — معمارية الـ daemon ومنظومة التشغيل. اكتشاف الوكلاء بمسح `PATH`، والـ daemon المحلي بوصفه العملية المميَّزة الوحيدة، ورؤية "الوكيل كزميل فريق".
+## جولة في المنتج
 
-## نظرة سريعة
+نظرة سريعة على ماهية Open Design وما يفعله. ابدأ من **الصفحة الرئيسية**، ونسّق سير العمل المتكرر عبر **الأتمتة**، واستخلص عقد علامة تجارية في **نظام التصميم**، ووسّع الإمكانات عبر **الإضافات** و**عمليات التكامل**؛ وداخل **الاستوديو** الخاص بأي مشروع، يبثّ نظام التصميم نفسه نماذج أولية ومخرجات حية وHyperFrames وعروضًا تقديمية وصورًا.
 
-| | ما تحصل عليه |
-|---|---|
-| **أدوات CLI لوكلاء البرمجة (16)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — يكتشفها تلقائياً من `PATH`، وتبدّل بينها بنقرة واحدة |
-| **بديل BYOK** | بروكسي API خاص بكل بروتوكول على `/api/proxy/{anthropic,openai,azure,google}/stream` — الصق `baseUrl` + `apiKey` + `model`، اختر Anthropic / OpenAI / Azure OpenAI / Google Gemini، ويُطبّع الـ daemon أحداث SSE إلى نفس chat stream. يتمّ صدّ عناوين IP الداخلية وثغرات SSRF عند حدود الـ daemon. |
-| **أنظمة تصميم مدمجة** | **129** — 2 starters مكتوبة يدوياً + 70 نظاماً للمنتجات (Linear، Stripe، Vercel، Airbnb، Tesla، Notion، Anthropic، Apple، Cursor، Supabase، Figma، Xiaohongshu، …) من [`awesome-design-md`][acd2]، إضافة إلى 57 design skill من [`awesome-design-skills`][ads] أُضيفت مباشرة تحت `design-systems/` |
-| **Skills مدمجة** | **31** — 27 في وضع `prototype` (web-prototype، saas-landing، dashboard، mobile-app، gamified-app، social-carousel، magazine-poster، dating-web، sprite-animation، motion-frames، critique، tweaks، wireframe-sketch، pm-spec، eng-runbook، finance-report، hr-onboarding، invoice، kanban-board، team-okrs، …) + 4 في وضع `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). مُجمَّعة في الـ picker حسب `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
-| **توليد الوسائط** | تشتغل أسطح الصورة والفيديو والصوت بالتوازي مع حلقة التصميم. **gpt-image-2** (Azure / OpenAI) للملصقات والصور الرمزية والإنفوغرافيك وخرائط المدن المرسومة · **Seedance 2.0** (ByteDance) لـ 15 ثانية t2v + i2v بطابع سينمائي · **HyperFrames** ([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)) لتحويل HTML→MP4 (إعلانات منتجات، طباعة حركية، رسومات بيانية، بطاقات اجتماعية، Logo outros). معرض **93** برومبت جاهزة للاستنساخ — 43 لـ gpt-image-2 + 39 لـ Seedance + 11 لـ HyperFrames — تحت [`prompt-templates/`](prompt-templates/) مع صور معاينة وبيانات المصدر. نفس واجهة الـ chat كما في الكود؛ المخرجات ملفات `.mp4` / `.png` حقيقية تنزل في مساحة عمل المشروع. |
-| **الاتجاهات البصرية** | 5 مدارس منتقاة (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — كل واحدة تأتي بلوحة OKLch حتميّة + font stack ([`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)) |
-| **إطارات الأجهزة** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — دقيقة على مستوى البكسل، مُشتركة عبر الـ skills تحت [`assets/frames/`](assets/frames/) |
-| **Agent runtime** | الـ daemon المحلي يُشغّل CLI داخل مجلد مشروعك — يحصل الوكيل على أدوات `Read` / `Write` / `Bash` / `WebFetch` حقيقية على نظام ملفات حقيقي، مع fallbacks على Windows لتجاوز قيود `ENAMETOOLONG` (stdin / ملف برومبت مؤقت) في كل adapter |
-| **الاستيراد** | اسحب ملف ZIP مُصدَّر من [Claude Design][cd] إلى مربّع الترحيب — `POST /api/import/claude-design` يفكّه إلى مشروع حقيقي ليُكمل وكيلك من حيث توقّف Anthropic |
-| **الاستمرارية** | SQLite في `.od/app.sqlite`: projects · conversations · messages · tabs · قوالب المستخدم. افتح المشروع غداً، فتجد بطاقة todo والملفات المفتوحة في مكانها تماماً. |
-| **دورة الحياة** | مدخل واحد: `pnpm tools-dev` (start / stop / run / status / logs / inspect / check) — يُقلع daemon + web (+ desktop) بـ stamps مكتوبة |
-| **سطح المكتب** | غلاف Electron اختياري بسبيل renderer معزول + sidecar IPC (STATUS / EVAL / SCREENSHOT / CONSOLE / CLICK / SHUTDOWN) — يُشغّل `tools-dev inspect desktop screenshot` لاختبارات E2E |
-| **أهداف النشر** | محلياً (`pnpm tools-dev`) · طبقة الويب على Vercel · تطبيق سطح مكتب Electron مُحزَّم لـ macOS (Apple Silicon) و Windows (x64) — حمّله من [open-design.ai](https://open-design.ai/) أو من [أحدث release](https://github.com/nexu-io/open-design/releases) |
-| **الترخيص** | Apache-2.0 |
+### الصفحات الأساسية
 
-[acd2]: https://github.com/VoltAgent/awesome-design-md
-[ads]: https://github.com/bergside/awesome-design-skills
+<table>
+<tr>
+<td valign="top">
+<img src="https://repo-assets.open-design.ai/resources/images/product/home.png" alt="Home page" /><br/>
+<sub><b>الصفحة الرئيسية</b> — نقطة الدخول للنظرة العامة. اختر مهارة ونظام تصميم، واكتب الموجز، وانطلق بكل شيء من مكان واحد.</sub>
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="https://repo-assets.open-design.ai/resources/images/product/automation.png" alt="Automation page" /><br/>
+<sub><b>الأتمتة</b> — حوّل سير عمل التصميم المتكرر إلى أتمتة قابلة لإعادة الاستخدام والجدولة.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="https://repo-assets.open-design.ai/resources/images/product/design-system.png" alt="Design System page" /><br/>
+<sub><b>نظام التصميم</b> — استخلص ملف <code>DESIGN.md</code> الخاص بفريقك إلى عقد علامة تجارية يشكّل كل مخرَج.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="https://repo-assets.open-design.ai/resources/images/product/plugin.png" alt="Plugin page" /><br/>
+<sub><b>الإضافة</b> — تصفّح وثبّت ووزّع إضافات سير العمل لتوسيع التوليد عند الطلب.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations page" /><br/>
+<sub><b>عمليات التكامل</b> — اربط الأنظمة الخارجية وأدوات MCP، واستخدم Open Design من أي بيئة تطوير أو سكربت أو أتمتة.</sub>
+</td>
+</tr>
+</table>
+
+### الاستوديو — أنواع مخرجات متعددة في مشروع واحد
+
+داخل استوديو المشروع، يبثّ نظام التصميم نفسه أنواعًا متعددة من المخرجات:
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="https://repo-assets.open-design.ai/resources/images/product/studio-prototype.png" alt="Prototype" /><br/>
+<sub><b>النموذج الأولي</b> — مخرجات HTML من صفحة واحدة تقرأ نظام التصميم لديك وتُعرَض في iframe معزول، قابلة للمعاينة فورًا وللتنزيل كمصدر.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="https://repo-assets.open-design.ai/resources/images/product/studio-hyperframe.png" alt="HyperFrame" /><br/>
+<sub><b>HyperFrame</b> — حركة ورسوميات متحركة برمجية، تُصيَّر إلى ملف MP4 حقيقي (مثل 1920×1080 · 30fps).</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="https://repo-assets.open-design.ai/resources/images/product/studio-ppt.png" alt="Deck" /><br/>
+<sub><b>العرض التقديمي</b> — عروض تقديمية يمكنك تصفّحها صفحة صفحة، والتنقل فيها بلوحة المفاتيح، وتصديرها إلى PPTX / PDF.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="https://repo-assets.open-design.ai/resources/images/product/studio-image.png" alt="Image" /><br/>
+<sub><b>الصورة</b> — صور وأصول بصرية بجودة العلامة التجارية، مع توليد عالي الدقة وتنزيل.</sub>
+</td>
+</tr>
+</table>
+
+---
+
+## توافق المنصات
+
+> يُشحَن Open Design على هيئة **مهارات وواجهة CLI وخادم MCP** تستهلكها وكلاء البرمجة السائدة بشكل أصلي. بمجرد تثبيت OD، يربط أمر واحد `od mcp install <agent>` خادم MCP في إعدادات ذلك الوكيل، فتستدعي الأدوات نفسها من داخل أي وكيل.
+
+| وكيل البرمجة / المنصة &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | الحالة &nbsp;&nbsp; | تثبيت خادم MCP بأمر واحد &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
+|---|:---:|---|
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ مدعوم | `od mcp install claude` |
+| [Codex CLI](https://github.com/openai/codex) | ✅ مدعوم | `od mcp install codex` |
+| [Cursor](https://www.cursor.com/cli) | ✅ مدعوم | `od mcp install cursor` |
+| [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ مدعوم | `od mcp install copilot` |
+| [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ مدعوم | `od mcp install copilot` |
+| Gemini CLI | ✅ مدعوم | `od mcp install gemini` |
+| [OpenCode](https://opencode.ai/) | ✅ مدعوم | `od mcp install opencode` |
+| [OpenClaw](https://github.com/openclaw/openclaw) | ✅ مدعوم | `od mcp install openclaw` |
+| [Antigravity](https://antigravity.google) | ✅ مدعوم | `od mcp install antigravity` |
+| [Cline](https://github.com/cline/cline) | ✅ مدعوم | `od mcp install cline` |
+| [Trae](https://www.trae.ai/) | ✅ مدعوم | `od mcp install trae` |
+| Kimi CLI | ✅ مدعوم | `od mcp install kimi` |
+| [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ مدعوم | `od mcp install pi` |
+| [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ مدعوم | `od mcp install vibe` |
+| [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ مدعوم | `od mcp install hermes` |
+
+`od mcp install <agent> --print` لمعاينة تجريبية دون تنفيذ · `--uninstall` للإزالة · القائمة الكاملة عبر `od mcp install --help`.
+
+<p align="center">
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 21 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Gemini · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Devin · Trae" width="100%" />
+</p>
+
+**لا توجد واجهة CLI مثبَّتة؟** يمنحك وكيل BYOK على `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` الحلقة نفسها (دون إنشاء عملية) — الصق `baseUrl` + `apiKey` + `model`، مع دعم OpenAI وAnthropic وAzure OpenAI وGoogle Gemini وOllama وLM Studio وvLLM، أو أي نقطة نهاية متوافقة مع OpenAI. تمنع حماية SSRF لكل هدف عناوين IP الداخلية / link-local / CGNAT عند حافة الـ daemon.
+
+يقيم عقد المحوّل ومحلّلات البثّ في [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). إضافة واجهة CLI جديدة تتطلب مدخلًا واحدًا — راجع [`docs/agent-adapters.md`](docs/agent-adapters.md).
+
+---
 
 ## عرض توضيحي
 
-<table>
-<tr>
-<td width="50%">
-<img src="docs/screenshots/01-entry-view.png" alt="01 · واجهة الدخول" /><br/>
-<sub><b>واجهة الدخول</b> — اختر skill، اختر نظام تصميم، واكتب الطلب. نفس السطح يخدم prototypes و decks وتطبيقات الموبايل و dashboards وصفحات editorial.</sub>
-</td>
-<td width="50%">
-<img src="docs/screenshots/02-question-form.png" alt="02 · نموذج اكتشاف turn-1" /><br/>
-<sub><b>نموذج الاكتشاف turn-1</b> — قبل أن يكتب النموذج بكسلاً واحداً، يُثبّت OD التفاصيل: surface، الجمهور، النبرة، السياق البصري، النطاق. 30 ثانية من خانات الاختيار توفّر 30 دقيقة من التراجعات.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%">
-<img src="docs/screenshots/03-direction-picker.png" alt="03 · منتقي الاتجاه" /><br/>
-<sub><b>منتقي الاتجاه</b> — حين لا يملك المستخدم هوية بصرية، يُطلق الوكيل نموذجاً ثانياً فيه 5 اتجاهات منتقاة (Monocle / Modern Minimal / Tech Utility / Brutalist / Soft Warm). نقرة واحدة → لوحة ألوان حتميّة + font stack، بلا ارتجال.</sub>
-</td>
-<td width="50%">
-<img src="docs/screenshots/04-todo-progress.png" alt="04 · تقدّم الـ todo الحيّ" /><br/>
-<sub><b>تقدّم الـ todo الحيّ</b> — تنساب خطّة الوكيل كبطاقة حيّة. تنتقل العناصر من <code>in_progress</code> إلى <code>completed</code> آنياً. يمكن للمستخدم التدخّل وتصحيح المسار بتكلفة منخفضة جداً.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%">
-<img src="docs/screenshots/05-preview-iframe.png" alt="05 · المعاينة المعزولة" /><br/>
-<sub><b>المعاينة المعزولة</b> — كلّ <code>&lt;artifact&gt;</code> يُعرض في srcdoc iframe نظيف. قابل للتحرير في المكان عبر مساحة الملفات؛ قابل للتنزيل HTML / PDF / ZIP.</sub>
-</td>
-<td width="50%">
-<img src="docs/screenshots/06-design-systems-library.png" alt="06 · مكتبة الأنظمة الـ72" /><br/>
-<sub><b>مكتبة الأنظمة الـ72</b> — كل نظام منتج يعرض بطاقته رباعية الألوان. اضغط لرؤية ملف <code>DESIGN.md</code> الكامل وشبكة الألوان والعرض الحيّ.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%">
-<img src="docs/screenshots/07-magazine-deck.png" alt="07 · Magazine deck" /><br/>
-<sub><b>وضع Deck (guizang-ppt)</b> — الـ <a href="https://github.com/op7418/guizang-ppt-skill"><code>guizang-ppt-skill</code></a> المُضمَّن يدخل دون تعديل. تخطيطات مجلّة، خلفيات WebGL hero، خرج HTML بملف واحد، تصدير PDF.</sub>
-</td>
-<td width="50%">
-<img src="docs/screenshots/08-mobile-app.png" alt="08 · نموذج موبايل" /><br/>
-<sub><b>نموذج موبايل</b> — chrome دقيق على مستوى البكسل لـ iPhone 15 Pro (Dynamic Island، رموز SVG لشريط الحالة، Home Indicator). النماذج متعدّدة الشاشات تستخدم أصول <code>/frames/</code> المشتركة، فلا يعيد الوكيل رسم الهاتف أبداً.</sub>
-</td>
-</tr>
-</table>
+أربع فئات أساسية للمنتج، كلها مُصيَّرة بواسطة وكيل برمجة يعمل على حاسوبك المحمول. انقر على صورة مصغّرة لرؤية المثال الحقيقي.
 
-## الـ Skills
+### 1 · النماذج الأولية — الويب · سطح المكتب · الجوال
 
-**31 skill جاهزة في الصندوق.** كل واحدة مجلد تحت [`skills/`](skills/) يتبع اصطلاح Claude Code [`SKILL.md`][skill] مع frontmatter موسّع `od:` يفسّره الـ daemon حرفياً — `mode`، `platform`، `scenario`، `preview.type`، `design_system.requires`، `default_for`، `featured`، `fidelity`، `speaker_notes`، `animations`، `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
-
-يحمل الكتالوج وضعان رئيسيان: **`prototype`** (27 skill — أيّ شيء يُعرض كصفحة artifact واحدة، من landing بأسلوب مجلّة إلى شاشة هاتف إلى مستند PM spec) و**`deck`** (4 skills — عروض أفقية مع إطار deck-framework). حقل **`scenario`** هو ما يُجمِّع به الـ picker: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
-
-### أمثلة العرض
-
-الـ skills الأكثر تميّزاً بصرياً والأنسب لأوّل تجربة. كل واحدة تأتي بـ `example.html` حقيقي يمكنك فتحه مباشرة من المستودع لرؤية ما سيُنتجه الوكيل بالضبط — بدون auth ولا إعداد.
+سطح المخرجات الافتراضي. مخرجات HTML من صفحة واحدة تقرأ ملف `DESIGN.md` لديك وتُعرَض في iframe معزول.
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<a href="skills/dating-web/"><img src="docs/screenshots/skills/dating-web.png" alt="dating-web" /></a><br/>
-<sub><b><a href="skills/dating-web/"><code>dating-web</code></a></b> · <i>prototype</i><br/>لوحة معلومات استهلاكية للمواعدة / التوافق — شريط جانبي للتنقّل، شريط أخبار، KPIs، رسم بياني للتطابق المتبادل خلال 30 يوماً، طباعة editorial.</sub>
+<img src="docs/screenshots/01-entry-view.png" alt="Entry view" /><br/>
+<sub><b>واجهة الدخول</b> — اختر مهارة، اختر نظام تصميم، اكتب الموجز. سطح واحد للنماذج الأولية ولوحات المعلومات والعروض التقديمية وتطبيقات الجوال وصفحات المجلات.</sub>
 </td>
 <td width="50%" valign="top">
-<a href="skills/digital-eguide/"><img src="docs/screenshots/skills/digital-eguide.png" alt="digital-eguide" /></a><br/>
-<sub><b><a href="skills/digital-eguide/"><code>digital-eguide</code></a></b> · <i>template</i><br/>دليل رقمي من صفحتين — غلاف (عنوان، مؤلف، تشويق TOC) + صفحة درس بـ pull-quote وقائمة خطوات. نبرة المنشئين / lifestyle.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<a href="skills/email-marketing/"><img src="docs/screenshots/skills/email-marketing.png" alt="email-marketing" /></a><br/>
-<sub><b><a href="skills/email-marketing/"><code>email-marketing</code></a></b> · <i>prototype</i><br/>إيميل HTML لإطلاق منتج — masthead، صورة hero، عنوان مقفَّل، CTA، شبكة مواصفات. عمود واحد متمركز، آمن مع table-fallback.</sub>
-</td>
-<td width="50%" valign="top">
-<a href="skills/gamified-app/"><img src="docs/screenshots/skills/gamified-app.png" alt="gamified-app" /></a><br/>
-<sub><b><a href="skills/gamified-app/"><code>gamified-app</code></a></b> · <i>prototype</i><br/>نموذج تطبيق موبايل بطابع لعبة من ثلاث شاشات على خلفية عرض داكنة — غلاف، مهام اليوم بـ XP وشريط مستوى، تفاصيل المهمة.</sub>
+<img src="docs/screenshots/skills/mobile-onboarding.png" alt="Mobile onboarding" /><br/>
+<sub><b>نموذج أولي للجوال</b> — هيكل iPhone 15 Pro دقيق بالبكسل، وتدفقات متعددة الشاشات. لا يعيد الوكيل أبدًا رسم إطار الهاتف؛ إذ تقيم إطارات الأجهزة المشتركة في <code>assets/frames/</code>.</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<a href="skills/mobile-onboarding/"><img src="docs/screenshots/skills/mobile-onboarding.png" alt="mobile-onboarding" /></a><br/>
-<sub><b><a href="skills/mobile-onboarding/"><code>mobile-onboarding</code></a></b> · <i>prototype</i><br/>تدفّق onboarding للموبايل بثلاث شاشات — splash، عرض القيمة، تسجيل الدخول. شريط الحالة، نقاط التمرير، CTA رئيسي.</sub>
+<img src="docs/screenshots/skills/dating-web.png" alt="Web prototype dating-web" /><br/>
+<sub><b>نموذج أولي للويب</b> — لوحة معلومات تحريرية بأشرطة تمرير ومؤشرات أداء رئيسية ومخططات. مُصيَّرة مباشرة من <code>design-templates/dating-web/</code>.</sub>
 </td>
 <td width="50%" valign="top">
-<a href="skills/motion-frames/"><img src="docs/screenshots/skills/motion-frames.png" alt="motion-frames" /></a><br/>
-<sub><b><a href="skills/motion-frames/"><code>motion-frames</code></a></b> · <i>prototype</i><br/>إطار motion-design واحد بحركات CSS متكرّرة — حلقة طباعة دوّارة، كرة أرضية متحرّكة، مؤقّت. جاهز للتسليم إلى HyperFrames.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<a href="skills/social-carousel/"><img src="docs/screenshots/skills/social-carousel.png" alt="social-carousel" /></a><br/>
-<sub><b><a href="skills/social-carousel/"><code>social-carousel</code></a></b> · <i>prototype</i><br/>كاروسيل ثلاثي 1080×1080 لمنصّات التواصل — لوحات سينمائية بعناوين تتداخل عبر السلسلة، علامة هوية، إشارة loop.</sub>
-</td>
-<td width="50%" valign="top">
-<a href="skills/sprite-animation/"><img src="docs/screenshots/skills/sprite-animation.png" alt="sprite-animation" /></a><br/>
-<sub><b><a href="skills/sprite-animation/"><code>sprite-animation</code></a></b> · <i>prototype</i><br/>شريحة شرح متحرّكة بأسلوب pixel / 8-bit — مسرح كريمي ممتلئ، تميمة بكسل متحرّكة، طباعة يابانية حركية، CSS keyframes تتكرّر.</sub>
+<img src="docs/screenshots/skills/gamified-app.png" alt="Gamified app" /><br/>
+<sub><b>نموذج أولي لتطبيق جوال</b> — تدفق مُلعَّب بثلاث شاشات مع أشرطة XP وتفاصيل المهام. سلّمه مباشرة إلى Cursor / Codex / Claude Code لتحويله إلى React/Next/Vue.</sub>
 </td>
 </tr>
 </table>
 
-### أسطح التصميم والتسويق (وضع prototype)
+### 2 · المخرجات الحية ولوحات المعلومات
 
-| Skill | المنصّة | السيناريو | المُخرَج |
+لوحات معلومات حية، وغرف اتخاذ القرار، وجدران مؤشرات الأداء — مخرجات من صفحة واحدة تسحب البيانات عبر لوحة تعديلات وتبقى قابلة للتحرير في مكانها.
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/screenshots/skills/live-dashboard.png" alt="Live dashboard" /><br/>
+<sub><b>لوحة معلومات حية</b> — جدار مؤشرات أداء قابل للتحرير تُظهِر لوحة تعديلاته المعاملات الجديرة بالضبط. يصدر الوكيل بيان manifest، ويُعاد عرض iframe دون إعادة تحميل.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="docs/screenshots/skills/research-decision-room.png" alt="Decision room" /><br/>
+<sub><b>غرفة اتخاذ القرار</b> — مخرَج إحاطة متعدد المصادر لاجتماعات المنتج / البحث / العمليات.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/screenshots/skills/github-dashboard.png" alt="GitHub dashboard" /><br/>
+<sub><b>لوحة معلومات بأسلوب GitHub</b> — مقاييس المستودع معروضة كمخرَج حي.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="docs/screenshots/skills/flowai-live-dashboard-template.png" alt="Flow live dashboard" /><br/>
+<sub><b>قالب لوحة معلومات حية من Flow</b> — قالب مؤشرات أداء خاص بمجال محدد، مُعلَّم وفق <code>DESIGN.md</code> النشِط.</sub>
+</td>
+</tr>
+</table>
+
+### 3 · العروض التقديمية — عروض بأسلوب المجلات، تحديثات أسبوعية، عروض ترويجية
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/screenshots/07-magazine-deck.png" alt="Magazine deck (guizang-ppt)" /><br/>
+<sub><b>وضع العرض التقديمي (guizang-ppt)</b> — تخطيطات بأسلوب المجلات، عنصر WebGL رئيسي، قوائم تحقق P0/P1/P2. مُجمَّع حرفيًا من <a href="https://github.com/op7418/guizang-ppt-skill"><code>op7418/guizang-ppt-skill</code></a> مع الحفاظ على ترخيصه الأصلي.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="docs/screenshots/skills/deck-swiss-international.png" alt="Swiss deck" /><br/>
+<sub><b>عرض تقديمي بأسلوب Swiss International</b> — مرتكز على الشبكة، بلمسات أحادية اللون. واحد من <b>15 قالب عرض تقديمي</b> و<b>36 سمة</b> ضمن <code>design-templates/html-ppt-*/</code>.</sub>
+</td>
+</tr>
+</table>
+
+يُصدَّر كل عرض تقديمي إلى **HTML** (ملف واحد بأصول مضمَّنة)، و**PDF** (طباعة المتصفح، مدركة للعرض التقديمي)، و**PPTX** (مهارة يقودها الوكيل)، و**ZIP** (أرشيف)، أو **Markdown**.
+
+### 4 · الصور — `gpt-image-2` وImageRouter وAPI مخصّص
+
+<table>
+<tr>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776662673014_nf0taw_HGRMNDybsAAGG88.jpg" alt="Illustrated city food map" /><br/><sub><b>خريطة طعام مدينة مرسومة</b><br/>ملصق سفر تحريري مرسوم باليد</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453149026_gd2k50_HHCSvymboAAVscc.jpg" alt="Cinematic elevator scene" /><br/><sub><b>مشهد مصعد سينمائي</b><br/>لقطة تحريرية ساكنة بإطار واحد</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453164993_mt5b69_HHDoWfeaUAEA6Vt.jpg" alt="Cyberpunk anime portrait" /><br/><sub><b>بورتريه سايبربانك</b><br/>صورة رمزية — وجه بنص نيون</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776661968404_8a5flm_HGQc_KOaMAA2vt0.jpg" alt="3D stone staircase evolution" /><br/><sub><b>درج حجري ثلاثي الأبعاد</b><br/>إنفوجرافيك من حجر منحوت</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453184257_vb9hvl_HG9tAkOa4AAuRrn.jpg" alt="Glamorous portrait" /><br/><sub><b>بورتريه فاخر</b><br/>لقطة استوديو تحريرية</sub></td>
+</tr>
+</table>
+
+**93 موجّهًا جاهزًا لإعادة الإنتاج** تقيم في [`prompt-templates/`](prompt-templates/) — صور مصغّرة للمعاينة، ونصّ الموجّه الكامل، والنموذج المستهدف، ونسبة الأبعاد، وإسناد المصدر. نقرة واحدة تُسقِط موجزًا في أداة الإنشاء.
+
+### 5 · الفيديو وHyperFrames — رسوميات حركية أصيلة للوكلاء
+
+**[HyperFrames][hyperframes]** هو إطار عمل الفيديو مفتوح المصدر والأصيل للوكلاء من HeyGen، مدمج كمواطن من الدرجة الأولى في Open Design. يكتب الوكيل HTML + CSS + GSAP، وتصيّره HyperFrames إلى ملف MP4 حتمي عبر Chrome بدون واجهة + FFmpeg. اقرنه بـ **Seedance 2.0** لتحويل النص إلى فيديو / الصورة إلى فيديو السينمائي، و**Veo 3 / Sora 2 / Kling 2** للنماذج المُوجَّهة المتنوعة، و**Suno v5 / Lyria 2** لطبقة الصوت.
+
+<table>
+<tr>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-saas-product-promo-30s.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png" alt="SaaS promo" /></a><br/><sub><b>عرض ترويجي لمنتج SaaS مدته 30 ثانية</b> · 16:9 · كشوفات واجهة ثلاثية الأبعاد</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-tiktok-karaoke-talking-head.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/tiktok-follow.png" alt="TikTok karaoke" /></a><br/><sub><b>وجه متحدث بكاريوكي TikTok</b> · 9:16 · TTS + تسميات توضيحية متزامنة مع الكلمات</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-brand-sizzle-reel.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Brand sizzle reel" /></a><br/><sub><b>مقطع ترويجي للعلامة التجارية مدته 30 ثانية</b> · 16:9 · خط حركي يتفاعل مع الصوت</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-data-bar-chart-race.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/data-chart.png" alt="Bar chart race" /></a><br/><sub><b>سباق المخططات الشريطية</b> · 16:9 · إنفوجرافيك بيانات بأسلوب NYT</sub></td>
+</tr>
+<tr>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-flight-map-route.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/nyc-paris-flight.png" alt="Flight map" /></a><br/><sub><b>خريطة رحلة طيران</b> · 16:9 · كشف مسار بأسلوب Apple</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-logo-outro-cinematic.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Logo outro" /></a><br/><sub><b>خاتمة شعار سينمائية مدتها 4 ثوانٍ</b> · 16:9 · تجميع قطعة قطعة + توهّج</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-money-counter-hype.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/apple-money-count.png" alt="Money counter" /></a><br/><sub><b>عدّاد أموال من $0 إلى $10K</b> · 9:16 · حماس بأسلوب Apple</sub></td>
+<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-website-to-video-promo.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.png" alt="Website to video" /></a><br/><sub><b>من موقع ويب إلى فيديو</b> · 16:9 · يلتقط الموقع عند 3 منافذ عرض</sub></td>
+</tr>
+</table>
+
+يُشحَن مع المستودع 11 قالب HyperFrames + 39 موجّه Seedance. الصور المصغّرة للكتالوج © HeyGen؛ والإطار مرخَّص بـ Apache-2.0. سير عمل التصيير الخاص بـ OD (تخزين التركيب المؤقت، حل sandbox-exec البديل، MP4-as-chip) موضَّح بالتفصيل في [`design-templates/hyperframes/`](design-templates/hyperframes/).
+
+[hyperframes]: https://github.com/heygen-com/hyperframes
+
+---
+
+## لماذا Open Design
+
+> **في أبريل 2026، أطلقت Anthropic [Claude Design][cd] — وهي المرة الأولى التي يتوقف فيها نموذج لغوي كبير عن كتابة النثر ويبدأ في تسليم مخرجات تصميم مباشرة.** انتشر بسرعة كبيرة. لكنه ظل مغلق المصدر، مدفوعًا فقط، سحابيًا فقط، مقيَّدًا بنموذج Anthropic ومهارات Anthropic وسطح Anthropic. لا دفع، ولا استضافة ذاتية، ولا نشر على Vercel، ولا إمكانية تبديل بوكيلك الخاص.
+
+‏Open Design (OD) هو البديل مفتوح المصدر. الحلقة نفسها، والنموذج الذهني نفسه القائم على المخرجات أولًا، دون أي تقييد:
+
+- 🤖 **أصيل للوكلاء، محايد تجاه النموذج.** نحن لا نشحن وكيلًا. أدوات `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` الموجودة أصلًا في `PATH` لديك هي محرك التصميم. بدّلها بنقرة واحدة.
+- 🧠 **بجودة العلامة التجارية افتراضيًا.** كل عملية تصيير تقرأ ملف `DESIGN.md` النشِط — وهو مخطط من 9 أقسام يغطي لوحة الألوان والخطوط والمباعدة والحركة والنبرة والأنماط المضادة. يُشحَن مع المستودع 150 نظامًا (Linear وStripe وVercel وAirbnb وApple وTesla وNotion وAnthropic وCursor وSupabase وFigma…). أسقِط مجلدًا، فيعثر عليه المُنتقي.
+- 🖥️ **محلي أولًا، BYOK في كل طبقة.** تطبيقات سطح مكتب أصلية لـ macOS (Apple Silicon + Intel) وWindows (x64). Linux AppImage على مسار الإصدار الاختياري. SQLite في `.od/app.sqlite`، والملفات في `.od/projects/<id>/`، بلا قياس عن بُعد، بلا ذهاب وإياب سحابي.
+- 🌍 **قابل للتركيب على ثلاثة مستويات.** **الإضافات** تحمل سير عمل قابلًا للتشغيل · **المهارات** تحمل ذوق الوكيل التصميمي · **أنظمة التصميم** تحمل العلامة التجارية. وكلها ملفات عادية يمكن لأي شخص تأليفها وإصدارها ونشرها.
+- 🔁 **حدِّث قاعدة شفرة موجودة.** سلّم مستودع `git` + ملف `DESIGN.md` إلى الوكيل، فيعيد هيكلة مكوناتك الحقيقية وفق مواصفة العلامة التجارية. تنقل إضافات مخصّصة سير عمل Figma / Pencil إلى شفرة React / Next.js / Vue.
+- 🔒 **الخصوصية عن قناعة.** كل شيء يعمل حيث تقيم بياناتك — حاسوبك المحمول، أو خادم فريقك، أو مشروع Vercel الخاص بك. وعند الحاجة إلى الشبكة، يكون وكيل BYOK محميًا ضد SSRF.
+
+### مقارنة
+
+| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Open Design** |
+|---|---|---|---|---|
+| مفتوح المصدر | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
+| استضافة ذاتية / سطح مكتب | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
+| أصيل للوكلاء (يعمل في واجهة CLI لديك) | Anthropic فقط | ❌ | وكيل سحابي فقط | **✅ 21 واجهة CLI + BYOK** |
+| `DESIGN.md` بجودة العلامة التجارية | احتكاري | Theme JSON | رموز محدودة | **✅ 150 نظامًا مشحونًا** |
+| المهارات / الإضافات / القوالب | مغلقة | متجر إضافات | مغلقة | **✅ أكثر من 100 مهارة · 261 إضافة** |
+| HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ من الدرجة الأولى** |
+| تحديث مستودع موجود وفق العلامة التجارية | ❌ | ❌ | ❌ | **✅ عبر الوكيل + `DESIGN.md`** |
+| الحد الأدنى للفوترة | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · أي نقطة نهاية متوافقة** |
+
+---
+
+## البدء السريع
+
+### 🖥️ تنزيل تطبيق سطح المكتب (موصى به — بلا إعداد)
+
+أسرع طريقة لاستخدام Open Design. لا Node، ولا pnpm، ولا استنساخ.
+
+- **macOS** (Apple Silicon · Intel x64) ← [**open-design.ai**](https://open-design.ai/) أو [إصدارات GitHub](https://github.com/nexu-io/open-design/releases)
+- **Windows** (x64) ← [**open-design.ai**](https://open-design.ai/) أو [إصدارات GitHub](https://github.com/nexu-io/open-design/releases)
+- **Linux** (AppImage، مسار اختياري) ← [إصدارات GitHub](https://github.com/nexu-io/open-design/releases)
+
+بعد التثبيت: يكتشف التطبيق تلقائيًا كل واجهة CLI لوكلاء البرمجة في `PATH` لديك، ويحمّل أكثر من 100 مهارة و150 نظام تصميم، ويتيح لك كتابة موجز في واجهة الدخول.
+
+### 🤖 التثبيت داخل وكيل البرمجة لديك (دون واجهة مستخدم)
+
+يمكنك استخدام Open Design دون فتح الواجهة الرسومية أبدًا — استدعِه كمهارة أو إضافة أو خادم MCP داخل Claude Code وCodex وCursor وCopilot وOpenClaw وAntigravity وHermes وKimi والمزيد.
+
+```bash
+# One-line install into the agent you're using:
+curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+# <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
+#         | pi | vibe | hermes | cline | kimi | trae | opencode
+```
+
+ثم، داخل الوكيل:
+
+```
+> Use open-design to generate a landing page with the Linear design system
+```
+
+يقرأ الوكيل `skills/`، ويختار `SKILL.md` المناسب، ويربط ملف `DESIGN.md` الذي سمّيته، ويصدر `<artifact>` قابلًا للمعاينة على `http://localhost:7456`.
+
+### 🐳 التشغيل باستخدام Docker
+
+```bash
+git clone https://github.com/nexu-io/open-design.git
+cd open-design/deploy
+cp .env.example .env
+echo "OD_API_TOKEN=$(openssl rand -hex 32)" >> .env
+docker compose up -d
+# open http://localhost:7456
+```
+
+### 🧑‍💻 التشغيل من المصدر
+
+```bash
+git clone https://github.com/nexu-io/open-design.git
+cd open-design
+corepack enable && pnpm install
+pnpm tools-dev run web
+```
+
+‏Node `~24`، وpnpm `10.33.x`. مستخدمو Windows، راجعوا [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md). البدء السريع الكامل، ومتغيرات البيئة، وNix flake، وسير بناء الحزمة ← [`QUICKSTART.md`](QUICKSTART.md).
+
+### سير عمل كامل — من الموجز إلى المخرَج
+
+`brief → plugin → direction → design system → artifact → handoff → memory`
+
+1. **يقدّم مدير منتج موجزًا.** يعرض مُنتقي الإضافات صفحة هبوط · عرضًا ترويجيًا · لوحة معلومات · منشورًا اجتماعيًا · مواصفة منتج · بطاقة نتائج OKR…
+2. **يثبّت مصمم (أو الوكيل) الاتجاه.** لا علامة تجارية؟ اختر من 5 اتجاهات منسّقة. لديك علامة تجارية؟ أسقِط لقطة شاشة / رابطًا ← يربط الوكيل GitHub، ويستورد Figma، ويصوغ ملف `DESIGN.md` قابلًا لإعادة الاستخدام.
+3. **يصدر الوكيل أول `<artifact>`.** الإضافة + المهارة + `DESIGN.md` مربوطة. يبثّ داخل iframe معزول، قابل للتحرير في مكانه — لا "إعادة توليد من الصفر".
+4. **سلّم إلى الهندسة.** المخرَج هو HTML/CSS حقيقي — أسقِطه في Cursor أو Codex أو Claude Code لمواصلة البناء كشفرة. أو صدّر PPTX / PDF / MP4 مباشرة إلى التسويق.
+5. **يصبح Open Design أذكى كلما استخدمته.** تتراكم لقطات شاشتك وخطوطك ولوحات ألوانك ومخرجاتك المؤكَّدة كقيم افتراضية للجلسة التالية. عمل معاد أقل، وانحراف أقل.
+
+---
+
+## استخدام Open Design من وكيل البرمجة لديك
+
+يشحن Open Design **خادم MCP عبر stdio** و**سكربتات تثبيت** لكل وكيل. يستطيع أي وكيل متوافق مع MCP في مستودع آخر قراءة الملفات من مشاريع Open Design المحلية لديك مباشرة — رموز CSS، ومكونات JSX، وHTML الدخول — كواجهة API مهيكلة قابلة للاستعلام بالاسم. يرى الوكيل دائمًا الملف الحي، لا تصديرًا قديمًا.
+
+```bash
+# One-line install (16+ CLIs supported):
+curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+
+# Then the agent can:
+od search-files "primary button"      # search files across projects
+od get-file design-systems/linear-app/DESIGN.md
+od get-artifact <slug>                # latest rendered artifact
+od plugin run web-prototype --brief "..."
+od skill list --scenario marketing
+```
+
+**لماذا MCP؟** تصدير ملف مضغوط وإعادة إرفاقه في كل دورة يكسر الانسياب. يكشف MCP مصدر التصميم مباشرة — فيرى الوكيل دائمًا الملف الحي.
+
+**بالنسبة لوكيل يبدأ من الصفر،** يضع المثبِّت `~/.config/<agent>/open-design.json` (أو ما يكافئه على المنصة) إضافة إلى مقتطف MCP جاهز للصق. يحصل Cursor على رابط عميق بنقرة واحدة؛ ويحصل Claude Code على سطر `claude mcp add-json` واحد؛ ويحصل كل وكيل آخر على JSON بالمخطط الذي تتوقعه إعداداته. سير العمل الكامل لكل وكيل ← **Settings → MCP server** في تطبيق سطح المكتب، أو [`docs/agent-adapters.md`](docs/agent-adapters.md).
+
+**نموذج الأمان.** للقراءة فقط افتراضيًا، ويرتبط الـ daemon بـ `127.0.0.1`، ويُمنع SSRF عند حافة الوكيل. يتطلب الكشف على الشبكة المحلية تعيين `OD_BIND_HOST` صريح إضافة إلى `OD_ALLOWED_ORIGINS`. تبقى بيانات اعتماد الموصِّلات ومسارات معاينة المخرجات الحية على loopback فقط أيًا كان.
+
+---
+
+## المهارات
+
+**أكثر من 100 مهارة تُشحَن جاهزة** — كل منها مجلد ضمن [`skills/`](skills/) يتبع اصطلاح [`SKILL.md`][skill] الخاص بـ Claude Code، موسَّعًا بترويسة `od:` (`mode` و`platform` و`scenario` و`preview.type` و`design_system.requires` و`default_for` و`fidelity` و`example_prompt`). أسقِط مجلدًا، وأعِد تشغيل الـ daemon، فيظهر في المُنتقي.
+
+يرسي **وضعان** أساس الكتالوج: `prototype` (مخرجات من صفحة واحدة للويب/الجوال/سطح المكتب) و`deck` (عروض تقديمية بالسحب الأفقي). إضافة إلى أوضاع `image` و`video` و`audio` و`template` و`design-system` و`utility`. ويجمّعها حقل **`scenario`** حسب الجمهور: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
+
+| المهارة | الوضع | السيناريو | ما تنتجه |
 |---|---|---|---|
-| [`web-prototype`](skills/web-prototype/) | desktop | design | HTML بصفحة واحدة — landings، تسويق، صفحات hero (الافتراضي لـ prototype) |
-| [`saas-landing`](skills/saas-landing/) | desktop | marketing | تخطيط Hero / features / pricing / CTA |
-| [`dashboard`](skills/dashboard/) | desktop | operation | لوحة إدارة / تحليلات بشريط جانبي + بيانات كثيفة |
-| [`pricing-page`](skills/pricing-page/) | desktop | sale | صفحة تسعير مستقلّة + جداول مقارنة |
-| [`docs-page`](skills/docs-page/) | desktop | engineering | تخطيط توثيق ثلاثي الأعمدة |
-| [`blog-post`](skills/blog-post/) | desktop | marketing | مقال طويل بنمط editorial |
-| [`mobile-app`](skills/mobile-app/) | mobile | design | شاشة(ات) تطبيق داخل إطار iPhone 15 Pro / Pixel |
-| [`mobile-onboarding`](skills/mobile-onboarding/) | mobile | design | تدفّق onboarding متعدّد الشاشات (splash · عرض القيمة · تسجيل الدخول) |
-| [`gamified-app`](skills/gamified-app/) | mobile | personal | نموذج تطبيق موبايل بطابع لعبة من ثلاث شاشات |
-| [`email-marketing`](skills/email-marketing/) | desktop | marketing | إيميل HTML لإطلاق منتج (آمن مع table-fallback) |
-| [`social-carousel`](skills/social-carousel/) | desktop | marketing | كاروسيل ثلاثي 1080×1080 |
-| [`magazine-poster`](skills/magazine-poster/) | desktop | marketing | ملصق مجلّة بصفحة واحدة |
-| [`motion-frames`](skills/motion-frames/) | desktop | marketing | إطار motion-design بحركات CSS متكرّرة |
-| [`sprite-animation`](skills/sprite-animation/) | desktop | marketing | شريحة شرح متحرّكة بأسلوب pixel / 8-bit |
-| [`dating-web`](skills/dating-web/) | desktop | personal | mockup لـ dashboard مواعدة استهلاكي |
-| [`digital-eguide`](skills/digital-eguide/) | desktop | marketing | دليل رقمي من صفحتين (غلاف + درس) |
-| [`wireframe-sketch`](skills/wireframe-sketch/) | desktop | design | إسكتش يدوي للأفكار الأوليّة — يخدم جولة "أرِ شيئاً مرئياً مبكراً" |
-| [`critique`](skills/critique/) | desktop | design | بطاقة تقييم ذاتي خماسية الأبعاد (Philosophy · Hierarchy · Detail · Function · Innovation) |
-| [`tweaks`](skills/tweaks/) | desktop | design | لوحة tweaks يطلقها الذكاء الاصطناعي — يقترح النموذج بنفسه القيم التي تستحقّ التعديل |
+| [`web-prototype`](design-templates/web-prototype/) | prototype | design | صفحة هبوط / عنصر رئيسي افتراضي |
+| [`saas-landing`](design-templates/saas-landing/) | prototype | marketing | عنصر رئيسي / ميزات / تسعير / دعوة لاتخاذ إجراء |
+| [`dashboard`](design-templates/dashboard/) | prototype | operation | إدارة / تحليلات (مع شريط جانبي) |
+| [`mobile-app`](design-templates/mobile-app/) | prototype | design | تطبيق مؤطَّر بـ iPhone 15 Pro / Pixel |
+| [`mobile-onboarding`](design-templates/mobile-onboarding/) | prototype | design | تدفق شاشة بداية · عرض القيمة · تسجيل دخول |
+| [`social-carousel`](design-templates/social-carousel/) | prototype | marketing | عرض دوّار من 3 بطاقات 1080×1080 |
+| [`email-marketing`](design-templates/email-marketing/) | prototype | marketing | بريد علامة تجارية آمن مع بديل جدولي |
+| [`magazine-poster`](design-templates/magazine-poster/) | prototype | marketing | تخطيط مجلة من صفحة واحدة |
+| [`motion-frames`](design-templates/motion-frames/) | prototype | marketing | عنصر رئيسي بحركة CSS متكررة |
+| [`sprite-animation`](design-templates/sprite-animation/) | prototype | marketing | شرح متحرك ببكسل 8-bit |
+| [`pm-spec`](design-templates/pm-spec/) | prototype | product | مستند مواصفة منتج (مع جدول محتويات + سجل قرارات) |
+| [`team-okrs`](design-templates/team-okrs/) | prototype | product | بطاقة نتائج OKR |
+| [`eng-runbook`](design-templates/eng-runbook/) | prototype | engineering | دليل إجراءات الحوادث |
+| [`finance-report`](design-templates/finance-report/) | prototype | finance | ملخّص مالي تنفيذي |
+| [`hr-onboarding`](design-templates/hr-onboarding/) | prototype | hr | خطة إعداد دور وظيفي |
+| [`guizang-ppt`](design-templates/guizang-ppt/) | deck | marketing | عرض ويب بأسلوب المجلات (افتراضي لوضع العرض التقديمي) |
+| [`html-ppt-*`](design-templates/) | deck | marketing | 15 قالب عرض تقديمي × 36 سمة (القالب الرئيسي في [`design-templates/html-ppt/`](design-templates/html-ppt/)) |
+| [`hyperframes`](design-templates/hyperframes/) | video | marketing | رسوميات حركية HTML → MP4 (إطار HeyGen مفتوح المصدر) |
+| [`critique`](design-templates/critique/) | utility | design | ورقة نقد ذاتي بخمسة أبعاد |
+| [`tweaks`](design-templates/tweaks/) | utility | design | بيان لوحة تعديلات يصدره الذكاء الاصطناعي |
 
-### أسطح Deck (وضع deck)
+بروتوكول المهارات الكامل ← [`docs/skills-protocol.md`](docs/skills-protocol.md). نقطة نهاية سجل المهارات: `GET /api/skills`.
 
-| Skill | الافتراضي لـ | المُخرَج |
+---
+
+## أنظمة التصميم
+
+**150 نظام `DESIGN.md` بجودة العلامة التجارية** تُشحَن مع المستودع — كل منها ملف Markdown واحد بمخطط من 9 أقسام (الألوان، الطباعة، المباعدة، التخطيط، المكونات، الحركة، النبرة، العلامة التجارية، الأنماط المضادة)، من [`VoltAgent/awesome-design-md`][acd2]. بدّل نظامًا ← يستخدم التصيير التالي الرموز الجديدة. بلا Theme JSON.
+
+<details>
+<summary><b>الكتالوج الكامل (انقر للتوسيع)</b></summary>
+
+**الذكاء الاصطناعي ونماذج اللغة الكبيرة** — `claude` · `cohere` · `mistral-ai` · `minimax` · `together-ai` · `replicate` · `runwayml` · `elevenlabs` · `ollama` · `x-ai`
+
+**أدوات المطورين** — `cursor` · `vercel` · `linear-app` · `framer` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `webflow` · `sanity` · `mintlify` · `lovable` · `composio` · `opencode-ai` · `voltagent`
+
+**الإنتاجية** — `notion` · `figma` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
+
+**التقنية المالية** — `stripe` · `coinbase` · `binance` · `kraken` · `mastercard` · `revolut` · `wise`
+
+**التجارة الإلكترونية** — `shopify` · `airbnb` · `uber` · `nike` · `starbucks` · `pinterest`
+
+**الإعلام** — `spotify` · `playstation` · `wired` · `theverge` · `meta`
+
+**السيارات** — `tesla` · `bmw` · `ferrari` · `lamborghini` · `bugatti` · `renault`
+
+**أخرى** — `apple` · `ibm` · `nvidia` · `vodafone` · `resend` · `spacex`
+
+**نقاط البداية** — `default` (Neutral Modern) · `warm-editorial`
+
+</details>
+
+أعِد استيراد المكتبة عبر [`scripts/sync-design-systems.ts`](scripts/sync-design-systems.ts). أضف علامتك التجارية الخاصة ← أسقِط ملف `DESIGN.md` في `design-systems/<brand>/`. الدليل الكامل ← [`design-systems/README.md`](design-systems/README.md).
+
+[acd2]: https://github.com/VoltAgent/awesome-design-md
+
+---
+
+## الإضافات
+
+**261 إضافة رسمية** تقيم في [`plugins/_official/`](plugins/_official/). كل إضافة هي **مجلد مهارة-وكيل قابل للنقل** — ملف `SKILL.md` (قابل للقراءة من أي وكيل يدعم Agent Skills)، إضافة إلى بيان `open-design.json` اختياري يمنح Open Design بيانات وصفية للسوق، ومدخلات، ومعاينات، وخطوط أنابيب، وتصريحات قدرات. انتقل مباشرة إلى فئة:
+
+| الفئة | العدد | المحتويات |
 |---|---|---|
-| [`guizang-ppt`](skills/guizang-ppt/) | **الافتراضي** لوضع deck | PPT ويب بأسلوب مجلّة — مُضمَّن حرفياً من [op7418/guizang-ppt-skill][guizang] مع الحفاظ على LICENSE الأصلية |
-| [`simple-deck`](skills/simple-deck/) | — | deck أفقي بسيط |
-| [`replit-deck`](skills/replit-deck/) | — | deck لاستعراض منتج (بأسلوب Replit) |
-| [`weekly-update`](skills/weekly-update/) | — | إيقاع أسبوعي لفريق على شكل deck (التقدّم · العوائق · التالي) |
+| [`scenarios/`](plugins/_official/scenarios/) | 11 | سيناريوهات تصميم كاملة — [`od-default`](plugins/_official/scenarios/od-default/)، [`od-design-refine`](plugins/_official/scenarios/od-design-refine/)، [`od-figma-migration`](plugins/_official/scenarios/od-figma-migration/)، [`od-code-migration`](plugins/_official/scenarios/od-code-migration/)، [`od-react-export`](plugins/_official/scenarios/od-react-export/)، [`od-nextjs-export`](plugins/_official/scenarios/od-nextjs-export/)، [`od-vue-export`](plugins/_official/scenarios/od-vue-export/)، [`od-media-generation`](plugins/_official/scenarios/od-media-generation/)، [`od-new-generation`](plugins/_official/scenarios/od-new-generation/)، [`od-tune-collab`](plugins/_official/scenarios/od-tune-collab/)، [`od-plugin-authoring`](plugins/_official/scenarios/od-plugin-authoring/) |
+| [`image-templates/`](plugins/_official/image-templates/) | 45 | موجّهات صور بلقطة واحدة — تحريرية، سينمائية، منتجات، بورتريه |
+| [`video-templates/`](plugins/_official/video-templates/) | 50 | قوالب حركة HyperFrames / Seedance / Veo |
+| [`design-systems/`](plugins/_official/design-systems/) | 142 | ملفات `DESIGN.md` للعلامات التجارية مغلَّفة كإضافات |
+| [`atoms/`](plugins/_official/atoms/) | 13 | أجزاء واجهة قابلة لإعادة الاستخدام (أزرار، عناصر رئيسية، بطاقات مؤشرات أداء) |
+| [`examples/`](plugins/_official/examples/) | 140 | مخرجات مرجعية قابلة لإعادة المزج |
 
-### أسطح المكتب والعمليات (وضع prototype مع سيناريوهات الوثائق)
+كذلك [`plugins/community/`](plugins/community/) لإضافات المجتمع و[`plugins/registry/`](plugins/registry/) لسير النشر.
 
-| Skill | السيناريو | المُخرَج |
-|---|---|---|
-| [`pm-spec`](skills/pm-spec/) | product | مستند PM spec بفهرس + سجل قرارات |
-| [`team-okrs`](skills/team-okrs/) | product | بطاقة OKR |
-| [`meeting-notes`](skills/meeting-notes/) | operation | سجل قرارات اجتماع |
-| [`kanban-board`](skills/kanban-board/) | operation | لقطة لوحة Kanban |
-| [`eng-runbook`](skills/eng-runbook/) | engineering | runbook لحوادث الإنتاج |
-| [`finance-report`](skills/finance-report/) | finance | ملخّص مالي تنفيذي |
-| [`invoice`](skills/invoice/) | finance | فاتورة بصفحة واحدة |
-| [`hr-onboarding`](skills/hr-onboarding/) | hr | خطّة onboarding لدور وظيفي |
+### ما يمكن للإضافات فعله
 
-إضافة skill جديدة = مجلّد واحد. اقرأ [`docs/skills-protocol.md`](docs/skills-protocol.md) لمعرفة الـ frontmatter الموسّع، fork لـ skill قائمة، أعد تشغيل الـ daemon، وستظهر في الـ picker. نقطة الكتالوج هي `GET /api/skills`؛ تجميع seed لكل skill (template + ملفات references) يقع على `GET /api/skills/:id/example`.
+- 🤖 **التشغيل في أي وكيل برمجة** — [Claude Code](docs/agent-adapters.md) وCodex وCursor وCopilot و[OpenClaw](https://github.com/openclaw/openclaw) و[Antigravity](https://antigravity.google) وHermes وKimi… عبر بروتوكول المهارات نفسه الذي يعرفه الوكيل أصلًا.
+- 🔁 **نقل سير عمل Figma / Pencil** ← شفرة React أو Next.js أو Vue. راجع [`od-figma-migration`](plugins/_official/scenarios/od-figma-migration/).
+- 🛠️ **تحديث قاعدة شفرة موجودة وفق مواصفة علامة تجارية** — وجّه إضافة نحو مستودع `git` + ملف `DESIGN.md`، واحصل على PR. راجع [`od-code-migration`](plugins/_official/scenarios/od-code-migration/).
+- 💾 **الاحتفاظ بسير عمل مخصّص** — تجلس قوالب فريقك القابلة لإعادة الاستخدام بجوار القوالب المشحونة.
 
-## ستّة أفكار حاملة
+### استخدام الإضافات
 
-### 1 · لا نشحن وكيلاً، وكيلك كافٍ
+الإضافات على تكافؤ تام عبر **واجهة الويب** وواجهة **`od` CLI** — نقاط نهاية `/api/plugins` نفسها، اختر ما يناسبك.
 
-الـ daemon يمسح `PATH` بحثاً عن [`claude`](https://docs.anthropic.com/en/docs/claude-code) و [`codex`](https://github.com/openai/codex) و `devin` و [`cursor-agent`](https://www.cursor.com/cli) و [`gemini`](https://github.com/google-gemini/gemini-cli) و [`opencode`](https://opencode.ai/) و [`qwen`](https://github.com/QwenLM/qwen-code) و `qodercli` و [`copilot`](https://github.com/features/copilot/cli) و `hermes` و `kimi` و [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) و [`kiro-cli`](https://kiro.dev) و [`vibe-acp`](https://github.com/mistralai/mistral-vibe) عند الإقلاع. ما يجده يصبح محرّك تصميم مرشّحاً — يُشغَّل عبر stdio بـ adapter لكل CLI، قابل للتبديل من الـ model picker. الإلهام من [`multica`](https://github.com/multica-ai/multica) و [`cc-switch`](https://github.com/farion1231/cc-switch). لا CLI مثبتة؟ وضع API هو نفس خط الأنابيب بدون spawn — اختر Anthropic أو متوافق مع OpenAI أو Azure OpenAI أو Google Gemini ويُعيد الـ daemon توجيه قطع SSE المُطبَّعة، مع رفض loopback / link-local / RFC1918 عند الحدّ.
+**في تطبيق سطح المكتب / الويب:** افتح صفحة **الإضافة** لتصفّح السوق وانقر **تثبيت**؛ وداخل استوديو المشروع، تظهر الإضافات كأشرطة في أداة الإنشاء تنقر عليها لتطبيقها (مع المدخلات التي تصرّح بها).
 
-### 2 · الـ Skills ملفات، لا plugins
+**على سطر الأوامر** (يعمل دون واجهة مستخدم — هذا هو المسار الذي تستخدمه الوكلاء الخارجية):
 
-اتّباعاً لاصطلاح Claude Code [`SKILL.md`](https://docs.anthropic.com/en/docs/claude-code/skills)، كل skill = `SKILL.md` + `assets/` + `references/`. ضع مجلّداً في [`skills/`](skills/)، أعد تشغيل الـ daemon، وستظهر في الـ picker. الـ `magazine-web-ppt` المضمَّنة هي [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) **حرفياً** — مع الحفاظ على الترخيص والإسناد الأصلي.
-
-### 3 · أنظمة التصميم Markdown قابل للنقل، لا theme JSON
-
-مخطّط `DESIGN.md` المؤلف من 9 أقسام من [`VoltAgent/awesome-design-md`][acd2] — color، typography، spacing، layout، components، motion، voice، brand، anti-patterns. كلّ artifact يقرأ من النظام النشط. بدّل النظام → الرندر التالي يستخدم الـ tokens الجديدة. القائمة المنسدلة تأتي بـ **Linear، Stripe، Vercel، Airbnb، Tesla، Notion، Apple، Anthropic، Cursor، Supabase، Figma، Resend، Raycast، Lovable، Cohere، Mistral، ElevenLabs، X.AI، Spotify، Webflow، Sanity، PostHog، Sentry، MongoDB، ClickHouse، Cal، Replicate، Clay، Composio، Xiaohongshu…** — إضافة إلى 57 design skill من [`awesome-design-skills`][ads].
-
-### 4 · نموذج الأسئلة التفاعلي يمنع 80% من التراجعات
-
-يُحدِّد مكدّس برومبت OD `RULE 1` بشكل صارم: كل brief تصميم جديد يبدأ بـ `<question-form id="discovery">` وليس بكود. Surface · الجمهور · النبرة · سياق الهوية · النطاق · القيود. حتى الـ brief الطويل يترك قرارات تصميمية مفتوحة — النبرة البصرية، موقف الألوان، النطاق — وهي تحديداً ما يُثبّته النموذج خلال 30 ثانية. تكلفة الاتجاه الخاطئ هي جولة chat واحدة، لا deck كامل.
-
-هذا هو **وضع Junior-Designer** المستخلص من [`huashu-design`](https://github.com/alchaincyf/huashu-design): اجمع الأسئلة دفعة واحدة في البداية، أرِ شيئاً مرئياً مبكراً (حتى لو wireframe بكتل رمادية)، ودَع المستخدم يصحّح المسار بتكلفة منخفضة. مدمجاً مع بروتوكول الأصول البصرية (locate · download · `grep` للـ hex · كتابة `brand-spec.md` · vocalise)، هذا هو السبب الأكبر في أن المخرج يتوقّف عن الإحساس بكونه AI freestyle ويبدأ يبدو كمصمّم انتبه لمصادره قبل أن يبدأ الرسم.
-
-### 5 · الـ daemon يجعل الوكيل يحسّ أنه على حاسوبك، لأنه فعلاً كذلك
-
-عند `spawn` الـ CLI، يضبط الـ daemon `cwd` على مجلّد artifacts المشروع تحت `.od/projects/<id>/`. يحصل الوكيل على `Read` / `Write` / `Bash` / `WebFetch` — أدوات حقيقية على نظام ملفات حقيقي. يستطيع `Read` لـ `assets/template.html` الخاص بالـ skill، `grep` على CSS لاستخراج قيم hex، كتابة `brand-spec.md`، إنزال صور مولّدة، وإنتاج ملفات `.pptx` / `.zip` / `.pdf` تظهر في مساحة الملفات كقطع تنزيل عند انتهاء الجولة. الجلسات والمحادثات والرسائل والـ tabs تُحفظ كلها في SQLite محلية — افتح المشروع غداً تجد بطاقة todo حيث تركتها.
-
-### 6 · مكدّس البرومبت هو المنتج
-
-ما تُكوِّنه عند الإرسال ليس "system + user". بل:
-
-```
-DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critique)
-  + identity charter   (OFFICIAL_DESIGNER_PROMPT, anti-AI-slop, junior-pass)
-  + active DESIGN.md   (72 systems available)
-  + active SKILL.md    (31 skills available)
-  + project metadata   (kind, fidelity, speakerNotes, animations, inspiration ids)
-  + skill side files   (auto-injected pre-flight: read assets/template.html + references/*.md)
-  + (deck kind, no skill seed) DECK_FRAMEWORK_DIRECTIVE   (nav / counter / scroll / print)
+```bash
+od plugin list                       # list installed plugins (--task-kind / --mode / --tag filters)
+od plugin search "landing page"      # search by keyword
+od plugin info od-default            # inspect a plugin's metadata, inputs, capabilities
+od plugin install od-figma-migration # install from a registry; also accepts ./local-folder or an https://… link
+od plugin apply od-default --input brief="a one-page pitch for our seed round"
+od plugin upgrade od-default         # upgrade
+od plugin uninstall od-default       # uninstall
 ```
 
-كل طبقة قابلة للتركيب. كل طبقة ملف يمكنك تعديله. اقرأ [`apps/daemon/src/prompts/system.ts`](apps/daemon/src/prompts/system.ts) و [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) لرؤية العقد الحقيقي.
+يدعم كل أمر `--json`، فتستطيع تمريره عبر `jq` / `xargs` إلى الأتمتة.
 
-## المعمارية
+### بناء إضافة
+
+تحتاج الإضافة **إلى ملف `SKILL.md` كحد أدنى فقط**؛ ولإدراجها في سوق Open Design، أضف ملف `open-design.json`:
 
 ```
-┌────────────────────── browser (Next.js 16) ──────────────────────┐
-│  chat · file workspace · iframe preview · settings · imports     │
-└──────────────┬───────────────────────────────────┬───────────────┘
-               │ /api/* (rewritten in dev)          │
-               ▼                                    ▼
-   ┌──────────────────────────────────┐   /api/proxy/{provider}/stream (SSE)
-   │  Local daemon (Express + SQLite) │   ─→ any OpenAI-compat
-   │                                  │       endpoint (BYOK)
-   │  /api/agents          /api/skills│       w/ SSRF blocking
-   │  /api/design-systems  /api/projects/…
-   │  /api/chat (SSE)      /api/proxy/{provider}/stream (SSE)
-   │  /api/templates       /api/import/claude-design
-   │  /api/artifacts/save  /api/artifacts/lint
-   │  /api/upload          /api/projects/:id/files…
-   │  /artifacts (static)  /frames (static)
-   │
-   │  optional: sidecar IPC at /tmp/open-design/ipc/<ns>/<app>.sock
-   │  (STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN)
-   └─────────┬────────────────────────┘
+my-plugin/
+├── SKILL.md            ← required: YAML frontmatter (name · description) + trigger phrasing + workflow (aim for < 500 lines)
+├── open-design.json    ← needed to list: marketplace metadata + inputs + pipeline + capabilities
+├── README.md           ← optional: usage, install, registry links
+├── preview/            ← optional: index.html / poster.png (strongly recommended for visual plugins)
+└── examples/           ← optional: concrete use cases
+```
+
+حقول `open-design.json` الأساسية: `specVersion` (حاليًا `1.0.0`)، و`name` (معرّف ثابت)، و`version` (semver)، و`compat.agentSkills[].path` (يشير إلى `./SKILL.md`)، و`od.kind` (`skill` / `scenario` / `atom` / `bundle`)، و`od.taskKind` (`new-generation` / `figma-migration` / `code-migration` / `tune-collab`)، و`od.mode` (سطح المخرجات، مثل `prototype` / `deck` / `live-artifact` / `image` / `video` / `hyperframes` / `audio` / `design-system` / `scenario`)، و`od.capabilities[]` (**صرّح بالحد الأدنى** — التثبيت المقيَّد يمنح فقط `prompt:inject` افتراضيًا)، و`od.inputs[]` (معاملات وقت التطبيق).
+
+التهيئة والتحقق محليًا:
+
+```bash
+od plugin scaffold --id my-plugin --title "My Plugin"   # generate the skeleton
+od plugin validate ./my-plugin                          # check manifest / file layout
+pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
+```
+
+مجموعة الحقول الكاملة وعقد وقت التشغيل ← [`plugins/spec/SPEC.md`](plugins/spec/SPEC.md)؛ تطوير إضافة بوكيل برمجة ← [`plugins/spec/AGENT-DEVELOPMENT.md`](plugins/spec/AGENT-DEVELOPMENT.md)؛ قوالب دنيا جاهزة للصق ← [`plugins/spec/examples/`](plugins/spec/examples/).
+
+### المساهمة بإضافة
+
+1. أسقِط مجلد الإضافة في [`plugins/community/`](plugins/community/) (الإضافات الخارجية)، أو — لشحنها مجمَّعة مع Open Design — في المستوى المطابق ضمن [`plugins/_official/`](plugins/_official/).
+2. اجتز التحقق: `od plugin validate` و`pnpm guard` و`pnpm --filter @open-design/plugin-runtime typecheck`.
+3. املأ الـ PR باستخدام القالب في [`plugins/spec/CONTRIBUTING.md`](plugins/spec/CONTRIBUTING.md) (المعرّف، الإصدار، المسار، الوضع، القدرات، أمثلة التشغيل؛ أرفِق لقطة شاشة / معاينة للإضافات البصرية).
+4. للنشر على سجل خارجي (skills.sh / ClawHub / GitHub مستقل) ← [`plugins/spec/PUBLISHING-REGISTRIES.md`](plugins/spec/PUBLISHING-REGISTRIES.md).
+
+نقطة نهاية سجل الإضافات: `GET /api/plugins`. نظرة عامة على الدليل ← [`plugins/README.md`](plugins/README.md) ([简体中文](plugins/README.zh-CN.md)).
+
+---
+
+## البنية المعمارية
+
+```
+┌────────────────── browser (Next.js 16) / Electron shell ──────────────┐
+│  chat · file workspace · iframe preview · settings · import · MCP     │
+└──────────────┬─────────────────────────────────────┬─────────────────┘
+               │ /api/*                              │
+               ▼                                     ▼
+   ┌─────────────────────────────────┐   /api/proxy/{provider}/stream (SSE)
+   │  local daemon (Express+SQLite)  │   ─→ any OpenAI-compatible BYOK,
+   │                                  │       SSRF-guarded at the edge
+   │  /api/skills    /api/plugins    │
+   │  /api/design-systems            │
+   │  /api/chat (SSE)   /api/proxy/* │
+   │  /api/projects/:id/files/...    │
+   │  /api/artifacts/{save,lint}     │
+   │  /api/import/claude-design      │
+   │  MCP stdio server                │
+   └─────────┬───────────────────────┘
              │ spawn(cli, [...], { cwd: .od/projects/<id> })
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
-   │  claude · codex · devin (ACP) · gemini · opencode · cursor-agent │
-   │  qwen · qoder · copilot · hermes (ACP) · kimi (ACP) · pi (RPC) · kiro (ACP) · vibe (ACP)     │
-   │  reads SKILL.md + DESIGN.md, writes artifacts to disk            │
+   │  claude · codex · cursor-agent · copilot · openclaw · antigravity ·│
+   │  gemini · opencode · qwen · qoder · hermes (ACP) · kimi (ACP) ·    │
+   │  pi (RPC) · kiro · kilo · vibe (ACP) · cline · trae · deepseek     │
+   │  reads SKILL.md + DESIGN.md, writes artifacts to disk             │
    └──────────────────────────────────────────────────────────────────┘
 ```
 
 | الطبقة | المكدّس |
 |---|---|
-| الواجهة الأمامية | Next.js 16 App Router + React 18 + TypeScript، قابل للنشر على Vercel |
-| Daemon | Node 24 · Express · بثّ SSE · `better-sqlite3`؛ الجداول: `projects` · `conversations` · `messages` · `tabs` · `templates` |
-| نقل الوكلاء | `child_process.spawn`؛ بمحلّلات أحداث مكتوبة لـ `claude-stream-json` (Claude Code)، `qoder-stream-json` (Qoder CLI)، `copilot-stream-json` (Copilot)، محلّلات `json-event-stream` لكل CLI (Codex / Gemini / OpenCode / Cursor Agent)، `acp-json-rpc` (Devin / Hermes / Kimi / Kiro / Kilo / Mistral Vibe عبر Agent Client Protocol)، `pi-rpc` (Pi عبر stdio JSON-RPC)، `plain` (Qwen Code / DeepSeek TUI) |
-| BYOK proxy | `POST /api/proxy/{anthropic,openai,azure,google}/stream` → APIs أعلى التيار خاصة بكل provider، SSE مُطبَّعة `delta/end/error`؛ يرفض loopback / link-local / RFC1918 عند حدّ الـ daemon |
-| التخزين | ملفات عادية في `.od/projects/<id>/` + SQLite في `.od/app.sqlite` + اعتمادات في `.od/media-config.json` (في gitignore، تُنشأ تلقائياً). `OD_DATA_DIR=<dir>` ينقل كل بيانات الـ daemon (تُستخدم لعزل الاختبارات وإعدادات التثبيت للقراءة فقط)؛ `OD_MEDIA_CONFIG_DIR=<dir>` يضيّق التجاوز إلى `media-config.json` فقط لإبقاء مفاتيح API في موقع منفصل |
-| المعاينة | iframe معزولة عبر `srcdoc` + محلّل `<artifact>` لكل skill ([`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)) |
-| التصدير | HTML (مع inlining للأصول) · PDF (طباعة المتصفّح، مع وعي بالـ deck) · PPTX (مدفوع بالوكيل عبر skill) · ZIP (archiver) · Markdown |
-| دورة الحياة | `pnpm tools-dev start \| stop \| run \| status \| logs \| inspect \| check`؛ المنافذ عبر `--daemon-port` / `--web-port`، النطاقات عبر `--namespace` |
-| سطح المكتب (اختياري) | غلاف Electron — يكتشف رابط الويب عبر sidecar IPC، بدون تخمين منافذ؛ نفس قناة `STATUS`/`EVAL`/`SCREENSHOT`/`CONSOLE`/`CLICK`/`SHUTDOWN` تُشغّل `tools-dev inspect desktop …` لاختبارات E2E |
-
-## Quickstart
-
-### تنزيل تطبيق سطح المكتب (بدون بناء)
-
-أسرع طريقة لتجربة Open Design هي تطبيق سطح المكتب الجاهز — بدون Node، بدون pnpm، بدون clone:
-
-- **[open-design.ai](https://open-design.ai/)** — صفحة التنزيل الرسمية
-- **[إصدارات GitHub](https://github.com/nexu-io/open-design/releases)**
-
-### التشغيل باستخدام Docker
-
-قم بتشغيل Open Design دون تثبيت Node.js أو pnpm محليًا.
-
-#### المتطلبات
-
-* Docker Desktop
-* Docker Compose v2
-
-تحقق من Docker:
-
-```bash id="70jv9o"
-docker compose version
-```
-
-#### بدء تشغيل Open Design
-
-1. استنسخ المستودع، وانتقل إلى مجلد deploy، وانسخ قالب البيئة:
-
-   ```bash
-   git clone https://github.com/nexu-io/open-design.git
-   cd open-design/deploy
-   cp .env.example .env
-   ```
-
-2. أنشئ رمزًا آمنًا:
-
-   ```bash
-   openssl rand -hex 32
-   ```
-
-3. افتح `.env` في محرر النصوص، وابحث عن `OD_API_TOKEN=`، والصق الرمز الذي أنشأته.
-
-ثم ابدأ الخدمة:
-
-```bash
-docker compose up -d
-```
-
-افتح في المتصفح:
-
-```text id="4s4xeh"
-http://localhost:7456
-```
-
-#### الأوامر الشائعة
-
-```bash id="gl95kp"
-# عرض السجلات
-docker compose logs -f
-
-# إعادة تشغيل الحاويات
-docker compose restart
-
-# إيقاف الحاويات
-docker compose down
-
-# سحب أحدث صورة
-docker compose pull
-docker compose up -d
-```
-
-لإعدادات Docker المتقدمة ومتغيرات البيئة، راجع [`QUICKSTART.md`](QUICKSTART.md).
-
-### التشغيل من المصدر
-
-```bash
-git clone https://github.com/nexu-io/open-design.git
-cd open-design
-corepack enable
-corepack pnpm --version   # should print 10.33.2
-pnpm install
-pnpm tools-dev run web
-# open the web URL printed by tools-dev
-```
-
-متطلّبات البيئة: Node `~24` و pnpm `10.33.x`. أدوات `nvm`/`fnm` اختيارية فقط؛ إن استخدمت إحداها فشغّل `nvm install 24 && nvm use 24` أو `fnm install 24 && fnm use 24` قبل `pnpm install`.
-
-يمكن لمستخدمي ويندوز اتباع [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) للحصول على مسار التثبيت الأصلي ومُشغّل صغير بنقرة مزدوجة.
-
-لتشغيل سطح المكتب / الخلفية، إعادة التشغيل بمنافذ ثابتة، وفحوص dispatcher توليد الوسائط (`OD_BIN`، `OD_DAEMON_URL`، `apps/daemon/dist/cli.js`) راجع [`QUICKSTART.md`](QUICKSTART.md).
-
-عند أوّل تحميل:
-
-1. يكتشف أيّ CLI وكلاء على `PATH` ويختار واحدة تلقائياً.
-2. يحمّل 31 skill + 72 نظام تصميم.
-3. يُظهر مربع الترحيب لتلصق Anthropic key (مطلوب فقط لمسار BYOK البديل).
-4. **ينشئ `./.od/` تلقائياً** — مجلد التشغيل المحلي الذي يحوي SQLite للمشاريع، artifacts كل مشروع، والرندرز المحفوظة. لا يوجد `od init`؛ الـ daemon يعمل `mkdir` لما يحتاجه عند الإقلاع.
-
-اكتب طلباً، اضغط **Send**، شاهد نموذج الأسئلة يصل، املأه، شاهد بطاقة todo تنساب، شاهد الـ artifact يُرسم. اضغط **Save to disk** أو نزِّل المشروع كـ ZIP.
-
-### حالة أوّل تشغيل (`./.od/`)
-
-يمتلك الـ daemon مجلداً مخفياً واحداً في جذر المستودع. كلّ ما فيه في gitignore ومحلّي للجهاز — لا تُجرِ commit له أبداً.
-
-```
-.od/
-├── app.sqlite                 ← projects · conversations · messages · open tabs
-├── artifacts/                 ← one-off "Save to disk" renders (timestamped)
-└── projects/<id>/             ← per-project working dir, also the agent's cwd
-```
-
-| تريد… | افعل |
-|---|---|
-| فحص ما بداخله | `ls -la .od && sqlite3 .od/app.sqlite '.tables'` |
-| الإعادة إلى حالة نظيفة | `pnpm tools-dev stop` ثم `rm -rf .od` ثم `pnpm tools-dev run web` |
-| نقله إلى مكان آخر | غير مدعوم بعد — المسار مُكوَّد نسبياً إلى المستودع |
-
-خريطة الملفات الكاملة، السكربتات، واستكشاف الأخطاء → [`QUICKSTART.md`](QUICKSTART.md).
-
-## تشغيل المشروع
-
-يمكن تشغيل Open Design كتطبيق ويب في متصفّحك، أو كتطبيق سطح مكتب Electron. كلا الوضعين يتشاركان نفس معمارية الـ daemon المحلي + الويب.
-
-### الويب / Localhost (الافتراضي)
-
-```bash
-# Foreground mode — keeps the lifecycle command in the foreground (logs written to files)
-pnpm tools-dev run web
-
-# View recent logs:
-pnpm tools-dev logs
-
-# Background mode — daemon + web run as background processes
-pnpm tools-dev start web
-```
-
-افتراضياً، يربط `tools-dev` نفسه بمنافذ ephemeral متاحة ويطبع الروابط الفعلية عند الإقلاع. لاستخدام منافذ ثابتة من حالة متوقّفة:
-
-```bash
-pnpm tools-dev run web --daemon-port 17456 --web-port 17573
-```
-
-إذا كان daemon/web يعملان بالفعل، استخدم `restart` لتبديل المنافذ في الجلسة القائمة:
-
-```bash
-pnpm tools-dev restart --daemon-port 17456 --web-port 17573
-```
-
-### سطح المكتب / Electron
-
-```bash
-# Start daemon + web + desktop in the background
-pnpm tools-dev
-
-# Check desktop status
-pnpm tools-dev inspect desktop status
-
-# Take a screenshot of the desktop app
-pnpm tools-dev inspect desktop screenshot --path /tmp/open-design.png
-```
-
-تطبيق سطح المكتب يكتشف رابط الويب تلقائياً عبر sidecar IPC — لا حاجة لتخمين المنافذ.
-
-### أوامر مفيدة أخرى
-
-| الأمر | ما يفعله |
-|---|---|
-| `pnpm tools-dev status` | يُظهر حالات الـ sidecar العاملة |
-| `pnpm tools-dev logs` | يُظهر ذيول سجلات daemon/web/desktop |
-| `pnpm tools-dev stop` | يوقف كل sidecars العاملة |
-| `pnpm tools-dev restart` | يوقف ثم يعيد تشغيل كل sidecars |
-| `pnpm tools-dev check` | الحالة + سجلات حديثة + تشخيصات شائعة |
-
-لإعادة التشغيل بمنافذ ثابتة، الإقلاع في الخلفية، واستكشاف الأخطاء الكامل، راجع [`QUICKSTART.md`](QUICKSTART.md).
-
-## استخدام Open Design من وكيل البرمجة لديك
-
-يشحن Open Design خادم MCP عبر stdio. اربطه بـ Claude Code أو Codex أو Cursor أو VS Code أو Antigravity أو Zed أو Windsurf أو أيّ عميل متوافق مع MCP، وسيتمكّن الوكيل في مستودع آخر من قراءة الملفات من مشاريع Open Design المحلية مباشرة. يحلّ هذا محلّ حلقة export-ثم-attach. حين يستدعي الوكيل `search_files` أو `get_file` أو `get_artifact` بدون وسيط مشروع، يأخذ MCP افتراضياً المشروع (والملف) المفتوح حالياً في Open Design، بحيث تعمل برومبتات مثل *«ابنِ هذا في تطبيقي»* أو *«طابِق هذه الأنماط»* مباشرة.
-
-**لماذا MCP؟** تصدير zip وإعادة إرفاقه مع كل دورة تصميم يكسر التدفّق. خادم MCP يكشف مصدر تصميمك مباشرة — tokens CSS، مكوّنات JSX، entry HTML — كـ API منظَّم يمكن للوكيل الاستعلام منه بالاسم. الوكيل يرى دائماً الملف الحيّ، لا نسخة قديمة من آخر export.
-
-افتح **Settings → MCP server** في تطبيق Open Design للحصول على تدفّق تثبيت لكلّ عميل. تُضمِّن اللوحة المسار المطلق لـ `node` ولـ `cli.js` المبني للـ daemon داخل كل snippet، فتعمل على نسخة source جديدة لا يكون فيها `od` على الـ PATH. Cursor يحصل على deeplink بنقرة واحدة؛ والباقي يحصلون على JSON snippet للنسخ واللصق بالشكل الذي يتوقّعه ملفّ تكوينهم (Claude Code يتضمّن سطر `claude mcp add-json` واحداً، فلا تحتاج لتحرير `~/.claude.json` يدوياً). أعد تشغيل أو reload لعميلك بعد التثبيت ليظهر الخادم.
-
-يجب أن يكون الـ daemon يعمل محلياً لتنجح استدعاءات أدوات MCP. إن كان الوكيل قد أُقلع قبل Open Design، أعد تشغيل الوكيل بعد جاهزية Open Design ليصل إلى الـ daemon الحيّ. الاستدعاءات أثناء توقّف الـ daemon تعيد خطأً واضحاً `"daemon not reachable"` بدلاً من crash.
-
-**نموذج الأمان.** خادم MCP للقراءة فقط؛ يكشف قراءة ملفات، metadata، وبحث — لا شيء يكتب على القرص أو يستدعي خدمة خارجية. يعمل كعملية ابن لوكيل البرمجة عبر stdio، لذا أيّ عميل MCP تسجّله يرث صلاحية قراءة لمشاريع Open Design المحلية لديك. عامله مثل تثبيت إضافة VS Code: لا تسجّل إلا العملاء الذين تثق بهم. الـ daemon يربط نفسه بـ `127.0.0.1` افتراضياً؛ التعرّض للشبكة المحلية بأكملها يتطلّب `OD_BIND_HOST` صريحاً.
-
-## بنية المستودع
-
-```
-open-design/
-├── README.md                      ← English
-├── README.ar.md                   ← العربية (this file)
-├── README.de.md                   ← Deutsch
-├── README.ru.md                   ← Русский
-├── README.zh-CN.md                ← 简体中文
-├── QUICKSTART.md                  ← run / build / deploy guide
-├── package.json                   ← pnpm workspace, single bin: od
-│
-├── apps/
-│   ├── daemon/                    ← Node + Express, the only server
-│   │   ├── src/                   ← TypeScript daemon source
-│   │   │   ├── cli.ts             ← `od` bin source, compiled to dist/cli.js
-│   │   │   ├── server.ts          ← /api/* routes (projects, chat, files, exports)
-│   │   │   ├── agents.ts          ← PATH scanner + per-CLI argv builders
-│   │   │   ├── claude-stream.ts   ← streaming JSON parser for Claude Code stdout
-│   │   │   ├── skills.ts          ← SKILL.md frontmatter loader
-│   │   │   └── db.ts              ← SQLite schema (projects/messages/templates/tabs)
-│   │   ├── sidecar/               ← tools-dev daemon sidecar wrapper
-│   │   └── tests/                 ← daemon package tests
-│   │
-│   └── web/                       ← Next.js 16 App Router + React client
-│       ├── app/                   ← App Router entrypoints
-│       ├── next.config.ts         ← dev rewrites + prod static export to out/
-│       └── src/                   ← React + TypeScript client modules
-│           ├── App.tsx            ← routing, bootstrap, settings
-│           ├── components/        ← chat, composer, picker, preview, sketch, …
-│           ├── prompts/
-│           │   ├── system.ts      ← composeSystemPrompt(base, skill, DS, metadata)
-│           │   ├── discovery.ts   ← turn-1 form + turn-2 branch + 5-dim critique
-│           │   └── directions.ts  ← 5 visual directions × OKLch palette + font stack
-│           ├── artifacts/         ← streaming <artifact> parser + manifests
-│           ├── runtime/           ← iframe srcdoc, markdown, export helpers
-│           ├── providers/         ← daemon SSE + BYOK API transports
-│           └── state/             ← config + projects (localStorage + daemon-backed)
-│
-├── e2e/                           ← Playwright UI + external integration/Vitest harness
-│
-├── packages/
-│   ├── contracts/                 ← shared web/daemon app contracts
-│   ├── sidecar-proto/             ← Open Design sidecar protocol contract
-│   ├── sidecar/                   ← generic sidecar runtime primitives
-│   └── platform/                  ← generic process/platform primitives
-│
-├── skills/                        ← 31 SKILL.md skill bundles (27 prototype + 4 deck)
-│   ├── web-prototype/             ← default for prototype mode
-│   ├── saas-landing/  dashboard/  pricing-page/  docs-page/  blog-post/
-│   ├── mobile-app/  mobile-onboarding/  gamified-app/
-│   ├── email-marketing/  social-carousel/  magazine-poster/
-│   ├── motion-frames/  sprite-animation/  digital-eguide/  dating-web/
-│   ├── critique/  tweaks/  wireframe-sketch/
-│   ├── pm-spec/  team-okrs/  meeting-notes/  kanban-board/
-│   ├── eng-runbook/  finance-report/  invoice/  hr-onboarding/
-│   ├── simple-deck/  replit-deck/  weekly-update/   ← deck mode
-│   └── guizang-ppt/               ← bundled magazine-web-ppt (default for deck)
-│       ├── SKILL.md
-│       ├── assets/template.html   ← seed
-│       └── references/{themes,layouts,components,checklist}.md
-│
-├── design-systems/                ← 72 DESIGN.md systems
-│   ├── default/                   ← Neutral Modern (starter)
-│   ├── warm-editorial/            ← Warm Editorial (starter)
-│   ├── linear-app/  vercel/  stripe/  airbnb/  notion/  cursor/  apple/  …
-│   └── README.md                  ← catalog overview
-│
-├── assets/
-│   └── frames/                    ← shared device frames (used cross-skill)
-│       ├── iphone-15-pro.html
-│       ├── android-pixel.html
-│       ├── ipad-pro.html
-│       ├── macbook.html
-│       └── browser-chrome.html
-│
-├── templates/
-│   ├── deck-framework.html        ← deck baseline (nav / counter / print)
-│   └── kami-deck.html             ← kami-flavored deck starter (parchment / ink-blue serif)
-│
-├── scripts/
-│   └── sync-design-systems.ts     ← re-import upstream awesome-design-md tarball
-│
-├── docs/
-│   ├── spec.md                    ← product spec, scenarios, differentiation
-│   ├── architecture.md            ← topologies, data flow, components
-│   ├── skills-protocol.md         ← extended SKILL.md od: frontmatter
-│   ├── agent-adapters.md          ← per-CLI detection + dispatch
-│   ├── modes.md                   ← prototype / deck / template / design-system
-│   ├── references.md              ← long-form provenance
-│   ├── roadmap.md                 ← phased delivery
-│   ├── schemas/                   ← JSON schemas
-│   └── examples/                  ← canonical artifact examples
-│
-└── .od/                           ← runtime data, gitignored, auto-created
-    ├── app.sqlite                 ← projects / conversations / messages / tabs
-    ├── projects/<id>/             ← per-project working folder (agent's cwd)
-    └── artifacts/                 ← saved one-off renders
-```
-
-## أنظمة التصميم
-
-<p align="center">
-  <img src="docs/assets/design-systems-library.png" alt="مكتبة أنظمة التصميم الـ72 — افتتاحية style guide" width="100%" />
-</p>
-
-72 نظاماً جاهزاً، كلٌّ منها [`DESIGN.md`](design-systems/README.md) واحد:
-
-<details>
-<summary><b>الكتالوج الكامل</b> (انقر للتوسيع)</summary>
-
-**AI & LLM** — `claude` · `cohere` · `mistral-ai` · `minimax` · `together-ai` · `replicate` · `runwayml` · `elevenlabs` · `ollama` · `x-ai`
-
-**Developer Tools** — `cursor` · `vercel` · `linear-app` · `framer` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `webflow` · `sanity` · `mintlify` · `lovable` · `composio` · `opencode-ai` · `voltagent`
-
-**Productivity** — `notion` · `figma` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
-
-**Fintech** — `stripe` · `coinbase` · `binance` · `kraken` · `mastercard` · `revolut` · `wise`
-
-**E-Commerce** — `shopify` · `airbnb` · `uber` · `nike` · `starbucks` · `pinterest`
-
-**Media** — `spotify` · `playstation` · `wired` · `theverge` · `meta`
-
-**Automotive** — `tesla` · `bmw` · `ferrari` · `lamborghini` · `bugatti` · `renault`
-
-**Other** — `apple` · `ibm` · `nvidia` · `vodafone` · `sentry` · `resend` · `spacex`
-
-**Starters** — `default` (Neutral Modern) · `warm-editorial`
-
-</details>
-
-تُستورد مكتبة أنظمة المنتجات عبر [`scripts/sync-design-systems.ts`](scripts/sync-design-systems.ts) من [`VoltAgent/awesome-design-md`][acd2]. أعد تشغيل السكربت للتحديث. الـ 57 design skills مصدرها [`bergside/awesome-design-skills`][ads] وأُضيفت مباشرة في `design-systems/`.
-
-## الاتجاهات البصرية
-
-حين لا يملك المستخدم brand spec، يُطلق الوكيل نموذجاً ثانياً بخمسة اتجاهات منتقاة — وهو تكييف OD لـ [نظام huashu-design "5 مدارس × 20 فلسفة تصميم" البديل](https://github.com/alchaincyf/huashu-design#%E8%AE%BE%E8%AE%A1%E6%96%B9%E5%90%91%E9%A1%BE%E9%97%AE-fallback). كل اتجاه مواصفات حتميّة — لوحة OKLch، font stack، تلميحات هيئة، references — يربطها الوكيل حرفياً بـ `:root` لقالب الـ seed. نقرة واحدة → نظام بصري كامل المواصفات. لا ارتجال، لا AI-slop.
-
-| الاتجاه | المزاج | المراجع |
-|---|---|---|
-| Editorial — Monocle / FT | مجلّة مطبوعة، حبر + كريمي + صدئ دافئ | Monocle · FT Weekend · NYT Magazine |
-| Modern minimal — Linear / Vercel | بارد، منظَّم، تفاصيل بسيطة | Linear · Vercel · Stripe |
-| Tech utility | كثافة معلومات، monospace، terminal | Bloomberg · Bauhaus tools |
-| Brutalist | خشن، طباعة عملاقة، بدون ظلال، تفاصيل قاسية | Bloomberg Businessweek · Achtung |
-| Soft warm | كريم، تباين منخفض، ألوان خوخية محايدة | Notion marketing · Apple Health |
-
-المواصفات الكاملة → [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts).
-
-## توليد الوسائط
-
-OD لا يقف عند الكود. نفس واجهة الـ chat التي تنتج HTML للـ `<artifact>` تقود أيضاً توليد **الصورة** و**الفيديو** و**الصوت**، مع adapters للنماذج موصولة في خط أنابيب الوسائط للـ daemon ([`apps/daemon/src/media-models.ts`](apps/daemon/src/media-models.ts)، [`apps/web/src/media/models.ts`](apps/web/src/media/models.ts)). كل رندر ينزل كملف حقيقي في مساحة عمل المشروع — `.png` للصورة، `.mp4` للفيديو — ويظهر كقطعة تنزيل عند انتهاء الجولة.
-
-ثلاث عائلات نماذج تحمل العبء حالياً:
-
-| السطح | النموذج | المزوّد | الاستخدام |
-|---|---|---|---|
-| **صورة** | `gpt-image-2` | Azure / OpenAI | ملصقات، صور رمزية، خرائط مرسومة، إنفوغرافيك، بطاقات اجتماعية بأسلوب مجلّة، ترميم صور، رسوم منتجات بانفجار |
-| **فيديو** | `seedance-2.0` | ByteDance Volcengine | 15 ثانية t2v + i2v سينمائي بالصوت — قصص قصيرة، لقطات شخصية مقرّبة، أفلام منتج، تصميم بأسلوب MV |
-| **فيديو** | `hyperframes-html` | [HeyGen / OSS](https://github.com/heygen-com/hyperframes) | HTML→MP4 motion graphics — إعلانات منتجات، طباعة حركية، مخطّطات بيانية، طبقات اجتماعية، logo outros، عمودي بأسلوب TikTok مع karaoke captions |
-
-معرض البرومبت المتنامي في [`prompt-templates/`](prompt-templates/) يحوي **93 برومبت جاهزة للاستنساخ** — 43 صورة (`prompt-templates/image/*.json`)، 39 لـ Seedance (`prompt-templates/video/*.json` باستثناء `hyperframes-*`)، 11 لـ HyperFrames (`prompt-templates/video/hyperframes-*.json`). كل واحد يحمل صورة معاينة، نصّ البرومبت حرفياً، النموذج المستهدف، نسبة العرض إلى الارتفاع، وكتلة `source` للترخيص والإسناد. الـ daemon يخدمها على `GET /api/prompt-templates`، وتطبيق الويب يعرضها كشبكة بطاقات في تبويبات **Image templates** و**Video templates** بواجهة الدخول؛ نقرة واحدة تضع البرومبت في الـ composer مع النموذج الصحيح مُختاراً مسبقاً.
-
-### gpt-image-2 — معرض الصور (عيّنة من 43)
-
-<table>
-<tr>
-<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776661968404_8a5flm_HGQc_KOaMAA2vt0.jpg" alt="3D Stone Staircase Evolution" /><br/><sub><b>3D Stone Staircase Evolution Infographic</b><br/>إنفوغرافيك من 3 خطوات بجمالية الحجر المنحوت</sub></td>
-<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776662673014_nf0taw_HGRMNDybsAAGG88.jpg" alt="Illustrated City Food Map" /><br/><sub><b>Illustrated City Food Map</b><br/>ملصق سفر editorial مرسوم باليد</sub></td>
-<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453149026_gd2k50_HHCSvymboAAVscc.jpg" alt="Cinematic Elevator Scene" /><br/><sub><b>Cinematic Elevator Scene</b><br/>لقطة ثابتة سينمائية لأزياء editorial</sub></td>
-<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453164993_mt5b69_HHDoWfeaUAEA6Vt.jpg" alt="Cyberpunk Anime Portrait" /><br/><sub><b>Cyberpunk Anime Portrait</b><br/>صورة رمزية — وجه نيون مع نص</sub></td>
-<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453184257_vb9hvl_HG9tAkOa4AAuRrn.jpg" alt="Glamorous Woman in Black" /><br/><sub><b>Glamorous Woman in Black Portrait</b><br/>بورتريه استوديو editorial</sub></td>
-</tr>
-</table>
-
-المجموعة الكاملة → [`prompt-templates/image/`](prompt-templates/image/). المصادر: معظمها من [`YouMind-OpenLab/awesome-gpt-image-prompts`](https://github.com/YouMind-OpenLab/awesome-gpt-image-prompts) (CC-BY-4.0) مع الحفاظ على إسناد المؤلفين في كل قالب.
-
-### Seedance 2.0 — معرض الفيديو (عيّنة من 39)
-
-<table>
-<tr>
-<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/c4515f4f328539e1ded2cc32f4ce63e7/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/c4515f4f328539e1ded2cc32f4ce63e7/thumbnails/thumbnail.jpg" alt="Music Podcast Guitar" /></a><br/><sub><b>Music Podcast & Guitar Technique</b><br/>فيلم استوديو سينمائي 4K</sub></td>
-<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/4a47ba646e7cedd79363c861864b8714/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/4a47ba646e7cedd79363c861864b8714/thumbnails/thumbnail.jpg" alt="Emotional Face" /></a><br/><sub><b>Emotional Face Close-up</b><br/>دراسة ميكرو-تعابير سينمائية</sub></td>
-<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7e8983364a95fe333f0f88bd1085a0e8/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7e8983364a95fe333f0f88bd1085a0e8/thumbnails/thumbnail.jpg" alt="Luxury Supercar" /></a><br/><sub><b>Luxury Supercar Cinematic</b><br/>فيلم منتج روائي</sub></td>
-<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/0279a674ce138ab5a0a6f020a7273d89/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/0279a674ce138ab5a0a6f020a7273d89/thumbnails/thumbnail.jpg" alt="Forbidden City Cat" /></a><br/><sub><b>Forbidden City Cat Satire</b><br/>قصة قصيرة ساخرة بأسلوب stylised</sub></td>
-<td width="20%" valign="top"><a href="https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts/releases/download/videos/1402.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7f63ad253175a9ad1dac53de490efac8/thumbnails/thumbnail.jpg" alt="Japanese Romance" /></a><br/><sub><b>Japanese Romance Short Film</b><br/>15 ثانية بنمط Seedance 2.0 السردي</sub></td>
-</tr>
-</table>
-
-اضغط أيّ صورة معاينة لتشغيل MP4 المُرَنْدَر فعلاً. المجموعة الكاملة → [`prompt-templates/video/`](prompt-templates/video/) (المداخل `*-seedance-*` والمُعلَّمة Cinematic). المصادر: [`YouMind-OpenLab/awesome-seedance-2-prompts`](https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts) (CC-BY-4.0) مع الحفاظ على روابط التغريدات الأصلية ومعرّفات المؤلفين.
-
-### HyperFrames — HTML→MP4 motion graphics (11 قالباً جاهزاً للاستنساخ)
-
-[**`heygen-com/hyperframes`**](https://github.com/heygen-com/hyperframes) هو إطار فيديو agent-native مفتوح المصدر من HeyGen — تكتب أنت (أو الوكيل) HTML + CSS + GSAP، فيرنده HyperFrames إلى MP4 حتمي عبر headless Chrome + FFmpeg. يشحن Open Design لـ HyperFrames كنموذج فيديو من الدرجة الأولى (`hyperframes-html`) موصول في dispatch الـ daemon، إضافة إلى `skills/hyperframes/` التي تعلّم الوكيل عقد timeline، قواعد الانتقال بين المشاهد، أنماط audio-reactive، captions/TTS، وكتل الكتالوج (`npx hyperframes add <slug>`).
-
-11 برومبت hyperframes تُشحن تحت [`prompt-templates/video/hyperframes-*.json`](prompt-templates/video/)، كل واحد brief محدّد ينتج archetype بعينه:
-
-<table>
-<tr>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-product-reveal-minimal.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Product reveal" /></a><br/><sub><b>5 ثوانٍ minimal product reveal</b> · 16:9 · بطاقة عنوان push-in بانتقال shader</sub></td>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-saas-product-promo-30s.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png" alt="SaaS promo" /></a><br/><sub><b>30 ثانية SaaS product promo</b> · 16:9 · بأسلوب Linear/ClickUp مع كشف UI ثلاثي الأبعاد</sub></td>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-tiktok-karaoke-talking-head.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/tiktok-follow.png" alt="TikTok karaoke" /></a><br/><sub><b>TikTok karaoke talking-head</b> · 9:16 · TTS + captions متزامنة بالكلمة</sub></td>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-brand-sizzle-reel.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Brand sizzle" /></a><br/><sub><b>30 ثانية brand sizzle reel</b> · 16:9 · طباعة حركية متزامنة مع الإيقاع، audio-reactive</sub></td>
-</tr>
-<tr>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-data-bar-chart-race.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/data-chart.png" alt="Data chart" /></a><br/><sub><b>Animated bar-chart race</b> · 16:9 · إنفوغرافيك بيانات بأسلوب NYT</sub></td>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-flight-map-route.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/nyc-paris-flight.png" alt="Flight map" /></a><br/><sub><b>خريطة طيران (مصدر → وجهة)</b> · 16:9 · كشف مسار سينمائي بأسلوب Apple</sub></td>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-logo-outro-cinematic.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Logo outro" /></a><br/><sub><b>4 ثوانٍ logo outro سينمائي</b> · 16:9 · تجميع جزء بجزء + bloom</sub></td>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-money-counter-hype.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/apple-money-count.png" alt="Money counter" /></a><br/><sub><b>عدّاد $0 → $10K</b> · 9:16 · hype بأسلوب Apple مع وميض أخضر + burst</sub></td>
-</tr>
-<tr>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-app-showcase-three-phones.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png" alt="App showcase" /></a><br/><sub><b>عرض تطبيق على 3 هواتف</b> · 16:9 · هواتف عائمة مع نقاط تركيز للميزات</sub></td>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-social-overlay-stack.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.png" alt="Social overlay" /></a><br/><sub><b>Social overlay stack</b> · 9:16 · X · Reddit · Spotify · Instagram بالتسلسل</sub></td>
-<td width="25%" valign="top"><a href="prompt-templates/video/hyperframes-website-to-video-promo.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.png" alt="Website to video" /></a><br/><sub><b>خطّ موقع → فيديو</b> · 16:9 · يلتقط الموقع بـ 3 viewports + انتقالات</sub></td>
-<td width="25%" valign="top">&nbsp;</td>
-</tr>
-</table>
-
-النمط نفسه: اختر قالباً، عدّل الـ brief، أرسل. يقرأ الوكيل `skills/hyperframes/SKILL.md` المضمَّن (الذي يحمل سير عمل OD-specific للرندر — تجميع ملفات المصدر في `.hyperframes-cache/` لتفادي ازدحام مساحة الملفات، يوزّع الـ daemon `npx hyperframes render` لتفادي تعليق macOS sandbox-exec / Puppeteer، وتنزل MP4 النهائية فقط كقطعة مشروع)، ويصوغ التركيب، ويسلّم MP4. صور معاينة كتل الكتالوج © HeyGen، تُخدم من CDN الخاص بهم؛ الإطار OSS بنفسه Apache-2.0.
-
-> **موصول لكنه لم يُسطَّح بعد كقوالب:** Kling 2.0 / 1.6 / 1.5، Veo 3 / Veo 2، Sora 2 / Sora 2-Pro (عبر Fal)، MiniMax video-01 — جميعها داخل `VIDEO_MODELS` ([`apps/web/src/media/models.ts`](apps/web/src/media/models.ts)). Suno v5 / v4.5، Udio v2، Lyria 2 (موسيقى) و gpt-4o-mini-tts، MiniMax TTS (كلام) تغطي سطح الصوت. القوالب لهذه مفتوحة لمساهمات — ضع JSON في `prompt-templates/video/` أو `prompt-templates/audio/` ويظهر في الـ picker.
-
-## ما وراء الـ chat — ماذا يُشحن أيضاً
-
-تأخذ حلقة الـ chat / artifact الأضواء، لكن حفنة من القدرات الأقل ظهوراً موصولة بالفعل وتستحق أن تعرفها قبل أن تقارن OD بأيّ شيء آخر:
-
-- **استيراد ZIP من Claude Design.** اسحب ملف export من claude.ai إلى مربّع الترحيب. `POST /api/import/claude-design` يستخرجه إلى `.od/projects/<id>/` حقيقي، يفتح ملف الإدخال كتبويب، ويُجهّز برومبت "أكمل من حيث ترك Anthropic" لوكيلك المحلّي. لا إعادة برومبت، ولا "اطلب من النموذج إعادة إنشاء ما كان لدينا للتوّ". ([`apps/daemon/src/server.ts`](apps/daemon/src/server.ts) — `/api/import/claude-design`)
-- **بروكسي BYOK متعدّد المزوّدين.** `POST /api/proxy/{anthropic,openai,azure,google}/stream` يأخذ `{ baseUrl, apiKey, model, messages }`، يبني الطلب الخاص بالمزوّد، يُطبّع قطع SSE إلى `delta/end/error`، ويرفض loopback / link-local / RFC1918 لتفادي SSRF. متوافق OpenAI يغطّي OpenAI و Azure AI Foundry `/openai/v1` و DeepSeek و Groq و MiMo و OpenRouter و vLLM المستضاف ذاتياً؛ Azure OpenAI يضيف رابط deployment + `api-version`؛ Google يستخدم Gemini `:streamGenerateContent`.
-- **قوالب يحفظها المستخدم.** ما إن يعجبك رندر، يلتقط `POST /api/templates` HTML + metadata في جدول `templates` بـ SQLite. المشروع التالي يلتقطه من صف "your templates" في الـ picker — نفس السطح كما الـ 31 المشحونة، لكن خاصّة بك.
-- **حفظ الـ tabs.** كل مشروع يتذكّر ملفاته المفتوحة والتبويب النشط في جدول `tabs`. أعد فتح المشروع غداً، تجد مساحة العمل كما تركتها بالضبط.
-- **API لفحص الـ artifact.** `POST /api/artifacts/lint` يُجري فحوصات بنيوية على artifact مولَّد (كسر إطار `<artifact>`، ملفات side files مفقودة، tokens لوحة قديمة) ويعيد نتائج يمكن للوكيل قراءتها في الجولة التالية. التقييم الذاتي خماسي الأبعاد يستخدم هذا ليؤسّس درجته على دليل حقيقي، لا انطباع.
-- **بروتوكول sidecar + أتمتة سطح المكتب.** عمليات الـ daemon والويب وسطح المكتب تحمل stamps خماسية الحقول (`app · mode · namespace · ipc · source`) وتعرض قناة JSON-RPC IPC على `/tmp/open-design/ipc/<namespace>/<app>.sock`. `tools-dev inspect desktop status \| eval \| screenshot` يقود تلك القناة، فيعمل E2E بدون رأس على غلاف Electron حقيقي بدون harnesses خاصة ([`packages/sidecar-proto/`](packages/sidecar-proto/)، [`apps/desktop/src/main/`](apps/desktop/src/main/)).
-- **spawn ودود لـ Windows.** كل adapter قد ينفجر `CreateProcess` عند حدّ ~32 KB لـ argv ببرومبتات طويلة (Codex، Gemini، OpenCode، Cursor Agent، Qwen، Qoder CLI، Pi) يُمرَّر له البرومبت عبر stdin بدلاً من ذلك. Claude Code و Copilot يحتفظان بـ `-p`؛ ويتراجع الـ daemon إلى ملف برومبت مؤقت إن تجاوز ذلك أيضاً.
-- **بيانات runtime لكل namespace.** `OD_DATA_DIR` و`--namespace` يمنحانك أشجار `.od/`-style معزولة تماماً، فلا تتشارك Playwright وقنوات beta ومشاريعك الفعلية ملف SQLite واحد.
-
-## ميكانيكا مكافحة AI-slop
-
-كل المنظومة أدناه هي playbook الخاص بـ [`huashu-design`](https://github.com/alchaincyf/huashu-design)، نُقل إلى مكدّس برومبت OD وأصبح قابلاً للإنفاذ لكل skill عبر pre-flight لملفات side. اقرأ [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) للاطّلاع على الصياغة الحيّة:
-
-- **نموذج الأسئلة أوّلاً.** الجولة الأولى `<question-form>` فقط — لا تفكير، لا أدوات، لا سرد. يختار المستخدم الافتراضيات بسرعة الـ radio.
-- **استخراج brand-spec.** حين يُرفق المستخدم لقطة شاشة أو URL، يُجري الوكيل بروتوكولاً من خمس خطوات (locate · download · grep hex · تدوين `brand-spec.md` · vocalise) قبل كتابة CSS. **لا يخمّن ألوان الهوية من الذاكرة أبداً.**
-- **تقييم خماسي الأبعاد.** قبل إصدار `<artifact>`، يُقيّم الوكيل ناتجه بصمت من 1 إلى 5 عبر philosophy / hierarchy / execution / specificity / restraint. أيّ شيء أقل من 3/5 تراجع — أصلح وأعد التقييم. مرّتان أمر طبيعي.
-- **checklist بمستويات P0/P1/P2.** كلّ skill تشحن `references/checklist.md` ببوابات P0 صارمة. على الوكيل المرور بـ P0 قبل الإصدار.
-- **قائمة سوداء للـ slop.** تدرّجات بنفسجية عدوانية، أيقونات emoji عامة، بطاقات مدوّرة بحدود يسارية بارزة، أشخاص SVG مرسومون يدوياً، Inter كخط *display*، metrics مخترعة — كلها ممنوعة صراحة في البرومبت.
-- **placeholders صادقة > إحصائيات وهمية.** حين لا يملك الوكيل رقماً حقيقياً، يكتب `—` أو كتلة رمادية معنونة، لا "أسرع 10×".
-
-## مقارنة
-
-| المحور | [Claude Design][cd] (Anthropic) | [Open CoDesign][ocod] | **Open Design** |
-|---|---|---|---|
-| الترخيص | مغلق | MIT | **Apache-2.0** |
-| الشكل | ويب (claude.ai) | سطح مكتب (Electron) | **تطبيق ويب + daemon محلي** |
-| قابل للنشر على Vercel | ❌ | ❌ | **✅** |
-| Agent runtime | مُضمَّن (Opus 4.7) | مُضمَّن ([`pi-ai`][piai]) | **مفوَّض إلى CLI الموجودة لدى المستخدم** |
-| Skills | خاصّة | 12 وحدة TS مخصّصة + `SKILL.md` | **31 حزمة [`SKILL.md`][skill] قابلة للسحب والإفلات** |
-| نظام التصميم | خاصّ | `DESIGN.md` (v0.2 roadmap) | **`DESIGN.md` × 129 نظاماً مشحوناً** |
-| مرونة المزوّد | Anthropic فقط | 7+ عبر [`pi-ai`][piai] | **16 CLI adapter + بروكسي BYOK متوافق OpenAI** |
-| نموذج أسئلة الإقلاع | ❌ | ❌ | **✅ قاعدة صارمة، الجولة 1** |
-| منتقي الاتجاه | ❌ | ❌ | **✅ 5 اتجاهات حتميّة** |
-| تقدّم todo حيّ + بثّ الأدوات | ❌ | ✅ | **✅** (نمط UX من open-codesign) |
-| معاينة iframe معزولة | ❌ | ✅ | **✅** (نمط من open-codesign) |
-| استيراد ZIP من Claude Design | n/a | ❌ | **✅ `POST /api/import/claude-design` — أكمل من حيث ترك Anthropic** |
-| تعديلات comment-mode دقيقة | ❌ | ✅ | 🟡 جزئي — تعليقات على عناصر المعاينة + مرفقات chat؛ موثوقية الـ patch الدقيقة لا تزال قيد العمل |
-| لوحة tweaks يطلقها الذكاء الاصطناعي | ❌ | ✅ | 🚧 roadmap — لوحة UX مخصّصة في جانب الـ chat لم تُنفَّذ بعد |
-| مساحة عمل بمستوى نظام الملفات | ❌ | جزئي (sandbox الـ Electron) | **✅ cwd حقيقي، أدوات حقيقية، SQLite دائم (projects · conversations · messages · tabs · templates)** |
-| تقييم ذاتي خماسي الأبعاد | ❌ | ❌ | **✅ بوابة pre-emit** |
-| فحص Artifact | ❌ | ❌ | **✅ `POST /api/artifacts/lint` — نتائج تُغذّى للوكيل** |
-| Sidecar IPC + سطح مكتب headless | ❌ | ❌ | **✅ عمليات بـ stamps + `tools-dev inspect desktop status \| eval \| screenshot`** |
-| صيغ التصدير | محدودة | HTML / PDF / PPTX / ZIP / Markdown | **HTML / PDF / PPTX (مدفوع بالوكيل) / ZIP / Markdown** |
-| إعادة استخدام skill PPT | N/A | مدمج | **[`guizang-ppt-skill`][guizang] يدخل (الافتراضي لوضع deck)** |
-| الحدّ الأدنى للفوترة | Pro / Max / Team | BYOK | **BYOK — الصق أي `baseUrl` متوافق مع OpenAI** |
-
-[cd]: https://x.com/claudeai/status/2045156267690213649
-[ocod]: https://github.com/OpenCoworkAI/open-codesign
-[piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
-[acd]: https://github.com/VoltAgent/awesome-claude-design
-[guizang]: https://github.com/op7418/guizang-ppt-skill
-[skill]: https://docs.anthropic.com/en/docs/claude-code/skills
-
-## الوكلاء المدعومون
-
-يكتشفها الـ daemon تلقائياً من `PATH` عند الإقلاع. لا حاجة لإعداد. dispatch البثّ في [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) (`AGENT_DEFS`)؛ محلّلات كل CLI بجانبه. النماذج تُملأ إمّا بفحص `<bin> --list-models` / `<bin> models` / مصافحة ACP، أو من قائمة fallback منتقاة عند عدم كشف الـ CLI لقائمة.
-
-| الوكيل | Bin | صيغة البثّ | شكل argv (مسار البرومبت المُركَّب) |
-|---|---|---|---|
-| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | `claude-stream-json` (أحداث مكتوبة) | `claude -p <prompt> --output-format stream-json --verbose [--include-partial-messages] [--add-dir …] --permission-mode bypassPermissions` |
-| [Codex CLI](https://github.com/openai/codex) | `codex` | `json-event-stream` + محلّل `codex` | `codex exec --json --skip-git-repo-check --full-auto [-C cwd] [--model …] [-c model_reasoning_effort=…] -` (البرومبت على stdin) |
-| Devin for Terminal | `devin` | `acp-json-rpc` | `devin --permission-mode dangerous --respect-workspace-trust false acp` |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `json-event-stream` + محلّل `gemini` | `GEMINI_CLI_TRUST_WORKSPACE=true gemini --output-format stream-json --yolo [--model …]` (البرومبت على stdin) |
-| [OpenCode](https://opencode.ai/) | `opencode` | `json-event-stream` + محلّل `opencode` | `opencode run --format json --dangerously-skip-permissions [--model …] -` (البرومبت على stdin) |
-| [Cursor Agent](https://www.cursor.com/cli) | `cursor-agent` | `json-event-stream` + محلّل `cursor-agent` | `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust [--workspace cwd] [--model …] -` (البرومبت على stdin) |
-| [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen` | `plain` (قطع stdout خام) | `qwen --yolo [--model …] -` (البرومبت على stdin) |
-| Qoder CLI | `qodercli` | `qoder-stream-json` (أحداث مكتوبة) | `qodercli -p --output-format stream-json --permission-mode bypass_permissions [--cwd cwd] [--model …] [--add-dir …]` (البرومبت على stdin) |
-| [GitHub Copilot CLI](https://github.com/features/copilot/cli) | `copilot` | `copilot-stream-json` (أحداث مكتوبة) | `copilot -p <prompt> --allow-all-tools --output-format json [--model …] [--add-dir …]` |
-| [Hermes](https://github.com/eqlabs/hermes) | `hermes` | `acp-json-rpc` (Agent Client Protocol) | `hermes acp --accept-hooks` |
-| Kimi CLI | `kimi` | `acp-json-rpc` | `kimi acp` |
-| [Kiro CLI](https://kiro.dev) | `kiro-cli` | `acp-json-rpc` | `kiro-cli acp` |
-| Kilo | `kilo` | `acp-json-rpc` | `kilo acp` |
-| [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | `vibe-acp` | `acp-json-rpc` | `vibe-acp` |
-| DeepSeek TUI | `deepseek` | `plain` (raw stdout chunks) | `deepseek exec --auto [--model …] <prompt>` |
-| [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | `pi` | `pi-rpc` (stdio JSON-RPC) | `pi --mode rpc [--model …] [--thinking …]` (البرومبت يُرسل كأمر RPC `prompt`) |
-| **BYOK متعدّد المزوّدين** | n/a | تطبيع SSE | `POST /api/proxy/{provider}/stream` → Anthropic / متوافق OpenAI / Azure OpenAI / Gemini؛ محمي SSRF ضد loopback / link-local / RFC1918 |
-
-إضافة CLI جديدة = مدخل واحد في [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts). صيغة البثّ واحدة من `claude-stream-json` أو `qoder-stream-json` أو `copilot-stream-json` أو `json-event-stream` (مع `eventParser` لكل CLI) أو `acp-json-rpc` أو `pi-rpc` أو `plain`.
-
-## المراجع والنسب
-
-كل مشروع خارجي يقتبس منه هذا المستودع. كل رابط يقود إلى المصدر لتحقّق من الـ provenance.
-
-| المشروع | الدور هنا |
-|---|---|
-| [`Claude Design`][cd] | المنتج المغلق المصدر الذي يُمثّل هذا المستودع البديل المفتوح له. |
-| [**`alchaincyf/huashu-design`**](https://github.com/alchaincyf/huashu-design) | نواة فلسفة التصميم. سير عمل Junior-Designer، بروتوكول الأصول البصرية المؤلف من 5 خطوات، checklist مكافحة AI-slop، التقييم الذاتي خماسي الأبعاد، ومكتبة "5 مدارس × 20 فلسفة تصميم" خلف منتقي الاتجاه — كلّها مكثّفة في [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) و [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts). |
-| [**`op7418/guizang-ppt-skill`**][guizang] | skill Magazine-web-PPT المضمَّن حرفياً تحت [`skills/guizang-ppt/`](skills/guizang-ppt/) مع الحفاظ على LICENSE الأصلية. الافتراضي لوضع deck. ثقافة checklist بمستويات P0/P1/P2 مستعارة لكل skill أخرى. |
-| [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | معمارية الـ daemon + adapter. اكتشاف الوكلاء بمسح PATH، الـ daemon المحلي بوصفه العملية المميَّزة الوحيدة، ورؤية "الوكيل كزميل فريق". نتبنّى النموذج، لا نضمّ الكود. |
-| [**`OpenCoworkAI/open-codesign`**][ocod] | أوّل بديل مفتوح المصدر لـ Claude-Design، وأقرب أقراننا. أنماط UX المُتبنّاة: حلقة الـ artifact المتدفّقة، معاينة iframe المعزولة (مع React 18 + Babel مضمّنين)، لوحة الوكيل الحيّة (todos + tool calls + قابلة للمقاطعة)، قائمة التصدير بخمس صيغ (HTML/PDF/PPTX/ZIP/Markdown)، مركز تخزين محلي أوّلاً، حقن الذوق عبر `SKILL.md`، والتمرير الأوّل لتعليقات comment-mode على المعاينة. أنماط UX لا تزال على roadmap لدينا: موثوقية surgical-edit الكاملة ولوحة tweaks يطلقها الذكاء. **نتعمّد عدم ضمّ [`pi-ai`][piai]** — open-codesign يحزمه كـ agent runtime؛ نحن نفوّض لأيّ CLI لدى المستخدم. |
-| [`VoltAgent/awesome-claude-design`][acd] / [`awesome-design-md`][acd2] | مصدر مخطّط `DESIGN.md` ذي 9 أقسام و70 نظام منتج مستوردة عبر [`scripts/sync-design-systems.ts`](scripts/sync-design-systems.ts). |
-| [`bergside/awesome-design-skills`][ads] | مصدر 57 design skill أُضيفت مباشرة كملفات `DESIGN.md` مُطبَّعة تحت `design-systems/`. |
-| [`farion1231/cc-switch`](https://github.com/farion1231/cc-switch) | الإلهام لتوزيع skills قائم على symlink عبر CLI وكلاء متعدّدين. |
-| [Claude Code skills][skill] | اصطلاح `SKILL.md` متبنّى حرفياً — أيّ skill من Claude Code تُسقط في `skills/` ويلتقطها الـ daemon. |
-
-تدوينة provenance طويلة — ما نأخذه من كل واحد، وما نتعمّد عدم أخذه — في [`docs/references.md`](docs/references.md).
-
-## Roadmap
-
-- [x] Daemon + اكتشاف الوكلاء (16 CLI adapter) + سجلّ skills + كتالوج أنظمة التصميم
-- [x] تطبيق ويب + chat + نموذج أسئلة + منتقي 5 اتجاهات + تقدّم todo + معاينة معزولة
-- [x] 31 skill + 72 نظام تصميم + 5 اتجاهات بصرية + 5 إطارات أجهزة
-- [x] مشاريع · محادثات · رسائل · tabs · قوالب مدعومة بـ SQLite
-- [x] بروكسي BYOK متعدّد المزوّدين (`/api/proxy/{anthropic,openai,azure,google}/stream`) مع حماية SSRF
+| الواجهة الأمامية | Next.js 16 App Router + React 18 + TypeScript |
+| الـ Daemon | Node 24 · Express · بثّ SSE · `better-sqlite3` |
+| التخزين | الملفات في `.od/projects/<id>/` + SQLite في `.od/app.sqlite` + `media-config.json` (مستبعَد من git، يُنشَأ تلقائيًا). يعيد `OD_DATA_DIR` تحديد موقع كل شيء. |
+| المعاينة | iframe معزول بـ `srcdoc` + محلّل `<artifact>` يعمل بالبثّ |
+| التصدير | HTML (مضمَّن) · PDF (طباعة المتصفح) · PPTX (يقوده الوكيل) · ZIP · Markdown · MP4 (HyperFrames) |
+| سطح المكتب | غلاف Electron + مُصيِّر معزول + IPC جانبي (STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN) |
+| دورة الحياة | نقطة دخول واحدة: `pnpm tools-dev` (start / stop / run / status / logs / inspect / check) |
+
+البنية المعمارية الكاملة ← [`docs/architecture.md`](docs/architecture.md). بروتوكول المهارات ← [`docs/skills-protocol.md`](docs/skills-protocol.md). عقد محوّل الوكلاء ← [`docs/agent-adapters.md`](docs/agent-adapters.md).
+
+---
+
+## خارطة الطريق
+
+- [x] الـ Daemon + 21 محوّل واجهة CLI لوكلاء البرمجة + سجل المهارات + كتالوج أنظمة التصميم
+- [x] تطبيق ويب + دردشة + نموذج أسئلة + مُنتقي 5 اتجاهات + تقدّم قائمة المهام + معاينة معزولة
+- [x] أكثر من 100 مهارة · 150 نظام تصميم · 5 اتجاهات بصرية · 5 إطارات أجهزة
+- [x] مشاريع مدعومة بـ SQLite · محادثات · رسائل · علامات تبويب · قوالب
+- [x] وكيل BYOK متعدد المزوّدين (`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) + حماية SSRF
 - [x] استيراد ZIP من Claude Design (`/api/import/claude-design`)
-- [x] بروتوكول sidecar + سطح مكتب Electron مع أتمتة IPC (STATUS / EVAL / SCREENSHOT / CONSOLE / CLICK / SHUTDOWN)
-- [x] API لفحص Artifact + بوابة pre-emit للتقييم الذاتي خماسي الأبعاد
-- [ ] تعديلات comment-mode الدقيقة — جزء جاهز: تعليقات عناصر المعاينة ومرفقات الـ chat؛ patching دقيق موثوق لا يزال قيد العمل
-- [ ] UX لوحة tweaks يطلقها الذكاء — لم تُنفَّذ بعد
-- [ ] وصفة نشر Vercel + tunnel (Topology B)
-- [ ] أمر واحد `npx od init` لإنشاء مشروع بـ `DESIGN.md`
-- [ ] متجر skills (`od skills install <github-repo>`) وسطح CLI `od skill add | list | remove | test` (مسوَّد في [`docs/skills-protocol.md`](docs/skills-protocol.md)، التنفيذ معلَّق)
-- [x] حزمة Electron من `apps/packaged/` — تنزيلات macOS (Apple Silicon) و Windows (x64) على [open-design.ai](https://open-design.ai/) و [صفحة إصدارات GitHub](https://github.com/nexu-io/open-design/releases)
+- [x] بروتوكول جانبي + سطح مكتب Electron + أتمتة IPC
+- [x] واجهة API لفحص المخرجات + بوابة نقد ذاتي بخمسة أبعاد قبل الإصدار
+- [x] **0.8.0** — بنية تحتية لسوق الإضافات (261 إضافة رسمية، مواصفة البيان، سكربتات تثبيت لكل وكيل)
+- [x] **0.9.0** — Open Design AMR (Model Router الرسمي مدمج في التطبيق: بلا إعداد، تسجيل دخول بنقرة واحدة)
+- [x] إصدارات Electron مجمَّعة — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (مسار اختياري)
+- [ ] تعديلات جراحية في وضع التعليق — مشحونة جزئيًا؛ الترقيع المستهدف الموثوق قيد التنفيذ
+- [ ] تجربة استخدام لوحة تعديلات يصدرها الذكاء الاصطناعي — لم تُنفَّذ بعد
+- [ ] `npx od init` لتهيئة مشروع بملف `DESIGN.md`
+- [ ] SDK للإضافات + واجهة `od plugin {add,list,remove,test,publish}` CLI
+- [ ] إضافات نقل Figma / Pencil ← React / Next / Vue (ألفا)
+- [ ] إضافة تحديث قاعدة شفرة موجودة (وجّهها نحو مستودع git + ملف `DESIGN.md`)
 
-تسليم بمراحل → [`docs/roadmap.md`](docs/roadmap.md).
+التسليم المرحلي ← [`docs/roadmap.md`](docs/roadmap.md).
 
-## الحالة
+---
 
-هذا تنفيذ مبكّر — الحلقة المغلقة (اكتشاف → اختيار skill + نظام تصميم → chat → تحليل `<artifact>` → معاينة → حفظ) تعمل من البداية إلى النهاية. مكدّس البرومبت ومكتبة الـ skills هما حيث تكمن معظم القيمة، وهما مستقرّان. واجهة المستخدم على مستوى المكوّنات تُشحن يومياً.
+## المجتمع
 
-## أعطنا ★
+أناس حقيقيون خلف كل قناة.
+
+- 💬 **Discord** — دردشة يومية، مشاركة الإضافات، أسئلة ← [**discord.gg/qhbcCH8Am4**](https://discord.gg/qhbcCH8Am4)
+- 🐦 **X / Twitter** — ملاحظات الإصدارات، المعالم، ما وراء الكواليس ← [**@nexudotio**](https://x.com/nexudotio)
+- 🗣️ **GitHub Discussions** — أسئلة وأجوبة معمّقة، RFCs، "اعرض عملك" ← [**Discussions**](https://github.com/nexu-io/open-design/discussions)
+- 🐛 **GitHub Issues** — تقارير الأخطاء، طلبات الميزات ← [**Issues**](https://github.com/nexu-io/open-design/issues)
+
+تصنيفا [`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) و[`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) هما أسهل طريق للدخول.
+
+---
+
+## المساهمة
+
+يظل Open Design يتحرك لأن المساهمين — مصممين ومهندسين ومؤلفي موجّهات — يواصلون الحضور. الكثير من أكثر المهارات وأنظمة التصميم والإضافات استخدامًا كتبها أشخاص خارج الفريق الأساسي.
+
+### 🎯 من أين تبدأ (أقصى أثر، أقل تغيير)
+
+| تريد أن تشحن… | كيف | أين |
+|---|---|---|
+| **مهارة** جديدة | أسقِط مجلدًا يحوي `SKILL.md` + `assets/` + `references/` | [`skills/`](skills/) · المواصفة في [`docs/skills-protocol.md`](docs/skills-protocol.md) |
+| **نظام تصميم** جديد | أسقِط ملف `DESIGN.md` باستخدام مخطط الأقسام التسعة | [`design-systems/<brand>/`](design-systems/) |
+| **إضافة** جديدة | أسقِط `open-design.json` + بيانًا ضمن مجلد فئة | [`plugins/community/`](plugins/community/) · المواصفة في [`plugins/spec/SPEC.md`](plugins/spec/SPEC.md) · دليل تطوير الوكيل في [`plugins/spec/AGENT-DEVELOPMENT.md`](plugins/spec/AGENT-DEVELOPMENT.md) |
+| دعم **واجهة CLI** جديدة لوكيل برمجة | مدخل محوّل واحد + محلّل بثّ | [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) |
+| إصلاح خطأ أو تحسين الواجهة | تصفّح تصنيف [`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) | [Issues ←](https://github.com/nexu-io/open-design/issues) |
+| ترجمة الوثائق | حدّث ملفات `README.<lang>.md` | [`TRANSLATIONS.md`](TRANSLATIONS.md) |
+
+### 🤖 المساهمة بصفتك وكيلًا
+
+إن كنت *أنت الوكيل الذي يقرأ هذا*، فأسرع طريق هو:
+
+```bash
+# 1. Boot locally
+git clone https://github.com/nexu-io/open-design.git
+cd open-design && corepack enable && pnpm install
+pnpm tools-dev run web
+
+# 2. Find a good-first-issue and assign yourself
+gh issue list --label "good first issue" --state open --limit 20
+gh issue develop <number>   # create a branch and worktree
+
+# 3. Make the change, run the checks
+pnpm guard && pnpm typecheck
+pnpm --filter @open-design/<package> test
+
+# 4. Open the PR
+gh pr create --fill
+```
+
+سير المساهمة الكامل الصديق للوكلاء، وأسلوب الشفرة، ومستوى الـ PR ← [`CONTRIBUTING.md`](CONTRIBUTING.md) ([Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)).
+
+### 🏅 برنامج Open Design Fellow
+
+نوظّف **Open Design Fellows** حول العالم — يشكّل الزملاء المنتج جنبًا إلى جنب مع الفريق الأساسي، ويمثّلون Open Design رسميًا في منطقتهم، وينمّون المجتمع محليًا، مدعومين بدعم مموَّل ($1,000 / MR)، ورصيد LLM مجاني، ومسار مراجعة مباشر. التفاصيل ← [`MAINTAINERS.md`](MAINTAINERS.md) والإعلان على [Discord](https://discord.gg/qhbcCH8Am4).
+
+---
+
+## المشرفون
+
+يحملون قدرًا كبيرًا من العبء — الصيانة اليومية، والمراجعة، ودعم المجتمع.
+
+<table>
+  <tr>
+    <td align="center" valign="top" width="200">
+      <a href="https://github.com/Nagendhra-web">
+        <img src="https://github.com/Nagendhra-web.png" width="96" alt="@Nagendhra-web" /><br/>
+        <sub><b>@Nagendhra-web</b></sub>
+      </a><br/>
+      <sub>مشرف</sub>
+    </td>
+    <td align="center" valign="top" width="200">
+      <a href="https://github.com/Sid-Qin">
+        <img src="https://github.com/Sid-Qin.png" width="96" alt="@Sid-Qin" /><br/>
+        <sub><b>@Sid-Qin</b></sub>
+      </a><br/>
+      <sub>مشرف</sub>
+    </td>
+  </tr>
+</table>
+
+قواعد المشرفين، ومعايير الترقية، وبروتوكول الخروج ← [`MAINTAINERS.md`](MAINTAINERS.md) (كذلك [Deutsch](MAINTAINERS.de.md) · [Français](MAINTAINERS.fr.md) · [简体中文](MAINTAINERS.zh-CN.md) · [日本語](MAINTAINERS.ja-JP.md) · [Português](MAINTAINERS.pt-BR.md)).
+
+## المساهمون
+
+شكرًا لكل من شارك — شفرة، وثائق، ملاحظات، مشكلة دقيقة، مهارة جديدة، نظام تصميم جديد.
+
+<a href="https://github.com/nexu-io/open-design/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Open Design contributors" />
+</a>
+
+---
+
+## نشاط المستودع
+
+<picture>
+  <img alt="Open Design — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
+</picture>
+
+يُعاد توليد ملف SVG أعلاه يوميًا بواسطة [`.github/workflows/metrics.yml`](.github/workflows/metrics.yml) باستخدام [`lowlighter/metrics`](https://github.com/lowlighter/metrics).
+
+---
+
+## امنحنا نجمة
 
 <p align="center">
   <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
-إن وفّر هذا عليك ثلاثين دقيقة — أعطه ★. النجوم لا تدفع الإيجار، لكنها تخبر المصمّم والوكيل والمساهم القادم أن هذه التجربة تستحقّ انتباههم. نقرة واحدة، ثلاث ثوانٍ، إشارة حقيقية: [github.com/nexu-io/open-design](https://github.com/nexu-io/open-design).
-
-## المساهمة
-
-Issues و PRs و skills جديدة وأنظمة تصميم جديدة، كلّها مرحَّب بها. أعلى المساهمات أثراً عادةً تكون مجلّداً واحداً، أو ملف Markdown واحداً، أو adapter بحجم PR:
-
-- **أضِف skill** — ضع مجلّداً في [`skills/`](skills/) متّبعاً اصطلاح [`SKILL.md`][skill].
-- **أضِف نظام تصميم** — ضع `DESIGN.md` في [`design-systems/<brand>/`](design-systems/) باستخدام مخطّط 9 أقسام.
-- **اربط CLI وكيل برمجة جديد** — مدخل واحد في [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts).
-
-الجولة الكاملة، حدّ الدمج، أسلوب الكود، وما لا نقبله → [`CONTRIBUTING.md`](CONTRIBUTING.md) ([Deutsch](CONTRIBUTING.de.md)، [Français](CONTRIBUTING.fr.md)، [简体中文](CONTRIBUTING.zh-CN.md)).
-
-## المساهمون
-
-شكراً لكلّ من ساعد في دفع Open Design للأمام — بكود، بوثائق، بملاحظات، بـ skills جديدة، بأنظمة تصميم جديدة، أو حتى بـ issue حادّة. كلّ مساهمة حقيقية تهمّ، والجدار أدناه أسهل طريقة لقول ذلك علناً.
-
-<a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-31" alt="Open Design contributors" />
-</a>
-
-إن شحنت أوّل PR — مرحباً. تصنيف [`good-first-issue`](https://github.com/nexu-io/open-design/labels/good-first-issue) هو نقطة الدخول.
-
-## نشاط المستودع
-
-<p align="center">
-  <img alt="Open Design — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" width="720" />
-</p>
-
-## تاريخ النجوم
+إن وفّر عليك هذا ثلاثين دقيقة، فامنحه ★. النجوم لا تدفع الإيجار — لكنها تخبر المصمم والوكيل والمساهم التالي بأن هذه التجربة تستحق اهتمامهم. نقرة واحدة، وثلاث ثوانٍ، وإشارة حقيقية.
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-31" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-31" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-31" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-28" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
   </picture>
 </a>
 
-إن انحنى المنحنى صعوداً، فتلك الإشارة التي نبحث عنها. ★ هذا المستودع لتدفعه.
+---
 
-## شكر وتقدير
+## المراجع والنَّسَب
 
-عائلة skills HTML PPT Studio — الـ master [`skills/html-ppt/`](skills/html-ppt/) والأغلفة لكل قالب تحت [`skills/html-ppt-*/`](skills/) (15 قالب deck كامل، 36 ثيم، 31 layout صفحة واحدة، 27 حركة CSS + 20 canvas FX، runtime لوحة المفاتيح، ووضع magnetic-card presenter) — مدمجة من المشروع المفتوح [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) (MIT). LICENSE المصدر يُشحن داخل الشجرة في [`skills/html-ppt/LICENSE`](skills/html-ppt/LICENSE) وتعود نسبة التأليف لـ [@lewislulu](https://github.com/lewislulu). كل بطاقة Examples لكل قالب (`html-ppt-pitch-deck`، `html-ppt-tech-sharing`، `html-ppt-presenter-mode`، `html-ppt-xhs-post`، …) تفوّض إرشاد التأليف للـ master skill ليُحفظ سلوك المصدر prompt → output من البداية للنهاية عند ضغط **Use this prompt**.
+| المشروع | الدور |
+|---|---|
+| [Claude Design][cd] | المنتج مغلق المصدر الذي يُعدّ هذا المستودع البديل مفتوح المصدر له. |
+| [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | بوصلة فلسفة التصميم — سير عمل المصمم المبتدئ، بروتوكول أصول العلامة التجارية، قائمة تحقق ضد الركاكة بالذكاء الاصطناعي، نقد بخمسة أبعاد. |
+| [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | مهارة عرض الويب بأسلوب المجلات، مجمَّعة حرفيًا ضمن [`design-templates/guizang-ppt/`](design-templates/guizang-ppt/). افتراضية لوضع العرض التقديمي. |
+| [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | عائلة HTML PPT Studio — 15 قالب عرض تقديمي، 36 سمة، 31 تخطيط صفحة، وقت تشغيل للحركة، وضع عرض ببطاقات مغناطيسية. |
+| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | أول بديل مفتوح المصدر لـ Claude Design؛ أنماط تجربة الاستخدام التي نستعيرها (حلقة بثّ المخرجات، iframe المعزول، لوحة الوكيل الحية). |
+| [`multica-ai/multica`](https://github.com/multica-ai/multica) | بنية الـ daemon + المحوّل — اكتشاف الوكلاء بمسح PATH، الـ daemon المحلي بصفته العملية المميَّزة الوحيدة. |
+| [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | مصدر مخطط `DESIGN.md` ذي الأقسام التسعة و70 نظام منتج. |
+| [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | مصدر مهارات التصميم الـ 57 المضافة ضمن `design-systems/`. |
+| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | إطار الرسوميات الحركية HTML→MP4، مدمج بصفته `hyperframes-html` من الدرجة الأولى في Open Design. |
+| [Claude Code skills][skill] | اصطلاح `SKILL.md` الذي نعتمده حرفيًا. |
 
-تدفّق deck الأفقي / المجلّة تحت [`skills/guizang-ppt/`](skills/guizang-ppt/) مدمج من [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) (MIT). نسبة التأليف لـ [@op7418](https://github.com/op7418).
+النَّسَب التفصيلي ← [`docs/references.md`](docs/references.md).
+
+[skill]: https://docs.anthropic.com/en/docs/claude-code/skills
 
 ## الترخيص
 
-Apache-2.0. تحتفظ `skills/guizang-ppt/` المضمَّنة بترخيصها الأصلي [LICENSE](skills/guizang-ppt/LICENSE) (MIT) ونسبة التأليف لـ [op7418](https://github.com/op7418). تحتفظ `skills/html-ppt/` المضمَّنة بترخيصها الأصلي [LICENSE](skills/html-ppt/LICENSE) (MIT) ونسبة التأليف لـ [lewislulu](https://github.com/lewislulu).
-
-[cd]: https://x.com/claudeai/status/2045156267690213649
+‏Apache-2.0. يحتفظ المجمَّع `design-templates/guizang-ppt/` بترخيصه الأصلي [LICENSE](design-templates/guizang-ppt/LICENSE) (MIT، [@op7418](https://github.com/op7418)). ويحتفظ المجمَّع `design-templates/html-ppt/` بترخيصه الأصلي [LICENSE](design-templates/html-ppt/LICENSE) (MIT، [@lewislulu](https://github.com/lewislulu)).
 
 </div>

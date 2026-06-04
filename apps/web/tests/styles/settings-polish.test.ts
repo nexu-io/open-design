@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
+import { readExpandedIndexCss } from '../helpers/read-expanded-css';
+
 const indexCss = readFileSync(new URL('../../src/index.css', import.meta.url), 'utf8');
-const primitivesCss = readFileSync(new URL('../../src/styles/primitives.css', import.meta.url), 'utf8');
+const expandedIndexCss = readExpandedIndexCss();
 const mentionHomeCss = readFileSync(new URL('../../src/styles/workspace/mention-home.css', import.meta.url), 'utf8');
 
 function cssBlock(css: string, selector: string): string {
@@ -29,9 +31,9 @@ describe('settings polish CSS', () => {
   });
 
   it('paints selected select options as a full-row state, not text-only emphasis', () => {
-    const option = cssBlock(primitivesCss, '.od-select-option');
-    const selected = cssBlock(primitivesCss, '.od-select-option.selected');
-    const selectedHover = cssBlock(primitivesCss, '.od-select-option.selected:hover:not(:disabled),\n.od-select-option.selected.active:not(:disabled)');
+    const option = cssBlock(expandedIndexCss, '.od-select-option');
+    const selected = cssBlock(expandedIndexCss, '.od-select-option.selected');
+    const selectedHover = cssBlock(expandedIndexCss, '.od-select-option.selected:hover:not(:disabled),\n.od-select-option.selected.active:not(:disabled)');
 
     expect(ruleValue(option, 'width')).toBe('100%');
     expect(ruleValue(option, 'display')).toBe('grid');

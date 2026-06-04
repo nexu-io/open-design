@@ -81,6 +81,17 @@ export type DaemonAgentPayload =
   | LiveArtifactSsePayload
   | LiveArtifactRefreshSsePayload
   | { type: 'tool_use'; id: string; name: string; input: unknown }
+  /**
+   * Live-only incremental tool-input fragment, emitted while the model is still
+   * streaming a tool call's JSON arguments (Claude `input_json_delta`). `delta`
+   * is a raw, possibly mid-token JSON fragment — not parseable on its own.
+   * Consumers accumulate by `id` (the content-block id, equal to the eventual
+   * `tool_use.id`) for real-time display and discard once the full `tool_use`
+   * arrives. `name` is the tool name (known at content-block start) so the UI
+   * can gate the live preview to code-writing tools. NOT persisted — see
+   * `daemonAgentPayloadToPersistedAgentEvent`.
+   */
+  | { type: 'tool_input_delta'; id: string; name: string; delta: string }
   | { type: 'tool_result'; toolUseId: string; content: string; isError?: boolean }
   | { type: 'usage'; usage?: { input_tokens?: number; output_tokens?: number }; costUsd?: number; durationMs?: number }
   | { type: 'fabricated_role_marker'; marker: string; messageId?: string }

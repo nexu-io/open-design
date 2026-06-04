@@ -345,7 +345,7 @@ const { spawn } = require('node:child_process');
 const fixture = ${JSON.stringify(FAKE_VELA_FIXTURE)};
 const stateFile = ${JSON.stringify(stateFile)};
 const args = process.argv.slice(2);
-if (args[0] === 'models') {
+if (args[0] === 'model' && args[1] === 'list') {
   const state = existsSync(stateFile)
     ? JSON.parse(readFileSync(stateFile, 'utf8'))
     : { attempts: 0 };

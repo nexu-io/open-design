@@ -13,6 +13,7 @@
 // needs to commit.
 
 import { useMemo, useState } from 'react';
+import { VisuallyHidden } from '@open-design/components';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { useI18n } from '../../i18n';
 import type { PluginShareAction } from '../../state/projects';
@@ -261,7 +262,7 @@ export function PluginCard({
           data-testid={`plugins-home-save-${record.id}`}
         >
           <Icon name={isSaved ? 'check' : 'star'} size={12} />
-          <span className="sr-only">{isSaved ? 'Saved' : 'Save'}</span>
+          <VisuallyHidden>{isSaved ? 'Saved' : 'Save'}</VisuallyHidden>
         </button>
         <span className="plugins-home__card-title" title={title}>
           <span className="plugins-home__card-title-text">{title}</span>

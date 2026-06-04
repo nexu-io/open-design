@@ -1884,7 +1884,7 @@ async function testAgentConnectionInternal(
       ...baseEnv,
       ...(mmdRouteLaunchEnv || {}),
     }, executableResolution);
-    const auth = await probeAgentAuthStatus(input.agentId, executableResolution.launchPath, env);
+    const auth = await probeAgentAuthStatus(def, executableResolution.launchPath, env);
     if (auth?.status === 'missing') {
       // Preflight auth probe runs after binary resolution but before the
       // smoke spawn — phase is still 'binary_resolution'. The smoke

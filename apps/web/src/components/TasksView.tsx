@@ -854,7 +854,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
             </div>
           </div>
         ) : null}
-        <div className="automations-templates__grid">
+        <div className="automations-templates__grid" key={templateFilter}>
           {filteredTemplates.map((template) => (
             <button
               key={template.id}

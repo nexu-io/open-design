@@ -1,4 +1,5 @@
 import type { KnownProvider } from '../../state/config';
+import { SearchableModelSelect } from '../modelOptions';
 
 interface ByokProviderPickerProps {
   label: string;
@@ -17,27 +18,37 @@ export function ByokProviderPicker({
   onCustomProviderSelect,
   onProviderSelect,
 }: ByokProviderPickerProps) {
+  const options = [
+    { id: '', label: customProviderLabel },
+    ...providers.map((provider, index) => ({
+      id: String(index),
+      label: provider.label,
+    })),
+  ];
+
   return (
     <label className="field">
       <span className="field-label">{label}</span>
-      <select
+      <SearchableModelSelect
+        className="inline-switcher__select settings-model-select settings-model-select--byok"
+        aria-label={label}
+        searchPlaceholder={label}
+        popoverTestId="settings-byok-provider-preset-popover"
+        popoverClassName="settings-byok-select-popover"
+        minSearchableOptions={Number.POSITIVE_INFINITY}
+        models={options}
         value={selectedProviderIndex >= 0 ? String(selectedProviderIndex) : ''}
-        onChange={(e) => {
-          if (e.target.value === '') {
+        onChange={(value) => {
+          if (value === '') {
             onCustomProviderSelect();
             return;
           }
-          const idx = Number(e.target.value);
+          const idx = Number(value);
           if (!isNaN(idx) && providers[idx]) {
             onProviderSelect(providers[idx]!);
           }
         }}
-      >
-        <option value="">{customProviderLabel}</option>
-        {providers.map((p, i) => (
-          <option key={p.label} value={i}>{p.label}</option>
-        ))}
-      </select>
+      />
     </label>
   );
 }

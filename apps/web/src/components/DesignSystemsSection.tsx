@@ -11,6 +11,7 @@ import {
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { Icon } from './Icon';
 import { orderDesignSystemGroups } from './design-system-group-order';
+import { AnimatePresence } from 'motion/react';
 
 // Sibling Settings section that hosts the design-systems registry.
 // Lifted out of the previous LibrarySection so each surface (functional
@@ -562,12 +563,14 @@ export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Pr
           </>
         )}
       </div>
-      {previewSystem ? (
-        <DesignSystemPreviewModal
-          system={previewSystem}
-          onClose={() => setPreviewSystem(null)}
-        />
-      ) : null}
+      <AnimatePresence>
+        {previewSystem ? (
+          <DesignSystemPreviewModal
+            system={previewSystem}
+            onClose={() => setPreviewSystem(null)}
+          />
+        ) : null}
+      </AnimatePresence>
       {renameTarget ? (
         <div className="modal-backdrop" onClick={cancelRename}>
           <form

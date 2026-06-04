@@ -78,8 +78,10 @@ describe('POST /api/import/folder', () => {
       tabs: string[];
       active: string | null;
       hasSavedState?: boolean;
+      updatedAt?: number;
     };
-    expect(tabs).toEqual({ tabs: [], active: null, hasSavedState: true });
+    expect(tabs).toMatchObject({ tabs: [], active: null, hasSavedState: true });
+    expect(typeof tabs.updatedAt).toBe('number');
   });
 
   it('rejects folder imports in sandbox mode', async () => {
