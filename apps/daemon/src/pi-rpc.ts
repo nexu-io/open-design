@@ -322,36 +322,59 @@ export function mapPiRpcEvent(
   return null;
 }
 
-/**
- * Scan a pi session directory for the most recent .jsonl session file.
- * Returns the absolute path to the newest session file, or null if none
- * are found or the directory does not exist.
- */
-function resolveLastSessionPath(cwd: string | undefined): string | null {
-  if (typeof cwd !== 'string' || cwd.length === 0) return null;
+type PiSessionFileSnapshot = Map<string, { mtimeMs: number; size: number }>;
+
+function readPiSessionFiles(cwd: string | undefined): Array<{ path: string; mtimeMs: number; size: number }> {
+  if (typeof cwd !== 'string' || cwd.length === 0) return [];
   const sessionsDir = path.join(cwd, '.pi', 'sessions');
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(sessionsDir, { withFileTypes: true });
   } catch {
-    return null;
+    return [];
   }
-  let newestPath: string | null = null;
-  let newestMtime = 0;
+  const files: Array<{ path: string; mtimeMs: number; size: number }> = [];
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue;
     try {
       const full = path.join(sessionsDir, entry.name);
       const stat = fs.statSync(full);
-      if (stat.mtimeMs > newestMtime) {
-        newestMtime = stat.mtimeMs;
-        newestPath = full;
-      }
+      files.push({ path: full, mtimeMs: stat.mtimeMs, size: stat.size });
     } catch {
       // Skip unreadable entries.
     }
   }
-  return newestPath;
+  return files;
+}
+
+function snapshotPiSessionFiles(cwd: string | undefined): PiSessionFileSnapshot {
+  const snapshot: PiSessionFileSnapshot = new Map();
+  for (const file of readPiSessionFiles(cwd)) {
+    snapshot.set(file.path, { mtimeMs: file.mtimeMs, size: file.size });
+  }
+  return snapshot;
+}
+
+/**
+ * Resolve the session file written by this RPC run.
+ *
+ * pi stores all sessions for a cwd under one shared `.pi/sessions` directory.
+ * Selecting the newest file globally is unsafe because another pi process can
+ * write a newer session while this run is ending. Instead, compare the
+ * directory against the snapshot taken before we sent `prompt` and accept only
+ * the single file that was created or updated during this run. If multiple
+ * files changed, return null rather than wiring the next turn to the wrong
+ * history.
+ */
+function resolveSessionPathChangedSince(
+  cwd: string | undefined,
+  before: PiSessionFileSnapshot,
+): string | null {
+  const changed = readPiSessionFiles(cwd).filter((file) => {
+    const previous = before.get(file.path);
+    return !previous || file.mtimeMs > previous.mtimeMs || file.size !== previous.size;
+  });
+  return changed.length === 1 ? changed[0]?.path ?? null : null;
 }
 
 /**
@@ -402,6 +425,7 @@ export function attachPiRpcSession({
   }
 
   const runStartedAt = Date.now();
+  const sessionFilesBeforePrompt = snapshotPiSessionFiles(cwd);
   let finished = false;
   let fatal = false;
   const sentFirstToken = { value: false };
@@ -541,10 +565,10 @@ export function attachPiRpcSession({
 
     if (result === 'agent_end') {
       finished = true;
-      // Capture the session file path pi just wrote to disk, so the
-      // caller can pass it as parentSession on the next RPC session
-      // for conversational continuity.
-      capturedSessionPath = resolveLastSessionPath(cwd);
+      // Capture only the session file changed by this run. If another pi
+      // process wrote to the shared session directory concurrently, the
+      // resolver returns null instead of risking cross-conversation resume.
+      capturedSessionPath = resolveSessionPathChangedSince(cwd, sessionFilesBeforePrompt);
       // pi's RPC process stays alive after agent_end (designed for
       // multi-prompt sessions). The daemon's /api/chat is single-shot,
       // so close stdin and let the process exit naturally, or kill it

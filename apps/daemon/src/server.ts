@@ -5605,12 +5605,6 @@ export async function startServer({
   // the same resolved-IP check before issuing the upstream request.
   const validateExternalApiBaseUrl = (baseUrl) => validateBaseUrlResolved(baseUrl);
 
-  // Per-project pi RPC session tracking for conversational continuity.
-  // Maps project cwd path (stable across runs for the same project) to
-  // the most recent .jsonl session file. Used to pass parentSession on
-  // subsequent pi RPC calls so the agent sees prior conversation history.
-  const piParentSessionPaths = new Map();
-
   const resolvedPortRef = {
     get current() {
       return resolvedPort;
@@ -11267,12 +11261,14 @@ export async function startServer({
       research,
       message,
     );
-    // Resume-capable adapters (today: Claude) continue their own CLI
-    // session so they keep working memory across turns. Decide once per
-    // run; reuse for the prompt-composition skipTranscript choice, the
-    // buildArgs flags, and the create-turn persistence below.
+    // Resume-capable adapters continue their own upstream session so they
+    // keep working memory across turns. Decide once per run; reuse for the
+    // prompt-composition skipTranscript choice, the buildArgs flags, and the
+    // create-turn persistence below.
+    const agentSupportsSessionResume =
+      def.resumesSessionViaCli === true || def.streamFormat === 'pi-rpc';
     const agentResumeCtx =
-      def.resumesSessionViaCli === true && run.conversationId
+      agentSupportsSessionResume && run.conversationId
         ? resolveAgentResumeContext(db, {
             conversationId: run.conversationId,
             agentId: def.id,
@@ -11283,9 +11279,9 @@ export async function startServer({
       currentPrompt,
       // Only trim to the latest turn when we are actually resuming an
       // existing session. A create turn still sends the full transcript so
-      // a brand-new session (incl. first Claude turn after another agent)
+      // a brand-new session (incl. first turn after another agent)
       // is seeded with prior context.
-      { skipTranscript: def.resumesSessionViaCli === true && agentResumeCtx.isResuming },
+      { skipTranscript: agentResumeCtx.isResuming },
     );
     // The stable instruction slice (daemon prompt + tool contract + system
     // prompt = design system / skills / memory) is identical across turns of
@@ -11293,7 +11289,7 @@ export async function startServer({
     // holds it, so on resume turns we skip it unless it changed since the
     // session was seeded — keyed by a hash stored on agent_sessions. Create
     // turns and changed-hash turns send the full block (byte-identical to the
-    // previous behavior); non-Claude agents have isResuming === false and so
+    // previous behavior); non-resume agents have isResuming === false and so
     // always send the full block.
     const stableInstructionFingerprint = [daemonSystemPrompt, runtimeToolPrompt, systemPrompt]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
@@ -12855,8 +12851,8 @@ export async function startServer({
         prompt: composed,
         cwd: effectiveCwd,
         model: safeModel,
-        parentSession: typeof effectiveCwd === 'string' && effectiveCwd.length > 0
-          ? piParentSessionPaths.get(effectiveCwd)
+        parentSession: agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId
+          ? agentResumeCtx.resumeSessionId
           : undefined,
         send: (channel, payload) => {
           if (channel === 'agent') {
@@ -13306,13 +13302,17 @@ export async function startServer({
       }
       // Capture the pi session file path for conversational continuity.
       // The session path is discovered by attachPiRpcSession when it
-      // processes agent_end; getLastSessionPath() returns it after the
-      // session completes. Stored keyed by effectiveCwd (stable per
-      // project) so the next pi RPC call passes parentSession.
-      if (acpSession && typeof acpSession.getLastSessionPath === 'function' && typeof effectiveCwd === 'string' && effectiveCwd.length > 0) {
+      // processes agent_end; persist it under (conversationId, agentId) so
+      // another conversation in the same cwd cannot inherit this history.
+      if (acpSession && typeof acpSession.getLastSessionPath === 'function') {
         const sessionPath = acpSession.getLastSessionPath();
-        if (sessionPath) {
-          piParentSessionPaths.set(effectiveCwd, sessionPath);
+        if (status === 'succeeded' && sessionPath && run.conversationId && def.streamFormat === 'pi-rpc') {
+          upsertAgentSession(db, {
+            conversationId: run.conversationId,
+            agentId: def.id,
+            sessionId: sessionPath,
+            stablePromptHash: currentStableHash,
+          });
         }
       }
       if (status === 'succeeded') {

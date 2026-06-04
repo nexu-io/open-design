@@ -1166,16 +1166,19 @@ test('attachPiRpcSession does NOT send new_session when parentSession is omitted
   assert.ok(types.includes('prompt'), 'should send prompt');
 });
 
-test('attachPiRpcSession getLastSessionPath returns path after agent_end with real session dir', async () => {
+test('attachPiRpcSession getLastSessionPath returns only the session changed during this run', async () => {
   const tmpDir = await import('node:os').then((m) => m.tmpdir());
   const piDir = path.join(tmpDir, `.pi-test-${Date.now()}`);
-  // resolveLastSessionPath scans <cwd>/.pi/sessions/, NOT <cwd>/sessions/.
+  // pi session capture scans <cwd>/.pi/sessions/, NOT <cwd>/sessions/.
   const sessionsDir = path.join(piDir, '.pi', 'sessions');
   const fsp = await import('node:fs/promises');
   await fsp.mkdir(sessionsDir, { recursive: true });
-  // Write a fake session file so resolveLastSessionPath finds something.
-  const sessionFile = path.join(sessionsDir, '2026-06-01T00-00-00_test.jsonl');
-  await fsp.writeFile(sessionFile, '{"msg":"test"}\n');
+  // Existing unrelated sessions, even with a newer mtime, must not be
+  // captured as this run's parent.
+  const unrelatedSessionFile = path.join(sessionsDir, '2026-06-01T00-00-00_unrelated.jsonl');
+  await fsp.writeFile(unrelatedSessionFile, '{"msg":"unrelated"}\n');
+  const future = new Date(Date.now() + 60_000);
+  await fsp.utimes(unrelatedSessionFile, future, future);
   try {
     const send = (_channel: string, _payload: JsonRecord) => {};
     const child = createMockChild();
@@ -1185,6 +1188,8 @@ test('attachPiRpcSession getLastSessionPath returns path after agent_end with re
       cwd: piDir,
       send,
     });
+    const sessionFile = path.join(sessionsDir, '2026-06-01T00-00-01_current.jsonl');
+    await fsp.writeFile(sessionFile, '{"msg":"current"}\n');
     // Feed agent_end to trigger session path capture.
     feedStdoutLines(child, [
       { type: 'agent_start' },
@@ -1199,9 +1204,33 @@ test('attachPiRpcSession getLastSessionPath returns path after agent_end with re
     // Wait a tick for the async capture to complete.
     await new Promise((resolve) => setTimeout(resolve, 10));
     const captured = session.getLastSessionPath();
-    assert.ok(captured, 'should return a session path after agent_end');
-    assert.ok(captured.endsWith('.jsonl'), 'session path should end with .jsonl');
-    assert.ok(captured.startsWith(sessionsDir), 'session path should be inside sessions dir');
+    assert.equal(captured, sessionFile, 'should capture only the session file changed after attach');
+  } finally {
+    await fsp.rm(piDir, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+test('attachPiRpcSession getLastSessionPath returns null when multiple session files changed', async () => {
+  const tmpDir = await import('node:os').then((m) => m.tmpdir());
+  const piDir = path.join(tmpDir, `.pi-test-${Date.now()}-ambiguous`);
+  const sessionsDir = path.join(piDir, '.pi', 'sessions');
+  const fsp = await import('node:fs/promises');
+  await fsp.mkdir(sessionsDir, { recursive: true });
+  try {
+    const send = (_channel: string, _payload: JsonRecord) => {};
+    const child = createMockChild();
+    const session = attachPiRpcSession({
+      child: child as unknown as ChildProcess,
+      prompt: 'test',
+      cwd: piDir,
+      send,
+    });
+    await fsp.writeFile(path.join(sessionsDir, 'current.jsonl'), '{"msg":"current"}\n');
+    await fsp.writeFile(path.join(sessionsDir, 'other.jsonl'), '{"msg":"other"}\n');
+    feedStdoutLines(child, [{ type: 'agent_end' }]);
+    closeStdout(child);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(session.getLastSessionPath(), null, 'ambiguous session changes should not be captured');
   } finally {
     await fsp.rm(piDir, { recursive: true, force: true }).catch(() => {});
   }
