@@ -3,6 +3,10 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeMediaExecutionPolicyForRun } from './media-policy.js';
+import {
+  normalizeRunToolBundleForRun,
+  summarizeRunToolBundle,
+} from './run-tool-bundle.js';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
@@ -57,6 +61,7 @@ export function createChatRunService({
       pluginId:
         typeof meta.pluginId === 'string' && meta.pluginId ? meta.pluginId : null,
       mediaExecution: normalizeMediaExecutionPolicyForRun(meta.mediaExecution),
+      toolBundle: normalizeRunToolBundleForRun(meta.toolBundle),
       status: 'queued',
       createdAt: now,
       updatedAt: now,
@@ -149,6 +154,7 @@ export function createChatRunService({
     errorCode: run.errorCode ?? null,
     eventsLogPath: run.eventsLogPath ?? null,
     mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
+    toolBundle: summarizeRunToolBundle(run.toolBundle),
   });
 
   const finish = (run, status, code: number | null = null, signal: string | null = null) => {
@@ -175,6 +181,10 @@ export function createChatRunService({
   };
 
   const start = (run, starter) => {
+    run.analyticsTelemetry = {
+      ...(run.analyticsTelemetry ?? {}),
+      startRequestedAt: Date.now(),
+    };
     void starter(run).catch((err) => {
       fail(run, 'AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
     });

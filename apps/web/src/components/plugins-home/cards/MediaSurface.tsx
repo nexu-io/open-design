@@ -8,7 +8,6 @@
 
 import { useEffect, useState } from 'react';
 import type { MediaPreviewSpec } from '../preview';
-import { Icon } from '../../Icon';
 
 interface Props {
   preview: MediaPreviewSpec;
@@ -50,7 +49,7 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
           onError={() => setPosterLoadFailed(true)}
         />
       ) : useFallback ? (
-        <MediaFallback pluginTitle={pluginTitle} mediaType={preview.mediaType} />
+        <MediaFallback pluginTitle={pluginTitle} />
       ) : (
         <div
           className={`plugins-home__media-skeleton${inView ? ' is-active' : ''}`}
@@ -73,21 +72,15 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
 }
 
 function MediaFallback({
-  mediaType,
   pluginTitle,
 }: {
-  mediaType: MediaPreviewSpec['mediaType'];
   pluginTitle: string;
 }) {
   const trimmed = pluginTitle.trim();
   const glyph = String.fromCodePoint(trimmed.codePointAt(0) ?? 0x2022).toUpperCase();
-  const icon = mediaType === 'video' ? 'play' : mediaType === 'audio' ? 'mic' : 'image';
   return (
     <div className="plugins-home__media-fallback" aria-hidden>
       <span className="plugins-home__media-fallback-glyph">{glyph}</span>
-      <span className="plugins-home__media-fallback-icon">
-        <Icon name={icon} size={15} />
-      </span>
     </div>
   );
 }

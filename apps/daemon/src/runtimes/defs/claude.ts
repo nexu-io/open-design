@@ -1,6 +1,17 @@
 import { agentCapabilities } from '../capabilities.js';
 import { DEFAULT_MODEL_OPTION } from './shared.js';
+import { loadMmdRouteModels } from '../mmd-routes.js';
 import type { RuntimeAgentDef } from '../types.js';
+
+const CLAUDE_FALLBACK_MODELS = [
+  DEFAULT_MODEL_OPTION,
+  { id: 'sonnet', label: 'Sonnet (alias)' },
+  { id: 'opus', label: 'Opus (alias)' },
+  { id: 'haiku', label: 'Haiku (alias)' },
+  { id: 'claude-opus-4-5', label: 'claude-opus-4-5' },
+  { id: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5' },
+  { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
+];
 
 export const claudeAgentDef = {
     id: 'claude',
@@ -22,19 +33,11 @@ export const claudeAgentDef = {
       '--include-partial-messages': 'partialMessages',
       '--add-dir': 'addDir',
     },
-    // `claude` has no list-models subcommand; the CLI accepts both short
-    // aliases (sonnet/opus/haiku) and the full ids, so we ship both as
-    // hints. Users who want a non-shipped model can paste it via the
-    // Settings dialog's custom-model input.
-    fallbackModels: [
-      DEFAULT_MODEL_OPTION,
-      { id: 'sonnet', label: 'Sonnet (alias)' },
-      { id: 'opus', label: 'Opus (alias)' },
-      { id: 'haiku', label: 'Haiku (alias)' },
-      { id: 'claude-opus-4-5', label: 'claude-opus-4-5' },
-      { id: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5' },
-      { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
-    ],
+    // `claude` has no list-models subcommand. Prefer local mmd/MMS routes
+    // when present so proxy-backed Claude-compatible models appear in the
+    // picker, then keep the built-in aliases as fallback hints.
+    fallbackModels: CLAUDE_FALLBACK_MODELS,
+    fetchModels: async (_resolvedBin, env) => loadMmdRouteModels(env, CLAUDE_FALLBACK_MODELS),
     // Prompt delivered via stdin to avoid both Linux `spawn E2BIG`
     // (MAX_ARG_STRLEN caps a single argv entry at ~128 KB) and Windows
     // `spawn ENAMETOOLONG` (CreateProcess caps the full command line at

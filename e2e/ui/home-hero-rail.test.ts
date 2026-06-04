@@ -370,7 +370,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('home hero rail shows the current creation chips and More shortcuts', async ({ page }) => {
+test('[P2] home hero rail shows the current creation chips and More shortcuts', async ({ page }) => {
   await gotoEntryHome(page);
 
   await expect(page.getByTestId('entry-star-badge')).toContainText('51.6K');
@@ -388,7 +388,7 @@ test('home hero rail shows the current creation chips and More shortcuts', async
   }
 });
 
-test('home hero rail switches non-media modes without surfacing media-only footer options', async ({ page }) => {
+test('[P1] home hero rail switches non-media modes without surfacing media-only footer options', async ({ page }) => {
   await gotoEntryHome(page);
 
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
@@ -413,7 +413,7 @@ test('home hero rail switches non-media modes without surfacing media-only foote
   await clearActiveChip(page);
 });
 
-test('home hero rail exposes media footer options for image, video, hyperframes, and audio', async ({ page }) => {
+test('[P1] home hero rail exposes media footer options for image, video, hyperframes, and audio', async ({ page }) => {
   await gotoEntryHome(page);
 
   await expectChipSelection(page, 'image', 'Image');
@@ -438,18 +438,18 @@ test('home hero rail exposes media footer options for image, video, hyperframes,
   await expect(page.getByTestId('home-hero-footer-option-duration')).toBeVisible();
 });
 
-test('home hero example presets update the composer input for prototype and live artifact', async ({ page }) => {
+test('[P1] home hero example presets update the composer input for prototype and live artifact', async ({ page }) => {
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-input');
-  await expect(input).toHaveValue('');
+  await expect(input).toHaveText('');
 
   await page.getByTestId('home-hero-rail-prototype').click();
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-web-prototype"]')
     .click();
-  await expect(input).toHaveValue(
+  await expect(input).toHaveText(
     'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
   );
 
@@ -459,26 +459,26 @@ test('home hero example presets update the composer input for prototype and live
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="image-template-notion-team-dashboard-live-artifact"]')
     .click();
-  await expect(input).toHaveValue('Create a refreshable Notion dashboard live artifact.');
+  await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
 });
 
-test('home hero deck example preset updates the composer input', async ({ page }) => {
+test('[P1] home hero deck example preset updates the composer input', async ({ page }) => {
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-input');
-  await expect(input).toHaveValue('');
+  await expect(input).toHaveText('');
 
   await page.getByTestId('home-hero-rail-deck').click();
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-simple-deck"]')
     .click();
-  await expect(input).toHaveValue(
+  await expect(input).toHaveText(
     'Create a pitch deck for decision makers about quarterly review with 10-15 pages. Speaker notes: include speaker notes. Use the active project design system.',
   );
 });
 
-test('clearing the active hero chip restores the rail and clears preset chrome', async ({ page }) => {
+test('[P2] clearing the active hero chip restores the rail and clears preset chrome', async ({ page }) => {
   await gotoEntryHome(page);
 
   await page.getByTestId('home-hero-rail-prototype').click();
@@ -496,7 +496,7 @@ test('clearing the active hero chip restores the rail and clears preset chrome',
   await expect(page.getByTestId('home-hero-rail-live-artifact')).toBeVisible();
 });
 
-test('after clearing one mode, selecting another example updates the composer without leaking prior mode state', async ({ page }) => {
+test('[P1] after clearing one mode, selecting another example updates the composer without leaking prior mode state', async ({ page }) => {
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-input');
@@ -506,7 +506,7 @@ test('after clearing one mode, selecting another example updates the composer wi
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-web-prototype"]')
     .click();
-  await expect(input).toHaveValue(
+  await expect(input).toHaveText(
     'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
   );
 
@@ -519,10 +519,10 @@ test('after clearing one mode, selecting another example updates the composer wi
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="image-template-notion-team-dashboard-live-artifact"]')
     .click();
-  await expect(input).toHaveValue('Create a refreshable Notion dashboard live artifact.');
+  await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
 });
 
-test('closing the selected example chip clears the example state while preserving the current mode chip', async ({ page }) => {
+test('[P2] closing the selected example chip clears the example state while preserving the current mode chip', async ({ page }) => {
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-input');
@@ -536,7 +536,7 @@ test('closing the selected example chip clears the example state while preservin
   const exampleChip = page.getByTestId('home-hero-active-example');
   await expect(exampleChip).toBeVisible();
   await expect(exampleChip).toContainText(/示例提示词|Example prompts/i);
-  await expect(input).toHaveValue('Create a refreshable Notion dashboard live artifact.');
+  await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
   await expect(page.getByTestId('home-hero-active-type-chip')).toContainText(/实时制品|Live artifact/i);
 
   await exampleChip.getByRole('button', { name: /关闭|close/i }).click();
@@ -545,10 +545,10 @@ test('closing the selected example chip clears the example state while preservin
   await expect(page.getByTestId('home-hero-active-type-chip')).toBeVisible();
   await expect(page.getByTestId('home-hero-active-type-chip')).toContainText(/实时制品|Live artifact/i);
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
-  await expect(input).toHaveValue('Create a refreshable Notion dashboard live artifact.');
+  await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
 });
 
-test('after closing one example chip, selecting another example updates the composer input', async ({ page }) => {
+test('[P1] after closing one example chip, selecting another example updates the composer input', async ({ page }) => {
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-input');
@@ -568,7 +568,7 @@ test('after closing one example chip, selecting another example updates the comp
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-live-artifact"]')
     .click();
   await expect(page.getByTestId('home-hero-active-example')).toBeVisible();
-  await expect(input).toHaveValue('Create refreshable, auditable Open Design artifacts backed by connector or local data.');
+  await expect(input).toHaveText('Create refreshable, auditable Open Design artifacts backed by connector or local data.');
 });
 
 async function expectChipSelection(page: Page, chipId: string, _label: string) {

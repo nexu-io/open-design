@@ -12,13 +12,19 @@ import { resolveDaemonUrl, DEFAULT_DAEMON_URL } from "../src/daemon-url.js";
 
 describe("resolveDaemonUrl", () => {
   let ipcBaseDir: string;
+  let fakeBinDir: string;
+  let emptyBinDir: string;
 
   beforeAll(() => {
     ipcBaseDir = fs.mkdtempSync(path.join(os.tmpdir(), "od-mcp-resolve-"));
+    fakeBinDir = fs.mkdtempSync(path.join(os.tmpdir(), "od-tools-dev-resolve-"));
+    emptyBinDir = fs.mkdtempSync(path.join(os.tmpdir(), "od-tools-dev-empty-"));
   });
 
   afterAll(() => {
     fs.rmSync(ipcBaseDir, { recursive: true, force: true });
+    fs.rmSync(fakeBinDir, { recursive: true, force: true });
+    fs.rmSync(emptyBinDir, { recursive: true, force: true });
   });
 
   it("prefers the explicit --daemon-url flag", async () => {
@@ -45,11 +51,37 @@ describe("resolveDaemonUrl", () => {
   it("returns the legacy default when no flag/env/socket is available", async () => {
     const url = await resolveDaemonUrl({
       env: {
+        PATH: emptyBinDir,
         [SIDECAR_ENV.IPC_PATH]: path.join(ipcBaseDir, "missing.sock"),
       },
       timeoutMs: 200,
     });
     expect(url).toBe(DEFAULT_DAEMON_URL);
+  });
+
+  it("discovers the default tools-dev daemon URL when no sidecar IPC path is available", async () => {
+    const pnpmBin = path.join(fakeBinDir, process.platform === "win32" ? "pnpm.cmd" : "pnpm");
+    const statusJson = JSON.stringify({
+      apps: {
+        daemon: {
+          url: "http://127.0.0.1:60123",
+        },
+      },
+    });
+    if (process.platform === "win32") {
+      fs.writeFileSync(pnpmBin, `@echo off\r\necho ${statusJson.replace(/"/g, '\\"')}\r\n`);
+    } else {
+      fs.writeFileSync(pnpmBin, `#!/bin/sh\nprintf '%s\\n' 'pnpm warning before json'\nprintf '%s\\n' '${statusJson}'\n`);
+      fs.chmodSync(pnpmBin, 0o755);
+    }
+
+    const url = await resolveDaemonUrl({
+      env: {
+        PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH ?? ""}`,
+      },
+      timeoutMs: 1000,
+    });
+    expect(url).toBe("http://127.0.0.1:60123");
   });
 
   it("discovers the live daemon URL via the concrete sidecar IPC status endpoint", async () => {

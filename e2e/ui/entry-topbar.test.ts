@@ -99,7 +99,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('home topbar shows the new entry chips and links', async ({ page }) => {
+test('[P2] home topbar shows the new entry chips and links', async ({ page }) => {
   await gotoEntryHome(page);
 
   const topbar = page.locator('.entry-main__topbar');
@@ -121,7 +121,7 @@ test('home topbar shows the new entry chips and links', async ({ page }) => {
   await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
 });
 
-test('home topbar execution pill reflects the selected Local CLI agent and opens the switcher', async ({ page }) => {
+test('[P1] home topbar execution pill reflects the selected Local CLI agent and opens the switcher', async ({ page }) => {
   await gotoEntryHome(page);
 
   const pill = page.getByTestId('inline-model-switcher-chip');
@@ -142,7 +142,7 @@ test('home topbar execution pill reflects the selected Local CLI agent and opens
   await expect(popover.getByRole('radio', { name: /Codex CLI/i })).toBeVisible();
 });
 
-test('home topbar star and discord badges expose the current external-link contract', async ({ page }) => {
+test('[P2] home topbar star and discord badges expose the current external-link contract', async ({ page }) => {
   await gotoEntryHome(page);
 
   const star = page.getByTestId('entry-star-badge');
@@ -156,7 +156,7 @@ test('home topbar star and discord badges expose the current external-link contr
   await expect(discord).toHaveAttribute('aria-label', /Join the Open Design Discord/i);
 });
 
-test('home topbar Use everywhere navigates to Integrations with the tab selected', async ({ page }) => {
+test('[P2] home topbar Use everywhere navigates to Integrations with the tab selected', async ({ page }) => {
   await gotoEntryHome(page);
 
   await page.getByTestId('entry-use-everywhere-button').click();
@@ -167,7 +167,7 @@ test('home topbar Use everywhere navigates to Integrations with the tab selected
   );
 });
 
-test('home topbar settings button opens settings and closes the execution popover', async ({ page }) => {
+test('[P1] home topbar settings button opens settings and closes the execution popover', async ({ page }) => {
   await gotoEntryHome(page);
 
   const pill = page.getByTestId('inline-model-switcher-chip');
@@ -181,7 +181,7 @@ test('home topbar settings button opens settings and closes the execution popove
   await expect(popover).toHaveCount(0);
 });
 
-test('clicking the top-left logo from another entry view returns to the home hero', async ({ page }) => {
+test('[P2] clicking the top-left logo from another entry view returns to the home hero', async ({ page }) => {
   await gotoEntryHome(page);
 
   await page.getByTestId('entry-use-everywhere-button').click();

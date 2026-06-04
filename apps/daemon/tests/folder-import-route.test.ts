@@ -1,6 +1,6 @@
 import type http from 'node:http';
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -56,26 +56,6 @@ describe('POST /api/import/folder', () => {
     }
   }
 
-  async function waitForRunStatus(
-    runId: string,
-  ): Promise<{ status: string; error?: string | null; errorCode?: string | null }> {
-    let lastStatus = 'unknown';
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
-      const statusBody = (await statusResponse.json()) as {
-        status: string;
-        error?: string | null;
-        errorCode?: string | null;
-      };
-      lastStatus = statusBody.status;
-      if (statusBody.status !== 'queued' && statusBody.status !== 'running') {
-        return statusBody;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    throw new Error(`run did not reach a terminal status; last status: ${lastStatus}`);
-  }
-
   it('creates a project rooted at the submitted folder', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
@@ -105,7 +85,7 @@ describe('POST /api/import/folder', () => {
     });
   });
 
-  it('fails sandbox runs for imported folders instead of using an empty managed project', async () => {
+  it('rejects sandbox runs for imported folders before creating a run', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
 
@@ -123,13 +103,76 @@ describe('POST /api/import/folder', () => {
           message: 'Inspect the imported project.',
         }),
       });
-      expect(runResp.status).toBe(202);
-      const { runId } = (await runResp.json()) as { runId: string };
-      const status = await waitForRunStatus(runId);
-      expect(status.status).toBe('failed');
-      expect(status.errorCode).toBe('BAD_REQUEST');
-      expect(status.error).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
+      expect(runResp.status).toBe(400);
+      const body = (await runResp.json()) as { error?: { message?: string } };
+      expect(body.error?.message).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
     });
+  });
+
+  it('rejects sandbox chat runs for imported folders before creating a run', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    await withSandboxMode(async () => {
+      const chatResp = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'claude',
+          projectId: project.id,
+          message: 'Inspect the imported project.',
+        }),
+      });
+      expect(chatResp.status).toBe(400);
+      const body = (await chatResp.json()) as { error?: { message?: string } };
+      expect(body.error?.message).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
+
+      const runsResp = await fetch(`${baseUrl}/api/runs?projectId=${encodeURIComponent(project.id)}`);
+      expect(runsResp.status).toBe(200);
+      const runsBody = (await runsResp.json()) as { runs: unknown[] };
+      expect(runsBody.runs).toHaveLength(0);
+    });
+  });
+
+  it('opens imported-folder projects through host editor routes in sandbox mode', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+    const binDir = makeFolder();
+    const cursorBin = path.join(
+      binDir,
+      process.platform === 'win32' ? 'cursor.cmd' : 'cursor',
+    );
+    await writeFile(
+      cursorBin,
+      process.platform === 'win32' ? '@echo off\r\nexit /b 0\r\n' : '#!/bin/sh\nexit 0\n',
+    );
+    await chmod(cursorBin, 0o755);
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ''}`;
+    try {
+      await withSandboxMode(async () => {
+        const resp = await fetch(`${baseUrl}/api/projects/${project.id}/open-in`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ editorId: 'cursor' }),
+        });
+        expect(resp.status).toBe(200);
+        const body = (await resp.json()) as { path?: string };
+        expect(body.path).toBe(await realpath(folder));
+      });
+    } finally {
+      if (previousPath == null) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
   });
 
   it('still opens an imported-folder project record in sandbox mode', async () => {

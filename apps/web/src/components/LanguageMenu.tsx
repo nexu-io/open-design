@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { popoverIn, staggerContainer, listItem } from '../motion';
 import { LOCALE_LABEL, LOCALES, useI18n, type Locale } from '../i18n';
 import { Icon } from './Icon';
 
@@ -45,34 +47,51 @@ export function LanguageMenu() {
         <span>{LOCALE_LABEL[locale]}</span>
         <Icon name="chevron-down" size={11} />
       </button>
-      {open ? (
-        <div className="lang-menu-popover" role="menu">
-          {LOCALES.map((code) => {
-            const active = locale === code;
-            return (
-              <button
-                key={code}
-                type="button"
-                role="menuitemradio"
-                aria-checked={active}
-                className={`lang-menu-item${active ? ' active' : ''}`}
-                onClick={() => {
-                  setLocale(code as Locale);
-                  setOpen(false);
-                }}
-              >
-                <span className="lang-menu-label">{LOCALE_LABEL[code]}</span>
-                <span className="lang-menu-code">{code}</span>
-                {active ? (
-                  <span className="lang-menu-check" aria-hidden>
-                    <Icon name="check" size={12} />
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+      <AnimatePresence>
+        {open ? (
+          <motion.div
+            className="lang-menu-popover"
+            role="menu"
+            variants={popoverIn}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+          >
+            <motion.div
+              variants={staggerContainer}
+              initial="hidden"
+              animate="visible"
+              style={{ display: 'contents' }}
+            >
+              {LOCALES.map((code) => {
+                const active = locale === code;
+                return (
+                  <motion.button
+                    key={code}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={active}
+                    className={`lang-menu-item${active ? ' active' : ''}`}
+                    onClick={() => {
+                      setLocale(code as Locale);
+                      setOpen(false);
+                    }}
+                    variants={listItem}
+                  >
+                    <span className="lang-menu-label">{LOCALE_LABEL[code]}</span>
+                    <span className="lang-menu-code">{code}</span>
+                    {active ? (
+                      <span className="lang-menu-check" aria-hidden>
+                        <Icon name="check" size={12} />
+                      </span>
+                    ) : null}
+                  </motion.button>
+                );
+              })}
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

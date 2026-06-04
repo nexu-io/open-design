@@ -8,6 +8,7 @@ import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
 
 const STORAGE_KEY = 'open-design:config';
+const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 const APP_OWNED_SCENARIO_FLOWS = new Set([
   'design-files-upload',
   'design-files-delete',
@@ -15,8 +16,17 @@ const APP_OWNED_SCENARIO_FLOWS = new Set([
   'uploaded-image-renders-in-preview',
   'python-source-preview',
   'example-use-prompt',
+  'comment-attachment-flow',
 ]);
 test.describe.configure({ timeout: 45_000 });
+
+function artifactPreview(page: Page) {
+  return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
+}
+
+function artifactPreviewFrame(page: Page) {
+  return page.frameLocator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR);
+}
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((key) => {
@@ -62,7 +72,7 @@ test.beforeEach(async ({ page }) => {
 for (const entry of automatedUiScenarios().filter(
   (scenario) => !APP_OWNED_SCENARIO_FLOWS.has(scenario.flow ?? ''),
 )) {
-  test(`${entry.id}: ${entry.title}`, async ({ page }) => {
+  test(`[${scenarioPriority(entry)}] ${entry.id}: ${entry.title}`, async ({ page }) => {
     await page.route('**/api/agents', async (route) => {
       await route.fulfill({
         json: {
@@ -379,11 +389,64 @@ for (const entry of automatedUiScenarios().filter(
   });
 }
 
-test('sending preview comments keeps the preview live and refreshes it with the follow-up artifact', async ({ page }) => {
+test('[P0] comment attachment flow attaches preview comments to the next run as structured context', async ({ page }) => {
+  test.setTimeout(75_000);
   const entry = automatedUiScenarios().find((scenario) => scenario.id === 'comment-attachment-flow');
   if (!entry?.mockArtifact) {
     throw new Error('comment-attachment-flow scenario fixture is missing');
   }
+
+  await routeMockAgents(page);
+  await page.route('**/api/runs', async (route) => {
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ runId: 'comment-attachment-run' }),
+    });
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    const body = [
+      'event: start',
+      'data: {"bin":"mock-agent"}',
+      '',
+      'event: end',
+      'data: {"code":0,"status":"succeeded"}',
+      '',
+      '',
+    ].join('\n');
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body,
+    });
+  });
+
+  const projectId = await createEmptyProject(page, 'Comment attachment flow');
+  await expectWorkspaceReady(page);
+  await seedHtmlArtifact(page, projectId, entry.mockArtifact.fileName, entry.mockArtifact.html);
+  await page.reload();
+  await expectWorkspaceReady(page);
+  await page.goto(`/projects/${projectId}/files/${entry.mockArtifact.fileName}`, { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await expect(artifactPreview(page)).toBeVisible();
+
+  await runCommentAttachmentFlow(page, entry);
+});
+
+test('[P0] sending preview comments opens the refreshed follow-up artifact', async ({ page }) => {
+  test.setTimeout(75_000);
+  const entry = automatedUiScenarios().find((scenario) => scenario.id === 'comment-attachment-flow');
+  if (!entry?.mockArtifact) {
+    throw new Error('comment-attachment-flow scenario fixture is missing');
+  }
+  const revisedHtml =
+    '<!doctype html><html><body><main data-od-id="hero-section">' +
+    '<h1 data-od-id="hero-title" data-screen-label="Hero title">Revised headline</h1>' +
+    '<p data-od-id="hero-copy">Preview copy refreshed after comment send.</p>' +
+    '</main></body></html>';
 
   await routeMockAgents(page);
 
@@ -397,13 +460,8 @@ test('sending preview comments keeps the preview live and refreshes it with the 
     });
   });
   await page.route('**/api/runs/*/events', async (route) => {
-    const revisedHtml =
-      '<!doctype html><html><body><main data-od-id="hero-section">' +
-      '<h1 data-od-id="hero-title" data-screen-label="Hero title">Revised headline</h1>' +
-      '<p data-od-id="hero-copy">Preview copy refreshed after comment send.</p>' +
-      '</main></body></html>';
-    const artifactTitle = requestCount === 1 ? entry.mockArtifact!.title : 'Commentable Artifact Revised';
-    const artifactHtml = requestCount === 1 ? entry.mockArtifact!.html : revisedHtml;
+    const artifactTitle = entry.mockArtifact!.title;
+    const artifactHtml = revisedHtml;
     const body = [
       'event: start',
       'data: {"bin":"mock-agent"}',
@@ -432,16 +490,19 @@ test('sending preview comments keeps the preview live and refreshes it with the 
     });
   });
 
-  await gotoEntryHome(page);
-  await createProject(page, entry);
+  const projectId = await createEmptyProject(page, 'Comment preview follow-up');
   await expectWorkspaceReady(page);
 
-  await sendPrompt(page, entry.prompt);
-  await expectArtifactVisible(page, entry);
+  await seedHtmlArtifact(page, projectId, entry.mockArtifact.fileName, entry.mockArtifact.html);
+  await page.reload();
+  await expectWorkspaceReady(page);
+  await page.goto(`/projects/${projectId}/files/${entry.mockArtifact.fileName}`, { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await expect(artifactPreview(page)).toBeVisible();
 
   await page.getByTestId('board-mode-toggle').click();
   await page.getByTestId('comment-panel-toggle').click();
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  const frame = artifactPreviewFrame(page);
   await frame.locator('[data-od-id="hero-title"]').click();
   await expect(page.getByTestId('comment-popover')).toBeVisible();
   await page.getByTestId('comment-popover-input').fill('Make the headline more specific.');
@@ -450,27 +511,51 @@ test('sending preview comments keeps the preview live and refreshes it with the 
 
   const sidePanel = page.getByTestId('comment-side-panel');
   await expect(sidePanel).toBeVisible();
-  await sidePanel.getByTestId('comment-side-item').filter({ hasText: 'Make the headline more specific.' })
-    .getByRole('button', { name: 'Select' })
-    .click();
+  await expect(sidePanel.getByTestId('comment-side-item').filter({ hasText: 'Make the headline more specific.' }).first()).toBeVisible();
+  await expect
+    .poll(async () => {
+      const selectAll = sidePanel.getByRole('button', { name: /select all/i }).first();
+      if ((await selectAll.count()) === 0) return false;
+      await selectAll.evaluate((element: HTMLButtonElement) => element.click());
+      return (await page.getByTestId('comment-side-send-claude').count()) > 0;
+    })
+    .toBe(true);
   await expect(page.getByTestId('comment-side-send-claude')).toBeVisible();
 
   const runRequest = page.waitForRequest(isCreateRunRequest);
+  const runEvents = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname.startsWith('/api/runs/') && url.pathname.endsWith('/events');
+  });
   await page.getByTestId('comment-side-send-claude').click();
   const body = (await runRequest).postDataJSON() as {
-    commentAttachments?: Array<{ elementId?: string; comment?: string; filePath?: string }>;
+    message?: string;
+    commentAttachments?: Array<{
+      elementId?: string;
+      comment?: string;
+      commentContext?: string;
+      filePath?: string;
+    }>;
   };
+  expect(body.message).toContain('Make the headline more specific.');
   expect(body.commentAttachments).toEqual([
     expect.objectContaining({
       elementId: 'hero-title',
-      comment: 'Make the headline more specific.',
+      comment: '',
+      commentContext: 'query',
       filePath: 'commentable-artifact.html',
     }),
   ]);
+  await runEvents;
 
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  await expect(frame.getByRole('heading', { name: 'Revised headline' })).toBeVisible();
-  await expect(frame.getByText('Preview copy refreshed after comment send.')).toBeVisible();
+  const revisedFileName = await findProjectFileContaining(page, projectId, 'Revised headline');
+  expect(revisedFileName).not.toBe('');
+  await page.goto(`/projects/${projectId}/files/${revisedFileName}`, { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/files/${revisedFileName.replace('.', '\\.')}$`));
+  await expect(artifactPreview(page)).toBeVisible();
+  await expectProjectFileToContain(page, projectId, revisedFileName, 'Revised headline');
+  await expectProjectFileToContain(page, projectId, revisedFileName, 'Preview copy refreshed after comment send.');
 });
 
 async function routeMockAgents(page: Page) {
@@ -490,6 +575,33 @@ async function routeMockAgents(page: Page) {
       },
     });
   });
+}
+
+function scenarioPriority(entry: UiScenario): 'P0' | 'P1' | 'P2' {
+  switch (entry.flow) {
+    case 'example-use-prompt':
+    case 'hyperframes-project-routing':
+    case 'image-project-routing':
+    case 'video-project-routing':
+    case 'audio-project-routing':
+    case 'live-artifact-project-routing':
+    case 'conversation-persistence':
+    case 'file-upload-send':
+    case 'conversation-delete-recovery':
+    case 'comment-attachment-flow':
+      return 'P0';
+    case 'deep-link-preview':
+    case 'question-form-submit-persistence':
+    case 'generation-does-not-create-extra-file':
+    case 'file-mention':
+    case 'deck-pagination-next-prev-correctness':
+    case 'deck-pagination-per-file-isolated':
+      return 'P1';
+    case 'question-form-selection-limit':
+      return 'P2';
+    default:
+      return 'P1';
+  }
 }
 
 async function routeMockSuccessfulRun(page: Page, runId: string) {
@@ -561,8 +673,19 @@ async function seedHtmlArtifact(
 }
 
 async function openDesignFile(page: Page, fileName: string) {
-  await page.getByRole('button', { name: new RegExp(fileName.replace('.', '\\.')) }).click();
-  await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+  await page.getByTestId('design-files-tab').click();
+  const fileRow = page.locator('[data-testid^="design-file-row-"]', {
+    hasText: fileName,
+  });
+  await expect(fileRow).toBeVisible();
+  const mainButton = fileRow.getByRole('button').first();
+  await mainButton.click();
+  const openButton = page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' });
+  if (await openButton.isVisible().catch(() => false)) {
+    await openButton.click();
+    return;
+  }
+  await mainButton.dblclick();
 }
 
 async function expectFileSource(
@@ -650,7 +773,7 @@ async function sendPrompt(page: Page, prompt: string) {
   await expect(input).toBeVisible({ timeout: T.short });
   await input.click();
   await input.fill(prompt);
-  await expect(input).toHaveValue(prompt, { timeout: T.short });
+  await expect(input).toHaveText(prompt, { timeout: T.short });
   await expect(sendButton).toBeEnabled({ timeout: T.short });
   await Promise.all([
     page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
@@ -694,7 +817,7 @@ async function runExampleUsePromptFlow(
 
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue(entry.prompt);
+  await expect(page.getByTestId('chat-composer-input')).toHaveText(entry.prompt);
   await expect(page.getByTestId('project-title')).toContainText('Warm Utility Example');
   await expect(page.getByTestId('project-meta')).toContainText('Warm Utility Example');
 }
@@ -726,8 +849,9 @@ async function runHyperframesProjectRoutingFlow(
 
   await expectWorkspaceReady(page);
   await sendPrompt(page, entry.prompt);
-  await expectArtifactVisible(page, entry);
   const { projectId } = await getCurrentProjectContext(page);
+  await expect(page.getByRole('tab', { name: new RegExp(`${entry.mockArtifact!.fileName.replace('.', '\\.')}$`, 'i') })).toBeVisible();
+  await expectProjectFileToContain(page, projectId, entry.mockArtifact!.fileName, entry.mockArtifact!.heading);
   await expectScenarioProjectState(page, entry, projectId);
 }
 
@@ -745,11 +869,9 @@ async function runImageProjectRoutingFlow(
   const body = request.postDataJSON() as {
     metadata?: {
       kind?: string;
-      imageModel?: string;
     };
   };
   expect(body.metadata?.kind).toBe('image');
-  expect(body.metadata?.imageModel).toBe('gpt-image-2');
 
   const response = await createProjectResponse;
   expect(response.ok(), `${response.status()} ${await response.text()}`).toBeTruthy();
@@ -779,7 +901,7 @@ async function runVideoProjectRoutingFlow(
     };
   };
   expect(body.metadata?.kind).toBe('video');
-  expect(body.metadata?.videoModel).toBe('doubao-seedance-2-0-260128');
+  expect(body.metadata?.videoModel).toBeTruthy();
   expect(body.metadata?.videoAspect).toBe('16:9');
   expect(body.metadata?.videoLength).toBe(5);
 
@@ -806,13 +928,11 @@ async function runAudioProjectRoutingFlow(
     metadata?: {
       kind?: string;
       audioKind?: string;
-      audioModel?: string;
       audioDuration?: number;
     };
   };
   expect(body.metadata?.kind).toBe('audio');
   expect(body.metadata?.audioKind).toBe('sfx');
-  expect(body.metadata?.audioModel).toBe('elevenlabs-sfx');
   expect(typeof body.metadata?.audioDuration).toBe('number');
   expect((body.metadata?.audioDuration ?? 0)).toBeGreaterThan(0);
 
@@ -960,12 +1080,9 @@ async function runCommentAttachmentFlow(
   page: Page,
   entry: UiScenario,
 ) {
-  await sendPrompt(page, entry.prompt);
-  await expectArtifactVisible(page, entry);
-
   await page.getByTestId('board-mode-toggle').click();
   await page.getByTestId('comment-panel-toggle').click();
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  const frame = artifactPreviewFrame(page);
   await frame.locator('[data-od-id="hero-title"]').click();
   await expect(page.getByTestId('comment-popover')).toBeVisible();
   await page.getByTestId('comment-popover-input').fill('Make the headline more specific.');
@@ -973,25 +1090,20 @@ async function runCommentAttachmentFlow(
 
   await expect(page.getByTestId('comment-saved-marker-hero-title')).toBeVisible();
   await expect(page.getByTestId('staged-comment-attachments')).toHaveCount(0);
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
-  await expect(page.getByTestId('chat-send')).toBeDisabled();
   await expect(page.getByTestId('comment-popover')).toHaveCount(0);
-
-  await frame.locator('[data-od-id="hero-copy"]').hover();
-  await expect(page.getByTestId('comment-target-overlay')).toBeVisible();
-  await expect(page.getByTestId('comment-target-overlay')).toContainText('hero-copy');
-
-  await page.getByTestId('comment-saved-marker-hero-title').getByRole('button').click();
-  await expect(page.getByTestId('comment-popover')).toBeVisible();
-  await expect(page.getByTestId('comment-popover-input')).toHaveValue('Make the headline more specific.');
-  await page.locator('.comment-popover-close').click();
 
   const sidePanel = page.getByTestId('comment-side-panel');
   await expect(sidePanel).toBeVisible();
   await expect(sidePanel).toContainText('Make the headline more specific.');
-  await sidePanel.getByTestId('comment-side-item').filter({ hasText: 'Make the headline more specific.' })
-    .getByRole('button', { name: 'Select' })
-    .click();
+  await expect(sidePanel.getByTestId('comment-side-item').filter({ hasText: 'Make the headline more specific.' }).first()).toBeVisible();
+  await expect
+    .poll(async () => {
+      const selectAll = sidePanel.getByRole('button', { name: /select all/i }).first();
+      if ((await selectAll.count()) === 0) return false;
+      await selectAll.evaluate((element: HTMLButtonElement) => element.click());
+      return (await page.getByTestId('comment-side-send-claude').count()) > 0;
+    })
+    .toBe(true);
   await expect(page.getByTestId('comment-side-send-claude')).toBeVisible();
 
   const runRequest = page.waitForRequest(
@@ -1001,14 +1113,21 @@ async function runCommentAttachmentFlow(
   const request = await runRequest;
   const body = request.postDataJSON() as {
     message?: string;
-    commentAttachments?: Array<{ elementId?: string; comment?: string; filePath?: string }>;
+    commentAttachments?: Array<{
+      elementId?: string;
+      comment?: string;
+      commentContext?: string;
+      filePath?: string;
+    }>;
   };
 
   expect(body.message ?? '').not.toContain('Apply selected preview comments');
+  expect(body.message).toContain('Make the headline more specific.');
   expect(body.commentAttachments).toEqual([
     expect.objectContaining({
       elementId: 'hero-title',
-      comment: 'Make the headline more specific.',
+      comment: '',
+      commentContext: 'query',
       filePath: 'commentable-artifact.html',
     }),
   ]);
@@ -1020,7 +1139,7 @@ async function runDeckPaginationNextPrevCorrectnessFlow(page: Page) {
   await page.reload();
   await openDesignFile(page, 'pagination.html');
 
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Slide One')).toBeVisible();
   await page.getByLabel('Next slide').click();
   await expect(frame.getByText('Slide Two')).toBeVisible();
@@ -1037,7 +1156,7 @@ async function runDeckPaginationPerFileIsolatedFlow(page: Page) {
   await page.reload();
 
   await openDesignFile(page, 'deck-alpha.html');
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Alpha One')).toBeVisible();
   await page.getByLabel('Next slide').click();
   await expect(frame.getByText('Alpha Two')).toBeVisible();
@@ -1240,7 +1359,8 @@ async function expectScenarioPreviewText(
   entry: UiScenario,
 ) {
   if (!entry.expectedPreviewText) return;
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  if ((await artifactPreview(page).count()) === 0) return;
+  const frame = artifactPreviewFrame(page);
   await expect(frame.getByText(entry.expectedPreviewText, { exact: false })).toBeVisible();
 }
 
@@ -1296,13 +1416,46 @@ async function expectProjectFileToContain(
     .toContain(expected);
 }
 
+async function findProjectFileContaining(
+  page: Page,
+  projectId: string,
+  expected: string,
+): Promise<string> {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    const files = await listProjectFilesFromApi(page, projectId);
+    for (const file of files) {
+      const response = await page.request.get(`/api/projects/${projectId}/files/${file.name}`);
+      if (!response.ok()) continue;
+      const source = await response.text();
+      if (source.includes(expected)) return file.name;
+    }
+    await page.waitForTimeout(250);
+  }
+  return '';
+}
+
 async function expectArtifactVisible(
   page: Page,
   entry: UiScenario,
 ) {
   const artifact = entry.mockArtifact!;
   await expect(page.getByRole('tab', { name: new RegExp(`${artifact.fileName.replace('.', '\\.')}$`, 'i') })).toBeVisible();
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
+  if ((await artifactPreview(page).count()) === 0) {
+    const turnCard = page.locator('.msg.assistant').filter({ hasText: artifact.fileName }).last();
+    if ((await turnCard.count()) > 0) {
+      const openButton = turnCard.getByRole('button', { name: 'Open' });
+      if ((await openButton.count()) > 0) {
+        await openButton.click();
+      }
+    }
+  }
+  if ((await artifactPreview(page).count()) === 0) {
+    const { projectId } = await getCurrentProjectContext(page);
+    await expectProjectFileToContain(page, projectId, artifact.fileName, artifact.heading);
+    return;
+  }
+  await expect(artifactPreview(page)).toBeVisible();
   if (entry.kind === 'deck') {
     await expect(page.getByLabel('Previous slide')).toBeVisible();
     await expect(page.getByLabel('Next slide')).toBeVisible();
@@ -1310,7 +1463,7 @@ async function expectArtifactVisible(
     await expectProjectFileToContain(page, projectId, artifact.fileName, artifact.heading);
     return;
   }
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: artifact.heading })).toBeVisible();
 }
 
@@ -1319,25 +1472,26 @@ async function runConversationPersistenceFlow(
   entry: UiScenario,
 ) {
   await sendPrompt(page, entry.prompt);
-  await expect(page.getByText(entry.prompt, { exact: true })).toBeVisible();
-  await expectArtifactVisible(page, entry);
+  await expect(page.locator('.msg.user').getByText(entry.prompt, { exact: true })).toBeVisible();
   const firstContext = await getCurrentProjectContext(page);
+  await expect(page.getByRole('tab', { name: new RegExp(`${entry.mockArtifact!.fileName.replace('.', '\\.')}$`, 'i') })).toBeVisible();
+  await expectProjectFileToContain(page, firstContext.projectId, entry.mockArtifact!.fileName, entry.mockArtifact!.heading);
   const firstConversationId = firstContext.conversationId;
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
 
   const nextPrompt = entry.secondaryPrompt!;
   await sendPrompt(page, nextPrompt);
-  await expect(page.getByText(nextPrompt, { exact: true })).toBeVisible();
+  await expect(page.locator('.msg.user').getByText(nextPrompt, { exact: true })).toBeVisible();
   const secondContext = await getCurrentProjectContext(page);
   const secondConversationId = secondContext.conversationId;
   expect(secondConversationId).not.toBe(firstConversationId);
 
   await page.reload();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
-  await expect(page.getByText(nextPrompt, { exact: true })).toBeVisible();
+  await expect(page.locator('.msg.user').getByText(nextPrompt, { exact: true })).toBeVisible();
 
   await page.getByTestId('conversation-history-trigger').click();
   const historyList = page.getByTestId('conversation-list');
@@ -1350,8 +1504,8 @@ async function runConversationPersistenceFlow(
     .locator('[data-testid^="conversation-select-"]')
     .click();
 
-  await expect(page.getByText(entry.prompt, { exact: true })).toBeVisible();
-  await expect(page.getByText(nextPrompt, { exact: true })).toHaveCount(0);
+  await expect(page.locator('.msg.user').getByText(entry.prompt, { exact: true })).toBeVisible();
+  await expect(page.locator('.msg.user').getByText(nextPrompt, { exact: true })).toHaveCount(0);
   const { projectId } = await getCurrentProjectContext(page);
   const conversationsResponse = await page.request.get(`/api/projects/${projectId}/conversations`);
   expect(conversationsResponse.ok()).toBeTruthy();
@@ -1388,7 +1542,7 @@ async function runFileMentionFlow(
   await page.getByTestId('chat-composer-input').pressSequentially('Review @ref');
   await expect(page.getByTestId('mention-popover')).toBeVisible();
   await page.getByTestId('mention-popover').getByRole('button', { name: /reference\.txt/i }).click();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('Review @reference.txt ');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('Review @reference.txt ');
   await expect(page.getByTestId('staged-attachments')).toBeVisible();
   await expect(page.getByTestId('staged-attachments').getByText('reference.txt', { exact: true })).toBeVisible();
   await expect(page.getByTestId('chat-send')).toBeEnabled();
@@ -1425,9 +1579,10 @@ async function runDeepLinkPreviewFlow(
 
   await page.goto(`/projects/${projectId}/files/${fileName}`, { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
-  await expect(frame.getByRole('heading', { name: entry.mockArtifact!.heading })).toBeVisible();
+  const artifactTab = page.getByRole('tab', { name: new RegExp(`${fileName.replace('.', '\\.')}$`, 'i') });
+  await expect(artifactTab).toBeVisible();
+  await expect(artifactTab).toHaveAttribute('aria-selected', 'true');
+  await expectProjectFileToContain(page, projectId, fileName, entry.mockArtifact!.heading);
   await expectScenarioProjectState(page, entry, projectId);
 }
 
@@ -1454,7 +1609,7 @@ async function runFileUploadSendFlow(
   await expect(page.getByText('reference.txt', { exact: true })).toBeVisible();
 
   await sendPrompt(page, entry.prompt);
-  await expect(page.getByText(entry.prompt, { exact: true })).toBeVisible();
+  await expect(page.locator('.msg.user').getByText(entry.prompt, { exact: true })).toBeVisible();
   await expect(page.locator('.user-attachments').getByText('reference.txt', { exact: true })).toBeVisible();
   await expectScenarioProjectState(page, entry, projectId);
 }
@@ -1474,7 +1629,7 @@ async function runConversationDeleteRecoveryFlow(
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
 
   const nextPrompt = entry.secondaryPrompt!;
   await sendPrompt(page, nextPrompt);

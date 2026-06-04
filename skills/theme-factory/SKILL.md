@@ -11,7 +11,7 @@ triggers:
 od:
   mode: design-system
   category: design-systems
-  upstream: "https://github.com/anthropics/skills/tree/main/theme-factory"
+  upstream: "https://github.com/anthropics/skills/tree/main/skills/theme-factory"
 ---
 
 # theme-factory
@@ -24,7 +24,7 @@ Apply professional font and color themes to artifacts including slides, docs, re
 
 ## Source
 
-- Upstream: https://github.com/anthropics/skills/tree/main/theme-factory
+- Upstream: https://github.com/anthropics/skills/tree/main/skills/theme-factory
 - Category: `design-systems`
 
 ## How to use
@@ -36,7 +36,7 @@ bundle into your active agent's skills directory:
 
 ```bash
 # Inspect the upstream README for exact paths
-open https://github.com/anthropics/skills/tree/main/theme-factory
+open https://github.com/anthropics/skills/tree/main/skills/theme-factory
 ```
 
 Then ask the agent to invoke this skill by name (`theme-factory`) or with

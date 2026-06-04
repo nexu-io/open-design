@@ -25,13 +25,18 @@
   padding: 32px 0 8px;
 }
 .home-hero__brand {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
   color: var(--text-muted);
   font-size: 13px;
 }
 .home-hero__brand-mark {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 8px);
+  transform: translateY(-50%);
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -258,7 +263,7 @@
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   padding: 14px 14px 10px;
   display: flex;
   flex-direction: column;
@@ -266,61 +271,88 @@
   margin-top: 0;
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
+.home-hero__input-card:has(.session-mode-toggle__popover),
+.home-hero__input-card:has(.home-hero__plugin-picker) {
+  z-index: 1700;
+  overflow: visible;
+}
 .home-hero__input-card--compact-authoring {
   max-width: 640px;
   padding-block: 12px 10px;
 }
 .home-hero__input-card:focus-within {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-  box-shadow: var(--shadow-md);
+  box-shadow: none;
 }
 .home-hero__input-card.is-drag-active {
   border-color: color-mix(in srgb, var(--accent) 56%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent), var(--shadow-md);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .home-hero__active {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 10px;
+  gap: 5px;
   align-items: center;
-  font-size: 12px;
+  max-height: min(82px, 18vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+  font-size: 11.5px;
 }
 .home-hero__active-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 8px 3px 6px;
+  gap: 5px;
+  min-width: 0;
+  max-width: min(240px, 100%);
+  min-height: 24px;
+  padding: 2px 5px 2px 3px;
   border-radius: 999px;
-  background: var(--accent-tint);
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
-  color: var(--accent);
+  background: color-mix(in srgb, var(--bg-panel) 86%, var(--accent-tint));
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border-soft));
+  color: color-mix(in srgb, var(--accent) 78%, var(--text));
+  line-height: 1;
+  box-shadow: none;
 }
 .home-hero__active-chip--skill {
-  background: color-mix(in srgb, var(--bg-subtle) 86%, var(--accent));
+  background: color-mix(in srgb, var(--bg-subtle) 88%, var(--accent-tint));
   color: var(--text-strong);
 }
 .home-hero__active-chip--context {
-  background: var(--bg-subtle);
+  background: color-mix(in srgb, var(--bg-panel) 90%, var(--bg-subtle));
   color: var(--text);
   border-color: var(--border-soft);
 }
+.home-hero__active-chip--file {
+  background: color-mix(in srgb, var(--bg-panel) 92%, var(--accent-tint));
+}
 .home-hero__active-chip--example {
   max-width: 100%;
-  background: color-mix(in srgb, var(--accent-tint) 78%, var(--bg-panel));
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
-  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-tint) 48%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+  color: color-mix(in srgb, var(--accent) 80%, var(--text));
 }
-.home-hero__active-chip--example > span:not(.home-hero__active-dot) {
+.home-hero__active-file-group {
+  display: contents;
+}
+.home-hero__active-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 18px;
+}
+.home-hero__active-meta {
+  flex: 0 0 auto;
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 18px;
 }
 .home-hero__active-chip-body {
   appearance: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
   padding: 0;
   border: 0;
@@ -338,25 +370,59 @@
 .home-hero__active-chip-body:disabled:hover {
   color: inherit;
 }
-.home-hero__active-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
+.home-hero__active-file-body {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+}
+.home-hero__active-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 8%, var(--bg-subtle));
+  color: inherit;
+}
+.home-hero__active-thumb {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  border-radius: 5px;
+  object-fit: cover;
+  background: var(--bg-subtle);
 }
 .home-hero__active-clear {
   appearance: none;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: none;
+  border-radius: 999px;
   color: inherit;
   cursor: pointer;
   padding: 0;
-  font-size: 14px;
   line-height: 1;
-  opacity: 0.75;
+  opacity: 0.62;
+}
+.home-hero__active-clear svg {
+  display: block;
 }
 .home-hero__active-clear:hover {
   opacity: 1;
+  background: var(--red-bg);
+  color: var(--red);
 }
 .home-hero__prompt-surface {
   display: flex;
@@ -368,216 +434,30 @@
 .home-hero__prompt-surface--with-inputs {
   padding: 0;
 }
+/* The homepage prompt now embeds the SAME Lexical editor as the project
+   composer (composer-editable / composer-inline-mention live in chat.css),
+   so mention chips render and vertically align identically across both
+   surfaces. The hero card owns the border + background, so the editor
+   itself stays transparent and borderless. */
 .home-hero__prompt-editor {
   position: relative;
   min-width: 0;
-  max-height: var(--home-hero-prompt-max-height);
-  overflow: hidden;
-  --home-hero-prompt-font-size: 15px;
-  --home-hero-prompt-line-height: 1.85;
-  --home-hero-prompt-padding: 6px 6px;
 }
-.home-hero__prompt-highlight,
-.home-hero__input {
-  font: inherit;
-  font-size: var(--home-hero-prompt-font-size);
-  font-weight: inherit;
-  line-height: var(--home-hero-prompt-line-height);
-  letter-spacing: normal;
-  word-spacing: normal;
-  font-kerning: auto;
-  font-feature-settings: normal;
-  font-variant-ligatures: normal;
-  text-rendering: auto;
-  tab-size: 4;
-  padding: var(--home-hero-prompt-padding);
-  box-sizing: border-box;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  text-align: start;
-}
-.home-hero__prompt-highlight {
-  position: absolute;
-  inset: 0;
-  z-index: auto;
-  overflow: hidden;
-  max-height: var(--home-hero-prompt-max-height);
-  color: var(--text);
-  /* Generous line-height so adjacent slot/mention pills do not
-     collide vertically when the prompt wraps. Each pill paints a
-     2px ring via `box-shadow`; with a tight line-height the rings
-     from line N and line N+1 visually merge into a single bar.
-     Bumping the line-height leaves ~8px of clear space between
-     pill rows. The textarea below mirrors this value so the
-     overlay and the editable text stay pixel-aligned. */
-  pointer-events: none;
-}
-.home-hero__prompt-highlight-inner {
-  position: relative;
-  top: calc(-1 * var(--home-hero-prompt-scroll, 0px));
-  min-height: 100%;
-}
-.home-hero__prompt-slot {
-  display: inline;
-  max-width: min(100%, 52ch);
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-  color: var(--accent);
-  font: inherit;
-  font-size: inherit;
-  font-weight: inherit;
-  line-height: inherit;
-  vertical-align: baseline;
-}
-.home-hero__prompt-option-shell {
-  position: relative;
-  z-index: 3;
-  display: inline;
-  pointer-events: auto;
-}
-.home-hero__prompt-slot--button {
-  appearance: none;
-  cursor: pointer;
-  pointer-events: auto;
-}
-.home-hero__prompt-slot--button:hover,
-.home-hero__prompt-slot--button:focus-visible {
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
-  outline: none;
-}
-.home-hero__prompt-option-popover {
-  position: relative;
-  z-index: 4;
-  display: grid;
-  gap: 6px;
-  width: min(100%, 420px);
-  margin-top: 6px;
-  padding: 9px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-panel);
-  box-shadow: var(--shadow-lg, 0 14px 36px rgba(0, 0, 0, 0.14));
-  color: var(--text);
-  font-size: 13px;
-  line-height: 1.3;
-  white-space: normal;
-}
-.home-hero__prompt-option-label {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-.home-hero__prompt-option-input {
+.home-hero__lexical {
   width: 100%;
   min-width: 0;
-  padding: 7px 9px;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
-  border-radius: 6px;
-  background: var(--bg-panel);
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
 }
-.home-hero__prompt-option-input:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent) 18%, transparent);
-  border-color: var(--accent);
+.home-hero__lexical .composer-input-editor {
+  min-height: 64px;
+  max-height: var(--home-hero-prompt-max-height, 180px);
 }
-.home-hero__prompt-option-note {
-  display: block;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.35;
+.home-hero__lexical .composer-editable {
+  min-height: 64px;
+  padding: 8px 4px;
 }
-.home-hero__prompt-option-note[data-tone='warning'] {
-  color: #9f3a1a;
-}
-.home-hero__prompt-slot[data-filled='false'] {
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
-  color: color-mix(in srgb, var(--accent) 74%, var(--text-muted));
-}
-.home-hero__prompt-mention {
-  appearance: none;
-  position: relative;
-  z-index: 3;
-  pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  max-width: none;
-  min-height: 24px;
-  margin: -2px 1px;
-  padding: 1px 8px;
-  border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
-  color: color-mix(in srgb, var(--accent) 68%, var(--text));
-  font: inherit;
-  font-size: inherit;
-  font-weight: 650;
-  line-height: inherit;
-  letter-spacing: inherit;
-  vertical-align: baseline;
-  cursor: pointer;
-  overflow: visible;
-  text-overflow: clip;
-  white-space: nowrap;
-  user-select: none;
-  -webkit-user-select: none;
-}
-.home-hero__prompt-mention:hover,
-.home-hero__prompt-mention:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 24%, transparent);
-  background: color-mix(in srgb, var(--accent) 14%, var(--bg-panel));
-  color: color-mix(in srgb, var(--accent) 70%, var(--text));
-  outline: none;
-}
-.home-hero__prompt-mention--static {
-  pointer-events: none;
-  cursor: default;
-}
-.home-hero__input {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  min-height: 84px;
-  max-height: var(--home-hero-prompt-max-height);
-  resize: none;
-  /* The textarea height is driven by the auto-grow effect in
-     HomeHero.tsx, which writes an explicit pixel height after every
-     keystroke. Keep the native resize grip disabled while allowing
-     the effect to toggle internal scrolling for very long prompts. */
-  border: none;
-  outline: none;
-  background: transparent;
-  color: var(--text);
-  overflow-y: hidden;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-  transition: none;
-}
-.home-hero__prompt-editor--highlighted .home-hero__input {
-  z-index: 2;
-  color: transparent;
-  caret-color: var(--text);
-}
-.home-hero__prompt-editor--highlighted .home-hero__input::selection {
-  background: color-mix(in srgb, var(--accent) 24%, transparent);
-  color: transparent;
-}
-.home-hero__input:focus {
-  border: none;
-  outline: none;
-  box-shadow: none;
-}
-.home-hero__input::placeholder {
+.home-hero__lexical .composer-input-placeholder {
+  top: 8px;
+  left: 4px;
   color: var(--text-soft);
 }
 .home-hero__input-card .plugin-inputs-form {
@@ -684,6 +564,18 @@
   border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: var(--shadow-lg, 0 14px 36px rgba(0, 0, 0, 0.14));
+}
+/* When hosted in the shared CaretFloatingLayer portal (position:fixed,
+   width owned by the layer), the picker becomes a static, full-width
+   panel anchored to the caret instead of the input card. */
+.caret-floating-layer .home-hero__plugin-picker--floating {
+  position: static;
+  inset: auto;
+  left: auto;
+  right: auto;
+  top: auto;
+  width: 100%;
+  max-height: var(--cfl-max-h, 60vh);
 }
 .home-hero__plugin-hover-card {
   display: grid;
@@ -866,101 +758,54 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-top: 1px dashed var(--border-soft);
+  border-top: 0;
   padding-top: 8px;
-}
-.home-hero__attachments {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 0 2px;
-}
-.home-hero__attachment-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: min(260px, 100%);
-  min-width: 0;
-  padding: 4px 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
-  color: var(--text);
-  font-size: 11.5px;
-  box-shadow: var(--shadow-xs);
-}
-.home-hero__attachment-icon {
-  width: 22px;
-  height: 22px;
-  flex: 0 0 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background: var(--bg-panel);
-  color: var(--text-muted);
-}
-.home-hero__attachment-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.home-hero__attachment-size {
-  flex: 0 0 auto;
-  color: var(--text-soft);
-}
-.home-hero__attachment-remove {
-  appearance: none;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.home-hero__attachment-remove:hover {
-  background: var(--red-bg);
-  color: var(--red);
 }
 .home-hero__foot-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
   flex: 1 1 auto;
   flex-wrap: nowrap;
 }
-.home-hero__attach {
+.home-hero__tool {
   appearance: none;
-  /* Match the submit button size and make the paper-clip glyph
-     readable at typical viewing distance. The previous 32px / 14px
-     glyph combo rendered the icon at roughly 11–12px after stroke
-     antialiasing and washed out against the white card. */
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  background: var(--bg-panel);
-  color: var(--text);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-xs);
-  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease;
+  font: inherit;
+  font-size: 14px;
+  transition:
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.home-hero__attach:hover {
+.home-hero__tool:hover,
+.home-hero__tool.is-active {
   background: var(--bg-subtle);
   border-color: var(--border-strong);
-  color: var(--accent);
-  transform: translateY(-0.5px);
+  color: var(--text);
+}
+.home-hero__tool-at {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1;
 }
 .home-hero__working-dir-wrap {
   position: relative;
@@ -1722,29 +1567,40 @@
 }
 .home-hero__submit {
   appearance: none;
-  /* Larger send button so the arrow glyph reads at typical viewing
-     distance and the primary call-to-action carries enough visual
-     weight against the surrounding muted controls. */
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  border: none;
-  background: var(--accent);
-  color: white;
-  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 120ms ease, transform 120ms ease;
+  gap: 6px;
+  min-width: 64px;
+  height: 32px;
+  padding: 0 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1;
+  transition:
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .home-hero__submit:hover:not(:disabled) {
-  background: var(--accent-strong);
-  transform: translateY(-0.5px);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: var(--shadow-sm);
 }
+.home-hero__submit:active:not(:disabled) { transform: translateY(1px); box-shadow: var(--shadow-xs); }
 .home-hero__submit:disabled {
-  background: var(--bg-muted);
-  color: var(--text-soft);
-  cursor: not-allowed;
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
 }
 .home-hero__error {
   color: var(--red);
@@ -1845,11 +1701,8 @@
   appearance: none;
   min-width: 0;
   min-height: 112px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 8px;
+  display: flex;
+  align-items: flex-start;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1869,18 +1722,8 @@
     box-shadow 140ms ease;
 }
 .home-hero__prompt-example span {
-  grid-column: 1 / -1;
-  align-self: start;
   min-width: 0;
   overflow-wrap: anywhere;
-}
-.home-hero__prompt-example svg {
-  grid-column: 2;
-  grid-row: 2;
-  align-self: end;
-  justify-self: end;
-  color: var(--text-faint);
-  transition: color 140ms ease, transform 140ms ease;
 }
 .home-hero__prompt-example:hover,
 .home-hero__prompt-example:focus-visible {
@@ -1890,11 +1733,6 @@
   color: var(--text-strong);
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
-}
-.home-hero__prompt-example:hover svg,
-.home-hero__prompt-example:focus-visible svg {
-  color: var(--accent);
-  transform: translate(1px, -1px);
 }
 
 .home-hero__plugin-presets-wrap {

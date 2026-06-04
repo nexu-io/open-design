@@ -1,0 +1,133 @@
+name: Notify main CI failure
+
+on:
+  workflow_run:
+    workflows:
+      - ci
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+jobs:
+  notify:
+    name: Notify Feishu
+    runs-on: ubuntu-latest
+    if: >-
+      ${{
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.conclusion == 'failure'
+      }}
+    steps:
+      - name: Send main CI failure alert
+        uses: actions/github-script@v7
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_MAIN_CI_WEBHOOK }}
+        with:
+          script: |
+            const webhook = process.env.FEISHU_WEBHOOK;
+            if (!webhook) {
+              core.setFailed('Missing FEISHU_MAIN_CI_WEBHOOK secret.');
+              return;
+            }
+
+            const run = context.payload.workflow_run;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const jobsResponse = await github.rest.actions.listJobsForWorkflowRun({
+              owner,
+              repo,
+              run_id: run.id,
+              per_page: 100,
+            });
+            const failedJobs = jobsResponse.data.jobs
+              .filter((job) => job.conclusion === 'failure')
+              .map((job) => `- ${job.name}`)
+              .join('\n') || '- Unknown';
+
+            const pullsResponse = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner,
+              repo,
+              commit_sha: run.head_sha,
+            });
+            const pull = pullsResponse.data[0];
+            const prText = pull
+              ? `#${pull.number} ${pull.title}\n${pull.html_url}`
+              : '未解析到关联 PR';
+
+            const shortSha = run.head_sha.slice(0, 7);
+            const author = run.head_commit?.author?.name || run.actor?.login || 'unknown';
+            const subject = run.head_commit?.message?.split('\n')[0] || run.display_title || 'unknown';
+            const repoName = `${owner}/${repo}`;
+
+            const body = {
+              msg_type: 'interactive',
+              card: {
+                config: {
+                  wide_screen_mode: true,
+                },
+                header: {
+                  template: 'red',
+                  title: {
+                    tag: 'plain_text',
+                    content: 'Open Design Main CI failed',
+                  },
+                },
+                elements: [
+                  {
+                    tag: 'div',
+                    text: {
+                      tag: 'lark_md',
+                      content: [
+                        `**Repository:** ${repoName}`,
+                        `**Branch:** main`,
+                        `**Workflow:** ${run.name}`,
+                        `**Commit:** ${shortSha}`,
+                        `**Author:** ${author}`,
+                        `**Subject:** ${subject}`,
+                        `**Related PR:** ${prText}`,
+                      ].join('\n'),
+                    },
+                  },
+                  {
+                    tag: 'div',
+                    text: {
+                      tag: 'lark_md',
+                      content: `**Failed jobs:**\n${failedJobs}`,
+                    },
+                  },
+                  {
+                    tag: 'action',
+                    actions: [
+                      {
+                        tag: 'button',
+                        text: {
+                          tag: 'plain_text',
+                          content: 'Open GitHub Actions run',
+                        },
+                        type: 'primary',
+                        url: run.html_url,
+                      },
+                    ],
+                  },
+                ],
+              },
+            };
+
+            const response = await fetch(webhook, {
+              method: 'POST',
+              headers: {
+                'content-type': 'application/json',
+              },
+              body: JSON.stringify(body),
+            });
+
+            if (!response.ok) {
+              const text = await response.text();
+              core.setFailed(`Feishu notification failed: ${response.status} ${text}`);
+            }

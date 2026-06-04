@@ -95,7 +95,7 @@ describe('deriveConfigureGlobals', () => {
 
 describe('deriveConfigureGlobals — cold-start gating', () => {
   // Reviewer #2285 (mrcfps, 2026-05-20 03:10) flagged a cold-start hole:
-  // `fetchAgents()` is async, so the App-level useEffect first fires with
+  // `fetchAgentsStream()` is async, so the App-level useEffect first fires with
   // `agents=[]` and `mode='daemon'`. Without gating, the helper used to
   // stamp `has_available_configure_cli=false / configure_availability=
   // unavailable` on every page_view fired before the probe resolved.

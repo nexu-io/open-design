@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { Button, Textarea } from '@open-design/components';
 import type { ConnectorConnectResponse, ConnectorDetail, ConnectorStatusResponse } from '@open-design/contracts';
 import { streamViaDaemon } from '../providers/daemon';
 import {
@@ -651,19 +652,18 @@ export function DesignSystemCreationFlow({
           <h1>It will take about 5 minutes to generate your design system.</h1>
           <p>You can step away. Keep the tab open in the background.</p>
           <div className="ds-setup-actions">
-            <button type="button" className="ghost" onClick={() => setStep('setup')}>
+            <Button variant="ghost" onClick={() => setStep('setup')}>
               <Icon name="arrow-left" />
               Back
-            </button>
-            <button
-              type="button"
-              className="primary"
+            </Button>
+            <Button
+              variant="primary"
               disabled={generationStarting}
               onClick={() => void generate()}
             >
               <Icon name="sparkles" />
               {generationStarting ? 'Opening project...' : 'Generate'}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -687,16 +687,15 @@ export function DesignSystemCreationFlow({
       ) : null}
       {embedded ? null : (
         <header className="ds-setup-topbar">
-          <button type="button" className="ghost" onClick={onBack}>
+          <Button variant="ghost" onClick={onBack}>
             <Icon name="arrow-left" />
             Back
-          </button>
+          </Button>
           <span className="ds-setup-mark">
             <Icon name="blocks" />
           </span>
-          <button
-            type="button"
-            className="primary"
+          <Button
+            variant="primary"
             disabled={!state.company.trim()}
             onClick={() => {
               if (!state.company.trim()) {
@@ -708,7 +707,7 @@ export function DesignSystemCreationFlow({
           >
             Continue to generation
             <Icon name="chevron-right" />
-          </button>
+          </Button>
         </header>
       )}
 
@@ -842,7 +841,7 @@ export function DesignSystemCreationFlow({
         {embedded ? null : (
           <label className="ds-setup-field">
             <span>Notes</span>
-            <textarea
+            <Textarea
               rows={4}
               value={state.notes}
               onChange={(event) => setState((curr) => ({ ...curr, notes: event.target.value }))}
@@ -853,13 +852,12 @@ export function DesignSystemCreationFlow({
         {error ? <div className="ds-editor-error">{error}</div> : null}
         {embedded ? (
           <div className="ds-setup-actions ds-setup-actions--embedded">
-            <button type="button" className="ghost" onClick={onBack}>
+            <Button variant="ghost" onClick={onBack}>
               <Icon name="arrow-left" />
               Back
-            </button>
-            <button
-              type="button"
-              className="primary"
+            </Button>
+            <Button
+              variant="primary"
               disabled={!state.company.trim()}
               onClick={() => {
                 if (!state.company.trim()) {
@@ -871,7 +869,7 @@ export function DesignSystemCreationFlow({
             >
               Generate
               <Icon name="chevron-right" />
-            </button>
+            </Button>
           </div>
         ) : null}
       </main>
@@ -1786,10 +1784,10 @@ export function DesignSystemDetailView({
 
       <main className="ds-review-main">
         <header className="ds-review-tabs">
-          <button type="button" className="ghost" onClick={onBack}>
+          <Button variant="ghost" onClick={onBack}>
             <Icon name="arrow-left" />
             Back
-          </button>
+          </Button>
           <div className="segmented">
             <button
               type="button"
@@ -1806,9 +1804,9 @@ export function DesignSystemDetailView({
               Design Files
             </button>
           </div>
-          <button type="button" className="ghost">
+          <Button variant="ghost">
             Share
-          </button>
+          </Button>
         </header>
 
         {tab === 'system' ? (
@@ -1834,9 +1832,9 @@ export function DesignSystemDetailView({
                 Published
               </label>
               {selectedId !== system.id ? (
-                <button
-                  type="button"
-                  className="ghost compact"
+                <Button
+                  variant="ghost"
+                  className="compact"
                   onClick={() => {
                     const statusBefore = mapDsStatusToTracking(system.status);
                     onSetDefault(system.id);
@@ -1856,7 +1854,7 @@ export function DesignSystemDetailView({
                   }}
                 >
                   Make default
-                </button>
+                </Button>
               ) : null}
             </div>
             <DesignSystemPackageCard system={system} />
@@ -1866,10 +1864,10 @@ export function DesignSystemDetailView({
                 <strong>Missing brand fonts</strong>
                 Open Design is rendering typography with substitute web fonts.
               </span>
-              <button type="button" className="ghost compact">
+              <Button variant="ghost" className="compact">
                 <Icon name="upload" />
                 Upload fonts
-              </button>
+              </Button>
             </div>
             {statusLine ? <div className="ds-status-line">{statusLine}</div> : null}
             <WorkspaceActivityCard message={workspaceActivityMessage} active={chatStreaming} />
@@ -1939,16 +1937,16 @@ export function DesignSystemDetailView({
             </div>
             <label className="ds-body-editor">
               DESIGN.md
-              <textarea
+              <Textarea
                 value={body}
                 onChange={(event) => setBody(event.target.value)}
                 rows={16}
                 disabled={!editable}
               />
             </label>
-            <button type="button" className="primary" disabled={!editable || saving} onClick={() => void saveBody()}>
+            <Button variant="primary" disabled={!editable || saving} onClick={() => void saveBody()}>
               Save DESIGN.md
-            </button>
+            </Button>
             {recentRevisions.length > 0 ? <RevisionHistoryList revisions={recentRevisions} /> : null}
           </div>
         ) : (
@@ -2734,9 +2732,9 @@ function DropZone({
           <span>{names.length > 0 && !onRemoveName ? names.join(', ') : prompt}</span>
         </label>
         {onBrowseFolder ? (
-          <button type="button" className="ghost" onClick={onBrowseFolder}>
+          <Button variant="ghost" onClick={onBrowseFolder}>
             Browse folder
-          </button>
+          </Button>
         ) : null}
       </div>
       {names.length > 0 && onRemoveName ? (
@@ -2923,24 +2921,24 @@ function GitHubRepositoryAccessPanel({
   }
 
   const composioAction = !composioConfigured ? (
-    <button type="button" className="ghost" onClick={onOpenConnectorsTab}>
+    <Button variant="ghost" onClick={onOpenConnectorsTab}>
       Configure Composio
-    </button>
+    </Button>
   ) : connected || authorizationPending ? (
     <>
       {authorizationPending && authorizationUrl ? (
-        <button type="button" className="ghost" disabled={busy} onClick={onOpenAuthorization}>
+        <Button variant="ghost" disabled={busy} onClick={onOpenAuthorization}>
           Open authorization
-        </button>
+        </Button>
       ) : null}
-      <button type="button" className="ghost" disabled={busy} onClick={onDisconnect}>
+      <Button variant="ghost" disabled={busy} onClick={onDisconnect}>
         {action === 'disconnect' ? 'Disconnecting...' : 'Disconnect'}
-      </button>
+      </Button>
     </>
   ) : (
-    <button type="button" className="ghost" disabled={busy} onClick={onConnect}>
+    <Button variant="ghost" disabled={busy} onClick={onConnect}>
       {action === 'connect' ? 'Connecting...' : 'Connect via Composio'}
-    </button>
+    </Button>
   );
 
   const methods: GitHubAccessMethod[] = [

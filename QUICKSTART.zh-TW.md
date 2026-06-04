@@ -77,6 +77,155 @@ pnpm typecheck                 # 對整個 workspace 執行 typecheck
 
 本地開發時，`tools-dev` 會先啟動 daemon，並將其連接埠傳遞給 `apps/web`，`apps/web/next.config.ts` 會將 `/api/*`、`/artifacts/*`、`/frames/*` 重寫到該 daemon 連接埠，從而使 App Router 能夠與相鄰的 Express 行程通訊，無需設定 CORS。
 
+## Docker 部署
+
+在一個完全容器化的環境中執行 Open Design，無需安裝 Node.js 或 pnpm。
+
+### 環境需求
+
+* Docker Desktop
+* Docker Compose v2
+
+驗證 Docker 是否正確安裝：
+
+```bash
+docker compose version
+```
+
+---
+
+## 啟動 Open Design
+
+從倉庫根目錄開始：
+
+1. 進入 deploy 目錄並複製環境設定範本：
+
+   ```bash
+   cd deploy
+   cp .env.example .env
+   ```
+
+2. 產生安全令牌：
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+3. 用編輯器開啟 `.env`，找到 `OD_API_TOKEN=`，將產生的令牌貼上。
+
+然後啟動服務：
+
+```bash
+docker compose up -d
+```
+
+在瀏覽器中開啟應用：
+
+```text
+http://localhost:7456
+```
+
+首次啟動可能需要幾秒鐘，Docker 會拉取最新映像檔。
+
+---
+
+## 常用 Docker 指令
+
+### 檢視日誌
+
+```bash
+docker compose logs -f
+```
+
+### 重新啟動容器
+
+```bash
+docker compose restart
+```
+
+### 停止容器
+
+```bash
+docker compose down
+```
+
+### 拉取最新映像檔
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### 刪除所有本地應用資料
+
+```bash
+docker compose down -v
+```
+
+---
+
+## 環境設定
+
+建立 `deploy/.env` 檔案來覆蓋預設設定。從提供的範例開始：
+
+```bash
+cp deploy/.env.example deploy/.env
+```
+
+編輯 `deploy/.env` 來設定你的令牌並調整其他值：
+
+```env
+# 主機暴露的埠號
+OPEN_DESIGN_PORT=7456
+
+# 容器記憶體限制
+OPEN_DESIGN_MEM_LIMIT=384m
+
+# 允許的 CORS 來源
+OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
+
+# Docker 映像檔標籤
+OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
+
+# Daemon 安全所需的 API 令牌
+# 使用以下命令產生：openssl rand -hex 32
+OD_API_TOKEN=
+```
+
+---
+
+## 持久化儲存
+
+Open Design 將專案和 SQLite 資料儲存在 Docker 卷中：
+
+```text
+open_design_data
+```
+
+該卷掛載到：
+
+```text
+/app/.od
+```
+
+資料在容器重新啟動和映像檔更新後持續保留。
+
+檢視卷：
+
+```bash
+docker volume inspect open-design_open_design_data
+```
+
+---
+
+## 注意事項
+
+* Docker 模式非常適合不想在本機安裝 Node.js 或 pnpm 的貢獻者。
+* 容器直接在連接埠 `7456` 上暴露生產環境的 daemon 建置。
+* 如需開發工作流程和進階本機設定，請參閱本快速入門指南的其餘部分。
+
+---
+
 ## 媒體生成 / agent dispatcher 問題排除
 
 Image、video、audio、HyperFrames 等 skill 在透過 daemon 啟動 agent 時，會注入環境變數以呼叫本地 `od` CLI：

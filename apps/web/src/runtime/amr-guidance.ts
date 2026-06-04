@@ -4,8 +4,9 @@
 // its own module so ChatPane / ProjectView / AssistantMessage can import it
 // without a circular dependency.
 
-// AMR model-gateway console wallet (recharge).
-export const AMR_RECHARGE_URL = 'https://open-design.ai/amr/wallet';
+// AMR model-gateway console wallet (account, balance, recharge).
+export const AMR_CONSOLE_URL = 'https://open-design.ai/amr/wallet';
+export const AMR_RECHARGE_URL = AMR_CONSOLE_URL;
 
 // Codes that mean a non-AMR agent hit "the model service rejected or could not
 // serve the run" — auth missing/invalid, quota/rate exhausted, or the upstream

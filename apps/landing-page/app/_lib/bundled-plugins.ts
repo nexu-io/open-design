@@ -461,3 +461,18 @@ export function getBundledPluginById(
 ): BundledPluginRecord | null {
   return getBundledPlugins().find((p) => p.manifestId === manifestId) ?? null;
 }
+
+// SystemRecord (from the `design-systems/` content collection) and the
+// design-system detail pages (from `plugins/_official/design-systems/`)
+// overlap on the folder name but not on the URL: a system folder `stripe`
+// becomes detail page `/plugins/design-system-stripe/`. ~8 of the ~150
+// systems ship no manifest, so they have no detail page. Resolve the link
+// here: callers link straight to the detail page when one exists, and
+// degrade to the `/plugins/systems/` index otherwise — same outcome the
+// `/systems/<slug>/` 301 redirects produce, but without the extra hop.
+export function detailHrefForSystemSlug(folderSlug: string): string | null {
+  const match = getDetailPlugins().find(
+    (p) => p.bucket === 'design-systems' && p.slug === folderSlug,
+  );
+  return match?.detailHref ?? null;
+}
