@@ -11,7 +11,10 @@
  * Output is a React fragment of typed elements — no dangerouslySetInnerHTML,
  * so untrusted text can't smuggle markup through.
  */
-import { Fragment, type MouseEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useT } from '../i18n';
+import { copyToClipboard } from '../lib/copy-to-clipboard';
+import { Icon } from '../components/Icon';
 
 export type MarkdownLinkClickHandler = (
   href: string,
@@ -46,9 +49,20 @@ type Block =
   | { kind: 'h'; level: 1 | 2 | 3 | 4; text: string }
   | { kind: 'ul'; items: string[] }
   | { kind: 'ol'; items: string[] }
+  | { kind: 'bq'; text: string }
   | { kind: 'code'; lang: string | null; body: string }
+  | { kind: 'codeComment'; comment: CodeCommentDirective }
   | { kind: 'table'; aligns: TableAlign[]; headers: string[]; rows: string[][] }
   | { kind: 'hr' };
+
+interface CodeCommentDirective {
+  title: string;
+  body: string;
+  file: string;
+  start?: number;
+  end?: number;
+  priority?: number;
+}
 
 function splitTableCells(line: string): string[] {
   // Walk char-by-char so we can respect three GFM cell-content rules without
@@ -126,6 +140,12 @@ function parseBlocks(input: string): Block[] {
       i++;
       continue;
     }
+    const codeComment = parseCodeCommentDirective(line);
+    if (codeComment) {
+      out.push({ kind: 'codeComment', comment: codeComment });
+      i++;
+      continue;
+    }
     // Fenced code block.
     const fence = /^```(\w[\w+-]*)?\s*$/.exec(line);
     if (fence) {
@@ -153,6 +173,16 @@ function parseBlocks(input: string): Block[] {
     if (/^\s*(-{3,}|_{3,}|\*{3,})\s*$/.test(line)) {
       out.push({ kind: 'hr' });
       i++;
+      continue;
+    }
+    // Blockquote. Group consecutive `>`-prefixed lines.
+    if (/^\s*>\s?/.test(line)) {
+      const buf: string[] = [];
+      while (i < lines.length && /^\s*>\s?/.test(lines[i] ?? '')) {
+        buf.push((lines[i] ?? '').replace(/^\s*>\s?/, ''));
+        i++;
+      }
+      out.push({ kind: 'bq', text: buf.join('\n') });
       continue;
     }
     // Unordered list. Group consecutive items.
@@ -202,6 +232,8 @@ function parseBlocks(input: string): Block[] {
       if (/^#{1,4}\s+/.test(next)) break;
       if (/^\s*[-*+]\s+/.test(next)) break;
       if (/^\s*\d+\.\s+/.test(next)) break;
+      if (/^\s*>\s?/.test(next)) break;
+      if (parseCodeCommentDirective(next)) break;
       if (isTableStartAt(lines, i)) break;
       buf.push(next);
       i++;
@@ -220,11 +252,24 @@ function renderBlock(block: Block, key: number, options?: RenderMarkdownOptions)
     return <Tag key={key} className={`md-h md-h${block.level}`}>{renderInline(block.text, options)}</Tag>;
   }
   if (block.kind === 'ul') {
+    const hasTask = block.items.some((it) => /^\[[ xX]\]\s+/.test(it));
     return (
-      <ul key={key} className="md-ul">
-        {block.items.map((item, i) => (
-          <li key={i}>{renderInline(item, options)}</li>
-        ))}
+      <ul key={key} className={`md-ul${hasTask ? ' md-task-list' : ''}`}>
+        {block.items.map((item, i) => {
+          const task = /^\[([ xX])\]\s+(.*)$/.exec(item);
+          if (task) {
+            const checked = task[1] !== ' ';
+            return (
+              <li key={i} className="md-task-item" data-checked={checked ? 'true' : 'false'}>
+                <span className="md-task-check" aria-hidden>
+                  {checked ? <Icon name="check" size={11} /> : null}
+                </span>
+                <span>{renderInline(task[2] ?? '', options)}</span>
+              </li>
+            );
+          }
+          return <li key={i}>{renderInline(item, options)}</li>;
+        })}
       </ul>
     );
   }
@@ -237,12 +282,24 @@ function renderBlock(block: Block, key: number, options?: RenderMarkdownOptions)
       </ol>
     );
   }
+  if (block.kind === 'bq') {
+    return (
+      <blockquote key={key} className="md-quote">
+        {renderInline(block.text, options)}
+      </blockquote>
+    );
+  }
   if (block.kind === 'code') {
     return (
-      <pre key={key} className="md-code">
-        <code data-lang={block.lang ?? undefined}>{block.body}</code>
-      </pre>
+      <MarkdownCodeBlock
+        key={key}
+        body={block.body}
+        lang={block.lang}
+      />
     );
+  }
+  if (block.kind === 'codeComment') {
+    return <CodeCommentBlock key={key} comment={block.comment} />;
   }
   if (block.kind === 'table') {
     const { aligns, headers, rows } = block;
@@ -279,6 +336,161 @@ function renderBlock(block: Block, key: number, options?: RenderMarkdownOptions)
   return null;
 }
 
+function parseCodeCommentDirective(line: string): CodeCommentDirective | null {
+  const match = /^\s*::code-comment\{([\s\S]*)\}\s*$/.exec(line);
+  if (!match) return null;
+  const attrs = parseDirectiveAttributes(match[1] ?? '');
+  const body = attrs.get('body')?.trim() ?? '';
+  const file = attrs.get('file')?.trim() ?? '';
+  if (!body || !file) return null;
+  const title = attrs.get('title')?.trim() || 'Code comment';
+  const start = parsePositiveInt(attrs.get('start'));
+  const end = parsePositiveInt(attrs.get('end'));
+  const priority = parsePositiveInt(attrs.get('priority'));
+  return {
+    title,
+    body,
+    file,
+    ...(start === undefined ? {} : { start }),
+    ...(end === undefined ? {} : { end }),
+    ...(priority === undefined ? {} : { priority }),
+  };
+}
+
+function parseDirectiveAttributes(raw: string): Map<string, string> {
+  const attrs = new Map<string, string>();
+  const attrRe = /([A-Za-z_][\w-]*)\s*=\s*("([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'|[^\s}]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = attrRe.exec(raw))) {
+    const key = match[1]!;
+    const quoted = match[3] ?? match[4];
+    const value = quoted ?? match[2] ?? '';
+    attrs.set(key, unescapeDirectiveValue(value.replace(/^['"]|['"]$/g, '')));
+  }
+  return attrs;
+}
+
+function unescapeDirectiveValue(value: string): string {
+  return value.replace(/\\(["'\\])/g, '$1');
+}
+
+function parsePositiveInt(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function CodeCommentBlock({ comment }: { comment: CodeCommentDirective }) {
+  const location = codeCommentLocation(comment);
+  return (
+    <article className="md-code-comment" data-priority={comment.priority ?? undefined}>
+      <div className="md-code-comment-head">
+        <span className="md-code-comment-icon" aria-hidden>!</span>
+        <strong>{renderInline(comment.title)}</strong>
+        {comment.priority ? (
+          <span className="md-code-comment-priority">P{comment.priority}</span>
+        ) : null}
+      </div>
+      <p className="md-code-comment-body">{renderInline(comment.body)}</p>
+      <code className="md-code-comment-file">{location}</code>
+    </article>
+  );
+}
+
+function codeCommentLocation(comment: CodeCommentDirective): string {
+  if (!comment.start) return comment.file;
+  if (comment.end && comment.end !== comment.start) {
+    return `${comment.file}:${comment.start}-${comment.end}`;
+  }
+  return `${comment.file}:${comment.start}`;
+}
+
+// Long blocks past this many lines start collapsed, matching Lobe's
+// "fold tall code" affordance so a single dump can't swallow the viewport.
+const CODE_COLLAPSE_LINE_THRESHOLD = 16;
+
+function MarkdownCodeBlock({ body, lang }: { body: string; lang: string | null }) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null);
+  const resetTimerRef = useRef<number | null>(null);
+  const copyLabel = copied ? t('fileViewer.copied') : t('fileViewer.copy');
+
+  const lineCount = body.split('\n').length;
+  const collapsible = lineCount > CODE_COLLAPSE_LINE_THRESHOLD;
+  const [collapsed, setCollapsed] = useState(collapsible);
+
+  useEffect(() => () => {
+    if (resetTimerRef.current != null) window.clearTimeout(resetTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!lang) return;
+    let cancelled = false;
+    import('./shiki').then(({ highlightCode }) =>
+      highlightCode(body, lang).then((html) => {
+        if (!cancelled && html) setHighlightedHtml(html);
+      }),
+    ).catch(() => {});
+    return () => { cancelled = true; };
+  }, [body, lang]);
+
+  async function handleCopy() {
+    const ok = await copyToClipboard(body);
+    if (!ok) return;
+    setCopied(true);
+    if (resetTimerRef.current != null) window.clearTimeout(resetTimerRef.current);
+    resetTimerRef.current = window.setTimeout(() => {
+      setCopied(false);
+      resetTimerRef.current = null;
+    }, 1600);
+  }
+
+  return (
+    <div className="md-code-block" data-collapsed={collapsed ? 'true' : undefined}>
+      <div className="md-code-header">
+        <span className="md-code-lang">{lang || 'text'}</span>
+        <div className="md-code-actions">
+          {collapsible ? (
+            <button
+              type="button"
+              className="md-code-action md-code-action-icon"
+              onClick={() => setCollapsed((c) => !c)}
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? t('designFiles.expandGroup') : t('designFiles.collapseGroup')}
+              title={collapsed ? t('designFiles.expandGroup') : t('designFiles.collapseGroup')}
+            >
+              <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={13} />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="md-code-action"
+            onClick={() => { void handleCopy(); }}
+            aria-label={copyLabel}
+            title={copyLabel}
+          >
+            <Icon name={copied ? 'check' : 'copy'} size={12} />
+            <span>{copyLabel}</span>
+          </button>
+        </div>
+      </div>
+      <div className="md-code-body">
+        {highlightedHtml ? (
+          <div
+            className="md-code md-code-highlighted"
+            dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+          />
+        ) : (
+          <pre className="md-code">
+            <code data-lang={lang ?? undefined}>{body}</code>
+          </pre>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Allowed schemes / forms for image `src` attributes. The BYOK chat
 // tool loop emits relative URLs like `/api/byok-image/<id>.png` which
 // the web's Next.js rewrites proxy to the daemon — that's the common
@@ -294,6 +506,48 @@ function isSafeMarkdownImageSrc(src: string): boolean {
     || src.startsWith('https://')
     || src.startsWith('data:image/')
     || src.startsWith('blob:')
+  );
+}
+
+const INLINE_CODE_HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+const PROSE_HEX_COLOR_RE = /(^|[^\w#])(#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}))(?![\w-])/g;
+
+function isInlineCodeHexColor(value: string): boolean {
+  return INLINE_CODE_HEX_COLOR_RE.test(value);
+}
+
+function ColorSwatch({ color }: { color: string }) {
+  return (
+    <span
+      className="md-color-swatch"
+      aria-hidden="true"
+      style={{ backgroundColor: color }}
+    />
+  );
+}
+
+function renderInlineCodeSpan(value: string, key: number): ReactNode {
+  if (!isInlineCodeHexColor(value)) {
+    return (
+      <code key={key} className="md-inline-code">
+        {value}
+      </code>
+    );
+  }
+  return (
+    <code key={key} className="md-inline-code md-color-token">
+      <ColorSwatch color={value} />
+      {value}
+    </code>
+  );
+}
+
+function renderColorToken(value: string, key: string): ReactNode {
+  return (
+    <span key={key} className="md-color-token">
+      <ColorSwatch color={value} />
+      {value}
+    </span>
   );
 }
 
@@ -330,11 +584,7 @@ function renderInline(text: string, options?: RenderMarkdownOptions): ReactNode 
       pushText(out, text.slice(lastIndex, m.index), key++, options);
     }
     if (m[1]) {
-      out.push(
-        <code key={key++} className="md-inline-code">
-          {m[1].slice(1, -1)}
-        </code>,
-      );
+      out.push(renderInlineCodeSpan(m[1].slice(1, -1), key++));
     } else if (m[3] !== undefined) {
       // Image: m[2] = alt (may be empty), m[3] = src
       const src = m[3];
@@ -418,7 +668,7 @@ function pushText(out: ReactNode[], text: string, baseKey: number, options?: Ren
   let k = 0;
   while ((m = urlRe.exec(text))) {
     if (m.index > lastIndex) {
-      segments.push(...withBreaks(text.slice(lastIndex, m.index), `${baseKey}-${k++}`));
+      segments.push(...withBreaksAndColorSwatches(text.slice(lastIndex, m.index), `${baseKey}-${k++}`));
     }
     const [href, suffix] = splitTrailingAutolinkPunctuation(m[1]!);
     segments.push(
@@ -434,12 +684,12 @@ function pushText(out: ReactNode[], text: string, baseKey: number, options?: Ren
       </a>,
     );
     if (suffix) {
-      segments.push(...withBreaks(suffix, `${baseKey}-${k++}`));
+      segments.push(...withBreaksAndColorSwatches(suffix, `${baseKey}-${k++}`));
     }
     lastIndex = urlRe.lastIndex;
   }
   if (lastIndex < text.length) {
-    segments.push(...withBreaks(text.slice(lastIndex), `${baseKey}-${k++}`));
+    segments.push(...withBreaksAndColorSwatches(text.slice(lastIndex), `${baseKey}-${k++}`));
   }
   out.push(<Fragment key={baseKey}>{segments}</Fragment>);
 }
@@ -451,12 +701,34 @@ function splitTrailingAutolinkPunctuation(url: string): [string, string] {
   return trimmed ? [trimmed, match[1]] : [url, ''];
 }
 
-function withBreaks(text: string, baseKey: string): ReactNode[] {
+function withBreaksAndColorSwatches(text: string, baseKey: string): ReactNode[] {
   const parts = text.split('\n');
   const out: ReactNode[] = [];
   parts.forEach((part, i) => {
     if (i > 0) out.push(<br key={`${baseKey}-br-${i}`} />);
-    if (part) out.push(<Fragment key={`${baseKey}-t-${i}`}>{part}</Fragment>);
+    if (part) out.push(...withProseColorSwatches(part, `${baseKey}-t-${i}`));
   });
+  return out;
+}
+
+function withProseColorSwatches(text: string, baseKey: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  PROSE_HEX_COLOR_RE.lastIndex = 0;
+  while ((match = PROSE_HEX_COLOR_RE.exec(text))) {
+    const prefix = match[1] ?? '';
+    const color = match[2] ?? '';
+    const colorIndex = match.index + prefix.length;
+    if (colorIndex > lastIndex) {
+      out.push(<Fragment key={`${baseKey}-${key++}`}>{text.slice(lastIndex, colorIndex)}</Fragment>);
+    }
+    out.push(renderColorToken(color, `${baseKey}-${key++}`));
+    lastIndex = colorIndex + color.length;
+  }
+  if (lastIndex < text.length) {
+    out.push(<Fragment key={`${baseKey}-${key++}`}>{text.slice(lastIndex)}</Fragment>);
+  }
   return out;
 }

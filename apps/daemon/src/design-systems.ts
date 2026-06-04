@@ -21,6 +21,7 @@ import {
 
 import { parseFrontmatter } from './frontmatter.js';
 import type { FrontmatterObject, FrontmatterValue } from './frontmatter.js';
+import { extractSwiftColors } from './swift-colors.js';
 
 export type DesignSystemSurface = 'web' | 'image' | 'video' | 'audio';
 export type DesignSystemSource = 'built-in' | 'installed' | 'user';
@@ -2823,6 +2824,28 @@ function extractSwatches(raw: string): string[] {
   // Form B: "**Stripe Purple** (`#533afd`)"
   const reB = /\*\*([A-Za-z][A-Za-z0-9 /&()+_-]{1,40}?)\*\*\s*\(?\s*`?(#[0-9a-fA-F]{3,8})/g;
   while ((m = reB.exec(raw)) !== null) push(m[1] ?? '', m[2] ?? '');
+  // Form C: markdown table rows, e.g.
+  //   | Window canvas | `--window-background` | `#1a1a1d` | base |
+  // Use the first cell that holds a hex as the value, and the first plain
+  // text cell (not the hex, not a `---` separator) as the name. Header and
+  // separator rows carry no hex, so they are skipped. Form A/B run first, so
+  // inline definitions still win in pickSwatchRow when a file mixes both.
+  const reC = /^[ \t]*\|(.+)\|[ \t]*$/gm;
+  while ((m = reC.exec(raw)) !== null) {
+    const cells = (m[1] ?? '').split('|').map((cell) => cell.trim());
+    const hexCell = cells.find((cell) => /#[0-9a-fA-F]{3,8}\b/.test(cell));
+    if (!hexCell) continue;
+    const hex = hexCell.match(/#[0-9a-fA-F]{3,8}/)?.[0] ?? '';
+    const nameCell = cells.find(
+      (cell) => cell.length > 0 && !/#[0-9a-fA-F]{3,8}/.test(cell) && !/^[-:\s]+$/.test(cell),
+    );
+    push(nameCell ?? '', hex);
+  }
+  // Form D: SwiftUI Color(...) declarations (HSB / RGB / white), converted to
+  // hex. Swift repos define palette tokens in source rather than CSS, so a
+  // captured ColorSystem.swift or a DESIGN.md that quotes it would otherwise
+  // yield no swatches. Inline hex forms above still win in pickSwatchRow.
+  for (const token of extractSwiftColors(raw)) push(token.name, token.hex);
   if (colors.length === 0) return [];
   return pickSwatchRow(colors).values;
 }

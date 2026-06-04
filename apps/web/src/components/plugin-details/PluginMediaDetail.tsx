@@ -3,7 +3,7 @@
 // Visually this variant now matches the html-example and design-system
 // modals — it reuses PreviewModal so every plugin variant shares the
 // same chrome (title + subtitle, primary `Use plugin` CTA, sidebar
-// toggle, fullscreen, share menu, close). The stage hosts the
+// toggle, fullscreen, plugin actions, close). The stage hosts the
 // type-specific media (image / video / audio) via PreviewModal's
 // `custom` view kind, and the right-side sidebar carries the prompt
 // body + PluginMetaSections so users can read the prompt and inspect
@@ -19,7 +19,7 @@ import { resolvePluginQueryFallback } from '../../state/projects';
 import { Icon } from '../Icon';
 import { PreviewModal, type PreviewView } from '../PreviewModal';
 import { PluginMetaSections } from './PluginMetaSections';
-import { PluginShareMenu } from './PluginShareMenu';
+import { buildPluginShareUrl, PluginShareMenu } from './PluginShareMenu';
 
 interface Props {
   record: InstalledPluginRecord;
@@ -210,6 +210,11 @@ export function PluginMediaDetail({
       subtitle={description || undefined}
       views={views}
       exportTitleFor={() => record.title}
+      shareTarget={{
+        title: record.title,
+        description: description || undefined,
+        url: buildPluginShareUrl(record),
+      }}
       onClose={onClose}
       sidebar={{
         label: 'Plugin info',

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
-import { readProjectFile, validateProjectPath } from './projects.js';
+import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
@@ -29,7 +29,12 @@ type CloudflarePagesConfigHints = {
 };
 type DeployFile = { file: string; data: Buffer | Uint8Array | string; contentType?: string; sourcePath?: string };
 type DeployFilePlan = { entryPath: string; html: string; files: DeployFile[]; missing: string[]; invalid: string[] };
-type DeployOptions = { metadata?: unknown; hookScriptUrl?: string; providerId?: DeployProviderId };
+type DeployOptions = {
+  metadata?: unknown;
+  hookScriptUrl?: string;
+  providerId?: DeployProviderId;
+  includeProjectFiles?: boolean;
+};
 type CloudflarePagesDeploySelection = { zoneId: string; zoneName: string; domainPrefix: string; hostname: string };
 type CloudflareDnsRecord = JsonObject & { id?: string; type?: string; name?: string; content?: string; comment?: string };
 type DeployLinkStatus = 'ready' | 'protected' | 'failed' | 'link-delayed';
@@ -318,6 +323,14 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
     }
   }
 
+  if (options.includeProjectFiles) {
+    await addVisibleProjectFilesToDeployPlan(files, {
+      projectsRoot,
+      projectId,
+      metadata: options.metadata,
+    });
+  }
+
   return {
     entryPath,
     html,
@@ -339,6 +352,37 @@ export async function buildDeployFileSet(projectsRoot: string, projectId: string
     });
   }
   return plan.files;
+}
+
+async function addVisibleProjectFilesToDeployPlan(
+  files: Map<string, DeployFile>,
+  input: { projectsRoot: string; projectId: string; metadata?: unknown },
+) {
+  if (isLinkedFolderProject(input.metadata)) return;
+  const projectFiles = await listFiles(input.projectsRoot, input.projectId, { metadata: input.metadata });
+  for (const item of projectFiles) {
+    if (!item?.name || files.has(item.name)) continue;
+    const safePath = validateProjectPath(item.name);
+    // The selected entry is already mapped to provider-root index.html. Keep
+    // the original root index reserved so choosing index-v1.html does not get
+    // overwritten by the old launcher at the same deploy path.
+    if (safePath === 'index.html') continue;
+    const projectFile = await readProjectFile(input.projectsRoot, input.projectId, safePath, input.metadata);
+    files.set(safePath, {
+      file: safePath,
+      data: projectFile.buffer,
+      contentType: projectFile.mime,
+      sourcePath: safePath,
+    });
+  }
+}
+
+function isLinkedFolderProject(metadata: unknown) {
+  return Boolean(
+    metadata
+      && typeof metadata === 'object'
+      && typeof (metadata as { baseDir?: unknown }).baseDir === 'string',
+  );
 }
 
 export async function deployToVercel({ config, files, projectId }: { config: DeployConfig; files: DeployFile[]; projectId: string }) {

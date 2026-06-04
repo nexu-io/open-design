@@ -23,6 +23,7 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate } from '../providers/registry';
 import { isStoredMediaProviderEntryPresent } from '../state/config';
+import { isMediaProviderPickerReady } from '../media/provider-readiness';
 import type {
   AudioKind,
   DesignSystemSummary,
@@ -114,6 +115,10 @@ export interface CreateInput {
   metadata: ProjectMetadata;
 }
 
+export type ImportClaudeDesignOutcome =
+  | { ok: true }
+  | { ok: false; message?: string; details?: string };
+
 interface Props {
   skills: SkillSummary[];
   designSystems: DesignSystemSummary[];
@@ -122,7 +127,9 @@ interface Props {
   onDeleteTemplate?: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
   onCreate: (input: CreateInput & { requestId?: string }) => void;
-  onImportClaudeDesign?: (file: File) => Promise<void> | void;
+  onImportClaudeDesign?: (
+    file: File,
+  ) => Promise<ImportClaudeDesignOutcome | void> | ImportClaudeDesignOutcome | void;
   // Web fallback: the user types an absolute baseDir into the manual
   // input and the renderer POSTs `/api/import/folder` itself. Browser
   // builds have no `shell.openPath` surface, so the renderer naming a
@@ -261,6 +268,9 @@ export function NewProjectPanel({
   const analytics = useAnalytics();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importZipError, setImportZipError] = useState<
+    { message: string; details?: string } | null
+  >(null);
   const [baseDir, setBaseDir] = useState('');
   const [importingFolder, setImportingFolder] = useState(false);
   // PR #974 round-4 (mrcfps): pickAndImport now returns structured
@@ -707,8 +717,19 @@ export function NewProjectPanel({
     ev.target.value = '';
     if (!file || !onImportClaudeDesign) return;
     setImporting(true);
+    setImportZipError(null);
     try {
-      await onImportClaudeDesign(file);
+      const result = await onImportClaudeDesign(file);
+      if (result?.ok === false) {
+        setImportZipError({
+          message: result.message ? `Import failed: ${result.message}` : 'Import failed',
+          details: result.details,
+        });
+      }
+    } catch (err) {
+      setImportZipError({
+        message: err instanceof Error ? `Import failed: ${err.message}` : 'Import failed',
+      });
     } finally {
       setImporting(false);
     }
@@ -826,13 +847,15 @@ export function NewProjectPanel({
           ) : null}
         </h3>
 
-        <input
-          className="newproj-name"
-          data-testid="new-project-name"
-          placeholder={t('newproj.namePlaceholder')}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
+        <div className="newproj-name-row">
+          <input
+            className="newproj-name"
+            data-testid="new-project-name"
+            placeholder={t('newproj.namePlaceholder')}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
 
         {showDesignSystemPicker ? (
           <DesignSystemPicker
@@ -1055,6 +1078,14 @@ export function NewProjectPanel({
         ) : null}
       </div>
       <div className="newproj-footer">{t('newproj.privacyFooter')}</div>
+      {importZipError ? (
+        <Toast
+          message={importZipError.message}
+          details={importZipError.details ?? null}
+          ttlMs={6000}
+          onDismiss={() => setImportZipError(null)}
+        />
+      ) : null}
       {importFolderError ? (
         <Toast
           message={importFolderError.message}
@@ -2412,8 +2443,8 @@ function MediaProjectOptions(props:
 
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['openai', 'volcengine', 'grok', 'nanobanana']),
-    video: new Set(['volcengine', 'hyperframes', 'grok']),
+    image: new Set(['openai', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image']),
+    video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter']),
     audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine']),
   };
   return models.filter((model) => {
@@ -2454,6 +2485,7 @@ function MediaModelCards({
     for (const model of models) {
       const provider = findProvider(model.provider);
       const providerId = provider?.id ?? model.provider;
+      if (!isMediaProviderPickerReady(providerId, mediaProviders)) continue;
       const entry = mediaProviders?.[providerId];
       const configured =
         provider?.credentialsRequired === false ||
@@ -2484,6 +2516,16 @@ function MediaModelCards({
     }
     return null;
   }, [groups, value]);
+  const firstAvailableModelId = groups[0]?.models[0]?.id ?? null;
+
+  useEffect(() => {
+    if (selected) return;
+    if (firstAvailableModelId) {
+      onChange(firstAvailableModelId);
+      return;
+    }
+    if (value) onChange('');
+  }, [firstAvailableModelId, onChange, selected, value]);
 
   const filteredGroups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -2787,28 +2829,31 @@ function buildMetadata(input: {
   }
   if (input.tab === 'media') {
     if (input.mediaSurface === 'image') {
+      const imageModel = input.imageModel.trim();
       return {
         kind,
-        imageModel: input.imageModel,
+        ...(imageModel ? { imageModel } : {}),
         imageAspect: input.imageAspect,
         ...buildPromptTemplateMetadata(input.promptTemplate),
         ...inspirations,
       };
     }
     if (input.mediaSurface === 'video') {
+      const videoModel = input.videoModel.trim();
       return {
         kind,
-        videoModel: input.videoModel,
+        ...(videoModel ? { videoModel } : {}),
         videoAspect: input.videoAspect,
         videoLength: input.videoLength,
         ...buildPromptTemplateMetadata(input.promptTemplate),
         ...inspirations,
       };
     }
+    const audioModel = input.audioModel.trim();
     return {
       kind,
       audioKind: input.audioKind,
-      audioModel: input.audioModel,
+      ...(audioModel ? { audioModel } : {}),
       audioDuration: input.audioDuration,
       ...(input.audioKind === 'speech' && input.voice.trim()
         ? { voice: input.voice.trim() }

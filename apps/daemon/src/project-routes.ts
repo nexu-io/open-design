@@ -1,6 +1,9 @@
-import type { Express } from 'express';
+import { rm } from 'node:fs/promises';
+import path from 'node:path';
+import type { Express, Response } from 'express';
 import {
   defaultScenarioPluginIdForProjectMetadata,
+  type ChatSessionMode,
   type PluginManifest,
 } from '@open-design/contracts';
 import { createProjectArtifactFile } from './artifact-create.js';
@@ -9,20 +12,565 @@ import { ArtifactRegressionError } from './artifact-stub-guard.js';
 import { listDesignSystems } from './design-systems.js';
 import {
   FIRST_PARTY_ATOMS,
+  buildConnectorProbe,
   getInstalledPlugin,
   listInstalledPlugins,
   resolvePluginSnapshot,
 } from './plugins/index.js';
+import { connectorService } from './connectors/service.js';
 import type { RouteDeps } from './server-context.js';
 import { listSkills } from './skills.js';
+import { isSafeId } from './projects.js';
+import {
+  BUILT_IN_PROJECT_LOCATION_ID,
+  allProjectLocations,
+  createLocationProjectDir,
+  ensureProjectLocation,
+  scanProjectLocation,
+  writeProjectManifest,
+} from './project-locations.js';
 import { auditDesignSystemPackage } from './tools-connectors-cli.js';
 
-export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'validation'> {}
+export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'validation'> {}
+
+function projectDetailResolvedDir(
+  projectsRoot: string,
+  project: any,
+  resolveProjectDir: (
+    projectsRoot: string,
+    projectId: string,
+    metadata?: unknown,
+    opts?: { allowUnavailableSandboxImportedProject?: boolean },
+  ) => string,
+): string {
+  const baseDir = typeof project?.metadata?.baseDir === 'string'
+    ? path.normalize(project.metadata.baseDir)
+    : null;
+  if (baseDir && path.isAbsolute(baseDir)) return baseDir;
+  return resolveProjectDir(projectsRoot, project.id, project.metadata, {
+    allowUnavailableSandboxImportedProject: true,
+  });
+}
+
+const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
+(function(){
+  if (window.__odUrlScrollBridge) return;
+  window.__odUrlScrollBridge = true;
+  var pending = false;
+  function scrollElement(){
+    return document.querySelector('.design-canvas') || document.scrollingElement || document.documentElement;
+  }
+  function num(value){
+    var next = Number(value || 0);
+    return Number.isFinite(next) ? next : 0;
+  }
+  function post(){
+    var el = scrollElement();
+    if (!el) return;
+    var frame = document.scrollingElement || document.documentElement;
+    window.parent.postMessage({
+      type: 'od:preview-scroll',
+      canvasLeft: Math.round(el.scrollLeft || 0),
+      canvasTop: Math.round(el.scrollTop || 0),
+      frameLeft: Math.round(frame.scrollLeft || 0),
+      frameTop: Math.round(frame.scrollTop || 0)
+    }, '*');
+  }
+  function schedule(){
+    if (pending) return;
+    pending = true;
+    window.requestAnimationFrame(function(){
+      pending = false;
+      post();
+    });
+  }
+  function scrollTo(el, left, top){
+    if (!el) return;
+    if (typeof el.scrollTo === 'function') el.scrollTo(num(left), num(top));
+    else {
+      el.scrollLeft = num(left);
+      el.scrollTop = num(top);
+    }
+  }
+  function scrollBy(el, left, top){
+    if (!el) return;
+    var dx = num(left);
+    var dy = num(top);
+    if (!dx && !dy) return;
+    if (typeof el.scrollBy === 'function') el.scrollBy({ left: dx, top: dy, behavior: 'auto' });
+    else {
+      el.scrollLeft = (el.scrollLeft || 0) + dx;
+      el.scrollTop = (el.scrollTop || 0) + dy;
+    }
+  }
+  function requestRestore(){
+    window.parent.postMessage({ type: 'od:preview-scroll-request' }, '*');
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || !data.type) return;
+    if (data.type === 'od:preview-scroll-restore') {
+      scrollTo(document.scrollingElement || document.documentElement, data.frameLeft, data.frameTop);
+      scrollTo(scrollElement(), data.canvasLeft, data.canvasTop);
+      setTimeout(post, 0);
+      return;
+    }
+    if (data.type === 'od:preview-scroll-by') {
+      scrollBy(scrollElement(), data.left, data.top);
+      schedule();
+    }
+  });
+  window.addEventListener('scroll', schedule, true);
+  document.addEventListener('scroll', schedule, true);
+  window.addEventListener('resize', schedule);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function(){
+      requestRestore();
+      schedule();
+    });
+  } else {
+    setTimeout(function(){
+      requestRestore();
+      schedule();
+    }, 0);
+  }
+})();
+</script>`;
+
+const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
+(function(){
+  if (window.__odUrlSelectionBridge) return;
+  window.__odUrlSelectionBridge = true;
+  var commentEnabled = false;
+  var mode = 'picker';
+  var hoveredId = null;
+  var drawing = false;
+  var stroke = [];
+  var strokeFrame = null;
+  var postTargetsPending = false;
+  var postTargetsTimer = null;
+  var activeCommentElementId = null;
+  var activeCommentSelector = null;
+  var activeTargetPending = false;
+  function esc(value){
+    try { return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/"/g, '\\\\"'); }
+    catch (_) { return String(value); }
+  }
+  function ensureStyle(){
+    if (document.querySelector('style[data-od-url-selection-style]')) return;
+    var style = document.createElement('style');
+    style.setAttribute('data-od-url-selection-style', '');
+    style.textContent =
+      'html[data-od-comment-mode] body * { cursor: crosshair !important; }' +
+      'html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cell !important; }' +
+      'html[data-od-comment-mode] body iframe,html[data-od-comment-mode] body object,html[data-od-comment-mode] body embed { pointer-events: none !important; }';
+    (document.head || document.documentElement).appendChild(style);
+  }
+  function active(){ return commentEnabled; }
+  function annotatedSelectorFor(el){
+    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
+    if (!id) return null;
+    return el.hasAttribute('data-od-id') ? '[data-od-id="' + esc(id) + '"]' : '[data-screen-label="' + esc(id) + '"]';
+  }
+  function domSelectorFor(el){
+    if (!el || !el.tagName || el === document.documentElement || el === document.body) return null;
+    var parts = [];
+    var node = el;
+    while (node && node !== document.documentElement && node !== document.body) {
+      var tag = node.tagName ? node.tagName.toLowerCase() : '';
+      if (!tag || /^(script|style|template|meta|link|title|noscript)$/.test(tag)) return null;
+      var parent = node.parentElement;
+      if (!parent) return null;
+      var index = 1;
+      var sibling = node.previousElementSibling;
+      while (sibling) {
+        if (sibling.tagName && sibling.tagName.toLowerCase() === tag) index++;
+        sibling = sibling.previousElementSibling;
+      }
+      parts.unshift(tag + ':nth-of-type(' + index + ')');
+      node = parent;
+    }
+    return parts.length ? 'body > ' + parts.join(' > ') : null;
+  }
+  function visibleTarget(el){
+    if (!el || !el.getBoundingClientRect) return false;
+    if (el === document.documentElement || el === document.body) return false;
+    if (/^(script|style|template|meta|link|title|noscript)$/.test(el.tagName ? el.tagName.toLowerCase() : '')) return false;
+    try {
+      var rect = el.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) return false;
+      var cs = window.getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || cs.pointerEvents === 'none') return false;
+    } catch (_) { return false; }
+    return true;
+  }
+  function meaningfulDomFallbackTarget(el){
+    if (!visibleTarget(el)) return false;
+    var tag = el.tagName ? el.tagName.toLowerCase() : '';
+    if (/^(a|button|input|textarea|select|label|img|video|canvas|h1|h2|h3|h4|h5|h6|p|li|td|th)$/.test(tag)) return true;
+    if (el.getAttribute && (el.getAttribute('role') || el.getAttribute('aria-label') || el.getAttribute('title'))) return true;
+    if (tag === 'svg') return !!(el.getAttribute && (el.getAttribute('role') || el.getAttribute('aria-label') || el.getAttribute('title')));
+    var text = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+    if (!text) return false;
+    if (/^(span|strong|em|b|i|small|code|mark)$/.test(tag)) return true;
+    var meaningfulChildren = 0;
+    for (var child = el.firstElementChild; child; child = child.nextElementSibling) {
+      var childTag = child.tagName ? child.tagName.toLowerCase() : '';
+      if (/^(script|style|template|meta|link|title|noscript)$/.test(childTag)) continue;
+      if ((child.textContent || '').replace(/\\s+/g, ' ').trim() || /^(img|video|canvas|svg|input|textarea|select)$/.test(childTag)) {
+        meaningfulChildren++;
+        if (meaningfulChildren > 1) return false;
+      }
+    }
+    return true;
+  }
+  function generatedRootAnnotation(el, id){
+    return id === 'path-0' && el && el.parentElement === document.body && el.id === 'root';
+  }
+  function styleSnapshot(el){
+    try {
+      var cs = window.getComputedStyle(el);
+      return {
+        color: cs.color,
+        backgroundColor: cs.backgroundColor,
+        fontSize: cs.fontSize,
+        fontWeight: cs.fontWeight,
+        lineHeight: cs.lineHeight,
+        paddingTop: cs.paddingTop,
+        paddingRight: cs.paddingRight,
+        paddingBottom: cs.paddingBottom,
+        paddingLeft: cs.paddingLeft,
+        borderRadius: cs.borderTopLeftRadius,
+        textAlign: cs.textAlign,
+        fontFamily: cs.fontFamily
+      };
+    } catch (_) { return null; }
+  }
+  function targetFrom(el, allowDomFallback, clickedEl, clickPoint){
+    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
+    if (allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
+    var selector = annotatedSelectorFor(el);
+    if (!id && allowDomFallback && meaningfulDomFallbackTarget(el)) {
+      selector = domSelectorFor(el);
+      if (selector) id = 'dom:' + selector;
+    }
+    if (!id || !selector) return null;
+    var rect = el.getBoundingClientRect();
+    var tag = el.tagName ? el.tagName.toLowerCase() : 'element';
+    var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0, 2).join('.') : '';
+    var html = '';
+    try {
+      var match = (el.outerHTML || '').replace(/\\s+/g, ' ').match(/^<[^>]+>/);
+      html = match ? match[0] : '';
+    } catch (_) {}
+    var payload = {
+      type: 'od:comment-target',
+      elementId: id,
+      selector: selector,
+      label: tag + cls,
+      text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
+      position: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
+      htmlHint: html.slice(0, 180),
+      style: styleSnapshot(el)
+    };
+    if (clickPoint) payload.hoverPoint = { x: Math.round(clickPoint.x), y: Math.round(clickPoint.y) };
+    if (clickedEl && clickedEl !== el) {
+      var clickedTag = clickedEl.tagName ? clickedEl.tagName.toLowerCase() : 'element';
+      var clickedCls = typeof clickedEl.className === 'string' && clickedEl.className.trim() ? '.' + clickedEl.className.trim().split(/\\s+/).slice(0, 2).join('.') : '';
+      payload.clickedDescendant = {
+        label: clickedTag + clickedCls,
+        text: (clickedEl.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 80)
+      };
+    }
+    return payload;
+  }
+  function allTargets(){
+    var includeDomFallback = commentEnabled && mode === 'picker';
+    var nodes = includeDomFallback ? document.querySelectorAll('body *') : document.querySelectorAll('[data-od-id], [data-screen-label]');
+    var items = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < nodes.length; i++) {
+      var item = targetFrom(nodes[i], includeDomFallback);
+      if (item && !seen[item.elementId]) {
+        seen[item.elementId] = true;
+        items.push(item);
+      }
+    }
+    return items;
+  }
+  function postTargets(){
+    if (!active()) return;
+    window.parent.postMessage({ type: 'od:comment-targets', targets: allTargets() }, '*');
+  }
+  function schedulePostTargets(){
+    if (!active() || postTargetsPending) return;
+    postTargetsPending = true;
+    if (postTargetsTimer) window.clearTimeout(postTargetsTimer);
+    postTargetsTimer = window.setTimeout(function(){
+      window.requestAnimationFrame(function(){
+        postTargetsPending = false;
+        postTargetsTimer = null;
+        postTargets();
+      });
+    }, 120);
+  }
+  function findCommentTargetByIdentity(elementId, selector){
+    var el = null;
+    if (selector) {
+      try { el = document.querySelector(String(selector)); } catch (_) { el = null; }
+    }
+    if (!el && elementId) {
+      try {
+        var id = String(elementId).replace(/"/g, '\\\\"');
+        el = document.querySelector('[data-od-id="' + id + '"], [data-screen-label="' + id + '"]');
+      } catch (_) { el = null; }
+    }
+    return el;
+  }
+  function postActiveCommentTarget(){
+    if (!active() || !activeCommentElementId) return;
+    var el = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
+    if (!el) return;
+    var payload = targetFrom(el, commentEnabled && mode === 'picker');
+    if (payload) window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-active-target-update' }), '*');
+  }
+  function schedulePostActiveCommentTarget(){
+    if (!active() || !activeCommentElementId || activeTargetPending) return;
+    activeTargetPending = true;
+    window.requestAnimationFrame(function(){
+      activeTargetPending = false;
+      postActiveCommentTarget();
+    });
+  }
+  function eventCandidateElements(event){
+    var items = [];
+    function push(node){
+      if (!node || node.nodeType !== 1) return;
+      if (items.indexOf(node) >= 0) return;
+      items.push(node);
+    }
+    try {
+      if (event && typeof event.composedPath === 'function') {
+        var path = event.composedPath();
+        for (var i = 0; i < path.length; i++) push(path[i]);
+      }
+    } catch (_) {}
+    push(event && event.target);
+    try {
+      if (event && typeof event.clientX === 'number' && typeof event.clientY === 'number' && document.elementsFromPoint) {
+        var stack = document.elementsFromPoint(event.clientX, event.clientY);
+        for (var s = 0; s < stack.length; s++) push(stack[s]);
+      } else if (event && typeof event.clientX === 'number' && typeof event.clientY === 'number' && document.elementFromPoint) {
+        push(document.elementFromPoint(event.clientX, event.clientY));
+      }
+    } catch (_) {}
+    return items;
+  }
+  function closestTarget(event){
+    var candidates = eventCandidateElements(event);
+    var allowDomFallback = commentEnabled && mode === 'picker';
+    var annotatedFallback = null;
+    for (var i = 0; i < candidates.length; i++) {
+      var clicked = candidates[i];
+      var el = clicked;
+      while (el && el !== document.documentElement) {
+        if (allowDomFallback && meaningfulDomFallbackTarget(el)) return { target: el, clicked: clicked };
+        if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) {
+          var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
+          if (allowDomFallback && generatedRootAnnotation(el, id)) {
+            el = el.parentElement;
+            continue;
+          }
+          if (allowDomFallback && !annotatedFallback) annotatedFallback = { target: el, clicked: clicked };
+          if (allowDomFallback) break;
+          return { target: el, clicked: clicked };
+        }
+        el = el.parentElement;
+      }
+    }
+    return annotatedFallback;
+  }
+  function relativePoint(ev){ return { x: Math.round(ev.clientX), y: Math.round(ev.clientY) }; }
+  function postStroke(type){ window.parent.postMessage({ type: type, points: stroke.slice() }, '*'); }
+  function schedulePostStroke(){
+    if (strokeFrame !== null) return;
+    strokeFrame = requestAnimationFrame(function(){
+      strokeFrame = null;
+      postStroke('od:pod-stroke');
+    });
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || !data.type) return;
+    if (data.type === 'od:url-selection-bridge-probe') {
+      window.parent.postMessage({ type: 'od:url-selection-bridge-ready' }, '*');
+      return;
+    }
+    if (data.type === 'od:comment-mode') {
+      commentEnabled = !!data.enabled;
+      mode = data.mode === 'pod' ? 'pod' : 'picker';
+      document.documentElement.toggleAttribute('data-od-comment-mode', commentEnabled);
+      document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
+      if (commentEnabled) setTimeout(postTargets, 0);
+      else {
+        hoveredId = null;
+        activeCommentElementId = null;
+        activeCommentSelector = null;
+      }
+      if (!commentEnabled || mode !== 'pod') {
+        drawing = false;
+        stroke = [];
+        try { window.parent.postMessage({ type: 'od:pod-clear' }, '*'); } catch (_) {}
+      }
+      return;
+    }
+    if (data.type === 'od:comment-active-target') {
+      activeCommentElementId = data.elementId ? String(data.elementId) : null;
+      activeCommentSelector = data.selector ? String(data.selector) : null;
+      schedulePostActiveCommentTarget();
+    }
+  });
+  document.addEventListener('mouseover', function(ev){
+    if (!commentEnabled || mode !== 'picker') return;
+    var result = closestTarget(ev);
+    if (!result) return;
+    var payload = targetFrom(result.target, true);
+    if (!payload || payload.elementId === hoveredId) return;
+    hoveredId = payload.elementId;
+    window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-hover' }), '*');
+  }, true);
+  document.addEventListener('mouseout', function(ev){
+    if (!commentEnabled || mode !== 'picker') return;
+    var result = closestTarget(ev);
+    if (!result) return;
+    var next = ev.relatedTarget;
+    while (next && next !== document.documentElement) {
+      if (next === result.target) return;
+      next = next.parentElement;
+    }
+    hoveredId = null;
+    window.parent.postMessage({ type: 'od:comment-leave' }, '*');
+  }, true);
+  document.addEventListener('click', function(ev){
+    if (!commentEnabled || mode !== 'picker') return;
+    var result = closestTarget(ev);
+    if (result) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var payload = targetFrom(result.target, true, result.clicked, { x: ev.clientX, y: ev.clientY });
+      if (payload) {
+        activeCommentElementId = payload.elementId || activeCommentElementId;
+        activeCommentSelector = payload.selector || activeCommentSelector;
+        window.parent.postMessage(payload, '*');
+      }
+      return;
+    }
+    var t = ev.target;
+    var walk = t && t.nodeType === 1 ? t : null;
+    while (walk && walk !== document.documentElement) {
+      var tag = walk.tagName;
+      if (tag === 'A' || tag === 'BUTTON' || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'LABEL') return;
+      if (walk.isContentEditable) return;
+      walk = walk.parentElement;
+    }
+    ev.preventDefault();
+    ev.stopPropagation();
+    var pinX = Math.round(ev.clientX);
+    var pinY = Math.round(ev.clientY);
+    var pinId = 'pin-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e6).toString(36);
+    window.parent.postMessage({
+      type: 'od:comment-target',
+      elementId: pinId,
+      selector: '[data-od-pin="' + pinId + '"]',
+      label: 'pin',
+      text: '',
+      position: { x: pinX - 12, y: pinY - 12, width: 24, height: 24 },
+      hoverPoint: { x: pinX, y: pinY },
+      htmlHint: '',
+      style: null,
+      freePin: true
+    }, '*');
+  }, true);
+  document.addEventListener('pointerdown', function(ev){
+    if (!commentEnabled || mode !== 'pod' || ev.button !== 0) return;
+    drawing = true;
+    stroke = [relativePoint(ev)];
+    ev.preventDefault();
+    ev.stopPropagation();
+    postStroke('od:pod-stroke');
+  }, true);
+  document.addEventListener('pointermove', function(ev){
+    if (!drawing || mode !== 'pod') return;
+    var point = relativePoint(ev);
+    var last = stroke[stroke.length - 1];
+    if (last && Math.hypot(last.x - point.x, last.y - point.y) < 4) return;
+    stroke.push(point);
+    ev.preventDefault();
+    ev.stopPropagation();
+    schedulePostStroke();
+  }, true);
+  function finishStroke(ev){
+    if (!drawing || mode !== 'pod') return;
+    drawing = false;
+    if (strokeFrame !== null) { cancelAnimationFrame(strokeFrame); strokeFrame = null; }
+    if (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+    postStroke('od:pod-select');
+  }
+  document.addEventListener('pointerup', finishStroke, true);
+  document.addEventListener('pointercancel', finishStroke, true);
+  window.addEventListener('resize', schedulePostTargets);
+  document.addEventListener('scroll', function(){
+    schedulePostActiveCommentTarget();
+    schedulePostTargets();
+  }, true);
+  var mo = new MutationObserver(schedulePostTargets);
+  mo.observe(document.documentElement, { subtree: true, childList: true });
+  ensureStyle();
+  window.parent.postMessage({ type: 'od:url-selection-bridge-ready' }, '*');
+})();
+</script>`;
+
+function previewBridgeTokens(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(previewBridgeTokens);
+  if (typeof value !== 'string') return [];
+  return value.split(/[,\s]+/).map((item) => item.trim()).filter(Boolean);
+}
+
+function wantsUrlPreviewScrollBridge(value: unknown): boolean {
+  return previewBridgeTokens(value).some((token) => token === 'scroll' || token === '1' || token === 'true');
+}
+
+function wantsUrlPreviewSelectionBridge(value: unknown): boolean {
+  return previewBridgeTokens(value).some((token) => token === 'selection' || token === 'comment' || token === 'comments' || token === 'annotation');
+}
+
+function injectBeforeBodyClose(html: string, marker: string, injection: string): string {
+  if (html.includes(marker)) return html;
+  const bodyCloseIndex = html.search(/<\/body\s*>/i);
+  if (bodyCloseIndex >= 0) {
+    return `${html.slice(0, bodyCloseIndex)}${injection}${html.slice(bodyCloseIndex)}`;
+  }
+  return `${html}${injection}`;
+}
+
+function injectUrlPreviewBridge(html: string, bridge: 'scroll' | 'selection'): string {
+  return bridge === 'scroll'
+    ? injectBeforeBodyClose(html, 'data-od-url-scroll-bridge', URL_PREVIEW_SCROLL_BRIDGE)
+    : injectBeforeBodyClose(html, 'data-od-url-selection-bridge', URL_PREVIEW_SELECTION_BRIDGE);
+}
+
+function normalizeChatSessionMode(value: unknown): ChatSessionMode {
+  return value === 'chat' ? 'chat' : 'design';
+}
 
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
   const { DESIGN_SYSTEMS_DIR, PROJECTS_DIR, SKILLS_DIR } = ctx.paths;
+  const { readAppConfig, writeAppConfig } = ctx.appConfig;
   const { insertProject, validateLinkedDirs, getProject, updateProject, dbDeleteProject, removeProjectDir } = ctx.projectStore;
   const { writeProjectFile, readProjectFile, ensureProject, listFiles, listTabs, setTabs, resolveProjectDir } = ctx.projectFiles;
   const { insertConversation, getConversation, listConversations, updateConversation, deleteConversation, listMessages, upsertMessage, listPreviewComments, upsertPreviewComment, updatePreviewCommentStatus, deletePreviewComment } = ctx.conversations;
@@ -30,7 +578,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { listLatestProjectRunStatuses, listProjectsAwaitingInput, normalizeProjectDisplayStatus, composeProjectDisplayStatus, listProjects } = ctx.status;
   const { subscribeFileEvents, activeProjectEventSinks } = ctx.events;
   const { randomId } = ctx.ids;
-  const { validateProjectDesignSystemId } = ctx.validation;
+  const { validateProjectDesignSystemId, validateProjectSkillId } = ctx.validation;
   async function loadPluginRegistryView() {
     const [skills, designSystems] = await Promise.all([
       listSkills(SKILLS_DIR),
@@ -80,8 +628,199 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     return Array.from(byTaskKind.values());
   }
 
-  app.get('/api/projects', (_req, res) => {
+  async function configuredProjectLocations() {
+    const config = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR);
+    const all = allProjectLocations(PROJECTS_DIR, config.projectLocations);
+    const valid = all[0] ? [all[0]] : [];
+    for (const location of all.slice(1)) {
+      const validated = validateLinkedDirs([location.path]);
+      if (validated.error) continue;
+      const canonical = validated.dirs[0];
+      if (!canonical) continue;
+      if (locationOverlapsDaemonData(canonical)) continue;
+      valid.push({ ...location, path: canonical });
+    }
+    return valid;
+  }
+
+  function locationOverlapsDaemonData(locationPath: string): boolean {
+    const runtimeDir = ctx.paths.RUNTIME_DATA_DIR_CANONICAL || ctx.paths.RUNTIME_DATA_DIR;
+    const projectsDir = path.join(runtimeDir, 'projects');
+    const relativeToRuntime = pathRelative(runtimeDir, locationPath);
+    const runtimeInsideLocation = pathRelative(locationPath, runtimeDir);
+    const relativeToProjects = pathRelative(projectsDir, locationPath);
+    const projectsInsideLocation = pathRelative(locationPath, projectsDir);
+    return isInsideOrSame(relativeToRuntime) || isInsideOrSame(runtimeInsideLocation)
+      || isInsideOrSame(relativeToProjects) || isInsideOrSame(projectsInsideLocation);
+  }
+
+  function pathRelative(from: string, to: string): string {
+    return path.relative(from, to);
+  }
+
+  function isInsideOrSame(relative: string): boolean {
+    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  }
+
+  function projectBelongsToLocation(project: any, location: { id: string; path: string }): boolean {
+    const metadata = project?.metadata;
+    if (typeof metadata?.baseDir !== 'string') return metadata?.projectLocationId === location.id;
+    const relative = path.relative(location.path, metadata.baseDir);
+    return isInsideOrSame(relative) && relative !== '';
+  }
+
+  function isProjectLocationProject(project: any): boolean {
+    const metadata = project?.metadata;
+    return metadata?.importedFrom === 'project-location'
+      || typeof metadata?.projectLocationId === 'string';
+  }
+
+  function projectVisibleForLocations(
+    project: any,
+    locations: Array<{ id: string; path: string; builtIn?: boolean }>,
+  ): boolean {
+    if (!isProjectLocationProject(project)) return true;
+    return locations.some((location) => !location.builtIn && projectBelongsToLocation(project, location));
+  }
+
+  async function resolveCreateProjectLocationId(explicitProjectLocationId: unknown): Promise<string> {
+    if (typeof explicitProjectLocationId === 'string' && explicitProjectLocationId.trim()) {
+      return explicitProjectLocationId.trim();
+    }
+    const config = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR);
+    const configuredDefault = typeof config.defaultProjectLocationId === 'string'
+      ? config.defaultProjectLocationId.trim()
+      : '';
+    if (!configuredDefault || configuredDefault === BUILT_IN_PROJECT_LOCATION_ID) {
+      return BUILT_IN_PROJECT_LOCATION_ID;
+    }
+    const locations = await configuredProjectLocations();
+    return locations.some((location) => !location.builtIn && location.id === configuredDefault)
+      ? configuredDefault
+      : BUILT_IN_PROJECT_LOCATION_ID;
+  }
+
+  function unregisterProjectsForRemovedLocations(
+    previousLocations: Array<{ id: string; path: string; builtIn?: boolean }>,
+    nextLocations: Array<{ id?: string; path: string }>,
+  ): string[] {
+    const nextIds = new Set(nextLocations.map((location) => location.id).filter(Boolean));
+    const nextPaths = new Set(nextLocations.map((location) => location.path));
+    const removed = previousLocations.filter(
+      (location) => !location.builtIn && !nextIds.has(location.id) && !nextPaths.has(location.path),
+    );
+    if (removed.length === 0) return [];
+    return listProjects(db)
+      .filter((project: any) => removed.some((location) => projectBelongsToLocation(project, location)))
+      .map((project: any) => project.id);
+  }
+
+  app.get('/api/project-locations', async (_req, res) => {
     try {
+      const locations = await configuredProjectLocations();
+      /** @type {import('@open-design/contracts').ProjectLocationsResponse} */
+      const body = { locations };
+      res.json(body);
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
+    }
+  });
+
+  app.put('/api/project-locations', async (req, res) => {
+    try {
+      const requested = Array.isArray(req.body?.locations) ? req.body.locations : null;
+      if (!requested) return sendApiError(res, 400, 'BAD_REQUEST', 'locations must be an array');
+      const previousLocations = await configuredProjectLocations();
+      const prepared = [];
+      for (const loc of requested) {
+        if (!loc || typeof loc !== 'object' || typeof loc.path !== 'string') continue;
+        const canonicalPath = await ensureProjectLocation(loc.path);
+        const validated = validateLinkedDirs([canonicalPath]);
+        if (validated.error) return sendApiError(res, 400, 'BAD_REQUEST', validated.error);
+        if (locationOverlapsDaemonData(canonicalPath)) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'project location cannot overlap daemon data');
+        }
+        prepared.push({
+          id: typeof loc.id === 'string' ? loc.id : undefined,
+          name: typeof loc.name === 'string' ? loc.name : undefined,
+          path: canonicalPath,
+        });
+      }
+      const config = await writeAppConfig(ctx.paths.RUNTIME_DATA_DIR, { projectLocations: prepared });
+      const locations = allProjectLocations(PROJECTS_DIR, config.projectLocations);
+      const removedProjectIds = unregisterProjectsForRemovedLocations(previousLocations, config.projectLocations ?? []);
+      /** @type {import('@open-design/contracts').ProjectLocationsResponse} */
+      const body = { locations, removedProjectIds };
+      res.json(body);
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.post('/api/project-locations/scan', async (_req, res) => {
+    try {
+      const locations = (await configuredProjectLocations()).filter((loc: any) => !loc.builtIn);
+      const imported = [];
+      const existing: string[] = [];
+      const skipped: Array<{ path: string; reason: string }> = [];
+      let scanned = 0;
+      const now = Date.now();
+      for (const location of locations) {
+        let found;
+        try {
+          found = await scanProjectLocation(location);
+        } catch (err: any) {
+          skipped.push({ path: location.path, reason: String(err?.message ?? err) });
+          continue;
+        }
+        scanned += found.length;
+        for (const entry of found) {
+          const { manifest } = entry;
+          if (getProject(db, manifest.id)) {
+            existing.push(manifest.id);
+            continue;
+          }
+          try {
+            const project = insertProject(db, {
+              id: manifest.id,
+              name: manifest.name,
+              skillId: manifest.skillId ?? null,
+              designSystemId: manifest.designSystemId ?? null,
+              pendingPrompt: null,
+              metadata: {
+                kind: 'prototype',
+                baseDir: entry.dir,
+                importedFrom: 'project-location',
+                projectLocationId: location.id,
+              },
+              customInstructions: null,
+              createdAt: manifest.createdAt,
+              updatedAt: manifest.updatedAt,
+            });
+            insertConversation(db, {
+              id: randomId(),
+              projectId: manifest.id,
+              title: null,
+              createdAt: now,
+              updatedAt: now,
+            });
+            if (project) imported.push(project);
+          } catch (err: any) {
+            skipped.push({ path: entry.dir, reason: String(err?.message ?? err) });
+          }
+        }
+      }
+      /** @type {import('@open-design/contracts').ScanProjectLocationsResponse} */
+      const body = { scanned, imported, existing, skipped };
+      res.json(body);
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.get('/api/projects', async (_req, res) => {
+    try {
+      const locations = await configuredProjectLocations();
       const latestRunStatuses = listLatestProjectRunStatuses(db);
       const awaitingInputProjects = listProjectsAwaitingInput(db);
       const activeRunStatuses = new Map();
@@ -102,15 +841,17 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
       /** @type {import('@open-design/contracts').ProjectsResponse} */
       const body = {
-        projects: listProjects(db).map((project: any) => ({
-          ...project,
-          status: composeProjectDisplayStatus(
-            activeRunStatuses.get(project.id) ??
-              latestRunStatuses.get(project.id) ?? { value: 'not_started' },
-            awaitingInputProjects,
-            project.id,
-          ),
-        })),
+        projects: listProjects(db)
+          .filter((project: any) => projectVisibleForLocations(project, locations))
+          .map((project: any) => ({
+            ...project,
+            status: composeProjectDisplayStatus(
+              activeRunStatuses.get(project.id) ??
+                latestRunStatuses.get(project.id) ?? { value: 'not_started' },
+              awaitingInputProjects,
+              project.id,
+            ),
+          })),
       };
       res.json(body);
     } catch (err: any) {
@@ -128,9 +869,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.post('/api/projects', async (req, res) => {
     try {
-      const { id, name, skillId, designSystemId, pendingPrompt, metadata, customInstructions, skipDiscoveryBrief } =
+      const { id, name, projectLocationId, skillId, designSystemId, pendingPrompt, metadata, customInstructions, skipDiscoveryBrief } =
         req.body || {};
-      if (typeof id !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/.test(id)) {
+      if (typeof id !== 'string' || !isSafeId(id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
       }
       if (typeof name !== 'string' || !name.trim()) {
@@ -179,11 +920,35 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         );
       }
       const normalizedDesignSystemId = designSystemValidation.id;
+      const skillValidation = await validateProjectSkillId(skillId);
+      if (!skillValidation.ok) {
+        return sendApiError(res, 400, skillValidation.code, skillValidation.message);
+      }
+      const normalizedSkillId = skillValidation.id;
+      const selectedLocationId = await resolveCreateProjectLocationId(projectLocationId);
+      let externalProjectDir: string | null = null;
+      if (selectedLocationId !== BUILT_IN_PROJECT_LOCATION_ID) {
+        const location = (await configuredProjectLocations()).find((loc: any) => loc.id === selectedLocationId);
+        if (!location || location.builtIn) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'unknown project location');
+        }
+        if (getProject(db, id)) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'project id already exists');
+        }
+        externalProjectDir = await createLocationProjectDir(location, id);
+      }
       const projectMetadata =
         metadata && typeof metadata === 'object'
           ? {
               ...metadata,
               ...(skipDiscoveryBrief === true ? { skipDiscoveryBrief: true } : {}),
+              ...(externalProjectDir
+                ? {
+                    baseDir: externalProjectDir,
+                    importedFrom: 'project-location',
+                    projectLocationId: selectedLocationId,
+                  }
+                : {}),
               ...(Array.isArray(metadata.linkedDirs)
                 ? (() => {
                     const v = validateLinkedDirs(metadata.linkedDirs);
@@ -192,33 +957,71 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                 : {}),
             }
           : skipDiscoveryBrief === true
-            ? { skipDiscoveryBrief: true }
-            : null;
+            ? {
+                skipDiscoveryBrief: true,
+                ...(externalProjectDir
+                  ? {
+                      baseDir: externalProjectDir,
+                      importedFrom: 'project-location',
+                      projectLocationId: selectedLocationId,
+                    }
+                  : {}),
+              }
+            : externalProjectDir
+              ? {
+                  kind: 'prototype',
+                  baseDir: externalProjectDir,
+                  importedFrom: 'project-location',
+                  projectLocationId: selectedLocationId,
+                }
+              : null;
       const now = Date.now();
-      const project = insertProject(db, {
-        id,
-        name: name.trim(),
-        skillId: skillId ?? null,
-        designSystemId: normalizedDesignSystemId,
-        pendingPrompt: pendingPrompt || null,
-        metadata: projectMetadata,
-        customInstructions:
-          typeof customInstructions === 'string'
-            ? customInstructions
-            : null,
-        createdAt: now,
-        updatedAt: now,
-      });
+      let project;
+      try {
+        if (externalProjectDir) {
+          await writeProjectManifest(externalProjectDir, {
+            schemaVersion: 1,
+            id,
+            name: name.trim(),
+            createdAt: now,
+            updatedAt: now,
+            skillId: normalizedSkillId,
+            designSystemId: normalizedDesignSystemId,
+          });
+        }
+        project = insertProject(db, {
+          id,
+          name: name.trim(),
+          skillId: normalizedSkillId,
+          designSystemId: normalizedDesignSystemId,
+          pendingPrompt: pendingPrompt || null,
+          metadata: projectMetadata,
+          customInstructions:
+            typeof customInstructions === 'string'
+              ? customInstructions
+              : null,
+          createdAt: now,
+          updatedAt: now,
+        });
+      } catch (err) {
+        if (externalProjectDir) {
+          await rm(externalProjectDir, { recursive: true, force: true }).catch(() => {});
+        }
+        throw err;
+      }
       // Seed a default conversation so the UI always has somewhere to write.
       const cid = randomId();
+      const initialSessionMode = normalizeChatSessionMode(
+        req.body?.conversationMode ?? req.body?.sessionMode,
+      );
       insertConversation(db, {
         id: cid,
         projectId: id,
         title: null,
+        sessionMode: initialSessionMode,
         createdAt: now,
         updatedAt: now,
       });
-
       const explicitPlugin =
         typeof req.body?.pluginId === 'string' && req.body.pluginId.trim().length > 0
           ? true
@@ -226,7 +1029,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             && req.body.appliedPluginSnapshotId.trim().length > 0;
       let resolveBody =
         explicitPlugin ? (req.body as Record<string, unknown>) : null;
-      if (!resolveBody) {
+      if (!resolveBody && initialSessionMode === 'design') {
         const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectMetadata);
         if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
           resolveBody = { ...(req.body || {}), pluginId: fallbackPluginId };
@@ -245,6 +1048,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             typeof normalizedDesignSystemId === 'string' && normalizedDesignSystemId.length > 0
               ? { id: normalizedDesignSystemId }
               : undefined,
+          connectorProbe: buildConnectorProbe(connectorService),
         });
         if (resolved && !resolved.ok) {
           if (!explicitPlugin) {
@@ -270,7 +1074,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       ) {
         const tpl = getTemplate(db, metadata.templateId);
         if (tpl && Array.isArray(tpl.files) && tpl.files.length > 0) {
-          await ensureProject(PROJECTS_DIR, id);
+          await ensureProject(PROJECTS_DIR, id, projectMetadata);
           for (const f of tpl.files) {
             if (
               !f ||
@@ -285,6 +1089,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                 id,
                 f.name,
                 Buffer.from(f.content, 'utf8'),
+                {},
+                projectMetadata,
               );
             } catch {
               // Skip individual file failures — the template snapshot is
@@ -307,11 +1113,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     }
   });
 
-  app.get('/api/projects/:id', (req, res) => {
+  app.get('/api/projects/:id', async (req, res) => {
     const project = getProject(db, req.params.id);
-    if (!project)
+    const locations = await configuredProjectLocations();
+    if (!project || !projectVisibleForLocations(project, locations))
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
-    const resolvedDir = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
+    const resolvedDir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
     /** @type {import('@open-design/contracts').ProjectResponse} */
     const body = { project, resolvedDir };
     res.json(body);
@@ -356,6 +1163,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             ...(existingMeta.importedFrom === 'folder'
               ? { importedFrom: 'folder' }
               : {}),
+            ...(existingMeta.importedFrom === 'project-location'
+              ? { importedFrom: 'project-location' }
+              : {}),
+            ...(typeof existingMeta.projectLocationId === 'string'
+              ? { projectLocationId: existingMeta.projectLocationId }
+              : {}),
             ...(existingMeta.fromTrustedPicker === true
               ? { fromTrustedPicker: true as const }
               : {}),
@@ -399,6 +1212,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           );
         }
         patch.designSystemId = designSystemValidation.id;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'skillId')) {
+        const skillValidation = await validateProjectSkillId(patch.skillId);
+        if (!skillValidation.ok) {
+          return sendApiError(res, 400, skillValidation.code, skillValidation.message);
+        }
+        patch.skillId = skillValidation.id;
       }
       const project = updateProject(db, req.params.id, patch);
       if (!project)
@@ -482,15 +1302,65 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     if (!getProject(db, req.params.id)) {
       return res.status(404).json({ error: 'project not found' });
     }
-    const { title } = req.body || {};
+    const { title, seedFromConversationId, forkAfterMessageId } = req.body || {};
     const now = Date.now();
+    const hasExplicitSessionMode = Boolean(
+      req.body && Object.prototype.hasOwnProperty.call(req.body, 'sessionMode'),
+    );
+    const requestedForkMessageId =
+      typeof forkAfterMessageId === 'string' && forkAfterMessageId
+        ? forkAfterMessageId
+        : null;
+    const sourceConversation =
+      typeof seedFromConversationId === 'string' && seedFromConversationId
+        ? getConversation(db, seedFromConversationId)
+        : null;
+    let seedMessages: any[] = [];
+    if (sourceConversation && sourceConversation.projectId === req.params.id) {
+      seedMessages = listMessages(db, seedFromConversationId);
+      if (requestedForkMessageId) {
+        const forkIndex = seedMessages.findIndex((message) => message.id === requestedForkMessageId);
+        if (forkIndex < 0) {
+          return res.status(404).json({ error: 'fork message not found' });
+        }
+        seedMessages = seedMessages.slice(0, forkIndex + 1);
+      }
+    } else if (requestedForkMessageId) {
+      return res.status(404).json({ error: 'fork source conversation not found' });
+    }
+    const sessionMode =
+      hasExplicitSessionMode
+        ? normalizeChatSessionMode(req.body.sessionMode)
+        : sourceConversation && sourceConversation.projectId === req.params.id
+          ? normalizeChatSessionMode(sourceConversation.sessionMode)
+          : 'design';
     const conv = insertConversation(db, {
       id: randomId(),
       projectId: req.params.id,
       title: typeof title === 'string' ? title.trim() || null : null,
+      sessionMode,
       createdAt: now,
       updatedAt: now,
     });
+    // Side Chat: inherit the source conversation's context by copying its
+    // messages into the fresh conversation. Be defensive — a missing or
+    // cross-project source id silently yields an empty conversation.
+    if (conv && seedMessages.length > 0) {
+      for (const m of seedMessages) {
+        // Fresh id per copied message; upsertMessage assigns the next
+        // position so role/content ordering is preserved. Drop the source's
+        // run pointers (runId/runStatus/lastRunEventId): they belong to the
+        // OTHER conversation's runs, and a copied still-`running` assistant
+        // turn would otherwise render a perpetual spinner in the side chat.
+        upsertMessage(db, conv.id, {
+          ...m,
+          id: randomId(),
+          runId: undefined,
+          runStatus: undefined,
+          lastRunEventId: undefined,
+        });
+      }
+    }
     res.json({ conversation: conv });
   });
 
@@ -629,15 +1499,21 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     if (!getProject(db, req.params.id)) {
       return res.status(404).json({ error: 'project not found' });
     }
-    const { tabs = [], active = null } = req.body || {};
+    const { tabs = [], active = null, browserTabs = [] } = req.body || {};
     if (!Array.isArray(tabs) || !tabs.every((t) => typeof t === 'string')) {
       return res.status(400).json({ error: 'tabs must be string[]' });
+    }
+    if (!Array.isArray(browserTabs)) {
+      return res.status(400).json({ error: 'browserTabs must be an array' });
     }
     const result = setTabs(
       db,
       req.params.id,
-      tabs,
-      typeof active === 'string' ? active : null,
+      {
+        tabs,
+        active: typeof active === 'string' ? active : null,
+        browserTabs,
+      },
     );
     res.json(result);
   });
@@ -795,7 +1671,7 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
 
 }
 
-export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts'> {}
+export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts' | 'projectPreviewScopes'> {}
 
 export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFileRoutesDeps) {
   const { db } = ctx;
@@ -804,9 +1680,108 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   const { upload } = ctx.uploads;
   const { fs } = ctx.node;
   const { getProject } = ctx.projectStore;
-  const { listFiles, searchProjectFiles, readProjectFile, resolveProjectDir, resolveProjectFilePath, parseByteRange, renameProjectFile, deleteProjectFile, writeProjectFile, sanitizeName, ensureProject } = ctx.projectFiles;
+  const { listFiles, listProjectFolders, createProjectFolder, deleteProjectFolder, searchProjectFiles, readProjectFile, resolveProjectDir, resolveProjectFilePath, parseByteRange, renameProjectFile, deleteProjectFile, writeProjectFile, sanitizeName, ensureProject } = ctx.projectFiles;
   const { buildDocumentPreview } = ctx.documents;
   const { validateArtifactManifestInput } = ctx.artifacts;
+  const { projectPreviewScopes } = ctx;
+  const projectPreviewIframeSandbox = 'allow-scripts allow-forms';
+  const projectPreviewCsp = [
+    `sandbox ${projectPreviewIframeSandbox}`,
+    "default-src 'self' data: blob:",
+    "img-src 'self' data: blob:",
+    "media-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "style-src 'self' 'unsafe-inline'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "connect-src 'none'",
+    "form-action 'none'",
+    "base-uri 'none'",
+    "object-src 'none'",
+  ].join('; ');
+  const previewScopeRe = /^[A-Za-z0-9_-]{8,128}$/u;
+
+  function setProjectPreviewHeaders(res: Response) {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', projectPreviewCsp);
+  }
+
+  async function sendProjectFile(
+    req: any,
+    res: Response,
+    projectId: string,
+    relPath: string,
+    metadata?: unknown,
+    beforeSend?: (mime: string) => void,
+    transformFile?: (file: { mime: string; buffer: Buffer }) => Buffer | string,
+  ) {
+    const meta = await resolveProjectFilePath(
+      PROJECTS_DIR,
+      projectId,
+      relPath,
+      metadata,
+    );
+    beforeSend?.(meta.mime);
+
+    if (meta.mime.startsWith('video/') || meta.mime.startsWith('audio/')) {
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Content-Type', meta.mime);
+
+      if (meta.size === 0) {
+        res.setHeader('Content-Length', '0');
+        return res.status(200).end();
+      }
+
+      const range = parseByteRange(req.headers.range, meta.size);
+
+      if (range === 'unsatisfiable') {
+        res.setHeader('Content-Range', `bytes */${meta.size}`);
+        return res.status(416).end();
+      }
+
+      let start;
+      let end;
+      let statusCode;
+      if (range) {
+        ({ start, end } = range);
+        statusCode = 206;
+        res.setHeader('Content-Range', `bytes ${start}-${end}/${meta.size}`);
+        res.setHeader('Content-Length', String(end - start + 1));
+      } else {
+        start = 0;
+        end = meta.size - 1;
+        statusCode = 200;
+        res.setHeader('Content-Length', String(meta.size));
+      }
+
+      res.status(statusCode);
+      const stream = fs.createReadStream(meta.filePath, { start, end });
+      stream.on('error', (streamErr: any) => {
+        if (!res.headersSent) {
+          sendApiError(res, 500, 'STREAM_ERROR', String(streamErr));
+        } else {
+          res.destroy(streamErr);
+        }
+      });
+      stream.pipe(res);
+      return;
+    }
+
+    const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, metadata);
+    res.type(file.mime).send(transformFile ? transformFile(file) : file.buffer);
+  }
+
+  function previewFilePathForProject(project: any, queryFile: unknown): string {
+    if (typeof queryFile === 'string' && queryFile.trim().length > 0) {
+      return queryFile;
+    }
+    const entryFile = project?.metadata?.entryFile;
+    return typeof entryFile === 'string' && entryFile.length > 0 ? entryFile : 'index.html';
+  }
+
+  function encodeProjectPathForUrl(filePath: string): string {
+    return filePath.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+  }
 
   // Project files. Each project owns a flat folder under .od/projects/<id>/
   // containing every file the user has uploaded, pasted, sketched, or that
@@ -849,6 +1824,71 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
+  app.get('/api/projects/:id/folders', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      const folders = await listProjectFolders(PROJECTS_DIR, req.params.id, {
+        metadata: project.metadata,
+      });
+      /** @type {import('@open-design/contracts').ProjectFoldersResponse} */
+      const body = { folders };
+      res.json(body);
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.post('/api/projects/:id/folders', async (req, res) => {
+    try {
+      const { name } = req.body || {};
+      if (typeof name !== 'string' || !name.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'name required');
+      }
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      const folder = await createProjectFolder(
+        PROJECTS_DIR,
+        req.params.id,
+        name,
+        project.metadata,
+      );
+      /** @type {import('@open-design/contracts').ProjectFolderResponse} */
+      const body = { folder };
+      res.json(body);
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
+    }
+  });
+
+  app.delete('/api/projects/:id/folders', async (req, res) => {
+    try {
+      const { path: folderPath } = req.body || {};
+      if (typeof folderPath !== 'string' || !folderPath.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'path required');
+      }
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      await deleteProjectFolder(
+        PROJECTS_DIR,
+        req.params.id,
+        folderPath,
+        project.metadata,
+      );
+      /** @type {import('@open-design/contracts').DeleteProjectFolderResponse} */
+      const body = { ok: true };
+      res.json(body);
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
+    }
+  });
+
   app.get('/api/projects/:id/design-system-package-audit', async (req, res) => {
     try {
       const project = getProject(db, req.params.id);
@@ -865,84 +1905,31 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
-
-  // Preflight for the raw file route. Current artifact fetches are simple GETs
-  // (no preflight needed), but an explicit handler future-proofs the route if
-  // artifacts ever add custom request headers.
-  app.options('/api/projects/:id/raw/*', (req, res) => {
-    if (req.headers.origin === 'null') {
-      res.header('Access-Control-Allow-Origin', '*');
-      res.header('Access-Control-Allow-Methods', 'GET');
-      res.header('Access-Control-Allow-Headers', 'Content-Type');
-    }
-    res.sendStatus(204);
-  });
-
-  app.get('/api/projects/:id/raw/*', async (req, res) => {
+  app.get('/api/projects/:id/preview-url', async (req, res) => {
     try {
-      const relPath = (req.params as any)[0];
       const project = getProject(db, req.params.id);
-      // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
-      // data: URIs, file://, and some sandboxed iframes also send null — all are
-      // local-only callers, so this is safe. Real cross-origin sites send a real
-      // origin and remain blocked by the browser's same-origin policy.
-      if (req.headers.origin === 'null') {
-        res.header('Access-Control-Allow-Origin', '*');
-      }
-
-      const meta = await resolveProjectFilePath(
-        PROJECTS_DIR,
-        req.params.id,
-        relPath,
-        project?.metadata,
-      );
-
-      if (meta.mime.startsWith('video/') || meta.mime.startsWith('audio/')) {
-        res.setHeader('Accept-Ranges', 'bytes');
-        res.setHeader('Content-Type', meta.mime);
-
-        if (meta.size === 0) {
-          res.setHeader('Content-Length', '0');
-          return res.status(200).end();
-        }
-
-        const range = parseByteRange(req.headers.range, meta.size);
-
-        if (range === 'unsatisfiable') {
-          res.setHeader('Content-Range', `bytes */${meta.size}`);
-          return res.status(416).end();
-        }
-
-        let start;
-        let end;
-        let statusCode;
-        if (range) {
-          ({ start, end } = range);
-          statusCode = 206;
-          res.setHeader('Content-Range', `bytes ${start}-${end}/${meta.size}`);
-          res.setHeader('Content-Length', String(end - start + 1));
-        } else {
-          start = 0;
-          end = meta.size - 1;
-          statusCode = 200;
-          res.setHeader('Content-Length', String(meta.size));
-        }
-
-        res.status(statusCode);
-        const stream = fs.createReadStream(meta.filePath, { start, end });
-        stream.on('error', (streamErr: any) => {
-          if (!res.headersSent) {
-            sendApiError(res, 500, 'STREAM_ERROR', String(streamErr));
-          } else {
-            res.destroy(streamErr);
-          }
-        });
-        stream.pipe(res);
+      if (!project) {
+        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         return;
       }
-
-      const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
-      res.type(file.mime).send(file.buffer);
+      const requestedPath = previewFilePathForProject(project, req.query.file);
+      const meta = await resolveProjectFilePath(
+        PROJECTS_DIR,
+        project.id,
+        requestedPath,
+        project.metadata,
+      );
+      const scope = projectPreviewScopes.mint(project.id);
+      /** @type {import('@open-design/contracts').ProjectPreviewUrlResponse} */
+      const body = {
+        url: `/api/projects/${encodeURIComponent(project.id)}/preview/${scope}/${encodeProjectPathForUrl(meta.name)}`,
+        file: meta.name,
+        csp: projectPreviewCsp,
+        iframeSandbox: projectPreviewIframeSandbox,
+        opaqueOrigin: true,
+      };
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(body);
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
       sendApiError(
@@ -954,10 +1941,117 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
-  app.delete('/api/projects/:id/raw/*', async (req, res) => {
+  app.get(/^\/api\/projects\/([^/]+)\/preview\/([^/]+)\/(.+)$/u, async (req, res) => {
     try {
-      const project = getProject(db, req.params.id);
-      await deleteProjectFile(PROJECTS_DIR, req.params.id, (req.params as any)[0], project?.metadata);
+      const params = req.params as unknown as { 0?: string; 1?: string; 2?: string };
+      const projectId = String(params[0] ?? '');
+      const scope = String(params[1] ?? '');
+      const relPath = String(params[2] ?? '');
+      if (!previewScopeRe.test(scope)) {
+        sendApiError(res, 400, 'BAD_REQUEST', 'invalid preview scope');
+        return;
+      }
+      const project = getProject(db, projectId);
+      if (!project) {
+        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        return;
+      }
+      if (!projectPreviewScopes.validate(project.id, scope)) {
+        sendApiError(res, 404, 'PREVIEW_SCOPE_NOT_FOUND', 'preview scope not found');
+        return;
+      }
+      if (req.headers.origin === 'null') {
+        res.header('Access-Control-Allow-Origin', '*');
+      }
+      await sendProjectFile(
+        req,
+        res,
+        project.id,
+        relPath,
+        project.metadata,
+        () => setProjectPreviewHeaders(res),
+      );
+    } catch (err: any) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err),
+      );
+    }
+  });
+
+
+  // Preflight for the raw file route. Current artifact fetches are simple GETs
+  // (no preflight needed), but an explicit handler future-proofs the route if
+  // artifacts ever add custom request headers.
+  app.options(/^\/api\/projects\/([^/]+)\/raw\/(.+)$/u, (req, res) => {
+    if (req.headers.origin === 'null') {
+      res.header('Access-Control-Allow-Origin', '*');
+      res.header('Access-Control-Allow-Methods', 'GET');
+      res.header('Access-Control-Allow-Headers', 'Content-Type');
+    }
+    res.sendStatus(204);
+  });
+
+  app.get(/^\/api\/projects\/([^/]+)\/raw\/(.+)$/u, async (req, res) => {
+    try {
+      const params = req.params as unknown as { 0?: string; 1?: string };
+      const projectId = String(params[0] ?? '');
+      const relPath = String(params[1] ?? '');
+      const project = getProject(db, projectId);
+      // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
+      // data: URIs, file://, and some sandboxed iframes also send null — all are
+      // local-only callers, so this is safe. Real cross-origin sites send a real
+      // origin and remain blocked by the browser's same-origin policy.
+      if (req.headers.origin === 'null') {
+        res.header('Access-Control-Allow-Origin', '*');
+      }
+
+      await sendProjectFile(
+        req,
+        res,
+        projectId,
+        relPath,
+        project?.metadata,
+        undefined,
+        (file) => {
+          if (
+            (wantsUrlPreviewScrollBridge(req.query.odPreviewBridge) ||
+              wantsUrlPreviewSelectionBridge(req.query.odPreviewBridge)) &&
+            /^text\/html(?:;|$)/i.test(file.mime)
+          ) {
+            let html = file.buffer.toString('utf8');
+            if (wantsUrlPreviewScrollBridge(req.query.odPreviewBridge)) {
+              html = injectUrlPreviewBridge(html, 'scroll');
+            }
+            if (wantsUrlPreviewSelectionBridge(req.query.odPreviewBridge)) {
+              html = injectUrlPreviewBridge(html, 'selection');
+            }
+            return html;
+          }
+          return file.buffer;
+        },
+      );
+    } catch (err: any) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err),
+      );
+    }
+  });
+
+  app.delete(/^\/api\/projects\/([^/]+)\/raw\/(.+)$/u, async (req, res) => {
+    try {
+      const params = req.params as unknown as { 0?: string; 1?: string };
+      const projectId = String(params[0] ?? '');
+      const rawSplat = String(params[1] ?? '');
+      const project = getProject(db, projectId);
+      await deleteProjectFile(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -999,13 +2093,16 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
-  app.get('/api/projects/:id/files/*', async (req, res) => {
+  app.get(/^\/api\/projects\/([^/]+)\/files\/(.+)$/u, async (req, res) => {
     try {
-      const project = getProject(db, req.params.id);
+      const params = req.params as unknown as { 0?: string; 1?: string };
+      const projectId = String(params[0] ?? '');
+      const fileSplat = String(params[1] ?? '');
+      const project = getProject(db, projectId);
       const file = await readProjectFile(
         PROJECTS_DIR,
-        req.params.id,
-        (req.params as any)[0],
+        projectId,
+        fileSplat,
         project?.metadata,
       );
       res.type(file.mime).send(file.buffer);
@@ -1194,13 +2291,18 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
     async (req, res) => {
       try {
         const incoming = Array.isArray(req.files) ? req.files : [];
+        // Subfolder the upload targeted (sanitized, forward-slash, '' for root),
+        // stashed by the multer destination resolver. Prepend it so callers
+        // get the file's true project-relative path, not just its basename.
+        const relDir = typeof (req as any)._uploadRelDir === 'string' ? (req as any)._uploadRelDir : '';
         const out = [];
         for (const f of incoming) {
           try {
             const stat = await fs.promises.stat(f.path);
+            const rel = relDir ? `${relDir}/${f.filename}` : f.filename;
             out.push({
-              name: f.filename,
-              path: f.filename,
+              name: rel,
+              path: rel,
               size: stat.size,
               mtime: stat.mtimeMs,
               originalName: f.originalname,

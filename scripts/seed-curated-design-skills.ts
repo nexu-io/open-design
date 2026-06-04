@@ -66,7 +66,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['canvas design', 'visual art', 'poster design', 'create poster', 'illustration', '海报', '插画'],
     mode: 'image',
     category: 'image-generation',
-    upstream: 'https://github.com/anthropics/skills/tree/main/canvas-design',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/canvas-design',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -76,7 +76,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['algorithmic art', 'generative art', 'p5js', 'procedural art', 'seeded randomness', '生成艺术'],
     mode: 'image',
     category: 'image-generation',
-    upstream: 'https://github.com/anthropics/skills/tree/main/algorithmic-art',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/algorithmic-art',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -126,7 +126,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['slack gif', 'animated gif', 'reaction gif', 'tiny gif'],
     mode: 'image',
     category: 'image-generation',
-    upstream: 'https://github.com/anthropics/skills/tree/main/slack-gif-creator',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/slack-gif-creator',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -432,7 +432,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['pptx', 'powerpoint', 'slide deck', 'create slides', 'edit pptx'],
     mode: 'deck',
     category: 'slides',
-    upstream: 'https://github.com/anthropics/skills/tree/main/pptx',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/pptx',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -476,7 +476,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['docx', 'word document', 'tracked changes', 'design brief doc', 'copy doc'],
     mode: 'prototype',
     category: 'documents',
-    upstream: 'https://github.com/anthropics/skills/tree/main/docx',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/docx',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -486,7 +486,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['pdf', 'create pdf', 'pdf form', 'branded pdf', 'one pager'],
     mode: 'prototype',
     category: 'documents',
-    upstream: 'https://github.com/anthropics/skills/tree/main/pdf',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/pdf',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -530,7 +530,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['brand guidelines', 'brand colors', 'brand typography', 'visual identity'],
     mode: 'design-system',
     category: 'design-systems',
-    upstream: 'https://github.com/anthropics/skills/tree/main/brand-guidelines',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/brand-guidelines',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -540,7 +540,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['theme factory', 'apply theme', 'design theme', 'theme generator', 'preset theme'],
     mode: 'design-system',
     category: 'design-systems',
-    upstream: 'https://github.com/anthropics/skills/tree/main/theme-factory',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/theme-factory',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -550,7 +550,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['frontend design', 'ui design', 'ux design', 'web design', 'production ui'],
     mode: 'design-system',
     category: 'design-systems',
-    upstream: 'https://github.com/anthropics/skills/tree/main/frontend-design',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/frontend-design',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -666,6 +666,16 @@ const CATALOGUE: CuratedSkill[] = [
     attribution: 'Curated from @Leonxlnx.',
   },
   {
+    id: 'impeccable-design-polish',
+    description:
+      'Follow-up design polish workflow for existing web artifacts: audit, critique, polish, animate, harden, and prepare for a live/share pass.',
+    triggers: ['impeccable', 'design polish', 'polish page', 'anti ai polish', 'critique design', 'harden ui'],
+    mode: 'prototype',
+    category: 'creative-direction',
+    upstream: 'https://github.com/pbakaus/impeccable',
+    attribution: 'Curated from @pbakaus.',
+  },
+  {
     id: 'wpds',
     description:
       'WordPress Design System. Apply WordPress\'s official design tokens, typography, and component patterns to themes and sites.',
@@ -774,13 +784,23 @@ const CATALOGUE: CuratedSkill[] = [
   // Animation & motion
   // -------------------------------------------------------------------------
   {
+    id: 'emilkowalski-motion',
+    description:
+      'Tasteful motion-design follow-up for existing interfaces: micro-interactions, state transitions, page motion, and reduced-motion fallbacks.',
+    triggers: ['emil kowalski', 'motion polish', 'micro interaction', 'interaction animation', 'tasteful animation'],
+    mode: 'prototype',
+    category: 'animation-motion',
+    upstream: 'https://emilkowal.ski/skill',
+    attribution: 'Curated from Emil Kowalski.',
+  },
+  {
     id: 'gsap-core',
     description:
       'Core GSAP API with gsap.to(), from(), fromTo(), easing, duration, stagger, and defaults. Production-grade web animation primitives.',
     triggers: ['gsap', 'gsap core', 'web animation', 'tween', 'easing'],
     mode: 'prototype',
     category: 'animation-motion',
-    upstream: 'https://github.com/greensock/skills',
+    upstream: 'https://github.com/greensock/gsap-skills',
     attribution: 'Curated from GreenSock (GSAP).',
   },
   {
@@ -790,7 +810,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['gsap timeline', 'animation timeline', 'sequenced animation', 'motion choreography'],
     mode: 'prototype',
     category: 'animation-motion',
-    upstream: 'https://github.com/greensock/skills',
+    upstream: 'https://github.com/greensock/gsap-skills',
     attribution: 'Curated from GreenSock (GSAP).',
   },
   {
@@ -800,7 +820,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['scrolltrigger', 'scroll animation', 'gsap scroll', 'scroll pin', 'scroll scrub'],
     mode: 'prototype',
     category: 'animation-motion',
-    upstream: 'https://github.com/greensock/skills',
+    upstream: 'https://github.com/greensock/gsap-skills',
     attribution: 'Curated from GreenSock (GSAP).',
   },
   {
@@ -810,7 +830,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['gsap react', 'usegsap', 'react animation', 'gsap context', 'react motion'],
     mode: 'prototype',
     category: 'animation-motion',
-    upstream: 'https://github.com/greensock/skills',
+    upstream: 'https://github.com/greensock/gsap-skills',
     attribution: 'Curated from GreenSock (GSAP).',
   },
   {
@@ -830,12 +850,12 @@ const CATALOGUE: CuratedSkill[] = [
   {
     id: 'd3-visualization',
     description:
-      'Teaches the agent to produce D3 charts and interactive data visualizations. Useful for editorial dashboards, reports, and explanatory graphics.',
-    triggers: ['d3', 'd3.js', 'interactive chart', 'data visualization', 'editorial chart'],
+      'Teaches the agent to produce D3 charts and interactive data visualizations. A comprehensive D3.js skill with examples across chart types and techniques giving the agent expert-level knowledge to generate complex, interactive visualizations. Useful for editorial dashboards, reports, data-rich prototypes, and explanatory graphics.',
+    triggers: ['d3', 'd3.js', 'interactive chart', 'data visualization', 'editorial chart', 'd3 bar chart', 'd3 line chart', 'd3 map', 'd3 force graph', 'd3 sankey', 'd3 treemap', 'd3 sunburst', 'd3 choropleth', 'd3 animation', 'd3 scroll', 'snow-d3'],
     mode: 'prototype',
     category: 'diagrams',
-    upstream: 'https://github.com/chrisvoncsefalvay/d3-claude-skill',
-    attribution: 'Curated from @chrisvoncsefalvay.',
+    upstream: 'https://github.com/jiannanya/snow-d3/',
+    attribution: 'Curated from @jiannanya.',
   },
   {
     id: 'hand-drawn-diagrams',
@@ -1020,7 +1040,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['web artifacts', 'tailwind artifact', 'react artifact', 'anthropic artifact'],
     mode: 'prototype',
     category: 'web-artifacts',
-    upstream: 'https://github.com/anthropics/skills/tree/main/web-artifacts-builder',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/web-artifacts-builder',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {

@@ -45,7 +45,6 @@ describe("win standalone prebundle policy", () => {
       "@open-design/daemon",
       "@open-design/desktop",
       "@open-design/packaged",
-      "@open-design/platform",
       "@open-design/sidecar",
       "@open-design/sidecar-proto",
       "@open-design/web",
@@ -59,10 +58,16 @@ describe("win standalone prebundle policy", () => {
     }
     expect(
       shouldInstallInternalPackageForWinPrebundle({
-        packageName: "@open-design/contracts",
-        webOutputMode: "standalone",
-      }),
-    ).toBe(true);
+      packageName: "@open-design/contracts",
+      webOutputMode: "standalone",
+    }),
+  ).toBe(true);
+  expect(
+    shouldInstallInternalPackageForWinPrebundle({
+      packageName: "@open-design/platform",
+      webOutputMode: "standalone",
+    }),
+  ).toBe(true);
   });
 
   it("documents the explicit code-level bundle boundaries", () => {

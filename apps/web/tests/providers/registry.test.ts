@@ -7,18 +7,95 @@ import {
   connectConnector,
   DEFAULT_DEPLOY_PROVIDER_ID,
   deployProjectFile,
+  fetchAgentsStream,
   fetchCloudflarePagesZones,
   fetchDeployConfig,
   fetchAppVersionInfo,
   fetchConnectorDetail,
   fetchConnectorDiscovery,
+  fetchPluginExampleHtml,
+  fetchPluginPreviewHtml,
   fetchProjectDesignSystemPackageAudit,
   fetchProjectFileText,
   fetchSkillExample,
   isDeployProviderId,
   updateDeployConfig,
   uploadProjectFiles,
+  writeProjectTextFileDetailed,
 } from '../../src/providers/registry';
+
+function agentStreamResponse(text: string): Response {
+  const encoder = new TextEncoder();
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(text));
+        controller.close();
+      },
+    }),
+    {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    },
+  );
+}
+
+describe('fetchAgentsStream', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('collects streamed agents only after the terminal done event', async () => {
+    const agent = {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => agentStreamResponse(
+        `event: agent\ndata: ${JSON.stringify(agent)}\n\n` +
+          'event: done\ndata: {}\n\n',
+      )),
+    );
+    const onAgent = vi.fn();
+
+    await expect(fetchAgentsStream({ onAgent })).resolves.toEqual([agent]);
+    expect(onAgent).toHaveBeenCalledWith(agent);
+  });
+
+  it('throws when the stream emits an error event', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => agentStreamResponse(
+        'event: error\ndata: {"error":"agent probe failed"}\n\n',
+      )),
+    );
+
+    await expect(fetchAgentsStream({ onAgent: vi.fn() }))
+      .rejects.toThrow('agent probe failed');
+  });
+
+  it('throws when the stream closes before the terminal done event', async () => {
+    const agent = {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => agentStreamResponse(
+        `event: agent\ndata: ${JSON.stringify(agent)}\n\n`,
+      )),
+    );
+
+    await expect(fetchAgentsStream({ onAgent: vi.fn() }))
+      .rejects.toThrow('agents stream ended before done');
+  });
+});
 
 describe('fetchAppVersionInfo', () => {
   afterEach(() => {
@@ -50,6 +127,29 @@ describe('fetchAppVersionInfo', () => {
     );
 
     await expect(fetchAppVersionInfo()).resolves.toBeNull();
+  });
+});
+
+describe('writeProjectTextFileDetailed', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('surfaces daemon save errors instead of collapsing them to null', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({
+        error: { code: 'ARTIFACT_REGRESSION', message: 'new artifact is smaller than the prior version' },
+      }), { status: 422, headers: { 'Content-Type': 'application/json' } })),
+    );
+
+    await expect(writeProjectTextFileDetailed('project-1', 'preview.html', '<html></html>')).resolves.toEqual({
+      ok: false,
+      status: 422,
+      code: 'ARTIFACT_REGRESSION',
+      message: 'new artifact is smaller than the prior version',
+    });
   });
 });
 
@@ -121,6 +221,91 @@ describe('fetchSkillExample', () => {
       error: 'HTTP 500',
     });
     expect(fetchMock).toHaveBeenCalledWith('/api/skills/design-brief/example');
+  });
+});
+
+// Plugin previews use the same daemon contract as skill examples (the
+// daemon returns 404 when the manifest declares a preview entry but no
+// file ships at that path). Skills already map that 404 to
+// { unavailable: true, kind: 'html' } per #897 so the modal renders a
+// calm "no shipped preview" placeholder instead of "Couldn't load this
+// example. The example HTML failed to fetch." Plugins lacked the
+// symmetric treatment, so bundled plugins like `example-live-artifact`
+// surfaced the misleading error from the Home Community grid even
+// though the catalog simply ships no example HTML for that plugin.
+describe('fetchPluginPreviewHtml', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('treats missing previews as unavailable instead of an error', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('preview not found', { status: 404 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchPluginPreviewHtml('example-live-artifact'),
+    ).resolves.toEqual({ unavailable: true, kind: 'html' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-live-artifact/preview',
+    );
+  });
+
+  it('forwards real preview fetch failures as discriminated errors', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('server error', { status: 500 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchPluginPreviewHtml('example-live-artifact'),
+    ).resolves.toEqual({ error: 'HTTP 500' });
+  });
+
+  it('returns html on success', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response('<html><body>preview</body></html>', { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchPluginPreviewHtml('example-live-artifact'),
+    ).resolves.toEqual({ html: '<html><body>preview</body></html>' });
+  });
+});
+
+describe('fetchPluginExampleHtml', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('treats missing example stems as unavailable instead of an error', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('example not found', { status: 404 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchPluginExampleHtml('example-live-artifact', 'index'),
+    ).resolves.toEqual({ unavailable: true, kind: 'html' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-live-artifact/example/index',
+    );
+  });
+
+  it('forwards real example fetch failures as discriminated errors', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('server error', { status: 500 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchPluginExampleHtml('example-live-artifact', 'index'),
+    ).resolves.toEqual({ error: 'HTTP 500' });
   });
 });
 
@@ -340,7 +525,7 @@ describe('connectConnector', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/connectors/airtable/connect', { method: 'POST' });
   });
 
-  it('keeps the popup open with the auth config error when initialization fails', async () => {
+  it('keeps the popup open with custom auth guidance when initialization fails', async () => {
     const authWindow = {
       document: {
         title: '',
@@ -359,7 +544,7 @@ describe('connectConnector', () => {
         results: {
           canvas: {
             status: 'custom_required',
-            message: 'Default auth config not found for toolkit "canvas".',
+            message: 'Canvas requires a custom Composio auth config. Create or enable a Canvas auth config in Composio with your own OAuth credentials, then retry this connection.',
           },
         },
       }), { status: 200 })),
@@ -367,12 +552,13 @@ describe('connectConnector', () => {
 
     await expect(connectConnector('canvas')).resolves.toEqual({
       connector: null,
-      error: 'Default auth config not found for toolkit "canvas".',
+      error: 'Canvas requires a custom Composio auth config. Create or enable a Canvas auth config in Composio with your own OAuth credentials, then retry this connection.',
     });
 
     expect(authWindow.close).not.toHaveBeenCalled();
     expect(authWindow.document.title).toBe('Connection failed');
-    expect(authWindow.document.body.innerHTML).toContain('Default auth config not found for toolkit "canvas".');
+    expect(authWindow.document.body.innerHTML).toContain('Canvas requires a custom Composio auth config.');
+    expect(authWindow.document.body.innerHTML).not.toContain('Default auth config not found');
   });
 
   it('opens the system browser through the daemon when the OAuth popup is blocked', async () => {

@@ -18,6 +18,8 @@ describe("desktop preload host boundary", () => {
     expect(source).toContain("OPEN_DESIGN_HOST_GLOBAL");
     expect(source).toContain("exportDiagnostics");
     expect(source).toContain("satisfies OpenDesignHostBridge");
+    expect(source).toContain("browser");
+    expect(source).toContain("browser:clear-data");
     expect(source).toContain("updater");
     // OS locale forwarded from main via webPreferences.additionalArguments
     // is mirrored onto __od__.client.osLocale. Pin the literal prefix
@@ -32,5 +34,13 @@ describe("desktop preload host boundary", () => {
     expect(source).not.toContain("exposeInMainWorld('electronAPI'");
     expect(source).not.toContain('exposeInMainWorld("__odDesktop"');
     expect(source).not.toContain("exposeInMainWorld('__odDesktop'");
+  });
+
+  it("mirrors the host import contract by accepting a null entryFile", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(here, "../../src/main/preload.cts"), "utf8");
+
+    expect(source).toContain("response.entryFile === null");
+    expect(source).toContain("entryFile === undefined");
   });
 });

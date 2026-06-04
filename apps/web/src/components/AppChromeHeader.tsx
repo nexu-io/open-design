@@ -1,20 +1,23 @@
 import type { ReactNode } from 'react';
 import { useT } from '../i18n';
-import { Icon } from './Icon';
+import { RemixIcon } from './RemixIcon';
 
 interface Props {
   actions?: ReactNode;
   children?: ReactNode;
+  fileActionsBefore?: ReactNode;
   onBack?: () => void;
   backLabel?: string;
   showTrafficSpace?: boolean;
 }
 
 export const APP_CHROME_FILE_ACTIONS_ID = 'app-chrome-file-actions';
+export const APP_CHROME_FILE_ACTIONS_SELECTOR = '[data-app-chrome-file-actions="true"]';
 
 export function AppChromeHeader({
   actions,
   children,
+  fileActionsBefore,
   onBack,
   backLabel,
   showTrafficSpace = true,
@@ -28,17 +31,24 @@ export function AppChromeHeader({
       {onBack ? (
         <button
           type="button"
-          className="app-chrome-back"
+          className="app-chrome-back od-tooltip"
           onClick={onBack}
           title={resolvedBackLabel}
+          data-tooltip={resolvedBackLabel}
+          data-tooltip-placement="bottom"
           aria-label={resolvedBackLabel}
         >
-          <Icon name="arrow-left" size={15} />
+          <RemixIcon name="arrow-left-line" size={16} />
         </button>
       ) : null}
       {children ? <div className="app-chrome-content">{children}</div> : null}
       <div className="app-chrome-drag" aria-hidden />
-      <div id={APP_CHROME_FILE_ACTIONS_ID} className="app-chrome-file-actions" />
+      {fileActionsBefore ? <div className="app-chrome-file-actions-before">{fileActionsBefore}</div> : null}
+      <div
+        id={APP_CHROME_FILE_ACTIONS_ID}
+        className="app-chrome-file-actions"
+        data-app-chrome-file-actions="true"
+      />
       {actions ? <div className="app-chrome-actions">{actions}</div> : null}
     </header>
   );
@@ -56,12 +66,14 @@ export function SettingsIconButton({
   return (
     <button
       type="button"
-      className="settings-icon-btn"
+      className="settings-icon-btn od-tooltip"
       onClick={onClick}
       title={title}
+      data-tooltip={title}
+      data-tooltip-placement="bottom"
       aria-label={ariaLabel}
     >
-      <Icon name="settings" size={17} />
+      <RemixIcon name="settings-line" size={18} />
     </button>
   );
 }

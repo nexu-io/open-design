@@ -3,8 +3,48 @@
   "specVersion": "1.0.0",
   "name": "video-template-video-seedance-three-kingdoms-lyubu-yuanmen-archery",
   "title": "Video - Three Kingdoms ARPG - Lyu Bu Yuanmen Archery (Seedance 2.0)",
+  "title_i18n": {
+    "zh-CN": "视频 - 三国 ARPG - 吕布辕门射戟（Seedance 2.0）",
+    "zh-TW": "影片 - 三國 ARPG - 呂布轅門射戟（Seedance 2.0）",
+    "ja": "動画 - 三国志 ARPG - 呂布轅門の射戟（Seedance 2.0）",
+    "ko": "비디오 - 삼국지 ARPG - 여포 원문사극(Seedance 2.0)",
+    "de": "Video - Three Kingdoms ARPG - Lyu Bu Yuanmen-Bogenschießen (Seedance 2.0)",
+    "fr": "Vidéo - Three Kingdoms ARPG - Lyu Bu tir à l'arc Yuanmen (Seedance 2.0)",
+    "ru": "Видео - Three Kingdoms ARPG - Лю Бу стрельба Yuanmen (Seedance 2.0)",
+    "es": "Vídeo - Three Kingdoms ARPG - Lyu Bu tiro de arco Yuanmen (Seedance 2.0)",
+    "pt-BR": "Vídeo - Three Kingdoms ARPG - Lyu Bu arco e flecha Yuanmen (Seedance 2.0)",
+    "it": "Video - Three Kingdoms ARPG - Lyu Bu tiro con l'arco Yuanmen (Seedance 2.0)",
+    "vi": "Video - Three Kingdoms ARPG - Lý Bố bắn cung Viên Môn (Seedance 2.0)",
+    "pl": "Wideo - Three Kingdoms ARPG - Lyu Bu łucznictwo Yuanmen (Seedance 2.0)",
+    "id": "Video - Three Kingdoms ARPG - Lyu Bu memanah Yuanmen (Seedance 2.0)",
+    "nl": "Video - Three Kingdoms ARPG - Lyu Bu Yuanmen boogschutterij (Seedance 2.0)",
+    "ar": "فيديو - Three Kingdoms ARPG - لو بو رماية يوانمن (Seedance 2.0)",
+    "tr": "Video - Three Kingdoms ARPG - Lyu Bu Yuanmen okçuluğu (Seedance 2.0)",
+    "uk": "Відео - Three Kingdoms ARPG - Лю Бу стрільба Yuanmen (Seedance 2.0)",
+    "en": "Video - Three Kingdoms ARPG - Lyu Bu Yuanmen Archery (Seedance 2.0)"
+  },
   "version": "0.1.0",
   "description": "A ~10s in-engine cinematic action sequence bringing the companion image template game-screenshot-three-kingdoms-lyubu-yuanmen-archery to life. Lyu Bu (吕布) stands at the center of a dusty military encampment between two facing armies, draws a red-lacquered longbow, holds a bead-on-draw, then looses a single gold-glowing qi-imbued arrow down the range toward a distant halberd planted in the ground. Tuned for Seedance 2.0 — tight camera discipline, a single decisive beat, crisp HUD-safe framing, clean bow/arrow physics, wind + dust + banner motion, and in-game-screenshot color grading. Designed as the direct video companion to the matching image template so the still and the clip can be served as a pair. Reference image: the Lyu Bu yuanmen-archery screenshot template.",
+  "description_i18n": {
+    "zh-CN": "约10秒游戏引擎内过场动作片段，吕布在两军阵营间的军营中央拉开红漆长弓，凝神瞄准后射出一支金色真气箭矢射向远处插在地上的方天画戟。专为 Seedance 2.0 调校，包含严谨镜头控制、弓箭物理效果、风沙旗帜动态和游戏截图色调。配套同名静态图模板使用。",
+    "zh-TW": "約10秒遊戲引擎內過場動作片段，呂布在兩軍陣營間的軍營中央拉開紅漆長弓，凝神瞄準後射出一支金色真氣箭矢射向遠處插在地上的方天畫戟。專為 Seedance 2.0 調校，包含嚴謹鏡頭控制、弓箭物理效果、風沙旗幟動態和遊戲截圖色調。配套同名靜態圖範本使用。",
+    "ja": "約10秒のゲームエンジン内アクションシーン。呂布が対峙する二つの軍勢の間で赤漆の長弓を引き、金色の気を纏った矢を遠方の戟に向けて放つ。Seedance 2.0向けに最適化されたカメラワーク、弓矢の物理演算、風砂と旗の動き、ゲームスクリーンショット風カラーグレーディングを収録。対応する静止画テンプレートとセットで使用可能。",
+    "ko": "약 10초 길이의 인게임 액션 시퀀스. 여포가 두 진영 사이 군영 중앙에서 붉은 칠 장궁을 당겨 금빛 기가 깃든 화살을 멀리 꽂힌 극을 향해 쏘아냅니다. Seedance 2.0 최적화로 정교한 카메라 제어, 활과 화살 물리 효과, 바람·먼지·깃발 움직임, 게임 스크린샷 색보정이 포함됩니다. 동일한 이미지 템플릿과 짝으로 제공됩니다.",
+    "de": "~10 Sekunden lange In-Engine-Actionsequenz: Lyu Bu spannt einen rotlackierten Langbogen und schießt einen goldleuchtenden Qi-Pfeil auf eine entfernte Hellebarde. Optimiert für Seedance 2.0 mit präziser Kameraführung, Bogen-/Pfeilphysik, Wind-, Staub- und Banneranimationen sowie Farbabstufung im Screenshot-Stil. Ergänzt das passende Bildtemplate.",
+    "fr": "Séquence d'action cinématique d'environ 10 secondes : Lyu Bu bande un arc laqué rouge et tire une flèche de qi dorée vers une hallebarde lointaine. Optimisée pour Seedance 2.0 avec contrôle de caméra rigoureux, physique de l'arc, animations de vent, poussière et bannières, et étalonnage type capture d'écran. Complète le template d'image associé.",
+    "ru": "~10-секундная внутриигровая экшен-сцена: Лю Бу натягивает красный лук и выпускает золотую стрелу ци в дальнюю алебарду. Оптимизировано для Seedance 2.0 с точной работой камеры, физикой лука и стрелы, анимацией ветра, пыли и знамён, цветокоррекцией в стиле скриншота. Дополняет соответствующий шаблон изображения.",
+    "es": "Secuencia de acción cinemática de ~10 segundos: Lyu Bu tensa un arco lacado en rojo y dispara una flecha de qi dorada hacia una alabarda distante. Optimizado para Seedance 2.0 con control de cámara preciso, física de arco y flecha, animación de viento, polvo y estandartes, y gradación de color estilo captura de pantalla. Complementa la plantilla de imagen correspondiente.",
+    "pt-BR": "Sequência de ação cinemática de ~10 segundos: Lyu Bu estica um arco laqueado vermelho e dispara uma flecha de qi dourada em direção a uma alabarda distante. Otimizado para Seedance 2.0 com controle rigoroso de câmera, física de arco e flecha, animação de vento, poeira e bandeiras, e gradação de cor estilo screenshot. Complementa o template de imagem correspondente.",
+    "it": "Sequenza d'azione cinematica di ~10 secondi: Lyu Bu tende un arco laccato rosso e scaglia una freccia di qi dorata verso un'alabarda distante. Ottimizzato per Seedance 2.0 con controllo preciso della camera, fisica dell'arco e freccia, animazione di vento, polvere e stendardi, e color grading stile screenshot. Complementa il template immagine corrispondente.",
+    "vi": "Cảnh hành động trong engine ~10 giây: Lý Bố giương cung sơn đỏ và bắn mũi tên khí vàng về phía chiếc kích xa. Tối ưu cho Seedance 2.0 với kiểm soát camera chặt chẽ, vật lý cung tên, hiệu ứng gió, bụi, cờ phướn và màu sắc kiểu ảnh chụp màn hình. Đi kèm template ảnh tương ứng.",
+    "pl": "~10-sekundowa sekwencja akcji w silniku gry: Lyu Bu napina czerwony lakierowany łuk i wypuszcza złotą strzałę qi w stronę odległej halabardii. Zoptymalizowane dla Seedance 2.0 z precyzyjną kontrolą kamery, fizyką łuku i strzały, animacją wiatru, kurzu i sztandarów oraz kolorystyką w stylu zrzutu ekranu. Uzupełnia odpowiedni szablon obrazu.",
+    "id": "Sekuens aksi sinematik ~10 detik dalam engine: Lyu Bu menarik busur panjang berlapis merah dan melepaskan anak panah qi bercahaya emas ke arah tombak halabarda yang jauh. Dioptimalkan untuk Seedance 2.0 dengan kontrol kamera ketat, fisika busur dan panah, animasi angin, debu dan spanduk, serta color grading bergaya screenshot. Melengkapi template gambar yang sesuai.",
+    "nl": "~10 seconden durende in-engine actiesequentie: Lyu Bu spant een roodgelakte langboog en schiet een goudgloeiende qi-pijl naar een verre hellebaard. Geoptimaliseerd voor Seedance 2.0 met strakke cameracontrole, boog/pijl-fysica, wind-, stof- en banieranimaties, en kleurgrading in screenshot-stijl. Vult het bijbehorende afbeeldingstemplate aan.",
+    "ar": "مشهد حركة سينمائي داخل المحرك ~10 ثوانٍ: يشد لو بو قوساً طويلاً مطلياً بالأحمر ويطلق سهماً ذهبياً من طاقة التشي نحو حربة بعيدة. محسّن لـ Seedance 2.0 مع تحكم دقيق بالكاميرا، فيزياء القوس والسهم، حركة الرياح والغبار والرايات، وتدرج ألوان بأسلوب لقطة الشاشة. يكمّل قالب الصورة المطابق.",
+    "tr": "~10 saniyelik motor içi sinematik aksiyon sekansı: Lyu Bu kırmızı cilalı uzun yayı gerer ve altın ışıltılı qi okunu uzaktaki mızrağa doğru atar. Seedance 2.0 için sıkı kamera kontrolü, yay/ok fiziği, rüzgar, toz ve sancak animasyonları, ekran görüntüsü stili renk düzeltmesiyle optimize edilmiştir. İlgili görüntü şablonunu tamamlar.",
+    "uk": "~10-секундна внутрішньоігрова екшн-сцена: Лю Бу натягує червоний лук і випускає золоту стрілу ци у віддалену алебарду. Оптимізовано для Seedance 2.0 з точним контролем камери, фізикою лука та стріли, анімацією вітру, пилу та прапорів, колірною корекцією в стилі скріншота. Доповнює відповідний шаблон зображення.",
+    "en": "A ~10s in-engine cinematic action sequence bringing the companion image template game-screenshot-three-kingdoms-lyubu-yuanmen-archery to life. Lyu Bu (吕布) stands at the center of a dusty military encampment between two facing armies, draws a red-lacquered longbow, holds a bead-on-draw, then looses a single gold-glowing qi-imbued arrow down the range toward a distant halberd planted in the ground. Tuned for Seedance 2.0 — tight camera discipline, a single decisive beat, crisp HUD-safe framing, clean bow/arrow physics, wind + dust + banner motion, and in-game-screenshot color grading. Designed as the direct video companion to the matching image template so the still and the clip can be served as a pair. Reference image: the Lyu Bu yuanmen-archery screenshot template."
+  },
   "license": "Apache-2.0",
   "author": {
     "name": "open-design contributors",
@@ -35,8 +75,8 @@
     "surface": "video",
     "preview": {
       "type": "video",
-      "poster": "https://raw.githubusercontent.com/nexu-io/open-design/main/assets/prompt-templates/video/video-seedance-three-kingdoms-lyubu-yuanmen-archery-poster.jpg",
-      "video": "https://raw.githubusercontent.com/nexu-io/open-design/main/assets/prompt-templates/video/video-seedance-three-kingdoms-lyubu-yuanmen-archery.mp4"
+      "poster": "https://repo-assets.open-design.ai/resources/images/prompt-templates/video-seedance-three-kingdoms-lyubu-yuanmen-archery-poster.jpg",
+      "video": "https://repo-assets.open-design.ai/resources/videos/prompt-templates/video-seedance-three-kingdoms-lyubu-yuanmen-archery.mp4"
     },
     "useCase": {
       "query": {

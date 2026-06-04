@@ -14,6 +14,7 @@ type ConnectorApiErrorCode =
   | 'FORBIDDEN'
   | 'VALIDATION_FAILED'
   | 'CONNECTOR_NOT_FOUND'
+  | 'CONNECTOR_AUTH_CONFIG_REQUIRED'
   | 'CONNECTOR_NOT_CONNECTED'
   | 'CONNECTOR_NOT_GRANTED'
   | 'CONNECTOR_DISABLED'
@@ -589,7 +590,7 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
     }
   });
 
-  app.get('/api/connectors/:connectorId', async (req: Request, res: Response) => {
+  app.get('/api/connectors/:connectorId', async (req: Request<{ connectorId: string }>, res: Response) => {
     try {
       const connectorId = req.params.connectorId;
       if (!connectorId) return options.sendApiError(res, 400, 'CONNECTOR_NOT_FOUND', 'connectorId is required');
@@ -625,7 +626,7 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
     }
   });
 
-  app.post('/api/connectors/:connectorId/connect', requireLocalDaemonRequest, async (req: Request, res: Response) => {
+  app.post('/api/connectors/:connectorId/connect', requireLocalDaemonRequest, async (req: Request<{ connectorId: string }>, res: Response) => {
     try {
       const connectorId = req.params.connectorId;
       if (!connectorId) return options.sendApiError(res, 400, 'CONNECTOR_NOT_FOUND', 'connectorId is required');
@@ -653,7 +654,7 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
     }
   });
 
-  app.get('/api/connectors/oauth/callback/:connectorId', async (req: Request, res: Response) => {
+  app.get('/api/connectors/oauth/callback/:connectorId', async (req: Request<{ connectorId: string }>, res: Response) => {
     try {
       const connectorId = req.params.connectorId;
       if (!connectorId) return options.sendApiError(res, 400, 'CONNECTOR_NOT_FOUND', 'connectorId is required');
@@ -674,7 +675,7 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
     }
   });
 
-  app.post('/api/connectors/:connectorId/authorization/cancel', requireLocalDaemonRequest, async (req: Request, res: Response) => {
+  app.post('/api/connectors/:connectorId/authorization/cancel', requireLocalDaemonRequest, async (req: Request<{ connectorId: string }>, res: Response) => {
     try {
       const connectorId = req.params.connectorId;
       if (!connectorId) return options.sendApiError(res, 400, 'CONNECTOR_NOT_FOUND', 'connectorId is required');
@@ -684,7 +685,7 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
     }
   });
 
-  app.delete('/api/connectors/:connectorId/connection', requireLocalDaemonRequest, async (req: Request, res: Response) => {
+  app.delete('/api/connectors/:connectorId/connection', requireLocalDaemonRequest, async (req: Request<{ connectorId: string }>, res: Response) => {
     try {
       const connectorId = req.params.connectorId;
       if (!connectorId) return options.sendApiError(res, 400, 'CONNECTOR_NOT_FOUND', 'connectorId is required');

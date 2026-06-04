@@ -196,4 +196,39 @@ describe('i18n locales', () => {
 
     expect(source).not.toMatch(/en\['(?:connectors\.category\.|liveArtifact\.viewer\.)/);
   });
+
+  // Tier-1 locale parity lock (issue #1894):
+  //
+  // Most locale modules use `...en` spread so missing translations silently
+  // fall back to English at runtime — that satisfies the dictionary-shape
+  // test above (`Object.keys(dict)` is complete) but hides drift between
+  // English and the rendered locale. `zh-CN` is the one locale today that
+  // declares every key explicitly with no `...en` spread, so a new English
+  // key without a matching `zh-CN` entry is a *real* hole, not a benign
+  // fallback. The two cases below lock that property in place: any future
+  // PR that lets `zh-CN` drift, or reintroduces an implicit spread, fails
+  // CI loudly instead of regressing translation coverage in silence.
+  it('keeps zh-CN explicitly translated for every English key (tier-1 parity lock)', () => {
+    const englishKeys = Object.keys(en).sort();
+    const explicit = explicitLocaleKeys('zh-CN').sort();
+
+    expect(
+      explicit,
+      'zh-CN must explicitly declare every English key (no implicit `...en` spread fallback). ' +
+        'Add the missing translations to `apps/web/src/i18n/locales/zh-CN.ts` rather than re-introducing the spread.',
+    ).toEqual(englishKeys);
+  });
+
+  it('keeps the zh-CN locale source free of the `...en` spread fallback', () => {
+    const source = readFileSync(
+      new URL('../../src/i18n/locales/zh-CN.ts', import.meta.url),
+      'utf8',
+    );
+
+    expect(
+      source,
+      'zh-CN.ts must not use `...en` spread — every key must be explicitly translated. ' +
+        'If you need to add new keys, declare them with their Chinese values directly.',
+    ).not.toMatch(/\.\.\.en\b/);
+  });
 });

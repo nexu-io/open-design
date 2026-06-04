@@ -45,6 +45,54 @@ function stringifyContent(value: unknown): string {
   }
 }
 
+function parseJsonObjectsFromContent(value: string): JsonObject[] {
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  const direct = safeParseJson(trimmed);
+  if (isRecord(direct)) return [direct];
+  const objects: JsonObject[] = [];
+  for (const line of trimmed.split(/\r?\n/u)) {
+    const parsedLine = safeParseJson(line.trim());
+    if (isRecord(parsedLine)) objects.push(parsedLine);
+  }
+  return objects;
+}
+
+function extractConnectorApiError(value: JsonObject): JsonObject | null {
+  if (isRecord(value.error)) {
+    if (typeof value.error.code === 'string') return value.error;
+    if (isRecord(value.error.data) && isRecord(value.error.data.error)) {
+      const wrappedError = value.error.data.error;
+      if (typeof wrappedError.code === 'string') return wrappedError;
+    }
+  }
+  return null;
+}
+
+function connectorToolSelectionErrorMessage(content: string): string | null {
+  if (!content.includes('CONNECTOR_TOOL_NOT_FOUND')) return null;
+  let error: JsonObject | null = null;
+  for (const parsed of parseJsonObjectsFromContent(content)) {
+    const parsedError = extractConnectorApiError(parsed);
+    if (parsedError?.code === 'CONNECTOR_TOOL_NOT_FOUND') {
+      error = parsedError;
+      break;
+    }
+  }
+  if (!error) return null;
+  const details = isRecord(error.details) ? error.details : {};
+  const connectorId = typeof details.connectorId === 'string' && details.connectorId
+    ? details.connectorId
+    : undefined;
+  const toolName = typeof details.toolName === 'string' && details.toolName
+    ? details.toolName
+    : 'the requested connector tool';
+  const target = connectorId
+    ? `Connector tool ${toolName} is not allowed for connector ${connectorId}.`
+    : `Connector tool ${toolName} is not allowed.`;
+  return `${target} Re-list the connector catalog and choose one of the currently allowed read-only tools.`;
+}
+
 function extractErrorMessage(value: unknown, fallback: string): string {
   if (typeof value === 'string') {
     const parsed = safeParseJson(value);
@@ -178,6 +226,10 @@ function handleGeminiEvent(obj: unknown, onEvent: StreamEventHandler): boolean {
     return true;
   }
 
+  if (obj.type === 'message' && obj.role === 'user') {
+    return true;
+  }
+
   if (
     obj.type === 'message' &&
     obj.role === 'assistant' &&
@@ -188,7 +240,59 @@ function handleGeminiEvent(obj: unknown, onEvent: StreamEventHandler): boolean {
     return true;
   }
 
-  if (obj.type === 'result' && isRecord(obj.stats)) {
+  if (
+    obj.type === 'tool_use' &&
+    typeof obj.tool_id === 'string' &&
+    typeof obj.tool_name === 'string'
+  ) {
+    onEvent({
+      type: 'tool_use',
+      id: obj.tool_id,
+      name: obj.tool_name,
+      input: safeParseJson(obj.parameters) ?? obj.parameters ?? null,
+    });
+    return true;
+  }
+
+  if (obj.type === 'tool_result' && typeof obj.tool_id === 'string') {
+    const error = isRecord(obj.error) ? obj.error : null;
+    const errorMessage = error ? extractErrorMessage(error, '') : '';
+    const output = typeof obj.output === 'string'
+      ? obj.output
+      : errorMessage || stringifyContent(obj.output);
+    onEvent({
+      type: 'tool_result',
+      toolUseId: obj.tool_id,
+      content: output,
+      isError: obj.status === 'error' || Boolean(error),
+    });
+    return true;
+  }
+
+  if (obj.type === 'error') {
+    const severity = typeof obj.severity === 'string' ? obj.severity.toLowerCase() : '';
+    const message = extractErrorMessage(
+      obj.message ?? obj.error,
+      severity === 'warning' ? 'Gemini CLI warning' : 'Gemini CLI error',
+    );
+    if (severity === 'warning') {
+      onEvent({ type: 'status', label: 'warning', detail: message });
+    } else {
+      onEvent({ type: 'error', message, raw: stringifyContent(obj) });
+    }
+    return true;
+  }
+
+  if (obj.type === 'result') {
+    if (obj.status === 'error' || isRecord(obj.error)) {
+      onEvent({
+        type: 'error',
+        message: extractErrorMessage(obj.error, 'Gemini CLI error'),
+        raw: stringifyContent(obj),
+      });
+      return true;
+    }
+    if (!isRecord(obj.stats)) return true;
     const usage: Usage = {};
     if (typeof obj.stats.input_tokens === 'number') usage.input_tokens = obj.stats.input_tokens;
     if (typeof obj.stats.output_tokens === 'number') usage.output_tokens = obj.stats.output_tokens;
@@ -352,12 +456,18 @@ if (obj.type === 'error') {
           },
         });
       }
+      const content = stringifyContent(item.aggregated_output ?? '');
       onEvent({
         type: 'tool_result',
         toolUseId: item.id,
-        content: stringifyContent(item.aggregated_output ?? ''),
+        content,
         isError: typeof item.exit_code === 'number' ? item.exit_code !== 0 : item.status === 'failed',
       });
+      const connectorToolError = connectorToolSelectionErrorMessage(content);
+      if (connectorToolError && !state.codexErrorEmitted) {
+        state.codexErrorEmitted = true;
+        onEvent({ type: 'error', message: connectorToolError });
+      }
       return true;
     }
   }

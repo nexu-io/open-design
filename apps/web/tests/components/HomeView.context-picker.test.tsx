@@ -1,13 +1,35 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
   type InstalledPluginRecord,
+  type ConnectorDetail,
+  type McpServerConfig,
   type SkillSummary,
 } from '@open-design/contracts';
 import { HomeView } from '../../src/components/HomeView';
+import { homeHeroPromptText, setHomeHeroPrompt } from '../helpers/home-hero-lexical';
+
+// HomeHero's prompt input migrated from a <textarea>+highlight overlay to the
+// same Lexical contenteditable the project composer uses. The `home-hero-input`
+// hook is now a contenteditable <div> with no `.value`, so:
+//   - driving text uses `setHomeHeroPrompt(...)` (a real `editor.update`) where
+//     the old tests did `fireEvent.change(input, { target: { value } })`.
+//   - reading text uses `homeHeroPromptText()` where they read `input.value`.
+// Picking from the @-picker still inserts an atomic mention PILL whose literal
+// text is `@<token>`, and the editor appends a trailing space — so serialized
+// editor text carries that space (the host trims it before submit).
+
+// Settle the Lexical update listener's onChange/onTrigger React state updates
+// (they flush a microtask after the discrete editor update) before asserting,
+// mirroring the project composer's `typeAndSettle`.
+async function settle() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
 
 const SKILL: SkillSummary = {
   id: 'prototype-lab',
@@ -22,6 +44,33 @@ const SKILL: SkillSummary = {
   hasBody: true,
   examplePrompt: 'Design a focused onboarding prototype.',
   aggregatesExamples: false,
+};
+
+const DECK_SKILL: SkillSummary = {
+  ...SKILL,
+  id: 'deck-lab',
+  name: 'Deck Lab',
+  description: 'Create a focused slide deck.',
+  triggers: ['deck', 'slides'],
+  mode: 'deck',
+  examplePrompt: 'Design a focused investor deck.',
+};
+
+const WEB_PROTOTYPE_PLUGIN = makePlugin('example-web-prototype', 'Web Prototype');
+const MCP_SERVER: McpServerConfig = {
+  id: 'linear',
+  label: 'Linear',
+  transport: 'stdio',
+  enabled: true,
+  command: 'npx',
+};
+const CONNECTOR: ConnectorDetail = {
+  id: 'slack',
+  name: 'Slack',
+  provider: 'Composio',
+  category: 'Communication',
+  status: 'connected',
+  tools: [],
 };
 
 function makePlugin(id: string, title: string): InstalledPluginRecord {
@@ -94,8 +143,12 @@ describe('HomeView context picker', () => {
 
     const input = await screen.findByTestId('home-hero-input');
     expect(screen.getByTestId('home-hero-attach')).toBeTruthy();
+    // Lexical's PastePlugin reads `clipboardData.files` (the old textarea path
+    // read `clipboardData.items[].getAsFile()`); the staged-file outcome is
+    // identical, only the clipboard shape the handler inspects changed.
     fireEvent.paste(input, {
       clipboardData: {
+        files: [file],
         items: [
           {
             kind: 'file',
@@ -151,25 +204,32 @@ describe('HomeView context picker', () => {
       />,
     );
 
-    const input = await screen.findByTestId('home-hero-input');
-    fireEvent.change(input, { target: { value: 'Build @chart' } });
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('Build @chart');
+    await settle();
     fireEvent.mouseDown(await screen.findByRole('option', { name: /chart plugin/i }));
 
+    // Picking inserts an atomic plugin mention pill (`@Chart Plugin`) plus a
+    // trailing space, and stages the plugin as context in HomeView state.
     await waitFor(() => {
-      expect((input as HTMLTextAreaElement).value).toBe('Build @Chart Plugin');
+      expect(homeHeroPromptText().trim()).toBe('Build @Chart Plugin');
       expect(screen.getByTestId('home-hero-context-plugin-chart-plugin')).toBeTruthy();
     });
 
-    fireEvent.change(input, { target: { value: `${(input as HTMLTextAreaElement).value} @deck` } });
+    // Re-seed the draft with a fresh `@deck` trigger appended after the first
+    // mention (the old test did the equivalent full-value replace). Picking the
+    // second plugin reconstructs both mention pills via the host's draft sync.
+    setHomeHeroPrompt('Build @Chart Plugin @deck');
+    await settle();
     fireEvent.mouseDown(await screen.findByRole('option', { name: /deck plugin/i }));
 
     await waitFor(() => {
-      expect((input as HTMLTextAreaElement).value).toBe('Build @Chart Plugin @Deck Plugin');
+      expect(homeHeroPromptText().trim()).toBe('Build @Chart Plugin @Deck Plugin');
       expect(screen.getByTestId('home-hero-context-plugin-chart-plugin')).toBeTruthy();
       expect(screen.getByTestId('home-hero-context-plugin-deck-plugin')).toBeTruthy();
     });
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
-    expect((input as HTMLTextAreaElement).value).not.toContain('Hydrated query');
+    expect(homeHeroPromptText()).not.toContain('Hydrated query');
 
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
@@ -216,12 +276,13 @@ describe('HomeView context picker', () => {
       />,
     );
 
-    const input = await screen.findByTestId('home-hero-input');
-    fireEvent.change(input, { target: { value: '@proto' } });
-    fireEvent.mouseDown(screen.getByRole('option', { name: /prototype lab/i }));
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('@proto');
+    await settle();
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /prototype lab/i }));
 
     await waitFor(() => {
-      expect((input as HTMLTextAreaElement).value).toBe('@Prototype Lab');
+      expect(homeHeroPromptText().trim()).toBe('@Prototype Lab');
       expect(screen.getByTestId('home-hero-active-skill')).toBeTruthy();
     });
 
@@ -232,6 +293,204 @@ describe('HomeView context picker', () => {
       pluginId: DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
       skillId: SKILL.id,
       projectKind: 'prototype',
+    }));
+  });
+
+  it('clears an active type chip when the user picks a skill (#2972)', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url === '/api/mcp/servers') {
+        return new Response(JSON.stringify({ servers: [], templates: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        skills={[DECK_SKILL, SKILL]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Prototype');
+    });
+
+    screen.getByTestId('home-hero-input');
+    setHomeHeroPrompt('@deck');
+    await settle();
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /deck lab/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-skill')).toBeTruthy();
+      expect(screen.queryByTestId('home-hero-active-type-chip')).toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
+      skillId: DECK_SKILL.id,
+      projectKind: 'deck',
+    }));
+    expect(onSubmit.mock.calls[0]?.[0]?.pluginId).not.toBe('example-web-prototype');
+  });
+
+  it('clears an active skill when the user picks a type chip (#2972)', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/apply')) {
+        return new Response(JSON.stringify({
+          appliedPlugin: {
+            snapshotId: 'snap-web-prototype',
+            pluginId: 'example-web-prototype',
+            pluginVersion: '1.0.0',
+            inputs: {},
+          },
+          contextItems: [],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url === '/api/mcp/servers') {
+        return new Response(JSON.stringify({ servers: [], templates: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        skills={[SKILL]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('@proto');
+    await settle();
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /prototype lab/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-skill')).toBeTruthy();
+    });
+
+    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Prototype');
+      expect(screen.queryByTestId('home-hero-active-skill')).toBeNull();
+    });
+
+    setHomeHeroPrompt('Build a pricing-page prototype.');
+    await settle();
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-web-prototype',
+      skillId: null,
+      projectKind: 'prototype',
+    })));
+  });
+
+  it('submits selected MCP servers and connectors as first-turn context', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url === '/api/mcp/servers') {
+        return new Response(JSON.stringify({ servers: [MCP_SERVER], templates: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        connectors={[CONNECTOR]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('@lin');
+    fireEvent.mouseDown(screen.getByRole('option', { name: /linear/i }));
+
+    await waitFor(() => {
+      expect(homeHeroPromptText().trim()).toBe('@Linear');
+    });
+
+    setHomeHeroPrompt('@Linear @sla');
+    fireEvent.mouseDown(screen.getByRole('option', { name: /slack/i }));
+
+    await waitFor(() => {
+      expect(homeHeroPromptText().trim()).toBe('@Linear @Slack');
+    });
+
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: '@Linear @Slack',
+      pluginId: DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
+      contextMcpServers: [
+        expect.objectContaining({ id: 'linear', label: 'Linear', transport: 'stdio' }),
+      ],
+      contextConnectors: [
+        expect.objectContaining({
+          id: 'slack',
+          name: 'Slack',
+          provider: 'Composio',
+          category: 'Communication',
+          status: 'connected',
+        }),
+      ],
     }));
   });
 });

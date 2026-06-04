@@ -12,6 +12,8 @@ import type { ApplyResult, InstalledPluginRecord } from '@open-design/contracts'
 import { applyPlugin } from '../state/projects';
 import { navigate } from '../router';
 import { useI18n } from '../i18n';
+import { useAnalytics } from '../analytics/provider';
+import { trackPluginDetailClick } from '../analytics/events';
 
 interface Props {
   pluginId: string;
@@ -19,10 +21,16 @@ interface Props {
 
 export function PluginDetailView(props: Props) {
   const { locale } = useI18n();
+  const analytics = useAnalytics();
   const [plugin, setPlugin] = useState<InstalledPluginRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState<ApplyResult | null>(null);
+
+  const onBack = () => {
+    trackPluginDetailClick(analytics.track, { page_name: 'plugins', area: 'plugin_detail', element: 'back', plugin_id: props.pluginId });
+    navigate({ kind: 'marketplace' });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -47,7 +55,7 @@ export function PluginDetailView(props: Props) {
   if (error) {
     return (
       <div className="plugin-detail" data-testid="plugin-detail">
-        <button type="button" onClick={() => navigate({ kind: 'marketplace' })}>
+        <button type="button" onClick={onBack}>
           ← Marketplace
         </button>
         <div role="alert">Failed to load plugin: {error}</div>
@@ -80,6 +88,7 @@ export function PluginDetailView(props: Props) {
   }>;
 
   const onUse = async () => {
+    trackPluginDetailClick(analytics.track, { page_name: 'plugins', area: 'plugin_detail', element: 'use_plugin', plugin_id: plugin.id });
     setApplying(true);
     setError(null);
     const result = await applyPlugin(plugin.id, { locale });
@@ -100,7 +109,7 @@ export function PluginDetailView(props: Props) {
       <button
         type="button"
         className="plugin-detail__back"
-        onClick={() => navigate({ kind: 'marketplace' })}
+        onClick={onBack}
       >
         ← Marketplace
       </button>

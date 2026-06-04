@@ -12,6 +12,7 @@ import { buildSrcdoc } from '../runtime/srcdoc';
 import type { SkillSummary, Surface } from '../types';
 import { Icon } from './Icon';
 import { PreviewModal } from './PreviewModal';
+import { AnimatePresence } from 'motion/react';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -127,10 +128,17 @@ export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
   // them up front so every count, filter, and rendered card downstream
   // sees only the user-facing entries. The full listing is still passed
   // through for `findSkillById` lookups elsewhere in the app.
-  const skills = useMemo(
-    () => rawSkills.filter((s) => !s.aggregatesExamples),
-    [rawSkills],
-  );
+  // Deduplicate by skill.id to prevent duplicate cards (issue #2889).
+  const skills = useMemo(() => {
+    const filtered = rawSkills.filter((s) => !s.aggregatesExamples);
+    const seen = new Map<string, SkillSummary>();
+    for (const skill of filtered) {
+      if (!seen.has(skill.id)) {
+        seen.set(skill.id, skill);
+      }
+    }
+    return Array.from(seen.values());
+  }, [rawSkills]);
   // Hold preview HTML per skill across re-renders so cards never re-flicker.
   const [previews, setPreviews] = useState<Record<string, string | null>>({});
   // Track per-skill fetch failures separately so the preview modal can show
@@ -454,6 +462,7 @@ export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
           ))}
         </div>
       )}
+      <AnimatePresence>
       {(() => {
         if (!previewSkill) return null;
         const unavailableKind = previewUnavailable[previewSkill.id];
@@ -475,7 +484,7 @@ export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
                 // it can render a calm "no shipped preview" placeholder
                 // instead of bouncing through the error state. Issue #897.
                 unavailable: unavailableKind
-                  ? { kind: unavailableKind }
+                  ? { kind: unavailableKind, noun: 'skill' }
                   : null,
                 deck: previewSkill.mode === 'deck',
               },
@@ -490,6 +499,7 @@ export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
           />
         );
       })()}
+      </AnimatePresence>
     </div>
   );
 }

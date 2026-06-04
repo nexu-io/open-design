@@ -5,7 +5,7 @@
 //      OD_API_TOKEN is set.
 //   2. When OD_API_TOKEN is set, every /api/* request from a non-loopback
 //      peer must carry `Authorization: Bearer <OD_API_TOKEN>`. The
-//      health/version/status probes stay open for monitoring.
+//      health/readiness/version probes stay open for monitoring.
 //
 // Tests force the bearer-required code path by stamping the env vars
 // before startServer. The daemon listens on 127.0.0.1 throughout (so
@@ -77,8 +77,8 @@ describe('bearer middleware', () => {
     expect(resp.status).toBe(200);
   });
 
-  it('keeps health / version / daemon-status open without a bearer', async () => {
-    for (const path of ['/api/health', '/api/version', '/api/daemon/status']) {
+  it('keeps health / readiness / version probes open without a bearer', async () => {
+    for (const path of ['/api/health', '/api/ready', '/api/version']) {
       const resp = await fetch(`${baseUrl}${path}`);
       expect(resp.status).toBe(200);
     }

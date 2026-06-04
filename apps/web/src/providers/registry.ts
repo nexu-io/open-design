@@ -12,6 +12,8 @@ import type {
   ImportLocalDesignSystemRequest,
   ImportLocalDesignSystemResponse,
   ReplaceProjectWorkingDirResponse,
+  SocialShareRequest,
+  SocialShareResponse,
 } from '@open-design/contracts';
 import type {
   AgentInfo,
@@ -50,6 +52,7 @@ import type {
   PromptTemplateDetail,
   PromptTemplateSummary,
   ProjectFile,
+  ProjectFolder,
   RenameProjectFileResponse,
   SkillDetail,
   SkillSummary,
@@ -87,7 +90,7 @@ function deployProviderQuery(providerId?: WebDeployProviderId): string {
 
 export async function fetchAgents(options?: { throwOnError?: boolean }): Promise<AgentInfo[]> {
   try {
-    const resp = await fetch('/api/agents');
+    const resp = await fetch('/api/agents', { cache: 'no-store' });
     if (!resp.ok) {
       if (options?.throwOnError) throw new Error(`agents ${resp.status}`);
       return [];
@@ -98,6 +101,104 @@ export async function fetchAgents(options?: { throwOnError?: boolean }): Promise
     if (options?.throwOnError) throw err;
     return [];
   }
+}
+
+// Incremental agent detection over Server-Sent Events: `onAgent` fires once
+// per agent the moment its probe settles (completion order, not registry
+// order), so a caller can paint cards as they resolve instead of waiting for
+// the slowest CLI. Resolves with every agent collected once the stream's
+// terminal `done` event arrives. This is additive: callers that don't need
+// incremental delivery keep using `fetchAgents()` (whose batch probe is now
+// parallelized per-agent and so is itself faster). Pass an AbortSignal to
+// cancel the underlying request.
+export async function fetchAgentsStream(args: {
+  onAgent: (agent: AgentInfo) => void;
+  signal?: AbortSignal;
+}): Promise<AgentInfo[]> {
+  const { onAgent, signal } = args;
+  const resp = await fetch('/api/agents?stream=1', {
+    cache: 'no-store',
+    headers: { Accept: 'text/event-stream' },
+    ...(signal ? { signal } : {}),
+  });
+  if (!resp.ok || !resp.body) {
+    throw new Error(`agents stream ${resp.status}`);
+  }
+  const collected: AgentInfo[] = [];
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let done = false;
+  const errorMessageFromData = (data: string): string => {
+    if (!data.trim()) return 'agents stream error';
+    try {
+      const parsed = JSON.parse(data) as { error?: unknown; message?: unknown };
+      const message = parsed.error ?? parsed.message;
+      if (typeof message === 'string' && message.trim()) return message;
+    } catch {
+      // Fall through to the raw data string below.
+    }
+    return data;
+  };
+
+  const handleEvent = (rawEvent: string) => {
+    // Each SSE record is `event: <name>\ndata: <json>`; we act on `agent`
+    // (one AgentInfo), `error` (terminal failure), and `done` (terminal
+    // success). Unknown events are ignored so the protocol can grow without
+    // breaking older clients.
+    let eventName = 'message';
+    const dataLines: string[] = [];
+    for (const line of rawEvent.split('\n')) {
+      if (line.startsWith('event:')) eventName = line.slice(6).trim();
+      else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+    }
+    const data = dataLines.join('\n');
+    if (eventName === 'done') {
+      done = true;
+      return;
+    }
+    if (eventName === 'error') {
+      throw new Error(errorMessageFromData(data));
+    }
+    if (eventName === 'agent' && data) {
+      try {
+        const agent = JSON.parse(data) as AgentInfo;
+        collected.push(agent);
+        onAgent(agent);
+      } catch {
+        // Ignore a malformed record rather than aborting the whole stream.
+      }
+    }
+  };
+
+  try {
+    while (!done) {
+      const { value, done: streamDone } = await reader.read();
+      if (streamDone) break;
+      buffer += decoder.decode(value, { stream: true });
+      let sep: number;
+      // SSE records are separated by a blank line ("\n\n").
+      while ((sep = buffer.indexOf('\n\n')) !== -1) {
+        const rawEvent = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        if (rawEvent.trim().length > 0) handleEvent(rawEvent);
+        if (done) break;
+      }
+    }
+    if (!done && buffer.trim().length > 0) {
+      handleEvent(buffer);
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      // Reader may already be closed; nothing to do.
+    }
+  }
+  if (!done) {
+    throw new Error('agents stream ended before done');
+  }
+  return collected;
 }
 
 export async function fetchSkills(): Promise<SkillSummary[]> {
@@ -347,13 +448,27 @@ export async function fetchSkill(id: string): Promise<SkillDetail | null> {
 }
 
 export async function fetchDesignSystems(): Promise<DesignSystemSummary[]> {
+  const result = await fetchDesignSystemsResult();
+  return result.ok ? result.designSystems : [];
+}
+
+// Discriminated-union variant: surfaces the fetch outcome instead of
+// collapsing a network/HTTP failure into an empty array. The mid-chat
+// design-system picker uses this so it can render a load-failure state
+// instead of silently showing an empty catalog, which would otherwise
+// be indistinguishable from "registry truly has no systems."
+export type DesignSystemsResult =
+  | { ok: true; designSystems: DesignSystemSummary[] }
+  | { ok: false };
+
+export async function fetchDesignSystemsResult(): Promise<DesignSystemsResult> {
   try {
     const resp = await fetch('/api/design-systems');
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as { designSystems: DesignSystemSummary[] };
-    return json.designSystems ?? [];
+    if (!resp.ok) return { ok: false };
+    const json = (await resp.json()) as { designSystems?: DesignSystemSummary[] };
+    return { ok: true, designSystems: json.designSystems ?? [] };
   } catch {
-    return [];
+    return { ok: false };
   }
 }
 
@@ -1218,6 +1333,24 @@ export async function checkDeploymentLink(
   return (await resp.json()) as WebDeployProjectFileResponse;
 }
 
+export async function createSocialSharePayload(
+  input: SocialShareRequest,
+): Promise<SocialShareResponse> {
+  const resp = await fetch('/api/social-share', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!resp.ok) {
+    const payload = await resp.json().catch(() => null) as {
+      error?: { message?: string };
+      message?: string;
+    } | null;
+    throw new Error(payload?.error?.message || payload?.message || `Share payload failed (${resp.status})`);
+  }
+  return (await resp.json()) as SocialShareResponse;
+}
+
 // Project files — all paths are scoped under .od/projects/<id>/ on disk.
 
 export async function fetchProjectFiles(projectId: string): Promise<ProjectFile[]> {
@@ -1228,6 +1361,51 @@ export async function fetchProjectFiles(projectId: string): Promise<ProjectFile[
     return json.files ?? [];
   } catch {
     return [];
+  }
+}
+
+export async function fetchProjectFolders(projectId: string): Promise<ProjectFolder[]> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/folders`);
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { folders?: ProjectFolder[] };
+    return json.folders ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function createProjectFolder(
+  projectId: string,
+  name: string,
+): Promise<ProjectFolder | null> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/folders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { folder?: ProjectFolder };
+    return json.folder ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteProjectFolder(
+  projectId: string,
+  folderPath: string,
+): Promise<boolean> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/folders`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: folderPath }),
+    });
+    return resp.ok;
+  } catch {
+    return false;
   }
 }
 
@@ -1560,17 +1738,39 @@ export async function writeProjectTextFile(
   content: string,
   options?: { artifactManifest?: ArtifactManifest },
 ): Promise<ProjectFile | null> {
+  const result = await writeProjectTextFileDetailed(projectId, name, content, options);
+  return result.ok ? result.file : null;
+}
+
+export type WriteProjectTextFileResult =
+  | { ok: true; file: ProjectFile }
+  | { ok: false; status?: number; code?: string; message: string };
+
+export async function writeProjectTextFileDetailed(
+  projectId: string,
+  name: string,
+  content: string,
+  options?: { artifactManifest?: ArtifactManifest },
+): Promise<WriteProjectTextFileResult> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, content, artifactManifest: options?.artifactManifest }),
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      const body = await readApiErrorBody(resp);
+      return {
+        ok: false,
+        status: resp.status,
+        code: body.code,
+        message: body.message || resp.statusText || 'Save failed',
+      };
+    }
     const json = (await resp.json()) as { file: ProjectFile };
-    return json.file;
+    return { ok: true, file: json.file };
   } catch {
-    return null;
+    return { ok: false, message: 'Network error while saving the file' };
   }
 }
 
@@ -1635,17 +1835,23 @@ export interface UploadProjectFilesResult {
 export async function uploadProjectFiles(
   projectId: string,
   files: File[],
+  dir?: string,
 ): Promise<UploadProjectFilesResult> {
   if (files.length === 0) return { uploaded: [], failed: [] };
 
   const uploaded: ChatAttachment[] = [];
   const failed: ProjectUploadFailure[] = [];
   let error: string | undefined;
+  const targetDir = dir?.trim() ?? '';
 
   for (let i = 0; i < files.length; i += PROJECT_UPLOAD_BATCH_SIZE) {
     const batch = files.slice(i, i + PROJECT_UPLOAD_BATCH_SIZE);
     const remaining = files.slice(i + PROJECT_UPLOAD_BATCH_SIZE);
     const form = new FormData();
+    // The `dir` field MUST be appended before the file parts: the daemon's
+    // multer destination resolver reads req.body.dir as each file streams in,
+    // and busboy only exposes fields parsed earlier in the multipart body.
+    if (targetDir) form.append('dir', targetDir);
     for (const f of batch) form.append('files', f);
 
     try {
@@ -1846,6 +2052,13 @@ export async function fetchDesignSystemShowcase(id: string): Promise<string | nu
 // Mirrors fetchSkillExample's discriminated result so the modal can
 // surface a Retry button instead of staying stuck at "Loading…" when
 // a plugin ships no preview entry or the asset is missing on disk.
+//
+// 404 is mapped to `unavailable` (mirroring the skill helper's #897
+// behavior) because the daemon returns 404 when the manifest's
+// `preview.entry` points at a file that doesn't ship — a missing
+// asset for an otherwise valid plugin is not an error the user can
+// retry their way out of. Surfacing the calm "no shipped preview"
+// placeholder is the truthful UX.
 export async function fetchPluginPreviewHtml(
   id: string,
 ): Promise<SkillExampleResult> {
@@ -1853,7 +2066,10 @@ export async function fetchPluginPreviewHtml(
     const resp = await fetch(
       `/api/plugins/${encodeURIComponent(id)}/preview`,
     );
-    if (!resp.ok) return { error: `HTTP ${resp.status}` };
+    if (!resp.ok) {
+      if (resp.status === 404) return { unavailable: true, kind: 'html' };
+      return { error: `HTTP ${resp.status}` };
+    }
     return { html: await resp.text() };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'network error';
@@ -1862,7 +2078,8 @@ export async function fetchPluginPreviewHtml(
 }
 
 // Fetch a single example output by stem (matches the basename of the
-// `od.useCase.exampleOutputs[].path` minus its extension).
+// `od.useCase.exampleOutputs[].path` minus its extension). 404 is
+// mapped to `unavailable` for the same reason as fetchPluginPreviewHtml.
 export async function fetchPluginExampleHtml(
   pluginId: string,
   stem: string,
@@ -1871,7 +2088,10 @@ export async function fetchPluginExampleHtml(
     const resp = await fetch(
       `/api/plugins/${encodeURIComponent(pluginId)}/example/${encodeURIComponent(stem)}`,
     );
-    if (!resp.ok) return { error: `HTTP ${resp.status}` };
+    if (!resp.ok) {
+      if (resp.status === 404) return { unavailable: true, kind: 'html' };
+      return { error: `HTTP ${resp.status}` };
+    }
     return { html: await resp.text() };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'network error';

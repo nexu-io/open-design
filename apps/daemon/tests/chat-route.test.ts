@@ -1,4 +1,5 @@
 import type http from 'node:http';
+import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import {
   chmodSync,
@@ -27,7 +28,10 @@ import {
 import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 import { getAgentDef } from '../src/agents.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
+import { upsertMessage } from '../src/db.js';
 import { renderCodexImagegenOverride } from '../src/prompts/system.js';
+
+const FAKE_VELA_FIXTURE = resolve(process.cwd(), 'tests', 'fixtures', 'fake-vela.mjs');
 
 function symlinkDir(target: string, link: string): void {
   symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
@@ -210,6 +214,369 @@ process.exit(0);
           status: 'failed',
           exitCode: 0,
         });
+      },
+    );
+  });
+
+
+  it('reuses an existing assistant message row instead of creating a duplicate when assistantMessageId is supplied', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for assistant message reuse tests');
+    }
+    const projectId = `proj-${randomUUID()}`;
+    const assistantMessageId = `assistant-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Assistant row reuse fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.ok).toBe(true);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    const dbFile = resolve(process.env.OD_DATA_DIR, 'app.sqlite');
+    const sqlite = new Database(dbFile);
+    try {
+      upsertMessage(sqlite as never, conversationId!, {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: '',
+        runStatus: 'failed',
+        startedAt: Date.now() - 1_000,
+        endedAt: Date.now() - 500,
+      });
+    } finally {
+      sqlite.close();
+    }
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'reused-assistant-row-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            assistantMessageId,
+            message: 'retry this turn',
+          }),
+        });
+        const body = await response.text();
+        expect(response.ok).toBe(true);
+        expect(body).toContain('reused-assistant-row-ok');
+      },
+    );
+
+    const verifyDb = new Database(dbFile, { readonly: true });
+    try {
+      const rows = verifyDb
+        .prepare(`SELECT id, content, run_id FROM messages WHERE conversation_id = ? AND role = 'assistant'`)
+        .all(conversationId) as Array<{ id: string; content: string; run_id: string | null }>;
+      expect(rows.filter((row) => row.id === assistantMessageId)).toHaveLength(1);
+      expect(rows.some((row) => row.id !== assistantMessageId && row.content.includes('reused-assistant-row-ok'))).toBe(false);
+      const reused = rows.find((row) => row.id === assistantMessageId);
+      expect(reused?.content).toContain('reused-assistant-row-ok');
+    } finally {
+      verifyDb.close();
+    }
+  });
+
+  it('rewrites the OpenCode scanner overflow into a generic retry message', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stderr.write('json-rpc id 4: opencode event stream: read opencode SSE: bufio.Scanner: token too long\\n');
+process.exit(1);
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            conversationId,
+            message: 'hello',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('AGENT_EXECUTION_FAILED');
+        expect(body).toContain('The run failed due to an unknown upstream streaming error. Please retry.');
+        expect(body).toContain('event: stderr');
+        expect(body).toContain('"status":"failed"');
+      },
+    );
+  });
+
+  it('retries transient AMR Link catalog failures before aborting startup', async () => {
+    const previousRuntimeKey = process.env.VELA_RUNTIME_KEY;
+    const previousLinkUrl = process.env.VELA_LINK_URL;
+    const stateFile = join(tmpdir(), `od-amr-model-retry-${randomUUID()}.json`);
+    try {
+      process.env.VELA_RUNTIME_KEY = 'fake-runtime-key';
+      process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+
+      await withFakeAgent(
+        'vela',
+        `
+const { existsSync, readFileSync, writeFileSync } = require('node:fs');
+const { spawn } = require('node:child_process');
+const fixture = ${JSON.stringify(FAKE_VELA_FIXTURE)};
+const stateFile = ${JSON.stringify(stateFile)};
+const args = process.argv.slice(2);
+if (args[0] === 'model' && args[1] === 'list') {
+  const state = existsSync(stateFile)
+    ? JSON.parse(readFileSync(stateFile, 'utf8'))
+    : { attempts: 0 };
+  state.attempts += 1;
+  writeFileSync(stateFile, JSON.stringify(state), 'utf8');
+  if (state.attempts < 3) {
+    process.stderr.write('Get "https://amr-link.open-design.ai/v1/models": context deadline exceeded\\n');
+    process.exit(1);
+  }
+}
+const child = spawn(process.execPath, [fixture, ...args], {
+  stdio: 'inherit',
+  env: process.env,
+});
+child.on('exit', (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  process.exit(code ?? 0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'amr',
+              message: 'hello',
+              model: 'deepseek-v3.2',
+            }),
+          });
+          const body = await response.text();
+
+          expect(response.ok).toBe(true);
+          expect(body).toContain('"type":"text_delta","delta":"Hello from fake "');
+          expect(body).toContain('"type":"text_delta","delta":"vela."');
+          expect(body).not.toContain('model_catalog_unavailable');
+          const attempts = JSON.parse(readFileSync(stateFile, 'utf8')) as { attempts: number };
+          expect(attempts.attempts).toBe(3);
+        },
+      );
+    } finally {
+      rmSync(stateFile, { force: true });
+      if (previousRuntimeKey == null) delete process.env.VELA_RUNTIME_KEY;
+      else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
+      if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
+      else process.env.VELA_LINK_URL = previousLinkUrl;
+    }
+  });
+
+  it('allows plugin authoring to succeed when the requested generated-plugin artifacts exist before close', async () => {
+    const projectId = `proj-plugin-authoring-success-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin authoring artifact success fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.status).toBe(200);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+const path = require('node:path');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  const pluginDir = path.join(process.cwd(), 'generated-plugin');
+  fs.mkdirSync(pluginDir, { recursive: true });
+  fs.writeFileSync(path.join(pluginDir, 'open-design.json'), JSON.stringify({ name: 'generated-plugin' }, null, 2));
+  fs.writeFileSync(path.join(pluginDir, 'SKILL.md'), '# Generated plugin\\n');
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 Open Design 插件脚手架。先读取文档规范，再生成插件文件。' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            pluginId: 'od-plugin-authoring',
+            message: '请创建一个可刷新、可审计、由 API 驱动的 Open Design 插件脚手架。',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('先读取文档规范，再生成插件文件');
+        expect(statusBody.status).toBe('succeeded');
+
+        const filesResponse = await fetch(`${baseUrl}/api/projects/${projectId}/files`);
+        expect(filesResponse.status).toBe(200);
+        const filesBody = await filesResponse.json() as { files: Array<{ name: string }> };
+        expect(filesBody.files.some((file) => file.name === 'generated-plugin/open-design.json')).toBe(true);
+        expect(filesBody.files.some((file) => file.name === 'generated-plugin/SKILL.md')).toBe(true);
+      },
+    );
+  });
+
+  it('does not report plugin authoring as succeeded when the agent only emits planning text without artifacts', async () => {
+    const projectId = `proj-plugin-authoring-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin authoring completion fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.status).toBe(200);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 Open Design 插件脚手架。先读取文档规范，再生成插件文件。' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            pluginId: 'od-plugin-authoring',
+            message: '请创建一个可刷新、可审计、由 API 驱动的 Open Design 插件脚手架。',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const {
+          runId,
+          pluginId,
+          appliedPluginSnapshotId,
+        } = await createResponse.json() as {
+          runId: string;
+          pluginId: string | null;
+          appliedPluginSnapshotId: string | null;
+        };
+        expect(pluginId).toBe('od-plugin-authoring');
+        expect(appliedPluginSnapshotId).toBeTruthy();
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('先读取文档规范，再生成插件文件');
+        expect(statusBody.status).not.toBe('succeeded');
+
+        const filesResponse = await fetch(`${baseUrl}/api/projects/${projectId}/files`);
+        expect(filesResponse.status).toBe(200);
+        const filesBody = await filesResponse.json() as { files: Array<{ name: string }> };
+        expect(filesBody.files.some((file) => file.name.startsWith('generated-plugin/'))).toBe(false);
+      },
+    );
+  });
+  it('closes the # Instructions block with an explicit "do not echo" guard so models do not parrot the prompt back', async () => {
+    // claude-opus-4-7 (and a few other instruction-tuned models) start
+    // their reply by echoing the # Instructions block verbatim, which
+    // shows up to users as the system prompt leading the visible
+    // answer. server.ts:9934 closes every Instructions block with a
+    // trailing guard line; this test pins the literal so a future
+    // refactor cannot silently drop it.
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('Do not quote, restate, or echo the # Instructions block above')
+      ? 'has-echo-guard'
+      : 'missing-echo-guard',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            message: 'hello',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('has-echo-guard');
+        expect(body).not.toContain('missing-echo-guard');
       },
     );
   });
@@ -476,6 +843,65 @@ process.stdin.on('end', () => {
         expect(body).not.toContain('unexpected-deck-framework');
       },
     );
+  });
+
+  it('honors mediaExecution on legacy chat requests', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        conversationId,
+        message: 'plan an image without using OD media',
+        skillId: 'imagegen',
+        mediaExecution: {
+          mode: 'disabled',
+          allowedSurfaces: ['image'],
+        },
+      }),
+    });
+    const body = await response.text();
+
+    expect(response.ok).toBe(true);
+    expect(body).toContain('unknown agent');
+
+    const runsResponse = await fetch(
+      `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+    );
+    const runsBody = await runsResponse.json() as {
+      runs: Array<{ mediaExecution?: { mode?: string; allowedSurfaces?: string[] } }>;
+    };
+    expect(runsBody.runs).toHaveLength(1);
+    expect(runsBody.runs[0]?.mediaExecution).toMatchObject({
+      mode: 'disabled',
+      allowedSurfaces: ['image'],
+    });
+  });
+
+  it('rejects invalid mediaExecution on legacy chat requests', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'opencode',
+        conversationId,
+        message: 'generate an image',
+        mediaExecution: { mode: 'provider-router' },
+      }),
+    });
+    const body = await response.text();
+
+    expect(response.status).toBe(400);
+    expect(body).toContain('mediaExecution.mode');
+
+    const runsResponse = await fetch(
+      `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+    );
+    const runsBody = await runsResponse.json() as { runs: unknown[] };
+    expect(runsBody.runs).toEqual([]);
   });
 
   it('propagates ad-hoc skill critique policy into the chat resolver', async () => {
@@ -1034,6 +1460,50 @@ process.exit(1);
     );
   });
 
+  it('suppresses Antigravity auth stdout and emits AGENT_AUTH_REQUIRED without an event: stdout delta', async () => {
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+// Simulate agy chat - printing the OAuth prompt and exiting 0
+process.stdout.write('Authentication required. Please visit the URL to log in: https://accounts.google.com/o/oauth2/auth?client_id=12345&redirect_uri=antigravity-redirect\\n');
+process.stdout.write('Waiting for authentication (timeout 30s)...\\n');
+process.stdout.write('Error: authentication timed out.\\n');
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'antigravity',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'AGENT_AUTH_REQUIRED');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('AGENT_AUTH_REQUIRED');
+        expect(eventsBody).not.toContain('event: stdout');
+        expect(eventsBody).not.toContain('accounts.google.com');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
   it('surfaces Qoder assistant error records through the SSE error channel', async () => {
     const qoderErrorLine = JSON.stringify({
       type: 'assistant',
@@ -1150,7 +1620,8 @@ setInterval(() => {}, 1000);
 
           expect(eventsBody).toContain('event: error');
           expect(eventsBody).toContain('Agent stalled without emitting any new output');
-          expect(eventsBody).toContain('Phase details: spawned agent binary');
+          expect(eventsBody).toContain('Phase details: spawned agent opencode;');
+          expect(eventsBody).not.toContain('spawned agent binary');
           expect(eventsBody).toMatch(/stdout arrived: (yes|no)/);
           expect(statusBody.status).toBe('failed');
         },
@@ -1508,6 +1979,43 @@ describe('chat prompt helpers', () => {
     expect(clientIdx).toBeGreaterThan(-1);
     expect(overrideIdx).toBeGreaterThan(clientIdx);
     expect(prompt.match(/## Codex built-in imagegen override/g)).toHaveLength(1);
+  });
+
+  it('omits the Codex final imagegen override when run media policy blocks execution', () => {
+    const metadata = {
+      kind: 'image',
+      imageModel: 'gpt-image-2',
+      imageAspect: '1:1',
+    };
+    const mediaExecution = {
+      mode: 'disabled',
+      allowedSurfaces: ['image'],
+    };
+    const generatedImagesDir = resolveCodexGeneratedImagesDir(
+      'codex',
+      metadata,
+      { CODEX_HOME: '/tmp/custom-codex-home' },
+      '/home/tester',
+      mediaExecution,
+    );
+    const otherwiseGrantedDir = resolve('/tmp/custom-codex-home/generated_images');
+    const override = resolveGrantedCodexImagegenOverride({
+      agentId: 'codex',
+      metadata,
+      codexGeneratedImagesDir: otherwiseGrantedDir,
+      extraAllowedDirs: [otherwiseGrantedDir],
+      mediaExecution,
+    });
+    const prompt = composeLiveInstructionPrompt({
+      daemonSystemPrompt: 'daemon media policy prompt',
+      runtimeToolPrompt: 'runtime tools',
+      clientSystemPrompt: 'client instructions',
+      finalPromptOverride: override,
+    });
+
+    expect(generatedImagesDir).toBeNull();
+    expect(override).toBeNull();
+    expect(prompt).not.toContain('## Codex built-in imagegen override');
   });
 
   it('defaults enabled research without an explicit query to the current message', () => {

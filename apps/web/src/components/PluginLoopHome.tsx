@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ApplyResult,
+  ChatSessionMode,
   InstalledPluginRecord,
   ProjectMetadata,
 } from '@open-design/contracts';
@@ -15,6 +16,8 @@ import { Icon } from './Icon';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { TrustBadge } from './TrustBadge';
 import { authorInitials, derivePluginSourceLinks } from '../runtime/plugin-source';
+import { useAnalytics } from '../analytics/provider';
+import { trackPluginLoopClick } from '../analytics/events';
 
 export interface PluginLoopSubmit {
   prompt: string;
@@ -39,9 +42,11 @@ export interface PluginLoopSubmit {
   projectKind?: 'prototype' | 'deck' | 'template' | 'image' | 'video' | 'audio' | 'other' | null;
   projectMetadata?: ProjectMetadata | null;
   workingDir?: string | null;
+  conversationMode?: ChatSessionMode;
   // Files staged on Home before the project exists. App uploads them
   // into the created project's Design Files before the first auto-send.
   attachments?: File[];
+  examplePromptContext?: { title: string; artifactType: string; brief: Record<string, string> };
 }
 
 interface Props {
@@ -56,6 +61,7 @@ interface ActivePlugin {
 
 export function PluginLoopHome({ onSubmit }: Props) {
   const { locale } = useI18n();
+  const analytics = useAnalytics();
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
@@ -128,6 +134,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
   function submit() {
     const trimmed = prompt.trim();
     if (!trimmed) return;
+    trackPluginLoopClick(analytics.track, { page_name: 'plugins', area: 'plugin_loop', element: 'submit', plugin_id: active?.record.id });
     onSubmit({
       prompt: trimmed,
       pluginId: active?.record.id ?? null,
@@ -168,7 +175,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
               <button
                 type="button"
                 className="plugin-loop-home__active-clear"
-                onClick={clearActive}
+                onClick={() => { trackPluginLoopClick(analytics.track, { page_name: 'plugins', area: 'plugin_loop', element: 'clear_active', plugin_id: active?.record.id }); clearActive(); }}
                 aria-label="Clear active plugin"
                 title="Clear active plugin"
               >
@@ -293,7 +300,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
                   <button
                     type="button"
                     className="plugin-loop-home__card-details"
-                    onClick={() => openDetails(p)}
+                    onClick={() => { trackPluginLoopClick(analytics.track, { page_name: 'plugins', area: 'plugin_loop', element: 'card_details', plugin_id: p.id }); openDetails(p); }}
                     aria-label={`View details for ${p.title}`}
                     data-testid={`view-details-${p.id}`}
                     title="View plugin details"
@@ -304,7 +311,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
                   <button
                     type="button"
                     className="plugin-loop-home__card-action"
-                    onClick={() => void usePlugin(p)}
+                    onClick={() => { trackPluginLoopClick(analytics.track, { page_name: 'plugins', area: 'plugin_loop', element: 'card_use', plugin_id: p.id }); void usePlugin(p); }}
                     disabled={isPending || pendingApplyId !== null}
                     aria-busy={isPending ? 'true' : undefined}
                     data-testid={`use-example-${p.id}`}

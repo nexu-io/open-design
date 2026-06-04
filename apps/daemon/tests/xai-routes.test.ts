@@ -25,11 +25,33 @@ const { onCallbackHolder, stopMock, startMock } = vi.hoisted(() => {
   return { onCallbackHolder: holder, stopMock: stop, startMock: start };
 });
 
+const {
+  proxyDispatcherCloseMock,
+  proxyDispatcherFactoryMock,
+  proxyDispatcherToken,
+} = vi.hoisted(() => {
+  const dispatcher = { tag: 'xai-test-dispatcher' };
+  const close = vi.fn(async () => {});
+  const factory = vi.fn(() => ({
+    close,
+    requestInit: { dispatcher },
+  }));
+  return {
+    proxyDispatcherCloseMock: close,
+    proxyDispatcherFactoryMock: factory,
+    proxyDispatcherToken: dispatcher,
+  };
+});
+
 vi.mock('../src/xai-oauth-server.js', () => ({
   XAI_CALLBACK_HOST: '127.0.0.1',
   XAI_CALLBACK_PORT: 56121,
   XAI_CALLBACK_PATH: '/callback',
   startCallbackListener: startMock,
+}));
+
+vi.mock('../src/connectionTest.js', () => ({
+  proxyDispatcherRequestInit: proxyDispatcherFactoryMock,
 }));
 
 import {
@@ -121,6 +143,8 @@ describe('xai-routes', () => {
     onCallbackHolder.current = null;
     startMock.mockClear();
     stopMock.mockClear();
+    proxyDispatcherCloseMock.mockClear();
+    proxyDispatcherFactoryMock.mockClear();
     app = await startTestApp(projectRoot);
   });
 
@@ -183,6 +207,7 @@ describe('xai-routes', () => {
     globalThis.fetch = vi.fn(async (input: any, init?: any) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === XAI_OAUTH_TOKEN_ENDPOINT) {
+        expect(init?.dispatcher).toBe(proxyDispatcherToken);
         return new Response(
           JSON.stringify({
             access_token: 'fresh-bearer',
@@ -209,6 +234,8 @@ describe('xai-routes', () => {
     expect(status.scope).toBe('openid profile');
     expect(status.listening).toBe(false); // listener cleared after handleCallback
     expect(typeof status.expiresAt).toBe('number');
+    expect(proxyDispatcherFactoryMock).toHaveBeenCalledTimes(1);
+    expect(proxyDispatcherCloseMock).toHaveBeenCalledTimes(1);
   });
 
   it('POST /api/xai/oauth/complete (paste-back) exchanges code and stores token', async () => {
@@ -220,6 +247,7 @@ describe('xai-routes', () => {
     globalThis.fetch = vi.fn(async (input: any, init?: any) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === XAI_OAUTH_TOKEN_ENDPOINT) {
+        expect(init?.dispatcher).toBe(proxyDispatcherToken);
         return new Response(
           JSON.stringify({
             access_token: 'pasted-bearer',
@@ -253,6 +281,8 @@ describe('xai-routes', () => {
     expect(status.listening).toBe(false);
     // Paste-back must stop the loopback listener so it doesn't dangle.
     expect(stopMock).toHaveBeenCalled();
+    expect(proxyDispatcherFactoryMock).toHaveBeenCalledTimes(1);
+    expect(proxyDispatcherCloseMock).toHaveBeenCalledTimes(1);
   });
 
   it('POST /api/xai/oauth/complete rejects empty state or code', async () => {
@@ -340,11 +370,16 @@ describe('xai-routes', () => {
     );
 
     let xaiHit = 0;
+    let bodyConsumed = false;
+    proxyDispatcherCloseMock.mockImplementationOnce(async () => {
+      expect(bodyConsumed).toBe(true);
+    });
     globalThis.fetch = vi.fn(async (input: any, init?: any) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url.includes('xai.example.test')) {
         xaiHit += 1;
         expect(url).toBe('https://xai.example.test/v1/responses');
+        expect(init?.dispatcher).toBe(proxyDispatcherToken);
         const headers = init?.headers as Record<string, string>;
         expect(headers.authorization).toBe('Bearer stored-test-bearer');
         expect(headers['content-type']).toBe('application/json');
@@ -358,34 +393,38 @@ describe('xai-routes', () => {
           allowed_x_handles: ['NousResearch', 'xai'],
           from_date: '2026-05-01',
         });
-        return new Response(
-          JSON.stringify({
-            output: [
-              {
-                content: [
-                  {
-                    text: 'Hermes 0.11 shipped xAI integration on 5/15.',
-                    annotations: [
-                      {
-                        type: 'url_citation',
-                        url: 'https://x.com/NousResearch/status/123',
-                        start_index: 0,
-                        end_index: 7,
-                      },
-                      {
-                        type: 'url_citation',
-                        url: 'https://x.com/xai/status/456',
-                        start_index: 8,
-                        end_index: 15,
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
+        return {
+          ok: true,
+          status: 200,
+          text: vi.fn(async () => {
+            bodyConsumed = true;
+            return JSON.stringify({
+              output: [
+                {
+                  content: [
+                    {
+                      text: 'Hermes 0.11 shipped xAI integration on 5/15.',
+                      annotations: [
+                        {
+                          type: 'url_citation',
+                          url: 'https://x.com/NousResearch/status/123',
+                          start_index: 0,
+                          end_index: 7,
+                        },
+                        {
+                          type: 'url_citation',
+                          url: 'https://x.com/xai/status/456',
+                          start_index: 8,
+                          end_index: 15,
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            });
           }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
+        } as unknown as Response;
       }
       // Pass through anything that isn't an xAI call (the test's own
       // request to the local express server).
@@ -410,6 +449,8 @@ describe('xai-routes', () => {
     ]);
     expect(body.model).toBe('grok-4.20-reasoning');
     expect(xaiHit).toBe(1);
+    expect(proxyDispatcherFactoryMock).toHaveBeenCalledTimes(1);
+    expect(proxyDispatcherCloseMock).toHaveBeenCalledTimes(1);
   });
 
   it('POST /api/xai/search surfaces upstream errors as 502', async () => {

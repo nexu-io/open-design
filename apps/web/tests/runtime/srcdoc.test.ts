@@ -37,6 +37,84 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('foreignObject');
   });
 
+  it('paints an opaque background before drawing so empty rasters never flatten to black', () => {
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
+
+    // A fresh 2D canvas is transparent black; without an opaque base, a
+    // foreignObject that paints nothing flattens to a solid BLACK PNG in
+    // clipboards/viewers (the reported bug). The bridge must fill first.
+    expect(srcdoc).toContain('function snapshotBackgroundColor()');
+    expect(srcdoc).toContain('ctx.fillStyle = bgColor;');
+    expect(srcdoc).toContain('ctx.fillRect(0, 0, w, h);');
+    // The fill happens before the rasterized image is drawn over it.
+    const fillIdx = srcdoc.indexOf('ctx.fillRect(0, 0, w, h);');
+    const drawIdx = srcdoc.indexOf('ctx.drawImage(img, 0, 0, w, h);');
+    expect(fillIdx).toBeGreaterThan(-1);
+    expect(drawIdx).toBeGreaterThan(fillIdx);
+  });
+
+  it('reports an empty-render error instead of shipping a blank capture', () => {
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
+
+    // When the foreignObject paints nothing the canvas is uniform; the bridge
+    // must surface that as an honest failure so the host can fall back / show
+    // an error rather than copy a (now white-filled but still empty) frame.
+    expect(srcdoc).toContain('function canvasLooksBlank(');
+    expect(srcdoc).toContain("error: 'empty-render'");
+  });
+
+  it('renders snapshot SVGs through data URLs so canvas export stays origin-clean', () => {
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
+
+    expect(srcdoc).toContain('function encodedSvgDataUrl()');
+    expect(srcdoc).toContain('img.src = encodedSvgDataUrl();');
+    expect(srcdoc).not.toContain('createObjectURL');
+    expect(srcdoc).not.toContain('snapshot too large');
+  });
+
+  it('crops snapshots with an XHTML wrapper instead of moving foreignObject offscreen', () => {
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
+
+    expect(srcdoc).toContain('function scrollOffset()');
+    expect(srcdoc).toContain('left:\' + (-scroll.x) + \'px;top:\' + (-scroll.y) + \'px;');
+    expect(srcdoc).toContain('<foreignObject x="0" y="0"');
+    expect(srcdoc).not.toContain('<foreignObject x="\' + (-window.scrollX || 0)');
+  });
+
+  it('removes external stylesheet dependencies from snapshot clones before rasterizing', () => {
+    const srcdoc = buildSrcdoc('<link rel="stylesheet" href="https://fonts.example/app.css"><style>@import "https://fonts.example/css"; @font-face { font-family: Remote; src: url(remote.woff2); } main { color: red; }</style><main>Hero</main>');
+
+    expect(srcdoc).toContain('link[rel~="stylesheet"], link[rel~="preload"], link[rel~="preconnect"]');
+    expect(srcdoc).toContain('.replace(/@import[^;]+;/gi,');
+    expect(srcdoc).toContain('.replace(/@font-face\\s*\\{[^}]*\\}/gi,');
+  });
+
+  it('prunes hidden snapshot clone nodes before rasterizing decks', () => {
+    const srcdoc = buildSrcdoc(deckHtml, { deck: true });
+
+    expect(srcdoc).toContain('function pruneHiddenSnapshotNodes');
+    expect(srcdoc).toContain("computed.display === 'none'");
+    expect(srcdoc).toContain("computed.visibility === 'hidden'");
+    expect(srcdoc).toContain('pruneHiddenSnapshotNodes(document.documentElement, clone)');
+  });
+
+  it('can guard preview iframes against load-time focus stealing', () => {
+    // This test would fail if injectPreviewFocusGuard were removed from
+    // buildSrcdoc — the guard script would be absent, and the assertions
+    // below would not find the data-od-preview-focus-guard marker.
+    const srcdoc = buildSrcdoc(
+      '<!doctype html><html><head><script>window.focus();document.body.focus();</script></head><body>Hero</body></html>',
+      { previewFocusGuard: true },
+    );
+
+    expect(srcdoc).toContain('data-od-preview-focus-guard');
+    expect(srcdoc).toContain("Object.defineProperty(window, 'focus'");
+    expect(srcdoc).toContain("Object.defineProperty(HTMLElement.prototype, 'focus'");
+    expect(srcdoc.indexOf('data-od-preview-focus-guard')).toBeLessThan(
+      srcdoc.indexOf('<script>window.focus();document.body.focus();</script>'),
+    );
+  });
+
   it('only uses directly mutable slide conventions for setActive support', () => {
     const srcdoc = buildSrcdoc(
       '<section class="slide">One</section><section class="slide">Two</section>',
@@ -45,7 +123,8 @@ describe('buildSrcdoc', () => {
 
     const canSetActive = srcdoc.match(/function canSetActive\(list\)\{([\s\S]*?)\n  \}/)?.[1] ?? '';
 
-    expect(canSetActive).toContain('findActiveByClass(list) >= 0');
+    expect(canSetActive).toContain('var active = findActiveByClass(list);');
+    expect(canSetActive).toContain('hasComputedHiddenSibling(list, active)');
     expect(canSetActive).toContain("list[i].style.display === 'none'");
     expect(canSetActive).toContain("list[i].style.visibility === 'hidden'");
     expect(canSetActive).toContain("list[i].hasAttribute('hidden')");
@@ -75,6 +154,8 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('schedulePostPreviewScroll');
     expect(srcdoc).toContain("type: 'od:preview-scroll'");
     expect(srcdoc).toContain("type: 'od:preview-scroll-request'");
+    expect(srcdoc).toContain("data.type === 'od:preview-scroll-by'");
+    expect(srcdoc).toContain('previewScrollBy(data.left, data.top)');
     expect(srcdoc).toContain('data-od-selection-bridge-style');
     expect(srcdoc).toContain('html[data-od-comment-mode] body iframe');
     expect(srcdoc).toContain('html[data-od-inspect-mode] body iframe');

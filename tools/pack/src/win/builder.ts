@@ -33,8 +33,13 @@ import {
 } from "./manifest.js";
 import { ensureNsisPersianLanguageAlias, writeNsisInclude } from "./nsis.js";
 import { sanitizeNamespace } from "./paths.js";
-import { resolveWinTargets } from "./report.js";
+import {
+  resolveElectronBuilderWinTargets,
+  shouldBuildWinNsisInstaller,
+  shouldBuildWinPortableZip,
+} from "./report.js";
 import type { ResourceTreeResult } from "./resources.js";
+import { buildWinPortableZip } from "./zip.js";
 import type {
   ElectronBuilderDirCacheMetadata,
   WinBuiltAppManifest,
@@ -101,7 +106,12 @@ async function runElectronBuilderRaw(config: ToolPackConfig, paths: WinPaths, pr
     buildDependenciesFromSource: ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
     compression: "maximum",
     directories: { output: paths.appBuilderOutputRoot },
-    electronDist: config.electronDistPath,
+    // Let electron-builder download the win32 Electron itself instead of
+    // pointing at node_modules' dist. pnpm does not reliably materialize the
+    // Electron dist on CI runners (electron.exe can be missing), which made
+    // the rename to `${PRODUCT_NAME}.exe` fail with ENOENT. The mac builder
+    // already relies on electron-builder's own download and is the only
+    // platform that stayed green through this regression.
     electronVersion: config.electronVersion,
     executableName: PRODUCT_NAME,
     extraMetadata: {
@@ -141,7 +151,7 @@ async function runElectronBuilderRaw(config: ToolPackConfig, paths: WinPaths, pr
     win: {
       artifactName: `${PRODUCT_NAME}-${namespaceToken}.\${ext}`,
       icon: paths.winIconPath,
-      target: resolveWinTargets(config.to).map((target) => ({ arch: ["x64"], target })),
+      target: resolveElectronBuilderWinTargets(config.to).map((target) => ({ arch: ["x64"], target })),
     },
   };
 
@@ -337,7 +347,13 @@ export async function runElectronBuilder(
     unpackedRoot: cachedUnpackedRoot,
     webStandaloneHookAuditPath: (await pathExists(paths.webStandaloneHookAuditPath)) ? paths.webStandaloneHookAuditPath : null,
   });
-  if (config.to === "nsis" || config.to === "all") {
-    await buildCustomWinNsisInstaller(config, paths, await materializeCachedUnpackedForInstaller(cachedUnpackedRoot, paths, packagedVersion));
+  if (shouldBuildWinNsisInstaller(config.to) || shouldBuildWinPortableZip(config.to)) {
+    const materialized = await materializeCachedUnpackedForInstaller(cachedUnpackedRoot, paths, packagedVersion);
+    if (shouldBuildWinNsisInstaller(config.to)) {
+      await buildCustomWinNsisInstaller(config, paths, materialized);
+    }
+    if (shouldBuildWinPortableZip(config.to)) {
+      await buildWinPortableZip(config, paths, materialized);
+    }
   }
 }

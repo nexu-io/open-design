@@ -8,8 +8,8 @@ vi.mock("electron", () => ({
   app: {},
 }));
 
+import { PackagedPathAccessError } from "../src/errors.js";
 import {
-  PackagedPathAccessError,
   claimPackagedSingleInstanceLock,
   verifyPackagedDataRootWritable,
 } from "../src/launch.js";

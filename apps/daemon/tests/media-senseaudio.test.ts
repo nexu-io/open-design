@@ -214,6 +214,50 @@ describe('senseaudio media generation', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('forwards requestInit.dispatcher through SenseAudio image submit and download fetches', async () => {
+    await writeConfig({
+      providers: {
+        senseaudio: {
+          apiKey: 'sense-test-key',
+          baseUrl: TEST_SENSEAUDIO_BASE_URL,
+        },
+      },
+    });
+
+    const dispatcher = {} as NonNullable<RequestInit['dispatcher']>;
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      if (String(input) === `${TEST_SENSEAUDIO_BASE_URL}/v1/image/sync`) {
+        expect(init?.dispatcher).toBe(dispatcher);
+        return new Response(JSON.stringify({
+          url: 'https://cdn.example.test/senseaudio-image.png',
+          base_resp: { status_code: 0, status_msg: 'success' },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      expect(String(input)).toBe('https://cdn.example.test/senseaudio-image.png');
+      expect(init?.dispatcher).toBe(dispatcher);
+      expect(init?.redirect).toBe('error');
+      return new Response(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'senseaudio-image-2.0-260319',
+      prompt: 'A reference render.',
+      output: 'senseaudio-image.png',
+      requestInit: { dispatcher },
+    });
+
+    expect(result.providerId).toBe('senseaudio');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('errors when no API key is configured', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

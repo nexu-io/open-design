@@ -42,17 +42,78 @@ export interface ProjectFile {
   stubGuardWarning?: ProjectFileStubGuardWarning;
 }
 
+export interface ProjectFolder {
+  name: string;
+  path: string;
+  type: 'dir';
+  size: 0;
+  mtime: number;
+}
+
 export interface ProjectFilesResponse {
   files: ProjectFile[];
+}
+
+export interface ProjectFoldersResponse {
+  folders: ProjectFolder[];
+}
+
+export type ProjectExportManifestFileRole =
+  | 'entry'
+  | 'artifact'
+  | 'supporting'
+  | 'asset'
+  | 'source'
+  | 'other';
+
+export interface ProjectExportManifestFile extends ProjectFile {
+  included: boolean;
+  role: ProjectExportManifestFileRole;
+  reasons: string[];
+}
+
+export interface ProjectExportManifestArtifact {
+  file: string;
+  title: string;
+  kind: ArtifactKind | null;
+  renderer: string | null;
+  status: string | null;
+  exports: string[];
+  supportingFiles: string[];
+  updatedAt: string | null;
+}
+
+export interface ProjectExportManifestResponse {
+  schema: 'open-design.project-export-manifest.v1';
+  projectId: string;
+  projectName: string | null;
+  generatedAt: string;
+  entryFile: string | null;
+  files: ProjectExportManifestFile[];
+  artifacts: ProjectExportManifestArtifact[];
+}
+
+export interface ProjectPreviewUrlResponse {
+  url: string;
+  file: string;
+  csp: string;
+  iframeSandbox: string;
+  opaqueOrigin: true;
 }
 
 export interface ProjectFileResponse {
   file: ProjectFile;
 }
 
+export interface ProjectFolderResponse {
+  folder: ProjectFolder;
+}
+
 export interface UploadProjectFilesResponse extends ProjectFilesResponse {}
 
 export interface DeleteProjectFileResponse extends OkResponse {}
+
+export interface DeleteProjectFolderResponse extends OkResponse {}
 
 export interface RenameProjectFileRequest {
   from: string;

@@ -9,6 +9,7 @@ import {
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
+  SIDECAR_MODES,
   normalizeDesktopSidecarMessage,
   type DesktopClickInput,
   type DesktopEvalInput,
@@ -27,7 +28,7 @@ import {
   requestJsonIpc,
   resolveAppIpcPath,
   resolveLogFilePath,
-  resolveNamespaceRoot,
+  resolveRuntimeNamespaceRoot,
   type JsonIpcServerHandle,
   type SidecarRuntimeContext,
 } from "@open-design/sidecar";
@@ -46,7 +47,12 @@ import {
 // runtime. They are part of the security boundary for child-window
 // navigation (see `setWindowOpenHandler` in `runtime.ts`), so
 // pinning them is worth the small extra surface.
-export { isAllowedChildWindowUrl, isHttpUrl, resolveDesktopStatusUrl } from "./runtime.js";
+export {
+  isAllowedChildWindowUrl,
+  isAllowedEmbeddedBrowserUrl,
+  isHttpUrl,
+  resolveDesktopStatusUrl,
+} from "./runtime.js";
 
 // Re-export the path-validation helpers for the same reason (#974).
 // shell.openPath is privileged main-process behaviour; pinning the
@@ -235,11 +241,31 @@ function installDesktopMenu(
       },
       {
         label: "Help",
+        role: "help",
         submenu: [
           {
-            label: "Open Design",
+            label: "Documentation",
             click() {
-              void shell.openExternal("https://github.com/nexu-io/open-design");
+              void shell.openExternal("https://github.com/nexu-io/open-design#readme");
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Contact Us",
+            click() {
+              void shell.openExternal("https://x.com/nexudotio");
+            },
+          },
+          {
+            label: "Report Issue",
+            click() {
+              void shell.openExternal("https://github.com/nexu-io/open-design/issues/new");
+            },
+          },
+          {
+            label: "Join Discord",
+            click() {
+              void shell.openExternal("https://discord.gg/mHAjSMV6gz");
             },
           },
           { type: "separator" },
@@ -363,10 +389,17 @@ export async function runDesktopMain(
     },
     { openPath: (path) => shell.openPath(path) },
   );
-  const namespaceRoot = resolveNamespaceRoot({
-    base: runtime.base,
+  // Resolve the namespace root the same way the diagnostics export does
+  // (apps/desktop/src/main/diagnostics.ts). In packaged builds `runtime.base`
+  // is `<namespaceRoot>/runtime`, so re-appending the namespace via
+  // `resolveNamespaceRoot` would write renderer.log to a phantom
+  // `<namespaceRoot>/runtime/<namespace>/logs/desktop` dir that the export
+  // reader never looks in. Keeping both sides on `resolveRuntimeNamespaceRoot`
+  // co-locates renderer.log with the desktop log dir AND keeps it captured.
+  const namespaceRoot = resolveRuntimeNamespaceRoot({
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-    namespace: runtime.namespace,
+    runtime,
+    runtimeMode: SIDECAR_MODES.RUNTIME,
   });
   const desktopLogPath = resolveLogFilePath({
     app: APP_KEYS.DESKTOP,

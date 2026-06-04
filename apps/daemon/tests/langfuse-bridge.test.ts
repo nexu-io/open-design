@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { reportRunCompletedFromDaemon } from '../src/langfuse-bridge.js';
+import { buildPromptStackTelemetry } from '../src/prompt-telemetry.js';
 
 interface FakeMessage {
   id: string;
@@ -257,14 +258,68 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(trace.metadata.eventsSummary.errors).toBe(0);
     expect(trace.metadata.tokens).toEqual({
       input: 100,
+      inputProvider: 100,
+      inputEffective: 100,
       output: 200,
       total: 300,
+      estimatedContext: 93,
+      cacheTokenSource: 'unavailable',
     });
     expect(trace.metadata.artifacts).toEqual([
       { slug: 'index.html', type: 'html', sizeBytes: 4096 },
       { slug: 'style.css', type: 'code', sizeBytes: 800 },
     ]);
     expect(trace.metadata.success).toBe(true);
+  });
+
+  it('forwards run prompt telemetry into trace and generation metadata', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-1',
+      telemetry: { metrics: true, content: true, artifactManifest: false },
+    });
+    const promptTelemetry = buildPromptStackTelemetry({
+      composedPrompt:
+        '# Instructions\n\nUse /Users/alice/project\n\n---\n# User request\n\ndesign a coffee landing page',
+      sections: [
+        { kind: 'daemonSystemPrompt', content: 'Use /Users/alice/project' },
+        { kind: 'userRequest', content: 'design a coffee landing page' },
+      ],
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 207 }));
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({
+          'conv-1': [{ id: 'msg-1', role: 'assistant', content: 'Here is a draft …' }],
+        }),
+        dataDir,
+        run: makeRun({ promptTelemetry } as any) as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    const batch = JSON.parse(init.body as string).batch as any[];
+    const trace = batch[0].body;
+    const generation = bodyOf(batch, 'generation-create', 'llm');
+    expect(trace.input).toBe('design a coffee landing page');
+    expect(generation.input).toBe('design a coffee landing page');
+    expect(trace.metadata.promptStack.sections[0].redactedContent).toContain(
+      '[REDACTED:path]',
+    );
+    expect(generation.metadata.promptStack).toEqual(trace.metadata.promptStack);
+    expect(
+      trace.metadata.promptStack.sections.some(
+        (section: { kind: string }) => section.kind === 'userRequest',
+      ),
+    ).toBe(true);
+    expect(trace.metadata.promptStack_section_userRequest_present).toBeUndefined();
   });
 
   it('attaches turn-level config (model / reasoning / skill / DS) to trace + generation', async () => {
@@ -334,6 +389,131 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(generation.modelParameters).toEqual({ reasoning: 'high' });
   });
 
+  it('labels turn.model with the agent-reported model on default-model runs', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-2',
+      telemetry: { metrics: true, content: true, artifactManifest: false },
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 207 }));
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      const run = makeRun({
+        // Request did not pin a model (the `default` placeholder), so the
+        // resolved model must come from the agent's reported status event —
+        // matching the agent-reported fallback server.ts uses for PostHog.
+        model: 'default',
+      }) as any;
+      run.events.unshift({
+        id: 0,
+        event: 'agent',
+        timestamp: run.createdAt + 10,
+        data: { type: 'status', label: 'model', model: 'claude-opus-4-1' },
+      });
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({ 'conv-1': [] }),
+        dataDir,
+        run,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    const batch = JSON.parse(init.body as string).batch as any[];
+    const trace = batch[0].body;
+    const generation = bodyOf(batch, 'generation-create', 'llm');
+
+    expect(trace.metadata.model).toBe('claude-opus-4-1');
+    expect(trace.tags).toEqual(
+      expect.arrayContaining(['model:claude-opus-4-1']),
+    );
+    expect(generation.model).toBe('claude-opus-4-1');
+  });
+
+  it('forwards token usage for a totalTokens-only usage event', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-3',
+      telemetry: { metrics: true, content: true, artifactManifest: false },
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 207 }));
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      const run = makeRun() as any;
+      // A provider that only reports an aggregate total — no input/output
+      // breakdown. scanRunEventsForUsageAnalytics still surfaces total_tokens,
+      // and the bridge must carry it through to Langfuse so the per-trace UI
+      // does not lose token visibility and stays consistent with PostHog.
+      run.events = [
+        {
+          id: 1,
+          event: 'agent',
+          timestamp: run.createdAt + 1000,
+          data: { type: 'usage', usage: { total_tokens: 512 } },
+        },
+      ];
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({ 'conv-1': [] }),
+        dataDir,
+        run,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    const batch = JSON.parse(init.body as string).batch as any[];
+    const trace = batch[0].body;
+    const generation = bodyOf(batch, 'generation-create', 'llm');
+    // total_tokens must reach the trace metadata even with no input/output.
+    expect(trace.metadata.tokens).toBeTruthy();
+    expect(trace.metadata.tokens.total).toBe(512);
+    expect(trace.metadata.tokens.input).toBeUndefined();
+    expect(trace.metadata.tokens.output).toBeUndefined();
+    // …and onto the Langfuse generation usage so cost/token views populate.
+    expect(generation.usage.total).toBe(512);
+  });
+
+  it('uses the default model bucket for a default-model run with no status/model event', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-4',
+      telemetry: { metrics: true, content: true, artifactManifest: false },
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 207 }));
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      // Request never pinned a concrete model (the `default` placeholder) and
+      // the agent never reported one. Keep this aligned with PostHog's
+      // model_id bucket so Langfuse traces remain filterable by model state.
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({ 'conv-1': [] }),
+        dataDir,
+        run: makeRun({ model: 'default' }) as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    const batch = JSON.parse(init.body as string).batch as any[];
+    const trace = batch[0].body;
+    const generation = bodyOf(batch, 'generation-create', 'llm');
+    expect(trace.metadata.model).toBe('default');
+    expect(trace.tags).toEqual(expect.arrayContaining(['model:default']));
+    expect(generation.model).toBe('default');
+  });
+
   it('omits artifacts when that gate is off', async () => {
     await writeAppCfg({
       installationId: 'install-1',
@@ -375,8 +555,12 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     // tokens + eventsSummary are still in metadata since they're metrics
     expect(trace.metadata.tokens).toEqual({
       input: 100,
+      inputProvider: 100,
+      inputEffective: 100,
       output: 200,
       total: 300,
+      estimatedContext: 93,
+      cacheTokenSource: 'unavailable',
     });
   });
 
@@ -463,6 +647,46 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(bodyOf(batch, 'event-create', 'run-error').statusMessage).toBe(
       'agent stream blew up',
     );
+  });
+
+  it('adds redacted stderr tail metadata for failed runs', async () => {
+    await writeAppCfg({
+      installationId: 'install-1',
+      telemetry: { metrics: true, content: true },
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 207 }));
+    const rawKey = `sk-${'a'.repeat(48)}`;
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({ 'conv-1': [] }),
+        dataDir,
+        run: makeRun({
+          status: 'failed',
+          events: [
+            { id: 1, event: 'stderr', data: { chunk: `provider 429 OPENAI_API_KEY=${rawKey}\n` } },
+            { id: 2, event: 'error', data: { error: { message: 'provider failed' } } },
+          ],
+        }) as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    const payload = init.body as string;
+    const batch = JSON.parse(payload).batch as any[];
+    expect(batch[0].body.metadata.stderr).toEqual({
+      tail: 'provider 429 OPENAI_API_KEY=[REDACTED:sk_key]',
+      lineCount: 1,
+      truncated: false,
+    });
+    expect(payload).not.toContain(rawKey);
   });
 
   it('survives a missing assistant message (web has not PUT yet)', async () => {

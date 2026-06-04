@@ -42,9 +42,18 @@ tsconfig.tsbuildinfo
 .cursor/
 .agents/
 .opencode/
-.claude/
+.claude/*
+# Exception: od-contribute skill ships with the repo so the OD app can mount it
+# for non-coder contributors. Personal Claude state (sessions, settings, etc.) stays ignored.
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/od-contribute/
+!.claude/commands/
+.claude/commands/*
+!.claude/commands/od-contribute.md
 .codex/
 .deepseek/
+.antigravitycli/
 
 # Commander task scratchpad; keep local task notes out of git by default.
 .task/
@@ -67,4 +76,7 @@ docs/superpowers/
 # on every deploy. Should not be committed (~70MB of PNGs).
 apps/landing-page/public/previews/
 
+# Ad-hoc local e2e scripts and their screenshots
+e2e/scripts/test-fal-webui.ts
+e2e/scripts/fal-webui-*.png
 growth/**

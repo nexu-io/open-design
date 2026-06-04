@@ -9,6 +9,7 @@ import {
   findExistingArtifactProjectFile,
   resolveRetryTarget,
   resolveSucceededRunStatus,
+  selectPrimaryProjectFile,
   shouldClearActiveRunRefs,
 } from '../../src/components/ProjectView';
 import type { Artifact, ChatMessage, ProjectFile } from '../../src/types';
@@ -59,6 +60,22 @@ function artifactProjectFile(name: string, mtime: number): ProjectFile {
     },
     kind: 'html',
     mime: 'text/html',
+    mtime,
+    name,
+    size: 100,
+  };
+}
+
+function projectFile(
+  name: string,
+  kind: ProjectFile['kind'],
+  mtime: number,
+  artifactManifest?: ProjectFile['artifactManifest'],
+): ProjectFile {
+  return {
+    artifactManifest,
+    kind,
+    mime: kind === 'html' ? 'text/html' : 'application/octet-stream',
     mtime,
     name,
     size: 100,
@@ -118,6 +135,8 @@ vi.mock('../../src/state/projects', () => ({
   patchProject: (...args: unknown[]) => patchProject(...args),
   saveMessage: (...args: unknown[]) => saveMessage(...args),
   saveTabs: (...args: unknown[]) => saveTabs(...args),
+  cacheTabsLocally: (_projectId: string, state: unknown) => state,
+  persistTabsToDaemonNow: vi.fn(),
 }));
 
 vi.mock('../../src/components/AppChromeHeader', () => ({
@@ -136,8 +155,12 @@ vi.mock('../../src/components/ChatPane', () => ({
   },
 }));
 
+const fileWorkspaceSpy = vi.fn();
 vi.mock('../../src/components/FileWorkspace', () => ({
-  FileWorkspace: () => null,
+  FileWorkspace: (props: Record<string, unknown>) => {
+    fileWorkspaceSpy(props);
+    return null;
+  },
 }));
 
 vi.mock('../../src/components/Loading', () => ({
@@ -165,6 +188,30 @@ describe('terminal replay artifact recovery', () => {
       .toBeNull();
     expect(findExistingArtifactProjectFile(replayArtifact, [stale, current], { minMtime: runCreatedAt }))
       .toBe(current);
+  });
+});
+
+describe('selectPrimaryProjectFile', () => {
+  it('prefers explicit primary manifests over newer renderable files', () => {
+    const newer = projectFile('preview.html', 'html', 2_000);
+    const primary = projectFile('index.html', 'html', 1_000, {
+      entry: 'index.html',
+      exports: ['html'],
+      kind: 'html',
+      primary: true,
+      renderer: 'html',
+      title: 'Index',
+      version: 1,
+    });
+
+    expect(selectPrimaryProjectFile([newer, primary])).toBe(primary);
+  });
+
+  it('ignores sidecar manifest files when choosing a fallback', () => {
+    const sidecar = projectFile('index.html.artifact.json', 'text', 2_000);
+    const html = projectFile('index.html', 'html', 1_000);
+
+    expect(selectPrimaryProjectFile([sidecar, html])).toBe(html);
   });
 });
 
@@ -661,6 +708,98 @@ describe('ProjectView daemon cleanup', () => {
     }
   });
 
+  it('queues board comment attachments while the current daemon run is still busy', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockImplementation(async () => new Promise<void>(() => {}));
+
+    render(
+      <ProjectView
+        project={{
+          id: 'project-comments',
+          name: 'Project',
+          skillId: null,
+          designSystemId: null,
+        } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const chatProps = await waitForReadyChatPaneProps();
+    await chatProps.onSend!('keep running', [], []);
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.streaming).toBe(true);
+    });
+
+    const workspaceProps = fileWorkspaceSpy.mock.calls.at(-1)?.[0] as {
+      onSendBoardCommentAttachments?: (attachments: unknown[]) => Promise<boolean | void>;
+    };
+    expect(workspaceProps.onSendBoardCommentAttachments).toBeTruthy();
+
+    await workspaceProps.onSendBoardCommentAttachments!([
+      {
+        id: 'hero-board-1',
+        order: 1,
+        filePath: 'preview.html',
+        elementId: 'hero',
+        selector: '[data-od-id="hero"]',
+        label: 'Hero',
+        comment: 'Use a warmer accent',
+        currentText: 'Hero',
+        pagePosition: { x: 10, y: 20, width: 100, height: 40 },
+        htmlHint: '<main data-od-id="hero">',
+        source: 'board-batch',
+      },
+    ]);
+
+    await waitFor(() => {
+      const latest = chatPaneSpy.mock.calls.at(-1)?.[0] as {
+        queuedItems?: Array<{
+          prompt?: string;
+          commentAttachments?: Array<{
+            comment: string;
+            commentContext?: string;
+            elementId?: string;
+          }>;
+        }>;
+      };
+      expect(latest.queuedItems).toHaveLength(1);
+      // Each board comment is queued as its own task: the comment text becomes
+      // the task prompt while the attachment rides along as element context
+      // (comment blanked, commentContext === 'query').
+      expect(latest.queuedItems?.[0]?.prompt).toBe('Use a warmer accent');
+      const queuedAttachment = latest.queuedItems?.[0]?.commentAttachments?.[0];
+      expect(queuedAttachment?.elementId).toBe('hero');
+      expect(queuedAttachment?.commentContext).toBe('query');
+    });
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+  });
+
   it('audits design-system workspace output after first auto-send and seeds a bounded repair prompt', async () => {
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);
@@ -1032,6 +1171,75 @@ describe('ProjectView daemon cleanup', () => {
         !call[2]?.runId,
     );
     expect(phantomSave).toBeUndefined();
+  });
+
+  it('persists a daemon assistant row as failed after an AMR auth error returns post-run creation', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: { onError: (error: Error) => void };
+    }) => {
+      options.onRunCreated?.('run-auth-expired');
+      options.handlers.onError(
+        new Error('Your authentication token has expired. Please sign in again.'),
+      );
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-auth-expired', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('retry auth', [], []);
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const failedAssistantSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-auth-expired' &&
+          call[1] === 'conv-1' &&
+          call[2]?.role === 'assistant' &&
+          call[2]?.runId === 'run-auth-expired' &&
+          call[2]?.runStatus === 'failed' &&
+          call[2]?.events?.some(
+            (event: { kind?: string; label?: string; detail?: string }) =>
+              event.kind === 'status' &&
+              event.label === 'error' &&
+              event.detail === 'Your authentication token has expired. Please sign in again.',
+          ),
+      );
+      expect(failedAssistantSave).toBeTruthy();
+    });
   });
 
   it('relinks terminal replay to an existing artifact without writing a duplicate file', async () => {

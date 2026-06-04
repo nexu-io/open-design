@@ -104,7 +104,7 @@ pnpm i18n:check
 
 ## 📋 Supported Languages
 
-Open Design currently supports **18 languages** across different surfaces:
+Open Design currently supports **19 languages** across different surfaces:
 
 | Language             | Code    | README | UI Dict | Core Docs | Status |
 | -------------------- | ------- | ------ | ------- | --------- | ------ |
@@ -116,6 +116,7 @@ Open Design currently supports **18 languages** across different surfaces:
 | Français             | `fr`    | ✅     | ✅      | ✅        | active |
 | Magyar (Hungarian)   | `hu`    | —      | ✅      | —         | active |
 | Bahasa Indonesia     | `id`    | —      | ✅      | —         | active |
+| Italiano             | `it`    | —      | ✅      | —         | active |
 | 日本語 (Japanese)    | `ja`    | ✅     | ✅      | ✅        | active |
 | 한국어 (Korean)      | `ko`    | ✅     | ✅      | —         | active |
 | Polski (Polish)      | `pl`    | —      | ✅      | —         | active |
@@ -330,6 +331,88 @@ Translations follow the conventions of the target region's tech writing communit
 - "installation" → your language's equivalent
 - "quickstart" → your language's equivalent
 - "settings" → your language's equivalent
+
+### French (`fr`) Glossary
+
+French UI copy should read naturally for a technical product audience without
+turning product/runtime terms into vague French approximations. Keep these
+rules stable across `apps/web/src/i18n/locales/fr.ts`, French core docs, and
+French display metadata.
+
+#### Keep in English
+
+Keep the exact English/token form for names, protocols, commands, environment
+variables, code identifiers, package names, file extensions, and technical
+runtime nouns that are clearer in English:
+
+| English source | French usage |
+| -------------- | ------------ |
+| Open Design | Open Design |
+| Claude Code, Codex, Cursor, Gemini, OpenCode | Claude Code, Codex, Cursor, Gemini, OpenCode |
+| CLI, API, SDK, MCP, HTTP, REST, SSE, JSONL | CLI, API, SDK, MCP, HTTP, REST, SSE, JSONL |
+| BYOK | BYOK |
+| runtime | runtime |
+| daemon | daemon |
+| sidecar | sidecar |
+| headless | headless |
+| plugin | plugin |
+| prompt | prompt |
+| token | token |
+| iframe | iframe |
+| monorepo, workspace | monorepo, workspace |
+| `od`, `pnpm`, `pnpm tools-dev` | `od`, `pnpm`, `pnpm tools-dev` |
+| `OD_DATA_DIR`, `OD_WEB_PORT`, `{provider}` | `OD_DATA_DIR`, `OD_WEB_PORT`, `{provider}` |
+| `.zip`, `.html`, `.md`, `.json` | `.zip`, `.html`, `.md`, `.json` |
+
+Use French grammar around preserved terms:
+
+- `le daemon local`, `un runtime`, `des plugins`, `les prompts`
+- `l’API`, `un endpoint REST`, `un flux SSE`
+- `la CLI locale`, `un serveur MCP`
+
+#### Translate When Standard
+
+Translate ordinary UI terms, workflow labels, and non-identifier product copy
+when a natural French equivalent exists:
+
+| English source | French |
+| -------------- | ------ |
+| Settings | Paramètres |
+| Save | Enregistrer |
+| Cancel | Annuler |
+| Delete | Supprimer |
+| Folder | Dossier |
+| File | Fichier |
+| Download | Télécharger |
+| Upload | Téléverser |
+| Search | Rechercher |
+| Preview | Aperçu |
+| Project | Projet |
+| Conversation | Conversation |
+| Dashboard | Tableau de bord |
+| Schedule | Planification |
+| Automation | Automatisation |
+| Artifact | Artefact |
+| Live artifact | Artefact dynamique |
+| Design files | Fichiers de design |
+| Slide deck | Présentation |
+| Engineering handoff | Transmission aux ingénieurs |
+| Shipped (product/software status) | Livré |
+
+#### Context-Sensitive Choices
+
+- `Skill` stays `Skill` when it names the Open Design/Claude skill format.
+  Translate only generic prose such as "ability" or "capability" as
+  `capacité`.
+- `Design System` may stay `Design System` when referring to the product
+  registry/object name. In explanatory prose, `système de design` is also
+  acceptable when it improves readability.
+- `runtime` stays `runtime` as a noun. Labels like "execution mode" can still
+  use `mode d’exécution`.
+- `source` can stay `source` for provenance labels, but translate ordinary
+  "data source" as `source de données`.
+- Do not translate command output or examples that users should see exactly in
+  their terminal.
 
 ### zh-CN ↔ zh-TW Glossary
 

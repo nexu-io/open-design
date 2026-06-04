@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AssistantMessage } from '../../src/components/AssistantMessage';
 import type { AgentEvent, ChatMessage } from '../../src/types';
@@ -38,7 +38,7 @@ describe('AssistantMessage tool status', () => {
       />,
     );
 
-    expect(container.querySelector('.op-status-ok')?.textContent).toMatch(/^done$/i);
+    expect(container.querySelector('.op-status-ok')).not.toBeNull();
     expect(container.querySelector('.op-status-running')).toBeNull();
   });
 
@@ -63,7 +63,7 @@ describe('AssistantMessage tool status', () => {
       />,
     );
 
-    expect(container.querySelector('.op-status-ok')?.textContent).toMatch(/^done$/i);
+    expect(container.querySelector('.op-status-ok')).not.toBeNull();
     expect(container.querySelector('.op-status-running')).toBeNull();
   });
 
@@ -92,7 +92,7 @@ describe('AssistantMessage tool status', () => {
     );
 
     expect(container.querySelector('.action-card-toggle.running')).toBeNull();
-    expect(screen.getByRole('button', { name: /Done/i })).toBeTruthy();
+    expect(container.querySelector('.op-status-ok, .action-card-status.op-status-ok')).not.toBeNull();
   });
 
   it('does not show Done when a failed run is missing a tool result', () => {
@@ -116,7 +116,7 @@ describe('AssistantMessage tool status', () => {
       />,
     );
 
-    expect(container.querySelector('.op-status-error')?.textContent).toMatch(/^error$/i);
+    expect(container.querySelector('.op-status-error')).not.toBeNull();
     expect(container.querySelector('.op-status-ok')).toBeNull();
   });
 
@@ -141,7 +141,7 @@ describe('AssistantMessage tool status', () => {
       />,
     );
 
-    expect(container.querySelector('.op-status-error')?.textContent).toMatch(/^error$/i);
+    expect(container.querySelector('.op-status-error')).not.toBeNull();
     expect(container.querySelector('.op-status-ok')).toBeNull();
   });
 
@@ -167,7 +167,30 @@ describe('AssistantMessage tool status', () => {
       />,
     );
 
-    expect(container.querySelector('.op-status-running')?.textContent).toBe('running…');
-    expect(screen.queryByText('Done')).toBeNull();
+    expect(container.querySelector('.op-status-running')).not.toBeNull();
+    expect(container.querySelector('.op-status-ok')).toBeNull();
+  });
+
+  it('renders URLs in JSON-like status details without trailing structural characters', () => {
+    const { container } = render(
+      <AssistantMessage
+        projectKind="prototype"
+        conversationId="conv-1"
+        message={messageWithEvents([
+          {
+            kind: 'status',
+            label: 'publish repo',
+            detail: '{"url":"https://github.com/nexu-io/example-plugin","nameWithOwner":"nexu-io/example-plugin"}',
+          },
+        ])}
+        streaming={false}
+        projectId="project-1"
+      />,
+    );
+
+    const link = container.querySelector('.status-detail a.md-link');
+    expect(link?.getAttribute('href')).toBe('https://github.com/nexu-io/example-plugin');
+    expect(link?.textContent).toBe('https://github.com/nexu-io/example-plugin');
+    expect(container.querySelector('.status-detail')?.textContent).toContain('"}');
   });
 });

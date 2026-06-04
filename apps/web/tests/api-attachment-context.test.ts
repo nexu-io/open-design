@@ -42,8 +42,48 @@ describe('historyWithApiAttachmentContext', () => {
 
     expect(mockedFetchProjectFilePreview).toHaveBeenCalledWith('project-1', 'brief.docx');
     expect(history[0]?.content).toContain('<attached-project-files>');
+    expect(history[0]?.content).toContain('user-visible order');
+    expect(history[0]?.content).toContain('### Attachment 1: brief.docx');
     expect(history[0]?.content).toContain('Hello world');
     expect(history[0]?.content).toContain('Second line');
+  });
+
+  it('preserves uploaded attachment order with numbered headings', async () => {
+    const history = await historyWithApiAttachmentContext(
+      [
+        userMessage('msg-1', 'Compare the first and second image', [
+          { path: 'uploads/first.png', name: 'image.png', kind: 'image' },
+          { path: 'uploads/second.png', name: 'image.png', kind: 'image' },
+        ]),
+      ],
+      'msg-1',
+      'project-1',
+      [projectFile('uploads/first.png', 'image'), projectFile('uploads/second.png', 'image')],
+    );
+
+    const content = history[0]?.content ?? '';
+    expect(content.indexOf('### Attachment 1:')).toBeLessThan(content.indexOf('### Attachment 2:'));
+    expect(content).toContain('path: uploads/first.png');
+    expect(content).toContain('path: uploads/second.png');
+  });
+
+  it('uses the explicit user-visible order before numbering attachments', async () => {
+    const history = await historyWithApiAttachmentContext(
+      [
+        userMessage('msg-1', 'Compare the first and second image', [
+          { path: 'uploads/second.png', name: 'second.png', kind: 'image', order: 1 },
+          { path: 'uploads/first.png', name: 'first.png', kind: 'image', order: 0 },
+        ]),
+      ],
+      'msg-1',
+      'project-1',
+      [projectFile('uploads/first.png', 'image'), projectFile('uploads/second.png', 'image')],
+    );
+
+    const content = history[0]?.content ?? '';
+    expect(content.indexOf('### Attachment 1: first.png')).toBeLessThan(
+      content.indexOf('### Attachment 2: second.png'),
+    );
   });
 
   it('reads raw text attachments with a cache buster from file metadata', async () => {
@@ -77,6 +117,64 @@ describe('historyWithApiAttachmentContext', () => {
     expect(mockedFetchProjectFilePreview).not.toHaveBeenCalled();
     expect(history[0]?.content).toContain('kind: sketch');
     expect(history[0]?.content).toContain('Content preview unavailable');
+  });
+
+  it('omits image attachment metadata when the provider sends native image blocks', async () => {
+    for (const path of ['hero.png', 'hero.jpg', 'hero.jpeg', 'hero.gif', 'hero.webp']) {
+      const history = await historyWithApiAttachmentContext(
+        [
+          userMessage('msg-1', 'Describe this image', [
+            { path, name: path, kind: 'image' },
+          ]),
+        ],
+        'msg-1',
+        'project-1',
+        [projectFile(path, 'image')],
+        { omitNativeImageAttachments: true },
+      );
+
+      expect(history[0]?.content).toBe('Describe this image');
+    }
+    expect(mockedFetchProjectFileText).not.toHaveBeenCalled();
+    expect(mockedFetchProjectFilePreview).not.toHaveBeenCalled();
+  });
+
+  it('omits sketch-prefixed raster image metadata when native image blocks carry them', async () => {
+    const history = await historyWithApiAttachmentContext(
+      [
+        userMessage('msg-1', 'Describe this image', [
+          { path: 'sketch-hero.png', name: 'sketch-hero.png', kind: 'image' },
+        ]),
+      ],
+      'msg-1',
+      'project-1',
+      [projectFile('sketch-hero.png', 'sketch')],
+      { omitNativeImageAttachments: true },
+    );
+
+    expect(history[0]?.content).toBe('Describe this image');
+    expect(mockedFetchProjectFileText).not.toHaveBeenCalled();
+    expect(mockedFetchProjectFilePreview).not.toHaveBeenCalled();
+  });
+
+  it('keeps unsupported image metadata when native image blocks cannot carry them', async () => {
+    for (const path of ['hero.avif', 'hero.bmp']) {
+      const history = await historyWithApiAttachmentContext(
+        [
+          userMessage('msg-1', 'Describe this image', [
+            { path, name: path, kind: 'image' },
+          ]),
+        ],
+        'msg-1',
+        'project-1',
+        [projectFile(path, 'image')],
+        { omitNativeImageAttachments: true },
+      );
+
+      expect(history[0]?.content).toContain('<attached-project-files>');
+      expect(history[0]?.content).toContain(`path: ${path}`);
+      expect(history[0]?.content).toContain('Content preview unavailable');
+    }
   });
 
   it('uses filename inference when the project file list has not refreshed yet', async () => {

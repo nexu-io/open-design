@@ -3,8 +3,48 @@
   "specVersion": "1.0.0",
   "name": "example-web-prototype-taste-brutalist",
   "title": "Web Prototype Taste Brutalist",
+  "title_i18n": {
+    "zh-CN": "Web Prototype Taste Brutalist",
+    "zh-TW": "Web Prototype Taste Brutalist",
+    "ja": "Web Prototype Taste Brutalist",
+    "ko": "Web Prototype Taste Brutalist",
+    "de": "Web Prototype Taste Brutalist",
+    "fr": "Web Prototype Taste Brutalist",
+    "ru": "Web Prototype Taste Brutalist",
+    "es": "Web Prototype Taste Brutalist",
+    "pt-BR": "Web Prototype Taste Brutalist",
+    "it": "Web Prototype Taste Brutalist",
+    "vi": "Web Prototype Taste Brutalist",
+    "pl": "Web Prototype Taste Brutalist",
+    "id": "Web Prototype Taste Brutalist",
+    "nl": "Web Prototype Taste Brutalist",
+    "ar": "Web Prototype Taste Brutalist",
+    "tr": "Web Prototype Taste Brutalist",
+    "uk": "Web Prototype Taste Brutalist",
+    "en": "Web Prototype Taste Brutalist"
+  },
   "version": "0.1.0",
   "description": "Swiss industrial-print web prototype. Newsprint canvas, monolithic black grotesque, viewport-bleeding numerals, hairline grid dividers, hazard-red accent, ASCII syntax decoration. Distilled from Leonxlnx/taste-skill `brutalist-skill` (Swiss Industrial Print mode).",
+  "description_i18n": {
+    "zh-CN": "瑞士工业印刷风格网页原型。新闻纸画布、黑色粗体字、溢出式数字、细线网格分隔、危险红强调色、ASCII 语法装饰。源自 Leonxlnx/taste-skill `brutalist-skill`（瑞士工业印刷模式）。",
+    "zh-TW": "瑞士工業印刷風格網頁原型。新聞紙畫布、黑色粗體字、溢出式數字、細線網格分隔、危險紅強調色、ASCII 語法裝飾。源自 Leonxlnx/taste-skill `brutalist-skill`（瑞士工業印刷模式）。",
+    "ja": "スイス産業印刷スタイルのウェブプロトタイプ。新聞紙キャンバス、モノリシックな黒のグロテスク書体、ビューポートから溢れる数字、ヘアライングリッド分割、ハザードレッドアクセント、ASCII シンタックス装飾。Leonxlnx/taste-skill `brutalist-skill`（スイス産業印刷モード）より抽出。",
+    "ko": "스위스 산업 인쇄 스타일 웹 프로토타입. 신문지 캔버스, 모놀리식 블랙 그로테스크 서체, 뷰포트 넘침 숫자, 헤어라인 그리드 구분선, 위험 빨강 강조, ASCII 구문 장식. Leonxlnx/taste-skill `brutalist-skill`(스위스 산업 인쇄 모드)에서 추출.",
+    "de": "Web-Prototyp im Schweizer Industriedruck-Stil. Zeitungspapier-Canvas, monolithische schwarze Grotesk-Schrift, viewport-übergreifende Ziffern, haardünne Rastereinteilungen, gefahrenrote Akzente, ASCII-Syntax-Dekoration. Abgeleitet von Leonxlnx/taste-skill `brutalist-skill` (Schweizer Industriedruck-Modus).",
+    "fr": "Prototype web d'imprimerie industrielle suisse. Toile papier journal, grotesque noire monolithique, chiffres débordant du viewport, séparateurs de grille ultrafins, accent rouge danger, décoration syntaxe ASCII. Extrait de Leonxlnx/taste-skill `brutalist-skill` (mode imprimerie industrielle suisse).",
+    "ru": "Веб-прототип в стиле швейцарской промышленной печати. Газетный холст, монолитный чёрный гротеск, выходящие за пределы вьюпорта цифры, тонкие разделители сетки, опасно-красный акцент, ASCII-декор синтаксиса. Создан на основе Leonxlnx/taste-skill `brutalist-skill` (режим швейцарской промышленной печати).",
+    "es": "Prototipo web de impresión industrial suiza. Lienzo de papel periódico, grotesca negra monolítica, números que desbordan el viewport, divisores de cuadrícula ultrafinos, acento rojo peligro, decoración de sintaxis ASCII. Destilado de Leonxlnx/taste-skill `brutalist-skill` (modo impresión industrial suiza).",
+    "pt-BR": "Protótipo web de impressão industrial suíça. Tela papel jornal, grotesca preta monolítica, numerais sangrados no viewport, divisores de grade finos, destaque vermelho perigo, decoração sintaxe ASCII. Destilado de Leonxlnx/taste-skill `brutalist-skill` (modo impressão industrial suíça).",
+    "it": "Prototipo web stampa industriale svizzera. Canvas carta da giornale, grottesco nero monolitico, numeri che sanguinano dal viewport, divisori griglia sottilissimi, accento rosso pericolo, decorazione sintassi ASCII. Estratto da Leonxlnx/taste-skill `brutalist-skill` (modalità stampa industriale svizzera).",
+    "vi": "Nguyên mẫu web phong cách in công nghiệp Thụy Sĩ. Canvas giấy báo, chữ grotesque đen nguyên khối, số tràn khung viewport, đường phân cách lưới siêu mỏng, điểm nhấn đỏ nguy hiểm, trang trí cú pháp ASCII. Trích xuất từ Leonxlnx/taste-skill `brutalist-skill` (chế độ in công nghiệp Thụy Sĩ).",
+    "pl": "Prototyp webowy w stylu szwajcarskiego druku przemysłowego. Płótno papieru gazetowego, monolityczny czarny grotesk, cyfry wykraczające poza viewport, włoskowate podziały siatki, akcent w kolorze czerwieni ostrzegawczej, dekoracja składni ASCII. Destylowane z Leonxlnx/taste-skill `brutalist-skill` (tryb szwajcarskiego druku przemysłowego).",
+    "id": "Prototipe web cetak industri Swiss. Kanvas kertas koran, grotesque hitam monolitik, angka yang meluap viewport, pembagi grid tipis, aksen merah bahaya, dekorasi sintaks ASCII. Disuling dari Leonxlnx/taste-skill `brutalist-skill` (mode cetak industri Swiss).",
+    "nl": "Webprototype in Zwitserse industriële drukkenstijl. Krantenpapierdoek, monolithisch zwart groteskschrift, viewport-overlopende cijfers, haardunne rasterscheidingen, gevarenrood accent, ASCII-syntaxdecoratie. Gedistilleerd uit Leonxlnx/taste-skill `brutalist-skill` (Zwitserse industriële drukmodus).",
+    "ar": "نموذج ويب بأسلوب الطباعة الصناعية السويسرية. لوحة ورق صحف، خط جروتسك أسود أحادي، أرقام تتجاوز إطار العرض، فواصل شبكة رفيعة، لهجة حمراء تحذيرية، زخرفة بناء جملة ASCII. مستخلص من Leonxlnx/taste-skill `brutalist-skill` (وضع الطباعة الصناعية السويسرية).",
+    "tr": "İsviçre endüstriyel baskı tarzı web prototipi. Gazete kağıdı tuval, monolitik siyah grotesk yazı, viewport'tan taşan rakamlar, ince çizgi ızgara ayırıcılar, tehlike kırmızısı vurgu, ASCII sözdizimi dekorasyonu. Leonxlnx/taste-skill `brutalist-skill`'den damıtılmıştır (İsviçre endüstriyel baskı modu).",
+    "uk": "Веб-прототип у стилі швейцарського промислового друку. Газетне полотно, монолітний чорний гротеск, цифри що виходять за межі viewport, тонкі роздільники сітки, небезпечно-червоний акцент, ASCII-декор синтаксису. Створено на основі Leonxlnx/taste-skill `brutalist-skill` (режим швейцарського промислового друку).",
+    "en": "Swiss industrial-print web prototype. Newsprint canvas, monolithic black grotesque, viewport-bleeding numerals, hairline grid dividers, hazard-red accent, ASCII syntax decoration. Distilled from Leonxlnx/taste-skill `brutalist-skill` (Swiss Industrial Print mode)."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -75,6 +115,6 @@
       "prompt:inject",
       "fs:write"
     ],
-    "featured": 0.10
+    "featured": 0.1
   }
 }

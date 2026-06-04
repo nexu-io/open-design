@@ -41,6 +41,7 @@ import {
   validateProjectPath,
 } from './projects.js';
 import { exportProjectTranscript } from './transcript-export.js';
+import { googleGenerateContentUrl } from './google-models.js';
 
 // Re-export the request/response types so existing daemon-internal
 // imports (and the route handler) keep their referenced names. The
@@ -595,9 +596,8 @@ function buildFinalizeProviderRequest(params: FinalizeProviderCallParams): Final
   }
 
   if (params.protocol === 'google') {
-    const clean = params.baseUrl.replace(/\/+$/, '');
     return {
-      url: `${clean}/v1beta/models/${encodeURIComponent(params.model)}:generateContent`,
+      url: googleGenerateContentUrl(params.baseUrl, params.model),
       headers: {
         'content-type': 'application/json',
         'x-goog-api-key': params.apiKey,

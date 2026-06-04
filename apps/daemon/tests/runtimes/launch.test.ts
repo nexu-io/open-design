@@ -8,6 +8,7 @@ import {
   codex,
   mkdirSync,
   mkdtempSync,
+  minimalAgentDef,
   resolveAgentLaunch,
   rmSync,
   tmpdir,
@@ -109,6 +110,44 @@ fsTest('resolveAgentLaunch selects nvm-installed codex under a minimal PATH and 
     });
   } finally {
     rmSync(home, { recursive: true, force: true });
+  }
+});
+
+fsTest('resolveAgentLaunch uses packaged built-in Vela for AMR and prepends its dirname', () => {
+  const root = mkdtempSync(join(tmpdir(), 'od-launch-amr-built-in-'));
+  try {
+    return withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'OD_RESOURCE_ROOT', 'VELA_OPENCODE_BIN'], () => {
+      const resourceRoot = join(root, 'resources', 'open-design');
+      const builtInDir = join(resourceRoot, 'bin');
+      const builtInVela = join(builtInDir, 'vela');
+      const companionTree = join(builtInDir, 'libexec', 'opencode');
+      const companionExe = join(
+        companionTree,
+        process.platform === 'win32' ? 'opencode.exe' : 'opencode',
+      );
+      mkdirSync(builtInDir, { recursive: true });
+      mkdirSync(companionTree, { recursive: true });
+      writeFileSync(builtInVela, '#!/bin/sh\nexit 0\n');
+      chmodSync(builtInVela, 0o755);
+      // packagedVelaOpenCodeCompanionTree now verifies the inner opencode
+      // executable, not just the directory — see #3148. Fixture must match.
+      writeFileSync(companionExe, '#!/bin/sh\nexit 0\n');
+      chmodSync(companionExe, 0o755);
+      process.env.PATH = '';
+      process.env.OD_AGENT_HOME = join(root, 'empty-home');
+      process.env.OD_RESOURCE_ROOT = resourceRoot;
+      delete process.env.VELA_OPENCODE_BIN;
+
+      const launch = resolveAgentLaunch(minimalAgentDef({ id: 'amr', bin: 'vela' }));
+
+      assert.equal(launch.selectedPath, builtInVela);
+      assert.equal(launch.launchPath, builtInVela);
+      assert.equal(launch.launchKind, 'selected');
+      assert.deepEqual(launch.childPathPrepend, [builtInDir]);
+      assert.equal(launch.diagnostic, null);
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

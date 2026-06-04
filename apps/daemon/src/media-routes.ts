@@ -1,22 +1,210 @@
 import type { Express } from 'express';
+import type { MediaExecutionPolicy } from '@open-design/contracts';
+import { defaultMediaExecutionPolicy, mediaPolicyDenial } from './media-policy.js';
 import type { RouteDeps } from './server-context.js';
+import { proxyDispatcherRequestInit } from './connectionTest.js';
+import { isSandboxModeEnabled } from './sandbox-mode.js';
+import type { ToolTokenGrant } from './tool-tokens.js';
 
-export interface RegisterMediaRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'media' | 'appConfig' | 'orbit' | 'nativeDialogs' | 'projectStore' | 'projectFiles' | 'conversations' | 'research'> {}
+const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
+
+export interface RegisterMediaRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'ids' | 'auth' | 'media' | 'appConfig' | 'orbit' | 'nativeDialogs' | 'projectStore' | 'projectFiles' | 'conversations' | 'research'> {}
+
+export type LegacyMediaRouteGrantDecision =
+  | { ok: true; grant: ToolTokenGrant | null }
+  | {
+      ok: false;
+      code: string;
+      details?: Record<string, unknown>;
+      message: string;
+      status: number;
+    };
+
+export function resolveLegacyMediaRouteGrant(input: {
+  grant: ToolTokenGrant | null;
+  projectId: string;
+  requestProjectOverride: (projectId: string, tokenProjectId: string) => boolean;
+  sandboxMode: boolean;
+}): LegacyMediaRouteGrantDecision {
+  if (
+    input.sandboxMode &&
+    input.grant &&
+    input.requestProjectOverride(input.projectId, input.grant.projectId)
+  ) {
+    return {
+      ok: false,
+      code: 'FORBIDDEN',
+      details: { suppliedProjectId: input.projectId },
+      message: 'projectId is derived from the tool token',
+      status: 403,
+    };
+  }
+
+  if (!input.grant && input.sandboxMode) {
+    return {
+      ok: false,
+      code: 'TOOL_TOKEN_MISSING',
+      message: 'tool token is required for media generation in sandbox mode',
+      status: 401,
+    };
+  }
+
+  return { ok: true, grant: input.grant };
+}
 
 export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) {
-  const { db } = ctx;
+  const { db, design } = ctx;
   const { sendApiError, requireLocalDaemonRequest, isLocalSameOrigin, resolvedPortRef } = ctx.http;
   const { PROJECT_ROOT, PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
+  const { authorizeToolRequest, optionalToolGrantFromRequest, requestProjectOverride } = ctx.auth;
   const { randomUUID } = ctx.ids;
   const { MEDIA_PROVIDERS, IMAGE_MODELS, VIDEO_MODELS, AUDIO_MODELS_BY_KIND, MEDIA_ASPECTS, VIDEO_LENGTHS_SEC, AUDIO_DURATIONS_SEC, readMaskedConfig, writeConfig, generateMedia, createMediaTask, persistMediaTask, appendTaskProgress, notifyTaskWaiters, getLiveMediaTask, mediaTaskSnapshot, listMediaTasksByProject, listElevenLabsVoiceOptions } = ctx.media;
   const { readAppConfig, writeAppConfig } = ctx.appConfig;
   const { orbitService } = ctx.orbit;
   const { openNativeFolderDialog } = ctx.nativeDialogs;
   const { getProject } = ctx.projectStore;
-  const { writeProjectFile } = ctx.projectFiles;
   const { insertConversation, upsertMessage } = ctx.conversations;
   const { searchResearch, ResearchError } = ctx.research;
   const getResolvedPort = () => resolvedPortRef.current;
+
+  const mediaPolicyForGrant = (grant: ToolTokenGrant | null):
+    | { ok: true; policy: MediaExecutionPolicy }
+    | { ok: false; code: string; message: string } => {
+    if (!grant?.runId) return { ok: true, policy: defaultMediaExecutionPolicy() };
+    const run = design.runs.get(grant.runId);
+    if (!run) {
+      return {
+        ok: false,
+        code: 'MEDIA_POLICY_UNAVAILABLE',
+        message: 'media generation policy is unavailable for this run',
+      };
+    }
+    return { ok: true, policy: run.mediaExecution ?? defaultMediaExecutionPolicy() };
+  };
+
+  const handleGenerate = async (
+    req: any,
+    res: any,
+    options: { projectId: string; grant: ToolTokenGrant | null },
+  ) => {
+    const projectId = options.projectId;
+    const project = getProject(db, projectId);
+    if (!project) return res.status(404).json({ error: 'project not found' });
+
+    const surface = req.body?.surface;
+    if (surface !== 'image' && surface !== 'video' && surface !== 'audio') {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'surface must be image, video, or audio');
+    }
+    const model = typeof req.body?.model === 'string' ? req.body.model : '';
+    if (!model) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'model is required');
+    }
+
+    const policy = mediaPolicyForGrant(options.grant);
+    if (!policy.ok) {
+      return sendApiError(res, 403, policy.code, policy.message);
+    }
+    const denial = mediaPolicyDenial(policy.policy, { surface, model });
+    if (denial) {
+      return sendApiError(res, 403, denial.code, denial.message);
+    }
+
+    let task: ReturnType<typeof createMediaTask> | null = null;
+    try {
+      const taskId = randomUUID();
+      task = createMediaTask(taskId, projectId, {
+        surface: req.body?.surface,
+        model: req.body?.model,
+      });
+      console.error(
+        `[task ${taskId.slice(0, 8)}] queued model=${req.body?.model} ` +
+          `surface=${req.body?.surface} ` +
+          `image=${req.body?.image ? 'yes' : 'no'} ` +
+          `compositionDir=${req.body?.compositionDir ? 'yes' : 'no'}`,
+      );
+
+      const proxyDispatcher = proxyDispatcherRequestInit(process.env, {
+        headersTimeout: LONG_MEDIA_PROXY_TIMEOUT_MS,
+        bodyTimeout: LONG_MEDIA_PROXY_TIMEOUT_MS,
+      });
+      task.status = 'running';
+      persistMediaTask(task);
+      generateMedia({
+        projectRoot: PROJECT_ROOT,
+        projectsRoot: PROJECTS_DIR,
+        projectId,
+        surface: req.body?.surface,
+        model: req.body?.model,
+        prompt: req.body?.prompt,
+        output: req.body?.output,
+        aspect: req.body?.aspect,
+        length:
+          typeof req.body?.length === 'number' ? req.body.length : undefined,
+        duration:
+          typeof req.body?.duration === 'number'
+            ? req.body.duration
+            : undefined,
+        voice: req.body?.voice,
+        audioKind: req.body?.audioKind,
+        language: typeof req.body?.language === 'string' ? req.body.language : undefined,
+        loop: typeof req.body?.loop === 'boolean' ? req.body.loop : undefined,
+        promptInfluence: typeof req.body?.promptInfluence === 'number'
+          ? req.body.promptInfluence
+          : undefined,
+        compositionDir: req.body?.compositionDir,
+        image: req.body?.image,
+        images: Array.isArray(req.body?.images) ? req.body.images : undefined,
+        onProgress: (line: any) => appendTaskProgress(task, line),
+        requestInit: proxyDispatcher.requestInit,
+      })
+        .then((meta: any) => {
+          task.status = 'done';
+          task.file = meta;
+          task.endedAt = Date.now();
+          persistMediaTask(task);
+          notifyTaskWaiters(task);
+          console.error(
+            `[task ${taskId.slice(0, 8)}] done size=${meta?.size} mime=${meta?.mime} ` +
+              `elapsed=${Math.round((task.endedAt - task.startedAt) / 1000)}s`,
+          );
+        })
+        .catch((err: any) => {
+          task.status = 'failed';
+          task.error = {
+            message: String(err && err.message ? err.message : err),
+            status: typeof err?.status === 'number' ? err.status : 400,
+            code: err?.code,
+          };
+          task.endedAt = Date.now();
+          persistMediaTask(task);
+          notifyTaskWaiters(task);
+          console.error(
+            `[task ${taskId.slice(0, 8)}] failed status=${task.error.status} ` +
+              `message=${(task.error.message || '').slice(0, 240)}`,
+          );
+        })
+        .finally(() => proxyDispatcher.close());
+
+      return res.status(202).json({
+        taskId,
+        status: task.status,
+        startedAt: task.startedAt,
+      });
+    } catch (err: any) {
+      if (task) {
+        task.status = 'failed';
+        task.error = {
+          message: String(err && err.message ? err.message : err),
+          status: typeof err?.status === 'number' ? err.status : 400,
+          code: err?.code,
+        };
+        task.endedAt = Date.now();
+        persistMediaTask(task);
+        notifyTaskWaiters(task);
+      }
+      throw err;
+    }
+  };
   app.get('/api/media/models', (_req, res) => {
     res.json({
       providers: MEDIA_PROVIDERS,
@@ -59,8 +247,16 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     try {
       const rawLimit = Number(req.query.limit);
       const limit = Number.isFinite(rawLimit) ? rawLimit : undefined;
-      const voices = await listElevenLabsVoiceOptions(PROJECT_ROOT, { limit });
-      res.json({ voices });
+      const proxyDispatcher = proxyDispatcherRequestInit(process.env);
+      try {
+        const voices = await listElevenLabsVoiceOptions(PROJECT_ROOT, {
+          limit,
+          requestInit: proxyDispatcher.requestInit,
+        });
+        res.json({ voices });
+      } finally {
+        await proxyDispatcher.close();
+      }
     } catch (err: any) {
       const message = String(err && err.message ? err.message : err);
       const status = message.includes('no ElevenLabs API key') ? 400 : 502;
@@ -148,82 +344,37 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
 
     try {
-      const projectId = req.params.id;
-      const project = getProject(db, projectId);
-      if (!project) return res.status(404).json({ error: 'project not found' });
-
-      const taskId = randomUUID();
-      const task = createMediaTask(taskId, projectId, {
-        surface: req.body?.surface,
-        model: req.body?.model,
+      const grant = optionalToolGrantFromRequest(req, { operation: 'media:generate' });
+      const grantDecision = resolveLegacyMediaRouteGrant({
+        grant,
+        projectId: req.params.id,
+        requestProjectOverride,
+        sandboxMode: isSandboxModeEnabled(process.env),
       });
-      console.error(
-        `[task ${taskId.slice(0, 8)}] queued model=${req.body?.model} ` +
-          `surface=${req.body?.surface} ` +
-          `image=${req.body?.image ? 'yes' : 'no'} ` +
-          `compositionDir=${req.body?.compositionDir ? 'yes' : 'no'}`,
-      );
+      if (!grantDecision.ok) {
+        return sendApiError(
+          res,
+          grantDecision.status,
+          grantDecision.code,
+          grantDecision.message,
+          grantDecision.details ? { details: grantDecision.details } : {},
+        );
+      }
+      await handleGenerate(req, res, { projectId: req.params.id, grant: grantDecision.grant });
+    } catch (err: any) {
+      const status = typeof err?.status === 'number' ? err.status : 400;
+      const code = err?.code;
+      const body: any = { error: String(err && err.message ? err.message : err) };
+      if (code) body.code = code;
+      res.status(status).json(body);
+    }
+  });
 
-      task.status = 'running';
-      persistMediaTask(task);
-      generateMedia({
-        projectRoot: PROJECT_ROOT,
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-        surface: req.body?.surface,
-        model: req.body?.model,
-        prompt: req.body?.prompt,
-        output: req.body?.output,
-        aspect: req.body?.aspect,
-        length:
-          typeof req.body?.length === 'number' ? req.body.length : undefined,
-        duration:
-          typeof req.body?.duration === 'number'
-            ? req.body.duration
-            : undefined,
-        voice: req.body?.voice,
-        audioKind: req.body?.audioKind,
-        language: typeof req.body?.language === 'string' ? req.body.language : undefined,
-        loop: typeof req.body?.loop === 'boolean' ? req.body.loop : undefined,
-        promptInfluence: typeof req.body?.promptInfluence === 'number'
-          ? req.body.promptInfluence
-          : undefined,
-        compositionDir: req.body?.compositionDir,
-        image: req.body?.image,
-        onProgress: (line: any) => appendTaskProgress(task, line),
-      })
-        .then((meta: any) => {
-          task.status = 'done';
-          task.file = meta;
-          task.endedAt = Date.now();
-          persistMediaTask(task);
-          notifyTaskWaiters(task);
-          console.error(
-            `[task ${taskId.slice(0, 8)}] done size=${meta?.size} mime=${meta?.mime} ` +
-              `elapsed=${Math.round((task.endedAt - task.startedAt) / 1000)}s`,
-          );
-        })
-        .catch((err: any) => {
-          task.status = 'failed';
-          task.error = {
-            message: String(err && err.message ? err.message : err),
-            status: typeof err?.status === 'number' ? err.status : 400,
-            code: err?.code,
-          };
-          task.endedAt = Date.now();
-          persistMediaTask(task);
-          notifyTaskWaiters(task);
-          console.error(
-            `[task ${taskId.slice(0, 8)}] failed status=${task.error.status} ` +
-              `message=${(task.error.message || '').slice(0, 240)}`,
-          );
-        });
-
-      res.status(202).json({
-        taskId,
-        status: task.status,
-        startedAt: task.startedAt,
-      });
+  app.post('/api/tools/media/generate', async (req, res) => {
+    const grant = authorizeToolRequest(req, res, 'media:generate');
+    if (!grant) return;
+    try {
+      await handleGenerate(req, res, { projectId: grant.projectId, grant });
     } catch (err: any) {
       const status = typeof err?.status === 'number' ? err.status : 400;
       const code = err?.code;
@@ -242,18 +393,24 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
 
     try {
-      const result = await searchResearch({
-        projectRoot: PROJECT_ROOT,
-        query: req.body?.query,
-        maxSources:
-          typeof req.body?.maxSources === 'number'
-            ? req.body.maxSources
+      const proxyDispatcher = proxyDispatcherRequestInit(process.env);
+      try {
+        const result = await searchResearch({
+          projectRoot: PROJECT_ROOT,
+          query: req.body?.query,
+          maxSources:
+            typeof req.body?.maxSources === 'number'
+              ? req.body.maxSources
+              : undefined,
+          providers: Array.isArray(req.body?.providers)
+            ? req.body.providers
             : undefined,
-        providers: Array.isArray(req.body?.providers)
-          ? req.body.providers
-          : undefined,
-      });
-      res.json(result);
+          requestInit: proxyDispatcher.requestInit,
+        });
+        res.json(result);
+      } finally {
+        await proxyDispatcher.close();
+      }
     } catch (err: any) {
       if (err instanceof ResearchError) {
         return res.status(err.status).json({

@@ -1,5 +1,6 @@
 import { homedir, userInfo } from 'node:os';
-import { dirname } from 'node:path';
+import { readdir, stat } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 
 import type { RequestHandler } from 'express';
 
@@ -13,11 +14,12 @@ import {
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_MODES,
   type SidecarStamp,
 } from '@open-design/sidecar-proto';
 import {
   resolveLogFilePath,
-  resolveNamespaceRoot,
+  resolveRuntimeNamespaceRoot,
   type SidecarRuntimeContext,
 } from '@open-design/sidecar';
 
@@ -28,9 +30,13 @@ export interface DiagnosticsHandlerOptions {
   runtime: SidecarRuntimeContext<SidecarStamp> | null;
   /** Project root used to derive crash-report match strings. */
   projectRoot: string;
+  /** Directory containing per-run event logs at <runsDir>/<runId>/events.jsonl. */
+  runsDir?: string | null;
 }
 
 const TAIL_BYTES_PER_LOG = 4 * 1024 * 1024;
+const TAIL_BYTES_PER_RUN_EVENT_LOG = 2 * 1024 * 1024;
+const MAX_RUN_EVENT_LOGS = 20;
 
 function safeUsername(): string | undefined {
   try {
@@ -48,10 +54,14 @@ export const STANDALONE_LAUNCH_WARNING =
 
 function buildSidecarLogSources(runtime: SidecarRuntimeContext<SidecarStamp> | null): LogSource[] {
   if (runtime == null) return [];
-  const namespaceRoot = resolveNamespaceRoot({
-    base: runtime.base,
+  // In packaged builds `runtime.base` is `<namespaceRoot>/runtime`, so the log
+  // tree lives a level UP at `<namespaceRoot>/logs`; `resolveRuntimeNamespaceRoot`
+  // accounts for that (a plain `resolveNamespaceRoot` here resolved every
+  // daemon/web log to an ENOENT phantom path and captured none of them).
+  const namespaceRoot = resolveRuntimeNamespaceRoot({
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-    namespace: runtime.namespace,
+    runtime,
+    runtimeMode: SIDECAR_MODES.RUNTIME,
   });
   const apps = [APP_KEYS.DAEMON, APP_KEYS.WEB, APP_KEYS.DESKTOP];
   const sources: LogSource[] = [];
@@ -83,11 +93,46 @@ function buildSidecarLogSources(runtime: SidecarRuntimeContext<SidecarStamp> | n
   return sources;
 }
 
+async function buildRunEventLogSources(runsDir: string | null | undefined): Promise<LogSource[]> {
+  if (!runsDir) return [];
+  let entries;
+  try {
+    entries = await readdir(runsDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const candidates: Array<{ runId: string; absolutePath: string; mtimeMs: number }> = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (!/^[A-Za-z0-9._-]+$/u.test(entry.name)) continue;
+    const absolutePath = join(runsDir, entry.name, 'events.jsonl');
+    try {
+      const info = await stat(absolutePath);
+      if (!info.isFile()) continue;
+      candidates.push({ runId: entry.name, absolutePath, mtimeMs: info.mtimeMs });
+    } catch {
+      continue;
+    }
+  }
+
+  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return candidates.slice(0, MAX_RUN_EVENT_LOGS).map(({ runId, absolutePath }) => ({
+    name: `runs/${runId}/events.jsonl`,
+    absolutePath,
+    kind: 'text',
+    tailBytes: TAIL_BYTES_PER_RUN_EVENT_LOG,
+  }));
+}
+
 export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOptions): RequestHandler {
   return async (_req, res) => {
     try {
       const versionInfo = await readCurrentAppVersionInfo().catch(() => null);
-      const sources = buildSidecarLogSources(options.runtime);
+      const sources = [
+        ...buildSidecarLogSources(options.runtime),
+        ...(await buildRunEventLogSources(options.runsDir)),
+      ];
       const username = safeUsername();
       const home = homedir();
 
