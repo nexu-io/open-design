@@ -874,6 +874,19 @@
 .composer:has(.composer-import-menu) {
   z-index: 80;
 }
+.chat-composer-slot {
+  flex: 0 0 auto;
+}
+.chat-composer-fixed-layer {
+  position: fixed;
+  z-index: 45;
+  pointer-events: none;
+  contain: layout style paint;
+  transform: translateZ(0);
+}
+.chat-composer-fixed-layer .composer {
+  pointer-events: auto;
+}
 /* Elevation kicks in only when a pinned todo card is sitting directly
  * above the composer. Without the card the chat scroll already provides
  * its own visual edge; the shadow would just darken empty whitespace. */

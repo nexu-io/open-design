@@ -13,8 +13,9 @@ import {
   fetchProjectFileText,
   uploadProjectFiles,
   writeProjectTextFile,
+  fetchProjectFolders,
 } from '../../src/providers/registry';
-import type { ChatMessage, ProjectFile } from '../../src/types';
+import type { ChatMessage, ProjectFile, ProjectFolder } from '../../src/types';
 
 vi.mock('../../src/components/AmrGuidance', () => ({
   AmrGuidance: ({
@@ -59,6 +60,7 @@ vi.mock('../../src/providers/registry', async () => {
     fetchProjectFileText: vi.fn(),
     uploadProjectFiles: vi.fn(),
     writeProjectTextFile: vi.fn(),
+    fetchProjectFolders: vi.fn().mockResolvedValue([]),
   };
 });
 
@@ -86,6 +88,30 @@ vi.mock('../../src/components/workspace/TerminalViewer', () => ({
     <div data-testid="terminal-viewer">{terminalId}</div>
   ),
 }));
+
+// Records the `folders` prop DesignFilesPanel receives on EVERY render (still
+// renders the real component). Lets a test observe the first render after a
+// project switch — the pre-paint frame RTL's post-rerender DOM assertion can't
+// see — to prove no stale folders ever reach the new panel.
+const { designFilesPanelRenders } = vi.hoisted(() => ({
+  designFilesPanelRenders: [] as { projectId: string; folderCount: number }[],
+}));
+vi.mock('../../src/components/DesignFilesPanel', async () => {
+  const actual = await vi.importActual<typeof import('../../src/components/DesignFilesPanel')>(
+    '../../src/components/DesignFilesPanel',
+  );
+  const Real = actual.DesignFilesPanel;
+  return {
+    ...actual,
+    DesignFilesPanel: (props: Parameters<typeof Real>[0]) => {
+      designFilesPanelRenders.push({
+        projectId: props.projectId,
+        folderCount: props.folders?.length ?? 0,
+      });
+      return <Real {...props} />;
+    },
+  };
+});
 
 const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
 const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
@@ -413,6 +439,62 @@ describe('FileWorkspace upload input', () => {
 
     expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('project');
     expect(screen.getByTestId('design-file-row-home.html')).toBeTruthy();
+  });
+
+  it('drops the previous project folders when switching, before the new fetch resolves', async () => {
+    const folder = (path: string): ProjectFolder => ({
+      name: path.split('/').pop() ?? path,
+      path,
+      type: 'dir',
+      size: 0,
+      mtime: 1700000000,
+    });
+    const mockedFolders = vi.mocked(fetchProjectFolders);
+    // project-a has an empty persisted folder; project-b's fetch stays pending.
+    // (One-time values take precedence over the factory default `[]`; no reset,
+    // so later tests keep that default.)
+    mockedFolders.mockResolvedValueOnce([folder('assets')]);
+    mockedFolders.mockReturnValueOnce(new Promise<ProjectFolder[]>(() => {}));
+
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-a',
+      projectKind: 'prototype',
+      files: [],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+    };
+    const { container, rerender } = render(<FileWorkspace {...baseProps} />);
+    // project-a's empty folder shows once its fetch resolves.
+    await waitFor(() => {
+      expect(
+        [...container.querySelectorAll('.df-dir-row .df-row-name')].some(
+          (e) => e.textContent === 'assets',
+        ),
+      ).toBe(true);
+    });
+
+    // Switch to project-b; its folder fetch is still pending. The previous
+    // project's 'assets' folder must be gone immediately (reset synchronously),
+    // not linger and suppress the new project's empty state.
+    designFilesPanelRenders.length = 0;
+    rerender(<FileWorkspace {...baseProps} projectId="project-b" files={[]} />);
+    expect(
+      [...container.querySelectorAll('.df-dir-row .df-row-name')].some(
+        (e) => e.textContent === 'assets',
+      ),
+    ).toBe(false);
+
+    // The reset happens during render, not in an effect — so the new panel's
+    // FIRST render (and every render thereafter) already sees zero folders.
+    // An effect-based reset would let project-b's first render observe the
+    // stale 'assets' folder before the effect cleared it; RTL's post-rerender
+    // DOM check above can't catch that frame, this can.
+    const projectBRenders = designFilesPanelRenders.filter((r) => r.projectId === 'project-b');
+    expect(projectBRenders.length).toBeGreaterThan(0);
+    expect(projectBRenders.every((r) => r.folderCount === 0)).toBe(true);
   });
 
   it('clears a prior upload failure after a later successful upload', async () => {
