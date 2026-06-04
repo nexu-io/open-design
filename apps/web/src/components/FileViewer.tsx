@@ -4802,7 +4802,11 @@ function HtmlViewer({
   const [manualEditHoverTarget, setManualEditHoverTarget] = useState<ManualEditTarget | null>(null);
   const [manualEditPageStylesOpen, setManualEditPageStylesOpen] = useState(false);
   const [manualEditPanelPosition, setManualEditPanelPosition] = useState<{ left: number; top: number } | null>(null);
+  const [manualEditTextSessionId, setManualEditTextSessionId] = useState<string | null>(null);
   const selectedManualEditTargetIdRef = useRef<string | null>(null);
+  const manualEditTextSessionIdRef = useRef<string | null>(null);
+  const manualEditCloseAfterTextCommitRef = useRef(false);
+  const manualEditCloseAfterTextCancelRef = useRef(false);
   const [manualEditDraft, setManualEditDraft] = useState<ManualEditDraft>(() => emptyManualEditDraft());
   const [manualEditHistory, setManualEditHistory] = useState<ManualEditHistoryEntry[]>([]);
   const [manualEditUndone, setManualEditUndone] = useState<ManualEditHistoryEntry[]>([]);
@@ -5522,6 +5526,13 @@ function HtmlViewer({
     win.postMessage({ type: 'od-edit-selected-target', id }, '*');
   }
 
+  function postManualEditTextFinishToIframe(commit: boolean): boolean {
+    const win = iframeRef.current?.contentWindow;
+    if (!win || !manualEditTextSessionIdRef.current) return false;
+    win.postMessage({ type: 'od-edit-text-finish', commit }, '*');
+    return true;
+  }
+
   function syncBridgeModes(target: HTMLIFrameElement | null = iframeRef.current) {
     const win = target?.contentWindow;
     if (!win) return;
@@ -5616,7 +5627,11 @@ function HtmlViewer({
     setManualEditTargets([]);
     setSelectedManualEditTarget(null);
     setManualEditPanelPosition(null);
+    setManualEditTextSessionId(null);
     selectedManualEditTargetIdRef.current = null;
+    manualEditTextSessionIdRef.current = null;
+    manualEditCloseAfterTextCommitRef.current = false;
+    manualEditCloseAfterTextCancelRef.current = false;
     setManualEditDraft(emptyManualEditDraft());
     setManualEditHistory([]);
     setManualEditUndone([]);
@@ -5666,6 +5681,10 @@ function HtmlViewer({
   useEffect(() => {
     selectedManualEditTargetIdRef.current = selectedManualEditTarget?.id ?? null;
   }, [selectedManualEditTarget?.id]);
+
+  useEffect(() => {
+    manualEditTextSessionIdRef.current = manualEditTextSessionId;
+  }, [manualEditTextSessionId]);
 
   useEffect(() => {
     if (!boardMode) {
@@ -5869,6 +5888,10 @@ function HtmlViewer({
       setManualEditPageStylesOpen(false);
       setManualEditPanelPosition(null);
       selectedManualEditTargetIdRef.current = null;
+      manualEditTextSessionIdRef.current = null;
+      manualEditCloseAfterTextCommitRef.current = false;
+      manualEditCloseAfterTextCancelRef.current = false;
+      setManualEditTextSessionId(null);
       setManualEditError(null);
       manualEditPendingStyleRef.current = null;
       if (manualEditStyleTimerRef.current) {
@@ -5899,6 +5922,7 @@ function HtmlViewer({
         return;
       }
       if (data.type === 'od-edit-hover') {
+        if (manualEditTextSessionIdRef.current) return;
         // Hover only surfaces a lightweight "edit params" affordance; it must
         // NOT switch the pinned inspector. The panel changes only when the
         // user clicks that affordance (or a container/image body), so moving
@@ -5919,11 +5943,40 @@ function HtmlViewer({
         return;
       }
       if (data.type === 'od-edit-text-commit') {
-        void applyManualEdit({
-          id: String(data.id),
-          kind: 'set-text',
-          value: String(data.value),
-        }, 'Edit text');
+        void (async () => {
+          const ok = await applyManualEdit({
+            id: String(data.id),
+            kind: 'set-text',
+            value: String(data.value),
+          }, 'Edit text');
+          if (ok && manualEditCloseAfterTextCommitRef.current) {
+            manualEditCloseAfterTextCommitRef.current = false;
+            await clearManualEditTargetSelection();
+          }
+        })();
+        return;
+      }
+      if (data.type === 'od-edit-text-session') {
+        const id = String(data.id || '');
+        if (data.active) {
+          manualEditTextSessionIdRef.current = id;
+          setManualEditTextSessionId(id);
+          return;
+        }
+        if (manualEditTextSessionIdRef.current === id) {
+          manualEditTextSessionIdRef.current = null;
+          setManualEditTextSessionId(null);
+        }
+        if (manualEditCloseAfterTextCancelRef.current) {
+          manualEditCloseAfterTextCancelRef.current = false;
+          manualEditCloseAfterTextCommitRef.current = false;
+          void clearManualEditTargetSelection();
+          return;
+        }
+        if (manualEditCloseAfterTextCommitRef.current && (!data.changed || !data.committed)) {
+          manualEditCloseAfterTextCommitRef.current = false;
+          void clearManualEditTargetSelection();
+        }
         return;
       }
     }
@@ -6040,6 +6093,13 @@ function HtmlViewer({
   }
 
   async function exitManualEditModeAfterFlush(): Promise<boolean> {
+    if (manualEditTextSessionIdRef.current) {
+      manualEditCloseAfterTextCommitRef.current = false;
+      manualEditCloseAfterTextCancelRef.current = false;
+      postManualEditTextFinishToIframe(true);
+      manualEditTextSessionIdRef.current = null;
+      setManualEditTextSessionId(null);
+    }
     const ok = await flushManualEditStyleSave();
     if (!ok) return false;
     setManualEditPanelPosition(null);
@@ -6081,6 +6141,8 @@ function HtmlViewer({
   async function clearManualEditTargetSelection() {
     cancelManualEditStyleDraft();
     selectedManualEditTargetIdRef.current = null;
+    manualEditTextSessionIdRef.current = null;
+    setManualEditTextSessionId(null);
     setSelectedManualEditTarget(null);
     setManualEditPanelPosition(null);
     setManualEditDraft(emptyManualEditDraft(sourceRef.current ?? ''));
@@ -6092,6 +6154,12 @@ function HtmlViewer({
   // the toolbar toggle's job. Dismiss flushes any in-flight tweak first so
   // nothing is lost; cancel reverts the in-flight unsaved tweak instead.
   async function dismissManualEditPanel() {
+    if (manualEditTextSessionIdRef.current) {
+      manualEditCloseAfterTextCommitRef.current = true;
+      manualEditCloseAfterTextCancelRef.current = false;
+      if (postManualEditTextFinishToIframe(true)) return;
+      manualEditCloseAfterTextCommitRef.current = false;
+    }
     const ok = await flushManualEditStyleSave();
     if (!ok) return;
     if (selectedManualEditTarget) void clearManualEditTargetSelection();
@@ -6099,6 +6167,12 @@ function HtmlViewer({
   }
 
   function cancelManualEditPanel() {
+    if (manualEditTextSessionIdRef.current) {
+      manualEditCloseAfterTextCancelRef.current = true;
+      manualEditCloseAfterTextCommitRef.current = false;
+      if (postManualEditTextFinishToIframe(false)) return;
+      manualEditCloseAfterTextCancelRef.current = false;
+    }
     if (selectedManualEditTarget) {
       void clearManualEditTargetSelection();
     } else {

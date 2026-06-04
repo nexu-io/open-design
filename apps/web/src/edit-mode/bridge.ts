@@ -84,8 +84,16 @@ export function buildManualEditBridge(enabled: boolean): string {
     var tag = el.tagName ? el.tagName.toLowerCase() : '';
     if (tag === 'a') return 'link';
     if (tag === 'img') return 'image';
+    if (['h1','h2','h3','h4','h5','h6','p','button','strong','span'].indexOf(tag) >= 0) return 'text';
+    if (isPlainTextContainer(el)) return 'text';
     if (['section','main','nav','div','article','header','footer'].indexOf(tag) >= 0) return 'container';
     return 'text';
+  }
+  function isPlainTextContainer(el){
+    var tag = el && el.tagName ? el.tagName.toLowerCase() : '';
+    if (['section','main','nav','div','article','header','footer'].indexOf(tag) < 0) return false;
+    if (el.children && el.children.length > 0) return false;
+    return !!((el.textContent || '').replace(/\\s+/g, ' ').trim());
   }
   function labelFor(el, id, kind){
     var explicit = el.getAttribute('data-od-label');
@@ -197,8 +205,8 @@ export function buildManualEditBridge(enabled: boolean): string {
     var el = findById(id);
     if (el) el.setAttribute('data-od-edit-selected', 'true');
   }
-  function closestTarget(event){
-    var el = event.target;
+  function closestEditableTargetFromNode(node){
+    var el = node && node.nodeType === 1 ? node : node && node.parentElement;
     while (el && el !== document.documentElement) {
       if (el !== document.body && el !== document.documentElement && isSourceMappable(el) && isDiscoveryTarget(el)) {
         return el;
@@ -206,6 +214,28 @@ export function buildManualEditBridge(enabled: boolean): string {
       el = el.parentElement;
     }
     return null;
+  }
+  function closestTextTargetFromNode(node){
+    var el = node && node.nodeType === 1 ? node : node && node.parentElement;
+    while (el && el !== document.documentElement) {
+      if (el !== document.body && el !== document.documentElement && isSourceMappable(el) && isDiscoveryTarget(el)) {
+        var kind = inferKind(el);
+        if (kind === 'text' || kind === 'link') return el;
+      }
+      el = el.parentElement;
+    }
+    return null;
+  }
+  function targetFromPoint(event){
+    var range = caretRangeFromClick(event);
+    var textTarget = range ? closestTextTargetFromNode(range.startContainer) : null;
+    if (textTarget) return textTarget;
+    var directTextTarget = closestTextTargetFromNode(event.target);
+    if (directTextTarget) return directTextTarget;
+    return closestEditableTargetFromNode(event.target);
+  }
+  function closestTarget(event){
+    return targetFromPoint(event);
   }
   function caretRangeFromClick(clickEvent){
     try {
@@ -237,45 +267,63 @@ export function buildManualEditBridge(enabled: boolean): string {
       sel.addRange(range);
     } catch (e) {}
   }
+  var activeTextEdit = null;
+  function postTextSession(el, active, extra){
+    if (!el) return;
+    window.parent.postMessage(Object.assign({
+      type: 'od-edit-text-session',
+      id: stableId(el),
+      active: !!active
+    }, extra || {}), '*');
+  }
+  function finishActiveTextEdit(commit){
+    if (!activeTextEdit) return false;
+    var session = activeTextEdit;
+    activeTextEdit = null;
+    var el = session.el;
+    el.removeAttribute('contenteditable');
+    el.removeAttribute('data-od-editing');
+    el.removeEventListener('keydown', session.onKey);
+    var value = (el.textContent || '').trim();
+    var changed = value !== session.originalText.trim();
+    if (commit && changed) {
+      window.parent.postMessage({
+        type: 'od-edit-text-commit',
+        id: stableId(el),
+        value: value
+      }, '*');
+    } else if (!commit) {
+      el.textContent = session.originalText;
+    }
+    postTextSession(el, false, { committed: !!commit, changed: changed });
+    return true;
+  }
   function makeEditable(el, clickEvent){
-    if (!el || el.getAttribute('contenteditable') === 'true') return;
+    if (!el) return;
+    if (activeTextEdit && activeTextEdit.el === el) {
+      placeCaretFromClick(clickEvent, el);
+      return;
+    }
+    if (activeTextEdit) finishActiveTextEdit(true);
+    if (el.getAttribute('contenteditable') === 'true') return;
     var originalText = el.textContent || '';
-    clearSelectedTarget();
     el.setAttribute('contenteditable', 'plaintext-only');
     el.setAttribute('data-od-editing', 'true');
     try { el.focus(); } catch (e) {}
     placeCaretFromClick(clickEvent, el);
-    function finish(commit){
-      el.removeAttribute('contenteditable');
-      el.removeAttribute('data-od-editing');
-      el.removeEventListener('blur', onBlur);
-      el.removeEventListener('keydown', onKey);
-      var value = (el.textContent || '').trim();
-      if (commit && value !== originalText.trim()) {
-        window.parent.postMessage({
-          type: 'od-edit-text-commit',
-          id: stableId(el),
-          value: value
-        }, '*');
-      } else if (!commit) {
-        el.textContent = originalText;
-      }
-    }
-    function onBlur(){ finish(true); }
     function onKey(ev){
       if (ev.key === 'Enter' && !ev.shiftKey) {
         ev.preventDefault();
-        finish(true);
-        try { el.blur(); } catch (e) {}
+        finishActiveTextEdit(true);
       }
       if (ev.key === 'Escape') {
         ev.preventDefault();
-        finish(false);
-        try { el.blur(); } catch (e) {}
+        finishActiveTextEdit(false);
       }
     }
-    el.addEventListener('blur', onBlur);
+    activeTextEdit = { el: el, originalText: originalText, onKey: onKey };
     el.addEventListener('keydown', onKey);
+    postTextSession(el, true);
   }
   function camelToKebab(name){ return String(name).replace(/[A-Z]/g, function(m){ return '-' + m.toLowerCase(); }); }
   function cssEscapeId(value){ if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(value); return String(value).replace(/"/g, '\\\\"'); }
@@ -325,7 +373,10 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (ev.data.type === 'od-edit-mode') {
       enabled = !!ev.data.enabled;
       document.documentElement.toggleAttribute('data-od-edit-mode', enabled);
-      if (!enabled) clearSelectedTarget();
+      if (!enabled) {
+        finishActiveTextEdit(true);
+        clearSelectedTarget();
+      }
       if (enabled) setTimeout(postTargets, 0);
       return;
     }
@@ -343,6 +394,10 @@ export function buildManualEditBridge(enabled: boolean): string {
       applyPreviewStyles(ev.data.id, ev.data.styles || {}, ev.data.version);
       return;
     }
+    if (ev.data.type === 'od-edit-text-finish') {
+      finishActiveTextEdit(ev.data.commit !== false);
+      return;
+    }
   });
   document.addEventListener('click', function(ev){
     if (!enabled) return;
@@ -356,6 +411,7 @@ export function buildManualEditBridge(enabled: boolean): string {
       window.parent.postMessage({ type: 'od-edit-background' }, '*');
       return;
     }
+    if (activeTextEdit && activeTextEdit.el !== el) finishActiveTextEdit(true);
     var kind = inferKind(el);
     window.parent.postMessage({ type: 'od-edit-select', target: targetFrom(el, true) }, '*');
     if (kind === 'text' || kind === 'link') {
@@ -365,6 +421,7 @@ export function buildManualEditBridge(enabled: boolean): string {
   }, true);
   document.addEventListener('pointerover', function(ev){
     if (!enabled) return;
+    if (activeTextEdit) return;
     if (ev.target && ev.target.closest && ev.target.closest('[data-od-editing="true"]')) return;
     var el = closestTarget(ev);
     if (!el) return;

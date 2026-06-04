@@ -364,7 +364,69 @@ describe('manual edit bridge target normalization', () => {
     expect(bridge).toContain("display.indexOf('flex') >= 0 || display.indexOf('grid') >= 0");
   });
 
-  it('turns text targets into inline editors and commits changed text', () => {
+  it('prefers nested text targets over their container on click', () => {
+    const dom = new JSDOM(
+      `<main>
+        <section data-od-id="card">
+          <p data-od-id="copy">Card copy</p>
+        </section>
+      </main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const copy = dom.window.document.querySelector('[data-od-id="copy"]') as HTMLElement;
+    const postMessage = vi.spyOn(dom.window.parent, 'postMessage');
+
+    copy.dispatchEvent(new dom.window.MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 8,
+      clientY: 8,
+    }));
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'od-edit-select',
+      target: expect.objectContaining({
+        id: 'copy',
+        kind: 'text',
+      }),
+    }, '*');
+    expect(copy.getAttribute('contenteditable')).toBe('plaintext-only');
+
+    dom.window.close();
+  });
+
+  it('keeps container targets selectable from empty card space', () => {
+    const dom = new JSDOM(
+      `<main>
+        <section data-od-id="card" style="padding: 40px">
+          <p data-od-id="copy">Card copy</p>
+        </section>
+      </main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const card = dom.window.document.querySelector('[data-od-id="card"]') as HTMLElement;
+    const postMessage = vi.spyOn(dom.window.parent, 'postMessage');
+
+    card.dispatchEvent(new dom.window.MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 4,
+      clientY: 4,
+    }));
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'od-edit-select',
+      target: expect.objectContaining({
+        id: 'card',
+        kind: 'container',
+      }),
+    }, '*');
+    expect(card.hasAttribute('contenteditable')).toBe(false);
+
+    dom.window.close();
+  });
+
+  it('turns text targets into inline editors and commits changed text on explicit finish', () => {
     const dom = new JSDOM(
       `<main><h1 data-od-id="title">Original title</h1></main>${buildManualEditBridge(true)}`,
       { runScripts: 'dangerously', url: 'http://localhost' },
@@ -391,12 +453,31 @@ describe('manual edit bridge target normalization', () => {
     title.textContent = 'Edited title';
     title.dispatchEvent(new dom.window.FocusEvent('blur', { bubbles: false }));
 
+    expect(title.getAttribute('contenteditable')).toBe('plaintext-only');
+    expect(title.getAttribute('data-od-editing')).toBe('true');
+    expect(postMessage).not.toHaveBeenCalledWith({
+      type: 'od-edit-text-commit',
+      id: 'title',
+      value: 'Edited title',
+    }, '*');
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od-edit-text-finish', commit: true },
+    }));
+
     expect(title.hasAttribute('contenteditable')).toBe(false);
     expect(title.hasAttribute('data-od-editing')).toBe(false);
     expect(postMessage).toHaveBeenCalledWith({
       type: 'od-edit-text-commit',
       id: 'title',
       value: 'Edited title',
+    }, '*');
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'od-edit-text-session',
+      id: 'title',
+      active: false,
+      committed: true,
+      changed: true,
     }, '*');
 
     dom.window.close();
@@ -421,6 +502,25 @@ describe('manual edit bridge target normalization', () => {
     expect(body.textContent).toBe('Original body');
     expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({
       type: 'od-edit-text-commit',
+    }), '*');
+
+    dom.window.close();
+  });
+
+  it('suppresses hover retargeting while inline text edit is active', () => {
+    const dom = new JSDOM(
+      `<main><h1 data-od-id="title">Title</h1><p data-od-id="body">Body</p></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const title = dom.window.document.querySelector('[data-od-id="title"]') as HTMLElement;
+    const body = dom.window.document.querySelector('[data-od-id="body"]') as HTMLElement;
+    const postMessage = vi.spyOn(dom.window.parent, 'postMessage');
+
+    title.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    body.dispatchEvent(new dom.window.MouseEvent('pointerover', { bubbles: true, cancelable: true }));
+
+    expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({
+      type: 'od-edit-hover',
     }), '*');
 
     dom.window.close();

@@ -1041,6 +1041,126 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByText('Trend card')).toBeNull();
   });
 
+  it('keeps the manual edit text inspector stable while an inline text session is active', async () => {
+    const textTarget = {
+      ...manualEditTarget('copy', 'Editable copy', 20),
+      kind: 'text' as const,
+      tagName: 'p',
+      text: 'Editable copy',
+      fields: { text: 'Editable copy' },
+      isLayoutContainer: false,
+      outerHtml: '<p data-od-id="copy">Editable copy</p>',
+    };
+    const trendTarget = manualEditTarget('trend-card', 'Trend card', 320);
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({
+          name: 'page.html',
+          path: 'page.html',
+          mime: 'text/html',
+          kind: 'html',
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Page',
+            entry: 'page.html',
+            renderer: 'html',
+            exports: ['html'],
+          },
+        })}
+        liveHtml='<html><body><p data-od-id="copy">Editable copy</p><aside data-od-id="trend-card">Trend</aside></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-select', target: textTarget },
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-session', id: 'copy', active: true },
+    }));
+    expect(await screen.findByText('Editable copy')).toBeTruthy();
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-hover', target: trendTarget },
+    }));
+
+    expect(screen.getByText('Editable copy')).toBeTruthy();
+    expect(screen.queryByTestId('manual-edit-hover-open')).toBeNull();
+    expect(screen.queryByText('Trend card')).toBeNull();
+  });
+
+  it('asks the iframe to commit or cancel the active manual text session from the panel footer', async () => {
+    const textTarget = {
+      ...manualEditTarget('copy', 'Editable copy', 20),
+      kind: 'text' as const,
+      tagName: 'p',
+      text: 'Editable copy',
+      fields: { text: 'Editable copy' },
+      isLayoutContainer: false,
+      outerHtml: '<p data-od-id="copy">Editable copy</p>',
+    };
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({
+          name: 'page.html',
+          path: 'page.html',
+          mime: 'text/html',
+          kind: 'html',
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Page',
+            entry: 'page.html',
+            renderer: 'html',
+            exports: ['html'],
+          },
+        })}
+        liveHtml='<html><body><p data-od-id="copy">Editable copy</p></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-select', target: textTarget },
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-session', id: 'copy', active: true },
+    }));
+    expect(await screen.findByText('Editable copy')).toBeTruthy();
+
+    fireEvent.click(document.querySelector('.manual-edit-footer-btn.primary') as HTMLButtonElement);
+    expect(postMessage).toHaveBeenCalledWith({ type: 'od-edit-text-finish', commit: true }, '*');
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-session', id: 'copy', active: true },
+    }));
+
+    fireEvent.click(document.querySelector('.manual-edit-footer-btn.subtle') as HTMLButtonElement);
+    expect(postMessage).toHaveBeenCalledWith({ type: 'od-edit-text-finish', commit: false }, '*');
+  });
+
   it('renders sandbox-shim artifacts on the srcdoc transport without entering edit mode (#2791)', () => {
     const file = baseFile({
       name: 'search.html',
