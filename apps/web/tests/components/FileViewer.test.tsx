@@ -627,7 +627,7 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Shell />);
 
     const firstFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
 
     fireEvent.click(screen.getByRole('button', { name: 'Leave project' }));
 
@@ -635,7 +635,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByTestId('home-view')).toBeTruthy();
     const parkedFrame = container.querySelector<HTMLIFrameElement>('.iframe-keep-alive-pool iframe');
     expect(parkedFrame).toBe(firstFrame);
-    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
 
     fireEvent.click(screen.getByRole('button', { name: 'Return project' }));
 
@@ -782,7 +782,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-od-render-mode="url-load"');
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
     expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
-    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll&amp;odPreviewBridge=selection"');
+    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll&amp;odPreviewBridge=selection&amp;odPreviewBridge=snapshot"');
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
   });
 
@@ -812,13 +812,13 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(frame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(frame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
 
     fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
 
     const reloadedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     expect(reloadedFrame).toBe(frame);
-    expect(reloadedFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=1&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(reloadedFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
   });
 
   it('remounts the srcDoc HTML preview when reload is requested', () => {
@@ -1168,7 +1168,7 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Switcher />);
     const getFrame = () => container.querySelector<HTMLIFrameElement>('[data-testid="artifact-preview-frame"]');
     const initialFrame = getFrame();
-    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
 
     const observationsBeforeSwitch = observedCommittedSrcs.length;
     fireEvent.click(screen.getByRole('button', { name: 'Switch file' }));
@@ -1176,9 +1176,9 @@ describe('FileViewer SVG artifacts', () => {
     const nextFrame = getFrame();
     expect(nextFrame).toBeTruthy();
     expect(observedCommittedSrcs[observationsBeforeSwitch]).toBe(
-      '/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection',
+      '/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot',
     );
-    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
   });
 
   it('allows downloads in the in-tab HTML presentation iframe', async () => {
