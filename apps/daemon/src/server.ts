@@ -3793,6 +3793,63 @@ export function classifyChatRunCloseStatus(params: {
   return 'failed';
 }
 
+type ClaudeStreamJsonBookkeepingRun = {
+  stdinOpen?: boolean;
+  pendingHostAnswers?: Set<string>;
+  turnCompletedCleanly?: boolean;
+  child?: {
+    stdin?: {
+      destroyed?: boolean;
+      end: () => void;
+    } | null;
+  } | null;
+};
+
+export function applyClaudeStreamJsonRunBookkeeping(
+  run: ClaudeStreamJsonBookkeepingRun,
+  ev: unknown,
+) {
+  if (!ev || typeof ev !== 'object') return;
+  const event = ev as {
+    type?: unknown;
+    name?: unknown;
+    id?: unknown;
+    stopReason?: unknown;
+  };
+
+  if (
+    run.stdinOpen &&
+    event.type === 'tool_use' &&
+    (event.name === 'AskUserQuestion' || event.name === 'ask_user_question') &&
+    typeof event.id === 'string'
+  ) {
+    if (!run.pendingHostAnswers) run.pendingHostAnswers = new Set();
+    run.pendingHostAnswers.add(event.id);
+    return;
+  }
+
+  const cleanTerminalTurn =
+    ((event.type === 'turn_end' &&
+      // `stop_reason: tool_use` means the model paused to wait for tool
+      // execution (claude-code is about to run an internal tool, or we owe a
+      // host tool_result). Either way the conversation is still in flight.
+      event.stopReason !== 'tool_use') ||
+      event.type === 'usage') &&
+    (!run.pendingHostAnswers || run.pendingHostAnswers.size === 0);
+  if (!cleanTerminalTurn) return;
+
+  // Record clean completion even if stdin was already closed by the
+  // host-answer path. The close-status classifier reads this to ignore late
+  // SessionEnd hook failures after the final assistant turn completed.
+  run.turnCompletedCleanly = true;
+  if (run.stdinOpen) {
+    if (run.child?.stdin && !run.child.stdin.destroyed) {
+      try { run.child.stdin.end(); } catch {}
+    }
+    run.stdinOpen = false;
+  }
+}
+
 function resolveChatRunShutdownGraceMs() {
   const raw = Number(process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS);
   if (!Number.isFinite(raw)) return 3_000;
@@ -12097,45 +12154,7 @@ export async function startServer({
         //     means the model paused mid-tool, not "turn complete".
         //   - usage (session result at EOF in single-shot mode).
         try {
-          if (run.stdinOpen) {
-            if (
-              ev &&
-              typeof ev === 'object' &&
-              ev.type === 'tool_use' &&
-              (ev.name === 'AskUserQuestion' || ev.name === 'ask_user_question') &&
-              typeof ev.id === 'string'
-            ) {
-              if (!run.pendingHostAnswers) run.pendingHostAnswers = new Set();
-              run.pendingHostAnswers.add(ev.id);
-            } else if (
-              ev &&
-              typeof ev === 'object' &&
-              ((ev.type === 'turn_end' &&
-                // `stop_reason: tool_use` means the model paused to wait
-                // for tool execution (claude-code is about to run an
-                // internal tool, or we owe a host tool_result). Either
-                // way the conversation is still in flight — do not close.
-                ev.stopReason !== 'tool_use') ||
-                ev.type === 'usage') &&
-              (!run.pendingHostAnswers || run.pendingHostAnswers.size === 0)
-            ) {
-              // Per-turn `turn_end` (synthesized from
-              // `assistant.message.stop_reason` in `claude-stream`) is the
-              // primary close signal; `usage` is the session-level result
-              // that fires at EOF in single-shot mode. Either is a valid
-              // "this turn is done" cue, but only when there's no host
-              // answer outstanding AND the model isn't paused mid-tool.
-              if (run.child && run.child.stdin && !run.child.stdin.destroyed) {
-                try { run.child.stdin.end(); } catch {}
-              }
-              run.stdinOpen = false;
-              // Single source of truth for "the model emitted a clean
-              // terminal turn." The close-status classifier reads this so
-              // a SessionEnd hook that exits non-zero during teardown does
-              // not fail a run whose deliverable was already produced (#3372).
-              run.turnCompletedCleanly = true;
-            }
-          }
+          applyClaudeStreamJsonRunBookkeeping(run, ev);
         } catch {}
       });
       child.stdout.on('data', (chunk) => claude.feed(chunk));

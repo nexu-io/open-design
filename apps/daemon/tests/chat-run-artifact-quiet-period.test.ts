@@ -21,6 +21,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   __forTestChatRunHandles,
   __forTestEmitLiveArtifactEvent,
+  applyClaudeStreamJsonRunBookkeeping,
   classifyChatRunCloseStatus,
   resolveActiveInactivityTimeoutMs,
   resolveChatRunArtifactQuietPeriodMs,
@@ -405,5 +406,52 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
         turnCompletedCleanly: true,
       }),
     ).toBe('canceled');
+  });
+});
+
+describe('applyClaudeStreamJsonRunBookkeeping', () => {
+  it('records clean completion when the host-answer path already closed stdin', () => {
+    const run = {
+      stdinOpen: false,
+      pendingHostAnswers: new Set<string>(),
+      turnCompletedCleanly: false,
+      child: {
+        stdin: {
+          destroyed: false,
+          end: vi.fn(),
+        },
+      },
+    };
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'turn_end',
+      stopReason: 'end_turn',
+    });
+
+    expect(run.turnCompletedCleanly).toBe(true);
+    expect(run.child.stdin.end).not.toHaveBeenCalled();
+  });
+
+  it('keeps waiting when a terminal event arrives with host answers still pending', () => {
+    const run = {
+      stdinOpen: true,
+      pendingHostAnswers: new Set(['toolu_1']),
+      turnCompletedCleanly: false,
+      child: {
+        stdin: {
+          destroyed: false,
+          end: vi.fn(),
+        },
+      },
+    };
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'turn_end',
+      stopReason: 'end_turn',
+    });
+
+    expect(run.turnCompletedCleanly).toBe(false);
+    expect(run.stdinOpen).toBe(true);
+    expect(run.child.stdin.end).not.toHaveBeenCalled();
   });
 });
