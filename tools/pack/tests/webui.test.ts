@@ -2,9 +2,11 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { cac } from "cac";
 import { describe, expect, it } from "vitest";
 
 import {
+  addWebuiBuildOptions,
   prebuiltSqliteTarget,
   pruneBuildOnlyNativeModules,
   resolveWebuiPackConfig,
@@ -29,6 +31,27 @@ describe("webuiArchiveKind", () => {
     expect(webuiArchiveKind("linux")).toBe("tar.gz");
     expect(webuiArchiveKind("mac")).toBe("zip");
     expect(webuiArchiveKind("win")).toBe("zip");
+  });
+});
+
+describe("addWebuiBuildOptions (CLI contract)", () => {
+  it("registers the build-only flags the lane honors (--app-version, --require-vela-cli)", () => {
+    const command = addWebuiBuildOptions(cac("test").command("webui <action>"));
+    const names = command.options.map((o) => o.name); // cac camelCases option names
+    expect(names).toContain("appVersion");
+    expect(names).toContain("requireVelaCli");
+    // Build-only boundary: installer/release flags must NOT be registered here.
+    expect(names).not.toContain("to");
+    expect(names).not.toContain("signed");
+    expect(names).not.toContain("portable");
+  });
+
+  it("parses `webui build --app-version <ver>` into options.appVersion (no parser regression)", () => {
+    const cli = cac("test");
+    addWebuiBuildOptions(cli.command("webui <action>"));
+    const parsed = cli.parse(["node", "test", "webui", "build", "--app-version", "9.9.9"], { run: false });
+    expect(parsed.options.appVersion).toBe("9.9.9");
+    expect(resolveWebuiPackConfig("linux", parsed.options).appVersion).toBe("9.9.9");
   });
 });
 

@@ -2,7 +2,7 @@ import { cac } from "cac";
 import type { CAC } from "cac";
 
 import { resolveToolPackConfig, type ToolPackCliOptions, type ToolPackPlatform } from "./config.js";
-import { buildPackedWebui, resolveWebuiPackConfig } from "./webui/build.js";
+import { addWebuiBuildOptions, buildPackedWebui, resolveWebuiPackConfig } from "./webui/build.js";
 import {
   cleanupPackedMacNamespace,
   installPackedMacDmg,
@@ -245,11 +245,13 @@ function resolveWebuiPlatform(value: unknown): ToolPackPlatform {
   throw new Error(`unsupported --platform: ${String(value)} (expected mac|win|linux)`);
 }
 
-addSharedOptions(
-  cli
-    .command("webui <action>", "WebUI packaging commands: build")
-    .option("--platform <platform>", "Target platform: mac|win|linux (default: host)")
-    .option("--arch <arch>", "Target arch: x64|arm64 (default: host arch)"),
+addWebuiBuildOptions(
+  addSharedOptions(
+    cli
+      .command("webui <action>", "WebUI packaging commands: build")
+      .option("--platform <platform>", "Target platform: mac|win|linux (default: host)")
+      .option("--arch <arch>", "Target arch: x64|arm64 (default: host arch)"),
+  ),
 ).action(async (action: string, options: CliOptions) => {
   const platform = resolveWebuiPlatform(options.platform);
   const config = resolveWebuiPackConfig(platform, options);

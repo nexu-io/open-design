@@ -3,6 +3,8 @@ import { chmod, cp, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
+import type { CAC } from "cac";
+
 import {
   assembleNodeApp,
   buildWorkspaceArtifacts,
@@ -196,6 +198,21 @@ export async function stageWebuiLauncherResources(
     await cp(join(resourcesRoot, "open-design-webui.desktop"), desktopEntry);
     await chmod(desktopEntry, 0o755);
   }
+}
+
+type WebuiCommand = ReturnType<CAC["command"]>;
+
+// Registers the build-surface CLI flags the WebUI lane honors. These are exactly
+// the build-only inputs `resolveToolPackBuildOnlyConfig` reads — and ONLY those:
+// the lane deliberately does NOT register installer/release flags (`--to`,
+// `--signed`, `--portable`), keeping the build-only boundary intact. Kept as a
+// named helper so the published `tools-pack webui build` CLI contract (notably
+// `--app-version`, documented in the WebUI plan) is testable and cannot silently
+// regress when the command wiring changes.
+export function addWebuiBuildOptions(command: WebuiCommand): WebuiCommand {
+  return command
+    .option("--app-version <version>", "override the WebUI archive version")
+    .option("--require-vela-cli", "fail packaging when the bundled Vela CLI cannot be resolved");
 }
 
 export function resolveWebuiPackConfig(
