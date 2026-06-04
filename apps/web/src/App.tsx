@@ -1410,7 +1410,7 @@ function AppInner() {
     navigate({
       kind: 'project',
       projectId: result.project.id,
-      fileName: result.entryFile,
+      fileName: null,
     });
   }, [rememberLocalProject]);
 
@@ -1448,7 +1448,7 @@ function AppInner() {
     navigate({
       kind: 'project',
       projectId: result.projectId,
-      fileName: result.entryFile,
+      fileName: null,
     });
   }, [beginProjectListRequest, rememberLocalProject, reconcileFetchedProjects]);
 

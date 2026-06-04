@@ -1,10 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createTabToTracking } from '@open-design/contracts/analytics';
-import {
-  isOpenDesignHostAvailable,
-  pickAndImportHostProject,
-  type OpenDesignHostProjectImportSuccess,
-} from '@open-design/host';
+import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackDesignSystemApplyResult,
@@ -59,6 +55,7 @@ import { formatPickAndImportFailure } from '../utils/pickAndImportError';
 import { Icon } from './Icon';
 import { Skeleton } from './Loading';
 import { Toast } from './Toast';
+import { useOpenFolderImport } from './useOpenFolderImport';
 
 // Snapshot of a curated prompt template, captured at New Project time and
 // folded into ProjectMetadata.promptTemplate. The user may have edited the
@@ -136,10 +133,8 @@ interface Props {
   onImportClaudeDesign?: (
     file: File,
   ) => Promise<ImportClaudeDesignOutcome | void> | ImportClaudeDesignOutcome | void;
-  // Web fallback: the user types an absolute baseDir into the manual
-  // input and the renderer POSTs `/api/import/folder` itself. Browser
-  // builds have no `shell.openPath` surface, so the renderer naming a
-  // path here cannot escalate (PR #974 trust model).
+  // Local-server flow: the daemon-owned native folder picker returns the
+  // selected baseDir, then the renderer POSTs `/api/import/folder`.
   onImportFolder?: (baseDir: string) => Promise<void> | void;
   // Host flow: the desktop main process owns the picker dialog and
   // the import call atomically (`pickAndImport` IPC). The renderer
@@ -275,16 +270,6 @@ export function NewProjectPanel({
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
   const [importZipError, setImportZipError] = useState<
-    { message: string; details?: string } | null
-  >(null);
-  const [baseDir, setBaseDir] = useState('');
-  const [importingFolder, setImportingFolder] = useState(false);
-  // PR #974 round-4 (mrcfps): pickAndImport now returns structured
-  // failure shapes (`desktop auth secret not registered`, `web sidecar
-  // URL not available`, `daemon returned HTTP X`) — surfacing them
-  // gives the user a recovery hint instead of a silent no-op.
-  // Shape: `{ message, details? }`. `null` means no toast.
-  const [importFolderError, setImportFolderError] = useState<
     { message: string; details?: string } | null
   >(null);
   const [tab, setTab] = useState<CreateTab>(initialTab);
@@ -743,60 +728,11 @@ export function NewProjectPanel({
     }
   }
 
-  // PR #974: the host bridge does not expose raw folder paths to the
-  // renderer. The desktop flow uses `pickAndImport`, which performs the
-  // picker + the HMAC-gated import atomically in the main process and
-  // returns host-owned project identifiers.
-  // The web fallback continues to use the manual baseDir input —
-  // browser builds have no `shell.openPath` surface so a renderer-named
-  // path cannot escalate.
-  const hasHostPickAndImport = isOpenDesignHostAvailable();
-
-  async function handleOpenFolder() {
-    if (hasHostPickAndImport) {
-      if (!onImportFolderResponse) return;
-      setImportFolderError(null);
-      setImportingFolder(true);
-      try {
-        const result = await pickAndImportHostProject({
-          skillId: skillIdForTab,
-        });
-        if (!result) return;
-        if (result.ok === true) {
-          await onImportFolderResponse(result);
-          return;
-        }
-        // Round-4 (mrcfps #2): every non-OK shape used to fall through
-        // a silent `return`. Reserve silent for the explicit cancel
-        // case; surface the structured reason for everything else
-        // (auth-not-registered, web-sidecar-down, daemon HTTP errors,
-        // network errors). The pickAndImport handler already pre-shapes
-        // these into a `{ ok: false, reason, details? }` envelope.
-        if ('canceled' in result && result.canceled === true) return;
-        setImportFolderError(formatPickAndImportFailure(result));
-      } finally {
-        setImportingFolder(false);
-      }
-      return;
-    }
-    if (!onImportFolder) return;
-    const trimmed = baseDir.trim();
-    if (!trimmed) {
-      setImportFolderError({ message: 'Path cannot be empty' });
-      return;
-    }
-    setImportFolderError(null);
-    setImportingFolder(true);
-    try {
-      await onImportFolder(trimmed);
-    } catch (err) {
-      setImportFolderError({
-        message: err instanceof Error ? err.message : 'Failed to import folder',
-      });
-    } finally {
-      setImportingFolder(false);
-    }
-  }
+  const folderImport = useOpenFolderImport({
+    skillId: skillIdForTab,
+    onImportFolder,
+    onImportFolderResponse,
+  });
 
   return (
     <div className="newproj" data-testid="new-project-panel">
@@ -1060,27 +996,16 @@ export function NewProjectPanel({
             </button>
           </>
         ) : null}
-        {(hasHostPickAndImport ? onImportFolderResponse : onImportFolder) ? (
+        {folderImport.available ? (
           <div className="newproj-open-folder">
-            {!hasHostPickAndImport ? (
-              <input
-                type="text"
-                className="newproj-folder-input"
-                placeholder="/path/to/project"
-                value={baseDir}
-                onChange={(e) => setBaseDir(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') void handleOpenFolder(); }}
-                disabled={importingFolder}
-              />
-            ) : null}
             <button
               type="button"
               className="ghost newproj-import"
-              disabled={(!hasHostPickAndImport && !baseDir.trim()) || importingFolder}
-              onClick={() => void handleOpenFolder()}
+              disabled={folderImport.importing}
+              onClick={() => void folderImport.openFolder()}
             >
               <Icon name="folder" size={13} />
-              <span>{importingFolder ? 'Opening…' : 'Open folder'}</span>
+              <span>{folderImport.importing ? 'Opening...' : 'Open folder'}</span>
             </button>
           </div>
         ) : null}
@@ -1094,12 +1019,12 @@ export function NewProjectPanel({
           onDismiss={() => setImportZipError(null)}
         />
       ) : null}
-      {importFolderError ? (
+      {folderImport.error ? (
         <Toast
-          message={importFolderError.message}
-          details={importFolderError.details ?? null}
+          message={folderImport.error.message}
+          details={folderImport.error.details ?? null}
           ttlMs={6000}
-          onDismiss={() => setImportFolderError(null)}
+          onDismiss={folderImport.clearError}
         />
       ) : null}
     </div>

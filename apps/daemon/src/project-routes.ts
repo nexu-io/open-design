@@ -1315,8 +1315,29 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       typeof seedFromConversationId === 'string' && seedFromConversationId
         ? getConversation(db, seedFromConversationId)
         : null;
+    // Client-supplied fork snapshot. The chat "Fork" action sends the exact
+    // messages the user is looking at (up to the fork point). We prefer it over
+    // reading the source conversation from the DB so a fork point that was
+    // never persisted — e.g. an assistant turn whose run errored / had its
+    // connection reset before reaching the database — still forks instead of
+    // 404ing on `forkAfterMessageId`.
+    const clientSeedMessages = Array.isArray(req.body?.seedMessages)
+      ? (req.body.seedMessages as any[]).filter(
+          (message) => message && typeof message.role === 'string',
+        )
+      : null;
     let seedMessages: any[] = [];
-    if (sourceConversation && sourceConversation.projectId === req.params.id) {
+    if (clientSeedMessages && clientSeedMessages.length > 0) {
+      seedMessages = clientSeedMessages;
+      if (requestedForkMessageId) {
+        const forkIndex = seedMessages.findIndex(
+          (message) => message.id === requestedForkMessageId,
+        );
+        if (forkIndex >= 0) {
+          seedMessages = seedMessages.slice(0, forkIndex + 1);
+        }
+      }
+    } else if (sourceConversation && sourceConversation.projectId === req.params.id) {
       seedMessages = listMessages(db, seedFromConversationId);
       if (requestedForkMessageId) {
         const forkIndex = seedMessages.findIndex((message) => message.id === requestedForkMessageId);

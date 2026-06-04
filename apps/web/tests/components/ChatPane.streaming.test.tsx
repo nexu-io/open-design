@@ -107,6 +107,12 @@ class MockResizeObserver {
   trigger(target: Element) {
     this.callback([{ target } as ResizeObserverEntry], this as unknown as ResizeObserver);
   }
+
+  static triggerObserved(target: Element) {
+    for (const instance of MockResizeObserver.instances) {
+      if (instance.observed.has(target)) instance.trigger(target);
+    }
+  }
 }
 
 function mockDataTransfer(): DataTransfer {
@@ -777,7 +783,7 @@ Expected output:
       },
     });
 
-    MockResizeObserver.instances[0]?.trigger(strip);
+    MockResizeObserver.triggerObserved(strip);
 
     expect(log!.scrollTop).toBe(600);
   });

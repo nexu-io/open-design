@@ -943,6 +943,9 @@ export interface Dict {
   'recentProjects.title': string;
   'recentProjects.viewAll': string;
   'recentProjects.empty': string;
+  'home.openExistingProject': string;
+  'home.openExistingProjectOpening': string;
+  'home.chooseFolderSubtitle': string;
   'pluginsHome.title': string;
   'pluginsHome.subtitle': string;
   'pluginsHome.browseRegistry': string;
@@ -1882,6 +1885,9 @@ export interface Dict {
   'chat.copyPrompt': string;
   'chat.copyDone': string;
   'chat.composerPlaceholder': string;
+  'chat.activeFileEditingLabel': string;
+  'chat.activeFilePlaceholder': string;
+  'chat.designArtifactsShowMore': string;
   'chat.mode.chat.label': string;
   'chat.mode.chat.title': string;
   'chat.mode.chat.summary': string;

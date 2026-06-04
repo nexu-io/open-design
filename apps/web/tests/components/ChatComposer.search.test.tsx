@@ -667,6 +667,50 @@ describe('ChatComposer /search command', () => {
     expect(onSend).not.toHaveBeenCalled();
     expect(composerText()).toContain('keep this draft');
   });
+
+  it('shows the active imported-folder file and sends it as edit context', async () => {
+    const onSend = vi.fn();
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[
+          {
+            name: 'site/index.html',
+            path: 'site/index.html',
+            type: 'file',
+            kind: 'html',
+            mime: 'text/html',
+            size: 128,
+            mtime: 1,
+          },
+        ]}
+        activeProjectFileName="site/index.html"
+        streaming={false}
+        projectMetadata={{ kind: 'prototype', importedFrom: 'folder' }}
+        onEnsureProject={async () => 'project-1'}
+        onSend={onSend}
+        onStop={vi.fn()}
+      />,
+    );
+
+    const activeFileStrip = screen.getByTestId('composer-active-file');
+    expect(activeFileStrip.textContent).toContain('Editing');
+    expect(activeFileStrip.textContent).toContain('site/index.html');
+    expect(screen.getByTestId('chat-composer').className).toContain('composer-active-file-mode');
+
+    expect(screen.getAllByText('Ask Open Design to change index.html...').length).toBeGreaterThan(0);
+    await typeAndSettle('Make the hero clearer');
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend).toHaveBeenCalledWith(
+      'Make the hero clearer',
+      [{ path: 'site/index.html', name: 'index.html', kind: 'file' }],
+      [],
+      undefined,
+    );
+  });
 });
 
 function deferred<T>() {

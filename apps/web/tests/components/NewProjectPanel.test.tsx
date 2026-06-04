@@ -60,6 +60,7 @@ afterEach(() => {
   cleanup();
   globalThis.ResizeObserver = originalResizeObserver;
   Element.prototype.scrollIntoView = originalScrollIntoView;
+  vi.unstubAllGlobals();
 });
 
 const originalResizeObserver = globalThis.ResizeObserver;
@@ -663,8 +664,17 @@ describe('NewProjectPanel folder import feedback', () => {
     expect(await screen.findByText('Import failed: unsupported zip contents')).toBeTruthy();
   });
 
-  it('shows an error when manual folder import rejects with a daemon message', async () => {
+  it('shows an error when folder picker import rejects with a daemon message', async () => {
     const onImportFolder = vi.fn().mockRejectedValue(new Error('folder not found'));
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/dialog/open-folder') {
+        return new Response(
+          JSON.stringify({ path: '/missing/project' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
 
     render(
       <NewProjectPanel
@@ -679,12 +689,11 @@ describe('NewProjectPanel folder import feedback', () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText('/path/to/project'), {
-      target: { value: '/missing/project' },
-    });
     fireEvent.click(screen.getByRole('button', { name: 'Open folder' }));
 
-    expect(onImportFolder).toHaveBeenCalledWith('/missing/project');
+    await waitFor(() => {
+      expect(onImportFolder).toHaveBeenCalledWith('/missing/project');
+    });
     expect(await screen.findByText('folder not found')).toBeTruthy();
   });
 });
