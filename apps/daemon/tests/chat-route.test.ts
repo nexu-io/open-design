@@ -727,6 +727,68 @@ process.stdin.on('end', () => {
       },
     );
   });
+  it('does not fail plugin authoring when a valid form follows a Unicode preamble that expands under toLowerCase', async () => {
+    // The mirrored close-tag scan must stay in the original-string coordinate
+    // space. Some code points expand under toLowerCase ("İ" -> "i̇"), so
+    // lowercasing the whole buffer before indexing would desync the close-tag
+    // offset and corrupt the JSON body slice, failing a valid form. The
+    // preamble here contains "İ" before a well-formed form block.
+    const projectId = `proj-plugin-authoring-unicode-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin authoring unicode-preamble fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.status).toBe(200);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'İstanbul brief — 先确认几个问题。\\n<ask-question id="discovery" title="Plugin brief">\\n{"questions":[{"id":"purpose","label":"What should it do?","type":"text"}]}\\n</ask-question>' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            pluginId: 'od-plugin-authoring',
+            message: '帮我做个插件。',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).not.toContain('ended before generating the required generated-plugin artifacts');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
   it('closes the # Instructions block with an explicit "do not echo" guard so models do not parrot the prompt back', async () => {
     // claude-opus-4-7 (and a few other instruction-tuned models) start
     // their reply by echoing the # Instructions block verbatim, which
