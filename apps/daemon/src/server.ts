@@ -12875,7 +12875,7 @@ export async function startServer({
             }
             clearInactivityWatchdog();
             send('error', createSseErrorPayload(
-              piErrorCode ?? 'AGENT_EXECUTION_FAILED',
+              'AGENT_EXECUTION_FAILED',
               agentStreamError,
               { retryable: false },
             ));
