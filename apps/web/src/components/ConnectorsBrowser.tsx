@@ -7,6 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SyntheticEvent,
 } from 'react';
+import { VisuallyHidden } from '@open-design/components';
 import type { ConnectorConnectResponse, ConnectorDetail, ConnectorStatusResponse } from '@open-design/contracts';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -900,7 +901,7 @@ export function ConnectorsBrowser({
             >
               <p className="connector-panel-alert-copy" role="status">
                 <strong title={alert.connectorName}>{alert.connectorName}</strong>
-                <span className="sr-only">: </span>
+                <VisuallyHidden>: </VisuallyHidden>
                 <span title={alert.message}>{alert.message}</span>
               </p>
               <button

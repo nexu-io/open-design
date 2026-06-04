@@ -8,9 +8,9 @@
 //
 // `agentCliEnv` is intentionally limited by allowlist below. It may include
 // proxy/auth overrides for local CLIs (for example ANTHROPIC_BASE_URL +
-// ANTHROPIC_API_KEY for Claude Code, or OPENAI_BASE_URL + OPENAI_API_KEY for
-// Codex). Those values are local-only and should not be logged or returned
-// outside this machine.
+// ANTHROPIC_AUTH_TOKEN for Claude Code, or OPENAI_BASE_URL + OPENAI_API_KEY
+// for Codex). Those values are local-only and should not be logged or
+// returned outside this machine.
 
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
@@ -162,7 +162,7 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
     'OPENCODE_TEST_HOME',
   ])],
   ['aider', new Set(['AIDER_BIN'])],
-  ['claude', new Set(['CLAUDE_CONFIG_DIR', 'CLAUDE_BIN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY'])],
+  ['claude', new Set(['CLAUDE_CONFIG_DIR', 'CLAUDE_BIN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'MMD_MODEL_ROUTES_FILE'])],
   ['codex', new Set(['CODEX_HOME', 'CODEX_BIN', 'OPENAI_BASE_URL', 'CODEX_API_KEY', 'OPENAI_API_KEY'])],
   ['copilot', new Set(['COPILOT_BIN'])],
   ['cursor-agent', new Set(['CURSOR_AGENT_BIN'])],

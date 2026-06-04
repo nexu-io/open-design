@@ -1,0 +1,125 @@
+name: notify-daily-feishu
+
+# Every morning (09:00 Asia/Shanghai) build a beta package off the currently
+# active release branch (highest-semver release/vX.Y.Z) by reusing release-beta,
+# then post a Feishu card with download links and the changelog since the
+# previously published beta — to a separate Feishu group from the per-push
+# release stream (which builds the heavier nightly channel).
+#
+# NOTE: schedule triggers only fire from the default branch (main), so this file
+# must live on main to run on its cron.
+
+on:
+  schedule:
+    # 01:00 UTC = 09:00 Asia/Shanghai
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Override the release branch to build (e.g. release/v0.9.0). Empty auto-selects the highest-semver release branch."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: feishu-daily
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve active release branch
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.pick.outputs.ref }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Pick highest-semver release branch
+        id: pick
+        env:
+          OVERRIDE_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          if [ -n "${OVERRIDE_REF:-}" ]; then
+            echo "using override ref: $OVERRIDE_REF"
+            echo "ref=$OVERRIDE_REF" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          latest="$(git ls-remote --heads origin 'refs/heads/release/v*' \
+            | sed 's#.*refs/heads/##' \
+            | grep -E '^release/v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V \
+            | tail -1)"
+          if [ -z "$latest" ]; then
+            echo "no release/vX.Y.Z branch found" >&2
+            exit 1
+          fi
+          echo "active release branch: $latest"
+          echo "ref=$latest" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build beta from active release branch
+    needs: resolve
+    uses: ./.github/workflows/release-beta.yml
+    secrets: inherit
+    with:
+      enable_mac: true
+      enable_win: true
+      ref: ${{ needs.resolve.outputs.ref }}
+
+  notify:
+    name: Notify Feishu (daily)
+    needs:
+      - resolve
+      - build
+    if: ${{ !cancelled() && needs.build.outputs.beta_version != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout built ref
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.resolve.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Compute changelog since last beta
+        id: changelog
+        env:
+          PREV: ${{ needs.build.outputs.previous_commit }}
+          CUR: ${{ needs.build.outputs.commit }}
+        run: |
+          set -euo pipefail
+          file="$RUNNER_TEMP/changelog.txt"
+          : > "$file"
+          if [ -n "$PREV" ] && git cat-file -e "${PREV}^{commit}" 2>/dev/null && git cat-file -e "${CUR}^{commit}" 2>/dev/null; then
+            git log --no-merges --pretty=format:'%s (%h)' "${PREV}..${CUR}" > "$file" || true
+          fi
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Post Feishu card
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_DAILY_WEBHOOK }}
+          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_DAILY_SIGN_SECRET }}
+          CHANNEL_LABEL: "Beta"
+          VERSION: ${{ needs.build.outputs.beta_version }}
+          BRANCH: ${{ needs.build.outputs.branch }}
+          COMMIT: ${{ needs.build.outputs.commit }}
+          PREVIOUS_COMMIT: ${{ needs.build.outputs.previous_commit }}
+          CHANGELOG_FILE: ${{ steps.changelog.outputs.file }}
+          BUILD_STATE: ${{ needs.build.result }}
+          MAC_ARM64_URL: ${{ needs.build.outputs.mac_arm64_url }}
+          WIN_URL: ${{ needs.build.outputs.win_url }}
+          STREAM_LABEL: "每日定时"
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node --experimental-strip-types .github/scripts/release/feishu/notify.ts

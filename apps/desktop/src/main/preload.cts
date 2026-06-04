@@ -3,6 +3,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 import type {
   OpenDesignHostBridge,
   OpenDesignHostActionResult,
+  OpenDesignHostBrowserClearDataOptions,
+  OpenDesignHostCaptureOptions,
+  OpenDesignHostCaptureResult,
   OpenDesignHostFailure,
   OpenDesignHostProjectImportResult,
   OpenDesignHostProjectReplaceWorkingDirResult,
@@ -12,7 +15,7 @@ import type {
 } from '@open-design/host';
 
 const OPEN_DESIGN_HOST_GLOBAL: typeof import('@open-design/host').OPEN_DESIGN_HOST_GLOBAL = '__od__';
-const OPEN_DESIGN_HOST_VERSION: typeof import('@open-design/host').OPEN_DESIGN_HOST_VERSION = 1;
+const OPEN_DESIGN_HOST_VERSION: typeof import('@open-design/host').OPEN_DESIGN_HOST_VERSION = 2;
 const UPDATER_STATUS_EVENT = 'od:update:status-changed';
 
 // Mirror of the argv prefix used by main's `applyOsLocaleSwitch` and
@@ -188,6 +191,26 @@ const shell = {
   },
 };
 
+const browser = {
+  clearData: async (options?: OpenDesignHostBrowserClearDataOptions): Promise<OpenDesignHostActionResult> => {
+    try {
+      return await ipcRenderer.invoke('browser:clear-data', options ?? null);
+    } catch (error) {
+      return actionFailure(reasonFromError(error));
+    }
+  },
+};
+
+const capture = {
+  page: async (options?: OpenDesignHostCaptureOptions): Promise<OpenDesignHostCaptureResult> => {
+    try {
+      return await ipcRenderer.invoke('od:capture-page', options ?? null);
+    } catch (error) {
+      return failure(reasonFromError(error));
+    }
+  },
+};
+
 function invokeUpdater(
   action: 'check' | 'download' | 'install' | 'status',
   options?: OpenDesignHostUpdaterActionOptions,
@@ -232,6 +255,8 @@ const hostBridge = {
     ...(osLocale !== undefined ? { osLocale } : {}),
   },
   shell,
+  browser,
+  capture,
   project,
   pdf: {
     print: async (html: string, nonce?: string, options?: PrintPdfOptions): Promise<OpenDesignHostActionResult> => {

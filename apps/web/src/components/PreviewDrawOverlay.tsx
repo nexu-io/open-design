@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode, type WheelEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type PointerEvent, type ReactNode, type WheelEvent } from 'react';
+import { createPortal, flushSync } from 'react-dom';
 
 import { Icon } from './Icon';
 import { RemixIcon } from './RemixIcon';
@@ -20,17 +21,26 @@ interface CaptureTarget {
   position: { x: number; y: number; width: number; height: number };
   htmlHint?: string;
 }
+interface PreviewSnapshot {
+  dataUrl: string;
+  w: number;
+  h: number;
+}
+type CaptureFrameRect = Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>;
 
 export const ANNOTATION_EVENT = 'opendesign:annotation';
+export type AnnotationAction = 'draft' | 'queue' | 'send';
 
 export interface AnnotationEventDetail {
   file: File | null;
   note: string;
-  action: 'queue' | 'send';
+  action: AnnotationAction;
   filePath?: string;
   markKind?: PreviewVisualMarkKind;
   bounds?: { x: number; y: number; width: number; height: number };
   target?: CaptureTarget | null;
+  /** Images the user attached in the markup composer to combine with the mark. */
+  extraFiles?: File[];
   ack?: (result: { ok: boolean; message?: string }) => void;
 }
 
@@ -40,7 +50,10 @@ interface Props {
   captureViewport?: boolean;
   onActiveChange?: (active: boolean) => void;
   captureTarget?: CaptureTarget | null;
+  captureSnapshot?: () => Promise<PreviewSnapshot | null>;
+  captureFrameRect?: () => CaptureFrameRect | null;
   filePath?: string;
+  hideChrome?: boolean;
   sendDisabled?: boolean;
   sendDisabledReason?: string;
 }
@@ -55,7 +68,10 @@ export function PreviewDrawOverlay({
   captureViewport = false,
   onActiveChange,
   captureTarget = null,
+  captureSnapshot,
+  captureFrameRect,
   filePath,
+  hideChrome = false,
   sendDisabled = false,
   sendDisabledReason,
 }: Props) {
@@ -74,9 +90,21 @@ export function PreviewDrawOverlay({
   const [hasBox, setHasBox] = useState(false);
   const [undoCount, setUndoCount] = useState(0);
   const [redoCount, setRedoCount] = useState(0);
-  const [pendingAction, setPendingAction] = useState<'queue' | 'send' | null>(null);
+  const [pendingAction, setPendingAction] = useState<AnnotationAction | null>(null);
+  // True only for the brief window while a host compositor capture is in
+  // flight: hides this overlay's strokes/toolbar so they don't appear in the
+  // screenshot (they're re-painted onto the result by compositeWithBackground).
+  const [capturing, setCapturing] = useState(false);
+  // Images the user attaches (picker/paste/drop) to combine with the mark.
+  const [extraFiles, setExtraFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Object-URL thumbnails for the attached (not-yet-uploaded) images, so the
+  // markup composer can preview/open/remove them just like the main chat
+  // composer's staged attachments. Revoked whenever the file set changes.
+  const [imagePreviews, setImagePreviews] = useState<{ file: File; url: string }[]>([]);
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [captureWarning, setCaptureWarning] = useState<{
-    action: 'queue' | 'send';
+    action: AnnotationAction;
     message: string;
   } | null>(null);
   const sending = pendingAction !== null;
@@ -110,6 +138,24 @@ export function PreviewDrawOverlay({
       ctx.stroke();
     }
   }, []);
+
+  // rAF-coalesce redraws driven by the pointermove hot path so a high-Hz
+  // pointer (or trackpad) repaints the canvas at most once per frame instead of
+  // once per raw event. One-shot redraws (pointerup, undo, clear) stay sync.
+  const redrawFrameRef = useRef<number | null>(null);
+  const scheduleRedraw = useCallback(() => {
+    if (redrawFrameRef.current !== null) return;
+    redrawFrameRef.current = requestAnimationFrame(() => {
+      redrawFrameRef.current = null;
+      redraw();
+    });
+  }, [redraw]);
+  useEffect(
+    () => () => {
+      if (redrawFrameRef.current !== null) cancelAnimationFrame(redrawFrameRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -236,15 +282,20 @@ export function PreviewDrawOverlay({
     if (!active || sending) return;
     if (boxDraftRef.current) {
       boxDraftRef.current.current = pointFromEvent(e);
-      redraw();
+      scheduleRedraw();
       return;
     }
     if (!drawingRef.current) return;
     drawingRef.current.points.push(pointFromEvent(e));
-    redraw();
+    scheduleRedraw();
   }
   function onPointerUp(e: PointerEvent) {
     if (!active || sending) return;
+    // A final synchronous redraw follows; drop any pending move-frame.
+    if (redrawFrameRef.current !== null) {
+      cancelAnimationFrame(redrawFrameRef.current);
+      redrawFrameRef.current = null;
+    }
     if (boxDraftRef.current) {
       boxDraftRef.current.current = pointFromEvent(e);
       const next = normalizedRectFromPoints(boxDraftRef.current.start, boxDraftRef.current.current);
@@ -282,6 +333,53 @@ export function PreviewDrawOverlay({
     syncHistoryState();
     redraw();
   }
+
+  function addExtraFiles(files: FileList | File[] | null) {
+    if (!files) return;
+    const imgs = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (imgs.length === 0) return;
+    setExtraFiles((cur) => [...cur, ...imgs]);
+  }
+  function onFileInputChange(e: ChangeEvent<HTMLInputElement>) {
+    addExtraFiles(e.target.files);
+    e.target.value = '';
+  }
+  function onNotePaste(e: ClipboardEvent<HTMLInputElement>) {
+    const files = e.clipboardData?.files;
+    if (!files || files.length === 0) return;
+    const imgs = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (imgs.length === 0) return;
+    e.preventDefault();
+    addExtraFiles(imgs);
+  }
+  function removeExtraFile(index: number) {
+    setExtraFiles((cur) => cur.filter((_, i) => i !== index));
+    setPreviewIndex(null);
+  }
+
+  // Keep object-URL thumbnails in sync with the attached files; revoke on
+  // change/unmount so we never leak blob URLs.
+  useEffect(() => {
+    const next = extraFiles.map((file) => ({ file, url: URL.createObjectURL(file) }));
+    setImagePreviews(next);
+    return () => {
+      next.forEach((item) => URL.revokeObjectURL(item.url));
+    };
+  }, [extraFiles]);
+
+  // Escape closes the image preview first (capture phase so it runs before the
+  // overlay's own Escape-to-close handler).
+  useEffect(() => {
+    if (previewIndex === null) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setPreviewIndex(null);
+      }
+    }
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [previewIndex]);
 
   function undoStroke() {
     if (sending) return;
@@ -321,6 +419,8 @@ export function PreviewDrawOverlay({
     drawingRef.current = null;
     selectionBoxRef.current = null;
     boxDraftRef.current = null;
+    setExtraFiles([]);
+    setPreviewIndex(null);
     syncHistoryState();
     redraw();
   }, [active, redraw]);
@@ -380,7 +480,36 @@ export function PreviewDrawOverlay({
     return undefined;
   }
 
-  async function requestSnapshot(): Promise<{ dataUrl: string; w: number; h: number } | null> {
+  function waitForOverlayHidden(): Promise<void> {
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+  }
+
+  function snapshotFrameRect(): CaptureFrameRect | null {
+    return (
+      captureFrameRect?.() ??
+      (captureSnapshot
+        ? wrapRef.current?.getBoundingClientRect()
+        : activePreviewIframe()?.getBoundingClientRect()) ??
+      null
+    );
+  }
+
+  async function requestSnapshot(): Promise<PreviewSnapshot | null> {
+    if (captureSnapshot) {
+      // The host's captureSnapshot is a compositor screenshot of the on-screen
+      // region, which would otherwise include this overlay's own strokes +
+      // toolbar. Hide them for the capture; compositeWithBackground re-paints
+      // the marks onto the result afterwards.
+      flushSync(() => setCapturing(true));
+      try {
+        await waitForOverlayHidden();
+        return await captureSnapshot();
+      } finally {
+        flushSync(() => setCapturing(false));
+      }
+    }
     const iframe = snapshotHostIframe();
     if (!iframe) return null;
     // Capture mode may still be swapping the srcDoc frame to full content when
@@ -434,10 +563,10 @@ export function PreviewDrawOverlay({
     ctx.restore();
   }
 
-  async function compositeWithBackground(snap: { dataUrl: string; w: number; h: number }): Promise<Blob | null> {
-    const iframe = activePreviewIframe();
-    if (!iframe) return null;
-    const rect = iframe.getBoundingClientRect();
+  async function compositeWithBackground(snap: PreviewSnapshot): Promise<Blob | null> {
+    const frameRect = snapshotFrameRect();
+    if (!frameRect) return null;
+    const rect = frameRect;
     const out = document.createElement('canvas');
     out.width = snap.w;
     out.height = snap.h;
@@ -450,6 +579,11 @@ export function PreviewDrawOverlay({
       img.src = snap.dataUrl;
     });
     if (!bg) return null;
+    // Opaque base: even when the captured snapshot is transparent (web fallback
+    // rasterizer painted nothing) the composited annotation never flattens to
+    // black — it degrades to a white frame with the marks on top.
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, out.width, out.height);
     ctx.drawImage(bg, 0, 0, snap.w, snap.h);
     const sx = snap.w / Math.max(1, rect.width);
     const sy = snap.h / Math.max(1, rect.height);
@@ -473,10 +607,10 @@ export function PreviewDrawOverlay({
     return new Promise((resolve) => out.toBlob((b) => resolve(b), 'image/png'));
   }
 
-  async function send(action: 'queue' | 'send') {
+  async function send(action: AnnotationAction) {
     const hasTarget = Boolean(captureTarget);
     const shouldCapture = hasInk || hasBox || hasTarget || captureViewport;
-    const canSubmit = shouldCapture || Boolean(note.trim());
+    const canSubmit = shouldCapture || Boolean(note.trim()) || extraFiles.length > 0;
     if (sending || !canSubmit) return;
     // While a task is running the primary Send is disabled (use Queue instead).
     // The note/attachment is not lost: Queue still stages it for the next turn.
@@ -520,6 +654,7 @@ export function PreviewDrawOverlay({
           markKind: kind,
           bounds: kind ? annotationBounds() : undefined,
           target: captureTarget,
+          extraFiles: extraFiles.length ? extraFiles : undefined,
           ack: finish,
         };
         window.dispatchEvent(new CustomEvent(ANNOTATION_EVENT, { detail }));
@@ -534,6 +669,8 @@ export function PreviewDrawOverlay({
       clearInk();
       setCaptureWarning(null);
       setNote('');
+      setExtraFiles([]);
+      setPreviewIndex(null);
     } finally {
       setPendingAction(null);
     }
@@ -541,10 +678,13 @@ export function PreviewDrawOverlay({
 
   const overlayPointer = active ? 'auto' : 'none';
   const showCanvas = active || hasInk || hasBox;
-  const canSubmit = hasInk || hasBox || Boolean(captureTarget) || captureViewport || Boolean(note.trim());
+  const canSubmit = hasInk || hasBox || Boolean(captureTarget) || captureViewport || Boolean(note.trim()) || extraFiles.length > 0;
+  const activePreview = previewIndex !== null ? imagePreviews[previewIndex] ?? null : null;
+  const canAddToInput = canSubmit;
   const canSend = canSubmit && !sendDisabled;
   const canUndo = (undoCount > 0 || hasBox) && !sending;
   const canRedo = redoCount > 0 && !sending;
+  const chromeHidden = capturing || hideChrome;
 
   return (
     <div
@@ -554,6 +694,7 @@ export function PreviewDrawOverlay({
         inset: 0,
         width: '100%',
         height: '100%',
+        zIndex: 0,
       }}
     >
       {children}
@@ -570,6 +711,8 @@ export function PreviewDrawOverlay({
             inset: 0,
             pointerEvents: overlayPointer,
             cursor: active ? 'crosshair' : 'default',
+            visibility: chromeHidden ? 'hidden' : 'visible',
+            zIndex: 80,
           }}
         />
       ) : null}
@@ -582,45 +725,134 @@ export function PreviewDrawOverlay({
               aria-live="polite"
               style={{
                 position: 'absolute',
-                left: '50%',
-                bottom: 82,
+                left: 'calc(50% - 52px)',
+                bottom: 112,
                 transform: 'translateX(-50%)',
                 display: 'flex',
                 alignItems: 'center',
-                maxWidth: 'min(420px, calc(100% - 32px))',
+                maxWidth: 'min(420px, calc(100% - 144px))',
                 padding: '8px 12px',
                 borderRadius: 999,
                 background: 'rgba(20,20,20,0.92)',
                 color: '#fff',
                 boxShadow: '0 6px 24px rgba(0,0,0,0.18)',
                 backdropFilter: 'blur(8px)',
-                zIndex: 11,
+                zIndex: 92,
                 pointerEvents: 'none',
                 fontSize: 13,
                 lineHeight: 1.35,
+                visibility: chromeHidden ? 'hidden' : undefined,
               }}
             >
               <span>{captureWarning.message}</span>
             </div>
           ) : null}
+          {imagePreviews.length > 0 ? (
+            <div
+              aria-label={t('chat.annotationAttachedImages')}
+              style={{
+                position: 'absolute',
+                left: 'calc(50% - 52px)',
+                bottom: 88,
+                transform: 'translateX(-50%)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                maxWidth: 'min(520px, calc(100% - 144px))',
+                overflowX: 'auto',
+                padding: '6px 8px',
+                background: 'rgba(20,20,20,0.92)',
+                borderRadius: 12,
+                boxShadow: '0 6px 24px rgba(0,0,0,0.18)',
+                backdropFilter: 'blur(8px)',
+                zIndex: 90,
+                pointerEvents: 'auto',
+                visibility: chromeHidden ? 'hidden' : undefined,
+              }}
+            >
+              {imagePreviews.map((item, i) => (
+                <div key={item.url} style={{ position: 'relative', flex: '0 0 auto' }}>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewIndex(i)}
+                    disabled={sending}
+                    title={item.file.name}
+                    aria-label={item.file.name}
+                    style={{
+                      display: 'block',
+                      width: 44,
+                      height: 44,
+                      padding: 0,
+                      border: '1px solid rgba(255,255,255,0.22)',
+                      borderRadius: 8,
+                      overflow: 'hidden',
+                      background: 'rgba(255,255,255,0.08)',
+                      cursor: sending ? 'wait' : 'zoom-in',
+                    }}
+                  >
+                    <img
+                      src={item.url}
+                      alt=""
+                      aria-hidden
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeExtraFile(i)}
+                    disabled={sending}
+                    aria-label={t('chat.annotationAttachedRemove')}
+                    title={t('chat.annotationAttachedRemove')}
+                    style={{
+                      position: 'absolute',
+                      top: -6,
+                      right: -6,
+                      width: 18,
+                      height: 18,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: 999,
+                      border: '1px solid rgba(0,0,0,0.25)',
+                      background: '#1f1f1f',
+                      color: '#fff',
+                      cursor: sending ? 'wait' : 'pointer',
+                      padding: 0,
+                    }}
+                  >
+                    <Icon name="close" size={10} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div
+            className="preview-draw-toolbar"
             style={{
               position: 'absolute',
-              left: '50%',
+              left: 'calc(50% - 52px)',
               bottom: 16,
               transform: 'translateX(-50%)',
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
+              alignContent: 'center',
+              flexWrap: 'wrap',
               gap: 8,
+              rowGap: 8,
+              boxSizing: 'border-box',
+              width: 'max-content',
+              maxWidth: 'min(760px, calc(100% - 144px))',
               padding: '6px 8px',
               background: 'rgba(20,20,20,0.92)',
               color: '#fff',
-              borderRadius: 999,
+              borderRadius: 24,
               boxShadow: '0 6px 24px rgba(0,0,0,0.18)',
               backdropFilter: 'blur(8px)',
-              zIndex: 10,
+              zIndex: 91,
               pointerEvents: 'auto',
               fontSize: 13,
+              visibility: chromeHidden ? 'hidden' : undefined,
             }}
           >
           <button
@@ -680,9 +912,30 @@ export function PreviewDrawOverlay({
             <RemixIcon name="arrow-go-forward-line" size={14} />
           </button>
           <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            style={{ display: 'none' }}
+            onChange={onFileInputChange}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={sending}
+            aria-label={t('chat.annotationAttachImage')}
+            title={t('chat.annotationAttachImage')}
+            data-tooltip={t('chat.annotationAttachImage')}
+            className="preview-draw-icon-action"
+            style={historyButtonStyle(!sending)}
+          >
+            <RemixIcon name="image-add-line" size={14} />
+          </button>
+          <input
             className="preview-draw-note-input"
             value={note}
             onChange={(e) => setNote(e.target.value)}
+            onPaste={onNotePaste}
             disabled={sending}
             placeholder={t('chat.annotationNotePlaceholder')}
             style={{
@@ -692,7 +945,12 @@ export function PreviewDrawOverlay({
               outline: 'none',
               boxShadow: '0 0 0 3px rgba(218, 97, 56, 0.22)',
               color: 'inherit',
-              width: 280,
+              flexGrow: 1,
+              flexShrink: 1,
+              flexBasis: 280,
+              minWidth: 0,
+              width: 'clamp(160px, 40vw, 320px)',
+              maxWidth: '100%',
               padding: '4px 8px',
               fontSize: 13,
               transition: 'background 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
@@ -705,9 +963,29 @@ export function PreviewDrawOverlay({
             }}
             onKeyDown={(e) => {
               if (isImeComposing(e, composingRef.current)) return;
-              if (e.key === 'Enter') void send('send');
+              if (e.key === 'Enter') void send('queue');
             }}
           />
+          <button
+            type="button"
+            onClick={() => void send('draft')}
+            disabled={sending || !canAddToInput}
+            aria-label={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : t('chat.annotationAddToInput')}
+            title={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : t('chat.annotationAddToInput')}
+            data-tooltip={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : t('chat.annotationAddToInput')}
+            className="preview-draw-icon-action"
+            style={{
+              ...drawActionButtonStyle(false),
+              opacity: canAddToInput ? 1 : 0.4,
+              cursor: sending ? 'wait' : (canAddToInput ? 'pointer' : 'not-allowed'),
+            }}
+          >
+            {pendingAction === 'draft' ? (
+              <Icon name="spinner" size={14} />
+            ) : (
+              <RemixIcon name="input-field" size={15} />
+            )}
+          </button>
           <button
             type="button"
             onClick={() => void send('queue')}
@@ -749,6 +1027,34 @@ export function PreviewDrawOverlay({
             )}
           </button>
           </div>
+          {activePreview ? createPortal(
+            <div
+              className="staged-preview-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label={activePreview.file.name}
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) setPreviewIndex(null);
+              }}
+            >
+              <div className="staged-preview-card">
+                <div className="staged-preview-head">
+                  <span title={activePreview.file.name}>{activePreview.file.name}</span>
+                  <button
+                    type="button"
+                    className="icon-only"
+                    onClick={() => setPreviewIndex(null)}
+                    aria-label={t('common.close')}
+                    title={t('common.close')}
+                  >
+                    <Icon name="close" size={14} />
+                  </button>
+                </div>
+                <img src={activePreview.url} alt={activePreview.file.name} />
+              </div>
+            </div>,
+            document.body,
+          ) : null}
         </>
       ) : null}
     </div>

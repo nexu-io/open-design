@@ -2,6 +2,7 @@ import { expect } from '@playwright/test';
 import type { Page, Route } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { fulfillAgentsRoute } from './mock-factory.js';
 
 const STORAGE_KEY = 'open-design:config';
 const GITHUB_STARS_STORAGE_KEY = 'open-design:gh-stars';
@@ -145,8 +146,8 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
     await fulfillGet(route, { config: VISUAL_CONFIG });
   });
 
-  await page.route('**/api/agents', async (route) => {
-    await fulfillGet(route, { agents: [MOCK_AGENT] });
+  await page.route('**/api/agents**', async (route) => {
+    await fulfillAgentsRoute(route, [MOCK_AGENT]);
   });
 
   await page.route(VISUAL_GITHUB_REPO_API, async (route) => {

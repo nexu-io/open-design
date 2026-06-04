@@ -157,12 +157,12 @@ verified line-by-line against the parsers in `apps/daemon/src/`:
 | `devin` `hermes` `kilo` `kimi` `kiro` `vibe` | `acp-json-rpc` | `acp.ts:attachAcpSession`                       |
 | `vela` (AMR) | `acp-json-rpc` + `login` / `models` subcommands | `runtimes/defs/amr.ts` + `apps/daemon/tests/fixtures/fake-vela.mjs` (sibling stub) |
 
-> **Note on `gemini` and `cursor-agent`**: OD's parsers for these two
-> agents do NOT recognize tool-call events — only init / assistant text /
-> usage. The renderers therefore emit ONLY the final assistant text wrapped
-> in the expected init/text/usage envelope. Tool calls present in the
-> source recording are silently dropped (which matches the real CLI's UI
-> behavior — these agents don't surface tools in OD's chat view).
+> **Note on `cursor-agent`**: OD's parser does NOT recognize tool-call
+> events — only init / assistant text / usage. The renderer therefore emits
+> only the final assistant text wrapped in the expected init/text/usage
+> envelope. Tool calls present in the source recording are silently dropped.
+> `gemini` recognizes the current Gemini CLI `stream-json` tool_use /
+> tool_result frames and replays recorded tool calls through that envelope.
 
 > **Note on ACP agents** (`devin` / `hermes` / `kilo` / `kimi` / `kiro` /
 > `vibe`): These do NOT stream stdout — they speak JSON-RPC v2 over stdio.

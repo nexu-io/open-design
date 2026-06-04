@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { useLayoutEffect, useRef, useState } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ANNOTATION_EVENT } from '../../src/components/PreviewDrawOverlay';
@@ -46,7 +46,10 @@ import type { InspectOverrideMap } from '../../src/components/FileViewer';
 import type { LiveArtifact, LiveArtifactWorkspaceEntry, PreviewComment, ProjectFile } from '../../src/types';
 import { I18nProvider } from '../../src/i18n';
 import type { Dict } from '../../src/i18n/types';
+import { emptyManualEditStyles } from '../../src/edit-mode/types';
 import { readExpandedIndexCss } from '../helpers/read-expanded-css';
+
+const TEST_SNAPSHOT_DATA_URL = 'data:image/png;base64,c25hcHNob3Q=';
 
 afterEach(() => {
   cleanup();
@@ -67,6 +70,31 @@ function baseFile(overrides: Partial<ProjectFile>): ProjectFile {
     mime: 'image/png',
     ...overrides,
   };
+}
+
+function createDragDataTransfer() {
+  const store = new Map<string, string>();
+  return {
+    effectAllowed: 'move',
+    dropEffect: 'move',
+    getData: vi.fn((type: string) => store.get(type) ?? ''),
+    setData: vi.fn((type: string, value: string) => {
+      store.set(type, value);
+    }),
+  };
+}
+
+// jsdom does not implement DragEvent, so fireEvent.dragOver/drop silently drop
+// the `clientY` from the event init. Construct the event and pin the coordinate
+// directly so handlers that read `event.clientY` (e.g. drop-edge math) see it.
+function fireDragEventWithClientY(
+  type: 'dragOver' | 'drop',
+  element: Element,
+  init: { dataTransfer: unknown; clientY: number },
+) {
+  const event = createEvent[type](element, { dataTransfer: init.dataTransfer } as never);
+  Object.defineProperty(event, 'clientY', { value: init.clientY, configurable: true });
+  fireEvent(element, event);
 }
 
 function deferredResponse() {
@@ -103,6 +131,80 @@ function testRect(left: number, top: number, width: number, height: number): DOM
 
 function clickAgentTool(testId: string) {
   fireEvent.click(screen.getByTestId(testId));
+}
+
+function manualEditTarget(id: string, label: string, x: number) {
+  return {
+    id,
+    kind: 'container',
+    label,
+    tagName: 'div',
+    className: '',
+    text: '',
+    rect: { x, y: 20, width: 180, height: 80 },
+    fields: {},
+    attributes: { 'data-od-label': label },
+    styles: emptyManualEditStyles(),
+    isLayoutContainer: true,
+    outerHtml: `<div data-od-id="${id}">${label}</div>`,
+  };
+}
+
+function installCanvasSnapshotMocks() {
+  class MockImage {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+
+    set src(_value: string) {
+      window.setTimeout(() => this.onload?.(), 0);
+    }
+  }
+
+  vi.stubGlobal('Image', MockImage as unknown as typeof Image);
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({
+    beginPath: vi.fn(),
+    clearRect: vi.fn(),
+    drawImage: vi.fn(),
+    fillRect: vi.fn(),
+    fillText: vi.fn(),
+    lineCap: 'round',
+    lineJoin: 'round',
+    lineTo: vi.fn(),
+    lineWidth: 1,
+    measureText: vi.fn(() => ({ width: 0 })),
+    moveTo: vi.fn(),
+    restore: vi.fn(),
+    save: vi.fn(),
+    scale: vi.fn(),
+    setLineDash: vi.fn(),
+    stroke: vi.fn(),
+    strokeRect: vi.fn(),
+    fillStyle: '',
+    font: '',
+    strokeStyle: '',
+  }) as unknown as CanvasRenderingContext2D) as unknown as HTMLCanvasElement['getContext']);
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback: BlobCallback) => {
+    callback(new Blob(['png'], { type: 'image/png' }));
+  });
+}
+
+function installPreviewSnapshotBridge(iframe: HTMLIFrameElement) {
+  const source = iframe.contentWindow;
+  if (!source) throw new Error('Expected preview iframe contentWindow');
+  return vi.spyOn(source, 'postMessage').mockImplementation((message: unknown) => {
+    const data = message as { type?: string; id?: string } | null;
+    if (!data || data.type !== 'od:snapshot' || !data.id) return;
+    window.dispatchEvent(new MessageEvent('message', {
+      source,
+      data: {
+        type: 'od:snapshot:result',
+        id: data.id,
+        dataUrl: TEST_SNAPSHOT_DATA_URL,
+        w: 2,
+        h: 2,
+      },
+    }));
+  });
 }
 
 describe('FileViewer preview scale', () => {
@@ -524,7 +626,7 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Shell />);
 
     const firstFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll');
+    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
 
     fireEvent.click(screen.getByRole('button', { name: 'Leave project' }));
 
@@ -532,7 +634,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByTestId('home-view')).toBeTruthy();
     const parkedFrame = container.querySelector<HTMLIFrameElement>('.iframe-keep-alive-pool iframe');
     expect(parkedFrame).toBe(firstFrame);
-    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll');
+    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
 
     fireEvent.click(screen.getByRole('button', { name: 'Return project' }));
 
@@ -679,8 +781,79 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-od-render-mode="url-load"');
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
     expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
-    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll"');
+    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll&amp;odPreviewBridge=selection"');
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
+  });
+
+  it('reloads a URL-loaded HTML preview with a new cache key without replacing the iframe', () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml="<html><body>hi</body></html>"
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(frame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
+
+    fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
+
+    const reloadedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(reloadedFrame).toBe(frame);
+    expect(reloadedFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=1&odPreviewBridge=scroll&odPreviewBridge=selection');
+  });
+
+  it('remounts the srcDoc HTML preview when reload is requested', () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        isDeck
+        liveHtml={'<html><body><section class="slide">one</section><section class="slide">two</section></body></html>'}
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+
+    fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
+
+    const reloadedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(reloadedFrame).not.toBe(frame);
+    expect(reloadedFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
   });
 
   it('offers image export for URL-loaded HTML previews', () => {
@@ -761,6 +934,110 @@ describe('FileViewer SVG artifacts', () => {
     expect(srcDocFrameAfter?.getAttribute('data-od-active')).toBe('true');
     expect(srcDocFrameAfter?.srcdoc).toContain('__odArtifactBootCount');
     expect(srcDocFrameAfter?.srcdoc).toContain('data-od-edit-bridge');
+  });
+
+  it('keeps the srcDoc edit transport active after canceling manual edit', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('url-load');
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    const editFrame = await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(frame.srcdoc).toContain('data-od-edit-bridge');
+      return frame;
+    });
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+
+    await waitFor(() => expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false'));
+    const previewFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
+
+    expect(previewFrame).toBe(editFrame);
+    expect(previewFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+    expect(previewFrame.srcdoc).toContain('data-od-edit-bridge');
+    expect(urlFrame?.getAttribute('data-od-active')).toBe('false');
+  });
+
+  it('keeps the manual edit inspector pinned after clicking a target', async () => {
+    const heroTarget = manualEditTarget('hero-card', 'Hero card', 20);
+    const trendTarget = manualEditTarget('trend-card', 'Trend card', 320);
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({
+          name: 'page.html',
+          path: 'page.html',
+          mime: 'text/html',
+          kind: 'html',
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Page',
+            entry: 'page.html',
+            renderer: 'html',
+            exports: ['html'],
+          },
+        })}
+        liveHtml='<html><body><main data-od-id="hero-card">Hero</main><aside data-od-id="trend-card">Trend</aside></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+
+    // Hover only surfaces the floating "edit params" affordance (#3438); it
+    // must not open the inspector. Pinning requires an explicit select.
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-hover', target: heroTarget },
+    }));
+    expect(await screen.findByTestId('manual-edit-hover-open')).toBeTruthy();
+    expect(screen.queryByText('Hero card')).toBeNull();
+
+    // Selecting pins the inspector to the hero card.
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-select', target: heroTarget },
+    }));
+    expect(await screen.findByText('Hero card')).toBeTruthy();
+
+    // Hovering a different element must not switch the pinned inspector.
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-hover', target: trendTarget },
+    }));
+
+    expect(screen.getByText('Hero card')).toBeTruthy();
+    expect(screen.queryByText('Trend card')).toBeNull();
   });
 
   it('renders sandbox-shim artifacts on the srcdoc transport without entering edit mode (#2791)', () => {
@@ -890,7 +1167,7 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Switcher />);
     const getFrame = () => container.querySelector<HTMLIFrameElement>('[data-testid="artifact-preview-frame"]');
     const initialFrame = getFrame();
-    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0&odPreviewBridge=scroll');
+    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
 
     const observationsBeforeSwitch = observedCommittedSrcs.length;
     fireEvent.click(screen.getByRole('button', { name: 'Switch file' }));
@@ -898,9 +1175,9 @@ describe('FileViewer SVG artifacts', () => {
     const nextFrame = getFrame();
     expect(nextFrame).toBeTruthy();
     expect(observedCommittedSrcs[observationsBeforeSwitch]).toBe(
-      '/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll',
+      '/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection',
     );
-    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll');
+    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
   });
 
   it('allows downloads in the in-tab HTML presentation iframe', async () => {
@@ -1172,6 +1449,65 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByText(/generates a Pages project name automatically/i)).toBeNull();
     expect(screen.queryByText(/project name is selected automatically/i)).toBeNull();
     expect(screen.queryByLabelText('Pages project name')).toBeNull();
+  });
+
+  it('closes the deploy/share modal from the backdrop or Escape', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=vercel-self') {
+        return new Response(JSON.stringify({
+          providerId: 'vercel-self',
+          configured: false,
+          tokenMask: '',
+          teamId: '',
+          teamSlug: '',
+          target: 'preview',
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    const openDeployModal = async () => {
+      fireEvent.click(screen.getByRole('button', { name: /share/i }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Vercel/i }));
+      return screen.findByRole('dialog');
+    };
+
+    const dialog = await openDeployModal();
+    expect(dialog).toBeTruthy();
+    fireEvent.click(dialog);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    const backdrop = document.querySelector<HTMLElement>('.deploy-flow-backdrop');
+    expect(backdrop).toBeTruthy();
+    fireEvent.click(backdrop!);
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    expect(await openDeployModal()).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('nudges the export button once when an artifact becomes exportable', async () => {
@@ -1535,7 +1871,10 @@ describe('FileViewer SVG artifacts', () => {
     expect(customDomainLabel).toBeTruthy();
     expect(pagesDevLabel.closest('.deploy-result-block')).toBe(customDomainLabel.closest('.deploy-result-block'));
     expect(screen.getByText('https://demo-pages.pages.dev')).toBeTruthy();
-    expect(screen.getByText('https://demo.example.com')).toBeTruthy();
+    // The custom domain is also the public share URL, so it renders both in the
+    // result block and in the social-share header; scope to the result block.
+    const resultBlock = customDomainLabel.closest('.deploy-result-block') as HTMLElement;
+    expect(within(resultBlock).getByText('https://demo.example.com')).toBeTruthy();
     const deployToast = document.querySelector('.od-toast');
     expect(deployToast?.className).toContain('tone-success');
     expect(deployToast?.className).toContain('placement-top');
@@ -2051,6 +2390,202 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByRole('menu')).toBeTruthy();
   });
 
+  it('opens existing deployed projects in the deploy/share modal before showing social targets', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({
+          deployments: [
+            {
+              id: 'vercel-deploy',
+              projectId: 'project-1',
+              fileName: 'index.html',
+              providerId: 'vercel-self',
+              url: 'https://vercel.example',
+              deploymentCount: 1,
+              target: 'preview',
+              status: 'ready',
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          ],
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=vercel-self') {
+        return new Response(JSON.stringify({
+          providerId: 'vercel-self',
+          configured: true,
+          tokenMask: 'saved-token',
+          teamId: '',
+          teamSlug: '',
+          target: 'preview',
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    const socialShareItem = await screen.findByRole('menuitem', { name: /social share/i });
+    expect(document.querySelector('.share-menu-social-grid')).toBeNull();
+    fireEvent.click(socialShareItem);
+
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'X' })).toBeTruthy();
+    expect(screen.getAllByText('https://vercel.example').length).toBeGreaterThan(0);
+  });
+
+  it('keeps social sharing in the deploy modal after a successful deploy', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method ?? 'GET';
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=vercel-self') {
+        return new Response(JSON.stringify({
+          providerId: 'vercel-self',
+          configured: true,
+          tokenMask: 'saved-token',
+          teamId: '',
+          teamSlug: '',
+          target: 'preview',
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/deploy' && method === 'POST') {
+        return new Response(JSON.stringify({
+          id: 'vercel-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'vercel-self',
+          url: 'https://vercel.example',
+          deploymentCount: 1,
+          target: 'preview',
+          status: 'ready',
+          createdAt: 1,
+          updatedAt: 2,
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /deploy then share/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'X' })).toBeNull();
+    const deployButtons = within(dialog).getAllByRole('button', { name: /^Deploy$/i });
+    fireEvent.click(deployButtons[deployButtons.length - 1]!);
+
+    expect(await screen.findByRole('link', { name: 'X' })).toBeTruthy();
+    expect(screen.getAllByText('https://vercel.example').length).toBeGreaterThan(0);
+  });
+
+  it('shows social sharing with a warning for protected deployments', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({
+          deployments: [
+            {
+              id: 'vercel-deploy',
+              projectId: 'project-1',
+              fileName: 'index.html',
+              providerId: 'vercel-self',
+              url: 'https://protected.vercel.example',
+              deploymentCount: 1,
+              target: 'preview',
+              status: 'protected',
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          ],
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=vercel-self') {
+        return new Response(JSON.stringify({
+          providerId: 'vercel-self',
+          configured: true,
+          tokenMask: 'saved-token',
+          teamId: '',
+          teamSlug: '',
+          target: 'preview',
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    const socialShareItem = await screen.findByRole('menuitem', { name: /social share/i });
+    fireEvent.click(socialShareItem);
+
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'X' })).toBeTruthy();
+    expect(screen.getAllByText(/requiring authentication/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('https://protected.vercel.example').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /copy link/i }).length).toBeGreaterThan(0);
+  });
+
   it('renders unsafe SVG source as escaped text instead of executable markup', () => {
     const file = baseFile({ name: 'unsafe.svg', path: 'unsafe.svg', mime: 'image/svg+xml' });
     const unsafeSource = [
@@ -2177,8 +2712,9 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByRole('menuitem', { name: 'Region' })).toBeNull();
     expect(screen.getByTestId('draw-overlay-toggle')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Mark' })).toBeTruthy();
-    expect(screen.queryByTestId('screenshot-capture-toggle')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Screenshot' })).toBeNull();
+    // Screenshot-to-clipboard is a primary preview tool: present in preview mode.
+    expect(screen.getByTestId('screenshot-copy-button')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Screenshot' })).toBeTruthy();
     expect(screen.queryByPlaceholderText('Add a note for this mark')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Pods' })).toBeNull();
 
@@ -2326,8 +2862,63 @@ describe('FileViewer tweaks toolbar', () => {
     });
   });
 
+  it('keeps the URL-loaded preview mounted when opening comments', async () => {
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const srcDocFrame = screen.getByTestId('artifact-preview-frame-srcdoc') as HTMLIFrameElement;
+    const postSpy = vi.spyOn(urlFrame.contentWindow!, 'postMessage');
+    expect(urlFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+    expect(urlFrame.getAttribute('src')).toContain('odPreviewBridge=selection');
+    expect(srcDocFrame.getAttribute('data-od-active')).toBe('false');
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: urlFrame.contentWindow,
+        data: { type: 'od:url-selection-bridge-ready' },
+      }));
+    });
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame')).toBe(urlFrame);
+      expect(urlFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(urlFrame.getAttribute('data-od-active')).toBe('true');
+      expect(srcDocFrame.getAttribute('data-od-active')).toBe('false');
+      expect(postSpy).toHaveBeenCalledWith(
+        { type: 'od:comment-mode', enabled: true, mode: 'inspect' },
+        '*',
+      );
+    });
+  });
+
+  it('falls back to srcDoc comments when the URL selection bridge is not ready', async () => {
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(urlFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    const srcDocFrame = await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      return frame;
+    });
+    expect(srcDocFrame.srcdoc).toContain('data-od-selection-bridge');
+  });
+
   it('lets Draw direct send emit a queued annotation while a task is running', async () => {
     const annotationSpy = vi.fn();
+    installCanvasSnapshotMocks();
 
     window.addEventListener(ANNOTATION_EVENT, annotationSpy);
 
@@ -2339,6 +2930,12 @@ describe('FileViewer tweaks toolbar', () => {
     );
 
     clickAgentTool('draw-overlay-toggle');
+    const srcDocFrame = await waitFor(() => {
+      const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      return activeFrame;
+    });
+    installPreviewSnapshotBridge(srcDocFrame);
     fireEvent.change(screen.getByPlaceholderText('Add a note for this mark'), {
       target: { value: 'mark this' },
     });
@@ -2363,6 +2960,7 @@ describe('FileViewer tweaks toolbar', () => {
         filePath: 'preview.html',
       },
     });
+    expect(annotationSpy.mock.calls[0]?.[0].detail.file).toBeInstanceOf(File);
     window.removeEventListener(ANNOTATION_EVENT, annotationSpy);
   });
 
@@ -2654,15 +3252,15 @@ describe('FileViewer tweaks toolbar', () => {
         projectKind="prototype"
         file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
-        previewComments={[olderComment, newerComment]}
+        previewComments={[newerComment, olderComment]}
       />,
     );
 
     fireEvent.click(screen.getByTestId('comment-panel-toggle'));
 
     expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
-    expect(screen.getByTestId('comment-saved-marker-pin-newer').textContent).toBe('1');
-    expect(screen.getByTestId('comment-saved-marker-pin-older').textContent).toBe('2');
+    expect(screen.getByTestId('comment-saved-marker-pin-older').textContent).toBe('1');
+    expect(screen.getByTestId('comment-saved-marker-pin-newer').textContent).toBe('2');
 
     clickAgentTool('board-mode-toggle');
 
@@ -2697,11 +3295,11 @@ describe('FileViewer tweaks toolbar', () => {
       expect(activeItem?.className).toContain('active');
       expect(activeItem?.getAttribute('aria-current')).toBe('true');
     });
-    expect(screen.getByTestId('comment-active-pin').textContent).toBe('1');
+    expect(screen.getByTestId('comment-active-pin').textContent).toBe('2');
     expect(document.querySelector('[data-comment-id="comment-older"]')?.className).not.toContain('active');
   });
 
-  it('orders and timestamps side comments by latest update time', () => {
+  it('orders side comments by creation time while keeping activity timestamps', () => {
     const createdFirstUpdatedLast: PreviewComment = {
       id: 'comment-updated-last',
       projectId: 'project-1',
@@ -2849,6 +3447,47 @@ describe('FileViewer tweaks toolbar', () => {
     expect(input.value).toBe('');
     expect(screen.queryByText('Existing note should stay in the thread')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+  });
+
+  it('shows saved image attachments when reopening a comment from the list', async () => {
+    const openComment: PreviewComment = {
+      id: 'comment-with-image',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'pin-with-image',
+      selector: '[data-od-pin="pin-with-image"]',
+      label: 'pin-with-image',
+      text: '',
+      htmlHint: '',
+      position: { x: 40, y: 52, width: 18, height: 18 },
+      note: 'Use this screenshot',
+      attachments: [{ path: 'uploads/ref-a.png', name: 'ref-a.png' }],
+      status: 'open',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[openComment]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    const sideImageLink = await screen.findByTestId('comment-side-attachment');
+    expect(sideImageLink.getAttribute('href')).toBe('/api/projects/project-1/raw/uploads/ref-a.png');
+    expect(sideImageLink.querySelector('img')?.getAttribute('src')).toBe('/api/projects/project-1/raw/uploads/ref-a.png');
+
+    fireEvent.click(screen.getByText('Use this screenshot').closest('[data-testid="comment-side-item"]')!);
+
+    const imageLink = await screen.findByTestId('comment-popover-existing-image');
+    expect(imageLink.getAttribute('href')).toBe('/api/projects/project-1/raw/uploads/ref-a.png');
+    expect(imageLink.querySelector('img')?.getAttribute('src')).toBe('/api/projects/project-1/raw/uploads/ref-a.png');
   });
 
   it('keeps the comment composer focused on the note after picking an element', async () => {
@@ -3117,6 +3756,152 @@ describe('FileViewer tweaks toolbar', () => {
     });
   });
 
+  it('keeps the hover card mounted when the pointer moves onto it (no flicker)', async () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    clickAgentTool('board-mode-toggle');
+
+    const target = {
+      elementId: 'hero',
+      selector: '[data-od-id="hero"]',
+      label: 'p',
+      text: 'Hero',
+      position: { x: 8, y: 12, width: 312, height: 63 },
+      hoverPoint: { x: 200, y: 100 },
+      htmlHint: '<p data-od-id="hero">Hero</p>',
+      style: { color: 'rgb(26, 25, 22)', fontSize: '13.5px' },
+    };
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { ...target, type: 'od:comment-hover' },
+    }));
+
+    const card = await screen.findByTestId('annotation-hover-popover');
+
+    // Pointer crosses from the element onto the floating card. The iframe sees
+    // that as a mouseout and posts od:comment-leave; the card's own mouseenter
+    // fires first and pins it, so the leave must be ignored and the card stays.
+    fireEvent.mouseEnter(card);
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od:comment-leave' },
+    }));
+
+    // Give React a chance to (wrongly) unmount before asserting it did not.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByTestId('annotation-hover-popover')).not.toBeNull();
+
+    // Leaving the card itself dismisses it.
+    fireEvent.mouseLeave(card);
+    await waitFor(() => {
+      expect(screen.queryByTestId('annotation-hover-popover')).toBeNull();
+    });
+  });
+
+  it('ignores an occlusion leave that arrives before the card pins (no entry flicker)', async () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    clickAgentTool('board-mode-toggle');
+
+    const target = {
+      elementId: 'hero',
+      selector: '[data-od-id="hero"]',
+      label: 'p',
+      text: 'Hero',
+      position: { x: 8, y: 12, width: 312, height: 63 },
+      hoverPoint: { x: 200, y: 100 },
+      htmlHint: '<p data-od-id="hero">Hero</p>',
+      style: { color: 'rgb(26, 25, 22)', fontSize: '13.5px' },
+    };
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { ...target, type: 'od:comment-hover' },
+    }));
+
+    const card = await screen.findByTestId('annotation-hover-popover');
+
+    // Real-world ordering the synchronous teardown got wrong: the iframe's async
+    // od:comment-leave lands BEFORE the card's mouseenter has had a chance to pin
+    // it. The dismiss must be deferred so the imminent mouseenter cancels it —
+    // otherwise the card tears down for a frame and flickers on the way in.
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od:comment-leave' },
+    }));
+    fireEvent.mouseEnter(card);
+
+    await new Promise((resolve) => setTimeout(resolve, 140));
+    expect(screen.queryByTestId('annotation-hover-popover')).not.toBeNull();
+  });
+
+  it('keeps the card when the pointer moves from it back onto the element', async () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    clickAgentTool('board-mode-toggle');
+
+    const target = {
+      elementId: 'hero',
+      selector: '[data-od-id="hero"]',
+      label: 'p',
+      text: 'Hero',
+      position: { x: 8, y: 12, width: 312, height: 63 },
+      hoverPoint: { x: 200, y: 100 },
+      htmlHint: '<p data-od-id="hero">Hero</p>',
+      style: { color: 'rgb(26, 25, 22)', fontSize: '13.5px' },
+    };
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { ...target, type: 'od:comment-hover' },
+    }));
+
+    const card = await screen.findByTestId('annotation-hover-popover');
+    fireEvent.mouseEnter(card);
+
+    // Pointer leaves the card heading back onto the element it overlaps. The
+    // card must NOT tear down synchronously on its own mouseleave — clearing
+    // here is what made the card vanish while the pointer was still over the
+    // element (the iframe does not always re-emit a hover to bring it back).
+    fireEvent.mouseLeave(card);
+    expect(screen.queryByTestId('annotation-hover-popover')).not.toBeNull();
+
+    // A re-hover (pointer landed back on the element) cancels the pending
+    // dismiss, so the card stays put rather than blinking out.
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { ...target, type: 'od:comment-hover' },
+    }));
+
+    await new Promise((resolve) => setTimeout(resolve, 140));
+    expect(screen.queryByTestId('annotation-hover-popover')).not.toBeNull();
+  });
+
   it('closes an open saved-comment composer when that comment leaves the open state', async () => {
     const openComment: PreviewComment = {
       id: 'comment-status-transition',
@@ -3285,6 +4070,81 @@ describe('FileViewer tweaks toolbar', () => {
     const rule = css.match(/\.inspect-panel\s*\{[^}]+\}/)?.[0] ?? '';
 
     expect(rule).toContain('width: min(296px, calc(100% - 28px));');
+  });
+
+  it('reorders saved comments with the drag handle for send sequence', () => {
+    const onReorder = vi.fn();
+    const comments: PreviewComment[] = [
+      {
+        id: 'comment-1',
+        projectId: 'project-1',
+        conversationId: 'conversation-1',
+        filePath: 'preview.html',
+        elementId: 'first',
+        selector: '[data-od-id="first"]',
+        label: 'First',
+        text: 'First',
+        htmlHint: '<p>First</p>',
+        position: { x: 0, y: 0, width: 100, height: 30 },
+        note: 'First task',
+        status: 'open',
+        createdAt: 10,
+        updatedAt: 10,
+      },
+      {
+        id: 'comment-2',
+        projectId: 'project-1',
+        conversationId: 'conversation-1',
+        filePath: 'preview.html',
+        elementId: 'second',
+        selector: '[data-od-id="second"]',
+        label: 'Second',
+        text: 'Second',
+        htmlHint: '<p>Second</p>',
+        position: { x: 0, y: 40, width: 100, height: 30 },
+        note: 'Second task',
+        status: 'open',
+        createdAt: 20,
+        updatedAt: 20,
+      },
+    ];
+
+    render(
+      <CommentSidePanel
+        comments={comments}
+        selectedIds={new Set()}
+        activeCommentId={null}
+        collapsed={false}
+        onCollapsedChange={() => {}}
+        onToggleSelect={() => {}}
+        onSelectAll={() => {}}
+        onClearSelection={() => {}}
+        onReorder={onReorder}
+        onReply={() => {}}
+        onSendSelected={() => {}}
+        sending={false}
+        t={t}
+      />,
+    );
+
+    const items = screen.getAllByTestId('comment-side-item');
+    items[0]!.getBoundingClientRect = vi.fn(() => ({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 300,
+      bottom: 40,
+      width: 300,
+      height: 40,
+      toJSON: () => ({}),
+    }));
+    const dataTransfer = createDragDataTransfer();
+    fireEvent.dragStart(screen.getAllByLabelText('chat.queuedReorder')[1]!, { dataTransfer });
+    fireDragEventWithClientY('dragOver', items[0]!, { dataTransfer, clientY: 0 });
+    fireDragEventWithClientY('drop', items[0]!, { dataTransfer, clientY: 0 });
+
+    expect(onReorder).toHaveBeenCalledWith(['comment-2', 'comment-1']);
   });
 
   it('does not classify text labels containing a standalone article as links', () => {

@@ -17,6 +17,7 @@ import { buildReactComponentSrcdoc } from './react-component';
 import { buildZip } from './zip';
 import { randomUUID } from '../utils/uuid';
 import {
+  captureHostPage,
   isOpenDesignHostAvailable,
   printHostPdf,
 } from '@open-design/host';
@@ -393,6 +394,60 @@ export async function requestPreviewSnapshot(
   return result.ok ? result.snapshot : null;
 }
 
+/**
+ * Capture a rectangle of the on-screen window via the desktop host's
+ * compositor (Electron `webContents.capturePage`). Unlike the in-iframe
+ * SVG-foreignObject bridge, this returns the REAL rendered pixels — fonts,
+ * external CSS, gradients, cross-origin images and embedded <webview> content
+ * all paint faithfully and the canvas is never tainted, so it cannot produce
+ * the black/blank frames the foreignObject path does. Returns null when no
+ * desktop host is present (pure web), so callers fall back to the bridge.
+ *
+ * `clipRect` is in CSS pixels relative to the viewport (e.g. an iframe's
+ * getBoundingClientRect()); capturePage expects DIP page coordinates, which
+ * match 1:1 for the top-level window (it never scrolls).
+ */
+export async function captureHostRegionSnapshot(
+  clipRect: { left: number; top: number; width: number; height: number } | null,
+): Promise<PreviewSnapshot | null> {
+  if (!isOpenDesignHostAvailable()) return null;
+  const clip = clipRect && clipRect.width >= 1 && clipRect.height >= 1
+    ? {
+        x: Math.max(0, Math.round(clipRect.left)),
+        y: Math.max(0, Math.round(clipRect.top)),
+        width: Math.max(1, Math.round(clipRect.width)),
+        height: Math.max(1, Math.round(clipRect.height)),
+      }
+    : undefined;
+  try {
+    const result = await captureHostPage(clip ? { clip } : undefined);
+    if (result.ok && result.dataUrl && result.w >= 1 && result.h >= 1) {
+      return { dataUrl: result.dataUrl, w: result.w, h: result.h };
+    }
+  } catch {
+    /* fall through to null so the caller can use the bridge */
+  }
+  return null;
+}
+
+/**
+ * Capture an iframe's on-screen region through the desktop compositor.
+ * Convenience wrapper over captureHostRegionSnapshot using the iframe's
+ * current bounding rect.
+ */
+export async function captureHostIframeSnapshot(
+  iframe: HTMLIFrameElement | null,
+): Promise<PreviewSnapshot | null> {
+  if (!iframe) return null;
+  const rect = iframe.getBoundingClientRect();
+  return captureHostRegionSnapshot({
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+  });
+}
+
 /** Convert a data-URL to a Blob without re-encoding through canvas. */
 function dataUrlToBlob(dataUrl: string): Blob {
   if (!dataUrl.startsWith('data:')) {
@@ -407,6 +462,48 @@ function dataUrlToBlob(dataUrl: string): Blob {
   const arr = new Uint8Array(bytes.length);
   for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
   return new Blob([arr], { type: mime });
+}
+
+type ClipboardItemCtor = new (
+  items: Record<string, Blob | Promise<Blob>>,
+) => ClipboardItem;
+
+/**
+ * Copy a PNG (or other image) data-URL onto the system clipboard as a real
+ * image item, so it can be pasted into the chat composer or any other app.
+ * Returns 'copied' on success, 'denied' when the clipboard API is missing or
+ * the browser refuses the write for permission/security reasons, and 'failed'
+ * for any other error (e.g. a malformed data-URL).
+ */
+export async function copyImageDataUrlToClipboard(
+  dataUrl: string,
+): Promise<'copied' | 'denied' | 'failed'> {
+  const clipboard = navigator.clipboard;
+  const ClipboardItemRef = (globalThis as { ClipboardItem?: ClipboardItemCtor })
+    .ClipboardItem;
+  if (!clipboard || typeof clipboard.write !== 'function' || !ClipboardItemRef) {
+    return 'denied';
+  }
+  try {
+    const blob = dataUrlToBlob(dataUrl);
+    // Safari only honours clipboard.write() inside the original user gesture,
+    // so prefer the Promise<Blob> ClipboardItem form when supported — it lets
+    // the browser resolve the blob lazily without losing the gesture context.
+    let item: ClipboardItem;
+    try {
+      item = new ClipboardItemRef({ [blob.type]: Promise.resolve(blob) });
+    } catch {
+      item = new ClipboardItemRef({ [blob.type]: blob });
+    }
+    await clipboard.write([item]);
+    return 'copied';
+  } catch (err) {
+    const name = (err as { name?: string } | null)?.name;
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+      return 'denied';
+    }
+    return 'failed';
+  }
 }
 
 export type ImageExportFormat = 'png' | 'jpeg' | 'webp';

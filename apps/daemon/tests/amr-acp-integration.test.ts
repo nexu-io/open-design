@@ -11,7 +11,7 @@
  * data record, so this test also pins the contract the def declares:
  *   - id, bin, streamFormat are stable for downstream consumers
  *   - buildArgs() emits the vela invocation shape the docs describe
- *   - AMR picker models come from `vela models`, not stale static ids.
+ *   - AMR authoritative models come from `vela model list --format json`, not stale static ids.
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -23,9 +23,12 @@ import { describe, expect, it } from 'vitest';
 
 import { attachAcpSession, detectAcpModels } from '../src/acp.js';
 import { classifyAmrAccountFailure } from '../src/integrations/vela-errors.js';
+import { AmrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
 import {
   amrAgentDef,
+  fetchVelaPresetModels,
   normalizeVelaModelId,
+  parseVelaModelJson,
   parseVelaModels,
 } from '../src/runtimes/defs/amr.js';
 import { getAgentDef } from '../src/runtimes/registry.js';
@@ -135,7 +138,35 @@ describe('AMR runtime def', () => {
     expect(models.map((model) => model.id)).not.toContain('seedance-2');
   });
 
-  it('fetches AMR picker models from `vela models`', async () => {
+  it('parses Vela preset and remote JSON without legacy id normalization', () => {
+    const models = parseVelaModelJson(JSON.stringify({
+      source: 'remote',
+      data: [
+        { id: 'public_model_deepseek_v3_2' },
+        { id: 'deepseek-v4-flash' },
+        { id: 'gpt-image-2' },
+        { id: 'deepseek-v4-flash' },
+      ],
+    }), 'remote');
+    expect(models).toEqual([
+      { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+      { id: 'public_model_deepseek_v3_2', label: 'public_model_deepseek_v3_2' },
+    ]);
+    expect(() => parseVelaModelJson(JSON.stringify({ source: 'preset', data: [] }), 'remote'))
+      .toThrow(/expected remote/);
+  });
+
+  it('fetches AMR preset models from `vela model preset --format json`', async () => {
+    const models = await fetchVelaPresetModels(FAKE_VELA, process.env);
+    expect(models).toEqual([
+      { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+      { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
+      { id: 'glm-5.1', label: 'glm-5.1' },
+      { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
+    ]);
+  });
+
+  it('fetches AMR authoritative models from `vela model list --format json`', async () => {
     const models = await amrAgentDef.fetchModels?.(FAKE_VELA, process.env);
     expect(models).toEqual([
       { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
@@ -154,7 +185,7 @@ describe('AMR runtime def', () => {
     ]);
   });
 
-  it('retries transient `vela models` failures before succeeding', async () => {
+  it('retries transient `vela model list --format json` failures before succeeding', async () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), 'od-amr-retry-'));
     const stateFile = path.join(tempDir, 'retry-state.json');
     const wrapperPath = path.join(tempDir, 'vela-wrapper');
@@ -164,7 +195,7 @@ const { spawn } = require('node:child_process');
 const stateFile = process.env.RETRY_STATE_FILE;
 const fakeVela = process.env.FAKE_VELA_PATH;
 const args = process.argv.slice(2);
-if (args[0] === 'models') {
+if (args[0] === 'model' && args[1] === 'list') {
   const state = stateFile && existsSync(stateFile)
     ? JSON.parse(readFileSync(stateFile, 'utf8'))
     : { attempts: 0 };
@@ -207,6 +238,92 @@ child.on('exit', (code) => {
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('AMR model loading cache', () => {
+  it('returns preset immediately, coalesces remote refreshes, then serves remote', async () => {
+    const cache = new AmrModelLoadingCache(1_000);
+    let remoteCalls = 0;
+    const releaseRemote: Array<() => void> = [];
+    const fetchRemote = async () => {
+      remoteCalls += 1;
+      await new Promise<void>((resolve) => {
+        releaseRemote.push(resolve);
+      });
+      return [{ id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' }];
+    };
+
+    const first = await cache.get('vela:local', {
+      fetchPreset: async () => [{ id: 'preset-a', label: 'preset-a' }],
+      fetchRemote,
+    });
+    const second = await cache.get('vela:local', {
+      fetchPreset: async () => [{ id: 'preset-b', label: 'preset-b' }],
+      fetchRemote,
+    });
+    expect(first).toMatchObject({ source: 'preset', refreshing: true });
+    expect(second).toMatchObject({ source: 'preset', refreshing: true });
+    expect(remoteCalls).toBe(1);
+
+    releaseRemote[0]?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const remote = await cache.get('vela:local', {
+      fetchPreset: async () => {
+        throw new Error('preset should not be required after remote cache exists');
+      },
+      fetchRemote,
+    });
+    expect(remote).toMatchObject({
+      source: 'remote',
+      refreshing: false,
+      models: [{ id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' }],
+    });
+  });
+
+  it('keeps stale remote rows when a later refresh fails', async () => {
+    const cache = new AmrModelLoadingCache(0);
+    cache.warm('vela:local', async () => [{ id: 'deepseek-v3.2', label: 'deepseek-v3.2' }]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const stale = await cache.get('vela:local', {
+      fetchPreset: async () => [{ id: 'preset-a', label: 'preset-a' }],
+      fetchRemote: async () => {
+        throw new Error('remote unavailable');
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const afterFailure = await cache.get('vela:local', {
+      fetchPreset: async () => [{ id: 'preset-a', label: 'preset-a' }],
+      fetchRemote: async () => {
+        throw new Error('remote unavailable');
+      },
+    });
+    expect(stale.source).toBe('remote');
+    expect(afterFailure).toMatchObject({
+      source: 'remote',
+      stale: true,
+      remoteError: 'remote unavailable',
+      models: [{ id: 'deepseek-v3.2', label: 'deepseek-v3.2' }],
+    });
+  });
+
+  it('keeps remote catalogs isolated per resolved Vela environment', async () => {
+    const cache = new AmrModelLoadingCache(60_000);
+    cache.warm('vela:local', async () => [{ id: 'remote-local', label: 'remote-local' }]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const otherEnv = await cache.get('vela:prod', {
+      fetchPreset: async () => [{ id: 'preset-prod', label: 'preset-prod' }],
+      fetchRemote: async () => [{ id: 'remote-prod', label: 'remote-prod' }],
+    });
+
+    expect(otherEnv).toMatchObject({
+      source: 'preset',
+      models: [{ id: 'preset-prod', label: 'preset-prod' }],
+      refreshing: true,
+    });
   });
 });
 

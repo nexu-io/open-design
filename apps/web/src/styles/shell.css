@@ -1,20 +1,21 @@
 /* -------- App shell ------------------------------------------------- */
 .app {
   display: grid;
-  /* Three rows: chrome header (auto, fixed at 40px), optional
-   * project-actions toolbar (auto — collapses to 0 when hidden),
-   * and the chat/workspace split (1fr — fills the remaining
-   * viewport). The split gets explicit `grid-row: 3` below so the
-   * layout works whether the toolbar is rendered or returns null
-   * (workspace-focused mode). */
+  /* Two rows: optional project-instructions bar (auto — collapses to 0
+   * when hidden) and the chat/workspace split (1fr — fills the remaining
+   * viewport). The standalone chrome header row was removed; its contents
+   * moved into the chat pane (project title + design-system picker) and the
+   * Design Files tab row (settings / handoff / present / share / avatar).
+   * The split gets explicit `grid-row: 2` below so the layout works whether
+   * the instructions bar is rendered or returns null. */
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto 1fr;
   height: 100vh;
   background: var(--bg-app);
   overflow: hidden;
 }
 .app > .split {
-  grid-row: 3;
+  grid-row: 2;
 }
 
 .workspace-shell {
@@ -53,10 +54,10 @@
   max-width: 100%;
   min-height: 38px;
   height: 38px;
-  padding: 0 8px 0 12px;
+  padding: 0 8px 0 6px;
   gap: 0;
   background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-subtle));
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  border-bottom: 0;
   box-shadow: 0 1px 0 color-mix(in srgb, var(--bg-panel) 80%, transparent) inset;
   user-select: none;
   -webkit-app-region: drag;
@@ -64,17 +65,32 @@
   position: relative;
   z-index: 120;
 }
+.workspace-tabs-chrome.app-chrome-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: color-mix(in srgb, var(--border) 64%, transparent);
+  transform: scaleY(0.5);
+  transform-origin: center bottom;
+  pointer-events: none;
+  z-index: 0;
+}
 .workspace-tabs-chrome .workspace-tabs-traffic {
-  margin-right: calc(var(--app-chrome-traffic-margin) + 8px);
+  margin-right: var(--app-chrome-traffic-margin);
 }
 .workspace-tabs-new-btn {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
+  margin-left: 5px;
+  margin-right: 0;
   padding: 0;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   background: transparent;
-  color: var(--text-faint);
+  color: var(--text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -82,9 +98,16 @@
   -webkit-app-region: no-drag;
   transition: background 100ms ease, color 100ms ease;
 }
+.workspace-tabs-strip.is-overflowing .workspace-tabs-new-btn {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--bg-panel);
+  box-shadow: -8px 0 10px -9px color-mix(in srgb, var(--text) 30%, transparent);
+}
 .workspace-tabs-new-btn:hover {
   background: color-mix(in srgb, var(--bg-panel) 72%, var(--bg-subtle));
-  color: var(--text);
+  color: var(--text-muted);
 }
 .workspace-tabs-icon-btn {
   width: 28px;
@@ -114,6 +137,8 @@
   align-items: center;
   gap: 0;
   padding-left: 0;
+  position: relative;
+  z-index: 1;
   /* Horizontal scroll inside the strip — tabs keep their natural width
      and the strip itself scrolls when it overflows the chrome. This
      replaces the previous "slice to N visible + overflow chip" model
@@ -147,21 +172,37 @@
   border-radius: 6px;
   background: transparent;
   color: var(--text-muted);
-  overflow: hidden;
+  overflow: visible;
   contain: layout style;
-  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+  transition-property: background, border-color, color, opacity, transform, box-shadow;
+  transition-duration: 100ms, 100ms, 100ms, 120ms, 150ms, 150ms;
+  transition-timing-function: ease, ease, ease, ease, cubic-bezier(0.2, 0.8, 0.2, 1), ease;
   -webkit-app-region: no-drag;
+  cursor: default;
+  z-index: 1;
+  will-change: transform;
+}
+.workspace-tab.is-dragging {
+  opacity: 0.88;
+  transform: translateY(-2px) scale(1.015);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--text) 14%, transparent);
+  cursor: default;
+  z-index: 3;
+}
+.workspace-tab.is-drag-over-before,
+.workspace-tab.is-drag-over-after {
+  background: color-mix(in srgb, var(--bg-panel) 84%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--border-strong) 42%, transparent);
+  color: var(--text);
+}
+.workspace-tab.is-drag-over-before {
+  transform: translateX(6px);
+}
+.workspace-tab.is-drag-over-after {
+  transform: translateX(-6px);
 }
 .workspace-tab + .workspace-tab::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 1px;
-  height: 14px;
-  background: color-mix(in srgb, var(--border) 70%, transparent);
-  transform: translateY(-50%);
-  pointer-events: none;
+  display: none;
 }
 .workspace-tab:hover {
   background: color-mix(in srgb, var(--bg-panel) 64%, transparent);
@@ -195,6 +236,7 @@
   justify-content: flex-start;
   gap: 6px;
   text-align: left;
+  cursor: inherit;
 }
 .workspace-tab__main:hover:not(:disabled) {
   background: transparent;
@@ -240,6 +282,7 @@
   justify-content: center;
   opacity: 0;
   flex: 0 0 auto;
+  cursor: pointer;
 }
 .workspace-tab:hover .workspace-tab__close,
 .workspace-tab.is-active .workspace-tab__close {
@@ -254,10 +297,10 @@
   align-self: stretch;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex: 0 0 auto;
-  margin-left: 8px;
-  padding-left: 4px;
+  margin-left: 4px;
+  padding-left: 2px;
   z-index: 35;
   -webkit-app-region: no-drag;
 }
@@ -425,6 +468,7 @@
 .workspace-tab-preview {
   position: fixed;
   z-index: 140;
+  box-sizing: border-box;
   display: flex;
   align-items: flex-start;
   gap: 9px;
@@ -570,6 +614,10 @@
   gap: 6px;
   flex-shrink: 0;
 }
+.app-chrome-file-actions-before:has(> [data-app-chrome-file-actions='true']:empty),
+.app-chrome-file-actions:empty {
+  display: none;
+}
 .app-chrome-file-actions {
   display: inline-flex;
   align-items: center;
@@ -580,10 +628,22 @@
   margin-left: 4px;
 }
 .app-chrome-file-actions:not(:empty) + .app-chrome-actions,
-.app-chrome-file-actions-before:not(:empty) + .app-chrome-file-actions:empty + .app-chrome-actions {
+.app-chrome-file-actions-before:not(:has(> [data-app-chrome-file-actions='true']:empty)):not(:empty) + .app-chrome-file-actions + .app-chrome-actions {
+  position: relative;
   margin-left: 4px;
-  padding-left: 8px;
-  border-left: 1px solid var(--border);
+  padding-left: 12px;
+}
+.app-chrome-file-actions:not(:empty) + .app-chrome-actions::before,
+.app-chrome-file-actions-before:not(:has(> [data-app-chrome-file-actions='true']:empty)):not(:empty) + .app-chrome-file-actions + .app-chrome-actions::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  width: 1px;
+  height: 20px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 82%, transparent);
+  transform: translateY(-50%);
 }
 .chrome-action {
   display: inline-flex;
@@ -755,51 +815,6 @@
 .live-artifact-preview-frame-host:fullscreen {
   background: var(--bg);
 }
-.app-project-title {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  min-width: 0;
-  width: 100%;
-  overflow: hidden;
-}
-.app-project-title-line {
-  display: flex;
-  /* Center on the cross-axis so the contentEditable title text, the
-     muted meta string, the design-system picker chip, and the edit
-     icon button all sit on a shared vertical mid-line. Baseline
-     alignment makes the icon-only edit button appear to "float" above
-     the text (the button has no text baseline of its own). */
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-}
-.app-project-title .title {
-  color: var(--text-strong);
-  font-size: 13.5px;
-  line-height: 18px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  overflow: hidden;
-  padding-left: 1px;
-  text-overflow: ellipsis;
-  flex: 0 1 auto;
-  min-width: 0;
-}
-.app-project-title .meta {
-  color: var(--text-muted);
-  font-size: 11.5px;
-  line-height: 16px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  flex: 0 1 auto;
-}
 .project-target-platforms,
 .project-feature-chips {
   display: inline-flex;
@@ -863,7 +878,7 @@
   background: color-mix(in srgb, var(--accent, #7c5cff) 12%, var(--bg-subtle));
 }
 
-/* Project instructions toggle & editor bar */
+/* Project instructions toggle & modal */
 .project-instructions-toggle {
   background: none;
   border: none;
@@ -880,25 +895,72 @@
   opacity: 1;
   background: var(--bg-hover, rgba(128, 128, 128, 0.1));
 }
-.project-instructions-bar {
-  padding: 8px 16px 10px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-secondary, var(--bg));
+.project-instructions-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: start center;
+  padding: min(14vh, 96px) 20px 20px;
+  background: color-mix(in srgb, #0f172a 24%, transparent);
+}
+.project-instructions-modal {
+  width: min(640px, 100%);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: var(--shadow-lg, 0 22px 70px rgba(15, 23, 42, 0.2));
 }
-.project-instructions-label {
-  font-size: 11px;
-  font-weight: 600;
+.project-instructions-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.project-instructions-modal-title-wrap {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.project-instructions-modal-title {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.project-instructions-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
   color: var(--text-muted);
-  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.project-instructions-modal-close:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text-muted) 9%, transparent);
 }
 .project-instructions-input {
   width: 100%;
-  min-height: 48px;
-  max-height: 120px;
-  padding: 8px 10px;
+  min-height: 160px;
+  max-height: min(52vh, 420px);
+  padding: 10px 12px;
   font-size: 13px;
   line-height: 1.45;
   border: 1px solid var(--border);
@@ -965,9 +1027,9 @@
 }
 .project-instructions-preview {
   width: 100%;
-  max-height: 160px;
+  max-height: min(52vh, 420px);
   overflow-y: auto;
-  padding: 8px 10px;
+  padding: 10px 12px;
   font-size: 13px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -1133,6 +1195,53 @@
 }
 .avatar-popover-head .who { font-weight: 600; font-size: 13px; }
 .avatar-popover-head .where { font-size: 11.5px; color: var(--text-muted); }
+.avatar-amr-account-link,
+.avatar-amr-account-link:visited {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 10px;
+  margin: 0 6px 6px;
+  padding: 9px 10px;
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border-soft));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-tint) 34%, var(--bg-panel));
+}
+.avatar-amr-account-link:hover {
+  background: color-mix(in srgb, var(--accent-tint) 52%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+}
+.avatar-amr-account-link__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-strong);
+}
+.avatar-amr-account-link__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.avatar-amr-account-link__copy span:first-child {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.avatar-amr-account-link__copy span:last-child {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .avatar-item {
   display: flex;
   align-items: center;
@@ -1192,18 +1301,21 @@ a.avatar-item:visited {
 }
 .avatar-select-row {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
   font-size: 12px;
   color: var(--text-muted);
 }
 .avatar-select-label {
   flex-shrink: 0;
-  min-width: 64px;
+  min-width: 0;
 }
 .avatar-select {
-  flex: 1;
-  min-width: 0;
+  display: block;
+  width: 100%;
+  min-width: min(340px, 100%);
   font-size: 12px;
   padding: 4px 6px;
   border-radius: var(--radius-sm);
@@ -1246,12 +1358,18 @@ a.avatar-item:visited {
 
 /* -------- Split / panes -------------------------------------------- */
 .split {
+  --project-chat-panel-width: 460px;
+  --project-workspace-panel-track: minmax(400px, 1fr);
   display: grid;
-  grid-template-columns: 460px 8px minmax(400px, 1fr);
+  grid-template-columns:
+    var(--project-chat-panel-width)
+    8px
+    var(--project-workspace-panel-track);
   min-height: 0;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  background: var(--bg);
 }
 .split.is-resizing-chat {
   cursor: col-resize;
@@ -1260,10 +1378,21 @@ a.avatar-item:visited {
 .split.is-resizing-chat iframe {
   pointer-events: none;
 }
+.split.is-resizing-chat .workspace,
+.split.is-resizing-chat .viewer,
+.split.split-focus .workspace,
+.split.split-focus .viewer {
+  contain: layout paint;
+}
+.split.is-resizing-chat .html-viewer:has(.deck-nav) .preview-frame-clip,
+.split.split-focus .html-viewer:has(.deck-nav) .preview-frame-clip {
+  background: var(--text-strong);
+}
 .split.split-focus {
   grid-template-columns: minmax(0, 1fr);
 }
 .split-chat-slot {
+  position: relative;
   display: flex;
   min-height: 0;
   min-width: 0;
@@ -1284,8 +1413,12 @@ a.avatar-item:visited {
   background: var(--bg-panel);
 }
 .comment-left-host {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
   display: flex;
-  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -1327,36 +1460,51 @@ a.avatar-item:visited {
   overflow: hidden;
 }
 .split-resize-handle {
+  position: relative;
+  z-index: 45;
   width: 8px;
   min-width: 8px;
   height: 100%;
   cursor: col-resize;
-  background:
-    linear-gradient(
-      90deg,
-      transparent 0,
-      transparent 3px,
-      var(--border) 3px,
-      var(--border) 5px,
-      transparent 5px
-    );
-  transition: background 120ms ease;
+  background: transparent;
   touch-action: none;
+}
+.split-resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -10px;
+  right: -10px;
+  cursor: col-resize;
+}
+.split-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 0.5px);
+  width: 1px;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--border) 92%, transparent);
+  opacity: 0.9;
+  transition:
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .split-resize-handle:hover,
 .split-resize-handle:focus-visible,
 .split.is-resizing-chat .split-resize-handle {
-  background:
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--accent) 16%, transparent) 0,
-      color-mix(in srgb, var(--accent) 16%, transparent) 3px,
-      var(--accent) 3px,
-      var(--accent) 5px,
-      color-mix(in srgb, var(--accent) 16%, transparent) 5px
-    );
+  background: transparent;
+}
+.split-resize-handle:hover::after,
+.split-resize-handle:focus-visible::after,
+.split.is-resizing-chat .split-resize-handle::after {
+  background: color-mix(in srgb, var(--accent) 70%, var(--border));
+  box-shadow: none;
+  opacity: 1;
 }
 .split-resize-handle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
+  outline: none;
 }

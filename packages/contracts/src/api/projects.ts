@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatRunStatus } from './chat.js';
+import type { ChatMessage, ChatRunStatus, ChatSessionMode } from './chat.js';
 import type {
   ProjectContextConnectorRef,
   ProjectContextMcpServerRef,
@@ -153,6 +153,14 @@ export interface ProjectMetadata {
   // Batch/API-created projects can opt out of the initial discovery form so
   // the first agent turn builds immediately from the submitted brief.
   skipDiscoveryBrief?: boolean;
+  // Set when the user submits an unmodified curated example prompt from the
+  // gallery. Skips discovery AND requests full-quality direct generation,
+  // treating the curated title/brief as the complete creative brief. Honored
+  // by both the daemon and contracts (API/BYOK) system-prompt composers so the
+  // feature is not mode-dependent.
+  examplePrompt?: boolean;
+  examplePromptTitle?: string;
+  examplePromptBrief?: Record<string, string>;
   // Plugins selected through @ mentions on Home. These are additive
   // context references; the explicit "Use plugin" snapshot, when present,
   // remains the primary executable plugin for the run.
@@ -192,10 +200,29 @@ export interface ProjectTemplate {
   createdAt: number;
 }
 
+export interface ProjectBrowserWorkspaceTab {
+  id: string;
+  insertAfter?: string | null;
+  label: string;
+  title?: string;
+  url?: string;
+  iconUrl?: string;
+}
+
+export interface ProjectTabsState {
+  tabs: string[];
+  active: string | null;
+  browserTabs?: ProjectBrowserWorkspaceTab[];
+  hasSavedState?: boolean;
+  updatedAt?: number;
+}
+
 export interface Conversation {
   id: string;
   projectId: string;
   title: string | null;
+  sessionMode?: ChatSessionMode;
+  messageCount?: number;
   createdAt: number;
   updatedAt: number;
   totalDurationMs?: number;
@@ -218,6 +245,8 @@ export interface CreateProjectRequest {
   pluginId?: string;
   appliedPluginSnapshotId?: string;
   pluginInputs?: Record<string, unknown>;
+  /** Session mode for the default conversation seeded with the project. */
+  conversationMode?: ChatSessionMode;
   customInstructions?: string;
   /** Persisted to metadata.skipDiscoveryBrief for automated project runs. */
   skipDiscoveryBrief?: boolean;
@@ -326,10 +355,27 @@ export interface ConversationResponse {
 
 export interface CreateConversationRequest {
   title?: string | null;
+  sessionMode?: ChatSessionMode;
+  /**
+   * Seed the new conversation with another conversation's context by copying
+   * its messages. The source must belong to the same project; a missing or
+   * foreign id is ignored and an empty conversation is created. Powers the
+   * "Side Chat" launcher, which forks the current chat's context into a new
+   * conversation.
+   */
+  seedFromConversationId?: string | null;
+  /**
+   * When paired with `seedFromConversationId`, copy only source messages up to
+   * and including this message. Used by the chat "Fork" action so the new
+   * conversation resumes from a specific assistant turn instead of inheriting
+   * future follow-ups from the source conversation.
+   */
+  forkAfterMessageId?: string | null;
 }
 
 export interface UpdateConversationRequest {
   title?: string | null;
+  sessionMode?: ChatSessionMode;
 }
 
 export interface MessagesResponse {
