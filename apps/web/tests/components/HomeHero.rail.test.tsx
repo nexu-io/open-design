@@ -124,6 +124,20 @@ describe('HomeHero intent rail', () => {
     }
   });
 
+  it('renders execution switcher inside the input footer when provided', () => {
+    renderHero({
+      executionSwitcher: (
+        <button type="button" data-testid="home-execution-switcher">
+          Local CLI
+        </button>
+      ),
+    });
+
+    const switcher = screen.getByTestId('home-execution-switcher');
+    const footer = switcher.closest('.home-hero__input-foot');
+    expect(footer).toBeTruthy();
+  });
+
   it('forwards the matching chip descriptor when clicked', () => {
     const { onPickChip } = renderHero();
     fireEvent.click(screen.getByTestId('home-hero-rail-image'));

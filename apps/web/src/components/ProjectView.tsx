@@ -2311,11 +2311,7 @@ export function ProjectView({
     const attachRecoverableRuns = async () => {
       const missingRunIdMessages = messages.filter((m) => {
         if (m.role !== 'assistant' || m.runId) return false;
-        const producedFileCount = Array.isArray(m.producedFiles) ? m.producedFiles.length : 0;
-        return (
-          isActiveRunStatus(m.runStatus) ||
-          (m.runStatus === 'succeeded' && (!m.content.trim() || producedFileCount === 0))
-        );
+        return isActiveRunStatus(m.runStatus);
       });
       const activeRuns = missingRunIdMessages.length > 0
         ? await listActiveChatRuns(project.id, reattachConversationId)
@@ -2340,14 +2336,8 @@ export function ProjectView({
       for (const message of messages) {
         if (cancelled) return;
         if (message.role !== 'assistant') continue;
-        const producedFileCount = Array.isArray(message.producedFiles)
-          ? message.producedFiles.length
-          : 0;
-        const needsTerminalReplay =
-          message.runStatus === 'succeeded' &&
-          (!message.content.trim() || producedFileCount === 0);
-        const needsFullReplay = needsTerminalReplay || isActiveRunStatus(message.runStatus);
-        if (!isActiveRunStatus(message.runStatus) && !needsTerminalReplay) continue;
+        const needsFullReplay = isActiveRunStatus(message.runStatus);
+        if (!needsFullReplay) continue;
         const fallbackRun = !message.runId
           ? activeByMessage.get(message.id) ?? historicalByMessage.get(message.id) ?? null
           : null;

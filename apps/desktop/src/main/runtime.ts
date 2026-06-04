@@ -643,13 +643,13 @@ const MAC_WINDOW_CHROME =
 
 const MAC_WINDOW_CHROME_CSS = `
   .app-chrome-header {
-    --app-chrome-traffic-space: 78px !important;
-    --app-chrome-traffic-margin: 8px !important;
+    --app-chrome-traffic-space: 96px !important;
+    --app-chrome-traffic-margin: 12px !important;
     -webkit-app-region: drag;
   }
   .app-chrome-traffic-space {
-    flex: 0 0 78px !important;
-    width: 78px !important;
+    flex: 0 0 96px !important;
+    width: 96px !important;
   }
   .app-chrome-header button,
   .app-chrome-header a,
@@ -1422,6 +1422,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     ...MAC_WINDOW_CHROME,
     webPreferences: {
       additionalArguments: osLocaleAdditionalArguments(options.osLocale),
+      backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
       preload: preloadPath,

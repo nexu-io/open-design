@@ -38,23 +38,34 @@ export function buildInlineMentionParts(
   if (!text) return null;
   if (!text.includes('@')) return null;
   const highlightUnknown = options.highlightUnknown ?? true;
-  const known = normalizeEntities(entities);
+  const known = getMentionTokenIndex(entities);
   const parts: InlineMentionPart[] = [];
-  let index = 0;
+  let scanStart = 0;
+  let copiedUntil = 0;
   let found = false;
 
-  while (index < text.length) {
-    const knownMatch = findNextKnownMention(text, known, index);
-    const unknownMatch = highlightUnknown ? findNextUnknownMention(text, index) : null;
-    const match = pickEarlierMention(knownMatch, unknownMatch);
-
-    if (!match) {
-      parts.push({ kind: 'text', text: text.slice(index) });
-      break;
+  while (scanStart < text.length) {
+    const start = text.indexOf('@', scanStart);
+    if (start === -1) break;
+    if (!isMentionBoundary(text, start)) {
+      scanStart = start + 1;
+      continue;
     }
 
-    if (match.start > index) {
-      parts.push({ kind: 'text', text: text.slice(index, match.start) });
+    const knownMatch = findKnownMentionAt(text, known, start);
+    const unknownMatch = highlightUnknown ? findUnknownMentionAt(text, start) : null;
+    const match =
+      knownMatch && (!unknownMatch || knownMatch.token.length >= unknownMatch.token.length)
+        ? knownMatch
+        : unknownMatch;
+
+    if (!match) {
+      scanStart = start + 1;
+      continue;
+    }
+
+    if (match.start > copiedUntil) {
+      parts.push({ kind: 'text', text: text.slice(copiedUntil, match.start) });
     }
     parts.push({
       kind: 'mention',
@@ -62,26 +73,45 @@ export function buildInlineMentionParts(
       text: match.token,
     });
     found = true;
-    index = match.start + match.token.length;
+    copiedUntil = match.start + match.token.length;
+    scanStart = copiedUntil;
+  }
+
+  if (copiedUntil < text.length) {
+    parts.push({ kind: 'text', text: text.slice(copiedUntil) });
   }
 
   return found ? coalesceTextParts(parts) : null;
 }
 
-// Cache the normalized+sorted list keyed by the input array's identity. The
-// composer feeds the SAME memoized `knownEntities` array on every keystroke, so
-// without this the full map/filter/sort re-ran per character (and per render
-// for the highlight path). A WeakMap lets the entry GC when the array changes.
-const normalizedEntitiesCache = new WeakMap<InlineMentionEntity[], InlineMentionEntity[]>();
+interface MentionTrieNode {
+  children: Map<string, MentionTrieNode>;
+  entity?: InlineMentionEntity;
+  token?: string;
+}
 
-function normalizeEntities(entities: InlineMentionEntity[]): InlineMentionEntity[] {
-  const cached = normalizedEntitiesCache.get(entities);
+interface MentionTokenIndex {
+  root: MentionTrieNode;
+}
+
+const mentionTokenIndexCache = new WeakMap<InlineMentionEntity[], MentionTokenIndex>();
+
+function getMentionTokenIndex(entities: InlineMentionEntity[]): MentionTokenIndex {
+  const cached = mentionTokenIndexCache.get(entities);
   if (cached) return cached;
+
+  const root: MentionTrieNode = { children: new Map() };
   const seen = new Set<string>();
   const normalized = entities
     .map((entity) => {
       const token = entity.token ?? inlineMentionToken(entity.label);
-      return { ...entity, token };
+      return {
+        id: entity.id,
+        kind: entity.kind,
+        label: entity.label,
+        token,
+        ...(entity.title ? { title: entity.title } : {}),
+      };
     })
     .filter((entity) => {
       if (!entity.token || entity.token === '@') return false;
@@ -91,67 +121,65 @@ function normalizeEntities(entities: InlineMentionEntity[]): InlineMentionEntity
       return true;
     })
     .sort((a, b) => (b.token?.length ?? 0) - (a.token?.length ?? 0));
-  normalizedEntitiesCache.set(entities, normalized);
-  return normalized;
-}
 
-function findNextKnownMention(
-  text: string,
-  entities: InlineMentionEntity[],
-  from: number,
-): MentionMatch | null {
-  let best: MentionMatch | null = null;
-  for (const entity of entities) {
+  for (const entity of normalized) {
     const token = entity.token;
     if (!token) continue;
-    let start = text.indexOf(token, from);
-    while (start !== -1 && !isMentionBoundary(text, start)) {
-      start = text.indexOf(token, start + 1);
+    let node = root;
+    for (const char of token) {
+      let child = node.children.get(char);
+      if (!child) {
+        child = { children: new Map() };
+        node.children.set(char, child);
+      }
+      node = child;
     }
-    if (start === -1) continue;
-    if (
-      !best ||
-      start < best.start ||
-      (start === best.start && token.length > best.token.length)
-    ) {
-      best = { start, token, entity };
+    if (!node.entity) {
+      node.entity = entity;
+      node.token = token;
+    }
+  }
+
+  const index = { root };
+  mentionTokenIndexCache.set(entities, index);
+  return index;
+}
+
+function findKnownMentionAt(
+  text: string,
+  index: MentionTokenIndex,
+  start: number,
+): MentionMatch | null {
+  let best: MentionMatch | null = null;
+  let node: MentionTrieNode | undefined = index.root;
+  for (let i = start; i < text.length; i += 1) {
+    node = node.children.get(text[i] ?? '');
+    if (!node) break;
+    if (node.entity && node.token && isMentionRightBoundary(text, i + 1)) {
+      best = { start, token: node.token, entity: node.entity };
     }
   }
   return best;
 }
 
-function findNextUnknownMention(text: string, from: number): MentionMatch | null {
-  const mentionPattern = /@[^\s@]+/g;
-  mentionPattern.lastIndex = from;
-  let match: RegExpExecArray | null;
-  while ((match = mentionPattern.exec(text)) !== null) {
-    const token = match[0];
-    const start = match.index;
-    if (!isMentionBoundary(text, start)) continue;
-    return {
-      start,
-      token,
-      entity: {
-        id: `unknown:${token}`,
-        kind: 'unknown',
-        label: token.slice(1),
-        token,
-        title: token,
-      },
-    };
+function findUnknownMentionAt(text: string, start: number): MentionMatch | null {
+  let end = start + 1;
+  if (end >= text.length || /[\s@]/.test(text[end] ?? '')) return null;
+  while (end < text.length && !/[\s@]/.test(text[end] ?? '')) {
+    end += 1;
   }
-  return null;
-}
-
-function pickEarlierMention(
-  known: MentionMatch | null,
-  unknown: MentionMatch | null,
-): MentionMatch | null {
-  if (!known) return unknown;
-  if (!unknown) return known;
-  if (known.start < unknown.start) return known;
-  if (unknown.start < known.start) return unknown;
-  return known.token.length >= unknown.token.length ? known : unknown;
+  const token = text.slice(start, end);
+  return {
+    start,
+    token,
+    entity: {
+      id: `unknown:${token}`,
+      kind: 'unknown',
+      label: token.slice(1),
+      token,
+      title: token,
+    },
+  };
 }
 
 /**

@@ -746,33 +746,39 @@
 
 /* Project page audit pass: one final rule set for the active project shell.
    Keep the outer panes flat; only controls and repeated items get radius. */
+.workspace-shell {
+  grid-template-rows: 34px minmax(0, 1fr);
+}
 .workspace-shell .workspace-tabs-chrome.app-chrome-header {
-  --workspace-tabs-chrome-height: 36px;
+  --workspace-tabs-chrome-height: 34px;
   --workspace-tab-bar-bg: color-mix(in srgb, var(--bg-panel) 82%, var(--bg-subtle));
-  --workspace-active-tab-border: color-mix(in srgb, var(--border-strong) 42%, transparent);
-  height: 36px;
-  min-height: 36px;
-  padding: 0 10px 0 6px;
+  --workspace-active-tab-border: color-mix(in srgb, var(--border-strong) 38%, transparent);
+  height: 34px;
+  min-height: 34px;
+  padding: 0 8px 0 0;
   background: var(--workspace-tab-bar-bg);
   border-bottom: 0;
   box-shadow: none;
 }
+.workspace-shell .workspace-tabs-traffic {
+  align-self: stretch;
+}
 .workspace-shell .workspace-tabs-strip {
-  gap: 4px;
-  align-items: flex-end;
-  padding-top: 3px;
+  gap: 3px;
+  align-items: center;
+  padding-top: 0;
 }
 .workspace-shell .workspace-tab {
-  height: 32px;
-  min-height: 32px;
-  min-width: 96px;
+  width: 156px;
+  height: 26px;
+  min-height: 26px;
+  min-width: 112px;
   max-width: 168px;
-  flex: 1 1 148px;
-  grid-template-columns: minmax(0, 1fr) 24px;
-  align-self: flex-end;
-  border-radius: 10px 10px 0 0;
+  flex: 0 0 156px;
+  grid-template-columns: minmax(0, 1fr) 22px;
+  align-self: center;
+  border-radius: 7px;
   border: 1px solid transparent;
-  border-bottom: 0;
   background: transparent;
   box-shadow: none;
 }
@@ -780,17 +786,16 @@
   display: none;
 }
 .workspace-shell .workspace-tab.is-active {
-  background: var(--bg-panel);
+  background: color-mix(in srgb, var(--bg-panel) 94%, var(--bg-subtle));
   border-color: var(--workspace-active-tab-border);
-  border-bottom-color: transparent;
   box-shadow:
-    0 1px 0 var(--bg-panel),
-    0 -1px 0 color-mix(in srgb, var(--bg-panel) 86%, transparent) inset;
+    0 1px 2px color-mix(in srgb, var(--text) 6%, transparent),
+    0 0 0 0.5px color-mix(in srgb, var(--bg-panel) 82%, transparent) inset;
   z-index: 2;
 }
 .workspace-shell .workspace-tab:not(.is-active):hover,
 .workspace-shell .workspace-tab:not(.is-active):focus-within {
-  border-radius: 10px;
+  border-radius: 7px;
   background:
     linear-gradient(
       color-mix(in srgb, var(--bg-panel) 78%, transparent),
@@ -810,15 +815,15 @@
 .workspace-shell .workspace-tab__main {
   position: relative;
   z-index: 2;
-  gap: 6px;
-  padding-inline: 10px 4px;
+  gap: 5px;
+  padding-inline: 9px 3px;
 }
 .workspace-shell .workspace-tab__close {
   position: relative;
   z-index: 2;
 }
 .workspace-shell .workspace-tab__label {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 540;
 }
 .workspace-shell .workspace-tab__close {
@@ -1336,21 +1341,42 @@
 }
 
 .app .composer {
+  padding: 9px 10px 11px;
+  background: transparent;
+}
+.chat-composer-fixed-layer .composer {
+  gap: 5px;
   padding: 8px 10px 10px;
   background: transparent;
 }
 .app .composer-shell {
-  padding: 8px;
+  padding: 7px;
   border-color: color-mix(in srgb, var(--border) 84%, var(--border-strong));
   border-radius: 10px;
   background: color-mix(in srgb, var(--bg-panel) 96%, var(--bg-subtle));
   box-shadow: var(--shadow-sm);
 }
+.chat-composer-fixed-layer .composer-shell {
+  padding: 0;
+  border-color: var(--border);
+  border-radius: 10px;
+  box-shadow: none;
+}
 .app .composer-shell:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border-strong));
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--text) 6%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.chat-composer-fixed-layer .composer-shell:focus-within {
   border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm), 0 0 0 3px var(--accent-soft);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 4%, transparent);
 }
 .app .composer.drag-active .composer-shell {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.chat-composer-fixed-layer .composer.drag-active .composer-shell {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
 }
@@ -1361,7 +1387,17 @@
      mention-highlight overlay share one value. Re-pinning it here would
      only set the textarea, drifting the overlay glyphs off the caret. */
 }
+.chat-composer-fixed-layer .composer textarea {
+  min-height: 56px;
+  max-height: min(184px, 34vh);
+}
 .app .composer-row {
+  min-height: 30px;
+  padding-top: 6px;
+  margin-top: 1px;
+  gap: 6px;
+}
+.chat-composer-fixed-layer .composer-row {
   min-height: 32px;
   padding-top: 2px;
 }
@@ -1369,13 +1405,32 @@
 .app .composer-import,
 .app .composer-research,
 .app .composer-send {
+  border-radius: 7px;
+}
+.chat-composer-fixed-layer .composer-row .icon-btn,
+.chat-composer-fixed-layer .composer-import,
+.chat-composer-fixed-layer .composer-research,
+.chat-composer-fixed-layer .composer-send {
   border-radius: 9px;
 }
 .app .composer-row .icon-btn {
   width: 28px;
   height: 28px;
 }
+.chat-composer-fixed-layer .composer-row .icon-btn {
+  width: 28px;
+  height: 28px;
+}
 .app .composer-send {
+  height: 28px;
+  min-height: 28px;
+  min-width: 58px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: none;
+}
+.chat-composer-fixed-layer .composer-send {
   height: 30px;
   min-height: 30px;
   padding: 0 12px;
@@ -1384,6 +1439,12 @@
   box-shadow: none;
 }
 .app .composer-send:disabled {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+  color: var(--text-faint);
+  cursor: default;
+}
+.chat-composer-fixed-layer .composer-send:disabled {
   background: var(--bg-subtle);
   border-color: var(--border);
   color: var(--text-faint);
@@ -1512,6 +1573,14 @@
   text-overflow: clip;
   white-space: normal;
 }
+.chat-composer-fixed-layer .composer-hint {
+  order: -1;
+  margin: 0 8px 1px;
+  color: color-mix(in srgb, var(--text-muted) 64%, transparent);
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
 
 .app .workspace {
   padding: 0;
@@ -1553,6 +1622,251 @@
   border-radius: 0;
   background: var(--bg-panel);
   box-shadow: none;
+}
+
+.app .df-panel,
+.app .df-main {
+  background: var(--bg-panel);
+}
+.app .df-panel:not(.no-preview) {
+  grid-template-columns: minmax(320px, 1fr) minmax(320px, 360px);
+}
+.app .df-main {
+  border-right-color: var(--border);
+}
+.app .df-body {
+  padding: 16px 20px 20px;
+  background: var(--bg-panel);
+}
+.app .df-controls-row {
+  margin: 0 0 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 14px;
+}
+.app .df-controls-primary {
+  grid-template-columns: 31px minmax(220px, 340px) minmax(0, auto);
+  gap: 10px;
+}
+.app .df-controls-toggles {
+  gap: 8px;
+}
+.app .df-refresh-control {
+  width: 31px;
+  height: 31px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  box-shadow: none;
+  flex: 0 0 auto;
+}
+.app .df-refresh-control:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+}
+.app .df-controls-row .df-actions {
+  margin-left: 0;
+  gap: 8px;
+}
+.app .df-controls-row .df-actions button {
+  min-height: 31px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  box-shadow: none;
+}
+.app .df-controls-row .df-actions button:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+}
+.app .df-group-toggle {
+  align-self: flex-start;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-subtle);
+  box-shadow: none;
+}
+.app .df-group-toggle > span {
+  padding: 0 8px;
+}
+.app .df-group-toggle button {
+  min-height: 26px;
+  padding: 2px 11px;
+  border-radius: 8px;
+}
+.app .df-group-toggle button.active {
+  background: var(--bg-panel);
+  box-shadow: none;
+}
+@media (max-width: 1180px) {
+  .app .df-controls-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app .df-controls-primary {
+    grid-template-columns: 31px minmax(180px, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .app .df-controls-primary {
+    grid-template-columns: 31px minmax(0, 1fr);
+  }
+}
+.app .df-pagination {
+  gap: 8px;
+  padding: 0 0 12px;
+  color: var(--text-muted);
+}
+.app .df-pagination-start {
+  border-bottom: 1px solid var(--border-soft);
+}
+.app .df-pagination-center {
+  justify-content: center;
+  padding: 14px 0 10px;
+}
+.app .df-pagination select,
+.app .df-page-btn {
+  min-height: 28px;
+  border-radius: 8px;
+  background-color: var(--bg-panel);
+  box-shadow: none;
+}
+.app .df-select-all {
+  border-radius: 7px;
+}
+.app .df-table {
+  width: 100%;
+  padding: 0;
+  border-collapse: collapse;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+.app .df-table thead {
+  border-bottom: 1px solid var(--border-soft);
+}
+.app .df-th-check,
+.app .df-cell-check {
+  width: 28px;
+  padding-left: 8px;
+}
+.app .df-th-icon,
+.app .df-cell-icon {
+  width: 40px;
+}
+.app .df-th-kind {
+  width: 128px;
+}
+.app .df-th-time {
+  width: 126px;
+}
+.app .df-th-menu,
+.app .df-cell-menu {
+  width: 34px;
+  padding-right: 6px;
+}
+.app .df-panel:not(.no-preview) .df-th-kind,
+.app .df-panel:not(.no-preview) .df-cell-kind,
+.app .df-panel:not(.no-preview) .df-th-time,
+.app .df-panel:not(.no-preview) .df-cell-time {
+  display: none;
+}
+.app .df-panel:not(.no-preview) .df-table {
+  table-layout: auto;
+}
+.app .df-panel:not(.no-preview) .df-th-name,
+.app .df-panel:not(.no-preview) .df-cell-name {
+  width: auto;
+}
+.app .df-panel:not(.no-preview) .df-cell-name {
+  min-width: 0;
+  max-width: none;
+}
+.app .df-panel:not(.no-preview) .df-row-name-btn,
+.app .df-panel:not(.no-preview) .df-row-name-wrap,
+.app .df-panel:not(.no-preview) .df-row-name {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.app .df-panel:not(.no-preview) .df-row-sub-kind,
+.app .df-panel:not(.no-preview) .df-row-sub-time {
+  display: inline;
+}
+.app .df-panel:not(.no-preview) .df-row-name {
+  display: block;
+}
+.app .df-th-sortable {
+  padding: 10px 8px 8px;
+  font-size: 10px;
+}
+.app .df-section-row td {
+  padding: 14px 8px 7px;
+  border-top: 0;
+}
+.app .df-section-label {
+  padding: 0;
+  font-size: 10px;
+}
+.app .df-cell-name,
+.app .df-cell-kind,
+.app .df-cell-time {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.app .df-cell-name {
+  padding-right: 14px;
+}
+.app .df-file-row + .df-file-row .df-cell-check,
+.app .df-file-row + .df-file-row .df-cell-icon,
+.app .df-file-row + .df-file-row .df-cell-name,
+.app .df-file-row + .df-file-row .df-cell-kind,
+.app .df-file-row + .df-file-row .df-cell-time,
+.app .df-file-row + .df-file-row .df-cell-menu {
+  border-top: 1px solid var(--border-soft);
+}
+.app .df-file-row:hover {
+  background: color-mix(in srgb, var(--bg-subtle) 62%, transparent);
+}
+.app .df-row-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+.app .df-row-name {
+  font-size: 13px;
+  font-weight: 560;
+  color: var(--text-strong);
+}
+.app .df-row-name-wrap {
+  gap: 0;
+}
+.app .df-row-size,
+.app .df-row-sub,
+.app .df-row-meta,
+.app .df-cell-kind,
+.app .df-cell-time,
+.app .df-kind-label {
+  font-size: 12px;
+}
+.app .df-cell-time,
+.app .df-page-info {
+  color: var(--text-soft);
+}
+.app .df-drop {
+  margin: 18px 0 0;
+  padding: 18px;
+  border-radius: 10px;
+  background: var(--bg-panel);
+}
+.app .df-drop .label {
+  font-size: 10.5px;
+}
+.app .df-drop .desc {
+  font-size: 12px;
+  max-width: 48ch;
 }
 
 /* -- Hand-off button in ChatPane header (paseo-style open-in-editor) -- */

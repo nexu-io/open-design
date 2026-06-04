@@ -53,6 +53,7 @@ interface Props {
   config: AppConfig;
   agents: AgentInfo[];
   providerModelsCache?: ProviderModelsCache;
+  compact?: boolean;
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
   onAgentChange: (id: string) => void;
@@ -126,6 +127,7 @@ export function InlineModelSwitcher({
   config,
   agents,
   providerModelsCache,
+  compact = false,
   daemonLive,
   onModeChange,
   onAgentChange,
@@ -533,7 +535,7 @@ export function InlineModelSwitcher({
 
   return (
     <div
-      className="inline-switcher"
+      className={`inline-switcher${compact ? ' inline-switcher--compact' : ''}`}
       ref={wrapRef}
       data-testid="inline-model-switcher"
     >

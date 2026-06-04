@@ -180,6 +180,7 @@ export interface LexicalComposerInputHandle {
   setText(text: string): void;
   clear(): void;
   focus(): void;
+  insertText(text: string): void;
   insertMention(insert: MentionInsert): void;
   replaceActiveTrigger(text: string): void;
 }
@@ -704,6 +705,18 @@ export const LexicalComposerInput = forwardRef<
       },
       focus() {
         editorRef.current?.focus();
+      },
+      insertText(text: string) {
+        const editor = editorRef.current;
+        if (!editor) return;
+        editor.update(() => {
+          let sel = $getSelection();
+          if (!$isRangeSelection(sel)) {
+            $getRoot().selectEnd();
+            sel = $getSelection();
+          }
+          if ($isRangeSelection(sel)) sel.insertText(text);
+        }, { discrete: true });
       },
       insertMention(insert: MentionInsert) {
         const editor = editorRef.current;

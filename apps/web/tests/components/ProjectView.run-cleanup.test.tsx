@@ -1242,7 +1242,7 @@ describe('ProjectView daemon cleanup', () => {
     });
   });
 
-  it('relinks terminal replay to an existing artifact without writing a duplicate file', async () => {
+  it('does not replay a terminal succeeded row with empty produced files', async () => {
     const runCreatedAt = Date.now();
     const existingArtifact = {
       artifactManifest: {
@@ -1329,20 +1329,17 @@ describe('ProjectView daemon cleanup', () => {
       />,
     );
 
-    await waitFor(() => {
-      expect(saveMessage.mock.calls).toEqual(
-        expect.arrayContaining([
-          expect.arrayContaining([
-            'project-1',
-            'conv-1',
-            expect.objectContaining({
-              id: 'msg-replay',
-              producedFiles: [existingArtifact],
-            }),
-          ]),
-        ]),
-      );
-    });
+    await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalledWith('project-1'));
+    expect(fetchChatRunStatus).not.toHaveBeenCalled();
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+    expect(saveMessage).not.toHaveBeenCalledWith(
+      'project-1',
+      'conv-1',
+      expect.objectContaining({
+        id: 'msg-replay',
+        producedFiles: [existingArtifact],
+      }),
+    );
     expect(writeProjectTextFile).not.toHaveBeenCalled();
   });
 });
