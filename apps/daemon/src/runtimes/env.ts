@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -49,6 +50,50 @@ const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
 // object loses Node's case-insensitive accessor — `Anthropic_Api_Key`
 // would survive a literal `delete env.ANTHROPIC_API_KEY` and still reach
 // the child. Iterate keys and compare case-insensitively to close that.
+// When the daemon launches the vela (amr) CLI, forward this installation's id
+// so vela's analytics can be correlated back to it — but only after the user
+// has consented to telemetry. spawnEnvForAgent is synchronous, so read the
+// config files synchronously and best-effort: any missing file / parse error /
+// withheld consent just omits the id (vela then reports without it). Consent
+// and the canonical id resolution mirror the daemon's /api/analytics/config
+// handler (telemetry.metrics === true; channel-root installation.json wins
+// over the legacy app-config.json field).
+function amrAnalyticsIdentityEnv(
+  env: NodeJS.ProcessEnv,
+): Record<string, string> {
+  const dataDir = env.OD_DATA_DIR?.trim();
+  if (!dataDir) return {};
+  let consented = false;
+  let installationId = '';
+  try {
+    const appCfg = JSON.parse(
+      readFileSync(path.join(dataDir, 'app-config.json'), 'utf8'),
+    ) as { telemetry?: { metrics?: unknown }; installationId?: unknown };
+    consented = appCfg?.telemetry?.metrics === true;
+    if (typeof appCfg?.installationId === 'string') {
+      installationId = appCfg.installationId;
+    }
+  } catch {
+    return {};
+  }
+  try {
+    const installationDir = env.OD_INSTALLATION_DIR?.trim() || dataDir;
+    const installation = JSON.parse(
+      readFileSync(path.join(installationDir, 'installation.json'), 'utf8'),
+    ) as { installationId?: unknown };
+    if (
+      typeof installation?.installationId === 'string' &&
+      installation.installationId.length > 0
+    ) {
+      installationId = installation.installationId;
+    }
+  } catch {
+    // Channel-root file absent/unreadable — fall back to app-config.json value.
+  }
+  if (!consented || installationId.length === 0) return {};
+  return { OD_INSTALLATION_ID: installationId };
+}
+
 export function spawnEnvForAgent(
   agentId: string,
   baseEnv: RuntimeEnvMap,
@@ -65,6 +110,7 @@ export function spawnEnvForAgent(
   );
   if (agentId === 'amr') {
     Object.assign(env, amrVelaProfileEnv(env));
+    Object.assign(env, amrAnalyticsIdentityEnv(env));
     if (!env.OPENCODE_TEST_HOME?.trim() && env.OD_DATA_DIR?.trim()) {
       env.OPENCODE_TEST_HOME = path.join(
         env.OD_DATA_DIR.trim(),
