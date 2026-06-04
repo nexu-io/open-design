@@ -6,6 +6,11 @@ import {
   velaLogout,
   type VelaLoginStatus,
 } from '../providers/daemon';
+import { useAnalytics } from '../analytics/provider';
+import {
+  recordAmrEntry,
+  type TrackingAmrEntrySource,
+} from '../analytics/amr-attribution';
 import { useI18n } from '../i18n';
 import {
   AMR_LOGIN_STATUS_EVENT,
@@ -24,10 +29,17 @@ interface AmrLoginPillProps {
   initialStatus?: VelaLoginStatus | null;
   skipInitialRefresh?: boolean;
   signInLabel?: string;
+  amrEntrySourceDetail?: TrackingAmrEntrySource;
   revealPendingCancelAction?: boolean;
   showConsoleAction?: boolean;
   onStatusChange?: (status: VelaLoginStatus | null) => void;
 }
+
+const AMR_LOGIN_REUSE_ENTRY_SOURCES: readonly TrackingAmrEntrySource[] = [
+  'settings_amr_agent_card',
+  'chat_error_authorize_retry',
+  'generation_preview_authorize_retry',
+];
 
 export type AmrAccountControlStatus =
   | 'signed-out'
@@ -87,6 +99,7 @@ export function AmrAccountControl({
   className,
   compact = false,
   email = '',
+  errorMessage,
   profile,
   showProfileBadge = false,
   showSignInAction = true,
@@ -109,6 +122,7 @@ export function AmrAccountControl({
   const isSigningIn = status === 'signing-in';
   const isCanceled = status === 'canceled';
   const hasError = status === 'error';
+  const loginErrorText = errorMessage || t('settings.amrLoginErrorCompact');
   const statusText = isSignedIn
     ? hideSignedInStatus
       ? ''
@@ -185,7 +199,7 @@ export function AmrAccountControl({
       ) : null}
       {hasError ? (
         <span className="amr-account-control__error" role="alert">
-          {t('settings.amrLoginErrorCompact')}
+          {loginErrorText}
         </span>
       ) : null}
     </div>
@@ -202,11 +216,13 @@ export function AmrLoginPill({
   initialStatus = null,
   skipInitialRefresh = false,
   signInLabel,
+  amrEntrySourceDetail,
   revealPendingCancelAction = false,
   showConsoleAction = false,
   onStatusChange,
 }: AmrLoginPillProps) {
   const { t } = useI18n();
+  const analytics = useAnalytics();
   const [status, setStatus] = useState<VelaLoginStatus | null>(initialStatus);
   const [pending, setPending] = useState<null | 'login' | 'logout' | 'cancel'>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -370,7 +386,12 @@ export function AmrLoginPill({
       loginStartedAtRef.current = startedAt;
       setErrorMessage(null);
       setPending('login');
-      const result = await startVelaLogin();
+      const attribution = amrEntrySourceDetail
+        ? recordAmrEntry(analytics.track, amrEntrySourceDetail, new Date(), {
+            reuseExistingFrom: AMR_LOGIN_REUSE_ENTRY_SOURCES,
+          })
+        : null;
+      const result = await startVelaLogin(attribution);
       if (!result.ok && !result.alreadyRunning) {
         loginStartedAtRef.current = null;
         loginPendingRef.current = false;
@@ -381,7 +402,7 @@ export function AmrLoginPill({
       notifyAmrLoginStatusChanged('login-started');
       startPolling(startedAt);
     },
-    [startPolling, t],
+    [amrEntrySourceDetail, analytics.track, startPolling, t],
   );
 
   const handleCancelLogin = useCallback(
@@ -462,6 +483,7 @@ export function AmrLoginPill({
         status={accountStatus}
         compact
         email={userEmail}
+        errorMessage={errorMessage}
         profile={status?.profile}
         showProfileBadge
         hideSignedOutStatus={hideSignedOutStatus}

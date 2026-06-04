@@ -4,6 +4,11 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 
 import { createCommandInvocation } from '@open-design/platform';
+import type {
+  AmrEntryAttribution,
+  TrackingAmrEntrySource,
+  TrackingPageName,
+} from '@open-design/contracts/analytics';
 
 import { resolveAgentLaunch } from '../runtimes/launch.js';
 import { spawnEnvForAgent } from '../runtimes/env.js';
@@ -11,6 +16,108 @@ import { getAgentDef } from '../runtimes/registry.js';
 import { resolveAmrProfile } from './vela-profile.js';
 
 export { resolveAmrProfile } from './vela-profile.js';
+
+const AMR_ENTRY_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
+  'onboarding_amr_card',
+  'onboarding_amr_sign_in_continue',
+  'inline_model_switcher_amr_row',
+  'settings_amr_agent_card',
+  'settings_amr_authorize',
+  'chat_error_authorize_retry',
+  'chat_error_recharge',
+  'chat_error_switch_retry_card',
+  'generation_preview_authorize_retry',
+  'generation_preview_recharge',
+  'generation_preview_switch_retry_card',
+]);
+
+type AmrEntrySourcePageName = Extract<
+  TrackingPageName,
+  'onboarding' | 'chat_panel' | 'settings' | 'file_manager'
+>;
+
+const AMR_ENTRY_SOURCE_PAGES: ReadonlySet<AmrEntrySourcePageName> = new Set([
+  'onboarding',
+  'chat_panel',
+  'settings',
+  'file_manager',
+]);
+
+const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
+  TrackingAmrEntrySource,
+  AmrEntrySourcePageName
+> = {
+  onboarding_amr_card: 'onboarding',
+  onboarding_amr_sign_in_continue: 'onboarding',
+  inline_model_switcher_amr_row: 'chat_panel',
+  settings_amr_agent_card: 'settings',
+  settings_amr_authorize: 'settings',
+  chat_error_authorize_retry: 'chat_panel',
+  chat_error_recharge: 'chat_panel',
+  chat_error_switch_retry_card: 'chat_panel',
+  generation_preview_authorize_retry: 'file_manager',
+  generation_preview_recharge: 'file_manager',
+  generation_preview_switch_retry_card: 'file_manager',
+};
+
+const AMR_ANALYTICS_EVENTS_URL =
+  'https://amr-api.open-design.ai/api/v1/analytics/events';
+const AMR_ANALYTICS_TIMEOUT_MS = 1500;
+
+type AmrAnalyticsEnv = 'local' | 'test' | 'staging' | 'production';
+
+const AMR_ANALYTICS_ENVS: ReadonlySet<AmrAnalyticsEnv> = new Set([
+  'local',
+  'test',
+  'staging',
+  'production',
+]);
+
+export interface AmrEntryAnalyticsPayload {
+  pageName: 'open_design';
+  sourcePageName: AmrEntrySourcePageName;
+  area: 'amr_entry';
+  element: TrackingAmrEntrySource;
+  action: 'click_amr_entry';
+  entryId: string;
+  sourceProduct: 'open_design';
+  sourceDetail: TrackingAmrEntrySource;
+  entryOccurredAt: string;
+}
+
+export interface AmrEntryAnalyticsContext {
+  deviceId?: string | null;
+  sessionId?: string | null;
+  locale?: string | null;
+}
+
+interface FetchResponseLike {
+  ok: boolean;
+  status: number;
+}
+
+type FetchLike = (
+  input: string,
+  init: {
+    method: 'POST';
+    headers: Record<string, string>;
+    body: string;
+    signal?: AbortSignal;
+  },
+) => Promise<FetchResponseLike>;
+
+export interface MirrorAmrEntryAnalyticsDeps {
+  analyticsContext?: AmrEntryAnalyticsContext | null;
+  appVersion?: string | null;
+  env?: NodeJS.ProcessEnv;
+  fetchImpl?: FetchLike;
+}
+
+export interface MirrorAmrEntryAnalyticsResult {
+  mirrored: boolean;
+  status?: number;
+  error?: string;
+}
 
 export interface VelaUser {
   id: string;
@@ -210,6 +317,7 @@ export function cancelVelaLogin(): CancelVelaLoginResult {
 export interface SpawnVelaLoginDeps {
   configuredEnv?: Record<string, string>;
   baseEnv?: NodeJS.ProcessEnv;
+  attribution?: AmrEntryAttribution | null;
 }
 
 async function waitForImmediateLoginFailure(child: ChildProcess): Promise<void> {
@@ -276,7 +384,10 @@ export async function spawnVelaLogin(
   if (!bin) {
     throw new Error('vela binary not found; install vela or configure VELA_BIN');
   }
-  const env = spawnEnvForAgent('amr', baseEnv, configuredEnv);
+  const env = {
+    ...spawnEnvForAgent('amr', baseEnv, configuredEnv),
+    ...velaLoginAttributionEnv(deps.attribution),
+  };
   // Route through createCommandInvocation so an npm/Node-style `vela.cmd` or
   // `vela.bat` shim on Windows gets wrapped under `cmd.exe /d /s /c …` with
   // verbatim args, matching what `execAgentFile` / chat-run spawning do. A
@@ -307,4 +418,176 @@ export async function spawnVelaLogin(
     startedAt: new Date().toISOString(),
     profile: resolveAmrProfile(env),
   };
+}
+
+export function parseVelaLoginAttribution(input: unknown): AmrEntryAttribution | null {
+  const raw = input && typeof input === 'object' && 'attribution' in input
+    ? (input as { attribution?: unknown }).attribution
+    : null;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const value = raw as Partial<AmrEntryAttribution>;
+  if (
+    typeof value.entryId !== 'string'
+    || value.entryId.length === 0
+    || value.sourceProduct !== 'open_design'
+    || typeof value.sourceDetail !== 'string'
+    || !AMR_ENTRY_SOURCES.has(value.sourceDetail as TrackingAmrEntrySource)
+    || typeof value.occurredAt !== 'string'
+    || !Number.isFinite(Date.parse(value.occurredAt))
+  ) {
+    return null;
+  }
+  return {
+    entryId: value.entryId,
+    sourceProduct: value.sourceProduct,
+    sourceDetail: value.sourceDetail as TrackingAmrEntrySource,
+    occurredAt: value.occurredAt,
+  };
+}
+
+export function parseAmrEntryAnalyticsPayload(
+  input: unknown,
+): AmrEntryAnalyticsPayload | null {
+  const raw = isRecord(input) && 'payload' in input ? input.payload : input;
+  if (!isRecord(raw)) return null;
+  const pageName = raw.pageName;
+  const sourcePageName = raw.sourcePageName;
+  const area = raw.area;
+  const element = raw.element;
+  const action = raw.action;
+  const entryId = raw.entryId;
+  const sourceProduct = raw.sourceProduct;
+  const sourceDetail = raw.sourceDetail;
+  const entryOccurredAt = raw.entryOccurredAt;
+  if (
+    pageName !== 'open_design'
+    || typeof sourcePageName !== 'string'
+    || !AMR_ENTRY_SOURCE_PAGES.has(sourcePageName as AmrEntrySourcePageName)
+    || area !== 'amr_entry'
+    || typeof element !== 'string'
+    || !AMR_ENTRY_SOURCES.has(element as TrackingAmrEntrySource)
+    || action !== 'click_amr_entry'
+    || typeof entryId !== 'string'
+    || entryId.length === 0
+    || sourceProduct !== 'open_design'
+    || typeof sourceDetail !== 'string'
+    || !AMR_ENTRY_SOURCES.has(sourceDetail as TrackingAmrEntrySource)
+    || sourceDetail !== element
+    || sourcePageName
+      !== AMR_ENTRY_SOURCE_PAGE_BY_SOURCE[sourceDetail as TrackingAmrEntrySource]
+    || typeof entryOccurredAt !== 'string'
+    || !Number.isFinite(Date.parse(entryOccurredAt))
+  ) {
+    return null;
+  }
+  return {
+    pageName,
+    sourcePageName: sourcePageName as AmrEntrySourcePageName,
+    area,
+    element: element as TrackingAmrEntrySource,
+    action,
+    entryId,
+    sourceProduct,
+    sourceDetail: sourceDetail as TrackingAmrEntrySource,
+    entryOccurredAt,
+  };
+}
+
+export async function mirrorAmrEntryAnalytics(
+  payload: AmrEntryAnalyticsPayload,
+  deps: MirrorAmrEntryAnalyticsDeps = {},
+): Promise<MirrorAmrEntryAnalyticsResult> {
+  const fetchImpl = deps.fetchImpl ?? (globalThis.fetch as unknown as FetchLike | undefined);
+  if (!fetchImpl) return { mirrored: false };
+  const env = deps.env ?? process.env;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AMR_ANALYTICS_TIMEOUT_MS);
+  timeout.unref?.();
+  try {
+    const response = await fetchImpl(resolveAmrAnalyticsEventsUrl(env), {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        events: [
+          {
+            common: buildAmrEntryAnalyticsCommon(payload, deps),
+            payload,
+          },
+        ],
+      }),
+    });
+    return { mirrored: response.ok, status: response.status };
+  } catch (err) {
+    return {
+      mirrored: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function velaLoginAttributionEnv(
+  attribution: AmrEntryAttribution | null | undefined,
+): Record<string, string> {
+  if (!attribution) return {};
+  return {
+    OPEN_DESIGN_AMR_ENTRY_ID: attribution.entryId,
+    OPEN_DESIGN_AMR_ENTRY_SOURCE: attribution.sourceDetail,
+    OPEN_DESIGN_AMR_ENTRY_AT: attribution.occurredAt,
+    OPEN_DESIGN_AMR_ORIGIN: attribution.sourceProduct,
+  };
+}
+
+function buildAmrEntryAnalyticsCommon(
+  payload: AmrEntryAnalyticsPayload,
+  deps: MirrorAmrEntryAnalyticsDeps,
+) {
+  const context = deps.analyticsContext ?? null;
+  const anonymousId = context?.deviceId?.trim() || payload.entryId;
+  const sessionId = context?.sessionId?.trim() || payload.entryId;
+  return {
+    eventId: `od-amr-entry-${payload.entryId}`,
+    eventTime: payload.entryOccurredAt,
+    registryKey: 'open_design_amr_entry',
+    eventName: 'amr_entry',
+    eventType: 'click',
+    platform: 'web',
+    env: resolveAmrAnalyticsEnv(deps.env ?? process.env),
+    userId: null,
+    anonymousId,
+    sessionId,
+    appVersion: deps.appVersion ?? null,
+    locale: context?.locale?.trim() || null,
+    timezone: null,
+    deviceType: null,
+    browser: null,
+    os: null,
+    arch: null,
+    cliVersion: null,
+    traceId: payload.entryId,
+    walletBalance: null,
+  };
+}
+
+function resolveAmrAnalyticsEventsUrl(env: NodeJS.ProcessEnv): string {
+  return env.OPEN_DESIGN_AMR_ANALYTICS_URL?.trim() || AMR_ANALYTICS_EVENTS_URL;
+}
+
+function resolveAmrAnalyticsEnv(env: NodeJS.ProcessEnv): AmrAnalyticsEnv {
+  const raw = env.OPEN_DESIGN_AMR_ANALYTICS_ENV?.trim();
+  if (raw && AMR_ANALYTICS_ENVS.has(raw as AmrAnalyticsEnv)) {
+    return raw as AmrAnalyticsEnv;
+  }
+  if (env.NODE_ENV === 'production') return 'production';
+  if (env.NODE_ENV === 'test') return 'test';
+  return 'local';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }

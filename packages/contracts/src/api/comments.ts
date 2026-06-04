@@ -33,6 +33,16 @@ export interface PreviewAnnotationStyle {
 export type PreviewCommentSelectionKind = 'element' | 'pod';
 export type PreviewVisualMarkKind = 'click' | 'stroke' | 'click+stroke';
 
+/**
+ * An image attached to a preview comment. `path` is the project-relative file
+ * path (uploaded via the normal file API) that the web app resolves to a raw
+ * URL for display; `name` is the original filename for labels/alt text.
+ */
+export interface PreviewCommentAttachment {
+  path: string;
+  name: string;
+}
+
 export interface PreviewCommentMember {
   elementId: string;
   selector: string;
@@ -77,6 +87,7 @@ export interface PreviewComment {
   /** Zero-based deck slide index when the comment was placed. */
   slideIndex?: number;
   note: string;
+  attachments?: PreviewCommentAttachment[];
   status: PreviewCommentStatus;
   createdAt: number;
   updatedAt: number;
@@ -85,6 +96,7 @@ export interface PreviewComment {
 export interface PreviewCommentUpsertRequest {
   target: PreviewCommentTarget;
   note: string;
+  attachments?: PreviewCommentAttachment[];
 }
 
 export interface PreviewCommentStatusRequest {

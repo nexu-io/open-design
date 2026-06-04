@@ -511,7 +511,7 @@ test('[P0] returning from an older conversation route to the project root keeps 
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
 
   const secondPrompt = 'Second conversation should not replace the deep-linked one';
   await sendPrompt(page, secondPrompt);
@@ -592,14 +592,14 @@ test('[P0] switching between conversations keeps the composer usable while navig
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
   const secondContext = await getCurrentProjectContext(page);
 
   const composerInput = page.getByTestId('chat-composer-input');
   await composerInput.fill(secondDraft);
-  await expect(composerInput).toHaveValue(secondDraft);
+  await expect(composerInput).toHaveText(secondDraft);
 
   await page.getByTestId('conversation-history-trigger').click();
   const historyList = page.getByTestId('conversation-list');
@@ -615,7 +615,7 @@ test('[P0] switching between conversations keeps the composer usable while navig
   await expect(page).toHaveURL(new RegExp(`/projects/${firstContext.projectId}/conversations/${firstContext.conversationId}$`));
 
   await composerInput.fill(firstDraft);
-  await expect(composerInput).toHaveValue(firstDraft);
+  await expect(composerInput).toHaveText(firstDraft);
 
   await page.getByTestId('conversation-history-trigger').click();
   await expect(historyList).toBeVisible();
@@ -709,7 +709,7 @@ test('[P0] reloading an older conversation route keeps the composer visible on t
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 
@@ -721,7 +721,7 @@ test('[P0] reloading an older conversation route keeps the composer visible on t
   await expect(routeHistoryList.locator('.chat-conv-item').filter({ hasText: firstPrompt }).first()).toBeVisible();
 
   await composerInput.fill(restoredDraft);
-  await expect(composerInput).toHaveValue(restoredDraft);
+  await expect(composerInput).toHaveText(restoredDraft);
 
   await page.reload();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
@@ -802,7 +802,7 @@ test('[P0] switching between conversations keeps staged attachments UI available
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
   await expect(page.getByTestId('staged-attachments')).toHaveCount(0);
@@ -903,7 +903,7 @@ test('[P0] reloading an older conversation route keeps the composer available af
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 
@@ -989,7 +989,7 @@ test('[P0] reloading the project keeps the latest conversation selected in histo
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
   const secondContext = await getCurrentProjectContext(page);
@@ -1079,7 +1079,7 @@ test('[P0] deleting the active conversation selects the remaining conversation i
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
   const secondContext = await getCurrentProjectContext(page);
@@ -1166,7 +1166,7 @@ test('[P0] returning from workspace surfaces keeps the older conversation reacha
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
   const secondContext = await getCurrentProjectContext(page);
@@ -1269,7 +1269,7 @@ test('[P0] reloading the project root keeps conversation history accessible', as
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 
@@ -1353,7 +1353,7 @@ test('[P0] opening an uploaded file route keeps the older conversation present i
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
   const secondContext = await getCurrentProjectContext(page);
@@ -1468,7 +1468,7 @@ test('[P0] opening an artifact file route keeps the older conversation present i
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
   const secondContext = await getCurrentProjectContext(page);
@@ -1575,7 +1575,7 @@ test('[P0] returning from a file deep-link to the project root keeps the chosen 
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 
@@ -1681,7 +1681,7 @@ test('[P0] returning from an artifact deep-link to the project root keeps the ar
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 
@@ -2348,7 +2348,7 @@ async function sendPrompt(page: Page, prompt: string) {
   await expect(input).toBeVisible({ timeout: 3_000 });
   await input.click();
   await input.fill(prompt);
-  await expect(input).toHaveValue(prompt, { timeout: 1500 });
+  await expect(input).toHaveText(prompt, { timeout: 1500 });
   await expect(sendButton).toBeEnabled({ timeout: 1500 });
   await Promise.all([
     page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
@@ -2404,7 +2404,7 @@ async function runExampleUsePromptFlow(
 
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue(entry.prompt);
+  await expect(page.getByTestId('chat-composer-input')).toHaveText(entry.prompt);
   await expect(page.getByTestId('project-title')).toContainText('Warm Utility Example');
   await expect(page.getByTestId('project-meta')).toContainText('Warm Utility Example');
 }
@@ -2520,7 +2520,7 @@ async function runCommentAttachmentFlow(
 
   await expect(page.getByTestId('comment-saved-marker-hero-title')).toBeVisible();
   await expect(page.getByTestId('staged-comment-attachments')).toHaveCount(0);
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
   await expect(page.getByTestId('chat-send')).toBeDisabled();
   await page.getByTestId('comment-popover').getByRole('button', { name: 'Close' }).click();
 
@@ -2830,7 +2830,7 @@ async function runConversationPersistenceFlow(
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
 
   const nextPrompt = entry.secondaryPrompt!;
   await sendPrompt(page, nextPrompt);
@@ -2880,7 +2880,7 @@ async function runFileMentionFlow(
   await page.getByTestId('chat-composer-input').pressSequentially('Review @ref');
   await expect(page.getByTestId('mention-popover')).toBeVisible();
   await page.getByTestId('mention-popover').getByRole('button', { name: /reference\.txt/i }).click();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('Review @reference.txt ');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('Review @reference.txt ');
   await expect(page.getByTestId('staged-attachments')).toBeVisible();
   await expect(page.getByTestId('staged-attachments').getByText('reference.txt', { exact: true })).toBeVisible();
   await expect(page.getByTestId('chat-send')).toBeEnabled();
@@ -3072,7 +3072,7 @@ async function runConversationDeleteRecoveryFlow(
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
 
   const nextPrompt = entry.secondaryPrompt!;
   await sendPrompt(page, nextPrompt);

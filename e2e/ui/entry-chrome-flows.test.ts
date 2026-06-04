@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page, Request } from '@playwright/test';
-import { applyStandardMocks, STORAGE_KEY } from '@/playwright/mock-factory';
+import { applyStandardMocks, fulfillAgentsRoute, STORAGE_KEY } from '@/playwright/mock-factory';
 const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 const STARTER_PLUGIN = makeStarterPlugin({
   id: 'localized-plugin',
@@ -100,7 +100,8 @@ test('[P0] entry chrome exposes the primary home creation surface and settings e
   // entry layout.
   await expect(page.locator('.pet-rail')).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Open settings' }).click();
+  await page.getByTestId('entry-settings-menu-trigger').click();
+  await page.getByTestId('entry-settings-open-details').click();
   const settingsDialog = page.getByRole('dialog');
   await expect(settingsDialog).toBeVisible();
   await expect(settingsDialog.getByRole('heading', { name: 'Execution mode' })).toBeVisible();
@@ -135,10 +136,14 @@ test('[P1] home view exposes the redesigned hero, recent projects, and starters'
   await createProject(page, 'Home structure recent project');
   await gotoEntryHome(page);
 
+  // The redesigned entry shell keeps every view mounted (only the active one
+  // is visible), so `plugins-home-section` exists in both the home and plugins
+  // views; scope the lookup to the home view to keep the locator unambiguous.
+  const home = page.getByTestId('entry-view-home');
   await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
   await expect(page.getByTestId('recent-projects-view-all')).toBeVisible();
-  await expect(page.getByTestId('plugins-home-section')).toBeVisible();
-  await expect(page.getByTestId('plugins-home-browse-registry')).toBeVisible();
+  await expect(home.getByTestId('plugins-home-section')).toBeVisible();
+  await expect(home.getByTestId('plugins-home-browse-registry')).toBeVisible();
   await expect(page.getByTestId('home-hero')).toBeVisible();
   await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
 
@@ -274,53 +279,49 @@ test('[P0] entry execution pill opens the Local CLI and BYOK switcher from Home'
       }),
     );
   }, STORAGE_KEY);
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'claude',
-            name: 'Claude Code',
-            bin: 'claude',
-            available: true,
-            version: '1.0.0',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-          {
-            id: 'codex',
-            name: 'Codex CLI',
-            bin: 'codex',
-            available: true,
-            version: '0.80.0',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-          {
-            id: 'opencode',
-            name: 'OpenCode',
-            bin: 'opencode',
-            available: true,
-            version: '0.5.0',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-          {
-            id: 'hermes',
-            name: 'Hermes',
-            bin: 'hermes',
-            available: true,
-            version: '0.5.0',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-          {
-            id: 'cursor-agent',
-            name: 'Cursor Agent',
-            bin: 'cursor-agent',
-            available: true,
-            version: '0.5.0',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
+  await page.route('**/api/agents**', async (route) => {
+    await fulfillAgentsRoute(route, [
+      {
+        id: 'claude',
+        name: 'Claude Code',
+        bin: 'claude',
+        available: true,
+        version: '1.0.0',
+        models: [{ id: 'default', label: 'Default' }],
       },
-    });
+      {
+        id: 'codex',
+        name: 'Codex CLI',
+        bin: 'codex',
+        available: true,
+        version: '0.80.0',
+        models: [{ id: 'default', label: 'Default' }],
+      },
+      {
+        id: 'opencode',
+        name: 'OpenCode',
+        bin: 'opencode',
+        available: true,
+        version: '0.5.0',
+        models: [{ id: 'default', label: 'Default' }],
+      },
+      {
+        id: 'hermes',
+        name: 'Hermes',
+        bin: 'hermes',
+        available: true,
+        version: '0.5.0',
+        models: [{ id: 'default', label: 'Default' }],
+      },
+      {
+        id: 'cursor-agent',
+        name: 'Cursor Agent',
+        bin: 'cursor-agent',
+        available: true,
+        version: '0.5.0',
+        models: [{ id: 'default', label: 'Default' }],
+      },
+    ]);
   });
   await page.route('**/api/app-config', async (route) => {
     if (route.request().method() !== 'GET') {
@@ -402,14 +403,16 @@ test('[P2] home topbar overlays close on outside click, Escape, and Settings ope
 
   const pill = page.getByTestId('inline-model-switcher-chip');
   const executionPopover = page.getByTestId('inline-model-switcher-popover');
-  const settingsButton = page.getByRole('button', { name: 'Open settings' });
 
   await pill.click();
   await expect(executionPopover).toBeVisible();
 
-  await settingsButton.click();
-  await expect(page.getByRole('dialog')).toBeVisible();
+  // The settings entry is a menu; opening it dismisses the execution popover,
+  // and its "Settings" item opens the full dialog.
+  await page.getByTestId('entry-settings-menu-trigger').click();
   await expect(executionPopover).toHaveCount(0);
+  await page.getByTestId('entry-settings-open-details').click();
+  await expect(page.getByRole('dialog')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
@@ -480,7 +483,7 @@ test('[P1] home starters can browse registry and use a starter query from Home',
   await page.getByTestId('plugins-home-use-with-query-localized-plugin').click();
 
   const input = page.getByTestId('home-hero-input');
-  await expect(input).toHaveValue('Make a design systems brief.');
+  await expect(input).toHaveText('Make a design systems brief.');
 });
 
 test('[P2] home starters shows the empty catalog state when no plugins are available', async ({ page }) => {
@@ -493,7 +496,11 @@ test('[P2] home starters shows the empty catalog state when no plugins are avail
   });
 
   await gotoEntryHome(page);
-  await expect(page.getByTestId('plugins-home-section')).toContainText('Catalog is empty.');
+  // `plugins-home-section` is rendered in both the home and plugins views (both
+  // stay mounted), so scope to the home view to keep the locator unambiguous.
+  await expect(page.getByTestId('entry-view-home').getByTestId('plugins-home-section')).toContainText(
+    'Catalog is empty.',
+  );
 });
 
 test('[P2] home starters search and facet filters narrow the visible gallery', async ({ page }) => {
@@ -555,7 +562,7 @@ test('[P1] home starters can jump into plugin creation through the registry brow
   await expect(page.locator('h1').filter({ hasText: 'Plugins' })).toBeVisible();
   await page.getByTestId('plugins-create-button').click();
 
-  await expect(page.getByTestId('home-hero-input')).toHaveValue(/Create an Open Design plugin/i);
+  await expect(page.getByTestId('home-hero-input')).toHaveText(/Create an Open Design plugin/i);
 });
 
 test('[P2] home starters search can enter a no-results state and recover with clear', async ({ page }) => {
@@ -569,12 +576,16 @@ test('[P2] home starters search can enter a no-results state and recover with cl
 
   await gotoEntryHome(page);
 
-  await page.getByTestId('plugins-home-pill-category-all').click();
-  await page.getByTestId('plugins-home-search').fill('no-such-starter');
-  await expect(page.getByTestId('plugins-home-section')).toContainText(
+  // `plugins-home-section` and its children are rendered in both the home and
+  // plugins views (both stay mounted), so scope to the home view to keep these
+  // strict-mode locators unambiguous.
+  const home = page.getByTestId('entry-view-home');
+  await home.getByTestId('plugins-home-pill-category-all').click();
+  await home.getByTestId('plugins-home-search').fill('no-such-starter');
+  await expect(home.getByTestId('plugins-home-section')).toContainText(
     'No plugins match the current filters.',
   );
-  await page.getByRole('button', { name: /Clear filters/i }).click();
+  await home.getByRole('button', { name: /Clear filters/i }).click();
   await expect(page.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
   await expect(page.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
 });
@@ -775,7 +786,7 @@ test('[P1] home starters Use plugin from the details modal applies the plugin to
   await page.getByTestId('plugin-details-use-detail-use-plugin').click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByTestId('home-hero-context-plugin-detail-use-plugin')).toBeVisible();
-  await expect(page.getByTestId('home-hero-input')).toHaveValue('');
+  await expect(page.getByTestId('home-hero-input')).toHaveText('');
 });
 
 test('[P0] home starters direct Use keeps prompt empty and still allows a freeform submit', async ({ page }) => {
@@ -790,11 +801,11 @@ test('[P0] home starters direct Use keeps prompt empty and still allows a freefo
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-input');
-  await expect(input).toHaveValue('');
+  await expect(input).toHaveText('');
 
   await page.locator('article.plugins-home__card[data-plugin-id="localized-plugin"]').hover();
   await page.getByTestId('plugins-home-use-localized-plugin').click({ force: true });
-  await expect(input).toHaveValue('');
+  await expect(input).toHaveText('');
 
   await input.fill('Use the selected starter as context');
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
@@ -827,7 +838,7 @@ test('[P1] home starters Use with query hydrates the prompt and keeps plugin con
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-input');
-  await expect(input).toHaveValue('');
+  await expect(input).toHaveText('');
   const starterCard = page.locator('[data-plugin-id="localized-plugin"]').first();
   await starterCard.scrollIntoViewIfNeeded();
   await starterCard.hover();
@@ -835,7 +846,7 @@ test('[P1] home starters Use with query hydrates the prompt and keeps plugin con
   await page.getByTestId('plugins-home-use-menu-localized-plugin').click();
   await page.getByTestId('plugins-home-use-with-query-localized-plugin').click();
   await expect(page.getByTestId('home-hero-context-plugin-localized-plugin')).toBeVisible();
-  await expect(input).toHaveValue('Make a design systems brief.');
+  await expect(input).toHaveText('Make a design systems brief.');
 });
 
 test('[P0] home starters Use with query carries the hydrated starter prompt into the created project and first user turn', async ({ page }) => {
@@ -857,7 +868,7 @@ test('[P0] home starters Use with query carries the hydrated starter prompt into
   await page.getByTestId('plugins-home-use-menu-localized-plugin').click();
   await page.getByTestId('plugins-home-use-with-query-localized-plugin').click();
   await expect(page.getByTestId('home-hero-context-plugin-localized-plugin')).toBeVisible();
-  await expect(input).toHaveValue('Make a design systems brief.');
+  await expect(input).toHaveText('Make a design systems brief.');
 
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
   const runRequestPromise = page.waitForRequest(isCreateRunRequest);
@@ -901,7 +912,12 @@ test('[P0] home hero input keeps Shift+Enter as a newline and submits on Enter',
   await input.fill('Line one');
   await input.press('Shift+Enter');
   await input.type('Line two');
-  await expect(input).toHaveValue('Line one\nLine two');
+  // Lexical renders the soft break as separate block nodes, so the editor's
+  // textContent collapses the newline; assert both lines are present rather
+  // than an exact "\n"-joined value. The newline itself is verified below
+  // against the create-project/run payloads.
+  await expect(input).toContainText('Line one');
+  await expect(input).toContainText('Line two');
   await expect(page).toHaveURL(/\/$/);
   await expect(submit).toBeEnabled();
 
@@ -941,7 +957,7 @@ test('[P1] home hero @ mention picker opens and Enter applies the highlighted pl
   await input.press('Enter');
 
   await expect(picker).toHaveCount(0);
-  await expect(input).toHaveValue('@Localized Plugin');
+  await expect(input).toHaveText('@Localized Plugin');
 });
 
 test('[P0] home hero attachment input stages files, enables submit, and supports removal', async ({ page }) => {

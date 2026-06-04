@@ -19,7 +19,15 @@ import {
   SENSEAUDIO_DEFAULT_VIDEO_MODEL,
   SENSEAUDIO_DEFAULT_AUDIO_MODEL,
   type BYOKToolContext,
+  type ImageToolResult,
 } from './byok-tools.js';
+import {
+  AIHUBMIX_DEFAULT_BASE_URL,
+  aihubmixHeaders,
+  aihubmixAppCodeHeader,
+  aihubmixOriginFromBase,
+  classifyAIHubMixModel,
+} from './aihubmix.js';
 import { isSafeId as isSafeProjectId } from './projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { proxyDispatcherRequestInit, validateBaseUrlResolved } from './connectionTest.js';
@@ -249,26 +257,30 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const protocol = body.protocol;
     if (
       typeof protocol !== 'string' ||
-      !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio'].includes(protocol)
+      !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix'].includes(protocol)
     ) {
       return sendApiError(
         res,
         400,
         'BAD_REQUEST',
-        'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio',
+        'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix',
       );
     }
+    // AIHubMix's catalogue (GET /api/v1/models?type=llm) is public, so its
+    // model list loads without a key. Every other protocol needs the key to
+    // hit its /v1/models endpoint.
+    const apiKeyRequired = protocol !== 'aihubmix';
     if (
       typeof body.baseUrl !== 'string' ||
       typeof body.apiKey !== 'string' ||
       !body.baseUrl.trim() ||
-      !body.apiKey.trim()
+      (apiKeyRequired && !body.apiKey.trim())
     ) {
       return sendApiError(
         res,
         400,
         'BAD_REQUEST',
-        'baseUrl and apiKey are required',
+        apiKeyRequired ? 'baseUrl and apiKey are required' : 'baseUrl is required',
       );
     }
     try {
@@ -316,13 +328,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         const protocol = body.protocol;
         if (
           typeof protocol !== 'string' ||
-          !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio'].includes(protocol)
+          !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix'].includes(protocol)
         ) {
           return sendApiError(
             res,
             400,
             'BAD_REQUEST',
-            'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio',
+            'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix',
           );
         }
         if (
@@ -756,6 +768,274 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     };
   }
 
+  // ---- Reusable base-chat streamers (text only — no tool loop) -------------
+  // Both the native /api/proxy/{anthropic,google}/stream routes AND the
+  // AIHubMix model-routed proxy call these. Only the resolved url + headers
+  // differ (AIHubMix adds the APP-Code header and a different origin), so the
+  // wire/SSE handling lives here once. The OpenAI tool loop stays in
+  // registerByokToolChatProxy.
+
+  const buildAnthropicChatPayload = (
+    model: string,
+    systemPrompt: unknown,
+    messages: unknown,
+    maxTokens: unknown,
+  ) => {
+    const payload: any = {
+      model,
+      max_tokens:
+        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+      messages: Array.isArray(messages) ? messages : [],
+      stream: true,
+    };
+    if (typeof systemPrompt === 'string' && systemPrompt) {
+      payload.system = systemPrompt;
+    }
+    return payload;
+  };
+
+  const runAnthropicChatStream = async (
+    res: any,
+    opts: { url: string; headers: Record<string, string>; payload: any; logTag: string },
+  ) => {
+    const sse = createSseResponse(res);
+    let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
+    try {
+      proxyDispatcher = proxyDispatcherRequestInit();
+      sse.send('start', { model: opts.payload?.model });
+      const response = await fetch(opts.url, {
+        ...proxyDispatcher.requestInit,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...opts.headers },
+        body: JSON.stringify(opts.payload),
+        redirect: 'error',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[${opts.logTag}] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+        );
+        sendProxyError(sse, `Upstream error: ${response.status}`, {
+          code: proxyErrorCode(response.status),
+          details: errorText,
+          retryable: response.status === 429 || response.status >= 500,
+        });
+        return sse.end();
+      }
+
+      let ended = false;
+      const guard = createDeltaGuard(sse);
+      await streamUpstreamSse(response, ({ event, data }: any) => {
+        if (!data) return false;
+        if (event === 'error' || data.type === 'error') {
+          const message = data.error?.message || data.message || 'Anthropic upstream error';
+          sendProxyError(sse, message, { details: data });
+          ended = true;
+          return true;
+        }
+        if (event === 'content_block_delta' && typeof data.delta?.text === 'string') {
+          guard.sendDelta(data.delta.text);
+          if (guard.contaminated) {
+            sse.send('end', {});
+            ended = true;
+            return true;
+          }
+        }
+        if (event === 'message_stop') {
+          sse.send('end', {});
+          ended = true;
+          return true;
+        }
+        return false;
+      });
+      if (!ended) sse.send('end', {});
+      sse.end();
+    } catch (err: any) {
+      console.error(`[${opts.logTag}] internal error: ${err.message}`);
+      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+      sse.end();
+    } finally {
+      await proxyDispatcher?.close();
+    }
+  };
+
+  const buildGeminiChatPayload = (
+    systemPrompt: unknown,
+    messages: unknown,
+    maxTokens: unknown,
+  ) => {
+    const contents = (Array.isArray(messages) ? messages : []).map((message: any) => ({
+      role: message.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: message.content }],
+    }));
+    const payload: any = {
+      contents,
+      generationConfig: {
+        maxOutputTokens:
+          typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+      },
+    };
+    if (typeof systemPrompt === 'string' && systemPrompt) {
+      payload.systemInstruction = { parts: [{ text: systemPrompt }] };
+    }
+    return payload;
+  };
+
+  const runGeminiChatStream = async (
+    res: any,
+    opts: { url: string; headers: Record<string, string>; payload: any; model: string; logTag: string },
+  ) => {
+    const sse = createSseResponse(res);
+    let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
+    try {
+      proxyDispatcher = proxyDispatcherRequestInit();
+      sse.send('start', { model: opts.model });
+      const response = await fetch(opts.url, {
+        ...proxyDispatcher.requestInit,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...opts.headers },
+        body: JSON.stringify(opts.payload),
+        redirect: 'error',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[${opts.logTag}] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+        );
+        sendProxyError(sse, `Upstream error: ${response.status}`, {
+          code: proxyErrorCode(response.status),
+          details: errorText,
+          retryable: response.status === 429 || response.status >= 500,
+        });
+        return sse.end();
+      }
+
+      let ended = false;
+      const guard = createDeltaGuard(sse);
+      await streamUpstreamSse(response, ({ data }: any) => {
+        if (!data) return false;
+        const streamError = extractStreamErrorMessage(data);
+        if (streamError) {
+          sendProxyError(sse, `Gemini error: ${streamError}`, { details: data });
+          ended = true;
+          return true;
+        }
+        const delta = extractGeminiText(data);
+        if (delta) {
+          guard.sendDelta(delta);
+          if (guard.contaminated) {
+            sse.send('end', {});
+            ended = true;
+            return true;
+          }
+        }
+        const blockMessage = extractGeminiBlockMessage(data);
+        if (blockMessage) {
+          sendProxyError(sse, blockMessage, { details: data });
+          ended = true;
+          return true;
+        }
+        return false;
+      });
+      if (!ended) sse.send('end', {});
+      sse.end();
+    } catch (err: any) {
+      console.error(`[${opts.logTag}] internal error: ${err.message}`);
+      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+      sse.end();
+    } finally {
+      await proxyDispatcher?.close();
+    }
+  };
+
+  // ---- Shared media tool-loop helpers (BYOK aihubmix only) ----------------
+  // The daemon authors ONE OpenAI-shaped tool array (BYOK_AIHUBMIX_TOOLS) and
+  // ONE tool-result content vocabulary. These helpers adapt both to the
+  // Anthropic Messages and Gemini generateContent native wires so an aihubmix
+  // claude/gemini chat model gets the same in-chat generate_image/video/speech
+  // tools the OpenAI family already has. They are pure (no request state), so
+  // they live at registerChatRoutes scope and are reused across requests.
+
+  // Tool-result content fed back to the model after a media tool runs. Same
+  // hints across all three wire protocols (OpenAI `tool` role, Anthropic
+  // `tool_result` block, Gemini `functionResponse`): tell the model the URL
+  // and exactly how to embed it (markdown image for PNG, link for MP4/MP3).
+  const buildToolResultContent = (result: {
+    ok: boolean;
+    url?: string;
+    error?: string;
+    kind?: 'image' | 'video' | 'speech';
+  }): string => {
+    if (result.ok) {
+      if (result.kind === 'video')
+        return `Video generated successfully. URL: ${result.url}. Reply to the user with a clickable markdown link, e.g. [▶ Play video](${result.url}). Do NOT use markdown image syntax — the chat renderer does not embed <video> tags.`;
+      if (result.kind === 'speech')
+        return `Speech generated successfully. URL: ${result.url}. Reply to the user with a clickable markdown link to the MP3, e.g. [▶ Play voiceover](${result.url}).`;
+      return `Image generated successfully. URL: ${result.url}. Reply to the user with: ![generated image](${result.url})`;
+    }
+    if (result.kind === 'video')
+      return `Video generation failed: ${result.error}. Apologize briefly and suggest a retry with a more specific prompt or a shorter duration.`;
+    if (result.kind === 'speech')
+      return `Speech generation failed: ${result.error}. Apologize briefly and suggest a retry with a shorter script or a valid voice id.`;
+    return `Image generation failed: ${result.error}. Apologize briefly and suggest a retry with a more specific prompt.`;
+  };
+
+  // OpenAI tool definition → Anthropic Messages `tools` shape. Anthropic calls
+  // the JSON-schema slot `input_schema` (OpenAI calls it `parameters`).
+  const openaiToolsToAnthropic = (tools: any[]): any[] =>
+    (Array.isArray(tools) ? tools : []).map((t: any) => ({
+      name: t?.function?.name,
+      description: t?.function?.description,
+      input_schema: t?.function?.parameters ?? { type: 'object', properties: {} },
+    }));
+
+  // Gemini's functionDeclaration `parameters` is an OpenAPI-subset Schema that
+  // rejects JSON-schema extras (additionalProperties, $schema, default, …). We
+  // strip everything outside the allowed key set recursively so the passthrough
+  // to Google does not 400 on an unknown field.
+  const GEMINI_SCHEMA_KEYS = new Set([
+    'type',
+    'format',
+    'description',
+    'nullable',
+    'enum',
+    'items',
+    'properties',
+    'required',
+  ]);
+  const sanitizeGeminiSchema = (schema: any): any => {
+    if (!schema || typeof schema !== 'object') return { type: 'object', properties: {} };
+    const out: any = {};
+    for (const [k, v] of Object.entries(schema)) {
+      if (!GEMINI_SCHEMA_KEYS.has(k)) continue;
+      if (k === 'properties' && v && typeof v === 'object') {
+        out.properties = {};
+        for (const [pk, pv] of Object.entries(v as any)) {
+          out.properties[pk] = sanitizeGeminiSchema(pv);
+        }
+      } else if (k === 'items') {
+        out.items = sanitizeGeminiSchema(v);
+      } else {
+        out[k] = v;
+      }
+    }
+    if (!out.type) out.type = 'object';
+    return out;
+  };
+
+  // OpenAI tool definitions → Gemini `tools:[{functionDeclarations:[…]}]`.
+  const openaiToolsToGemini = (tools: any[]): any[] => [
+    {
+      functionDeclarations: (Array.isArray(tools) ? tools : []).map((t: any) => ({
+        name: t?.function?.name,
+        description: t?.function?.description,
+        parameters: sanitizeGeminiSchema(t?.function?.parameters),
+      })),
+    },
+  ];
+
   app.post('/api/proxy/anthropic/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
@@ -1164,6 +1444,26 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         assistantMessage: any;
         toolCalls: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
       };
+
+  // Shared shape for main's BYOK tool-loop chat proxy factory (AIHubMix-style
+  // separate-per-provider model). Coexists with `runByokMediaChat` below so the
+  // unified path (SenseAudio / OpenAI / Azure / Anthropic) and the factory path
+  // (AIHubMix's own tool table) both stay available.
+  type ByokToolRunner = (args: any, toolCtx: BYOKToolContext) => Promise<ImageToolResult>;
+  interface ByokToolChatProxyOptions {
+    providerId: string;
+    logTag: string;
+    defaultBaseUrl: string;
+    tools: any[];
+    buildHeaders: (apiKey: string) => Record<string, string>;
+    isImageModel: (value: unknown) => boolean;
+    isVideoModel?: (value: unknown) => boolean;
+    isSpeechModel?: (value: unknown) => boolean;
+    runImage: ByokToolRunner;
+    runSpeech: ByokToolRunner;
+    runVideo?: ByokToolRunner;
+    routeByModel?: boolean;
+  }
 
   // Shared media-chat tool loop for OpenAI-compatible BYOK proxies. SenseAudio,
   // OpenAI, Azure, DeepSeek, and Ollama all speak the same /chat/completions +

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { useT } from '../i18n';
 import type { DirectionCard, FormOption, QuestionForm } from '../artifacts/question-form';
 import { formatFormAnswers, formOptionValueForLabel } from '../artifacts/question-form';
@@ -13,15 +13,51 @@ interface Props {
   // begins with "[form answers — <id>]", we parse it back out and pass it
   // here so the rendered form reflects what was sent.
   submittedAnswers?: Record<string, string | string[]>;
+  // When the form lives in the Questions tab the Continue button owns the
+  // submit, so hide the form's own footer button and report ready-state out.
+  hideInternalSubmit?: boolean;
+  onReadyChange?: (ready: boolean) => void;
   onSubmit?: (text: string, answers: Record<string, string | string[]>) => void;
 }
 
-export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit }: Props) {
+// Lets a parent (the Questions tab Continue button) trigger submission.
+export interface QuestionFormHandle {
+  submit: () => void;
+  // Submit with no answers — backs the "skip all" affordance. Every question
+  // is optional, so this just records each as "(skipped)" and moves on.
+  skipAll: () => void;
+}
+
+export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function QuestionFormView(
+  { form, interactive, submittedAnswers, hideInternalSubmit = false, onReadyChange, onSubmit },
+  ref,
+) {
   const t = useT();
   const initial = useMemo(() => buildInitialState(form, submittedAnswers), [form, submittedAnswers]);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>(initial);
   const locked = !interactive || !onSubmit || submittedAnswers !== undefined;
   const currentAnswers = submittedAnswers ?? answers;
+
+  // When the form streams in question-by-question, backfill state for newly
+  // revealed questions without disturbing answers the user already touched.
+  useEffect(() => {
+    setAnswers((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const q of form.questions) {
+        if (next[q.id] !== undefined) continue;
+        changed = true;
+        if (submittedAnswers && submittedAnswers[q.id] !== undefined) {
+          next[q.id] = canonicalizeQuestionValue(q, submittedAnswers[q.id]!);
+        } else if (q.defaultValue !== undefined) {
+          next[q.id] = canonicalizeQuestionValue(q, q.defaultValue);
+        } else {
+          next[q.id] = q.type === 'checkbox' ? [] : '';
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [form, submittedAnswers]);
 
   function update(id: string, value: string | string[]) {
     if (locked) return;
@@ -41,39 +77,45 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
     });
   }
 
-  function missingRequired(): string | null {
-    for (const q of form.questions) {
-      if (!q.required) continue;
-      const v = currentAnswers[q.id];
-      if (Array.isArray(v) ? v.length === 0 : !(typeof v === 'string' && v.trim().length > 0)) {
-        return q.label;
-      }
-    }
-    return null;
-  }
-
   function handleSubmit() {
     if (locked || !onSubmit) return;
-    if (!withinSelectionLimits) return;
-    const missing = missingRequired();
-    if (missing) {
-      // Soft inline guard — surface via aria but don't alert; the disabled
-      // state of the submit button covers most cases.
-      return;
-    }
+    // Block submit until required fields are answered and selection caps hold.
+    // skipAll() is the only path that intentionally bypasses this (the new
+    // Questions-tab Skip button / countdown).
+    if (!ready) return;
     onSubmit(formatFormAnswers(form, answers), answers);
   }
 
-  const required = form.questions.filter((q) => q.required);
+  function handleSkipAll() {
+    if (locked || !onSubmit) return;
+    const empty: Record<string, string | string[]> = {};
+    onSubmit(formatFormAnswers(form, empty), empty);
+  }
+
+  // Per-question checkbox selection caps must hold.
   const withinSelectionLimits = form.questions.every((q) => {
     if (q.type !== 'checkbox' || q.maxSelections === undefined) return true;
     const v = currentAnswers[q.id];
     return !Array.isArray(v) || v.length <= q.maxSelections;
   });
-  const ready = withinSelectionLimits && required.every((q) => {
+  // Required questions must carry a non-empty answer. This gates the standard
+  // submit button AND the Questions-tab Continue CTA — only skipAll() bypasses
+  // it on purpose. Without this, main-path forms (the discovery router's
+  // required taskType/output, the ElevenLabs voice picker) would accept an
+  // empty submit and serialize "(skipped)" for fields the rest of the system
+  // treats as mandatory.
+  const requiredAnswered = form.questions.every((q) => {
+    if (q.required !== true) return true;
     const v = currentAnswers[q.id];
-    return Array.isArray(v) ? v.length > 0 : typeof v === 'string' && v.trim().length > 0;
+    if (Array.isArray(v)) return v.length > 0;
+    return typeof v === 'string' && v.trim().length > 0;
   });
+  const ready = withinSelectionLimits && requiredAnswered;
+
+  useImperativeHandle(ref, () => ({ submit: handleSubmit, skipAll: handleSkipAll }));
+  useEffect(() => {
+    onReadyChange?.(!locked && ready);
+  }, [onReadyChange, locked, ready]);
 
   return (
     <div className={`question-form${locked ? ' question-form-locked' : ''}`} data-form-id={form.id}>
@@ -204,29 +246,31 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
           );
         })}
       </div>
-      <div className="question-form-foot">
-        {locked ? (
-          <span className="qf-locked-note">
-            {submittedAnswers ? t('qf.lockedSubmitted') : t('qf.lockedPrev')}
-          </span>
-        ) : (
-          <span className="qf-hint">{t('qf.hint')}</span>
-        )}
-        {!locked ? (
-          <button
-            type="button"
-            className="primary"
-            onClick={handleSubmit}
-            disabled={!ready}
-            title={ready ? t('qf.submitTitle') : t('qf.submitDisabledTitle')}
-          >
-            {form.submitLabel ?? t('qf.submitDefault')}
-          </button>
-        ) : null}
-      </div>
+      {hideInternalSubmit ? null : (
+        <div className="question-form-foot">
+          {locked ? (
+            <span className="qf-locked-note">
+              {submittedAnswers ? t('qf.lockedSubmitted') : t('qf.lockedPrev')}
+            </span>
+          ) : (
+            <span className="qf-hint">{t('qf.hint')}</span>
+          )}
+          {!locked ? (
+            <button
+              type="button"
+              className="primary"
+              onClick={handleSubmit}
+              disabled={!ready}
+              title={ready ? t('qf.submitTitle') : t('qf.submitDisabledTitle')}
+            >
+              {form.submitLabel ?? t('qf.submitDefault')}
+            </button>
+          ) : null}
+        </div>
+      )}
     </div>
   );
-}
+});
 
 function OptionCopy({ option }: { option: FormOption }) {
   return (

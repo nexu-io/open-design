@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  __forTestRetryFinalResultForRunStatus,
+  __forTestRunRetryEventsForAnalytics,
   __forTestResolveRunProjectKindForAnalytics,
+  __forTestScanRunEventsForRetrySideEffects,
   __forTestScanRunEventsForFinishedProps,
 } from '../src/server.js';
 import { hasExplicitRequestedModelForAnalytics } from '../src/run-analytics-observability.js';
@@ -139,5 +142,49 @@ describe('hasExplicitRequestedModelForAnalytics', () => {
     expect(hasExplicitRequestedModelForAnalytics('')).toBe(false);
     expect(hasExplicitRequestedModelForAnalytics(' default ')).toBe(false);
     expect(hasExplicitRequestedModelForAnalytics('claude-opus-4-7')).toBe(true);
+  });
+});
+
+describe('run retry analytics helpers', () => {
+  it('detects retry-blocking side effects from run events', () => {
+    expect(__forTestScanRunEventsForRetrySideEffects([
+      { event: 'stderr', data: { chunk: 'HTTP 503' } },
+    ])).toEqual({
+      userVisibleOutputSeen: false,
+      toolCallSeen: false,
+      artifactWriteSeen: false,
+      liveArtifactSeen: false,
+    });
+
+    expect(__forTestScanRunEventsForRetrySideEffects([
+      { event: 'agent', data: { type: 'text_delta', delta: 'hello' } },
+      { event: 'agent', data: { type: 'tool_use', id: 't1', name: 'Read', input: {} } },
+      { event: 'agent', data: { type: 'live_artifact' } },
+    ])).toMatchObject({
+      userVisibleOutputSeen: true,
+      toolCallSeen: true,
+      liveArtifactSeen: true,
+    });
+  });
+
+  it('derives retry final result from terminal status and attempt count', () => {
+    expect(__forTestRetryFinalResultForRunStatus('succeeded', 0)).toBe('not_attempted');
+    expect(__forTestRetryFinalResultForRunStatus('failed', 0)).toBe('suppressed');
+    expect(__forTestRetryFinalResultForRunStatus('succeeded', 1)).toBe('success');
+    expect(__forTestRetryFinalResultForRunStatus('failed', 1)).toBe('failed');
+    expect(__forTestRetryFinalResultForRunStatus('canceled', 1)).toBe('suppressed');
+  });
+
+  it('selects retry events for daemon-side analytics replay', () => {
+    const events = [
+      { event: 'start', data: {} },
+      { event: 'run_retry_attempted', data: { retry_attempt_index: 1 } },
+      { event: 'run_retry_finished', data: { retry_result: 'success' } },
+      { event: 'end', data: {} },
+    ];
+    expect(__forTestRunRetryEventsForAnalytics(events).map((event) => event.event)).toEqual([
+      'run_retry_attempted',
+      'run_retry_finished',
+    ]);
   });
 });

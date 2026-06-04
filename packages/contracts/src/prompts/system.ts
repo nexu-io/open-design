@@ -29,6 +29,7 @@
  * The composed string is what the daemon sees as `systemPrompt` and what
  * the Anthropic path sends as `system`.
  */
+import type { ChatSessionMode } from '../api/chat.js';
 import type { ProjectMetadata, ProjectTemplate } from '../api/projects.js';
 import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
@@ -220,6 +221,10 @@ export interface ComposeInput {
   // When set to 'plain', suppresses tool_calls so API/BYOK-mode models
   // only emit <artifact> blocks (they cannot execute tools).
   streamFormat?: string | undefined;
+  // Per-conversation mode. Design mode keeps the artifact-first agent
+  // workflow; chat mode keeps the same context/tools but answers like a
+  // standard multi-turn assistant unless the user explicitly asks to build.
+  sessionMode?: ChatSessionMode | undefined;
   // UI locale selected by the client. User-visible generated form copy
   // must follow this locale even when the user's initial prompt is brief.
   locale?: string | undefined;
@@ -245,6 +250,7 @@ export function composeSystemPrompt({
   audioVoiceOptions,
   audioVoiceOptionsError,
   streamFormat,
+  sessionMode,
   locale,
   userInstructions,
   projectInstructions,
@@ -273,6 +279,11 @@ export function composeSystemPrompt({
   // later" header.
   if (streamFormat === 'plain') {
     parts.push(API_MODE_OVERRIDE);
+    parts.push('\n\n---\n\n');
+  }
+
+  if (sessionMode === 'chat') {
+    parts.push(CHAT_MODE_OVERRIDE);
     parts.push('\n\n---\n\n');
   }
 
@@ -429,6 +440,14 @@ Every later instruction in this prompt that tells you to "call TodoWrite", "run 
 - \`<question-form>\` blocks for discovery on turn 1, exactly as the rules below describe — question-form is markup the UI parses, not a tool call.
 
 If the rules below tell you to plan with TodoWrite, write the plan as prose instead. If they tell you to read skill side files before writing, describe in one sentence which patterns/conventions you're going to apply and proceed. If they tell you to run brand-spec extraction via Bash + Read + WebFetch, ask the user the missing brand questions in the discovery form instead.`;
+
+const CHAT_MODE_OVERRIDE = `# Chat mode — standard conversation (read first — overrides every rule below)
+
+This conversation is in Open Design Chat mode. Open Design is the open-source Claude Design alternative and a native Figma counterpart. Official links: GitHub https://github.com/nexu-io/open-design, website https://open-design.ai/, Discord https://discord.com/invite/9ptkbbqRu.
+
+Use the same available context, files, attachments, connectors, MCP servers, project memory, and model capabilities as Design mode. The difference is behavior: answer like a fast, direct, multi-turn desktop chat assistant. Prefer concise prose, explanations, comparisons, debugging help, and follow-up questions only when needed.
+
+Override artifact-first discovery rules below: do not emit a default discovery \`<question-form>\`, do not call TodoWrite just to plan a chat answer, and do not create or edit project files, HTML, PPT, slide decks, images, video, or audio unless the user explicitly asks you to generate/build/design/export/modify something. When the user does ask for a design artifact or file change, you may use the normal Open Design agent workflow and the same tools/capabilities available in Design mode.`;
 
 function renderMetadataBlock(
   metadata: ProjectMetadata | undefined,

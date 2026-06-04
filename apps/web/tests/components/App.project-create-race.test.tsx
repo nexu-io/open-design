@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
-import type { AppConfig, Project } from '../../src/types';
+import type { AgentInfo, AppConfig, Project } from '../../src/types';
 import {
   fetchComposioConfigFromDaemon,
   fetchDaemonConfig,
@@ -16,12 +16,13 @@ import {
 } from '../../src/state/config';
 import {
   daemonIsLive,
-  fetchAgents,
+  fetchAgentsStream,
   fetchAppVersionInfo,
   fetchDesignSystems,
   fetchDesignTemplates,
   fetchPromptTemplates,
   fetchSkills,
+  replaceProjectWorkingDir,
   uploadProjectFiles,
 } from '../../src/providers/registry';
 import {
@@ -39,6 +40,8 @@ vi.mock('../../src/components/EntryView', () => ({
     onDeleteProject,
     onImportFolderResponse,
     onOpenProject,
+    onRefreshAgents,
+    agents,
     projects,
   }: {
     onCreateProject: (input: unknown) => void;
@@ -50,6 +53,8 @@ vi.mock('../../src/components/EntryView', () => ({
       projectId: string;
     }) => Promise<void> | void;
     onOpenProject: (id: string) => void;
+    onRefreshAgents: () => void | Promise<void>;
+    agents: AgentInfo[];
     projects: Project[];
   }) => (
     <main>
@@ -69,6 +74,21 @@ vi.mock('../../src/components/EntryView', () => ({
       <button
         type="button"
         onClick={() =>
+          onCreateProject({
+            name: 'Dir project',
+            skillId: null,
+            designSystemId: null,
+            metadata: { kind: 'prototype', userWorkingDir: '/Users/me/external' },
+            userWorkingDirToken: 'wd-token',
+            pendingFiles: [new File(['hi'], 'note.txt', { type: 'text/plain' })],
+          })
+        }
+      >
+        Create project with working dir
+      </button>
+      <button
+        type="button"
+        onClick={() =>
           void onImportFolderResponse?.({
             conversationId: 'conv-import',
             entryFile: null,
@@ -79,6 +99,16 @@ vi.mock('../../src/components/EntryView', () => ({
       >
         Host import folder
       </button>
+      <button type="button" onClick={() => void onRefreshAgents()}>
+        Refresh agents
+      </button>
+      <div data-testid="entry-agent-list">
+        {agents.map((agent) => (
+          <span key={agent.id} data-testid={`entry-agent-${agent.id}`}>
+            {agent.name}
+          </span>
+        ))}
+      </div>
       {projects.map((project) => (
         <div key={project.id} data-testid={`entry-project-${project.id}`}>
           <span>{project.name}</span>
@@ -142,12 +172,13 @@ vi.mock('../../src/providers/registry', async () => {
   return {
     ...actual,
     daemonIsLive: vi.fn(),
-    fetchAgents: vi.fn(),
+    fetchAgentsStream: vi.fn(),
     fetchAppVersionInfo: vi.fn(),
     fetchDesignSystems: vi.fn(),
     fetchDesignTemplates: vi.fn(),
     fetchPromptTemplates: vi.fn(),
     fetchSkills: vi.fn(),
+    replaceProjectWorkingDir: vi.fn(),
     uploadProjectFiles: vi.fn(),
   };
 });
@@ -184,13 +215,14 @@ vi.mock('../../src/state/config', async () => {
 });
 
 const mockedDaemonIsLive = vi.mocked(daemonIsLive);
-const mockedFetchAgents = vi.mocked(fetchAgents);
+const mockedFetchAgentsStream = vi.mocked(fetchAgentsStream);
 const mockedFetchAppVersionInfo = vi.mocked(fetchAppVersionInfo);
 const mockedFetchDesignSystems = vi.mocked(fetchDesignSystems);
 const mockedFetchDesignTemplates = vi.mocked(fetchDesignTemplates);
 const mockedFetchPromptTemplates = vi.mocked(fetchPromptTemplates);
 const mockedFetchSkills = vi.mocked(fetchSkills);
 const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
+const mockedReplaceProjectWorkingDir = vi.mocked(replaceProjectWorkingDir);
 const mockedCreateProject = vi.mocked(createProject);
 const mockedDeleteProject = vi.mocked(deleteProject);
 const mockedGetProject = vi.mocked(getProject);
@@ -257,7 +289,7 @@ describe('App project creation routing', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/');
     mockedDaemonIsLive.mockResolvedValue(true);
-    mockedFetchAgents.mockResolvedValue([]);
+    mockedFetchAgentsStream.mockResolvedValue([]);
     mockedFetchSkills.mockResolvedValue([]);
     mockedFetchDesignTemplates.mockResolvedValue([]);
     mockedFetchDesignSystems.mockResolvedValue([]);
@@ -289,6 +321,215 @@ describe('App project creation routing', () => {
     cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+  });
+
+  it('auto-picks the first available agent in registry order after streamed probes settle', async () => {
+    const codexAgent: AgentInfo = {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+      version: '0.80.0',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      version: '1.0.0',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    mockedLoadConfig.mockReturnValue({ ...baseConfig, agentId: null });
+    mockedListProjects.mockResolvedValue([]);
+    mockedFetchAgentsStream.mockImplementation(async ({ onAgent }) => {
+      onAgent(codexAgent);
+      onAgent(claudeAgent);
+      return [codexAgent, claudeAgent];
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockedSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ agentId: 'claude' }),
+      );
+    });
+    expect(
+      mockedSaveConfig.mock.calls.some(([saved]) => saved.agentId === 'codex'),
+    ).toBe(false);
+    expect(mockedSyncConfigToDaemon).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: 'claude' }),
+    );
+  });
+
+  it('ignores stale streamed writes from an older bootstrap after a newer rescan', async () => {
+    const staleCodexAgent: AgentInfo = {
+      id: 'codex',
+      name: 'Stale Codex CLI',
+      bin: 'codex',
+      available: false,
+      version: null,
+      models: [],
+    };
+    const refreshedCodexAgent: AgentInfo = {
+      id: 'codex',
+      name: 'Fresh Codex CLI',
+      bin: 'codex',
+      available: true,
+      version: '0.80.0',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    const staleBootstrap = deferred<AgentInfo[]>();
+    let emitStaleAgent: ((agent: AgentInfo) => void) | null = null;
+    mockedFetchAgentsStream
+      .mockImplementationOnce(({ onAgent }) => {
+        emitStaleAgent = onAgent;
+        return staleBootstrap.promise;
+      })
+      .mockImplementationOnce(async ({ onAgent }) => {
+        onAgent(refreshedCodexAgent);
+        return [refreshedCodexAgent];
+      });
+    mockedListProjects.mockResolvedValue([]);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Refresh agents' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('entry-agent-codex').textContent).toBe(
+        'Fresh Codex CLI',
+      );
+    });
+
+    await act(async () => {
+      emitStaleAgent?.(staleCodexAgent);
+      staleBootstrap.resolve([staleCodexAgent]);
+      await staleBootstrap.promise;
+    });
+
+    expect(screen.getByTestId('entry-agent-codex').textContent).toBe(
+      'Fresh Codex CLI',
+    );
+  });
+
+  it('does not auto-pick from a partial rescan when an older bootstrap settles', async () => {
+    const codexAgent: AgentInfo = {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+      version: '0.80.0',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      version: '1.0.0',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    const staleBootstrap = deferred<AgentInfo[]>();
+    const rescan = deferred<AgentInfo[]>();
+    mockedLoadConfig.mockReturnValue({ ...baseConfig, agentId: null });
+    mockedListProjects.mockResolvedValue([]);
+    mockedFetchAgentsStream
+      .mockReturnValueOnce(staleBootstrap.promise)
+      .mockImplementationOnce(({ onAgent }) => {
+        onAgent(codexAgent);
+        return rescan.promise;
+      });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Refresh agents' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('entry-agent-codex').textContent).toBe(
+        'Codex CLI',
+      );
+    });
+
+    await act(async () => {
+      staleBootstrap.resolve([]);
+      await staleBootstrap.promise;
+    });
+    await act(async () => {
+      rescan.resolve([codexAgent, claudeAgent]);
+      await rescan.promise;
+    });
+
+    await waitFor(() => {
+      expect(mockedSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ agentId: 'claude' }),
+      );
+    });
+    expect(
+      mockedSaveConfig.mock.calls.some(([saved]) => saved.agentId === 'codex'),
+    ).toBe(false);
+  });
+
+  it('keeps auto-pick gated while rescanning from an empty agent state', async () => {
+    const codexAgent: AgentInfo = {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+      version: '0.80.0',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      version: '1.0.0',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    const initialProbe = deferred<AgentInfo[]>();
+    const rescan = deferred<AgentInfo[]>();
+    mockedLoadConfig.mockReturnValue({ ...baseConfig, agentId: null });
+    mockedListProjects.mockResolvedValue([]);
+    mockedFetchAgentsStream
+      .mockReturnValueOnce(initialProbe.promise)
+      .mockImplementationOnce(({ onAgent }) => {
+        onAgent(codexAgent);
+        return rescan.promise;
+      });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockedFetchAgentsStream).toHaveBeenCalledTimes(1);
+    });
+    await act(async () => {
+      initialProbe.resolve([]);
+      await initialProbe.promise;
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Refresh agents' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('entry-agent-codex').textContent).toBe(
+        'Codex CLI',
+      );
+    });
+
+    await act(async () => {
+      rescan.resolve([codexAgent, claudeAgent]);
+      await rescan.promise;
+    });
+
+    await waitFor(() => {
+      expect(mockedSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ agentId: 'claude' }),
+      );
+    });
+    expect(
+      mockedSaveConfig.mock.calls.some(([saved]) => saved.agentId === 'codex'),
+    ).toBe(false);
   });
 
   it('keeps a newly created project open when the initial project list resolves stale', async () => {
@@ -585,5 +826,67 @@ describe('App project creation routing', () => {
       );
     });
     expect(screen.queryByTestId('entry-project-project-existing')).toBeNull();
+  });
+
+  it('switches to the picked working dir before uploading staged Home attachments', async () => {
+    // Regression for the "picked working dir + staged attachment" case:
+    // replaceProjectWorkingDir flips metadata.baseDir to the external folder,
+    // so it must run BEFORE uploadProjectFiles — otherwise the staged files
+    // land in the temporary managed .od/projects/<id> root and vanish once the
+    // working dir flips. Asserting the call order locks the ordering in.
+    mockedListProjects.mockResolvedValue([]);
+    mockedReplaceProjectWorkingDir.mockResolvedValue(undefined as never);
+
+    render(<App />);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Create project with working dir' }),
+    );
+
+    await waitFor(() => {
+      expect(mockedReplaceProjectWorkingDir).toHaveBeenCalledTimes(1);
+      expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockedReplaceProjectWorkingDir).toHaveBeenCalledWith(
+      'project-new',
+      '/Users/me/external',
+      'wd-token',
+    );
+    // Both target the same project id, and the working-dir handoff is ordered
+    // strictly before the upload so the files land in the final tree.
+    expect(mockedUploadProjectFiles.mock.calls[0]?.[0]).toBe('project-new');
+    const replaceOrder = mockedReplaceProjectWorkingDir.mock.invocationCallOrder[0]!;
+    const uploadOrder = mockedUploadProjectFiles.mock.invocationCallOrder[0]!;
+    expect(replaceOrder).toBeLessThan(uploadOrder);
+  });
+
+  it('short-circuits the upload + auto-send when the working-dir handoff fails', async () => {
+    // Regression for the swallowed-failure case: the desktop working-dir token
+    // has a ~60s TTL, so a slow user (or any rejected POST) makes
+    // replaceProjectWorkingDir throw AFTER the project already exists. The old
+    // code only logged a warning and then uploaded the staged attachments into
+    // the managed root while the user believed their chosen folder was applied.
+    // The fix surfaces a create-time error toast AND aborts the rest of the
+    // submit path so the first run cannot proceed on a tree the user did not
+    // choose.
+    mockedListProjects.mockResolvedValue([]);
+    mockedReplaceProjectWorkingDir.mockRejectedValue(
+      new Error('working-dir token expired'),
+    );
+
+    render(<App />);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Create project with working dir' }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Couldn't apply the chosen folder/i)).toBeTruthy();
+    });
+    expect(mockedReplaceProjectWorkingDir).toHaveBeenCalledTimes(1);
+    // The handoff failed, so the staged attachments must NOT be uploaded into
+    // the managed `.od/projects/<id>` root the user did not pick.
+    expect(mockedUploadProjectFiles).not.toHaveBeenCalled();
   });
 });

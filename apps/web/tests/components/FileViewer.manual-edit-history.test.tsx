@@ -124,7 +124,7 @@ describe('FileViewer manual edit history regressions', () => {
     expect(screen.getByTestId('draw-overlay-toggle').getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('remounts the srcDoc iframe when exiting manual edit on a srcDoc-only preview', async () => {
+  it('keeps the srcDoc iframe mounted when closing manual edit on a srcDoc-only preview', async () => {
     const source = '<!doctype html><html><body><script>localStorage.getItem("od");</script><main data-od-id="hero">Hero</main></body></html>';
 
     render(
@@ -146,10 +146,10 @@ describe('FileViewer manual edit history regressions', () => {
 
     await waitFor(() => {
       const previewFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-      expect(previewFrame).not.toBe(editFrame);
+      expect(previewFrame).toBe(editFrame);
       expect(previewFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
       expect(previewFrame.srcdoc).toContain('Hero');
-      expect(previewFrame.srcdoc).not.toContain('data-od-edit-bridge');
+      expect(previewFrame.srcdoc).toContain('data-od-edit-bridge');
     });
   });
 

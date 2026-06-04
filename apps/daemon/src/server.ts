@@ -13,6 +13,7 @@ import os from 'node:os';
 import net from 'node:net';
 import {
   defaultScenarioPluginIdForProjectMetadata,
+  type OpenDesignDiscordPresenceResponse,
   type OpenDesignGithubLatestReleaseResponse,
   type OpenDesignGithubRepoResponse,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
@@ -55,6 +56,9 @@ import {
   cancelVelaLogin,
   forgetVelaLogin,
   mergeVelaEnv,
+  mirrorAmrEntryAnalytics,
+  parseAmrEntryAnalyticsPayload,
+  parseVelaLoginAttribution,
   readVelaCredentialRevision,
   readVelaLoginStatus,
   spawnVelaLogin,
@@ -167,32 +171,7 @@ import {
   respondSurface as respondSurfaceRow,
   revokeProjectSurface,
 } from './genui/index.js';
-import {
-  buildMemoryTree,
-  composeMemoryBody,
-  deleteMemoryEntry,
-  extractFromMessage,
-  listMemoryEntries,
-  maskMemoryExtractionConfig,
-  memoryDir,
-  memoryEvents,
-  readMemoryConfig,
-  readMemoryEntry,
-  readMemoryIndex,
-  updateMemoryTreeNode,
-  upsertMemoryEntry,
-  writeMemoryConfig,
-  writeMemoryIndex,
-} from './memory.js';
-import {
-  clearExtractions as clearMemoryExtractions,
-  listExtractions as listMemoryExtractions,
-  removeExtraction as removeMemoryExtraction,
-} from './memory-extractions.js';
-import {
-  extractMemoryFromConnectors,
-  suggestMemoryFromConnectors,
-} from './memory-connectors.js';
+import { composeMemoryBody, extractFromMessage } from './memory.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { stageAmrImagePaths } from './amr-image-staging.js';
@@ -245,6 +224,7 @@ import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure } from './run-failure-classification.js';
+import { decideSafeRunRetry } from './run-retry-policy.js';
 import {
   hasExplicitRequestedModelForAnalytics,
   scanRunEventsForUsageAnalytics,
@@ -368,14 +348,18 @@ import { DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
 import {
   buildProjectArchive,
   buildBatchArchive,
+  createProjectFolder,
   decodeMultipartFilename,
   deleteProjectFile,
   assertSandboxProjectRootAvailable,
+  deleteProjectFolder,
   detectEntryFile,
   ensureProject,
+  ensureProjectSubdir,
   isRunTouchedProjectFile,
   isSafeId,
   listFiles,
+  listProjectFolders,
   mimeFor,
   parseByteRange,
   projectDir,
@@ -427,6 +411,7 @@ import {
   listTemplates,
   getLatestRoutineRun,
   getRoutine,
+  normalizeConversationSessionMode,
   deleteRoutine as dbDeleteRoutine,
   openDatabase,
   setTabs,
@@ -435,10 +420,14 @@ import {
   updateProject,
   updateRoutine,
   updateRoutineRun,
+  clearAgentSession,
+  updateAgentSessionStableHash,
+  upsertAgentSession,
   upsertDeployment,
   upsertMessage,
   upsertPreviewComment,
 } from './db.js';
+import { resolveAgentResumeContext, isClaudeResumeFailure, hashStableInstructions, computeIncludeStable } from './agent-session-resume.js';
 import {
   createLiveArtifact,
   deleteLiveArtifact,
@@ -455,22 +444,26 @@ import {
 import { LiveArtifactRefreshUnavailableError, refreshLiveArtifact } from './live-artifacts/refresh-service.js';
 import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
 import { registerConnectorRoutes } from './connectors/routes.js';
-import { registerActiveContextRoutes } from './active-context-routes.js';
-import { registerHostToolsRoutes } from './host-tools-routes.js';
+import { registerActiveContextRoutes } from './routes/active-context.js';
+import { registerHostToolsRoutes } from './routes/host-tools.js';
 import { registerMcpRoutes } from './mcp-routes.js';
-import { registerXaiRoutes } from './xai-routes.js';
-import { registerLiveArtifactRoutes } from './live-artifact-routes.js';
-import { registerDesignSystemToolRoutes } from './design-system-tool-routes.js';
-import { registerDeployRoutes, registerDeploymentCheckRoutes } from './deploy-routes.js';
+import { registerXaiRoutes } from './routes/xai.js';
+import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
+import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
+import { registerDeployRoutes, registerDeploymentCheckRoutes } from './routes/deploy.js';
 import { registerMediaRoutes } from './media-routes.js';
 import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes } from './project-routes.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
-import { registerHandoffRoutes } from './handoff-routes.js';
+import { registerHandoffRoutes } from './routes/handoff.js';
 import { EmptyTranscriptError, synthesizeHandoffPrompt } from './handoff-design.js';
 import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './chat-routes.js';
-import { registerStaticResourceRoutes } from './static-resource-routes.js';
-import { registerRoutineRoutes, routineDbRowToContract } from './routine-routes.js';
+import { registerTerminalRoutes } from './terminal-routes.js';
+import { createTerminalService } from './terminals.js';
+import { registerSocialShareRoutes } from './social-share-routes.js';
+import { registerMemoryRoutes } from './routes/memory.js';
+import { registerStaticResourceRoutes } from './routes/static-resource.js';
+import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
 import { installRouteRegistrationGuard } from './route-registration-guard.js';
 import { submitToolResultToRunState } from './run-tool-results.js';
 import { assertServerContextSatisfiesRoutes } from './route-context-contract.js';
@@ -858,10 +851,14 @@ export function normalizeCommentAttachments(input) {
       const screenshotPath = cleanString(raw.screenshotPath);
       const markKind = normalizeVisualMarkKind(raw.markKind);
       const intent = compactString(raw.intent, 220);
-      const comment = cleanString(raw.comment) || intent;
+      const imageAttachments = normalizePreviewCommentImageAttachments(raw.imageAttachments);
+      const commentContext = raw.commentContext === 'query' ? 'query' : 'context';
+      const comment = commentContext === 'query'
+        ? ''
+        : cleanString(raw.comment) || intent || imageOnlyCommentFallback(imageAttachments.length);
       const selectionKind =
         raw.selectionKind === 'visual' ? 'visual' : raw.selectionKind === 'pod' ? 'pod' : 'element';
-      if (!filePath || !elementId || !comment) return null;
+      if (!filePath || !elementId) return null;
       if (selectionKind !== 'visual' && !selector) return null;
       if (selectionKind === 'visual' && !screenshotPath) return null;
       const podMembers = selectionKind === 'pod' ? normalizeAttachmentPodMembers(raw.podMembers) : [];
@@ -895,6 +892,8 @@ export function normalizeCommentAttachments(input) {
         intent: selectionKind === 'visual'
           ? intent || visualAnnotationIntent(markKind)
           : undefined,
+        imageAttachments: imageAttachments.length > 0 ? imageAttachments : undefined,
+        commentContext,
         source: raw.source === 'board-batch' ? 'board-batch' : 'saved-comment',
       };
     })
@@ -923,8 +922,10 @@ export function renderCommentAttachmentHint(commentAttachments) {
       `currentText: ${item.currentText || '(empty)'}`,
       `htmlHint: ${item.htmlHint || '(none)'}`,
       `computedStyle: ${formatAnnotationStyle(item.style) || '(none)'}`,
-      `comment: ${item.comment}`,
     );
+    if (item.comment && item.commentContext !== 'query') {
+      lines.push(`comment: ${item.comment}`);
+    }
     if (targetKind === 'visual') {
       lines.push(
         `screenshot: ${item.screenshotPath}`,
@@ -945,6 +946,13 @@ export function renderCommentAttachmentHint(commentAttachments) {
         if (memberStyle) lines.push(`member.${memberIndex + 1}.computedStyle: ${memberStyle}`);
       });
     }
+    const imageAttachments = normalizePreviewCommentImageAttachments(item.imageAttachments);
+    if (imageAttachments.length > 0) {
+      lines.push(`imageAttachments: ${imageAttachments.length}`);
+      imageAttachments.forEach((attachment, attachmentIndex) => {
+        lines.push(`image.${attachmentIndex + 1}: ${attachment.path} | ${attachment.name}`);
+      });
+    }
   }
   lines.push('</attached-preview-comments>');
   return lines.join('\n');
@@ -952,6 +960,29 @@ export function renderCommentAttachmentHint(commentAttachments) {
 
 function cleanString(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizePreviewCommentImageAttachments(input) {
+  if (!Array.isArray(input)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const item of input) {
+    if (!item || typeof item !== 'object') continue;
+    const path = cleanString(item.path);
+    if (!path || seen.has(path)) continue;
+    seen.add(path);
+    const name = cleanString(item.name) || path.split('/').pop() || path;
+    out.push({ path, name });
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
+function imageOnlyCommentFallback(count) {
+  if (count <= 0) return '';
+  return count > 1
+    ? `Use the ${count} attached images as the comment reference.`
+    : 'Use the attached image as the comment reference.';
 }
 
 function normalizeVisualMarkKind(value) {
@@ -1049,6 +1080,16 @@ function finiteAttachmentNumber(value) {
   return Number.isFinite(value) ? Math.round(value) : 0;
 }
 
+const DESIGN_FILES_HINT_FOLDER_LIMIT = 40;
+const DESIGN_FILES_HINT_FILE_LIMIT = 80;
+type DesignFilesHintEntry = {
+  name?: string;
+  path?: string;
+  kind?: string;
+  type?: string;
+  size?: number;
+};
+
 function formatAttachmentPosition(position) {
   return `x=${position.x}, y=${position.y}, width=${position.width}, height=${position.height}`;
 }
@@ -1087,6 +1128,88 @@ export function resolveSafeProjectAttachments(cwd, attachments, opts = {}) {
   }
 
   return out;
+}
+
+export function formatProjectAttachmentHint(attachments) {
+  if (!Array.isArray(attachments) || attachments.length === 0) return '';
+  return [
+    '',
+    '',
+    'Attached project files in user-visible order:',
+    ...attachments.map((p, index) => `${index + 1}. \`${p}\``),
+    '',
+    'When the user says "first attachment", "second file", or similar, map those references to the numbered list above.',
+  ].join('\n');
+}
+
+function formatProjectEntrySize(size: number) {
+  if (!Number.isFinite(size) || size <= 0) return '';
+  if (size < 1024) return `${Math.round(size)} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDesignFilesEntryLine(entry: DesignFilesHintEntry | null | undefined, fallbackKind?: string) {
+  const entryPath =
+    typeof entry?.path === 'string' && entry.path
+      ? entry.path
+      : typeof entry?.name === 'string'
+        ? entry.name
+        : '';
+  if (!entryPath) return null;
+  const kind = fallbackKind || entry.kind || entry.type || 'file';
+  const size = kind === 'folder' ? '' : formatProjectEntrySize(Number(entry.size));
+  return `- \`${entryPath}\` (${[kind, size].filter(Boolean).join(', ')})`;
+}
+
+export function formatDesignFilesWorkspaceHint(
+  cwd: string | null | undefined,
+  files: DesignFilesHintEntry[] = [],
+  folders: DesignFilesHintEntry[] = [],
+) {
+  if (typeof cwd !== 'string' || cwd.trim().length === 0) return '';
+  const safeFolders = Array.isArray(folders) ? folders : [];
+  const safeFiles = Array.isArray(files) ? files : [];
+  const folderLines = safeFolders
+    .slice(0, DESIGN_FILES_HINT_FOLDER_LIMIT)
+    .map((folder) => formatDesignFilesEntryLine(folder, 'folder'))
+    .filter(Boolean);
+  const fileLines = safeFiles
+    .slice(0, DESIGN_FILES_HINT_FILE_LIMIT)
+    .map((file) => formatDesignFilesEntryLine(file, file?.kind || 'file'))
+    .filter(Boolean);
+  const totalFolders = safeFolders.length;
+  const totalFiles = safeFiles.length;
+  const omittedFolders = Math.max(0, totalFolders - folderLines.length);
+  const omittedFiles = Math.max(0, totalFiles - fileLines.length);
+
+  const lines = [
+    '',
+    '',
+    '## Design Files workspace',
+    `The Design Files panel is backed by your current working directory: \`${cwd}\`. Write project files relative to this directory (for example \`index.html\` or \`assets/x.png\`). The user can browse these files in real time.`,
+    'The selected/attached files for a turn are only a shortcut for priority and ordering. If the user did not attach any file, do not assume there are no relevant Design Files.',
+    'When the request refers to existing files, asks you to choose a file, says "current", "this design", "the deck", "the image", "the folder", or depends on project state, inspect/search/read this workspace before answering or editing. Prefer project-relative paths, use the active workspace context as the default target, and ask only if multiple plausible targets remain after inspection.',
+    'For non-trivial inspection or edits, surface progress through visible planning/status/tool events instead of silently guessing.',
+    '',
+    `Current Design Files snapshot: ${totalFolders} folder${totalFolders === 1 ? '' : 's'}, ${totalFiles} file${totalFiles === 1 ? '' : 's'}.`,
+  ];
+
+  if (folderLines.length > 0) {
+    lines.push('', 'Folders:', ...folderLines);
+    if (omittedFolders > 0) lines.push(`- ... ${omittedFolders} more folder${omittedFolders === 1 ? '' : 's'} omitted`);
+  }
+
+  if (fileLines.length > 0) {
+    lines.push('', 'Files:', ...fileLines);
+    if (omittedFiles > 0) lines.push(`- ... ${omittedFiles} more file${omittedFiles === 1 ? '' : 's'} omitted`);
+  }
+
+  if (folderLines.length === 0 && fileLines.length === 0) {
+    lines.push('', 'No user-visible Design Files exist yet. Create clear project-relative files when the task requires output.');
+  }
+
+  return lines.join('\n');
 }
 
 export function resolveSafePromptImagePaths(imagePaths, opts = {}) {
@@ -1745,6 +1868,52 @@ export function createAgentRuntimeToolPrompt(
   ].join('\n');
 }
 
+const WORKSPACE_CONTEXT_KINDS = new Set([
+  'design-files',
+  'design-system',
+  'file',
+  'folder',
+  'browser',
+  'terminal',
+  'side-chat',
+  'live-artifact',
+]);
+
+function normalizeWorkspaceContextItems(items) {
+  if (!Array.isArray(items)) return [];
+  const out = [];
+  const seen = new Set();
+  const cleanString = (value, max = 500) => {
+    if (typeof value !== 'string') return '';
+    return value.trim().slice(0, max);
+  };
+  for (const item of items) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const kind = cleanString(record.kind, 64);
+    if (!WORKSPACE_CONTEXT_KINDS.has(kind)) continue;
+    const id = cleanString(record.id, 240);
+    const label = cleanString(record.label, 240);
+    if (!id || !label) continue;
+    const dedupeKey = `${kind}:${id}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    const normalized: Record<string, string> = { id, kind, label };
+    const tabId = cleanString(record.tabId, 240);
+    const pathValue = cleanString(record.path, 500);
+    const absolutePath = cleanString(record.absolutePath, 1000);
+    const url = cleanString(record.url, 1000);
+    const title = cleanString(record.title, 500);
+    if (tabId) normalized.tabId = tabId;
+    if (pathValue) normalized.path = pathValue;
+    if (absolutePath) normalized.absolutePath = absolutePath;
+    if (url) normalized.url = url;
+    if (title) normalized.title = title;
+    out.push(normalized);
+  }
+  return out;
+}
+
 function normalizeRunContextSelection(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const stringList = (items) => {
@@ -1765,14 +1934,17 @@ function normalizeRunContextSelection(value) {
     pluginIds: stringList(value.pluginIds),
     mcpServerIds: stringList(value.mcpServerIds),
     connectorIds: stringList(value.connectorIds),
+    workspaceItems: normalizeWorkspaceContextItems(value.workspaceItems),
   };
 }
 
 function mergeRunContextSelections(...contexts) {
-  const merged = { skillIds: [], pluginIds: [], mcpServerIds: [], connectorIds: [] };
+  const merged = { skillIds: [], pluginIds: [], mcpServerIds: [], connectorIds: [], workspaceItems: [] };
+  const listKeys = ['skillIds', 'pluginIds', 'mcpServerIds', 'connectorIds'];
+  const workspaceSeen = new Set();
   for (const context of contexts) {
     const normalized = normalizeRunContextSelection(context);
-    for (const key of Object.keys(merged)) {
+    for (const key of listKeys) {
       const seen = new Set(merged[key]);
       for (const id of normalized[key] ?? []) {
         if (!seen.has(id)) {
@@ -1780,6 +1952,12 @@ function mergeRunContextSelections(...contexts) {
           merged[key].push(id);
         }
       }
+    }
+    for (const item of normalized.workspaceItems ?? []) {
+      const key = `${item.kind}:${item.id}`;
+      if (workspaceSeen.has(key)) continue;
+      workspaceSeen.add(key);
+      merged.workspaceItems.push(item);
     }
   }
   return Object.fromEntries(
@@ -1831,9 +2009,61 @@ function formatContextRefList(ids, refs, titleKey = 'title') {
     .join('\n');
 }
 
+function formatWorkspaceContextList(items) {
+  if (!Array.isArray(items)) return '';
+  return items
+    .map((item, index) => {
+      const details = [
+        item.path ? `path: \`${item.path}\`` : null,
+        item.absolutePath ? `absolute: \`${item.absolutePath}\`` : null,
+        item.url ? `url: ${item.url}` : null,
+        item.title ? `title: ${item.title}` : null,
+        item.tabId ? `tab: \`${item.tabId}\`` : null,
+      ].filter(Boolean).join(' | ');
+      return `${index + 1}. ${item.kind}: ${item.label} (\`${item.id}\`)${details ? ` — ${details}` : ''}`;
+    })
+    .join('\n');
+}
+
+function renderWorkspaceContextToolHints(items) {
+  if (!Array.isArray(items) || items.length === 0) return '';
+  const kinds = new Set(items.map((item) => item?.kind).filter(Boolean));
+  const hints = [];
+  if (kinds.has('browser')) {
+    hints.push(
+      '- Browser tabs: use the selected browser tab URL/title as the target for requests about logos, fonts, images, colors, motion code, element/page screenshots, accessibility, OG/meta tags, or page structure. Prefer mounted browser automation / browser-use style tools when available (DOM snapshot, page screenshot, element screenshot, accessibility tree, evaluated JavaScript). If only URL/title context is available and no inspection tool is mounted, say that explicitly and do not invent page internals.',
+    );
+  }
+  if (kinds.has('terminal')) {
+    hints.push(
+      '- Terminal tabs: treat the selected terminal tab as the target shell/session. If the exact scrollback is not included in the prompt, run safe project-local read-only commands or ask for the terminal transcript instead of guessing hidden output.',
+    );
+  }
+  if (kinds.has('file') || kinds.has('folder') || kinds.has('design-files')) {
+    hints.push(
+      '- File and Design Files tabs: use project-relative paths exactly as shown. Read before editing, and keep generated screenshots/briefs/assets in Design Files when the user asks to capture or extract references.',
+    );
+  }
+  if (kinds.has('live-artifact')) {
+    hints.push(
+      '- Live artifact tabs: treat the selected live artifact as the preview target. Inspect or modify its source files rather than editing generated runtime output when possible.',
+    );
+  }
+  return hints.join('\n');
+}
+
 function renderRunContextPrompt(selection, metadata) {
   const context = mergeRunContextSelections(projectMetadataContextSelection(metadata), selection);
   const lines = [];
+  if (Array.isArray(context.workspaceItems) && context.workspaceItems.length > 0) {
+    lines.push('### Active workspace context');
+    lines.push(
+      'The user did not manually choose this context; Open Design selected the currently focused workspace tab. Use it as the default target for phrases like "this", "current", "the browser", "the terminal", or "that file" unless the user says otherwise. Use project-relative paths exactly when reading or editing project files.',
+    );
+    lines.push(formatWorkspaceContextList(context.workspaceItems));
+    const toolHints = renderWorkspaceContextToolHints(context.workspaceItems);
+    if (toolHints) lines.push(toolHints);
+  }
   if (Array.isArray(context.pluginIds) && context.pluginIds.length > 0) {
     lines.push('### Selected plugins');
     lines.push(
@@ -2044,6 +2274,70 @@ function scanRunEventsForFinishedProps(events, reqBodyModel) {
 
 export function __forTestScanRunEventsForFinishedProps(events, reqBodyModel) {
   return scanRunEventsForFinishedProps(events, reqBodyModel);
+}
+
+function scanRunEventsForRetrySideEffects(events) {
+  const sideEffects = {
+    userVisibleOutputSeen: false,
+    toolCallSeen: false,
+    artifactWriteSeen: false,
+    liveArtifactSeen: false,
+  };
+  for (const rec of Array.isArray(events) ? events : []) {
+    if (rec?.event === 'stdout') {
+      const chunk = rec.data?.chunk;
+      if (typeof chunk === 'string' ? chunk.length > 0 : chunk !== undefined) {
+        sideEffects.userVisibleOutputSeen = true;
+      }
+    }
+    const data = rec?.data;
+    if (!data || typeof data !== 'object') continue;
+    if (data.type === 'text_delta' || data.type === 'thinking_delta') {
+      const delta = typeof data.delta === 'string' ? data.delta : '';
+      if (delta.length > 0) sideEffects.userVisibleOutputSeen = true;
+    }
+    if (data.type === 'tool_use') sideEffects.toolCallSeen = true;
+    if (data.type === 'artifact') sideEffects.artifactWriteSeen = true;
+    if (data.type === 'live_artifact' || rec.event === 'live_artifact') {
+      sideEffects.liveArtifactSeen = true;
+    }
+  }
+  if (
+    countNewHtmlArtifacts(events) > 0 ||
+    didRunCreateDesignSystemFile(events) ||
+    countDesignSystemPreviewModules(events) > 0
+  ) {
+    sideEffects.artifactWriteSeen = true;
+  }
+  return sideEffects;
+}
+
+export function __forTestScanRunEventsForRetrySideEffects(events) {
+  return scanRunEventsForRetrySideEffects(events);
+}
+
+function retryFinalResultForRunStatus(status, retryAttemptCount) {
+  const result = runResultFromStatus(status);
+  if ((retryAttemptCount ?? 0) <= 0) {
+    return result === 'failed' ? 'suppressed' : 'not_attempted';
+  }
+  if (result === 'success') return 'success';
+  if (result === 'failed') return 'failed';
+  return 'suppressed';
+}
+
+export function __forTestRetryFinalResultForRunStatus(status, retryAttemptCount) {
+  return retryFinalResultForRunStatus(status, retryAttemptCount);
+}
+
+function runRetryEventsForAnalytics(events) {
+  return (Array.isArray(events) ? events : []).filter((rec) =>
+    rec?.event === 'run_retry_attempted' || rec?.event === 'run_retry_finished'
+  );
+}
+
+export function __forTestRunRetryEventsForAnalytics(events) {
+  return runRetryEventsForAnalytics(events);
 }
 
 function githubRepoNameFromPluginName(name) {
@@ -2413,6 +2707,10 @@ function daemonAgentPayloadToPersistedAgentEvent(data) {
   if (type === 'tool_use' && typeof data.id === 'string' && typeof data.name === 'string') {
     return { kind: 'tool_use', id: data.id, name: data.name, input: normalizePersistedToolInput(data.input) };
   }
+  // Live-only incremental tool-input fragments are for real-time display only.
+  // Returning null skips persistence so history replay isn't polluted with
+  // mid-token JSON shards; the full `tool_use` above is the persisted record.
+  if (type === 'tool_input_delta') return null;
   if (type === 'tool_result' && typeof data.toolUseId === 'string') {
     return {
       kind: 'tool_result',
@@ -3068,11 +3366,18 @@ const OPEN_DESIGN_GITHUB_REPO_API = 'https://api.github.com/repos/nexu-io/open-d
 const OPEN_DESIGN_GITHUB_RELEASE_LATEST_API = 'https://api.github.com/repos/nexu-io/open-design/releases/latest';
 const OPEN_DESIGN_GITHUB_CACHE_TTL_MS = 60 * 60 * 1000;
 const OPEN_DESIGN_GITHUB_TIMEOUT_MS = 4_000;
+const OPEN_DESIGN_DISCORD_INVITE_CODE = 'mHAjSMV6gz';
+const OPEN_DESIGN_DISCORD_INVITE_URL = `https://discord.gg/${OPEN_DESIGN_DISCORD_INVITE_CODE}`;
+const OPEN_DESIGN_DISCORD_INVITE_API = `https://discord.com/api/v10/invites/${OPEN_DESIGN_DISCORD_INVITE_CODE}?with_counts=true`;
+const OPEN_DESIGN_DISCORD_CACHE_TTL_MS = 5 * 60 * 1000;
+const OPEN_DESIGN_DISCORD_TIMEOUT_MS = 4_000;
 
 let openDesignGithubRepoCache = null;
 let openDesignGithubRepoInflight = null;
 let openDesignGithubLatestReleaseCache = null;
 let openDesignGithubLatestReleaseInflight = null;
+let openDesignDiscordPresenceCache = null;
+let openDesignDiscordPresenceInflight = null;
 
 async function readOpenDesignGithubRepoStats() {
   const now = Date.now();
@@ -3180,6 +3485,79 @@ async function readOpenDesignLatestReleaseInfo() {
   return openDesignGithubLatestReleaseInflight;
 }
 
+async function readOpenDesignDiscordPresence() {
+  const now = Date.now();
+  if (
+    openDesignDiscordPresenceCache &&
+    now - openDesignDiscordPresenceCache.fetchedAt < OPEN_DESIGN_DISCORD_CACHE_TTL_MS
+  ) {
+    return { ...openDesignDiscordPresenceCache, stale: false };
+  }
+
+  if (openDesignDiscordPresenceInflight) {
+    return openDesignDiscordPresenceInflight;
+  }
+
+  openDesignDiscordPresenceInflight = (async () => {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), OPEN_DESIGN_DISCORD_TIMEOUT_MS);
+    try {
+      const response = await fetch(OPEN_DESIGN_DISCORD_INVITE_API, {
+        headers: {
+          accept: 'application/json',
+          'user-agent': 'open-design-daemon',
+        },
+        signal: ctrl.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`Discord invite metadata request failed with HTTP ${response.status}`);
+      }
+      const payload = await response.json();
+      const profile = payload && typeof payload.profile === 'object' ? payload.profile : null;
+      const onlineCount =
+        typeof payload?.approximate_presence_count === 'number'
+          ? payload.approximate_presence_count
+          : typeof profile?.online_count === 'number'
+            ? profile.online_count
+            : null;
+      const memberCount =
+        typeof payload?.approximate_member_count === 'number'
+          ? payload.approximate_member_count
+          : typeof profile?.member_count === 'number'
+            ? profile.member_count
+            : null;
+
+      if (
+        !Number.isFinite(onlineCount) ||
+        onlineCount == null ||
+        onlineCount < 0 ||
+        !Number.isFinite(memberCount) ||
+        memberCount == null ||
+        memberCount < 0
+      ) {
+        throw new Error('Discord invite metadata did not include numeric member counts');
+      }
+
+      openDesignDiscordPresenceCache = {
+        onlineCount,
+        memberCount,
+        fetchedAt: Date.now(),
+      };
+      return { ...openDesignDiscordPresenceCache, stale: false };
+    } catch (error) {
+      if (openDesignDiscordPresenceCache) {
+        return { ...openDesignDiscordPresenceCache, stale: true };
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      openDesignDiscordPresenceInflight = null;
+    }
+  })();
+
+  return openDesignDiscordPresenceInflight;
+}
+
 function bearerTokenFromRequest(req) {
   const header = req.get('authorization');
   if (typeof header !== 'string') return undefined;
@@ -3217,6 +3595,12 @@ function openNativeFolderDialog() {
   return new Promise((resolve) => {
     const platform = process.platform;
     if (platform === 'darwin') {
+      // `choose folder` is handled specially by the system: it presents a fully
+      // interactive standard navigation panel that reliably takes key focus
+      // (unlike a JXA-driven NSOpenPanel from background-only osascript, which
+      // renders but can't be clicked). That standard panel already includes a
+      // "New Folder" button in the bottom-left, so users can create a folder
+      // inline without any extra wiring.
       execFile(
         'osascript',
         ['-e', 'POSIX path of (choose folder with prompt "Select a code folder to link")'],
@@ -3361,8 +3745,20 @@ const projectUpload = multer({
         // and keyed by project id; null fallback gives the standard
         // .od/projects/<id>/ behavior for non-imported projects.
         const meta = projectMetadataLookup?.(req.params.id) ?? null;
-        const dir = await ensureProject(PROJECTS_DIR, req.params.id, meta);
-        cb(null, dir);
+        // Optional `dir` form field (sent BEFORE the file parts by the web
+        // client) routes uploads into a subfolder, so files dropped/picked
+        // while viewing a folder land there instead of the project root. The
+        // sanitized relative dir is stashed on the request so the route can
+        // report each file's true project-relative path.
+        const subdir = typeof req.body?.dir === 'string' ? req.body.dir : '';
+        const { absDir, relDir } = await ensureProjectSubdir(
+          PROJECTS_DIR,
+          req.params.id,
+          subdir,
+          meta,
+        );
+        (req as any)._uploadRelDir = relDir;
+        cb(null, absDir);
       } catch (err) {
         cb(err, '');
       }
@@ -3846,6 +4242,7 @@ export function classifyChatRunCloseStatus(params: {
   signal: NodeJS.Signals | string | null;
   acpCleanCompletion: boolean;
   artifactQuietShutdownRequested: boolean;
+  turnCompletedCleanly: boolean;
 }): 'canceled' | 'succeeded' | 'failed' {
   if (params.cancelRequested) return 'canceled';
   if (params.code === 0) return 'succeeded';
@@ -3857,7 +4254,80 @@ export function classifyChatRunCloseStatus(params: {
     params.code === null &&
     (params.signal === 'SIGTERM' || params.signal === 'SIGKILL');
   if (artifactQuietShutdown) return 'succeeded';
+  // Post-completion teardown carve-out (#3372). When the model already
+  // emitted a clean terminal turn (a `turn_end`/`usage` event with no
+  // outstanding host answer, the same condition that closes the child's
+  // stdin), a later non-zero exit or kill signal is a teardown artifact,
+  // not a generation failure: a SessionEnd hook the agent runs on its way
+  // out (e.g. the Honcho memory plugin) can exit non-zero and drag the
+  // whole `claude` process to `exit 1` long after the deliverable was
+  // produced. Treating that as `failed` surfaces a red banner and halts
+  // the flow for work that already succeeded. Same family as the ACP and
+  // artifact-quiet-shutdown carve-outs above: the work completed; the odd
+  // exit is teardown noise. This deliberately does NOT cover non-zero
+  // exits *before* a clean turn — those stay `failed` (real CLI bug,
+  // model error, mid-turn crash), and the agent-specific auth/quota/AMR
+  // guards in the close handler run before this classifier so a genuine
+  // post-turn auth failure is still surfaced with its specific code.
+  if (params.turnCompletedCleanly) return 'succeeded';
   return 'failed';
+}
+
+type ClaudeStreamJsonBookkeepingRun = {
+  stdinOpen?: boolean;
+  pendingHostAnswers?: Set<string>;
+  turnCompletedCleanly?: boolean;
+  child?: {
+    stdin?: {
+      destroyed?: boolean;
+      end: () => void;
+    } | null;
+  } | null;
+};
+
+export function applyClaudeStreamJsonRunBookkeeping(
+  run: ClaudeStreamJsonBookkeepingRun,
+  ev: unknown,
+) {
+  if (!ev || typeof ev !== 'object') return;
+  const event = ev as {
+    type?: unknown;
+    name?: unknown;
+    id?: unknown;
+    stopReason?: unknown;
+  };
+
+  if (
+    run.stdinOpen &&
+    event.type === 'tool_use' &&
+    (event.name === 'AskUserQuestion' || event.name === 'ask_user_question') &&
+    typeof event.id === 'string'
+  ) {
+    if (!run.pendingHostAnswers) run.pendingHostAnswers = new Set();
+    run.pendingHostAnswers.add(event.id);
+    return;
+  }
+
+  const cleanTerminalTurn =
+    ((event.type === 'turn_end' &&
+      // `stop_reason: tool_use` means the model paused to wait for tool
+      // execution (claude-code is about to run an internal tool, or we owe a
+      // host tool_result). Either way the conversation is still in flight.
+      event.stopReason !== 'tool_use') ||
+      event.type === 'usage') &&
+    (!run.pendingHostAnswers || run.pendingHostAnswers.size === 0);
+  if (!cleanTerminalTurn) return;
+
+  // Record clean completion even if stdin was already closed by the
+  // host-answer path. The close-status classifier reads this to ignore late
+  // SessionEnd hook failures after the final assistant turn completed.
+  run.turnCompletedCleanly = true;
+  if (run.stdinOpen) {
+    if (run.child?.stdin && !run.child.stdin.destroyed) {
+      try { run.child.stdin.end(); } catch {}
+    }
+    run.stdinOpen = false;
+  }
 }
 
 function resolveChatRunShutdownGraceMs() {
@@ -4503,6 +4973,25 @@ export async function startServer({
     }
   });
 
+  app.get('/api/community/discord', async (_req, res) => {
+    try {
+      const presence = await readOpenDesignDiscordPresence();
+      const payload = /** @type {OpenDesignDiscordPresenceResponse} */ ({
+        inviteCode: OPEN_DESIGN_DISCORD_INVITE_CODE,
+        inviteUrl: OPEN_DESIGN_DISCORD_INVITE_URL,
+        onlineCount: presence.onlineCount,
+        memberCount: presence.memberCount,
+        fetchedAt: presence.fetchedAt,
+        stale: presence.stale,
+      });
+      res.json(payload);
+    } catch (error) {
+      res.status(502).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
   // Plan §3.F2 / spec §11.7 — daemon lifecycle status. Returns the
   // host / port the server is bound to plus the data dir,
   // so `od daemon status --json` can render a one-shot health snapshot
@@ -4788,409 +5277,10 @@ export async function startServer({
   // ---- Projects (DB-backed) -------------------------------------------------
 
 
-  // ----- Memory store -----------------------------------------------------
-  // Markdown-on-disk memory under <dataDir>/memory/. The daemon folds these
-  // into every system prompt (gated by `enabled`) and the chat run loop
-  // calls `/api/memory/extract` after each turn to sediment new facts.
-  app.get('/api/memory', async (_req, res) => {
-    try {
-      const [config, index, entries] = await Promise.all([
-        readMemoryConfig(RUNTIME_DATA_DIR),
-        readMemoryIndex(RUNTIME_DATA_DIR),
-        listMemoryEntries(RUNTIME_DATA_DIR),
-      ]);
-      res.json({
-        enabled: config.enabled,
-        chatExtractionEnabled: config.chatExtractionEnabled,
-        rootDir: memoryDir(RUNTIME_DATA_DIR),
-        index,
-        entries,
-        extraction: maskMemoryExtractionConfig(config.extraction),
-      });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Static sub-resources (`/index`, `/config`, `/extract`) registered
-  // BEFORE the `:id` catch-alls so an `index` / `config` / `extract` slug
-  // can't shadow the real handlers.
-  app.get('/api/memory/tree', async (_req, res) => {
-    try {
-      const [config, tree] = await Promise.all([
-        readMemoryConfig(RUNTIME_DATA_DIR),
-        buildMemoryTree(RUNTIME_DATA_DIR),
-      ]);
-      res.json({
-        enabled: config.enabled,
-        rootDir: memoryDir(RUNTIME_DATA_DIR),
-        tree,
-      });
-    } catch (err) {
-      res.status(500).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.patch('/api/memory/tree/:id', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const entry = await updateMemoryTreeNode(
-        RUNTIME_DATA_DIR,
-        req.params.id,
-        body,
-      );
-      const tree = await buildMemoryTree(RUNTIME_DATA_DIR);
-      res.json({ entry, tree });
-    } catch (err) {
-      const message = String((err && err.message) || err);
-      res.status(message === 'memory not found' ? 404 : 400).json({ error: message });
-    }
-  });
-
-  app.put('/api/memory/index', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const index = typeof body.index === 'string' ? body.index : '';
-      await writeMemoryIndex(RUNTIME_DATA_DIR, index);
-      res.json({ index });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.patch('/api/memory/config', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const patch = {};
-      if (typeof body.enabled === 'boolean') patch.enabled = body.enabled;
-      if (typeof body.chatExtractionEnabled === 'boolean') {
-        patch.chatExtractionEnabled = body.chatExtractionEnabled;
-      }
-      // Three-state extraction handling so the UI can: (a) leave the
-      // override alone (omit `extraction`), (b) clear it back to
-      // auto-pick (`extraction: null`), or (c) commit a custom override
-      // (`extraction: { provider, ... }`). For the apiKey field we
-      // need *four* states because the masked GET surfaces only an
-      // `apiKeyTail` (the secret never round-trips):
-      //   - field absent      → preserve the stored key (UI re-saves
-      //                          a settings form without re-typing
-      //                          the secret).
-      //   - field === ''      → CLEAR the stored key (the picker's
-      //                          drift-resync effect fires this when
-      //                          the user clears their BYOK chat
-      //                          API key — keeping the old daemon-
-      //                          side credential would silently keep
-      //                          calling the provider after the user
-      //                          intentionally removed it from the
-      //                          chat picker, which the reviewer
-      //                          flagged as a credential-sync bug).
-      //   - field === 'sk-…'  → replace with the new key.
-      //   - provider differs  → ignore stored key entirely.
-      if (Object.prototype.hasOwnProperty.call(body, 'extraction')) {
-        if (body.extraction === null) {
-          patch.extraction = null;
-        } else if (body.extraction && typeof body.extraction === 'object') {
-          const incoming = body.extraction;
-          const current = await readMemoryConfig(RUNTIME_DATA_DIR);
-          const apiKeyOmitted = !Object.prototype.hasOwnProperty.call(
-            incoming,
-            'apiKey',
-          );
-          const sameProvider =
-            !!current.extraction
-            && current.extraction.provider === incoming.provider;
-          let nextApiKey = '';
-          if (typeof incoming.apiKey === 'string' && incoming.apiKey) {
-            nextApiKey = incoming.apiKey;
-          } else if (apiKeyOmitted && sameProvider) {
-            nextApiKey = current.extraction.apiKey ?? '';
-          }
-          patch.extraction = {
-            provider: incoming.provider,
-            model:
-              typeof incoming.model === 'string' ? incoming.model : undefined,
-            baseUrl:
-              typeof incoming.baseUrl === 'string'
-                ? incoming.baseUrl
-                : undefined,
-            apiKey: nextApiKey,
-            // Azure-only; ignored by the validator for the other providers.
-            // We forward whatever the UI sent (or the previously-stored
-            // value when the UI omits the field) so re-saving an azure
-            // override without re-typing the api-version doesn't blank it.
-            apiVersion:
-              typeof incoming.apiVersion === 'string'
-                ? incoming.apiVersion
-                : current.extraction?.apiVersion,
-          };
-        }
-      }
-      const next = await writeMemoryConfig(RUNTIME_DATA_DIR, patch);
-      res.json({
-        enabled: next.enabled,
-        chatExtractionEnabled: next.chatExtractionEnabled,
-        extraction: maskMemoryExtractionConfig(next.extraction),
-      });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  // SSE feed of memory mutations. The web settings panel subscribes to
-  // this and re-fetches on every event; toast UIs can listen for
-  // `kind === 'extract'` and surface a small "Memory updated (N new)"
-  // notification. Payload shape: MemoryChangeEvent (see ./memory.ts).
-  //
-  // The same connection also forwards `extraction` events — one per LLM
-  // extraction phase transition — so the settings panel can render a
-  // live "recent extractions" list. We multiplex on a single SSE stream
-  // so the browser opens one connection instead of two.
-  app.get('/api/memory/events', async (_req, res) => {
-    const sse = createSseResponse(res);
-    sse.send('connected', { at: Date.now() });
-    const onChange = (event) => {
-      sse.send('change', event);
-    };
-    const onExtraction = (event) => {
-      sse.send('extraction', event);
-    };
-    memoryEvents.on('change', onChange);
-    memoryEvents.on('extraction', onExtraction);
-    res.on('close', () => {
-      memoryEvents.off('change', onChange);
-      memoryEvents.off('extraction', onExtraction);
-    });
-  });
-
-  // Recent LLM-extraction attempts (newest first; capped server-side).
-  // Surfaces skip reasons, in-flight calls, success counts, and errors
-  // so the settings panel can show "why didn't memory update?" at a
-  // glance instead of leaving the user to guess.
-  app.get('/api/memory/extractions', async (_req, res) => {
-    try {
-      res.json({ extractions: listMemoryExtractions() });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Drop the entire extraction history. Registered BEFORE the `:id`
-  // catch-all so a literal "/api/memory/extractions" can still be
-  // cleared with `curl -X DELETE`.
-  app.delete('/api/memory/extractions', async (_req, res) => {
-    try {
-      const removed = clearMemoryExtractions();
-      res.json({ removed });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-	  app.delete('/api/memory/extractions/:id', async (req, res) => {
-	    try {
-	      const removed = removeMemoryExtraction(req.params.id);
-	      res.json({ removed });
-	    } catch (err) {
-	      res.status(400).json({ error: String((err && err.message) || err) });
-	    }
-	  });
-
-	  app.post('/api/memory/connectors/suggest', requireLocalDaemonRequest, async (req, res) => {
-	    try {
-	      const body = req.body && typeof req.body === 'object' ? req.body : {};
-	      const connectorIds = Array.isArray(body.connectorIds)
-	        ? body.connectorIds
-	          .filter((id) => typeof id === 'string')
-	          .map((id) => id.trim())
-	          .filter(Boolean)
-	          .slice(0, 12)
-	        : undefined;
-	      const query =
-	        typeof body.query === 'string' ? body.query.trim().slice(0, 240) : '';
-	      const projectId =
-	        typeof body.projectId === 'string' && body.projectId.trim()
-	          ? body.projectId.trim()
-	          : null;
-	      const appConfig = await readAppConfig(RUNTIME_DATA_DIR).catch(() => ({}));
-	      const chatAgentId =
-	        typeof body.chatAgentId === 'string' && body.chatAgentId.trim()
-	          ? body.chatAgentId.trim()
-	          : typeof appConfig.agentId === 'string' && appConfig.agentId.trim()
-	            ? appConfig.agentId.trim()
-	            : null;
-	      const requestChatModel =
-	        typeof body.chatModel === 'string' && body.chatModel.trim()
-	          ? body.chatModel.trim()
-	          : null;
-	      const chatModel =
-	        requestChatModel
-	        || (chatAgentId && appConfig.agentModels?.[chatAgentId]?.model
-	          ? appConfig.agentModels[chatAgentId].model
-	          : null);
-	      const result = await suggestMemoryFromConnectors(RUNTIME_DATA_DIR, {
-	        projectsRoot: PROJECTS_DIR,
-	        projectRoot: PROJECT_ROOT,
-	        projectId,
-	        connectorIds,
-	        query,
-	        chatAgentId,
-	        chatModel,
-	      });
-	      res.json(result);
-	    } catch (err) {
-	      res.status(400).json({ error: String((err && err.message) || err) });
-	    }
-	  });
-
-	  app.post('/api/memory/connectors/extract', requireLocalDaemonRequest, async (req, res) => {
-	    try {
-	      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const connectorIds = Array.isArray(body.connectorIds)
-        ? body.connectorIds
-          .filter((id) => typeof id === 'string')
-          .map((id) => id.trim())
-          .filter(Boolean)
-          .slice(0, 12)
-        : undefined;
-      const query =
-        typeof body.query === 'string' ? body.query.trim().slice(0, 240) : '';
-      const projectId =
-        typeof body.projectId === 'string' && body.projectId.trim()
-          ? body.projectId.trim()
-          : null;
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR).catch(() => ({}));
-      const chatAgentId =
-        typeof body.chatAgentId === 'string' && body.chatAgentId.trim()
-          ? body.chatAgentId.trim()
-          : typeof appConfig.agentId === 'string' && appConfig.agentId.trim()
-            ? appConfig.agentId.trim()
-            : null;
-      const requestChatModel =
-        typeof body.chatModel === 'string' && body.chatModel.trim()
-          ? body.chatModel.trim()
-          : null;
-      const chatModel =
-        requestChatModel
-        || (chatAgentId && appConfig.agentModels?.[chatAgentId]?.model
-          ? appConfig.agentModels[chatAgentId].model
-          : null);
-      const result = await extractMemoryFromConnectors(RUNTIME_DATA_DIR, {
-        projectsRoot: PROJECTS_DIR,
-        projectRoot: PROJECT_ROOT,
-        projectId,
-        connectorIds,
-        query,
-        chatAgentId,
-        chatModel,
-      });
-      res.json(result);
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  // Imperative extract — used by CLI chats internally and by BYOK /
-  // API-mode chats from the web app, which never reach the chat-run
-  // path on the daemon. Mirrors the two-phase hook the daemon's chat
-  // route applies inline:
-  //
-  //   - Pre-turn (only `userMessage` supplied): run the synchronous
-  //     heuristic regex pack so explicit "remember: X" / "我是 X"
-  //     markers land in memory before the prompt is composed, and the
-  //     same turn's assistant reply already reflects them.
-  //   - Post-turn (`userMessage` + `assistantMessage` supplied): queue
-  //     the LLM extractor in the background — it speaks SSE /
-  //     extraction-history on its own and may take several seconds, so
-  //     we don't block the HTTP response on it. The heuristic is
-  //     skipped on this branch because the caller already ran it
-  //     pre-turn; running it twice would double the
-  //     `recordHeuristic({...})` rows in the extraction history for
-  //     every turn.
-  //
-  // External callers (curl, replay tools) that pass only
-  // `userMessage` keep the legacy behaviour: heuristic-only.
-  app.post('/api/memory/extract', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const userMessage =
-        typeof body.userMessage === 'string' ? body.userMessage : '';
-      const assistantMessage =
-        typeof body.assistantMessage === 'string' ? body.assistantMessage : '';
-      const hasAssistant = assistantMessage.trim().length > 0;
-      const memoryConfig = await readMemoryConfig(RUNTIME_DATA_DIR);
-      if (memoryConfig.chatExtractionEnabled === false) {
-        return res.json({ changed: [], attemptedLLM: false });
-      }
-      const changed = hasAssistant
-        ? []
-        : await extractFromMessage(RUNTIME_DATA_DIR, userMessage);
-      // BYOK chat config — only forwarded by the web app for API-mode
-      // chats. We strip the surface to the five fields pickProvider()
-      // actually consumes and validate the provider against the four
-      // shapes the extractor speaks; an unknown / missing provider
-      // means "let the legacy chain decide" so a malformed payload
-      // can't override the env / media-config fallbacks.
-      const rawChat = body.chatProvider;
-      let chatProvider = null;
-      if (rawChat && typeof rawChat === 'object') {
-        const provider = rawChat.provider;
-        if (
-          provider === 'anthropic'
-          || provider === 'openai'
-          || provider === 'azure'
-          || provider === 'google'
-          || provider === 'ollama'
-        ) {
-          chatProvider = {
-            provider,
-            apiKey: typeof rawChat.apiKey === 'string' ? rawChat.apiKey : '',
-            baseUrl: typeof rawChat.baseUrl === 'string' ? rawChat.baseUrl : '',
-            apiVersion:
-              typeof rawChat.apiVersion === 'string' ? rawChat.apiVersion : '',
-            model: typeof rawChat.model === 'string' ? rawChat.model : '',
-          };
-        }
-      }
-      let attemptedLLM = false;
-      if (userMessage.trim().length > 0 && hasAssistant) {
-        attemptedLLM = true;
-        void import('./memory-llm.js')
-          .then(({ extractWithLLM }) =>
-            extractWithLLM(
-              RUNTIME_DATA_DIR,
-              { userMessage, assistantMessage },
-              {
-                projectRoot: PROJECT_ROOT,
-                chatAgentId: null,
-                chatProvider,
-              },
-            ),
-          )
-          .catch((err) =>
-            console.warn('[memory-llm] background failed (http extract)', err),
-          );
-      }
-      res.json({ changed, attemptedLLM });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  // Composed memory body for the system prompt. Daemon-side chat runs
-  // call `composeMemoryBody()` directly; the web app (BYOK / API mode)
-  // can't import daemon internals, so this endpoint exposes the same
-  // string the daemon would have folded into the system prompt for a
-  // CLI run. `ProjectView.composedSystemPrompt()` calls it before each
-  // BYOK turn and passes the result into `composeSystemPrompt`'s
-  // `memoryBody` field — without this, the Memory tab is a no-op for
-  // BYOK users even though the UI saves model/index/entries for them.
-  app.get('/api/memory/system-prompt', async (_req, res) => {
-    try {
-      const body = await composeMemoryBody(RUNTIME_DATA_DIR);
-      res.json({ body });
-    } catch (err) {
-      res.status(500).json({ error: String((err && err.message) || err) });
-    }
+  registerMemoryRoutes(app, {
+    http: { createSseResponse, requireLocalDaemonRequest },
+    paths: { RUNTIME_DATA_DIR, PROJECT_ROOT, PROJECTS_DIR },
+    appConfig: { readAppConfig },
   });
 
   app.get('/api/automation-source-packets', async (req, res) => {
@@ -5282,48 +5372,6 @@ export async function startServer({
     }
   });
 
-  app.post('/api/memory', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const entry = await upsertMemoryEntry(RUNTIME_DATA_DIR, body);
-      res.json({ entry });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.get('/api/memory/:id', async (req, res) => {
-    try {
-      const entry = await readMemoryEntry(RUNTIME_DATA_DIR, req.params.id);
-      if (!entry) return res.status(404).json({ error: 'memory not found' });
-      res.json({ entry });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.put('/api/memory/:id', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const entry = await upsertMemoryEntry(RUNTIME_DATA_DIR, {
-        ...body,
-        id: req.params.id,
-      });
-      res.json({ entry });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.delete('/api/memory/:id', async (req, res) => {
-    try {
-      await deleteMemoryEntry(RUNTIME_DATA_DIR, req.params.id);
-      res.json({ ok: true });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
   // Reconcile follow-up — the inline POST /api/projects body that lived
   // on garnet (with baseDir privilege check, linkedDirs validation,
   // template snapshot seeding, plugin snapshot resolution with default
@@ -5346,6 +5394,10 @@ export async function startServer({
     getAppVersion: () => cachedAppVersion?.version ?? '0.0.0',
     readAnalyticsContext,
   };
+
+  // Interactive Terminal sessions (node-pty). In-memory, process-local, and
+  // killed on daemon shutdown — see shutdownDaemonRuns below.
+  const terminalService = createTerminalService();
 
   // PostHog runtime config.
   //
@@ -5602,6 +5654,9 @@ export async function startServer({
   const projectFileDeps = {
     ensureProject,
     listFiles,
+    listProjectFolders,
+    createProjectFolder,
+    deleteProjectFolder,
     searchProjectFiles,
     readProjectFile,
     resolveProjectDir,
@@ -5782,6 +5837,7 @@ export async function startServer({
     projectStore: projectStoreDeps,
     projectFiles: projectFileDeps,
   });
+  registerSocialShareRoutes(app, { http: httpDeps });
   registerProjectRoutes(app, {
     db,
     design,
@@ -5797,6 +5853,14 @@ export async function startServer({
     telemetry: { reportFinalizedMessage },
     appConfig: appConfigDeps,
     validation: validationDeps,
+  });
+  registerTerminalRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    projectFiles: projectFileDeps,
+    terminals: terminalService,
   });
   registerImportRoutes(app, {
     db,
@@ -5984,15 +6048,57 @@ export async function startServer({
     if (!getProject(db, req.params.id)) {
       return res.status(404).json({ error: 'project not found' });
     }
-    const { title } = req.body || {};
+    const { title, seedFromConversationId, forkAfterMessageId } = req.body || {};
     const now = Date.now();
+    const hasExplicitSessionMode = Boolean(
+      req.body && Object.prototype.hasOwnProperty.call(req.body, 'sessionMode'),
+    );
+    const requestedForkMessageId =
+      typeof forkAfterMessageId === 'string' && forkAfterMessageId
+        ? forkAfterMessageId
+        : null;
+    const sourceConversation =
+      typeof seedFromConversationId === 'string' && seedFromConversationId
+        ? getConversation(db, seedFromConversationId)
+        : null;
+    let seedMessages = [];
+    if (sourceConversation && sourceConversation.projectId === req.params.id) {
+      seedMessages = listMessages(db, seedFromConversationId);
+      if (requestedForkMessageId) {
+        const forkIndex = seedMessages.findIndex((message) => message.id === requestedForkMessageId);
+        if (forkIndex < 0) {
+          return res.status(404).json({ error: 'fork message not found' });
+        }
+        seedMessages = seedMessages.slice(0, forkIndex + 1);
+      }
+    } else if (requestedForkMessageId) {
+      return res.status(404).json({ error: 'fork source conversation not found' });
+    }
+    const sessionMode =
+      hasExplicitSessionMode
+        ? normalizeConversationSessionMode(req.body.sessionMode)
+        : sourceConversation && sourceConversation.projectId === req.params.id
+          ? normalizeConversationSessionMode(sourceConversation.sessionMode)
+          : 'design';
     const conv = insertConversation(db, {
       id: randomId(),
       projectId: req.params.id,
       title: typeof title === 'string' ? title.trim() || null : null,
+      sessionMode,
       createdAt: now,
       updatedAt: now,
     });
+    if (conv && seedMessages.length > 0) {
+      for (const m of seedMessages) {
+        upsertMessage(db, conv.id, {
+          ...m,
+          id: randomId(),
+          runId: undefined,
+          runStatus: undefined,
+          lastRunEventId: undefined,
+        });
+      }
+    }
     res.json({ conversation: conv });
   });
 
@@ -6131,15 +6237,21 @@ export async function startServer({
     if (!getProject(db, req.params.id)) {
       return res.status(404).json({ error: 'project not found' });
     }
-    const { tabs = [], active = null } = req.body || {};
+    const { tabs = [], active = null, browserTabs = [] } = req.body || {};
     if (!Array.isArray(tabs) || !tabs.every((t) => typeof t === 'string')) {
       return res.status(400).json({ error: 'tabs must be string[]' });
+    }
+    if (!Array.isArray(browserTabs)) {
+      return res.status(400).json({ error: 'browserTabs must be an array' });
     }
     const result = setTabs(
       db,
       req.params.id,
-      tabs,
-      typeof active === 'string' ? active : null,
+      {
+        tabs,
+        active: typeof active === 'string' ? active : null,
+        browserTabs,
+      },
     );
     res.json(result);
   });
@@ -6287,11 +6399,12 @@ export async function startServer({
     }
   });
 
-  app.post('/api/integrations/vela/login', async (_req, res) => {
+  app.post('/api/integrations/vela/login', async (req, res) => {
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
-      const spawned = await spawnVelaLogin({ configuredEnv });
+      const attribution = parseVelaLoginAttribution(req.body);
+      const spawned = await spawnVelaLogin({ configuredEnv, attribution });
       res.status(202).json(spawned);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -6308,6 +6421,36 @@ export async function startServer({
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
+  });
+
+  app.post('/api/integrations/vela/analytics-entry', async (req, res) => {
+    const payload = parseAmrEntryAnalyticsPayload(req.body);
+    if (!payload) {
+      res.status(400).json({ error: 'invalid_amr_entry_analytics' });
+      return;
+    }
+    // Consent gate. The web fetch wrapper attaches `x-od-analytics-*` headers
+    // only when Privacy → metrics is on (apps/web/src/analytics/provider.tsx),
+    // so a null context means the user is opted out — never forward the click
+    // to the external AMR endpoint. Mirrors the analytics-capture invariant.
+    const analyticsContext = readAnalyticsContext(req);
+    if (!analyticsContext) {
+      res.status(202).json({ mirrored: false });
+      return;
+    }
+    // Defense in depth: re-read telemetry.metrics from app-config so a stale
+    // header leak after opt-out still cannot ship behavior to AMR, matching
+    // createAnalyticsService.capture (apps/daemon/src/analytics.ts).
+    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+    if (appConfig.telemetry?.metrics !== true) {
+      res.status(202).json({ mirrored: false });
+      return;
+    }
+    const result = await mirrorAmrEntryAnalytics(payload, {
+      analyticsContext,
+      env: process.env,
+    });
+    res.status(202).json(result);
   });
 
   app.post('/api/integrations/vela/logout', async (_req, res) => {
@@ -10110,13 +10253,18 @@ export async function startServer({
     async (req, res) => {
       try {
         const incoming = Array.isArray(req.files) ? req.files : [];
+        // Subfolder the upload targeted (sanitized, forward-slash, '' for root),
+        // stashed by the multer destination resolver. Prepend it so the client
+        // gets the file's true project-relative path, not just its basename.
+        const relDir = typeof (req as any)._uploadRelDir === 'string' ? (req as any)._uploadRelDir : '';
         const out = [];
         for (const f of incoming) {
           try {
             const stat = await fs.promises.stat(f.path);
+            const rel = relDir ? `${relDir}/${f.filename}` : f.filename;
             out.push({
-              name: f.filename,
-              path: f.filename,
+              name: rel,
+              path: rel,
               size: stat.size,
               mtime: stat.mtimeMs,
               originalName: f.originalname,
@@ -10153,6 +10301,7 @@ export async function startServer({
     designSystemId,
     streamFormat,
     locale,
+    sessionMode,
     connectedExternalMcp,
     appliedPluginSnapshotId,
     defaultMediaModels,
@@ -10625,6 +10774,7 @@ export async function startServer({
       critiqueBrand: critiqueShouldRun ? critiqueBrand : undefined,
       critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
       locale: typeof locale === 'string' ? locale : undefined,
+      sessionMode: normalizeConversationSessionMode(sessionMode),
       mediaExecution,
       streamFormat,
       connectedExternalMcp: Array.isArray(connectedExternalMcp)
@@ -10764,6 +10914,7 @@ export async function startServer({
       skillId,
       skillIds,
       designSystemId,
+      sessionMode,
       attachments = [],
       commentAttachments = [],
       model,
@@ -10775,6 +10926,10 @@ export async function startServer({
       research,
       context,
     } = chatBody;
+    run.analyticsTelemetry = {
+      ...(run.analyticsTelemetry ?? {}),
+      promptBuildStartAt: Date.now(),
+    };
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
     if (typeof conversationId === 'string' && conversationId)
       run.conversationId = conversationId;
@@ -10794,6 +10949,14 @@ export async function startServer({
     if (typeof skillId === 'string' && skillId) run.skillId = skillId;
     if (typeof designSystemId === 'string' && designSystemId)
       run.designSystemId = designSystemId;
+    const conversationSession =
+      typeof conversationId === 'string' && conversationId
+        ? getConversation(db, conversationId)
+        : null;
+    const runSessionMode =
+      sessionMode === 'chat' || sessionMode === 'design'
+        ? normalizeConversationSessionMode(sessionMode)
+        : normalizeConversationSessionMode(conversationSession?.sessionMode);
     const def = getAgentDef(agentId);
     if (!def)
       return design.runs.fail(
@@ -10821,7 +10984,11 @@ export async function startServer({
     // disk and a marker inside this turn's message is reflected in this
     // turn's prompt. Failures are swallowed — memory is best-effort and
     // must never block the agent run.
-    if (typeof message === 'string' && message.trim().length > 0) {
+    if (
+      (run.retryAttemptCount ?? 0) === 0 &&
+      typeof message === 'string' &&
+      message.trim().length > 0
+    ) {
       try {
         await extractFromMessage(RUNTIME_DATA_DIR, message);
       } catch (err) {
@@ -10837,18 +11004,26 @@ export async function startServer({
     // consistently reject imported-folder metadata that has no managed copy.
     let cwd = null;
     let existingProjectFiles = [];
+    let existingProjectFolders = [];
     if (typeof projectId === 'string' && projectId) {
       try {
         const chatProject = getProject(db, projectId);
         const chatMeta = chatProject?.metadata;
+        // ensureProject/resolveProjectDir now resolve external baseDir folders
+        // internally (and assertSandboxProjectRootAvailable rejects imported
+        // folders with no managed copy in sandbox mode), so we pass chatMeta
+        // through instead of branching on baseDir here.
         assertSandboxProjectRootAvailable(chatMeta);
         cwd = await ensureProject(PROJECTS_DIR, projectId, chatMeta);
         existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
+        existingProjectFolders = await listProjectFolders(PROJECTS_DIR, projectId, { metadata: chatMeta });
       } catch (err) {
         if (err instanceof SandboxImportedProjectError) {
           return design.runs.fail(run, 'BAD_REQUEST', err.message);
         }
         cwd = null;
+        existingProjectFiles = [];
+        existingProjectFolders = [];
       }
     }
     if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
@@ -10891,13 +11066,6 @@ export async function startServer({
     // systemPrompt. We also stitch in the cwd hint so the agent knows
     // where its file tools should write, and the attachment list so it
     // doesn't have to guess what the user just dropped in.
-    // Also ship the current file listing so the agent can pick a unique
-    // filename instead of clobbering a previous artifact.
-    const filesListBlock = existingProjectFiles.length
-      ? `\nFiles already in this folder (do NOT overwrite unless the user asks; pick a fresh, descriptive name for new artifacts):\n${existingProjectFiles
-          .map((f) => `- ${f.name}`)
-          .join('\n')}`
-      : '\nThis folder is empty. Choose a clear, descriptive filename for whatever you create.';
     const projectRecord =
       typeof projectId === 'string' && projectId
         ? getProject(db, projectId)
@@ -10909,16 +11077,14 @@ export async function startServer({
       return v.dirs ?? [];
     })();
     const cwdHint = cwd
-      ? `\n\nYour working directory: ${cwd}\nWrite project files relative to it (e.g. \`index.html\`, \`assets/x.png\`). The user can browse those files in real time.${filesListBlock}`
+      ? formatDesignFilesWorkspaceHint(cwd, existingProjectFiles, existingProjectFolders)
       : '';
     const linkedDirsHint = linkedDirs.length > 0
       ? `\n\nLinked code folders (read-only reference code the user wants you to see):\n${
           linkedDirs.map((d) => `- \`${d}\``).join('\n')
         }`
       : '';
-    const attachmentHint = safeAttachments.length
-      ? `\n\nAttached project files: ${safeAttachments.map((p) => `\`${p}\``).join(', ')}`
-      : '';
+    const attachmentHint = formatProjectAttachmentHint(safeAttachments);
     // Plan §3.A3 / spec §9: thread plugin context onto every tool token
     // so the connector execute route can re-validate the §5.3
     // capability gate without re-reading the SQLite snapshot row.
@@ -11043,6 +11209,7 @@ export async function startServer({
         designSystemId,
         streamFormat: def?.streamFormat ?? 'plain',
         locale,
+        sessionMode: runSessionMode,
         connectedExternalMcp,
         mediaExecution: run?.mediaExecution,
         // Plan §3.M2 / §3.V1 — forward the run's snapshot id so the
@@ -11139,18 +11306,56 @@ export async function startServer({
       research,
       message,
     );
+    // Resume-capable adapters (today: Claude) continue their own CLI
+    // session so they keep working memory across turns. Decide once per
+    // run; reuse for the prompt-composition skipTranscript choice, the
+    // buildArgs flags, and the create-turn persistence below.
+    const agentResumeCtx =
+      def.resumesSessionViaCli === true && run.conversationId
+        ? resolveAgentResumeContext(db, {
+            conversationId: run.conversationId,
+            agentId: def.id,
+          })
+        : { resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null };
     const userRequestPrompt = composeChatUserRequestForAgent(
       message,
       currentPrompt,
-      { skipTranscript: def.resumesSessionViaCli === true },
+      // Only trim to the latest turn when we are actually resuming an
+      // existing session. A create turn still sends the full transcript so
+      // a brand-new session (incl. first Claude turn after another agent)
+      // is seeded with prior context.
+      { skipTranscript: def.resumesSessionViaCli === true && agentResumeCtx.isResuming },
     );
-    const clientInstructionPrompt = [researchCommandContract, runContextPrompt, systemPrompt]
+    // The stable instruction slice (daemon prompt + tool contract + system
+    // prompt = design system / skills / memory) is identical across turns of
+    // a conversation in the common case. A resumed Claude session already
+    // holds it, so on resume turns we skip it unless it changed since the
+    // session was seeded — keyed by a hash stored on agent_sessions. Create
+    // turns and changed-hash turns send the full block (byte-identical to the
+    // previous behavior); non-Claude agents have isResuming === false and so
+    // always send the full block.
+    const stableInstructionFingerprint = [daemonSystemPrompt, runtimeToolPrompt, systemPrompt]
+      .map((part) => (typeof part === 'string' ? part.trim() : ''))
+      .join('\n\n---\n\n');
+    const currentStableHash = hashStableInstructions(stableInstructionFingerprint);
+    // `runtimeToolPrompt` is part of the fingerprint and varies only when the
+    // tool-token grant's presence flips between turns (rare cwd/projectId edge
+    // cases); any such change correctly forces a full re-send that turn.
+    const includeStableInstructions = computeIncludeStable(
+      agentResumeCtx.isResuming,
+      agentResumeCtx.storedStablePromptHash,
+      currentStableHash,
+    );
+    const clientInstructionParts = includeStableInstructions
+      ? [researchCommandContract, runContextPrompt, systemPrompt]
+      : [researchCommandContract, runContextPrompt];
+    const clientInstructionPrompt = clientInstructionParts
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
       .join('\n\n---\n\n');
     const instructionPrompt = composeLiveInstructionPrompt({
-      daemonSystemPrompt,
-      runtimeToolPrompt,
+      daemonSystemPrompt: includeStableInstructions ? daemonSystemPrompt : '',
+      runtimeToolPrompt: includeStableInstructions ? runtimeToolPrompt : '',
       clientSystemPrompt: clientInstructionPrompt,
       finalPromptOverride: codexImagegenOverride,
     });
@@ -11241,6 +11446,10 @@ export async function startServer({
         },
       ],
     });
+    run.analyticsTelemetry = {
+      ...(run.analyticsTelemetry ?? {}),
+      promptBuildEndAt: Date.now(),
+    };
     // Per-agent model + reasoning the user picked in the model menu.
     // Trust the value when it matches the most recent /api/agents listing
     // (live or fallback). Otherwise allow it through if it passes a
@@ -11262,6 +11471,150 @@ export async function startServer({
     const send = (event, data) => {
       persistRunEventToAssistantMessage(db, run, event, data);
       design.runs.emit(run, event, data);
+    };
+    const retryAnalyticsBase = (decision, failure, errorCode) => {
+      const runProjectKind = resolveRunProjectKindForAnalytics({
+        hintProjectKind: null,
+        projectMetadata: projectRecord?.metadata,
+      });
+      const isDesignSystemRun =
+        runProjectKind === 'design_system' ||
+        (typeof designSystemId === 'string' && designSystemId.length > 0);
+      return {
+        page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
+        area: isDesignSystemRun ? 'design_system_generation' : 'chat_panel',
+        project_id: typeof projectId === 'string' ? projectId : run.projectId,
+        conversation_id:
+          typeof conversationId === 'string' ? conversationId : run.conversationId ?? null,
+        run_id: run.id,
+        retry_of_run_id: run.id,
+        retry_attempt_index: decision.retryAttemptIndex,
+        retry_max_attempts: decision.retryMaxAttempts,
+        retry_strategy: decision.retryStrategy,
+        agent_provider_id: agentIdToTracking(agentId),
+        model_id: modelIdForTracking(safeModel ?? model),
+        ...(failure?.failure_category ? { failure_category: failure.failure_category } : {}),
+        ...(failure?.failure_detail ? { failure_detail: failure.failure_detail } : {}),
+        ...(failure?.failure_stage ? { failure_stage: failure.failure_stage } : {}),
+        ...(errorCode ? { error_code: errorCode } : {}),
+      };
+    };
+    const restartSameRunAfterRetry = () => {
+      run.status = 'queued';
+      run.updatedAt = Date.now();
+      run.child = null;
+      run.acpSession = null;
+      run.exitCode = null;
+      run.signal = null;
+      run.error = null;
+      run.errorCode = null;
+      run.stdinOpen = false;
+      run.pendingHostAnswers?.clear?.();
+      run.analyticsTelemetry = {
+        startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
+      };
+      void startChatRun(chatBody, run).catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        design.runs.emit(
+          run,
+          'error',
+          createSseErrorPayload('AGENT_EXECUTION_FAILED', message),
+        );
+        // Route the retried-start failure through the same finalizer as child
+        // close/error so it emits terminal retry telemetry (run_retry_finished
+        // with retry_result: 'failed') and sets run.retryFinalResult, instead
+        // of finishing directly and leaving run_finished to report the fallback
+        // retry_final_result: 'not_attempted'. retryAttemptCount is already 1
+        // here, so decideSafeRunRetry suppresses with attempt_limit_reached and
+        // cannot trigger another restart loop.
+        finishWithRetryDecision('failed', 1, null);
+      });
+    };
+    const finalizeRetryTelemetry = (status, decision, failure, errorCode) => {
+      const attemptCount = run.retryAttemptCount ?? 0;
+      const result = runResultFromStatus(status);
+      if (attemptCount <= 0 && result !== 'failed') {
+        run.retryFinalResult = 'not_attempted';
+        run.retrySuppressedReason = undefined;
+        return;
+      }
+      const retryResult =
+        attemptCount > 0
+          ? result === 'success'
+            ? 'success'
+            : result === 'failed'
+              ? 'failed'
+              : 'suppressed'
+          : 'suppressed';
+      const retrySuppressedReason =
+        retryResult === 'suppressed'
+          ? run.cancelRequested
+            ? 'cancel_requested'
+            : decision?.retrySuppressedReason
+          : undefined;
+      const eventDecision =
+        attemptCount > 0
+          ? { ...decision, retryAttemptIndex: attemptCount }
+          : decision;
+      run.retryFinalResult = retryResult;
+      run.retrySuppressedReason = retrySuppressedReason;
+      design.runs.emit(run, 'run_retry_finished', {
+        ...retryAnalyticsBase(eventDecision, failure, errorCode),
+        retry_result: retryResult,
+        ...(retrySuppressedReason
+          ? { retry_suppressed_reason: retrySuppressedReason }
+          : {}),
+      });
+    };
+    const finishWithRetryDecision = (status, code = null, signal = null) => {
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        finalizeStartAt: run.analyticsTelemetry?.finalizeStartAt ?? Date.now(),
+      };
+      const result = runResultFromStatus(status);
+      const errorCode = deriveRunErrorCode({
+        status,
+        error: run.error,
+        errorCode: run.errorCode,
+        exitCode: code,
+        signal,
+      });
+      const failure = classifyRunFailure({
+        result,
+        status: {
+          status,
+          error: run.error,
+          errorCode: run.errorCode,
+          exitCode: code,
+          signal,
+        },
+        ...(errorCode ? { errorCode } : {}),
+        agentId: run.agentId,
+        events: run.events,
+      });
+      const decision = decideSafeRunRetry({
+        result,
+        failure,
+        attemptCount: run.retryAttemptCount ?? 0,
+        sideEffects: {
+          ...scanRunEventsForRetrySideEffects(run.events),
+          cancelRequested: !!run.cancelRequested,
+        },
+      });
+      if (decision.shouldRetry && !design.runs.isTerminal(run.status)) {
+        run.retryAttemptCount = decision.retryAttemptIndex;
+        run.retryFinalResult = undefined;
+        run.retrySuppressedReason = undefined;
+        design.runs.emit(run, 'run_retry_attempted', {
+          ...retryAnalyticsBase(decision, failure, errorCode),
+          retry_reason: decision.retryReason,
+        });
+        restartSameRunAfterRetry();
+        return true;
+      }
+      finalizeRetryTelemetry(status, decision, failure, errorCode);
+      design.runs.finish(run, status, code, signal);
+      return false;
     };
     const mcpServers = buildLiveArtifactsMcpServersForAgent(def, {
       enabled: Boolean(toolTokenGrant?.token),
@@ -11590,9 +11943,14 @@ export async function startServer({
       safeImages,
       extraAllowedDirs,
       agentOptions,
-      { cwd: effectiveCwd, hasPriorAssistantTurn, agentLogFilePath },
+      {
+        cwd: effectiveCwd,
+        hasPriorAssistantTurn,
+        agentLogFilePath,
+        resumeSessionId: agentResumeCtx.resumeSessionId,
+        newSessionId: agentResumeCtx.newSessionId,
+      },
     );
-
     // Second-pass budget check that knows about the Windows `.cmd` shim
     // wrap. The pre-buildArgs `checkPromptArgvBudget` only looks at the
     // raw composed prompt; on Windows an npm-installed adapter resolves
@@ -11648,6 +12006,27 @@ export async function startServer({
       return design.runs.finish(run, 'failed', 1, null);
     }
 
+    let persistDeliveredAgentSessionState = () => {};
+    if (def.resumesSessionViaCli === true && run.conversationId) {
+      let persisted = false;
+      persistDeliveredAgentSessionState = () => {
+        if (persisted) return;
+        persisted = true;
+        if (!agentResumeCtx.isResuming && agentResumeCtx.newSessionId) {
+          upsertAgentSession(db, {
+            conversationId: run.conversationId,
+            agentId: def.id,
+            sessionId: agentResumeCtx.newSessionId,
+            stablePromptHash: currentStableHash,
+          });
+          return;
+        }
+        if (agentResumeCtx.isResuming && includeStableInstructions) {
+          updateAgentSessionStableHash(db, run.conversationId, def.id, currentStableHash);
+        }
+      };
+    }
+
     // `runStartTimeMs` is consumed by the run-end artifact-manifest
     // reconciler (#2893 / #3110) to skip artifacts whose mtime predates
     // this run. The original main-side hunk also re-declared `const send`
@@ -11675,6 +12054,14 @@ export async function startServer({
     // they just terminated the process. Set strictly inside
     // `failForInactivity`'s quiet-period branch.
     let artifactQuietShutdownRequested = false;
+    // Set when the no-output inactivity watchdog routed this attempt through
+    // the same-run retry finalizer AND that finalizer restarted the run on a
+    // fresh child. The stalled child is then SIGTERM'd, so its later `close`
+    // must NOT finalize the run a second time or unregister the new attempt's
+    // event sink / run handle (both keyed by the shared runId). The close
+    // handler bails early when this is true, revoking only this attempt's own
+    // tool token.
+    let watchdogRetryRestarted = false;
     const summarizeAgentEventForInactivity = (payload) => {
       const type = payload?.type ? String(payload.type) : 'unknown';
       if (type === 'tool_result') {
@@ -11766,7 +12153,17 @@ export async function startServer({
         stallPayload = createSseErrorPayload('AGENT_EXECUTION_FAILED', message, { retryable: true });
       }
       send('error', stallPayload);
-      design.runs.finish(run, 'failed', 1, null);
+      // A silent first-token hang is one of the safe transient failure shapes
+      // this run is allowed to recover: classifyRunFailure maps the stall text
+      // to a retryable `timeout` at `first_token_wait`, and decideSafeRunRetry
+      // permits the same-run retry when no output/tools/artifacts were seen.
+      // Route through the shared finalizer (after surfacing stallPayload) so
+      // the watchdog path gets the same run_retry_attempted/run_retry_finished
+      // telemetry as child close/error — not a bare terminal failure.
+      const retried = finishWithRetryDecision('failed', 1, null);
+      if (retried) {
+        watchdogRetryRestarted = true;
+      }
       if (acpSession?.abort) {
         acpSession.abort();
       }
@@ -12464,40 +12861,7 @@ export async function startServer({
         //     means the model paused mid-tool, not "turn complete".
         //   - usage (session result at EOF in single-shot mode).
         try {
-          if (run.stdinOpen) {
-            if (
-              ev &&
-              typeof ev === 'object' &&
-              ev.type === 'tool_use' &&
-              (ev.name === 'AskUserQuestion' || ev.name === 'ask_user_question') &&
-              typeof ev.id === 'string'
-            ) {
-              if (!run.pendingHostAnswers) run.pendingHostAnswers = new Set();
-              run.pendingHostAnswers.add(ev.id);
-            } else if (
-              ev &&
-              typeof ev === 'object' &&
-              ((ev.type === 'turn_end' &&
-                // `stop_reason: tool_use` means the model paused to wait
-                // for tool execution (claude-code is about to run an
-                // internal tool, or we owe a host tool_result). Either
-                // way the conversation is still in flight — do not close.
-                ev.stopReason !== 'tool_use') ||
-                ev.type === 'usage') &&
-              (!run.pendingHostAnswers || run.pendingHostAnswers.size === 0)
-            ) {
-              // Per-turn `turn_end` (synthesized from
-              // `assistant.message.stop_reason` in `claude-stream`) is the
-              // primary close signal; `usage` is the session-level result
-              // that fires at EOF in single-shot mode. Either is a valid
-              // "this turn is done" cue, but only when there's no host
-              // answer outstanding AND the model isn't paused mid-tool.
-              if (run.child && run.child.stdin && !run.child.stdin.destroyed) {
-                try { run.child.stdin.end(); } catch {}
-              }
-              run.stdinOpen = false;
-            }
-          }
+          applyClaudeStreamJsonRunBookkeeping(run, ev);
         } catch {}
       });
       child.stdout.on('data', (chunk) => claude.feed(chunk));
@@ -12659,18 +13023,29 @@ export async function startServer({
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
-      design.runs.finish(run, 'failed', 1, null);
+      finishWithRetryDecision('failed', 1, null);
     });
     child.on('close', async (code, signal) => {
       try {
       clearInactivityWatchdog();
+      if (watchdogRetryRestarted) {
+        // The inactivity watchdog already failed this attempt and the same-run
+        // retry restarted on a fresh child. Finalization and event-sink / run-
+        // handle ownership (keyed by the shared runId) now belong to the new
+        // attempt, so this stalled child's close must not re-run them — doing
+        // so would re-finalize the run and delete the new attempt's sink.
+        // Revoke only THIS attempt's tool token (idempotent, keyed by its own
+        // token string) and bail; the `finally` block still cleans up logs.
+        revokeToolToken('child_exit');
+        return;
+      }
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       if (acpSession?.hasFatalError()) {
-        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+        return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
       }
       if (agentStreamError) {
-        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+        return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
       }
       if (
         code !== 0 &&
@@ -12682,7 +13057,7 @@ export async function startServer({
           );
           if (amrFailure) {
             sendAmrAccountFailure(amrFailure);
-            return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+            return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
           }
         }
         const authFailure = classifyAgentAuthFailure(
@@ -12695,8 +13070,28 @@ export async function startServer({
             authFailure.message ?? cursorAuthGuidance(),
             { retryable: true },
           ));
-          return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+          return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
         }
+      }
+      if (
+        code !== 0 &&
+        !run.cancelRequested &&
+        def.resumesSessionViaCli === true &&
+        agentResumeCtx.isResuming &&
+        run.conversationId &&
+        isClaudeResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
+      ) {
+        // The stored session id no longer resolves (pruned / machine moved
+        // / ~/.claude cleared). Drop it so the next turn starts a fresh
+        // session seeded with the full transcript, and surface a retryable
+        // error rather than a confusing hard failure.
+        clearAgentSession(db, run.conversationId, def.id);
+        send('error', createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          'The previous Claude session could not be resumed (it may have expired). Resend your message to continue with a fresh session.',
+          { retryable: true },
+        ));
+        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
       // Empty-output guard: a clean `code === 0` exit with no visible
       // output means the run silently finished without producing anything.
@@ -12712,7 +13107,7 @@ export async function startServer({
           'Agent completed without producing any output. The model or provider may have returned an empty response — check the agent logs for upstream errors.',
           { retryable: true },
         ));
-        return design.runs.finish(run, 'failed', code, signal);
+        return finishWithRetryDecision('failed', code, signal);
       }
       if (
         code === 0 &&
@@ -12725,7 +13120,7 @@ export async function startServer({
           'Plugin authoring ended before generating the required generated-plugin artifacts.',
           { retryable: true },
         ));
-        return design.runs.finish(run, 'failed', code, signal);
+        return finishWithRetryDecision('failed', code, signal);
       }
       // Plain-stream auth-failure guard: plain adapters (today
       // antigravity, deepseek's TUI variants) may exit cleanly with
@@ -12753,7 +13148,7 @@ export async function startServer({
             authFailure.message ?? `${def.name} authentication required. Please re-authenticate and retry.`,
             { retryable: true },
           ));
-          return design.runs.finish(run, 'failed', 0, signal);
+          return finishWithRetryDecision('failed', 0, signal);
         }
       }
       // Plain-stream empty-output guard: plain agents send raw stdout
@@ -12815,7 +13210,7 @@ export async function startServer({
           msg,
           { retryable: true },
         ));
-        return design.runs.finish(run, 'failed', 0, signal);
+        return finishWithRetryDecision('failed', 0, signal);
       }
       // ACP agents that don't shut down on stdin.end() (e.g. Devin for
       // Terminal) are forced to exit via SIGTERM from attachAcpSession after
@@ -12839,6 +13234,7 @@ export async function startServer({
         signal,
         acpCleanCompletion,
         artifactQuietShutdownRequested,
+        turnCompletedCleanly: !!run.turnCompletedCleanly,
       });
       // Skip the close-handler failure emit when the run is already
       // terminal: the inactivity watchdog (failForInactivity) finishes the
@@ -12956,7 +13352,10 @@ export async function startServer({
       for (const chunk of plaintextStdoutBuffer) {
         send('stdout', { chunk });
       }
-      design.runs.finish(run, status, code, signal);
+      if (status === 'succeeded') {
+        persistDeliveredAgentSessionState();
+      }
+      finishWithRetryDecision(status, code, signal);
       } finally {
         // Best-effort cleanup of the per-run agy log file on every close
         // path — successful, failed, cancelled, or non-zero exit — so
@@ -12970,6 +13369,10 @@ export async function startServer({
     });
     if (writePromptToChildStdin && child.stdin) {
       const promptInputFormat = def.promptInputFormat ?? 'text';
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        modelCallStartAt: Date.now(),
+      };
       if (promptInputFormat === 'stream-json') {
         // Wrap the prompt as an Anthropic user message and write it as one
         // JSONL line. Do NOT close stdin: claude-code keeps reading further
@@ -13692,6 +14095,15 @@ export async function startServer({
         const finishedModelId = hasExplicitRequestedModelForAnalytics(reqBody.model)
           ? modelIdForTracking(reqBody.model)
           : modelIdForTracking(usageAnalytics.agent_reported_model);
+        for (const [index, retryEvent] of runRetryEventsForAnalytics(run.events).entries()) {
+          design.analytics.capture({
+            eventName: retryEvent.event,
+            context: analyticsContext,
+            appVersion: design.getAppVersion(),
+            properties: retryEvent.data,
+            insertId: `${runInsertId}-${retryEvent.event}-${index}`,
+          });
+        }
         design.analytics.capture({
           eventName: 'run_finished',
           context: analyticsContext,
@@ -13720,6 +14132,11 @@ export async function startServer({
             // artifact" funnel instead of counting them as failures. See
             // `run-artifacts.ts`; tested in `tests/run-artifacts.test.ts`.
             asked_user_question: runAskedUserQuestion(run.events),
+            retry_attempt_count: run.retryAttemptCount ?? 0,
+            retry_final_result: run.retryFinalResult ?? 'not_attempted',
+            ...(run.retrySuppressedReason
+              ? { retry_suppressed_reason: run.retrySuppressedReason }
+              : {}),
             ...(isDesignSystemRun ? {
               // DS runs land a `DESIGN.md` write when generation
               // succeeded; the run-artifacts inspector reuses the
@@ -14347,6 +14764,7 @@ export async function startServer({
       daemonShutdownStarted = true;
       daemonShuttingDown = true;
       await design.runs.shutdownActive({ graceMs: resolveChatRunShutdownGraceMs() });
+      await terminalService.shutdownActive();
       await design.analytics.shutdown();
     };
     let server;

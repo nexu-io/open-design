@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane } from '../../src/components/ChatPane';
+import { trackRunFailedToastSurfaceView } from '../../src/analytics/events';
 import type { ChatMessage, Conversation } from '../../src/types';
 
 vi.mock('../../src/i18n', () => ({
@@ -26,8 +27,18 @@ vi.mock('../../src/components/ChatComposer', () => ({
   ChatComposer: forwardRef((_props, _ref) => <div data-testid="composer" />),
 }));
 
+vi.mock('../../src/analytics/events', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/analytics/events')>();
+  return {
+    ...actual,
+    trackChatPanelClick: vi.fn(),
+    trackRunFailedToastSurfaceView: vi.fn(),
+  };
+});
+
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
 });
 
 // Session rename was removed by design — chats are not renamed. These tests
@@ -90,6 +101,47 @@ describe('ChatPane session switcher', () => {
     expect(screen.queryByTestId('chat-active-conversation-rename-input')).toBeNull();
     expect(screen.queryByDisplayValue('Contract review draft')).toBeNull();
   });
+
+  it('tracks run_failed_toast exposure for AMR balance guidance', async () => {
+    render(
+      <ChatPane
+        messages={[
+          failedAssistantMessage({
+            id: 'msg-amr-balance',
+            runId: 'run-amr-balance',
+            code: 'AMR_INSUFFICIENT_BALANCE',
+            agentId: 'amr',
+          }),
+        ]}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectKindForTracking="prototype"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        onRetry={vi.fn()}
+        conversations={[conversation({ id: 'conv-1', title: 'Current' })]}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(trackRunFailedToastSurfaceView).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(trackRunFailedToastSurfaceView).mock.calls[0]![1]).toMatchObject({
+      page_name: 'chat_panel',
+      area: 'chat_panel',
+      element: 'run_failed_toast',
+      error_code: 'AMR_INSUFFICIENT_BALANCE',
+      project_id: 'project-1',
+      project_kind: 'prototype',
+      conversation_id: 'conv-1',
+      assistant_message_id: 'msg-amr-balance',
+      run_id: 'run-amr-balance',
+    });
+  });
 });
 
 function renderChatPane(props: {
@@ -134,5 +186,35 @@ function conversation(overrides: Partial<Conversation> & { id: string }): Conver
     createdAt: 1,
     updatedAt: 1,
     ...overrides,
+  };
+}
+
+function failedAssistantMessage({
+  id,
+  runId,
+  code,
+  agentId,
+}: {
+  id: string;
+  runId: string;
+  code: string;
+  agentId: string;
+}): ChatMessage {
+  return {
+    id,
+    role: 'assistant',
+    content: '',
+    createdAt: 1,
+    runId,
+    runStatus: 'failed',
+    agentId,
+    events: [
+      {
+        kind: 'status',
+        label: 'error',
+        detail: 'AMR balance empty',
+        code,
+      },
+    ],
   };
 }

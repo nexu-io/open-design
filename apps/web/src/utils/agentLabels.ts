@@ -51,6 +51,28 @@ export function agentDisplayName(
   return null;
 }
 
+// Canonical icon id for `AgentIcon` (maps to `apps/web/public/agent-icons/`).
+// Returns the agent id whose brand asset should render; falls back to a
+// normalized basename so `AgentIcon`'s letter fallback still reads sensibly.
+export function agentIconId(
+  agentId?: string | null,
+  fallbackName?: string | null,
+): string {
+  for (const raw of [agentId, fallbackName]) {
+    if (!raw) continue;
+    const base = raw.split(' · ')[0]?.trim() || raw;
+    const key = normalizeKey(base);
+    const alias = AGENT_ALIASES[key] ?? key;
+    if (AGENT_LABELS[alias]) return alias;
+    if (alias.includes('cursor-agent')) return 'cursor-agent';
+    for (const id of Object.keys(AGENT_LABELS)) {
+      if (alias.includes(id)) return id;
+    }
+  }
+  const fallback = normalizeKey(agentId ?? fallbackName ?? '');
+  return fallback || 'claude';
+}
+
 export function exactAgentDisplayName(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const key = normalizeKey(raw);

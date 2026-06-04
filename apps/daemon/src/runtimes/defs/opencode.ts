@@ -27,6 +27,12 @@ export const opencodeAgentDef = {
       { id: 'openai/gpt-5', label: 'openai/gpt-5' },
       { id: 'google/gemini-2.5-pro', label: 'google/gemini-2.5-pro' },
     ],
+    // OpenCode's CLI help currently exposes model selection and session
+    // controls, but not an explicit per-run reasoning / effort flag. Keep
+    // `reasoningOptions` undefined and do not synthesize argv for
+    // `options.reasoning`; that would advertise a control the adapter cannot
+    // actually pass through. See issue #2828.
+    //
     // Prompt delivered via stdin (`opencode run` with no message argv) to
     // avoid Windows `spawn ENAMETOOLONG` while preserving OpenCode's
     // structured stream. A literal `-` is parsed as a positional message by

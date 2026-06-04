@@ -1,4 +1,7 @@
 import type { ExecFileOptions } from 'node:child_process';
+import type { AgentDiagnostic } from '@open-design/contracts';
+
+export type { AgentDiagnostic } from '@open-design/contracts';
 
 export type RuntimeEnv = NodeJS.ProcessEnv | Record<string, string>;
 
@@ -40,6 +43,15 @@ export type RuntimeContext = {
   // ~/.gemini/antigravity-cli/settings.json). Tests pass a temp path
   // so unit assertions against buildArgs do not touch the real home dir.
   antigravitySettingsPath?: string;
+  // Resume-capable adapters (resumesSessionViaCli) read these to decide
+  // whether to continue the CLI's own session. `resumeSessionId` is the
+  // stored id for this (conversation, agent) when a prior session exists;
+  // the adapter passes it to the CLI's resume flag and the daemon sends
+  // only the latest user turn. When it is null/absent the adapter starts
+  // a new session using `newSessionId` (a freshly minted UUID the daemon
+  // also persists) and the daemon seeds it with the full transcript.
+  resumeSessionId?: string | null;
+  newSessionId?: string;
 };
 
 // Marker on a RuntimeAgentDef declaring that the adapter's CLI maintains
@@ -162,6 +174,18 @@ export type RuntimeAgentDef = {
   // present in the daemon's `process.env`; Settings-UI per-agent env
   // values only reach the spawned child and are NOT consulted here.
   defaultModelEnvVar?: string;
+  // Declarative authentication probe. When set, detection spawns
+  // `<bin> <args>` after the version check and classifies the combined
+  // stdout/stderr to derive `authStatus`. This replaces the previous
+  // hardcoded "only cursor-agent gets an auth probe" gate: an adapter
+  // opts in by declaring a cheap, side-effect-free status/whoami command
+  // (e.g. cursor-agent `status`). Adapters WITHOUT this field are never
+  // actively probed for auth — their auth status is only inferred later
+  // from a real chat failure's error text (see classifyAgentServiceFailure).
+  authProbe?: {
+    args: string[];
+    timeoutMs?: number;
+  };
 };
 
 export type DetectedAgent = Omit<
@@ -176,6 +200,7 @@ export type DetectedAgent = Omit<
   | 'versionProbeTimeoutMs'
   | 'maxPromptArgBytes'
   | 'env'
+  | 'authProbe'
 > & {
   models: RuntimeModelOption[];
   modelsSource: RuntimeModelSource;
@@ -184,6 +209,7 @@ export type DetectedAgent = Omit<
   authMessage?: string;
   path?: string;
   version?: string | null;
+  diagnostics?: AgentDiagnostic[];
 };
 
 export type RuntimeExecOptions = ExecFileOptions & {

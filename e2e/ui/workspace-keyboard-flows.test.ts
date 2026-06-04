@@ -181,7 +181,12 @@ test('[P0] project chat Enter sends while Shift+Enter inserts a newline', async 
   await input.fill('first line');
   await input.press('Shift+Enter');
   await input.pressSequentially('second line');
-  await expect(input).toHaveValue('first line\nsecond line');
+  // Lexical renders the soft break as separate block nodes, so the editor's
+  // textContent collapses the newline; assert both lines are present rather
+  // than an exact "\n"-joined value. The newline reaching the sent message is
+  // verified by the `.msg.user` assertions below.
+  await expect(input).toContainText('first line');
+  await expect(input).toContainText('second line');
   expect(runCount).toBe(0);
 
   await Promise.all([
@@ -190,7 +195,7 @@ test('[P0] project chat Enter sends while Shift+Enter inserts a newline', async 
   ]);
 
   expect(runCount).toBe(1);
-  await expect(input).toHaveValue('');
+  await expect(input).toHaveText('');
   await expect(page.locator('.msg.user', { hasText: 'first line' })).toHaveCount(1);
   await expect(page.locator('.msg.user', { hasText: 'second line' })).toHaveCount(1);
   await expect(page.getByRole('tab', { name: /keyboard-artifact\.html/i })).toHaveAttribute(
@@ -476,7 +481,7 @@ async function sendPrompt(page: Page, prompt: string) {
   const sendButton = page.getByTestId('chat-send');
   await input.click();
   await input.fill(prompt);
-  await expect(input).toHaveValue(prompt, { timeout: 1500 });
+  await expect(input).toHaveText(prompt, { timeout: 1500 });
   await expect(sendButton).toBeEnabled({ timeout: 1500 });
   const chatResponse = page.waitForResponse(isCreateRunResponse, { timeout: 2000 });
   await sendButton.evaluate((button: HTMLButtonElement) => button.click());

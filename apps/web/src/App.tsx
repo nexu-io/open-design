@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
+import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { useAnalytics } from './analytics/provider';
 import {
   trackFileUploadResult,
@@ -12,17 +13,19 @@ import {
   projectKindToTracking,
   fidelityToTracking,
 } from '@open-design/contracts/analytics';
-import type { AmrModelsResponse } from '@open-design/contracts';
+import type { AmrModelsResponse, ChatSessionMode } from '@open-design/contracts';
 import { EntryView } from './components/EntryView';
 import type { IntegrationTab } from './components/IntegrationsView';
 import { MarketplaceView } from './components/MarketplaceView';
 import { PluginDetailView } from './components/PluginDetailView';
 import type { CreateInput, ImportClaudeDesignOutcome } from './components/NewProjectPanel';
 import { MemoryToast } from './components/MemoryToast';
+import { Toast } from './components/Toast';
 import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
 import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
+import { TooltipLayer } from './components/TooltipLayer';
 import { openWorkspaceTab, WorkspaceTabsBar } from './components/WorkspaceTabsBar';
 import {
   DesignSystemCreationFlow,
@@ -43,12 +46,13 @@ import { PrivacyConsentModal } from './components/PrivacyConsentModal';
 import {
   daemonIsLive,
   fetchAppVersionInfo,
-  fetchAgents,
+  fetchAgentsStream,
   fetchDesignSystems,
   fetchDesignTemplates,
   fetchPromptTemplates,
   fetchSkills,
   uploadProjectFiles,
+  replaceProjectWorkingDir,
 } from './providers/registry';
 import {
   RUNS_CHANGED_EVENT,
@@ -86,6 +90,7 @@ import {
   deleteTemplate,
   patchProject,
 } from './state/projects';
+import { useModalWindowDragGuard } from './hooks/useModalWindowDragGuard';
 import type {
   PluginShareAction,
   PluginShareProjectOutcome,
@@ -212,11 +217,81 @@ function mergeAmrModelsIntoAgents(
   });
 }
 
-export function App() {
+const CANONICAL_AGENT_ORDER = [
+  'amr',
+  'claude',
+  'codex',
+  'devin',
+  'gemini',
+  'opencode',
+  'hermes',
+  'trae-cli',
+  'grok-build',
+  'kimi',
+  'cursor-agent',
+  'qwen',
+  'qoder',
+  'copilot',
+  'pi',
+  'kiro',
+  'kilo',
+  'vibe',
+  'deepseek',
+  'aider',
+  'antigravity',
+  'reasonix',
+] as const;
+
+const CANONICAL_AGENT_ORDER_INDEX = new Map<string, number>(
+  CANONICAL_AGENT_ORDER.map((id, index) => [id, index]),
+);
+
+function orderAgentsByRegistry(agents: AgentInfo[]): AgentInfo[] {
+  return agents
+    .map((agent, index) => ({ agent, index }))
+    .sort((left, right) => {
+      const leftRank =
+        CANONICAL_AGENT_ORDER_INDEX.get(left.agent.id) ??
+        CANONICAL_AGENT_ORDER.length;
+      const rightRank =
+        CANONICAL_AGENT_ORDER_INDEX.get(right.agent.id) ??
+        CANONICAL_AGENT_ORDER.length;
+      if (leftRank !== rightRank) return leftRank - rightRank;
+      return left.index - right.index;
+    })
+    .map(({ agent }) => agent);
+}
+
+function upsertAgent(agents: AgentInfo[], agent: AgentInfo): AgentInfo[] {
+  const index = agents.findIndex((item) => item.id === agent.id);
+  if (index === -1) return [...agents, agent];
+  const next = agents.slice();
+  next[index] = agent;
+  return next;
+}
+
+function isAbortError(err: unknown): boolean {
   return (
-    <IframeKeepAliveProvider>
-      <AppInner />
-    </IframeKeepAliveProvider>
+    typeof err === 'object' &&
+    err !== null &&
+    'name' in err &&
+    (err as { name?: unknown }).name === 'AbortError'
+  );
+}
+
+export function App() {
+  // `reducedMotion="user"` makes every motion/react component honor the OS
+  // `prefers-reduced-motion` setting: transform/layout animations are zeroed
+  // out while opacity-only changes are kept. The CSS `@media (prefers-reduced-
+  // motion: reduce)` block covers the CSS-keyframe surfaces, but the dialogs,
+  // toasts and popovers that moved to motion/react need this gate too — without
+  // it they keep springing/sliding for users who asked us not to animate.
+  return (
+    <MotionConfig reducedMotion="user">
+      <IframeKeepAliveProvider>
+        <AppInner />
+      </IframeKeepAliveProvider>
+    </MotionConfig>
   );
 }
 
@@ -224,6 +299,7 @@ function AppInner() {
   const { t } = useI18n();
   const iframeKeepAlivePool = useIframeKeepAlivePool();
   const clientType = useMemo(() => detectClientType(), []);
+  useModalWindowDragGuard();
   // Observability marker. `apps/web/src/observability/white-screen.ts`
   // keys its "app actually mounted" success condition on this attribute
   // because the dynamic-import loading shell (`<div class="od-loading-shell">
@@ -242,6 +318,11 @@ function AppInner() {
   const latestPersistedConfigRef = useRef(config);
   latestPersistedConfigRef.current = config;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Surfaced when a Home-picked working dir could not be applied to a freshly
+  // created project (expired/invalid desktop token, daemon rejection). Without
+  // this the failure was swallowed and the user believed their folder was in
+  // effect while the project actually stayed in the managed root.
+  const [workingDirError, setWorkingDirError] = useState<string | null>(null);
   const [settingsWelcome, setSettingsWelcome] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('execution');
   const [settingsHighlight, setSettingsHighlight] = useState<SettingsHighlight>(null);
@@ -249,6 +330,7 @@ function AppInner() {
   const [daemonLive, setDaemonLive] = useState(false);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const amrModelsRef = useRef<AmrModelsResponse | null>(null);
+  const agentStreamRequestSeqRef = useRef(0);
   const [amrPollRestartToken, setAmrPollRestartToken] = useState(0);
   const [providerModelsCache, setProviderModelsCache] = useState<
     Record<string, ProviderModelOption[]>
@@ -312,6 +394,15 @@ function AppInner() {
   const [composioConfigLoading, setComposioConfigLoading] = useState(true);
   const route = useRoute();
   const analytics = useAnalytics();
+
+  const beginAgentStreamRequest = useCallback(() => {
+    agentStreamRequestSeqRef.current += 1;
+    return agentStreamRequestSeqRef.current;
+  }, []);
+
+  const isCurrentAgentStreamRequest = useCallback((requestId: number) => {
+    return agentStreamRequestSeqRef.current === requestId;
+  }, []);
 
   // v2 schema removed the standalone `app_launch` event; the initial
   // page_view fires from each top-level page surface (home / projects /
@@ -442,7 +533,7 @@ function AppInner() {
   // changes; the next capture inherits the fresh values, so dashboards
   // can segment by execution setup without per-helper boilerplate.
   //
-  // Gated on `agentsLoading` so the cold-start probe (`fetchAgents()`
+  // Gated on `agentsLoading` so the cold-start probe (`fetchAgentsStream()`
   // lands asynchronously after this effect's first run) does not stamp
   // the first home/projects/plugins page_view with
   // has_available_configure_cli=false / configure_availability=unavailable
@@ -566,6 +657,7 @@ function AppInner() {
   // gate every tab including the ones that don't need agents at all.
   useEffect(() => {
     let cancelled = false;
+    const agentStreamAbort = new AbortController();
     (async () => {
       const alive = await daemonIsLive();
       if (cancelled) return;
@@ -586,11 +678,42 @@ function AppInner() {
         return;
       }
 
-      void fetchAgents().then((list) => {
-        if (cancelled) return;
-        setAgents(mergeAmrModelsIntoAgents(list, amrModelsRef.current));
-        setAgentsLoading(false);
-      });
+      const agentRequestId = beginAgentStreamRequest();
+      void fetchAgentsStream({
+        signal: agentStreamAbort.signal,
+        onAgent: (agent) => {
+          if (cancelled || !isCurrentAgentStreamRequest(agentRequestId)) return;
+          setAgents((current) =>
+            mergeAmrModelsIntoAgents(
+              upsertAgent(current, agent),
+              amrModelsRef.current,
+            ),
+          );
+        },
+      })
+        .then((list) => {
+          if (cancelled || !isCurrentAgentStreamRequest(agentRequestId)) return;
+          setAgents(
+            mergeAmrModelsIntoAgents(
+              orderAgentsByRegistry(list),
+              amrModelsRef.current,
+            ),
+          );
+        })
+        .catch((err) => {
+          if (
+            cancelled ||
+            isAbortError(err) ||
+            !isCurrentAgentStreamRequest(agentRequestId)
+          ) {
+            return;
+          }
+          setAgents([]);
+        })
+        .finally(() => {
+          if (cancelled || !isCurrentAgentStreamRequest(agentRequestId)) return;
+          setAgentsLoading(false);
+        });
 
       // Functional skills + design templates land independently. Both
       // gate `skillsLoading` together so the EntryView stops rendering
@@ -727,8 +850,14 @@ function AppInner() {
     })();
     return () => {
       cancelled = true;
+      agentStreamAbort.abort();
     };
-  }, [beginProjectListRequest, reconcileFetchedProjects]);
+  }, [
+    beginAgentStreamRequest,
+    beginProjectListRequest,
+    isCurrentAgentStreamRequest,
+    reconcileFetchedProjects,
+  ]);
 
   // Auto-pick the first available agent once both the daemon-stored config
   // and the agents listing have landed. Splitting this out of bootstrap
@@ -995,11 +1124,35 @@ function AppInner() {
         await syncConfigToDaemon(nextConfig);
         setConfig(nextConfig);
       }
-      const next = await fetchAgents({ throwOnError: options?.throwOnError });
-      setAgents(mergeAmrModelsIntoAgents(next, amrModelsRef.current));
-      return next;
+      const agentRequestId = beginAgentStreamRequest();
+      setAgentsLoading(true);
+      try {
+        const next = await fetchAgentsStream({
+          onAgent: (agent) => {
+            if (!isCurrentAgentStreamRequest(agentRequestId)) return;
+            setAgents((current) =>
+              mergeAmrModelsIntoAgents(
+                upsertAgent(current, agent),
+                amrModelsRef.current,
+              ),
+            );
+          },
+        });
+        const ordered = orderAgentsByRegistry(next);
+        if (isCurrentAgentStreamRequest(agentRequestId)) {
+          setAgents(mergeAmrModelsIntoAgents(ordered, amrModelsRef.current));
+          setAgentsLoading(false);
+        }
+        return ordered;
+      } catch (err) {
+        if (!isCurrentAgentStreamRequest(agentRequestId)) return [];
+        setAgentsLoading(false);
+        if (options?.throwOnError) throw err;
+        setAgents([]);
+        return [];
+      }
     },
-    [config],
+    [beginAgentStreamRequest, config, isCurrentAgentStreamRequest],
   );
 
   const handleCreateProject = useCallback(
@@ -1009,9 +1162,11 @@ function AppInner() {
         pluginId?: string;
         appliedPluginSnapshotId?: string;
         pluginInputs?: Record<string, unknown>;
+        conversationMode?: ChatSessionMode;
         autoSendFirstMessage?: boolean;
         requestId?: string;
         pendingFiles?: File[];
+        userWorkingDirToken?: string;
       },
     ): Promise<boolean> => {
       // Honor an explicit `null` design system — the create panel defaults
@@ -1032,6 +1187,7 @@ function AppInner() {
         designSystemId: input.designSystemId,
         pendingPrompt: derivedPendingPrompt,
         metadata: input.metadata,
+        ...(input.conversationMode ? { conversationMode: input.conversationMode } : {}),
         ...(input.pluginId ? { pluginId: input.pluginId } : {}),
         ...(input.appliedPluginSnapshotId
           ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
@@ -1058,8 +1214,42 @@ function AppInner() {
       const pendingFiles = Array.isArray(input.pendingFiles)
         ? input.pendingFiles.filter((file): file is File => file instanceof File)
         : [];
+      // Flip the project onto the user-picked working directory BEFORE
+      // uploading staged Home attachments. `replaceProjectWorkingDir` changes
+      // `metadata.baseDir`, so the project starts reading from the external
+      // folder. If we uploaded first, the staged files would land in the
+      // temporary managed `.od/projects/<id>` root and then silently vanish
+      // from Design Files and the first auto-send context once the working
+      // dir flips. Doing the handoff first means the initial upload lands in
+      // the final tree.
+      const userWorkingDir = input.metadata?.userWorkingDir;
+      let workingDirHandoffFailed = false;
+      if (userWorkingDir) {
+        try {
+          await replaceProjectWorkingDir(
+            result.project.id,
+            userWorkingDir,
+            input.userWorkingDirToken,
+          );
+        } catch (err) {
+          // The desktop working-dir token is short-lived (~60s TTL); if the
+          // user lingered on Home or the POST was otherwise rejected, the
+          // handoff fails AFTER the project already exists. Do NOT swallow
+          // this and do NOT proceed: uploading staged attachments or
+          // auto-sending the first message would target the managed
+          // `.od/projects/<id>` root the user did not choose. Mark the
+          // handoff as failed so the upload + auto-send branches below are
+          // skipped, then surface a create-time error so the user can
+          // re-pick the working directory from inside the project.
+          console.warn('Failed to set working directory for new project', userWorkingDir, err);
+          workingDirHandoffFailed = true;
+          setWorkingDirError(
+            `Couldn't apply the chosen folder "${userWorkingDir}". The project was created in the default location — re-pick the working directory from the project before uploading files or sending a message.`,
+          );
+        }
+      }
       let firstMessageAttachments: ChatAttachment[] = [];
-      if (pendingFiles.length > 0) {
+      if (!workingDirHandoffFailed && pendingFiles.length > 0) {
         // Home composer attaches stay client-side until submit lands a
         // project; the actual upload happens here. v2 doc wants one
         // file_upload_result per surface — `page_name='home'` /
@@ -1102,6 +1292,7 @@ function AppInner() {
       // pre-filling the composer. Scoped to sessionStorage so a page
       // reload after the run has started does not refire.
       if (
+        !workingDirHandoffFailed &&
         input.autoSendFirstMessage &&
         (derivedPendingPrompt !== undefined || firstMessageAttachments.length > 0)
       ) {
@@ -1683,6 +1874,7 @@ function AppInner() {
         onAgentChange={handleAgentChange}
         onAgentModelChange={handleAgentModelChange}
         onRefreshAgents={refreshAgents}
+        onThemeChange={handleThemeChange}
         onOpenSettings={openSettings}
         onOpenAmrSettings={openAmrSettings}
         onOpenMcpSettings={openMcpSettings}
@@ -1790,7 +1982,9 @@ function AppInner() {
           route={route}
           projects={projects}
         />
-        <div className="workspace-shell__body">{appMain}</div>
+        <div className="workspace-shell__body">
+          {appMain}
+        </div>
       </div>
       {clientType === 'desktop' ? null : (
         <PetOverlay
@@ -1799,6 +1993,8 @@ function AppInner() {
           onOpenProject={handleOpenProject}
         />
       )}
+      <TooltipLayer />
+      <AnimatePresence>
       {settingsOpen ? (
         <SettingsDialog
           initial={config}
@@ -1842,7 +2038,15 @@ function AppInner() {
           onProviderModelsCacheChange={setProviderModelsCache}
         />
       ) : null}
+      </AnimatePresence>
       <MemoryToast onOpenMemory={() => openSettings('memory')} />
+      {workingDirError ? (
+        <Toast
+          message={workingDirError}
+          role="alert"
+          onDismiss={() => setWorkingDirError(null)}
+        />
+      ) : null}
       {/* First-run privacy consent banner. It waits for daemon config
           hydration because privacyDecisionAt is daemon-owned and stripped
           from localStorage. It waits for `onboardingCompleted` so first-run
@@ -1850,7 +2054,14 @@ function AppInner() {
           finish both flip the flag). Independent of Settings: z-index in
           index.css sits above modal backdrops so opening Settings does
           not hide the banner. */}
+      <AnimatePresence>
       {showPrivacyConsent ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 10, scale: 0.97 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+        >
         <PrivacyConsentModal
           onAccept={() => {
             // Default opt-in: clicking "I get it" enables the same telemetry
@@ -1869,7 +2080,9 @@ function AppInner() {
             });
           }}
         />
+      </motion.div>
       ) : null}
+      </AnimatePresence>
     </>
   );
 }

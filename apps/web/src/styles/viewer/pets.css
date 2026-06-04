@@ -607,7 +607,14 @@
   position: relative;
   display: inline-flex;
 }
+.composer-design-toolbox-wrap {
+  position: relative;
+  display: inline-flex;
+}
 .composer-tools-trigger {
+  position: relative;
+}
+.composer-toolbox-trigger {
   position: relative;
 }
 .composer-tools-at {
@@ -628,6 +635,11 @@
   background: var(--bg-subtle);
   color: var(--text);
 }
+.composer-toolbox-trigger.active {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
+  color: var(--text);
+}
 .composer-tools-menu {
   position: absolute;
   bottom: calc(100% + 6px);
@@ -642,6 +654,115 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+.composer-design-toolbox-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  z-index: 30;
+  padding: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: min(430px, calc(100vh - 120px));
+  overflow-y: auto;
+}
+.composer-design-toolbox-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 6px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.composer-design-toolbox-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.composer-design-toolbox-lucky {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.composer-design-toolbox-lucky:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+}
+.composer-design-toolbox-row {
+  align-items: flex-start;
+  gap: 9px;
+}
+.composer-design-toolbox-row .composer-tools-row-body {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.composer-design-toolbox-row .composer-tools-row-body strong {
+  line-height: 1.25;
+}
+.composer-design-toolbox-row .composer-tools-row-meta {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-muted);
+  line-height: 1.35;
+  text-transform: none;
+  white-space: normal;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.composer-design-toolbox-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--text);
+}
+.composer-design-toolbox-skill {
+  display: inline-flex;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.composer-design-toolbox-badge {
+  flex: 0 0 auto;
+  max-width: 54px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 5px;
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1.2;
 }
 .composer-tools-tabs {
   display: flex;

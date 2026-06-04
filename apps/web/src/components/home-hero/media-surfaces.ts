@@ -10,6 +10,7 @@ import {
   IMAGE_MODELS,
   imageSizesForModel,
   MEDIA_ASPECTS,
+  type MediaModel,
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
   videoDurationsForModel,
@@ -46,8 +47,13 @@ export function buildHomeMediaComposer(
   promptTemplates: PromptTemplateSummary[],
   seedInputs: Record<string, unknown> = {},
   voiceOptions: Array<{ voiceId: string; name: string }> = [],
-  options: { elevenLabsVoiceWarning?: string | null; elevenLabsVoicesLoading?: boolean } = {},
+  options: {
+    elevenLabsVoiceWarning?: string | null;
+    elevenLabsVoicesLoading?: boolean;
+    imageModels?: MediaModel[];
+  } = {},
 ): HomeMediaComposerState {
+  const imageModels = options.imageModels ?? IMAGE_MODELS;
   const inputs = normalizeHomeMediaInputs(
     surface,
     {
@@ -56,8 +62,9 @@ export function buildHomeMediaComposer(
     },
     promptTemplates,
     voiceOptions,
+    imageModels,
   );
-  const fields = fieldsForSurface(surface, inputs, voiceOptions, options);
+  const fields = fieldsForSurface(surface, inputs, voiceOptions, options, imageModels);
   const editableFieldNames = fields.map((field) => field.name);
   const queryTemplate = queryTemplateForSurface(surface, inputs);
   return {
@@ -75,6 +82,7 @@ export function normalizeHomeMediaInputs(
   raw: Record<string, unknown>,
   promptTemplates: PromptTemplateSummary[] = [],
   voiceOptions: Array<{ voiceId: string; name: string }> = [],
+  imageModels: MediaModel[] = IMAGE_MODELS,
 ): Record<string, unknown> {
   if (surface === 'image') {
     const ratio = validOption(stringValue(raw.ratio) || stringValue(raw.aspect), MEDIA_ASPECTS, '16:9');
@@ -249,6 +257,7 @@ function fieldsForSurface(
   inputs: Record<string, unknown>,
   voiceOptions: Array<{ voiceId: string; name: string }>,
   options: { elevenLabsVoiceWarning?: string | null; elevenLabsVoicesLoading?: boolean },
+  imageModels: MediaModel[] = IMAGE_MODELS,
 ): InputFieldSpec[] {
   if (surface === 'image') {
     const imageSizes = imageSizesForModel(stringValue(inputs.model));
@@ -458,7 +467,7 @@ function validAudioDuration(kind: AudioKind, raw: unknown): number {
 
 function homeAudioModels(kind: AudioKind) {
   if (kind === 'music') return [];
-  const runnableProviders = new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine']);
+  const runnableProviders = new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']);
   return AUDIO_MODELS_BY_KIND[kind].filter((model) => runnableProviders.has(model.provider));
 }
 

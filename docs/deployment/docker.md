@@ -68,3 +68,4 @@ You should see the Open Design interface.
 - `failed to connect to the docker API`: Docker Desktop is not running yet
 - `address already in use`: Port `7456` is occupied by another process
 - `curl: (7) Failed to connect`: container is still starting; wait 10-20 seconds and retry
+- `Authorization: Bearer <OD_API_TOKEN> required` on macOS: Docker Desktop bridge networking makes the daemon see requests as non-loopback. See [Docker Desktop on macOS](../../deploy/README.md#docker-desktop-on-macos) for the host networking workaround.

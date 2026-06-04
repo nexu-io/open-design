@@ -1,0 +1,80 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle, var(--bg-panel));
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Severity is a quiet hint, not an alarm: a "not installed yet" agent in the
+   install list should read as informational, so we only nudge the left border
+   tone instead of painting the whole row. */
+.error {
+  border-left-color: color-mix(in srgb, var(--danger, #d9534f) 40%, var(--border));
+}
+
+.warning {
+  border-left-color: color-mix(in srgb, var(--warning, #d9a441) 40%, var(--border));
+}
+
+.info {
+  border-left-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.message {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-muted, var(--text));
+}
+
+/* Actions sit at the bottom-right of the info box: the message owns the top,
+   the fix icon(s) tuck into the corner so they never crowd the reason text. */
+.actions {
+  display: inline-flex;
+  align-self: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Quiet, neutral icon button — no accent/danger fill, so a "not installed yet"
+   row never looks like a destructive or alarming control. */
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: var(--text);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.action:hover {
+  color: var(--text);
+  background: var(--bg-hover, var(--bg-subtle));
+  border-color: var(--accent);
+}
+
+/* The glyph must not be flex-shrunk: inside the centered inline-flex button its
+   width otherwise collapses to 0 and the icon disappears even though it's drawn
+   in the text color. */
+.action svg {
+  flex: 0 0 auto;
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

@@ -113,6 +113,26 @@ export type TrackingProjectSource =
   | 'chat_composer'
   | 'unknown';
 
+export type TrackingAmrEntrySource =
+  | 'onboarding_amr_card'
+  | 'onboarding_amr_sign_in_continue'
+  | 'inline_model_switcher_amr_row'
+  | 'settings_amr_agent_card'
+  | 'settings_amr_authorize'
+  | 'chat_error_authorize_retry'
+  | 'chat_error_recharge'
+  | 'chat_error_switch_retry_card'
+  | 'generation_preview_authorize_retry'
+  | 'generation_preview_recharge'
+  | 'generation_preview_switch_retry_card';
+
+export interface AmrEntryAttribution {
+  entryId: string;
+  sourceProduct: 'open_design';
+  sourceDetail: TrackingAmrEntrySource;
+  occurredAt: string;
+}
+
 // The six tabs inside the New project modal (CSV row 7 tab_name).
 export type TrackingNewProjectTab =
   | 'prototype'
@@ -1327,12 +1347,36 @@ export interface ChatPanelClickProps {
     | 'resources_popover_trigger';
 }
 
+// Next-step action affordance shown under the last assistant message after a
+// previewable artifact is produced. `next_step_exposed` fires once when the
+// affordance becomes visible so the funnel can divide clicks by exposure;
+// the action elements drive the "second-turn rate" / "share rate" acceptance
+// metrics. `chip_id` carries the recommended-chip identity (e.g.
+// `polish_visual`, `second_version`) for the `chip` element.
+export interface NextStepActionClickProps {
+  page_name: 'chat_panel';
+  area: 'next_step';
+  element: 'next_step_exposed' | 'share' | 'chip';
+  chip_id?: string;
+}
+
 // Hosted-AMR nudge shown under a non-AMR agent's model/auth/quota failure.
 // `go_amr` is the link that opens https://open-design.ai/amr.
 export interface RunFailedToastClickProps {
   page_name: 'chat_panel';
   area: 'chat_panel';
   element: 'go_amr';
+}
+
+export interface AmrEntryClickProps {
+  page_name: TrackingPageName;
+  area: 'amr_entry';
+  element: TrackingAmrEntrySource;
+  action: 'click_amr_entry';
+  entry_id: string;
+  source_product: 'open_design';
+  source_detail: TrackingAmrEntrySource;
+  entry_occurred_at: string;
 }
 
 export interface ChatPanelResourcesPopoverClickProps {
@@ -1669,7 +1713,9 @@ export type UiClickProps =
   | IntegrationsSkillsTabClickProps
   | IntegrationsUseEverywhereTabClickProps
   | ChatPanelClickProps
+  | NextStepActionClickProps
   | RunFailedToastClickProps
+  | AmrEntryClickProps
   | ChatPanelResourcesPopoverClickProps
   | FileManagerClickProps
   | ArtifactToolbarClickProps

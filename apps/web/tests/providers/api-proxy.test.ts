@@ -55,6 +55,42 @@ describe('buildProxyMessages', () => {
     ]);
   });
 
+  it('serializes Anthropic image blocks in user-visible attachment order', async () => {
+    const pngBytes = new Uint8Array([137, 80, 78, 71]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        headers: {
+          get: (name: string) => (name.toLowerCase() === 'content-type' ? 'image/png' : null),
+        },
+        arrayBuffer: async () => pngBytes.buffer,
+      }),
+    );
+
+    await buildProxyMessages(
+      '/api/proxy/anthropic/stream',
+      [
+        userMessage('Compare them', [
+          { path: 'references/second.png', name: 'second.png', kind: 'image', size: 4, order: 1 },
+          { path: 'references/first.png', name: 'first.png', kind: 'image', size: 4, order: 0 },
+        ]),
+      ],
+      { projectId: 'project-1' },
+    );
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      '/api/projects/project-1/raw/references/first.png',
+      { cache: 'no-store' },
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      '/api/projects/project-1/raw/references/second.png',
+      { cache: 'no-store' },
+    );
+  });
+
   it('keeps non-Anthropic proxy messages as plain text', async () => {
     vi.stubGlobal('fetch', vi.fn());
 

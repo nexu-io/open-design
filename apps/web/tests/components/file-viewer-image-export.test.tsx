@@ -112,7 +112,7 @@ describe('FileViewer image export', () => {
     expect(screen.getByRole('radio', { name: 'PNG' })).toBeTruthy();
 
     await waitFor(() => {
-      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(srcDocFrame);
+      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(srcDocFrame, 1500);
       expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,ok', 'png');
     });
     await waitForSaveButton();
@@ -131,6 +131,28 @@ describe('FileViewer image export', () => {
     expect(requestPreviewSnapshotMock).toHaveBeenCalledTimes(1);
     expect(saveImageBlobMock).toHaveBeenCalledWith(imageBlob);
     expect(screen.getByText('workspace.jpg')).toBeTruthy();
+  });
+
+  it('retries the srcDoc snapshot bridge before giving up on URL-loaded previews', async () => {
+    const pngBlob = new Blob(['png'], { type: 'image/png' });
+    requestPreviewSnapshotMock
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        dataUrl: 'data:image/png;base64,recovered',
+        w: 800,
+        h: 600,
+      });
+    imageDataUrlToBlobMock.mockResolvedValueOnce(pngBlob);
+
+    const { srcDocFrame } = renderHtmlPreview();
+    openImageExportDialog();
+
+    await waitFor(() => {
+      expect(requestPreviewSnapshotMock).toHaveBeenCalledTimes(2);
+      expect(requestPreviewSnapshotMock).toHaveBeenNthCalledWith(1, srcDocFrame, 1500);
+      expect(requestPreviewSnapshotMock).toHaveBeenNthCalledWith(2, srcDocFrame, 3000);
+      expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,recovered', 'png');
+    });
   });
 
   it('uses the prepared PNG data URL for fallback downloads', async () => {

@@ -13,6 +13,8 @@
 // mirroring real vela's on-disk side-effect without the device-auth loop.
 
 import { mkdtempSync, existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type http from 'node:http';
@@ -38,14 +40,23 @@ let tmpHome: string;
 
 async function getJson<T = unknown>(url: string): Promise<{ status: number; body: T }> {
   const resp = await fetch(url);
-  const body = (await resp.json()) as T;
-  return { status: resp.status, body };
+  const parsedBody = (await resp.json()) as T;
+  return { status: resp.status, body: parsedBody };
 }
 
-async function postJson<T = unknown>(url: string): Promise<{ status: number; body: T }> {
-  const resp = await fetch(url, { method: 'POST' });
-  const body = (await resp.json()) as T;
-  return { status: resp.status, body };
+async function postJson<T = unknown>(
+  url: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): Promise<{ status: number; body: T }> {
+  const init: RequestInit = {
+    method: 'POST',
+    headers: body === undefined ? headers : { 'Content-Type': 'application/json', ...headers },
+  };
+  if (body !== undefined) init.body = JSON.stringify(body);
+  const resp = await fetch(url, init);
+  const parsedBody = (await resp.json()) as T;
+  return { status: resp.status, body: parsedBody };
 }
 
 async function waitForAmrModels(
@@ -141,6 +152,8 @@ afterEach(() => {
   delete process.env.FAKE_VELA_LOGIN_USER_PLAN;
   delete process.env.VELA_RUNTIME_KEY;
   delete process.env.VELA_LINK_URL;
+  delete process.env.OPEN_DESIGN_AMR_ANALYTICS_URL;
+  delete process.env.OPEN_DESIGN_AMR_ANALYTICS_ENV;
   rmSync(tmpHome, { recursive: true, force: true });
 });
 
@@ -512,6 +525,212 @@ describe('POST /api/integrations/vela/login', () => {
     expect(after.body.loggedIn).toBe(false);
     expect(after.body.loginInFlight).toBe(false);
     expect(existsSync(configPath())).toBe(false);
+  });
+});
+
+describe('POST /api/integrations/vela/analytics-entry', () => {
+  it('mirrors Open Design AMR entry clicks to the AMR analytics ingest shape', async () => {
+    const requests: unknown[] = [];
+    const captureServer = createServer((req, res) => {
+      let raw = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk) => {
+        raw += chunk;
+      });
+      req.on('end', () => {
+        requests.push(JSON.parse(raw));
+        res.writeHead(202, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ accepted: 1 }));
+      });
+    });
+    await new Promise<void>((resolve) => {
+      captureServer.listen(0, '127.0.0.1', () => resolve());
+    });
+    const address = captureServer.address() as AddressInfo;
+    process.env.OPEN_DESIGN_AMR_ANALYTICS_URL =
+      `http://127.0.0.1:${address.port}/api/v1/analytics/events`;
+    process.env.OPEN_DESIGN_AMR_ANALYTICS_ENV = 'test';
+
+    const payload = {
+      pageName: 'open_design',
+      sourcePageName: 'chat_panel',
+      area: 'amr_entry',
+      element: 'chat_error_recharge',
+      action: 'click_amr_entry',
+      entryId: 'od-amr-entry-123',
+      sourceProduct: 'open_design',
+      sourceDetail: 'chat_error_recharge',
+      entryOccurredAt: '2026-06-03T12:00:00.000Z',
+    };
+
+    try {
+      const { status, body } = await postJson<{ mirrored: boolean; status: number }>(
+        `${baseUrl}/api/integrations/vela/analytics-entry`,
+        { payload },
+        {
+          'x-od-analytics-device-id': 'od-device-1',
+          'x-od-analytics-session-id': 'od-session-1',
+          'x-od-analytics-locale': 'zh-CN',
+        },
+      );
+
+      expect(status).toBe(202);
+      expect(body).toEqual({ mirrored: true, status: 202 });
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject({
+        events: [
+          {
+            common: {
+              eventId: 'od-amr-entry-od-amr-entry-123',
+              eventTime: '2026-06-03T12:00:00.000Z',
+              registryKey: 'open_design_amr_entry',
+              eventName: 'amr_entry',
+              eventType: 'click',
+              platform: 'web',
+              env: 'test',
+              userId: null,
+              anonymousId: 'od-device-1',
+              sessionId: 'od-session-1',
+              appVersion: null,
+              locale: 'zh-CN',
+              traceId: 'od-amr-entry-123',
+            },
+            payload,
+          },
+        ],
+      });
+    } finally {
+      await new Promise<void>((resolve) => {
+        captureServer.close(() => resolve());
+      });
+    }
+  });
+
+  it('rejects malformed AMR entry analytics payloads', async () => {
+    const { status, body } = await postJson<{ error: string }>(
+      `${baseUrl}/api/integrations/vela/analytics-entry`,
+      { payload: { pageName: 'open_design' } },
+    );
+
+    expect(status).toBe(400);
+    expect(body).toEqual({ error: 'invalid_amr_entry_analytics' });
+  });
+
+  it('does not mirror to AMR when the request carries no analytics-consent headers', async () => {
+    const requests: unknown[] = [];
+    const captureServer = createServer((req, res) => {
+      let raw = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk) => {
+        raw += chunk;
+      });
+      req.on('end', () => {
+        requests.push(JSON.parse(raw));
+        res.writeHead(202, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ accepted: 1 }));
+      });
+    });
+    await new Promise<void>((resolve) => {
+      captureServer.listen(0, '127.0.0.1', () => resolve());
+    });
+    const address = captureServer.address() as AddressInfo;
+    process.env.OPEN_DESIGN_AMR_ANALYTICS_URL =
+      `http://127.0.0.1:${address.port}/api/v1/analytics/events`;
+    process.env.OPEN_DESIGN_AMR_ANALYTICS_ENV = 'test';
+
+    const payload = {
+      pageName: 'open_design',
+      sourcePageName: 'chat_panel',
+      area: 'amr_entry',
+      element: 'chat_error_recharge',
+      action: 'click_amr_entry',
+      entryId: 'od-amr-entry-no-consent',
+      sourceProduct: 'open_design',
+      sourceDetail: 'chat_error_recharge',
+      entryOccurredAt: '2026-06-03T12:00:00.000Z',
+    };
+
+    try {
+      // No x-od-analytics-* headers => readAnalyticsContext returns null =>
+      // opted out. The route must short-circuit before any external fetch.
+      const { status, body } = await postJson<{ mirrored: boolean }>(
+        `${baseUrl}/api/integrations/vela/analytics-entry`,
+        { payload },
+      );
+
+      expect(status).toBe(202);
+      expect(body).toEqual({ mirrored: false });
+      expect(requests).toHaveLength(0);
+    } finally {
+      await new Promise<void>((resolve) => {
+        captureServer.close(() => resolve());
+      });
+    }
+  });
+
+  it('does not mirror to AMR when telemetry.metrics consent is off', async () => {
+    const dataDir = process.env.OD_DATA_DIR as string;
+    const previous = await readAppConfig(dataDir);
+    await writeAppConfig(dataDir, {
+      ...previous,
+      telemetry: { ...(previous.telemetry ?? {}), metrics: false },
+    });
+
+    const requests: unknown[] = [];
+    const captureServer = createServer((req, res) => {
+      let raw = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk) => {
+        raw += chunk;
+      });
+      req.on('end', () => {
+        requests.push(JSON.parse(raw));
+        res.writeHead(202, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ accepted: 1 }));
+      });
+    });
+    await new Promise<void>((resolve) => {
+      captureServer.listen(0, '127.0.0.1', () => resolve());
+    });
+    const address = captureServer.address() as AddressInfo;
+    process.env.OPEN_DESIGN_AMR_ANALYTICS_URL =
+      `http://127.0.0.1:${address.port}/api/v1/analytics/events`;
+    process.env.OPEN_DESIGN_AMR_ANALYTICS_ENV = 'test';
+
+    const payload = {
+      pageName: 'open_design',
+      sourcePageName: 'chat_panel',
+      area: 'amr_entry',
+      element: 'chat_error_recharge',
+      action: 'click_amr_entry',
+      entryId: 'od-amr-entry-metrics-off',
+      sourceProduct: 'open_design',
+      sourceDetail: 'chat_error_recharge',
+      entryOccurredAt: '2026-06-03T12:00:00.000Z',
+    };
+
+    try {
+      // Consent headers are present, but app-config opt-out must still win as
+      // defense in depth against a stale header leak after the user opts out.
+      const { status, body } = await postJson<{ mirrored: boolean }>(
+        `${baseUrl}/api/integrations/vela/analytics-entry`,
+        { payload },
+        {
+          'x-od-analytics-device-id': 'od-device-1',
+          'x-od-analytics-session-id': 'od-session-1',
+          'x-od-analytics-locale': 'zh-CN',
+        },
+      );
+
+      expect(status).toBe(202);
+      expect(body).toEqual({ mirrored: false });
+      expect(requests).toHaveLength(0);
+    } finally {
+      await writeAppConfig(dataDir, previous as unknown as Record<string, unknown>);
+      await new Promise<void>((resolve) => {
+        captureServer.close(() => resolve());
+      });
+    }
   });
 });
 

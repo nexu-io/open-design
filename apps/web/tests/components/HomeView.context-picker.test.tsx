@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
@@ -10,6 +10,26 @@ import {
   type SkillSummary,
 } from '@open-design/contracts';
 import { HomeView } from '../../src/components/HomeView';
+import { homeHeroPromptText, setHomeHeroPrompt } from '../helpers/home-hero-lexical';
+
+// HomeHero's prompt input migrated from a <textarea>+highlight overlay to the
+// same Lexical contenteditable the project composer uses. The `home-hero-input`
+// hook is now a contenteditable <div> with no `.value`, so:
+//   - driving text uses `setHomeHeroPrompt(...)` (a real `editor.update`) where
+//     the old tests did `fireEvent.change(input, { target: { value } })`.
+//   - reading text uses `homeHeroPromptText()` where they read `input.value`.
+// Picking from the @-picker still inserts an atomic mention PILL whose literal
+// text is `@<token>`, and the editor appends a trailing space — so serialized
+// editor text carries that space (the host trims it before submit).
+
+// Settle the Lexical update listener's onChange/onTrigger React state updates
+// (they flush a microtask after the discrete editor update) before asserting,
+// mirroring the project composer's `typeAndSettle`.
+async function settle() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
 
 const SKILL: SkillSummary = {
   id: 'prototype-lab',
@@ -123,8 +143,12 @@ describe('HomeView context picker', () => {
 
     const input = await screen.findByTestId('home-hero-input');
     expect(screen.getByTestId('home-hero-attach')).toBeTruthy();
+    // Lexical's PastePlugin reads `clipboardData.files` (the old textarea path
+    // read `clipboardData.items[].getAsFile()`); the staged-file outcome is
+    // identical, only the clipboard shape the handler inspects changed.
     fireEvent.paste(input, {
       clipboardData: {
+        files: [file],
         items: [
           {
             kind: 'file',
@@ -180,25 +204,32 @@ describe('HomeView context picker', () => {
       />,
     );
 
-    const input = await screen.findByTestId('home-hero-input');
-    fireEvent.change(input, { target: { value: 'Build @chart' } });
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('Build @chart');
+    await settle();
     fireEvent.mouseDown(await screen.findByRole('option', { name: /chart plugin/i }));
 
+    // Picking inserts an atomic plugin mention pill (`@Chart Plugin`) plus a
+    // trailing space, and stages the plugin as context in HomeView state.
     await waitFor(() => {
-      expect((input as HTMLTextAreaElement).value).toBe('Build @Chart Plugin');
+      expect(homeHeroPromptText().trim()).toBe('Build @Chart Plugin');
       expect(screen.getByTestId('home-hero-context-plugin-chart-plugin')).toBeTruthy();
     });
 
-    fireEvent.change(input, { target: { value: `${(input as HTMLTextAreaElement).value} @deck` } });
+    // Re-seed the draft with a fresh `@deck` trigger appended after the first
+    // mention (the old test did the equivalent full-value replace). Picking the
+    // second plugin reconstructs both mention pills via the host's draft sync.
+    setHomeHeroPrompt('Build @Chart Plugin @deck');
+    await settle();
     fireEvent.mouseDown(await screen.findByRole('option', { name: /deck plugin/i }));
 
     await waitFor(() => {
-      expect((input as HTMLTextAreaElement).value).toBe('Build @Chart Plugin @Deck Plugin');
+      expect(homeHeroPromptText().trim()).toBe('Build @Chart Plugin @Deck Plugin');
       expect(screen.getByTestId('home-hero-context-plugin-chart-plugin')).toBeTruthy();
       expect(screen.getByTestId('home-hero-context-plugin-deck-plugin')).toBeTruthy();
     });
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
-    expect((input as HTMLTextAreaElement).value).not.toContain('Hydrated query');
+    expect(homeHeroPromptText()).not.toContain('Hydrated query');
 
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
@@ -245,12 +276,13 @@ describe('HomeView context picker', () => {
       />,
     );
 
-    const input = await screen.findByTestId('home-hero-input');
-    fireEvent.change(input, { target: { value: '@proto' } });
-    fireEvent.mouseDown(screen.getByRole('option', { name: /prototype lab/i }));
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('@proto');
+    await settle();
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /prototype lab/i }));
 
     await waitFor(() => {
-      expect((input as HTMLTextAreaElement).value).toBe('@Prototype Lab');
+      expect(homeHeroPromptText().trim()).toBe('@Prototype Lab');
       expect(screen.getByTestId('home-hero-active-skill')).toBeTruthy();
     });
 
@@ -302,9 +334,10 @@ describe('HomeView context picker', () => {
       expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Prototype');
     });
 
-    const input = screen.getByTestId('home-hero-input');
-    fireEvent.change(input, { target: { value: '@deck' } });
-    fireEvent.mouseDown(screen.getByRole('option', { name: /deck lab/i }));
+    screen.getByTestId('home-hero-input');
+    setHomeHeroPrompt('@deck');
+    await settle();
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /deck lab/i }));
 
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-active-skill')).toBeTruthy();
@@ -368,9 +401,10 @@ describe('HomeView context picker', () => {
       />,
     );
 
-    const input = await screen.findByTestId('home-hero-input');
-    fireEvent.change(input, { target: { value: '@proto' } });
-    fireEvent.mouseDown(screen.getByRole('option', { name: /prototype lab/i }));
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('@proto');
+    await settle();
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /prototype lab/i }));
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-active-skill')).toBeTruthy();
     });
@@ -381,7 +415,8 @@ describe('HomeView context picker', () => {
       expect(screen.queryByTestId('home-hero-active-skill')).toBeNull();
     });
 
-    fireEvent.change(input, { target: { value: 'Build a pricing-page prototype.' } });
+    setHomeHeroPrompt('Build a pricing-page prototype.');
+    await settle();
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
@@ -424,19 +459,19 @@ describe('HomeView context picker', () => {
       />,
     );
 
-    const input = await screen.findByTestId('home-hero-input');
-    fireEvent.change(input, { target: { value: '@lin' } });
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('@lin');
     fireEvent.mouseDown(screen.getByRole('option', { name: /linear/i }));
 
     await waitFor(() => {
-      expect((input as HTMLTextAreaElement).value).toBe('@Linear');
+      expect(homeHeroPromptText().trim()).toBe('@Linear');
     });
 
-    fireEvent.change(input, { target: { value: '@Linear @sla' } });
+    setHomeHeroPrompt('@Linear @sla');
     fireEvent.mouseDown(screen.getByRole('option', { name: /slack/i }));
 
     await waitFor(() => {
-      expect((input as HTMLTextAreaElement).value).toBe('@Linear @Slack');
+      expect(homeHeroPromptText().trim()).toBe('@Linear @Slack');
     });
 
     fireEvent.click(screen.getByTestId('home-hero-submit'));
