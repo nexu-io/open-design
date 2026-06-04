@@ -257,6 +257,20 @@ export function createChatRunService({
     }
   };
 
+  const cancelGraceMs = () => {
+    const raw = Number(process.env.OD_CHAT_RUN_CANCEL_GRACE_MS || process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS);
+    return Number.isFinite(raw) && raw > 0 ? raw : 3000;
+  };
+
+  const scheduleCancelKillFallback = (run, graceMs = cancelGraceMs()) => {
+    setTimeout(() => {
+      killChild(run, 'SIGTERM');
+    }, graceMs).unref?.();
+    setTimeout(() => {
+      killChild(run, 'SIGKILL');
+    }, graceMs * 2).unref?.();
+  };
+
   const cancel = (run) => {
     if (!TERMINAL_RUN_STATUSES.has(run.status)) {
       run.cancelRequested = true;
@@ -268,11 +282,10 @@ export function createChatRunService({
       if (run.acpSession?.abort) {
         run.acpSession.abort();
         const graceMs = Number(process.env.PI_ABORT_GRACE_MS) || 3000;
-        setTimeout(() => {
-          if (run.child && !run.child.killed) run.child.kill('SIGTERM');
-        }, graceMs).unref();
-      } else if (run.child && !run.child.killed) {
-        run.child.kill('SIGTERM');
+        scheduleCancelKillFallback(run, graceMs);
+      } else if (run.child) {
+        killChild(run, 'SIGTERM');
+        scheduleCancelKillFallback(run);
       } else {
         finish(run, 'canceled', null, 'SIGTERM');
       }
