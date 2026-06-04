@@ -549,7 +549,9 @@ export function InlineModelSwitcher({
         onClick={handleChipClick}
         aria-haspopup="menu"
         aria-expanded={open}
-        title={t('inlineSwitcher.chipTitle')}
+        aria-label={`${chipMode} · ${chipPrimary} · ${chipModel}`}
+        title={`${chipMode} · ${chipPrimary} · ${chipModel}`}
+        data-tooltip={`${chipMode} · ${chipPrimary} · ${chipModel}`}
       >
         {showAmrReminder ? (
           <span

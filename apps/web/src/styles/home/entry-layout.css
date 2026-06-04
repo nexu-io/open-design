@@ -31,9 +31,28 @@
   box-shadow: none;
 }
 
-/* Left rail */
+/* Entry view collapses the rail by default (Manus-style): the grid's first
+   column animates between 0 and the rail width. Collapsed = clean full-width
+   entry for new users; expanded = the rail docks and pushes the main content
+   to the right (it stays docked until the user collapses it again). */
+.entry-shell--no-header .entry {
+  grid-template-columns: 0 minmax(0, 1fr);
+  transition: grid-template-columns 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.entry-shell--no-header .entry.entry--rail-open {
+  grid-template-columns: var(--entry-rail-width, 56px) minmax(0, 1fr);
+}
+
+/* Left rail — docked column. Lives in the grid's first track; collapsed the
+   track is 0-wide so the rail is clipped away, expanded it occupies the rail
+   width. */
 .entry-nav-rail {
-  width: var(--entry-rail-width, 64px);
+  /* Fill the grid track (0 collapsed → rail width expanded) rather than a
+     fixed width, so a 0-wide track truly hides the rail instead of letting a
+     56px rail overflow it. The inner groups keep the icon column's width.
+     Border lives on the `::after` hairline below (from main), not on the box. */
+  width: 100%;
+  min-width: 0;
   border-right: 0;
   background: var(--bg-panel);
   padding: 8px 0 10px;
@@ -42,18 +61,128 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  /* The rail intentionally lets its descendants escape horizontally so
-     the hover tooltips and the bottom help popover can render to the
-     right of the icon column without being clipped. Vertical overflow
-     is still controlled by the parent `.entry` shell. */
-  overflow: visible;
-  /* `.entry-main--scroll` is `position: relative` with its own
-     background, which would otherwise paint *on top of* any absolutely
-     positioned descendant of the rail that escapes the 64px column
-     (hover tooltips, help popover). Elevating the rail above the main
-     area lets those floats appear over the scroll surface. */
   position: relative;
   z-index: 30;
+  /* Visibility is driven purely by the grid track width (0 collapsed) plus
+     the overflow clip below — no opacity fade, which previously crossed with
+     the topbar toggle's fade-out and caused a flash on expand. */
+  pointer-events: none;
+}
+.entry-nav-rail.is-open {
+  pointer-events: auto;
+}
+/* While collapsed (the grid track is 0) clip the rail's 56px of content so
+   nothing bleeds over the full-width entry. Expanded, descendants may escape
+   horizontally so hover tooltips and the help popover render to the right. */
+.entry:not(.entry--rail-open) .entry-nav-rail {
+  overflow: hidden;
+  /* Drop the right border too, otherwise a 1px seam shows on the
+     zero-width collapsed track. */
+  border-right: 0;
+}
+.entry--rail-open .entry-nav-rail {
+  overflow: visible;
+}
+
+/* Brand slot — the logo, with a collapse button that fades in on hover so the
+   docked rail can be dismissed Manus-style without a separate chrome control. */
+.entry-nav-rail__brand {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+.entry-nav-rail .entry-nav-rail__collapse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.entry--rail-open .entry-nav-rail__brand:hover .entry-nav-rail__collapse,
+.entry--rail-open .entry-nav-rail__collapse:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* Coarse-pointer / non-hover devices can't reveal the collapse button on
+   hover, and the topbar toggle is display:none once the rail docks — so the
+   rail would strand open. Keep the collapse control permanently visible and
+   tappable there so touch users can always fold the rail back. */
+@media (hover: none) {
+  .entry--rail-open .entry-nav-rail__collapse {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+/* When the rail is collapsed the brand element still sits at the top-left
+   under the cursor; force the absolutely-positioned collapse button inert so
+   it can't swallow clicks meant for the topbar toggle stacked beneath it. */
+.entry:not(.entry--rail-open) .entry-nav-rail__collapse {
+  opacity: 0;
+  pointer-events: none;
+}
+.entry-nav-rail__collapse:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text-strong, #111);
+}
+.entry-nav-rail__collapse:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Topbar panel toggle — the single affordance left visible when the rail
+   is collapsed. Sits at the left edge of the sticky topbar and is hidden
+   once the rail is docked (the rail's own collapse button takes over). */
+.entry-rail-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-right: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* The flex layout would otherwise shrink the icon's width to a sliver; pin
+   the SVG so the panel glyph renders at its intended square size. */
+.entry-rail-toggle svg,
+.entry-nav-rail__collapse svg {
+  flex-shrink: 0;
+}
+.entry-rail-toggle:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text-strong, #111);
+}
+.entry-rail-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* Hide the topbar toggle the instant the rail docks — a fade here would
+   cross with the rail's logo sliding in and read as a flash. */
+.entry--rail-open .entry-rail-toggle {
+  display: none;
 }
 .entry-nav-rail::after {
   content: '';
@@ -636,6 +765,75 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+/* ============================================================
+   Icon-only topbar chips
+   Collapse the Star / Discord / model-switcher / Use-everywhere
+   chips to square icon buttons; the full label surfaces as a
+   downward hover tooltip. Keeps the entry topbar quiet and tidy.
+   ============================================================ */
+.entry-main__topbar-chips--icon-only .entry-discord-badge,
+.entry-main__topbar-chips--icon-only .use-everywhere-chip,
+.entry-main__topbar-chips--icon-only .inline-switcher__chip {
+  width: 32px;
+  height: 32px;
+  min-width: 0;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  border-radius: 8px;
+  position: relative;
+  /* The model-switcher chip clips overflow to truncate long model names;
+     collapsed there's no text, so let the downward tooltip escape. */
+  overflow: visible;
+}
+/* Hide every text fragment; keep only the leading icon glyph. */
+.entry-main__topbar-chips--icon-only .entry-discord-badge__label,
+.entry-main__topbar-chips--icon-only .use-everywhere-chip__label,
+.entry-main__topbar-chips--icon-only .inline-switcher__chip-text,
+.entry-main__topbar-chips--icon-only .inline-switcher__chip-chevron {
+  display: none;
+}
+
+/* Center the surviving icon wrappers inside the square. */
+.entry-main__topbar-chips--icon-only .use-everywhere-chip__icon,
+.entry-main__topbar-chips--icon-only .inline-switcher__chip-icon {
+  margin: 0;
+}
+
+/* Downward hover tooltip for the collapsed chips. */
+.entry-main__topbar-chips--icon-only [data-tooltip] {
+  position: relative;
+}
+.entry-main__topbar-chips--icon-only [data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  padding: 5px 9px;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--bg-panel);
+  background: var(--text-strong, #111);
+  border-radius: 6px;
+  box-shadow: var(--shadow-sm, 0 4px 12px rgba(0, 0, 0, 0.12));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+  z-index: 60;
+}
+.entry-main__topbar-chips--icon-only [data-tooltip]:hover::after,
+.entry-main__topbar-chips--icon-only [data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+/* While the model-switcher popover is open, suppress its tooltip so the
+   bubble doesn't collide with the menu. */
+.entry-main__topbar-chips--icon-only [data-tooltip][aria-expanded='true']::after {
+  display: none;
 }
 
 .entry-settings-menu {

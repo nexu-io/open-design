@@ -1775,6 +1775,11 @@ export function DesignSystemDetailView({
             initialDraft={chatSeed?.text}
             conversations={conversations}
             activeConversationId={activeConversationId}
+            // Intentionally omit `messagesConversationId`: the loader above does
+            // not retag `projectChatMessages` during a conversation switch, so
+            // trusting the live length would show the previous conversation's
+            // count for the newly active row. Fall back to the persisted
+            // `conversation.messageCount` for a stable list count instead.
             onSelectConversation={setActiveConversationId}
             onDeleteConversation={() => {}}
             onNewConversation={createProjectChatConversation}

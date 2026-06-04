@@ -142,7 +142,8 @@ describe('HomeView context picker', () => {
     );
 
     const input = await screen.findByTestId('home-hero-input');
-    expect(screen.getByTestId('home-hero-attach')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('home-hero-plus-trigger'));
+    expect(screen.getByTestId('home-hero-plus-attach')).toBeTruthy();
     // Lexical's PastePlugin reads `clipboardData.files` (the old textarea path
     // read `clipboardData.items[].getAsFile()`); the staged-file outcome is
     // identical, only the clipboard shape the handler inspects changed.
@@ -210,10 +211,12 @@ describe('HomeView context picker', () => {
     fireEvent.mouseDown(await screen.findByRole('option', { name: /chart plugin/i }));
 
     // Picking inserts an atomic plugin mention pill (`@Chart Plugin`) plus a
-    // trailing space, and stages the plugin as context in HomeView state.
+    // trailing space, and stages the plugin as context in HomeView state. The
+    // inline pill is now the only on-screen representation of the staged context
+    // (the duplicate top context-badge row was removed), so the submit payload
+    // below is the authoritative check that the plugin was staged.
     await waitFor(() => {
       expect(homeHeroPromptText().trim()).toBe('Build @Chart Plugin');
-      expect(screen.getByTestId('home-hero-context-plugin-chart-plugin')).toBeTruthy();
     });
 
     // Re-seed the draft with a fresh `@deck` trigger appended after the first
@@ -225,8 +228,6 @@ describe('HomeView context picker', () => {
 
     await waitFor(() => {
       expect(homeHeroPromptText().trim()).toBe('Build @Chart Plugin @Deck Plugin');
-      expect(screen.getByTestId('home-hero-context-plugin-chart-plugin')).toBeTruthy();
-      expect(screen.getByTestId('home-hero-context-plugin-deck-plugin')).toBeTruthy();
     });
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
     expect(homeHeroPromptText()).not.toContain('Hydrated query');
@@ -241,6 +242,125 @@ describe('HomeView context picker', () => {
         expect.objectContaining({ id: 'deck-plugin', title: 'Deck Plugin' }),
       ],
     }));
+  });
+
+  it('keeps a context-only `Use` selection in the submit payload without an @mention', async () => {
+    // Regression: the submit-time reconciliation dropped every context that
+    // lacked an inline `@mention` token, which silently discarded contexts
+    // staged through the plain `Use` action (which never writes a token). The
+    // agent then received no `contextPlugins` even though the user explicitly
+    // chose the plugin as context. See PR #3625 review thread on HomeView.tsx.
+    const plugin = makePlugin('chart-plugin', 'Chart Plugin');
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [plugin] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url === '/api/mcp/servers') {
+        return new Response(JSON.stringify({ servers: [], templates: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
+
+    // Stage the plugin as context-only via the plain `Use` action. This does
+    // NOT insert an `@mention` pill into the prompt.
+    fireEvent.click(await screen.findByTestId('plugins-home-use-chart-plugin'));
+    await settle();
+
+    // A context-only selection has no inline pill, so it must still be visible
+    // and removable through a chip — otherwise it would be silently kept in the
+    // payload with no way for the user to see or clear it.
+    expect(await screen.findByTestId('home-hero-context-plugin-chart-plugin')).toBeTruthy();
+
+    // The user then types a freeform prompt that never references the plugin.
+    setHomeHeroPrompt('Summarize my latest numbers');
+    await settle();
+    expect(homeHeroPromptText()).not.toContain('@');
+
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'Summarize my latest numbers',
+      contextPlugins: [
+        expect.objectContaining({ id: 'chart-plugin', title: 'Chart Plugin' }),
+      ],
+    }));
+  });
+
+  it('drops a context-only `Use` selection from the submit payload once its chip is cleared', async () => {
+    // Regression: a context-only selection is kept in the payload until the
+    // user explicitly clears it. The active-row chip's clear button is that
+    // explicit path; after clearing, the plugin must no longer be sent.
+    const plugin = makePlugin('chart-plugin', 'Chart Plugin');
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [plugin] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url === '/api/mcp/servers') {
+        return new Response(JSON.stringify({ servers: [], templates: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
+    fireEvent.click(await screen.findByTestId('plugins-home-use-chart-plugin'));
+    await settle();
+
+    // Clear it through the chip's remove control.
+    fireEvent.click(await screen.findByTestId('home-hero-context-clear-chart-plugin'));
+    await settle();
+    expect(screen.queryByTestId('home-hero-context-plugin-chart-plugin')).toBeNull();
+
+    setHomeHeroPrompt('Summarize my latest numbers');
+    await settle();
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    const payload = onSubmit.mock.calls[0]?.[0];
+    expect(payload?.prompt).toBe('Summarize my latest numbers');
+    expect(payload?.contextPlugins ?? []).toEqual([]);
   });
 
   it('binds a selected home skill to the created project payload', async () => {
@@ -490,6 +610,65 @@ describe('HomeView context picker', () => {
           category: 'Communication',
           status: 'connected',
         }),
+      ],
+    }));
+  });
+
+  it('keeps a connector context when the prompt has punctuation right after the pill', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url === '/api/mcp/servers') {
+        return new Response(JSON.stringify({ servers: [], templates: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        connectors={[CONNECTOR]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('@sla');
+    fireEvent.mouseDown(screen.getByRole('option', { name: /slack/i }));
+
+    await waitFor(() => {
+      expect(homeHeroPromptText().trim()).toBe('@Slack');
+    });
+
+    // The user types a comma right after the (still-visible) connector pill and
+    // keeps writing — the pill was never deleted, so the connector must still be
+    // sent. Reconciliation must not drop it just because the serialized text is
+    // `@Slack,` rather than `@Slack`.
+    setHomeHeroPrompt('Summarize @Slack, then draft follow-ups');
+    await settle();
+
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'Summarize @Slack, then draft follow-ups',
+      pluginId: DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
+      contextConnectors: [
+        expect.objectContaining({ id: 'slack', name: 'Slack' }),
       ],
     }));
   });

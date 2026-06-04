@@ -4,6 +4,7 @@ on:
   workflow_run:
     workflows:
       - ci
+      - ui-extended-main
     types:
       - completed
 
@@ -20,7 +21,7 @@ jobs:
       ${{
         github.event.workflow_run.event == 'push' &&
         github.event.workflow_run.head_branch == 'main' &&
-        github.event.workflow_run.conclusion == 'failure'
+        contains(fromJSON('["failure","timed_out","cancelled"]'), github.event.workflow_run.conclusion)
       }}
     steps:
       - name: Send main CI failure alert
@@ -38,6 +39,16 @@ jobs:
             const run = context.payload.workflow_run;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const startedAt = new Date(run.run_started_at || run.created_at).getTime();
+            const updatedAt = new Date(run.updated_at).getTime();
+            const durationMinutes = Number.isFinite(startedAt) && Number.isFinite(updatedAt)
+              ? Math.round((updatedAt - startedAt) / 60000)
+              : null;
+
+            if (run.conclusion === 'cancelled' && durationMinutes !== null && durationMinutes < 35) {
+              core.info(`Skipping short cancelled run (${durationMinutes}m), likely superseded by a newer main push.`);
+              return;
+            }
 
             const jobsResponse = await github.rest.actions.listJobsForWorkflowRun({
               owner,
@@ -46,8 +57,8 @@ jobs:
               per_page: 100,
             });
             const failedJobs = jobsResponse.data.jobs
-              .filter((job) => job.conclusion === 'failure')
-              .map((job) => `- ${job.name}`)
+              .filter((job) => ['failure', 'timed_out', 'cancelled'].includes(job.conclusion))
+              .map((job) => `- ${job.name} (${job.conclusion})`)
               .join('\n') || '- Unknown';
 
             const pullsResponse = await github.rest.repos.listPullRequestsAssociatedWithCommit({
@@ -64,6 +75,9 @@ jobs:
             const author = run.head_commit?.author?.name || run.actor?.login || 'unknown';
             const subject = run.head_commit?.message?.split('\n')[0] || run.display_title || 'unknown';
             const repoName = `${owner}/${repo}`;
+            const title = run.name === 'ui-extended-main'
+              ? 'Open Design Main UI regression failed'
+              : 'Open Design Main CI failed';
 
             const body = {
               msg_type: 'interactive',
@@ -75,7 +89,7 @@ jobs:
                   template: 'red',
                   title: {
                     tag: 'plain_text',
-                    content: 'Open Design Main CI failed',
+                    content: title,
                   },
                 },
                 elements: [
@@ -87,6 +101,8 @@ jobs:
                         `**Repository:** ${repoName}`,
                         `**Branch:** main`,
                         `**Workflow:** ${run.name}`,
+                        `**Conclusion:** ${run.conclusion}`,
+                        `**Duration:** ${durationMinutes === null ? 'unknown' : `${durationMinutes}m`}`,
                         `**Commit:** ${shortSha}`,
                         `**Author:** ${author}`,
                         `**Subject:** ${subject}`,

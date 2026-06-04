@@ -12,9 +12,10 @@ on:
       suite:
         description: "UI suite to run"
         required: true
-        default: p0p1
+        default: p0
         type: choice
         options:
+          - p0
           - p0p1
           - full
 
@@ -26,11 +27,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ui_extended:
-    name: Extended UI regression
-    if: ${{ github.repository == 'nexu-io/open-design' }}
+  ui_p0:
+    name: UI P0 (${{ matrix.name }})
+    if: ${{ github.repository == 'nexu-io/open-design' && (github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.suite != 'full')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: entry-onboarding
+            command: >-
+              pnpm -C e2e exec playwright test -c playwright.config.ts
+              ui/critical-smoke.test.ts
+              ui/entry-chrome-flows.test.ts
+              ui/entry-configuration-flows.test.ts
+              ui/amr-onboarding.test.ts
+              ui/api-empty-response.test.ts
+              --grep '\[P0\]'
+          - name: project-workspace
+            command: >-
+              pnpm -C e2e exec playwright test -c playwright.config.ts
+              ui/app.test.ts
+              ui/app-restoration.test.ts
+              ui/app-design-files.test.ts
+              ui/app-manual-edit.test.ts
+              ui/project-management-flows.test.ts
+              ui/workspace-keyboard-flows.test.ts
+              --grep '\[P0\]'
+          - name: runtime-recovery
+            command: >-
+              pnpm -C e2e exec playwright test -c playwright.config.ts
+              ui/real-daemon-run.test.ts
+              ui/amr-run-failure-recovery.test.ts
+              ui/amr-logout-requires-relogin.test.ts
+              ui/settings-local-cli-codex-fallback.test.ts
+              --grep '\[P0\]'
+          - name: settings-connectors
+            command: >-
+              pnpm -C e2e exec playwright test -c playwright.config.ts
+              ui/settings-api-protocol.test.ts
+              ui/settings-connectors-auth-happy-path.test.ts
+              ui/settings-connectors-auth-recovery.test.ts
+              --grep '\[P0\]'
 
     steps:
       - name: Checkout
@@ -54,19 +93,112 @@ jobs:
       - name: Clean Playwright state
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean
 
-      - name: Run UI P0/P1
-        if: ${{ github.event_name != 'schedule' && inputs.suite != 'full' }}
-        run: pnpm -C e2e test:ui:p0p1
+      - name: Run UI P0 domain
+        run: ${{ matrix.command }}
+
+      - name: Upload Playwright debug artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-p0-${{ github.run_id }}-${{ matrix.name }}
+          path: |
+            e2e/ui/reports/playwright-html-report
+            e2e/ui/reports/test-results
+            e2e/ui/reports/results.json
+            e2e/ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ui_extended:
+    name: UI P1 (${{ matrix.name }})
+    if: ${{ github.repository == 'nexu-io/open-design' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'p0p1')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: P1 shard 1
+            part: p1
+            command: pnpm -C e2e exec playwright test -c playwright.config.ts ui --grep '\[P1\]' --shard=1/2
+          - name: P1 shard 2
+            part: p1
+            command: pnpm -C e2e exec playwright test -c playwright.config.ts ui --grep '\[P1\]' --shard=2/2
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Setup Playwright
+        uses: ./.github/actions/setup-playwright
+        with:
+          package-json-path: e2e/package.json
+          install-command: pnpm -C e2e exec playwright install --with-deps chromium
+
+      - name: Prebuild workspace type declarations
+        run: |
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/web build:sidecar
+
+      - name: Clean Playwright state
+        run: pnpm -C e2e exec tsx scripts/playwright.ts clean
+
+      - name: Run UI P1 shard
+        run: ${{ matrix.command }}
+
+      - name: Upload Playwright debug artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-extended-main-${{ github.run_id }}-${{ matrix.part }}-${{ matrix.name }}
+          path: |
+            e2e/ui/reports/playwright-html-report
+            e2e/ui/reports/test-results
+            e2e/ui/reports/results.json
+            e2e/ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ui_full_manual:
+    name: Full UI regression
+    if: ${{ github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && inputs.suite == 'full' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Setup Playwright
+        uses: ./.github/actions/setup-playwright
+        with:
+          package-json-path: e2e/package.json
+          install-command: pnpm -C e2e exec playwright install --with-deps chromium
+
+      - name: Prebuild workspace type declarations
+        run: |
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/web build:sidecar
+
+      - name: Clean Playwright state
+        run: pnpm -C e2e exec tsx scripts/playwright.ts clean
 
       - name: Run full UI
-        if: ${{ github.event_name == 'schedule' || inputs.suite == 'full' }}
         run: pnpm -C e2e test:ui
 
       - name: Upload Playwright debug artifact
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: ui-extended-main-${{ github.run_id }}
+          name: ui-full-manual-${{ github.run_id }}
           path: |
             e2e/ui/reports/playwright-html-report
             e2e/ui/reports/test-results

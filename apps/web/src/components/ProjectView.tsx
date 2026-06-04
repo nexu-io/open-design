@@ -601,6 +601,25 @@ export function projectSplitClassName(workspaceFocused: boolean): string {
   return workspaceFocused ? 'split split-focus' : 'split';
 }
 
+// React key for the on-screen question form. Deliberately does NOT include the
+// form's parsed `id`: there is at most one (first) form per assistant message,
+// so `${conversation}:${message}` is already a stable, unique identity for the
+// occurrence. Folding the parsed id in would remount the panel mid-stream — the
+// preview shows the `discovery` fallback until the body `id` streams in, and a
+// form that emits answerable questions before its `id` would flip identity
+// while the user is mid-answer, dropping their selections. A distinct later
+// form lives in a different assistant message, so it still gets its own key
+// (and replays the reveal) without relying on the id.
+export function buildQuestionFormKey(
+  conversationId: string | null,
+  assistantMessageId: string | null,
+  hasForm: boolean,
+): string | null {
+  return conversationId && assistantMessageId && hasForm
+    ? `${conversationId}:${assistantMessageId}`
+    : null;
+}
+
 type ProjectSplitStyle = CSSProperties & {
   '--project-chat-panel-width': string;
   '--project-workspace-panel-track': string;
@@ -1096,19 +1115,21 @@ export function ProjectView({
     Boolean(questionForm || questionsGenerating) && questionFormSubmittedAnswers === undefined;
   // Stable identity for the current form occurrence, used to remember that its
   // one-by-one reveal already played. Keyed on the conversation + the hosting
-  // assistant message id + template id (not the message index). The assistant
-  // message id is allocated once and kept in place across the streaming→
-  // persisted swap (same `assistantId` throughout), so it survives the brief
-  // unmount/re-focus of the Questions tab without replaying the animation —
-  // yet it differs for every distinct form occurrence, so a second discovery
-  // form later in the same conversation (which shares the `discovery` template
-  // id) gets its own key and still animates from the frame.
-  const questionFormKey = useMemo(() => {
-    const f = questionForm ?? questionFormPreview;
-    return activeConversationId && lastAssistantMessageId && f
-      ? `${activeConversationId}:${lastAssistantMessageId}:${f.id}`
-      : null;
-  }, [activeConversationId, lastAssistantMessageId, questionForm, questionFormPreview]);
+  // assistant message id (not the message index, and NOT the parsed form id —
+  // see buildQuestionFormKey). The assistant message id is allocated once and
+  // kept in place across the streaming→persisted swap (same `assistantId`
+  // throughout), so it survives the brief unmount/re-focus of the Questions tab
+  // without replaying the animation, yet differs for every distinct form
+  // occurrence (each lives in its own assistant message).
+  const questionFormKey = useMemo(
+    () =>
+      buildQuestionFormKey(
+        activeConversationId,
+        lastAssistantMessageId,
+        Boolean(questionForm ?? questionFormPreview),
+      ),
+    [activeConversationId, lastAssistantMessageId, questionForm, questionFormPreview],
+  );
 
   // Auto-switch the workspace to the Questions tab when a new discovery form
   // first appears, and let the chat banner re-focus it on click. The nonce
@@ -1675,6 +1696,14 @@ export function ProjectView({
   const projectFileNames = useMemo(
     () => new Set(projectFiles.map((f) => f.name)),
     [projectFiles],
+  );
+  const activeProjectFileName = useMemo(
+    () => (
+      openTabsState.active && projectFileNames.has(openTabsState.active)
+        ? openTabsState.active
+        : null
+    ),
+    [openTabsState.active, projectFileNames],
   );
   const agentsById = useMemo(
     () => new Map(agents.map((agent) => [agent.id, agent])),
@@ -2311,11 +2340,7 @@ export function ProjectView({
     const attachRecoverableRuns = async () => {
       const missingRunIdMessages = messages.filter((m) => {
         if (m.role !== 'assistant' || m.runId) return false;
-        const producedFileCount = Array.isArray(m.producedFiles) ? m.producedFiles.length : 0;
-        return (
-          isActiveRunStatus(m.runStatus) ||
-          (m.runStatus === 'succeeded' && (!m.content.trim() || producedFileCount === 0))
-        );
+        return isActiveRunStatus(m.runStatus);
       });
       const activeRuns = missingRunIdMessages.length > 0
         ? await listActiveChatRuns(project.id, reattachConversationId)
@@ -2340,14 +2365,8 @@ export function ProjectView({
       for (const message of messages) {
         if (cancelled) return;
         if (message.role !== 'assistant') continue;
-        const producedFileCount = Array.isArray(message.producedFiles)
-          ? message.producedFiles.length
-          : 0;
-        const needsTerminalReplay =
-          message.runStatus === 'succeeded' &&
-          (!message.content.trim() || producedFileCount === 0);
-        const needsFullReplay = needsTerminalReplay || isActiveRunStatus(message.runStatus);
-        if (!isActiveRunStatus(message.runStatus) && !needsTerminalReplay) continue;
+        const needsFullReplay = isActiveRunStatus(message.runStatus);
+        if (!needsFullReplay) continue;
         const fallbackRun = !message.runId
           ? activeByMessage.get(message.id) ?? historicalByMessage.get(message.id) ?? null
           : null;
@@ -4342,10 +4361,20 @@ export function ProjectView({
         const forkTitle = sourceTitle
           ? t('chat.forkedConversationTitle', { title: sourceTitle })
           : undefined;
+        // Seed the fork from the messages the user is actually looking at,
+        // up to and including the fork point. A run that errored or had its
+        // connection reset before its assistant message was persisted leaves
+        // that message in memory only; copying from the database by id would
+        // 404 and silently drop the fork. Sending the in-memory snapshot makes
+        // the fork resilient to that gap.
+        const forkIndex = messages.findIndex((m) => m.id === assistantMessage.id);
+        const seedMessages =
+          forkIndex >= 0 ? messages.slice(0, forkIndex + 1) : [...messages, assistantMessage];
         const fresh = await createConversation(project.id, forkTitle, {
           seedFromConversationId: activeConversationId,
           forkAfterMessageId: assistantMessage.id,
           sessionMode: activeSessionMode,
+          seedMessages,
         });
         if (!fresh) throw new Error(t('chat.forkConversationFailed'));
         setMessages([]);
@@ -4384,6 +4413,7 @@ export function ProjectView({
       activeConversation?.title,
       activeSessionMode,
       forkingMessageId,
+      messages,
       navigate,
       onProjectsRefresh,
       openTabsState.active,
@@ -5158,6 +5188,7 @@ export function ProjectView({
               onSessionModeChange={handleActiveConversationSessionModeChange}
               projectKindForTracking={projectKindToTracking(project.metadata?.kind)}
               projectFiles={projectFiles}
+              activeProjectFileName={activeProjectFileName}
               hasActiveDesignSystem={!!project.designSystemId}
               activeDesignSystem={chatDesignSystemSummary}
               projectFileNames={projectFileNames}
@@ -5198,6 +5229,7 @@ export function ProjectView({
               newConversationDisabled={newConversationDisabled}
               conversations={conversations}
               activeConversationId={activeConversationId}
+              messagesConversationId={messagesConversationId}
               onSelectConversation={handleSelectConversation}
               onDeleteConversation={handleDeleteConversation}
               onOpenSettings={onOpenSettings}
@@ -5352,6 +5384,8 @@ export function ProjectView({
           onRequestBrowserUsePrompt={handleBrowserUsePrompt}
           onPluginFolderAgentAction={handlePluginFolderAgentAction}
           activePluginActionPaths={activePluginActionPaths}
+          preferredPreviewFile={project.metadata?.entryFile ?? null}
+          autoPreviewDesignArtifacts={project.metadata?.importedFrom === 'folder'}
           focusMode={workspaceFocused}
           onFocusModeChange={setWorkspaceFocused}
           designSystemProject={designSystemProject}

@@ -220,6 +220,17 @@
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--text-muted) 18%, transparent) transparent;
 }
+/* Bottom-anchor the transcript so a short conversation (e.g. a fresh fork)
+   rests against the composer instead of stranding its messages at the top with
+   a large blank area below. The auto top margin absorbs the free space above
+   the first row when the content is shorter than the viewport; once the content
+   outgrows the viewport the auto margin resolves to 0 and the log scrolls
+   normally with the top fully reachable (unlike `justify-content: flex-end`,
+   which clips overflowing content above the scroll range). The empty/loading
+   states own their own vertical layout, so they're excluded. */
+.chat-log > :first-child:not(.chat-empty-wrap):not(.chat-loading-state) {
+  margin-top: auto;
+}
 .chat-log::-webkit-scrollbar {
   width: 8px;
 }
@@ -874,6 +885,19 @@
 .composer:has(.composer-import-menu) {
   z-index: 80;
 }
+.chat-composer-slot {
+  flex: 0 0 auto;
+}
+.chat-composer-fixed-layer {
+  position: fixed;
+  z-index: 45;
+  pointer-events: none;
+  contain: layout style paint;
+  transform: translateZ(0);
+}
+.chat-composer-fixed-layer .composer {
+  pointer-events: auto;
+}
 /* Elevation kicks in only when a pinned todo card is sitting directly
  * above the composer. Without the card the chat scroll already provides
  * its own visual edge; the shadow would just darken empty whitespace. */
@@ -923,6 +947,35 @@
   border-color: var(--accent);
   background: var(--accent-tint);
 }
+.composer-active-file {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  width: fit-content;
+  max-width: calc(100% - 24px);
+  margin: 0 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-panel));
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.25;
+}
+.composer-active-file__label {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-weight: 650;
+}
+.composer-active-file__name {
+  min-width: 0;
+  max-width: min(100%, 260px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+}
 /* -------- Lexical contenteditable input ---------------------------- */
 .composer-input-wrap {
   position: relative;
@@ -947,6 +1000,10 @@
   max-height: min(184px, 34vh);
   overflow-y: auto;
 }
+.composer.composer-active-file-mode .composer-input-editor {
+  min-height: clamp(150px, 20vh, 210px);
+  max-height: min(300px, 32vh);
+}
 .composer-input-editor [contenteditable='true'],
 .composer-input-editor .composer-editable {
   outline: none;
@@ -961,6 +1018,10 @@
   word-break: break-word;
   caret-color: var(--accent);
   -webkit-user-modify: read-write-plaintext-only; /* paste-as-plain-text guard */
+}
+.composer.composer-active-file-mode .composer-input-editor [contenteditable='true'],
+.composer.composer-active-file-mode .composer-input-editor .composer-editable {
+  min-height: clamp(150px, 20vh, 210px);
 }
 /* Lexical placeholder — absolutely positioned over the empty editor. The
    editor adds/removes its sibling automatically; we style by class. */

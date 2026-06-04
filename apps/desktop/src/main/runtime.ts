@@ -1422,6 +1422,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     ...MAC_WINDOW_CHROME,
     webPreferences: {
       additionalArguments: osLocaleAdditionalArguments(options.osLocale),
+      backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
       preload: preloadPath,

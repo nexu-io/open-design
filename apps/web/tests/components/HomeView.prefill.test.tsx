@@ -518,8 +518,12 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
+    // The per-plugin context badge row was removed; staged plugin context now
+    // only renders as an inline @mention pill (or, when the prompt is empty as
+    // here, surfaces via the active context row's resolved-count label). Assert
+    // the plugin was staged through that count rather than the dropped badge.
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-context-plugin-example-web-prototype')).toBeTruthy();
+      expect(screen.getByLabelText(/1 context items resolved/i)).toBeTruthy();
     });
     await screen.findByTestId('home-hero-input');
     expect(homeHeroPromptValue()).toBe('');
@@ -1197,7 +1201,9 @@ describe('HomeView prompt handoff', () => {
       expect(homeHeroPromptText()).toBe(expectedPrompt);
     });
     expect(screen.queryByRole('dialog', { name: /replace current prompt/i })).toBeNull();
-    expect(screen.getByTestId('home-hero-context-plugin-example-web-prototype')).toBeTruthy();
+    // Plugin context stays staged across the appended-prompt handoff; the
+    // dropped per-plugin badge is replaced by the active context row's count.
+    expect(screen.getByLabelText(/1 context items resolved/i)).toBeTruthy();
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
   });
 

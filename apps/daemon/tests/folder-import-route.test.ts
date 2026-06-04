@@ -71,6 +71,17 @@ describe('POST /api/import/folder', () => {
     expect(body.project.metadata?.importedFrom).toBe('folder');
     expect(body.conversationId).toBeTruthy();
     expect(body.entryFile).toBe('index.html');
+
+    const tabsResp = await fetch(`${baseUrl}/api/projects/${body.project.id}/tabs`);
+    expect(tabsResp.status).toBe(200);
+    const tabs = (await tabsResp.json()) as {
+      tabs: string[];
+      active: string | null;
+      hasSavedState?: boolean;
+      updatedAt?: number;
+    };
+    expect(tabs).toMatchObject({ tabs: [], active: null, hasSavedState: true });
+    expect(typeof tabs.updatedAt).toBe('number');
   });
 
   it('rejects folder imports in sandbox mode', async () => {

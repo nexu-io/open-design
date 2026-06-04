@@ -8,6 +8,7 @@
 // textarea can live centered in the hero.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import type {
   ApplyResult,
   ChatSessionMode,
@@ -36,7 +37,7 @@ import {
   resolvePluginQueryFallback,
 } from '../state/projects';
 import { fetchMcpServers } from '../state/mcp';
-import { useI18n } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import {
   localizeSkillName,
   localizeSkillPrompt,
@@ -57,8 +58,9 @@ import type {
   PromptTemplateSummary,
   SkillSummary,
 } from '../types';
-import { inlineMentionToken } from '../utils/inlineMentions';
+import { inlineMentionToken, mentionTokenPresent } from '../utils/inlineMentions';
 import { HomeHero, type ExamplePromptInfo, type HomeHeroHandle } from './HomeHero';
+import { Icon } from './Icon';
 import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
 import {
   buildHomeMediaComposer,
@@ -75,12 +77,15 @@ import {
   type HomePromptHandoff,
 } from './home-hero/plugin-authoring';
 import { PluginDetailsModal } from './PluginDetailsModal';
+import { HomeTemplatesReveal } from './HomeTemplatesReveal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import type { FacetSelection } from './plugins-home/facets';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
 import { AnimatePresence } from 'motion/react';
+import { Toast } from './Toast';
+import { useOpenFolderImport } from './useOpenFolderImport';
 
 interface ActivePlugin {
   record: InstalledPluginRecord;
@@ -118,16 +123,26 @@ interface ActivePlugin {
   suppressPromptSync: boolean;
 }
 
+// `inlineBacked` distinguishes a context inserted as an inline `@mention` pill
+// (added through the mention picker / plus menu, which writes a token into the
+// prompt) from a context-only selection made through the plain `Use` action
+// (which stages the context without touching the prompt). Inline-backed
+// contexts are dropped once their `@` token is deleted; context-only ones stay
+// selected until explicitly removed. Conflating the two drops plain `Use`
+// selections from the submit payload because they never carry a token.
 interface SelectedPluginContext {
   record: InstalledPluginRecord;
+  inlineBacked: boolean;
 }
 
 interface SelectedMcpContext {
   server: McpServerConfig;
+  inlineBacked: boolean;
 }
 
 interface SelectedConnectorContext {
   connector: ConnectorDetail;
+  inlineBacked: boolean;
 }
 
 interface PendingReplacement {
@@ -182,6 +197,10 @@ interface Props {
   onOpenProject: (id: string) => void;
   onViewAllProjects: () => void;
   onBrowseRegistry?: () => void;
+  onOpenIntegrations?: () => void;
+  onOpenMcp?: () => void;
+  onImportFolder?: (baseDir: string) => Promise<void> | void;
+  onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
   // Stage B: optional callbacks the rail's migration chips need.
   // HomeView itself never imports them; EntryShell threads them
   // through so the dispatcher can stay declarative.
@@ -208,6 +227,10 @@ export function HomeView({
   onOpenProject,
   onViewAllProjects,
   onBrowseRegistry,
+  onOpenIntegrations,
+  onOpenMcp,
+  onImportFolder,
+  onImportFolderResponse,
   onOpenNewProject,
   promptHandoff,
   skills = EMPTY_SKILLS,
@@ -296,6 +319,12 @@ export function HomeView({
   const consumedHandoffIdRef = useRef<number | null>(null);
   const pendingPromptFocusEndRef = useRef(false);
   const activePluginApplyRequestRef = useRef(0);
+  const importSkillId = useMemo(() => {
+    const prototypeSkills = skills.filter((skill) => skill.mode === 'prototype');
+    return prototypeSkills.find((skill) => skill.defaultFor.includes('prototype'))?.id
+      ?? prototypeSkills[0]?.id
+      ?? null;
+  }, [skills]);
 
   useEffect(() => {
     let cancelled = false;
@@ -458,21 +487,36 @@ export function HomeView({
         : 0,
     [active],
   );
-  const contextItemCount = useMemo(
-    () =>
+  // Inline-backed contexts are already represented in the composer as `@mention`
+  // pills, so they must NOT also drive the active context row — otherwise
+  // selecting only an inline-mentioned connector mounts an empty row (count
+  // label, no visible children) above the editor. Context-only `Use` selections
+  // have no inline representation, so they are the only ones the row should
+  // surface (and count).
+  const contextItemCount = useMemo(() => {
+    const contextOnlyPlugins = selectedPluginContexts.filter(
+      (item) => !item.inlineBacked,
+    ).length;
+    const contextOnlyMcp = selectedMcpContexts.filter(
+      (item) => !item.inlineBacked,
+    ).length;
+    const contextOnlyConnectors = selectedConnectorContexts.filter(
+      (item) => !item.inlineBacked,
+    ).length;
+    return (
       activeContextItemCount +
-      selectedPluginContexts.length +
-      selectedMcpContexts.length +
-      selectedConnectorContexts.length +
-      stagedFiles.length,
-    [
-      activeContextItemCount,
-      selectedConnectorContexts.length,
-      selectedMcpContexts.length,
-      selectedPluginContexts.length,
-      stagedFiles.length,
-    ],
-  );
+      contextOnlyPlugins +
+      contextOnlyMcp +
+      contextOnlyConnectors +
+      stagedFiles.length
+    );
+  }, [
+    activeContextItemCount,
+    selectedConnectorContexts,
+    selectedMcpContexts,
+    selectedPluginContexts,
+    stagedFiles.length,
+  ]);
 
   // The Home chip rail and the Community grid share a mental
   // model — "Prototype" up top is the same artifact intent as the
@@ -788,7 +832,7 @@ export function HomeView({
     let shouldFocusOnly = true;
     setSelectedPluginContexts((prev) => {
       if (prev.some((item) => item.record.id === record.id)) return prev;
-      return [...prev, { record }];
+      return [...prev, { record, inlineBacked: false }];
     });
     if (action === 'use-with-query') {
       const queryPrompt = renderPluginContextPrompt(record, inputs);
@@ -879,7 +923,7 @@ export function HomeView({
   function addPluginContext(record: InstalledPluginRecord, nextPrompt: string | null) {
     setSelectedPluginContexts((prev) => {
       if (prev.some((item) => item.record.id === record.id)) return prev;
-      return [...prev, { record }];
+      return [...prev, { record, inlineBacked: true }];
     });
     if (nextPrompt !== null) setPrompt(nextPrompt);
     setError(null);
@@ -1066,7 +1110,7 @@ export function HomeView({
     setSelectedMcpContexts((current) => (
       current.some((item) => item.server.id === _server.id)
         ? current
-        : [...current, { server: _server }]
+        : [...current, { server: _server, inlineBacked: true }]
     ));
     setPrompt(nextPrompt);
     setError(null);
@@ -1089,7 +1133,7 @@ export function HomeView({
     setSelectedConnectorContexts((current) => (
       current.some((item) => item.connector.id === connector.id)
         ? current
-        : [...current, { connector }]
+        : [...current, { connector, inlineBacked: true }]
     ));
     setPrompt(nextPrompt);
     setPromptEditedByUser(false);
@@ -1300,28 +1344,41 @@ export function HomeView({
       submittedActive = { ...submittedActive, result, inputs: submittedPluginInputs };
       setActive(submittedActive);
     }
-    const contextPlugins = selectedPluginContexts.map((item) => ({
-      id: item.record.id,
-      title: item.record.title,
-      ...(item.record.manifest?.description
-        ? { description: item.record.manifest.description }
-        : {}),
-    }));
-    const contextMcpServers = selectedMcpContexts.map((item) => ({
-      id: item.server.id,
-      ...(item.server.label ? { label: item.server.label } : {}),
-      ...(item.server.transport ? { transport: item.server.transport } : {}),
-      ...(item.server.url ? { url: item.server.url } : {}),
-      ...(item.server.command ? { command: item.server.command } : {}),
-    }));
-    const contextConnectors = selectedConnectorContexts.map((item) => ({
-      id: item.connector.id,
-      name: item.connector.name,
-      provider: item.connector.provider,
-      category: item.connector.category,
-      status: item.connector.status,
-      ...(item.connector.accountLabel ? { accountLabel: item.connector.accountLabel } : {}),
-    }));
+    // Reconcile each selected context against the serialized prompt text before
+    // forwarding it. Inline-backed contexts (inserted as `@mention` pills) are
+    // only sent while their token survives in the prompt — the Lexical composer
+    // lets users delete a mention pill (backspace, edit), and when they do that
+    // plugin/MCP/connector should stop being sent. Context-only `Use`
+    // selections never carry a token, so they stay in the payload until the
+    // user explicitly clears them.
+    const contextPlugins = selectedPluginContexts
+      .filter((item) => !item.inlineBacked || mentionTokenPresent(trimmed, item.record.title))
+      .map((item) => ({
+        id: item.record.id,
+        title: item.record.title,
+        ...(item.record.manifest?.description
+          ? { description: item.record.manifest.description }
+          : {}),
+      }));
+    const contextMcpServers = selectedMcpContexts
+      .filter((item) => !item.inlineBacked || mentionTokenPresent(trimmed, item.server.label || item.server.id))
+      .map((item) => ({
+        id: item.server.id,
+        ...(item.server.label ? { label: item.server.label } : {}),
+        ...(item.server.transport ? { transport: item.server.transport } : {}),
+        ...(item.server.url ? { url: item.server.url } : {}),
+        ...(item.server.command ? { command: item.server.command } : {}),
+      }));
+    const contextConnectors = selectedConnectorContexts
+      .filter((item) => !item.inlineBacked || mentionTokenPresent(trimmed, item.connector.name))
+      .map((item) => ({
+        id: item.connector.id,
+        name: item.connector.name,
+        provider: item.connector.provider,
+        category: item.connector.category,
+        status: item.connector.status,
+        ...(item.connector.accountLabel ? { accountLabel: item.connector.accountLabel } : {}),
+      }));
     const submittedProjectKind =
       submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other';
     const submittedProjectMetadata = submittedActive?.mediaSurface
@@ -1387,9 +1444,15 @@ export function HomeView({
         selectedPluginContexts={selectedPluginContexts.map((item) => item.record)}
         selectedMcpContexts={selectedMcpContexts.map((item) => item.server)}
         selectedConnectorContexts={selectedConnectorContexts.map((item) => item.connector)}
+        contextOnlyPlugins={selectedPluginContexts.filter((item) => !item.inlineBacked).map((item) => item.record)}
+        contextOnlyMcpServers={selectedMcpContexts.filter((item) => !item.inlineBacked).map((item) => item.server)}
+        contextOnlyConnectors={selectedConnectorContexts.filter((item) => !item.inlineBacked).map((item) => item.connector)}
         onRemovePluginContext={removePluginContext}
         onRemoveMcpContext={removeMcpContext}
         onRemoveConnectorContext={removeConnectorContext}
+        onAddPlugin={onBrowseRegistry}
+        onAddConnector={onOpenIntegrations}
+        onAddMcp={onOpenMcp}
         onOpenPluginDetails={setDetailsRecord}
         pluginInputFields={active?.inputFields ?? []}
         pluginInputValues={active?.inputs ?? {}}
@@ -1438,6 +1501,12 @@ export function HomeView({
         executionSwitcher={executionSwitcher}
       />
 
+      <HomeExistingProjectAction
+        skillId={importSkillId}
+        onImportFolder={onImportFolder}
+        onImportFolderResponse={onImportFolderResponse}
+      />
+
       <RecentProjectsStrip
         projects={projects}
         designSystems={designSystems}
@@ -1467,17 +1536,21 @@ export function HomeView({
         }}
       />
 
-      <PluginsHomeSection
-        plugins={plugins}
-        loading={pluginsLoading}
-        activePluginId={active?.record.id ?? null}
-        pendingApplyId={pendingApplyId}
-        onUse={(record, action) => requestPluginContextUse(record, action)}
-        onOpenDetails={setDetailsRecord}
-        onBrowseRegistry={onBrowseRegistry}
-        preferDefaultFacet={false}
-        presetSelection={presetStartersSelection}
-      />
+      <HomeTemplatesReveal
+        enabled={!projectsLoading && projects.length === 0}
+      >
+        <PluginsHomeSection
+          plugins={plugins}
+          loading={pluginsLoading}
+          activePluginId={active?.record.id ?? null}
+          pendingApplyId={pendingApplyId}
+          onUse={(record, action) => requestPluginContextUse(record, action)}
+          onOpenDetails={setDetailsRecord}
+          onBrowseRegistry={onBrowseRegistry}
+          preferDefaultFacet={false}
+          presetSelection={presetStartersSelection}
+        />
+      </HomeTemplatesReveal>
 
       <AnimatePresence>
         {detailsRecord ? (
@@ -1567,6 +1640,60 @@ export function HomeView({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function HomeExistingProjectAction({
+  skillId,
+  onImportFolder,
+  onImportFolderResponse,
+}: {
+  skillId: string | null;
+  onImportFolder?: (baseDir: string) => Promise<void> | void;
+  onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
+}) {
+  const t = useT();
+  const folderImport = useOpenFolderImport({
+    skillId,
+    onImportFolder,
+    onImportFolderResponse,
+  });
+  if (!folderImport.available) return null;
+
+  return (
+    <section className="home-existing-project" data-testid="home-existing-project">
+      <form
+        className="home-existing-project__form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void folderImport.openFolder();
+        }}
+      >
+        <button
+          type="submit"
+          className="home-existing-project__button"
+          disabled={folderImport.importing}
+        >
+          <Icon name="folder" size={14} />
+          <span>
+            {folderImport.importing
+              ? t('home.openExistingProjectOpening')
+              : t('home.openExistingProject')}
+          </span>
+        </button>
+      </form>
+      <p className="home-existing-project__subtitle">
+        {t('home.chooseFolderSubtitle')}
+      </p>
+      {folderImport.error ? (
+        <Toast
+          message={folderImport.error.message}
+          details={folderImport.error.details ?? null}
+          ttlMs={6000}
+          onDismiss={folderImport.clearError}
+        />
+      ) : null}
+    </section>
   );
 }
 

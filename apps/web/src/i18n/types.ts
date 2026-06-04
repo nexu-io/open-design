@@ -798,6 +798,8 @@ export interface Dict {
   'entry.useEverywhereTitle': string;
   'entry.useEverywhereAria': string;
   // Left nav rail (icon-only) — surface labels also serve as tooltips
+  'entry.navExpand': string;
+  'entry.navCollapse': string;
   'entry.navNewProject': string;
   'entry.navHome': string;
   'entry.navProjects': string;
@@ -811,10 +813,19 @@ export interface Dict {
 
   // Entry home
   'homeHero.title': string;
+  'homeHero.templatesScrollHint': string;
+  'homeHero.templatesCollapse': string;
   'homeHero.subtitlePrefix': string;
   'homeHero.placeholder': string;
   'homeHero.placeholderActive': string;
   'homeHero.skills': string;
+  'homeHero.addMenu': string;
+  'homeHero.addPlugin': string;
+  'homeHero.addConnectors': string;
+  'homeHero.addMcp': string;
+  'homeHero.noPlugins': string;
+  'homeHero.noMcp': string;
+  'homeHero.noConnectors': string;
   'homeHero.applying': string;
   'homeHero.pluginTitle': string;
   'homeHero.pluginPrefix': string;
@@ -943,6 +954,9 @@ export interface Dict {
   'recentProjects.title': string;
   'recentProjects.viewAll': string;
   'recentProjects.empty': string;
+  'home.openExistingProject': string;
+  'home.openExistingProjectOpening': string;
+  'home.chooseFolderSubtitle': string;
   'pluginsHome.title': string;
   'pluginsHome.subtitle': string;
   'pluginsHome.browseRegistry': string;
@@ -1882,6 +1896,9 @@ export interface Dict {
   'chat.copyPrompt': string;
   'chat.copyDone': string;
   'chat.composerPlaceholder': string;
+  'chat.activeFileEditingLabel': string;
+  'chat.activeFilePlaceholder': string;
+  'chat.designArtifactsShowMore': string;
   'chat.mode.chat.label': string;
   'chat.mode.chat.title': string;
   'chat.mode.chat.summary': string;
