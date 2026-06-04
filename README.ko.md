@@ -332,7 +332,7 @@ corepack enable && pnpm install
 pnpm tools-dev run web
 ```
 
-Node `~24`, pnpm `10.33.x`. Windows 사용자는 [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md)를 참고하세요. 전체 빠른 시작, 환경 변수, Nix flake, 패키징 빌드 흐름 → [`QUICKSTART.md`](QUICKSTART.md).
+Node `~24`, pnpm `10.33.x`. Windows 사용자는 [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md)를 참고하세요. 전체 빠른 시작, 환경 변수, Nix flake, 패키징 빌드 흐름 → [`QUICKSTART.ko.md`](QUICKSTART.ko.md).
 
 ### 전체 워크플로 — 브리프에서 아티팩트까지
 
@@ -631,7 +631,7 @@ pnpm --filter @open-design/<package> test
 gh pr create --fill
 ```
 
-전체 에이전트 친화적 기여 흐름, 코드 스타일, PR 기준 → [`CONTRIBUTING.md`](CONTRIBUTING.md) ([Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)).
+전체 에이전트 친화적 기여 흐름, 코드 스타일, PR 기준 → [`CONTRIBUTING.ko.md`](CONTRIBUTING.ko.md) ([Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)).
 
 ### 🏅 Open Design Fellow 프로그램
 
