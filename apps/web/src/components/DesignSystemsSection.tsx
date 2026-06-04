@@ -11,6 +11,7 @@ import {
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { Icon } from './Icon';
 import { orderDesignSystemGroups } from './design-system-group-order';
+import { AnimatePresence } from 'motion/react';
 
 // Sibling Settings section that hosts the design-systems registry.
 // Lifted out of the previous LibrarySection so each surface (functional
@@ -20,6 +21,13 @@ import { orderDesignSystemGroups } from './design-system-group-order';
 interface Props {
   cfg: AppConfig;
   setCfg: Dispatch<SetStateAction<AppConfig>>;
+  /**
+   * Notified after a successful design-system mutation.
+   * Lets App.tsx evict preview iframes whose project depends on the
+   * affected design system; body-only edits on existing systems also
+   * flow through here.
+   */
+  onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
 }
 
 function toggleCraftSlug(current: string[], slug: string, enabled: boolean): string[] {
@@ -29,7 +37,7 @@ function toggleCraftSlug(current: string[], slug: string, enabled: boolean): str
   return Array.from(next);
 }
 
-export function DesignSystemsSection({ cfg, setCfg }: Props) {
+export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Props) {
   const t = useT();
   const cardRefs = useRef(new Map<string, HTMLDivElement>());
   const [designSystems, setDesignSystems] = useState<DesignSystemSummary[]>([]);
@@ -178,6 +186,7 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
           .map((d) => (d.id === targetId ? { ...d, title: updated.title } : d))
           .sort((a, b) => a.title.localeCompare(b.title)),
       );
+      onDesignSystemsChanged?.(targetId);
     }
     // Ignore a stale completion: the user cancelled or opened another rename
     // while this PATCH was in flight, so the modal state now belongs to a
@@ -230,6 +239,7 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
     setImportPath('');
     setImportedDesignSystem(result.designSystem);
     setImportMessage(result.designSystem.title);
+    onDesignSystemsChanged?.(result.designSystem.id);
   }
 
   function viewImportedDesignSystem() {
@@ -553,12 +563,14 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
           </>
         )}
       </div>
-      {previewSystem ? (
-        <DesignSystemPreviewModal
-          system={previewSystem}
-          onClose={() => setPreviewSystem(null)}
-        />
-      ) : null}
+      <AnimatePresence>
+        {previewSystem ? (
+          <DesignSystemPreviewModal
+            system={previewSystem}
+            onClose={() => setPreviewSystem(null)}
+          />
+        ) : null}
+      </AnimatePresence>
       {renameTarget ? (
         <div className="modal-backdrop" onClick={cancelRename}>
           <form

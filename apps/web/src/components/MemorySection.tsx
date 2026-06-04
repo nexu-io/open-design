@@ -6,6 +6,7 @@ import {
   useState,
   type CSSProperties,
 } from 'react';
+import { Button } from '@open-design/components';
 import { Icon, type IconName } from './Icon';
 import { ConnectorLogo, useResolvedTheme } from './ConnectorLogo';
 import { useT } from '../i18n';
@@ -1421,33 +1422,35 @@ export function MemorySection({
 	          {entry.description || '—'}
 	        </div>
 	      </div>
-	      <button
-	        type="button"
-	        className="library-card-expand"
-	        onClick={() => openPreview(entry.id)}
-	        title={t('settings.memoryPreview')}
-	      >
-	        <Icon
-	          name={previewId === entry.id ? 'chevron-down' : 'chevron-right'}
-	          size={14}
-	        />
-	      </button>
-	      <button
-	        type="button"
-	        className="ghost library-card-action"
-	        onClick={() => startEdit(entry.id)}
-	        title={t('settings.memoryEdit')}
-	      >
-	        <Icon name="edit" size={14} />
-	      </button>
-	      <button
-	        type="button"
-	        className="ghost library-card-action"
-	        onClick={() => onDelete(entry.id)}
-	        title={t('settings.memoryDelete')}
-	      >
-	        <Icon name="close" size={14} />
-	      </button>
+	      <div className="memory-card-actions">
+	        <button
+	          type="button"
+	          className="library-card-expand"
+	          onClick={() => openPreview(entry.id)}
+	          title={t('settings.memoryPreview')}
+	        >
+	          <Icon
+	            name={previewId === entry.id ? 'chevron-down' : 'chevron-right'}
+	            size={14}
+	          />
+	        </button>
+	        <button
+	          type="button"
+	          className="ghost library-card-action"
+	          onClick={() => startEdit(entry.id)}
+	          title={t('settings.memoryEdit')}
+	        >
+	          <Icon name="edit" size={14} />
+	        </button>
+	        <button
+	          type="button"
+	          className="ghost library-card-action"
+	          onClick={() => onDelete(entry.id)}
+	          title={t('settings.memoryDelete')}
+	        >
+	          <Icon name="close" size={14} />
+	        </button>
+	      </div>
 	      {previewId === entry.id && (
 	        <div className="library-preview" style={{ width: '100%' }}>
 	          {previewBody === null ? (
@@ -1530,15 +1533,17 @@ export function MemorySection({
             </div>
           ) : null}
         </div>
-        <button
-          type="button"
-          className="ghost library-card-action"
-          onClick={() => void onDeleteExtraction(record.id)}
-          title={t('settings.memoryExtractionDelete')}
-          aria-label={t('settings.memoryExtractionDelete')}
-        >
-          <Icon name="close" size={14} />
-        </button>
+        <div className="memory-card-actions">
+          <button
+            type="button"
+            className="ghost library-card-action"
+            onClick={() => void onDeleteExtraction(record.id)}
+            title={t('settings.memoryExtractionDelete')}
+            aria-label={t('settings.memoryExtractionDelete')}
+          >
+            <Icon name="close" size={14} />
+          </button>
+        </div>
       </div>
     );
   };
@@ -1833,17 +1838,16 @@ export function MemorySection({
                   {t('settings.memorySaveHint')}
                 </span>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button" className="ghost" onClick={cancelEdit}>
+                  <Button variant="ghost" onClick={cancelEdit}>
                     {t('common.cancel')}
-                  </button>
-                  <button
-                    type="button"
-                    className="primary"
+                  </Button>
+                  <Button
+                    variant="primary"
                     onClick={onSave}
                     disabled={busy || !editing.name.trim()}
                   >
                     {editing.id ? t('common.save') : t('common.create')}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -2280,12 +2284,7 @@ export function MemorySection({
                             {children.map((child) => (
                               <li
                                 key={child.id}
-                                style={{
-                                  display: 'grid',
-                                  gridTemplateColumns: 'minmax(0, 1fr) auto',
-                                  alignItems: 'center',
-                                  gap: 8,
-                                }}
+                                className="memory-tree-child-row"
                               >
                                 <span style={{ minWidth: 0 }}>
                                   <span className="library-card-name">{child.name}</span>{' '}
@@ -2299,14 +2298,16 @@ export function MemorySection({
                                     </span>
                                   ) : null}
                                 </span>
-                                <button
-                                  type="button"
-                                  className="ghost library-card-action"
-                                  onClick={() => startEdit(child.id)}
-                                  title={t('settings.memoryEdit')}
-                                >
-                                  <Icon name="edit" size={14} />
-                                </button>
+                                <div className="memory-card-actions">
+                                  <button
+                                    type="button"
+                                    className="ghost library-card-action"
+                                    onClick={() => startEdit(child.id)}
+                                    title={t('settings.memoryEdit')}
+                                  >
+                                    <Icon name="edit" size={14} />
+                                  </button>
+                                </div>
                               </li>
                             ))}
                           </ul>

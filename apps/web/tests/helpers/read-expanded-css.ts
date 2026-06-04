@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
+const packageCssImports = new Map([
+  ['@open-design/components/styles.css', join(process.cwd(), '../../packages/components/src/styles.css')],
+]);
+
 function expandCssFile(filePath: string, seen = new Set<string>()): string {
   const key = filePath;
   if (seen.has(key)) {
@@ -12,7 +16,8 @@ function expandCssFile(filePath: string, seen = new Set<string>()): string {
   return css.replace(/@import\s+(?:url\(([^)]+)\)|(['"])([^'"]+)\2);/g, (_match, urlImport, _quote, quotedImport) => {
     const specifier = (quotedImport ?? urlImport ?? '').trim().replace(/^['"]|['"]$/g, '');
     if (!specifier.startsWith('./') && !specifier.startsWith('../')) {
-      return '';
+      const packageCssPath = packageCssImports.get(specifier);
+      return packageCssPath == null ? '' : expandCssFile(packageCssPath, seen);
     }
     return expandCssFile(join(dirname(filePath), specifier), seen);
   });

@@ -633,6 +633,7 @@ describe('fetchMediaProvidersFromDaemon', () => {
           providers: {
             openai: {
               configured: true,
+              source: 'stored',
               apiKeyTail: '1234',
               baseUrl: 'https://daemon.example/v1',
               model: 'gpt-image-1',
@@ -650,6 +651,7 @@ describe('fetchMediaProvidersFromDaemon', () => {
         openai: {
           apiKey: '',
           apiKeyConfigured: true,
+          source: 'stored',
           apiKeyTail: '1234',
           baseUrl: 'https://daemon.example/v1',
           model: 'gpt-image-1',
@@ -729,6 +731,34 @@ describe('buildMediaProvidersForDaemonSave', () => {
           model: 'gemini-custom',
         },
       },
+      force: false,
+    });
+  });
+
+  it('does not persist default OpenAI base URL for OAuth-only markers', () => {
+    expect(
+      buildMediaProvidersForDaemonSave(
+        {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '',
+            baseUrl: '',
+            source: 'oauth-codex',
+          },
+        },
+        {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '',
+            baseUrl: '',
+            source: 'oauth-codex',
+          },
+        },
+      ),
+    ).toEqual({
+      providers: {},
       force: false,
     });
   });

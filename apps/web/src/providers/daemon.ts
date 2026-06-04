@@ -10,6 +10,7 @@
  *                 non-zero (tail appended to the error message).
  */
 import type { AgentEvent, ChatCommentAttachment, ChatMessage } from '../types';
+import type { AmrEntryAttribution } from '../analytics/amr-attribution';
 import type {
   ChatAnalyticsHints,
   ChatRunCreateResponse,
@@ -17,9 +18,12 @@ import type {
   ChatRunStatus,
   ChatRunStatusResponse,
   ChatRequest,
+  ChatSessionMode,
   ChatSseEvent,
   ChatSseStartPayload,
   DaemonAgentPayload,
+  AmrModelsResponse,
+  MediaExecutionPolicy,
   ResearchOptions,
   RunContextSelection,
   SseErrorPayload,
@@ -135,10 +139,50 @@ function scopeHistoryToAgent(history: ChatMessage[], targetAgentId?: string): Ch
   return history;
 }
 
+// Strip OD-specific markup that the agent emitted on a prior turn but
+// that the model would otherwise pattern-match as a template to echo.
+// Today this is `<question-form>` blocks and the ```json fenced schemas
+// some models (GPT-OSS-120B Medium, Gemini 3.5 Flash) emit alongside
+// them — leaving those literal in the transcript causes weak/medium
+// plain-stream models to re-emit an identical form on the user's
+// follow-up turn, looking like the discovery form loop never breaks
+// (see PR #3157 form-loop investigation).
+//
+// User content is preserved verbatim — a user message that legitimately
+// quotes `<question-form>` (e.g. discussing the markup with the agent)
+// must not be mangled.
+export function sanitizePriorAssistantTurnForTranscript(content: string): string {
+  let sanitized = content.replace(
+    /<question-form\b[^>]*>[\s\S]*?<\/question-form>/g,
+    '[question-form was emitted here on a prior turn; the user already answered, see their reply below.]',
+  );
+  // Strip ```json (or plain ```) fenced blocks whose body matches the
+  // form schema shape — `"questions": [` is the strongest tell. A
+  // generic JSON snippet without that key (e.g. an API response the
+  // agent shared) is left intact.
+  sanitized = sanitized.replace(
+    /```(?:json)?\s*\n([\s\S]*?)\n```/g,
+    (match, body: string) => {
+      if (/"questions"\s*:\s*\[/.test(body)) {
+        return '[form schema was echoed here on a prior turn; stripped to avoid a loop.]';
+      }
+      return match;
+    },
+  );
+  return sanitized;
+}
+
 export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: string): string {
   const scopedHistory = scopeHistoryToAgent(history, targetAgentId);
   const transcript = scopedHistory
-    .map((m) => `## ${m.role}\n${escapeTranscriptRoleDelimiters(truncateForTranscript(m.content.trim()))}`)
+    .map((m) => {
+      const trimmed = m.content.trim();
+      const sanitized =
+        m.role === 'assistant'
+          ? sanitizePriorAssistantTurnForTranscript(trimmed)
+          : trimmed;
+      return `## ${m.role}\n${escapeTranscriptRoleDelimiters(truncateForTranscript(sanitized))}`;
+    })
     .join('\n\n');
   const warning = buildPriorRunContextWarning(scopedHistory);
   return warning ? `${warning}\n\n${transcript}` : transcript;
@@ -146,6 +190,14 @@ export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: st
 
 export interface DaemonStreamHandlers extends StreamHandlers {
   onAgentEvent: (ev: AgentEvent) => void;
+  /**
+   * Live-only incremental tool-input fragment (Claude `input_json_delta`).
+   * Kept off `AgentEvent`/`PersistedAgentEvent` because it is ephemeral and
+   * never persisted — consumers accumulate by tool-use `id` for real-time
+   * display and discard once the full `tool_use` event arrives. `name` is the
+   * tool name so the UI can gate the live preview to code-writing tools.
+   */
+  onToolInputDelta?: (id: string, name: string, delta: string) => void;
 }
 
 export interface DaemonStreamOptions {
@@ -163,6 +215,7 @@ export interface DaemonStreamOptions {
   // workspace.
   projectId?: string | null;
   conversationId?: string | null;
+  sessionMode?: ChatSessionMode;
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
@@ -183,6 +236,8 @@ export interface DaemonStreamOptions {
   reasoning?: string | null;
   research?: ResearchOptions;
   context?: RunContextSelection;
+  appliedPluginSnapshotId?: string | null;
+  mediaExecution?: MediaExecutionPolicy;
   locale?: string;
   initialLastEventId?: string | null;
   onRunCreated?: (runId: string) => void;
@@ -258,6 +313,7 @@ export async function streamViaDaemon({
   handlers,
   projectId,
   conversationId,
+  sessionMode,
   assistantMessageId,
   clientRequestId,
   skillId,
@@ -269,6 +325,8 @@ export async function streamViaDaemon({
   reasoning,
   research,
   context,
+  appliedPluginSnapshotId,
+  mediaExecution,
   locale,
   initialLastEventId,
   onRunCreated,
@@ -290,6 +348,7 @@ export async function streamViaDaemon({
     currentPrompt: latestUserPromptFromHistory(history),
     projectId: projectId ?? null,
     conversationId: conversationId ?? null,
+    sessionMode,
     assistantMessageId: assistantMessageId ?? null,
     clientRequestId: clientRequestId ?? null,
     skillId: skillId ?? null,
@@ -300,8 +359,10 @@ export async function streamViaDaemon({
     model: model ?? null,
     reasoning: reasoning ?? null,
     locale,
+    ...(appliedPluginSnapshotId ? { appliedPluginSnapshotId } : {}),
     ...(context ? { context } : {}),
     ...(research ? { research } : {}),
+    ...(mediaExecution ? { mediaExecution } : {}),
     ...(analyticsHints ? { analyticsHints } : {}),
   };
   const body = JSON.stringify(request);
@@ -402,6 +463,46 @@ export async function submitChatRunToolResult(
   }
 }
 
+// PR #3157: Antigravity's auth banner can offer a one-click "open
+// system terminal with agy" button. The daemon endpoint spawns
+// osascript / x-terminal-emulator / `cmd /c start` for the user; on
+// success the new Terminal window pops up with agy running and the
+// browser opens for OAuth. The Promise resolves once the daemon kicks
+// off the spawn (not when OAuth completes), so the UI can disable the
+// button momentarily and then re-enable for a retry click after the
+// user finishes in the terminal.
+export interface LaunchAntigravityOauthResult {
+  ok: boolean;
+  platform?: string;
+  via?: string;
+  error?: string;
+}
+export async function launchAntigravityOauth(): Promise<LaunchAntigravityOauthResult> {
+  try {
+    const resp = await fetch('/api/agents/antigravity/oauth-launch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const body = (await resp.json().catch(() => null)) as
+      | LaunchAntigravityOauthResult
+      | null;
+    if (!resp.ok) {
+      return {
+        ok: false,
+        error:
+          body?.error ?? `daemon returned ${resp.status} ${resp.statusText}`,
+      };
+    }
+    return body ?? { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 export interface VelaUser {
   id: string;
   email: string;
@@ -434,6 +535,16 @@ export async function fetchVelaLoginStatus(): Promise<VelaLoginStatus | null> {
   }
 }
 
+export async function fetchAmrModels(): Promise<AmrModelsResponse | null> {
+  try {
+    const resp = await fetch('/api/amr/models', { cache: 'no-store' });
+    if (!resp.ok) return null;
+    return (await resp.json()) as AmrModelsResponse;
+  } catch {
+    return null;
+  }
+}
+
 export interface StartVelaLoginResult {
   ok: boolean;
   status: number;
@@ -442,9 +553,15 @@ export interface StartVelaLoginResult {
   error?: string;
 }
 
-export async function startVelaLogin(): Promise<StartVelaLoginResult> {
+export async function startVelaLogin(
+  attribution?: AmrEntryAttribution | null,
+): Promise<StartVelaLoginResult> {
   try {
-    const resp = await fetch('/api/integrations/vela/login', { method: 'POST' });
+    const resp = await fetch('/api/integrations/vela/login', {
+      method: 'POST',
+      headers: attribution ? { 'Content-Type': 'application/json' } : undefined,
+      body: attribution ? JSON.stringify({ attribution }) : undefined,
+    });
     if (resp.ok) {
       const body = (await resp.json()) as { pid?: number };
       return { ok: true, status: resp.status, pid: body.pid };
@@ -635,6 +752,16 @@ async function consumeDaemonRun({
           }
 
           if (event.event === 'agent') {
+            if (event.data.type === 'tool_input_delta') {
+              if (
+                typeof event.data.id === 'string' &&
+                typeof event.data.name === 'string' &&
+                typeof event.data.delta === 'string'
+              ) {
+                handlers.onToolInputDelta?.(event.data.id, event.data.name, event.data.delta);
+              }
+              continue;
+            }
             const translated = translateAgentEvent(event.data);
             if (!translated) continue;
             if (translated.kind === 'text') {
@@ -698,7 +825,10 @@ async function consumeDaemonRun({
       }
     }
 
-    if (endStatus === 'canceled') return;
+    if (endStatus === 'canceled') {
+      handlers.onDone(acc);
+      return;
+    }
 
     // Trust the server's authoritative success declaration. When the server
     // explicitly sets `status: 'succeeded'` (either in the SSE end payload
@@ -821,6 +951,13 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
       outputTokens: usage.output_tokens,
       costUsd: typeof data.costUsd === 'number' ? data.costUsd : undefined,
       durationMs: typeof data.durationMs === 'number' ? data.durationMs : undefined,
+    };
+  }
+  if (t === 'fabricated_role_marker' && typeof data.marker === 'string') {
+    return {
+      kind: 'status',
+      label: 'warning',
+      detail: `Model emitted fabricated role marker ("${data.marker}"). Response was truncated to prevent unauthorized instruction injection.`,
     };
   }
   if (t === 'raw' && typeof data.line === 'string') {

@@ -1,7 +1,13 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
+import {
+  isSandboxModeEnabled,
+  resolveSandboxRuntimeConfigFromEnv,
+  sandboxAgentProfilesConfigPath,
+} from '../sandbox-mode.js';
 import { DEFAULT_MODEL_OPTION, sanitizeCustomModel } from './models.js';
 import type {
   RuntimeAgentDef,
@@ -9,10 +15,44 @@ import type {
   RuntimeModelOption,
 } from './types.js';
 
-function localAgentProfilesFile(): string {
+const RUNTIME_PROJECT_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../..',
+);
+
+function isInsideDir(parent: string, child: string): boolean {
+  const relative = path.relative(parent, child);
+  return (
+    relative === '' ||
+    (!relative.startsWith('..') && !path.isAbsolute(relative))
+  );
+}
+
+function localAgentProfilesFile(): string | null {
   const explicit = process.env.OD_AGENT_PROFILES_CONFIG;
-  if (typeof explicit === 'string' && explicit.trim()) {
-    return explicit.trim();
+  const explicitPath =
+    typeof explicit === 'string' && explicit.trim()
+      ? path.resolve(explicit.trim())
+      : null;
+
+  if (isSandboxModeEnabled(process.env)) {
+    if (!process.env.OD_DATA_DIR?.trim()) return null;
+    const sandboxRuntime = resolveSandboxRuntimeConfigFromEnv(
+      process.env,
+      RUNTIME_PROJECT_ROOT,
+    );
+    if (!sandboxRuntime?.enabled) return null;
+    if (
+      explicitPath &&
+      isInsideDir(sandboxRuntime.roots.agentHomeDir, explicitPath)
+    ) {
+      return explicitPath;
+    }
+    return sandboxAgentProfilesConfigPath(sandboxRuntime);
+  }
+
+  if (explicitPath) {
+    return explicitPath;
   }
   return path.join(homedir(), '.open-design', 'agents.local.json');
 }
@@ -152,9 +192,11 @@ function createLocalAgentDef(
 export function readLocalAgentProfileDefs(
   baseDefs: RuntimeAgentDef[],
 ): RuntimeAgentDef[] {
+  const profilesFile = localAgentProfilesFile();
+  if (profilesFile == null) return [];
   let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(localAgentProfilesFile(), 'utf8'));
+    parsed = JSON.parse(readFileSync(profilesFile, 'utf8'));
   } catch {
     return [];
   }

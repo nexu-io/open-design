@@ -154,7 +154,7 @@ async function openNewProjectImageModelPicker(page: Page) {
 }
 
 test.describe('Settings media providers flows', () => {
-  test('autosaves media provider edits and restores them after closing and reopening settings', async ({ page }) => {
+  test('[P1] autosaves media provider edits and restores them after closing and reopening settings', async ({ page }) => {
     await seedSettingsBase(page);
 
     const mediaConfigWrites: Array<Record<string, unknown>> = [];
@@ -191,7 +191,7 @@ test.describe('Settings media providers flows', () => {
     await expect(dialog.getByLabel('FishAudio Base URL')).toHaveValue('https://fish.example.com');
   });
 
-  test('reloads media provider settings from daemon after an initial load failure', async ({ page }) => {
+  test('[P1] reloads media provider settings from daemon after an initial load failure', async ({ page }) => {
     await seedSettingsBase(page);
 
     let daemonMediaStatus: 'error' | 'ok' = 'error';
@@ -231,7 +231,7 @@ test.describe('Settings media providers flows', () => {
     await expect(dialog.getByLabel('OpenAI Base URL')).toHaveValue('https://daemon.example/v1');
   });
 
-  test('saved media provider config is consumed by the new-project media picker across pages', async ({ page }) => {
+  test('[P1] saved media provider config is consumed by the new-project media picker across pages', async ({ page }) => {
     await seedSettingsBase(page);
     await routeBootstrapApis(page);
 

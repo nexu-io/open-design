@@ -8,13 +8,47 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { FileWorkspace, scrollWorkspaceTabsWithWheel } from '../../src/components/FileWorkspace';
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
-import { projectSplitClassName } from '../../src/components/ProjectView';
+import { projectSplitClassName, projectSplitStyle } from '../../src/components/ProjectView';
 import {
   fetchProjectFileText,
   uploadProjectFiles,
   writeProjectTextFile,
 } from '../../src/providers/registry';
-import type { ProjectFile } from '../../src/types';
+import type { ChatMessage, ProjectFile } from '../../src/types';
+
+vi.mock('../../src/components/AmrGuidance', () => ({
+  AmrGuidance: ({
+    errorCode,
+    projectId,
+    projectKind,
+    conversationId,
+    assistantMessageId,
+    runId,
+    onActivate,
+  }: {
+    errorCode: string;
+    projectId: string;
+    projectKind: string | null;
+    conversationId: string | null;
+    assistantMessageId: string;
+    runId: string | null;
+    onActivate?: (() => void) | undefined;
+  }) => (
+    <div
+      data-testid="mock-amr-guidance"
+      data-error-code={errorCode}
+      data-project-id={projectId}
+      data-project-kind={projectKind ?? ''}
+      data-conversation-id={conversationId ?? ''}
+      data-assistant-message-id={assistantMessageId}
+      data-run-id={runId ?? ''}
+    >
+      <button type="button" data-testid="mock-amr-guidance-activate" onClick={onActivate}>
+        Switch to AMR
+      </button>
+    </div>
+  ),
+}));
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -27,6 +61,31 @@ vi.mock('../../src/providers/registry', async () => {
     writeProjectTextFile: vi.fn(),
   };
 });
+
+vi.mock('../../src/components/DesignBrowserPanel', () => ({
+  DesignBrowserPanel: ({
+    initialIconUrl,
+    initialTitle,
+    initialUrl,
+  }: {
+    initialIconUrl?: string;
+    initialTitle?: string;
+    initialUrl?: string;
+  }) => (
+    <div
+      data-testid="design-browser-panel"
+      data-initial-icon-url={initialIconUrl ?? ''}
+      data-initial-title={initialTitle ?? ''}
+      data-initial-url={initialUrl ?? ''}
+    />
+  ),
+}));
+
+vi.mock('../../src/components/workspace/TerminalViewer', () => ({
+  TerminalViewer: ({ terminalId }: { terminalId: string }) => (
+    <div data-testid="terminal-viewer">{terminalId}</div>
+  ),
+}));
 
 const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
 const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
@@ -85,6 +144,25 @@ function workspaceFile(name: string): ProjectFile {
   };
 }
 
+function failedAssistantMessage(
+  code: string,
+  agentId: string,
+  detail = 'Recovered upstream failure',
+): ChatMessage {
+  return {
+    id: `msg-${code.toLowerCase()}`,
+    role: 'assistant',
+    content: '',
+    createdAt: 1700000000,
+    startedAt: 1700000000,
+    runId: `run-${code.toLowerCase()}`,
+    runStatus: 'failed',
+    agentId,
+    preTurnFileNames: [],
+    events: [{ kind: 'status', label: 'error', detail, code }],
+  };
+}
+
 function renderWorkspace(element: React.ReactElement) {
   host = document.createElement('div');
   document.body.appendChild(host);
@@ -100,6 +178,10 @@ function getTabByName(container: HTMLElement, name: RegExp): HTMLElement {
   const tab = tabs.find((node) => name.test(node.textContent ?? ''));
   if (!tab) throw new Error(`Could not find tab matching ${name}`);
   return tab;
+}
+
+function renderedTabLabels(): string[] {
+  return screen.getAllByRole('tab').map((tab) => tab.textContent?.trim() ?? '');
 }
 
 function createDragDataTransfer() {
@@ -298,6 +380,52 @@ describe('FileWorkspace upload input', () => {
     });
   });
 
+  it('clears a prior upload failure after a later successful upload', async () => {
+    mockedUploadProjectFiles
+      .mockRejectedValueOnce(new Error('storage offline'))
+      .mockResolvedValueOnce({
+        uploaded: [
+          {
+            path: 'retry.png',
+            name: 'retry.png',
+            kind: 'image',
+            size: 1024,
+          },
+        ],
+        failed: [],
+      });
+
+    const onRefreshFiles = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[baseFile({ name: 'retry.png', path: 'retry.png' })]}
+        liveArtifacts={[]}
+        onRefreshFiles={onRefreshFiles}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByTestId('design-files-upload-input');
+    fireEvent.change(input, {
+      target: { files: [new File(['failed'], 'failed.png', { type: 'image/png' })] },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('upload-error-banner').textContent).toContain('storage offline');
+    });
+
+    fireEvent.change(input, {
+      target: { files: [new File(['retry'], 'retry.png', { type: 'image/png' })] },
+    });
+
+    await waitFor(() => expect(onRefreshFiles).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByTestId('upload-error-banner')).toBeNull());
+  });
+
   it('falls back to the browser file list when a dragged entry cannot be read', async () => {
     const fallbackFile = new File(['mock'], 'fallback.png', { type: 'image/png' });
     const onUploadFiles = vi.fn();
@@ -390,6 +518,585 @@ describe('FileWorkspace upload input', () => {
     );
 
     expect(markup).toContain('Show chat');
+  });
+});
+
+describe('FileWorkspace launcher tab creation', () => {
+  it('reports the active Design Files tab as workspace context', async () => {
+    const onActiveContextChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        resolvedDir="/tmp/open-design/project-1"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        onActiveContextChange={onActiveContextChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onActiveContextChange).toHaveBeenLastCalledWith({
+        id: 'workspace:design-files',
+        kind: 'design-files',
+        label: 'Design Files',
+        tabId: '__design_files__',
+        absolutePath: '/tmp/open-design/project-1',
+      });
+    });
+  });
+
+  it('appends a new terminal to the latest tab list after parent tabs change', async () => {
+    mockedFetchProjectFileText.mockResolvedValue('');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ terminal: { id: 'term-1' } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+    const onTabsStateChange = vi.fn();
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-1',
+      projectKind: 'prototype',
+      files: [],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange,
+    };
+
+    const { rerender } = render(<FileWorkspace {...baseProps} />);
+    rerender(
+      <FileWorkspace
+        {...baseProps}
+        tabsState={{ tabs: ['chat:existing'], active: null }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(await screen.findByRole('button', { name: /New Terminal/i }));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['chat:existing', 'terminal:term-1'],
+        active: 'terminal:term-1',
+      });
+    });
+  });
+
+  it('appends a new side chat to the latest tab list after parent tabs change', async () => {
+    mockedFetchProjectFileText.mockResolvedValue('');
+    const onTabsStateChange = vi.fn();
+    const onCreateSideChat = vi.fn(async () => 'conversation-2');
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-1',
+      projectKind: 'prototype',
+      files: [],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange,
+      onCreateSideChat,
+    };
+
+    const { rerender } = render(<FileWorkspace {...baseProps} />);
+    rerender(
+      <FileWorkspace
+        {...baseProps}
+        tabsState={{ tabs: ['terminal:existing'], active: null }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(await screen.findByRole('button', { name: /New Side Chat/i }));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['terminal:existing', 'chat:conversation-2'],
+        active: 'chat:conversation-2',
+      });
+    });
+  });
+
+  it('renders terminal and side chat tabs after a Design Files-anchored browser tab', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['terminal:term-1', 'chat:conversation-1'],
+          active: 'chat:conversation-1',
+          browserTabs: [
+            {
+              id: '__browser__:1',
+              insertAfter: '__design_files__',
+              label: 'Browser',
+            },
+          ],
+        }}
+        conversations={[
+          {
+            id: 'conversation-1',
+            projectId: 'project-1',
+            title: null,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ]}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    expect(renderedTabLabels()).toEqual([
+      'Design Files',
+      'Browser',
+      'New Terminal',
+      'Side chat',
+    ]);
+  });
+
+  it('anchors a new browser after the visible tab tail', async () => {
+    const onTabsStateChange = vi.fn();
+    const rootBrowserTab = {
+      id: '__browser__:1',
+      insertAfter: '__design_files__',
+      label: 'Browser',
+    };
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['terminal:term-1'],
+          active: 'terminal:term-1',
+          browserTabs: [rootBrowserTab],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(await screen.findByRole('button', { name: /New Browser/i }));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['terminal:term-1'],
+        active: '__browser__:2',
+        browserTabs: [
+          rootBrowserTab,
+          {
+            id: '__browser__:2',
+            insertAfter: 'terminal:term-1',
+            label: 'Browser 2',
+          },
+        ],
+      });
+    });
+  });
+
+  it('opens the Design Files tab launcher with the browser new-tab shortcut', async () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const allowedDefault = fireEvent.keyDown(window, {
+      key: 't',
+      metaKey: true,
+    });
+
+    expect(allowedDefault).toBe(false);
+    expect(screen.getByTestId('workspace-add-tab').getAttribute('aria-expanded')).toBe(
+      'true',
+    );
+    expect(await screen.findByRole('dialog', { name: /New tab/i })).toBeTruthy();
+    expect(screen.getByTestId('tab-launcher-search')).toBe(document.activeElement);
+  });
+
+  it('closes the active Design Files workspace tab with the browser close-tab shortcut', () => {
+    const onTabsStateChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('analysis.html'), workspaceFile('notes.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['analysis.html', 'notes.html'], active: 'notes.html' }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    const allowedDefault = fireEvent.keyDown(window, {
+      key: 'w',
+      ctrlKey: true,
+    });
+
+    expect(allowedDefault).toBe(false);
+    expect(onTabsStateChange).toHaveBeenLastCalledWith({
+      tabs: ['analysis.html'],
+      active: 'analysis.html',
+    });
+  });
+
+  it('switches Design Files workspace tabs with browser-style next and previous shortcuts', async () => {
+    const onTabsStateChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('analysis.html'), workspaceFile('notes.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['analysis.html', 'notes.html'], active: 'analysis.html' }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    const nextAllowedDefault = fireEvent.keyDown(window, {
+      key: 'Tab',
+      ctrlKey: true,
+    });
+
+    expect(nextAllowedDefault).toBe(false);
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /notes\.html/ }).getAttribute('aria-selected')).toBe(
+        'true',
+      );
+    });
+    expect(onTabsStateChange).toHaveBeenLastCalledWith({
+      tabs: ['analysis.html', 'notes.html'],
+      active: 'notes.html',
+    });
+
+    const previousAllowedDefault = fireEvent.keyDown(window, {
+      key: 'Tab',
+      ctrlKey: true,
+      shiftKey: true,
+    });
+
+    expect(previousAllowedDefault).toBe(false);
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /analysis\.html/ }).getAttribute('aria-selected')).toBe(
+        'true',
+      );
+    });
+    expect(onTabsStateChange).toHaveBeenLastCalledWith({
+      tabs: ['analysis.html', 'notes.html'],
+      active: 'analysis.html',
+    });
+  });
+
+  it('focuses a browser open request without adding it to file tabs', async () => {
+    const onTabsStateChange = vi.fn();
+    const browserTabs = [
+      {
+        id: '__browser__:1',
+        label: 'Browser 1',
+        title: 'Dribbble',
+        url: 'https://dribbble.com/',
+      },
+    ];
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['cover.html'], active: 'cover.html', browserTabs }}
+        openRequest={{ name: '__browser__:1', nonce: 1 }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html'],
+        active: '__browser__:1',
+        browserTabs,
+      });
+    });
+  });
+
+  it('focuses the design-system workspace tab without adding it to file tabs', async () => {
+    const onTabsStateChange = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['cover.html'], active: 'cover.html' }}
+        openRequest={{ name: '__design_system__', nonce: 1 }}
+        onTabsStateChange={onTabsStateChange}
+        designSystemProject={{
+          id: 'neutral-modern',
+          title: 'Neutral Modern',
+          category: 'Starter',
+          source: 'bundled',
+          updatedAt: 1,
+        } as never}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html'],
+        active: '__design_system__',
+      });
+    });
+  });
+});
+
+describe('FileWorkspace generation failure recovery', () => {
+  it('surfaces authorize-and-retry on the failed preview surface for AMR auth failures', () => {
+    const onAuthorizeAndRetry = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['generation'], active: 'generation' }}
+        onTabsStateChange={vi.fn()}
+        messages={[failedAssistantMessage('AMR_AUTH_REQUIRED', 'amr', 'AMR auth expired')]}
+        onAuthorizeAndRetry={onAuthorizeAndRetry}
+      />,
+    );
+
+    expect(screen.getByTestId('generation-preview-stage')).toBeTruthy();
+    expect(screen.getByTestId('generation-preview-authorize').textContent).toContain('Authorize');
+    expect(screen.queryByTestId('mock-amr-guidance')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('generation-preview-authorize'));
+
+    expect(onAuthorizeAndRetry).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'msg-amr_auth_required', agentId: 'amr' }),
+    );
+  });
+
+  it('surfaces the AMR promotion card and retry action for non-AMR rate-limited failures', () => {
+    const onRetry = vi.fn();
+    const onAuthorizeAndRetry = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['generation'], active: 'generation' }}
+        onTabsStateChange={vi.fn()}
+        messages={[failedAssistantMessage('RATE_LIMITED', 'claude', 'Claude quota exhausted')]}
+        onRetry={onRetry}
+        onAuthorizeAndRetry={onAuthorizeAndRetry}
+        conversationId="conv-1"
+      />,
+    );
+
+    expect(screen.getByTestId('generation-preview-stage')).toBeTruthy();
+    expect(screen.getByTestId('generation-preview-retry')).toBeTruthy();
+    const guidance = screen.getByTestId('mock-amr-guidance');
+    expect(guidance.getAttribute('data-error-code')).toBe('RATE_LIMITED');
+    expect(guidance.getAttribute('data-project-id')).toBe('project-1');
+    expect(guidance.getAttribute('data-project-kind')).toBe('prototype');
+    expect(guidance.getAttribute('data-conversation-id')).toBe('conv-1');
+    expect(guidance.getAttribute('data-assistant-message-id')).toBe('msg-rate_limited');
+    expect(guidance.getAttribute('data-run-id')).toBe('run-rate_limited');
+
+    fireEvent.click(screen.getByTestId('generation-preview-retry'));
+    fireEvent.click(screen.getByTestId('mock-amr-guidance-activate'));
+
+    expect(onRetry).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'msg-rate_limited', agentId: 'claude' }),
+    );
+    expect(onAuthorizeAndRetry).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'msg-rate_limited', agentId: 'claude' }),
+    );
+  });
+
+  it('suppresses the AMR promotion card for upstream outages while keeping retry available', () => {
+    const onRetry = vi.fn();
+    const onAuthorizeAndRetry = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['generation'], active: 'generation' }}
+        onTabsStateChange={vi.fn()}
+        messages={[failedAssistantMessage('UPSTREAM_UNAVAILABLE', 'claude', 'Model provider unavailable')]}
+        onRetry={onRetry}
+        onAuthorizeAndRetry={onAuthorizeAndRetry}
+        conversationId="conv-1"
+      />,
+    );
+
+    expect(screen.getByTestId('generation-preview-stage')).toBeTruthy();
+    expect(screen.getByTestId('generation-preview-retry')).toBeTruthy();
+    expect(screen.queryByTestId('mock-amr-guidance')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('generation-preview-retry'));
+
+    expect(onRetry).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'msg-upstream_unavailable', agentId: 'claude' }),
+    );
+    expect(onAuthorizeAndRetry).not.toHaveBeenCalled();
+  });
+
+  it('surfaces recharge and retry actions on the failed preview surface for AMR balance errors', () => {
+    const onRetry = vi.fn();
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['generation'], active: 'generation' }}
+        onTabsStateChange={vi.fn()}
+        messages={[failedAssistantMessage('AMR_INSUFFICIENT_BALANCE', 'amr', 'AMR balance empty')]}
+        onRetry={onRetry}
+      />,
+    );
+
+    expect(screen.getByTestId('generation-preview-stage')).toBeTruthy();
+    expect(screen.getByTestId('generation-preview-recharge').textContent).toContain('Top up AMR');
+    expect(screen.getByTestId('generation-preview-retry')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('generation-preview-recharge'));
+    fireEvent.click(screen.getByTestId('generation-preview-retry'));
+
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    const [walletUrl, target, features] = openSpy.mock.calls[0] ?? [];
+    expect(target).toBe('_blank');
+    expect(features).toBe('noopener,noreferrer');
+    const parsedWalletUrl = new URL(String(walletUrl));
+    expect(`${parsedWalletUrl.origin}${parsedWalletUrl.pathname}`).toBe(
+      'https://open-design.ai/amr/wallet',
+    );
+    expect(parsedWalletUrl.searchParams.get('od_origin')).toBe('open_design');
+    expect(parsedWalletUrl.searchParams.get('od_entry_source')).toBe(
+      'generation_preview_recharge',
+    );
+    expect(parsedWalletUrl.searchParams.get('od_entry_id')).toMatch(/^od-amr-/u);
+    expect(Number.isFinite(Date.parse(parsedWalletUrl.searchParams.get('od_entry_at') ?? ''))).toBe(
+      true,
+    );
+    expect(onRetry).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'msg-amr_insufficient_balance', agentId: 'amr' }),
+    );
+  });
+
+  it('wires the terminal auth launcher and retry to the failed assistant for antigravity auth failures', () => {
+    const onRetry = vi.fn();
+    const onLaunchTerminalAuth = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['generation'], active: 'generation' }}
+        onTabsStateChange={vi.fn()}
+        messages={[failedAssistantMessage('AGENT_AUTH_REQUIRED', 'antigravity', 'Sign in with agy first')]}
+        onRetry={onRetry}
+        onLaunchTerminalAuth={onLaunchTerminalAuth}
+      />,
+    );
+
+    expect(screen.getByTestId('generation-preview-launch-terminal')).toBeTruthy();
+    expect(screen.getByTestId('generation-preview-retry')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('generation-preview-launch-terminal'));
+    fireEvent.click(screen.getByTestId('generation-preview-retry'));
+
+    expect(onLaunchTerminalAuth).toHaveBeenCalledTimes(1);
+    expect(onRetry).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'msg-agent_auth_required', agentId: 'antigravity' }),
+    );
+  });
+
+  it('wires the terminal model-switch launcher and retry to the failed assistant for antigravity rate limits', () => {
+    const onRetry = vi.fn();
+    const onLaunchTerminalAuth = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['generation'], active: 'generation' }}
+        onTabsStateChange={vi.fn()}
+        messages={[failedAssistantMessage('RATE_LIMITED', 'antigravity', 'Switch agy models in the terminal')]}
+        onRetry={onRetry}
+        onLaunchTerminalAuth={onLaunchTerminalAuth}
+      />,
+    );
+
+    expect(screen.getByTestId('generation-preview-launch-terminal')).toBeTruthy();
+    expect(screen.getByTestId('generation-preview-retry')).toBeTruthy();
+    expect(screen.queryByTestId('mock-amr-guidance')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('generation-preview-launch-terminal'));
+    fireEvent.click(screen.getByTestId('generation-preview-retry'));
+
+    expect(onLaunchTerminalAuth).toHaveBeenCalledTimes(1);
+    expect(onRetry).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'msg-rate_limited', agentId: 'antigravity' }),
+    );
   });
 });
 
@@ -600,10 +1307,77 @@ describe('FileWorkspace tab reordering', () => {
   });
 });
 
+describe('FileWorkspace Questions tab', () => {
+  const discoveryForm = {
+    id: 'discovery',
+    title: 'Quick brief',
+    questions: [
+      {
+        id: 'platform',
+        label: 'Platform',
+        type: 'radio' as const,
+        options: [
+          { label: 'Mobile', value: 'Mobile' },
+          { label: 'Desktop web', value: 'Desktop web' },
+        ],
+        required: true,
+      },
+    ],
+  };
+
+  it('shows the Questions tab while the form is unanswered', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        questionForm={discoveryForm}
+      />,
+    );
+
+    expect(screen.getByTestId('questions-tab')).toBeTruthy();
+  });
+
+  it('removes the Questions tab once the form has been answered', () => {
+    // Regression for #3355: answering a question moved the answered copy back
+    // into chat but left a locked duplicate mounted in the Questions tab.
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        questionForm={discoveryForm}
+        questionFormSubmittedAnswers={{ platform: 'Mobile' }}
+      />,
+    );
+
+    expect(screen.queryByTestId('questions-tab')).toBeNull();
+  });
+});
+
 describe('projectSplitClassName', () => {
   it('marks the project split as focused so the chat pane can collapse globally', () => {
     expect(projectSplitClassName(false)).toBe('split');
     expect(projectSplitClassName(true)).toBe('split split-focus');
+  });
+
+  it('uses CSS variables for split widths so pointer resize can update layout without rerendering workspace content', () => {
+    expect(projectSplitStyle(false, 512, 'minmax(420px, 1fr)')).toEqual({
+      '--project-chat-panel-width': '512px',
+      '--project-workspace-panel-track': 'minmax(420px, 1fr)',
+      gridTemplateColumns: '512px 8px minmax(420px, 1fr)',
+    });
+    expect(projectSplitStyle(true, 512, 'minmax(420px, 1fr)')).toBeUndefined();
   });
 });
 
@@ -828,5 +1602,242 @@ describe('FileWorkspace sketch save', () => {
     });
     expect(btn.textContent).not.toBe('Saving…');
     expect(btn.querySelector('svg')).not.toBeNull();
+  });
+});
+
+describe('FileWorkspace add-module menu', () => {
+  it('opens the add-module menu so the + button reveals the Browser option', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const addButton = screen.getByTestId('workspace-add-tab');
+    expect(addButton.getAttribute('aria-expanded')).toBe('false');
+
+    act(() => {
+      fireEvent.click(addButton);
+    });
+
+    expect(addButton.getAttribute('aria-expanded')).toBe('true');
+    const browserItem = screen.getByRole('button', { name: /New Browser/ });
+    const menu = browserItem.closest('[data-testid="tab-launcher-menu"]');
+    expect(menu).not.toBeNull();
+
+    // The tab strip is a horizontal scroll container that also clips
+    // vertically, so the "+" button lives OUTSIDE it in `.ws-tabs-actions`
+    // and the launcher menu is portaled to <body> — neither can be clipped
+    // by the scrolling bar.
+    const tabsBar = document.querySelector('.ws-tabs-bar');
+    expect(tabsBar).not.toBeNull();
+    expect(tabsBar!.contains(addButton)).toBe(false);
+    expect(tabsBar!.contains(menu)).toBe(false);
+    expect(addButton.closest('.ws-tabs-actions')).not.toBeNull();
+  });
+
+  it('orders launcher sections as create new, files, then tabs in one scroll body', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['cover.html'],
+          active: 'cover.html',
+          browserTabs: [
+            {
+              id: '__browser__:1',
+              label: 'Reference Browser',
+              title: 'Behance',
+              url: 'https://www.behance.net/',
+            },
+          ],
+        }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    });
+
+    const scrollBody = screen.getByTestId('tab-launcher-scroll-body');
+    const createHeader = screen.getByText('Create new');
+    const fileHeader = screen.getByText('Open a file');
+    const tabsHeader = screen.getByText('Open tabs');
+
+    expect(scrollBody.contains(createHeader)).toBe(true);
+    expect(scrollBody.contains(fileHeader)).toBe(true);
+    expect(scrollBody.contains(tabsHeader)).toBe(true);
+    expect(createHeader.compareDocumentPosition(fileHeader) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(fileHeader.compareDocumentPosition(tabsHeader) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('adds a new browser tab every time the Browser module is selected', () => {
+    const onTabsStateChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    const addButton = screen.getByTestId('workspace-add-tab');
+    for (let i = 0; i < 3; i += 1) {
+      act(() => {
+        fireEvent.click(addButton);
+      });
+      act(() => {
+        fireEvent.click(screen.getByRole('button', { name: /New Browser/ }));
+      });
+    }
+
+    const browserTabs = screen
+      .getAllByRole('tab')
+      .filter((tab) => /Browser(?: \d+)?/.test(tab.textContent ?? ''));
+    expect(browserTabs).toHaveLength(3);
+    expect(browserTabs.map((tab) => tab.textContent?.trim())).toEqual([
+      'Browser',
+      'Browser 2',
+      'Browser 3',
+    ]);
+    expect(browserTabs[2]!.getAttribute('aria-selected')).toBe('true');
+
+    const browserPanels = screen
+      .getAllByTestId('design-browser-panel')
+      .map((panel) => panel.closest('.ws-browser-panel'));
+    expect(browserPanels).toHaveLength(3);
+    expect(browserPanels[0]!.className).not.toContain('active');
+    expect(browserPanels[1]!.className).not.toContain('active');
+    expect(browserPanels[2]!.className).toContain('active');
+    expect(onTabsStateChange).toHaveBeenLastCalledWith({
+      tabs: [],
+      active: '__browser__:3',
+      browserTabs: [
+        { id: '__browser__:1', insertAfter: '__design_files__', label: 'Browser' },
+        { id: '__browser__:2', insertAfter: '__browser__:1', label: 'Browser 2' },
+        { id: '__browser__:3', insertAfter: '__browser__:2', label: 'Browser 3' },
+      ],
+    });
+  });
+
+  it('restores persisted browser tabs with their active URL state', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: [],
+          active: '__browser__:2',
+          browserTabs: [
+            {
+              id: '__browser__:2',
+              insertAfter: '__design_files__',
+              label: 'Browser 2',
+              title: 'SVG Repo',
+              url: 'https://www.svgrepo.com/',
+              iconUrl: 'https://www.svgrepo.com/favicon.ico',
+            },
+          ],
+        }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const restoredTab = screen.getByRole('tab', { name: /SVG Repo/ });
+    expect(restoredTab.getAttribute('aria-selected')).toBe('true');
+    const browserPanel = screen.getByTestId('design-browser-panel');
+    expect(browserPanel.dataset.initialUrl).toBe('https://www.svgrepo.com/');
+    expect(browserPanel.dataset.initialTitle).toBe('SVG Repo');
+    expect(browserPanel.dataset.initialIconUrl).toBe('https://www.svgrepo.com/favicon.ico');
+  });
+
+  it('persists browser-tab removal when a browser tab is closed', () => {
+    const onTabsStateChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: [],
+          active: '__browser__:1',
+          browserTabs: [
+            { id: '__browser__:1', insertAfter: '__design_files__', label: 'Browser' },
+          ],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    const restoredTab = screen.getByRole('tab', { name: /Browser/ });
+    const closeButton = restoredTab.querySelector<HTMLButtonElement>('.ws-tab-close');
+    expect(closeButton).not.toBeNull();
+    act(() => {
+      fireEvent.click(closeButton!);
+    });
+
+    expect(screen.queryByRole('tab', { name: /Browser/ })).toBeNull();
+    expect(screen.queryByTestId('design-browser-panel')).toBeNull();
+    expect(onTabsStateChange).toHaveBeenLastCalledWith({
+      tabs: [],
+      active: '__design_files__',
+    });
+  });
+
+  it('appends a new browser tab after existing workspace tabs', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('analysis.html'), workspaceFile('notes.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['analysis.html', 'notes.html'], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const addButton = screen.getByTestId('workspace-add-tab');
+    act(() => {
+      fireEvent.click(addButton);
+    });
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /New Browser/ }));
+    });
+
+    const tabLabels = screen
+      .getAllByRole('tab')
+      .map((tab) => tab.textContent?.trim() ?? '');
+    const fileIndex = tabLabels.findIndex((label) => label.includes('notes.html'));
+    const browserIndex = tabLabels.findIndex((label) => label === 'Browser');
+
+    expect(fileIndex).toBeGreaterThanOrEqual(0);
+    expect(browserIndex).toBe(fileIndex + 1);
   });
 });

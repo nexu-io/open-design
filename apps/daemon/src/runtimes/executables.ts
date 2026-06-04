@@ -2,9 +2,16 @@ import { accessSync, constants, existsSync, statSync } from 'node:fs';
 import { delimiter } from 'node:path';
 import path from 'node:path';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { wellKnownUserToolchainBins } from '@open-design/platform';
+import { resolveSandboxRuntimeConfigFromEnv } from '../sandbox-mode.js';
 import { expandHomePath } from './paths.js';
 import type { RuntimeAgentDef } from './types.js';
+
+const RUNTIME_PROJECT_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../..',
+);
 
 const AGENT_BIN_ENV_KEYS = new Map<string, string>([
   ['amr', 'VELA_BIN'],
@@ -24,6 +31,7 @@ const AGENT_BIN_ENV_KEYS = new Map<string, string>([
   ['pi', 'PI_BIN'],
   ['qoder', 'QODER_BIN'],
   ['qwen', 'QWEN_BIN'],
+  ['reasonix', 'REASONIX_BIN'],
   ['trae-cli', 'TRAE_CLI_BIN'],
   ['vibe', 'VIBE_BIN'],
 ]);
@@ -34,7 +42,12 @@ let cachedToolchainDirs: string[] | null = null;
 let cachedToolchainDirsAt = 0;
 
 function userToolchainDirs() {
-  const homeOverride = process.env.OD_AGENT_HOME;
+  const sandboxRuntime = resolveSandboxRuntimeConfigFromEnv(
+    process.env,
+    RUNTIME_PROJECT_ROOT,
+  );
+  const homeOverride =
+    sandboxRuntime?.roots.agentHomeDir ?? process.env.OD_AGENT_HOME;
   const home = homeOverride || homedir();
   const now = Date.now();
   if (
@@ -75,6 +88,22 @@ function resolvePathDirs() {
     seen.add(dir);
     return true;
   });
+}
+
+// The exact, de-duplicated directory list `resolveOnPath` walks. Surfaced so
+// detection can attach it to a `not-on-path` diagnostic verbatim — the UI
+// shows the user where we actually looked before asking them to set an
+// explicit binary path, instead of recomputing PATH client-side.
+export function agentSearchDirs(): string[] {
+  return resolvePathDirs();
+}
+
+// The `*_BIN` environment variable that overrides PATH detection for a given
+// agent id (e.g. `cursor-agent` → `CURSOR_AGENT_BIN`), or null when the agent
+// has no override key. Drives the `setEnv` / `clearEnv` fix intents.
+export function agentBinEnvKey(agentId: string | undefined): string | null {
+  if (!agentId) return null;
+  return AGENT_BIN_ENV_KEYS.get(agentId) ?? null;
 }
 
 export function resolveOnPath(bin: string): string | null {

@@ -206,7 +206,7 @@ test.describe('Critique Theater e2e (Phase 11)', () => {
     await stubInterruptEndpoint(page);
   });
 
-  test('mounts the live stage with five panelist lanes mid-run', async ({ page }) => {
+  test('[P2] mounts the live stage with five panelist lanes mid-run', async ({ page }) => {
     // LIVE_PREFIX leaves the reducer in `running` so the Theater stage
     // is the rendered surface. No terminal frame arrives, so the
     // collapsed surface never replaces it during the assertions.
@@ -221,7 +221,7 @@ test.describe('Critique Theater e2e (Phase 11)', () => {
     }
   });
 
-  test('renders the shipped badge after the run terminates', async ({ page }) => {
+  test('[P2] renders the shipped badge after the run terminates', async ({ page }) => {
     // FULL_TRANSCRIPT runs through `ship`, so the reducer settles on
     // `shipped` and `<TheaterCollapsed>` mounts. We do NOT assert the
     // live stage was visible here; the two surfaces are mutually
@@ -235,7 +235,7 @@ test.describe('Critique Theater e2e (Phase 11)', () => {
     await expect(page.getByText(/composite 8\.6/)).toBeVisible();
   });
 
-  test('Esc mid-run transitions to interrupted with the best-composite summary', async ({ page }) => {
+  test('[P2] Esc mid-run transitions to interrupted with the best-composite summary', async ({ page }) => {
     await stubProjectEvents(page, LIVE_PREFIX);
     const projectId = await seedProject(page, 'interrupt');
     await page.goto(`/projects/${projectId}`);
@@ -250,7 +250,7 @@ test.describe('Critique Theater e2e (Phase 11)', () => {
     await expect(page.getByText(/Interrupted at round/)).toBeVisible();
   });
 
-  test('Theater states expose a valid role tree (region + 5 panelist groups)', async ({ page }) => {
+  test('[P2] Theater states expose a valid role tree (region + 5 panelist groups)', async ({ page }) => {
     await stubProjectEvents(page, LIVE_PREFIX);
     const projectId = await seedProject(page, 'a11y');
     await page.goto(`/projects/${projectId}`);
@@ -271,7 +271,7 @@ test.describe('Critique Theater e2e (Phase 11)', () => {
     { width: 768, height: 1024, label: 'tablet' },
     { width: 1280, height: 800, label: 'desktop' },
   ]) {
-    test.fixme(`visual regression - shipped state @ ${vp.label}`, async ({ page }) => {
+    test.fixme(`[P2] visual regression - shipped state @ ${vp.label}`, async ({ page }) => {
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await stubProjectEvents(page, FULL_TRANSCRIPT);
       const projectId = await seedProject(page, `visual-${vp.label}`);

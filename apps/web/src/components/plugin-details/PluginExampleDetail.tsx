@@ -95,7 +95,12 @@ export function PluginExampleDetail({
           label: t('examples.previewLabel'),
           html,
           error,
-          unavailable: unavailableKind ? { kind: unavailableKind } : null,
+          // Pass the surface-appropriate noun so the unavailable placeholder
+          // reads "this plugin" / "this template" instead of falling back to
+          // the legacy skills-only "this skill" copy. Issue #3216.
+          unavailable: unavailableKind
+            ? { kind: unavailableKind, noun: isDeck ? 'template' : 'plugin' }
+            : null,
           deck: isDeck,
         },
       ]}

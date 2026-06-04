@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
 
 export const STORAGE_KEY = 'open-design:config';
 
@@ -71,11 +71,32 @@ export async function routeAppConfig(page: Page): Promise<void> {
 
 /** Intercept GET /api/agents with a single standard mock agent. */
 export async function routeMockAgents(page: Page): Promise<void> {
-  await page.route('**/api/agents', async (route) => {
-    if (route.request().method() !== 'GET') {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({ json: { agents: [STANDARD_MOCK_AGENT] } });
+  await page.route('**/api/agents**', async (route) => {
+    await fulfillAgentsRoute(route, [STANDARD_MOCK_AGENT]);
+  });
+}
+
+export async function fulfillAgentsRoute(
+  route: Route,
+  agents: readonly unknown[],
+): Promise<void> {
+  if (route.request().method() !== 'GET') {
+    await route.continue();
+    return;
+  }
+
+  const url = new URL(route.request().url());
+  if (url.searchParams.get('stream') !== '1') {
+    await route.fulfill({ json: { agents } });
+    return;
+  }
+
+  const agentEvents = agents
+    .map((agent) => `event: agent\ndata: ${JSON.stringify(agent)}\n\n`)
+    .join('');
+  await route.fulfill({
+    status: 200,
+    contentType: 'text/event-stream; charset=utf-8',
+    body: `${agentEvents}event: done\ndata: {}\n\n`,
   });
 }

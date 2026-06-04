@@ -21,6 +21,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { pluginDetailPath, pluginDetailSlug } from './plugin-slug';
 import {
   DEFAULT_LOCALE,
   getLocaleDefinition,
@@ -40,6 +41,16 @@ function pluginsRoot(): string | null {
   return SOURCE_ROOTS.find((dir) => existsSync(dir)) ?? null;
 }
 
+const COMMUNITY_ROOTS = [
+  path.resolve(process.cwd(), 'plugins/community'),
+  path.resolve(process.cwd(), '../../plugins/community'),
+  path.resolve(fileURLToPath(new URL('../../../../plugins/community', import.meta.url))),
+] as const;
+
+function communityRoot(): string | null {
+  return COMMUNITY_ROOTS.find((dir) => existsSync(dir)) ?? null;
+}
+
 /** Buckets we walk under `plugins/_official/`. Order = display order. */
 export const BUNDLED_BUCKETS = [
   'examples',
@@ -52,13 +63,18 @@ export const BUNDLED_BUCKETS = [
 
 export type BundledBucket = (typeof BUNDLED_BUCKETS)[number];
 
+// Detail pages cover every locally-shipped plugin: the `_official` buckets
+// above PLUS the `community/` source folders. `community` is not a `_official`
+// bucket (no tier subdir), so it gets its own label/source handling.
+export type DetailBucket = BundledBucket | 'community';
+
 export interface BundledPluginRecord {
   /** Folder name, e.g. `3d-stone-staircase-evolution-infographic`. */
   slug: string;
   /** Manifest `name`, e.g. `image-template-3d-stone-staircase-evolution-infographic`. */
   manifestId: string;
-  /** Source bucket. */
-  bucket: BundledBucket;
+  /** Source bucket (or `community` for community-folder plugins). */
+  bucket: DetailBucket;
   /** Manifest `title` (English baseline; pre-localization fallback). */
   title: string;
   /**
@@ -105,7 +121,9 @@ export interface BundledPluginRecord {
    * the homepage.
    */
   previewEntryUrl?: string;
-  /** Detail page URL on this site (`/plugins/<manifest-id>/`). */
+  /** Single-segment detail slug (matches the catalog id's last segment). */
+  detailSlug: string;
+  /** Detail page URL on this site (`/plugins/<detail-slug>/`). */
   detailHref: string;
   /** GitHub source folder URL. */
   sourceUrl: string;
@@ -260,12 +278,22 @@ function hasLocalPreview(manifestId: string): boolean {
   return cachedLocalPreviewSet.has(`${manifestId}.png`);
 }
 
-function loadOne(
-  root: string,
-  bucket: BundledBucket,
-  slug: string,
-): BundledPluginRecord | null {
-  const manifestPath = path.join(root, bucket, slug, 'open-design.json');
+function loadOne(opts: {
+  manifestPath: string;
+  slugDir: string;
+  slug: string;
+  bucket: DetailBucket;
+  sourceUrl: string;
+  /**
+   * Catalog-consistent id to derive the detail slug from. _official manifest
+   * names already match their catalog last segment, but community plugins
+   * carry a `community-` manifest name while the catalog/listing keys off the
+   * folder name. Passing `community/<folder>` here keeps the detail page, the
+   * list card, and the share link on one slug. Defaults to the manifest id.
+   */
+  routeId?: string;
+}): BundledPluginRecord | null {
+  const { manifestPath, slugDir, slug, bucket, sourceUrl, routeId } = opts;
   if (!existsSync(manifestPath)) return null;
   let raw: BundledManifestRaw;
   try {
@@ -275,6 +303,7 @@ function loadOne(
   }
 
   const manifestId = asString(raw.name) ?? slug;
+  const slugBasis = routeId ?? manifestId;
   const title = asString(raw.title) ?? manifestId;
   const titleI18n = asLocaleMap(raw.title_i18n);
   const description = asString(raw.description) ?? '';
@@ -315,14 +344,11 @@ function loadOne(
     previewVideo: asString(raw.od?.preview?.video),
     previewEntryUrl:
       asString(raw.od?.preview?.type) === 'html'
-        ? entryRelativeUrl(
-            manifestId,
-            asString(raw.od?.preview?.entry),
-            path.join(root, bucket, slug),
-          )
+        ? entryRelativeUrl(manifestId, asString(raw.od?.preview?.entry), slugDir)
         : undefined,
-    detailHref: `/plugins/${manifestId}/`,
-    sourceUrl: `${REPO_FOR_BUCKET(bucket)}/${slug}`,
+    detailSlug: pluginDetailSlug(slugBasis),
+    detailHref: pluginDetailPath(slugBasis),
+    sourceUrl,
   };
 }
 
@@ -350,7 +376,13 @@ export function getBundledPlugins(): ReadonlyArray<BundledPluginRecord> {
       if (name.startsWith('_') || name.startsWith('.')) continue;
       const full = path.join(dir, name);
       if (!statSync(full).isDirectory()) continue;
-      const record = loadOne(root, bucket, name);
+      const record = loadOne({
+        manifestPath: path.join(root, bucket, name, 'open-design.json'),
+        slugDir: path.join(root, bucket, name),
+        slug: name,
+        bucket,
+        sourceUrl: `${REPO_FOR_BUCKET(bucket)}/${name}`,
+      });
       if (!record) continue;
       // Atoms are infrastructure plugins (`code-import`, `patch-edit`,
       // …) that the daemon needs but the in-app Plugins home filters
@@ -366,8 +398,81 @@ export function getBundledPlugins(): ReadonlyArray<BundledPluginRecord> {
   return cachedAll;
 }
 
+let cachedDetail: ReadonlyArray<BundledPluginRecord> | null = null;
+
+/**
+ * Every locally-shipped plugin that gets a detail page. Unlike
+ * `getBundledPlugins` (the in-app library view), this is the FULL set:
+ *   - all `_official/<bucket>/` plugins, atoms INCLUDED — they are
+ *     installable registry entries, so a shared link must resolve;
+ *   - every `plugins/community/<slug>/` folder (bucket = `community`).
+ * The route slug is the single-segment `pluginDetailSlug(manifestId)`;
+ * ids are globally unique on their last segment so there are no clashes.
+ */
+export function getDetailPlugins(): ReadonlyArray<BundledPluginRecord> {
+  if (cachedDetail) return cachedDetail;
+  const out: BundledPluginRecord[] = [];
+
+  const root = pluginsRoot();
+  if (root) {
+    for (const bucket of BUNDLED_BUCKETS) {
+      const dir = path.join(root, bucket);
+      if (!existsSync(dir)) continue;
+      for (const name of readdirSync(dir)) {
+        if (name.startsWith('_') || name.startsWith('.')) continue;
+        if (!statSync(path.join(dir, name)).isDirectory()) continue;
+        const record = loadOne({
+          manifestPath: path.join(dir, name, 'open-design.json'),
+          slugDir: path.join(dir, name),
+          slug: name,
+          bucket,
+          sourceUrl: `${REPO_FOR_BUCKET(bucket)}/${name}`,
+        });
+        if (record) out.push(record);
+      }
+    }
+  }
+
+  const community = communityRoot();
+  if (community) {
+    for (const name of readdirSync(community)) {
+      if (name.startsWith('_') || name.startsWith('.')) continue;
+      const dir = path.join(community, name);
+      if (!statSync(dir).isDirectory()) continue;
+      const record = loadOne({
+        manifestPath: path.join(dir, 'open-design.json'),
+        slugDir: dir,
+        slug: name,
+        bucket: 'community',
+        routeId: `community/${name}`,
+        sourceUrl: `https://github.com/nexu-io/open-design/tree/main/plugins/community/${name}`,
+      });
+      if (record) out.push(record);
+    }
+  }
+
+  out.sort((a, b) => a.title.localeCompare(b.title));
+  cachedDetail = out;
+  return cachedDetail;
+}
+
 export function getBundledPluginById(
   manifestId: string,
 ): BundledPluginRecord | null {
   return getBundledPlugins().find((p) => p.manifestId === manifestId) ?? null;
+}
+
+// SystemRecord (from the `design-systems/` content collection) and the
+// design-system detail pages (from `plugins/_official/design-systems/`)
+// overlap on the folder name but not on the URL: a system folder `stripe`
+// becomes detail page `/plugins/design-system-stripe/`. ~8 of the ~150
+// systems ship no manifest, so they have no detail page. Resolve the link
+// here: callers link straight to the detail page when one exists, and
+// degrade to the `/plugins/systems/` index otherwise — same outcome the
+// `/systems/<slug>/` 301 redirects produce, but without the extra hop.
+export function detailHrefForSystemSlug(folderSlug: string): string | null {
+  const match = getDetailPlugins().find(
+    (p) => p.bucket === 'design-systems' && p.slug === folderSlug,
+  );
+  return match?.detailHref ?? null;
 }

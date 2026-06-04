@@ -84,28 +84,115 @@ describe('packaged child Vite+ environment forwarding', () => {
 
   it('forwards standard Node proxy variables to packaged sidecars', () => {
     const env = resolvePackagedChildBaseEnv({
+      ALL_PROXY: 'socks5://127.0.0.1:1080',
       HOME: '/Users/tester',
       HTTP_PROXY: 'http://127.0.0.1:7890',
       HTTPS_PROXY: 'http://127.0.0.1:7890',
       NODE_USE_ENV_PROXY: '1',
       NO_PROXY: 'localhost,127.0.0.1',
       RANDOM_INTERNAL_FLAG: 'drop-me',
+      all_proxy: 'socks5://127.0.0.1:1081',
       http_proxy: 'http://127.0.0.1:7891',
       https_proxy: 'http://127.0.0.1:7891',
       no_proxy: 'localhost,127.0.0.1,::1',
     });
 
     expect(env).toMatchObject({
+      ALL_PROXY: 'socks5://127.0.0.1:1081',
       HOME: '/Users/tester',
-      HTTP_PROXY: 'http://127.0.0.1:7890',
-      HTTPS_PROXY: 'http://127.0.0.1:7890',
+      HTTP_PROXY: 'http://127.0.0.1:7891',
+      HTTPS_PROXY: 'http://127.0.0.1:7891',
       NODE_USE_ENV_PROXY: '1',
-      NO_PROXY: 'localhost,127.0.0.1',
+      NO_PROXY: 'localhost,127.0.0.1,::1',
+      all_proxy: 'socks5://127.0.0.1:1081',
       http_proxy: 'http://127.0.0.1:7891',
       https_proxy: 'http://127.0.0.1:7891',
       no_proxy: 'localhost,127.0.0.1,::1',
     });
     expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
+  it('merges system proxy env when the packaged app was GUI-launched without shell proxy vars', () => {
+    const env = resolvePackagedChildBaseEnv(
+      {
+        HOME: '/Users/tester',
+      },
+      false,
+      {
+        HTTP_PROXY: 'http://system-proxy:8080',
+        HTTPS_PROXY: 'http://system-proxy:8443',
+        ALL_PROXY: 'socks5://system-proxy:1080',
+        NO_PROXY: '.local,localhost',
+        NODE_USE_ENV_PROXY: '1',
+      },
+    );
+
+    expect(env).toMatchObject({
+      HOME: '/Users/tester',
+      HTTP_PROXY: 'http://system-proxy:8080',
+      HTTPS_PROXY: 'http://system-proxy:8443',
+      ALL_PROXY: 'socks5://system-proxy:1080',
+      NO_PROXY: '.local,localhost',
+      NODE_USE_ENV_PROXY: '1',
+    });
+  });
+
+  it('lets forwarded lowercase proxy env override system uppercase proxy env', () => {
+    const env = resolvePackagedChildBaseEnv(
+      {
+        HOME: '/Users/tester',
+        https_proxy: 'http://user-lowercase:9443',
+      },
+      false,
+      {
+        HTTPS_PROXY: 'http://system-uppercase:8443',
+        NODE_USE_ENV_PROXY: '1',
+      },
+    );
+
+    expect(env.HTTPS_PROXY).toBe('http://user-lowercase:9443');
+    if (process.platform !== 'win32') {
+      expect(env.https_proxy).toBe('http://user-lowercase:9443');
+    }
+  });
+
+  it('enables Node env proxy support for forwarded lowercase proxy env', () => {
+    const env = resolvePackagedChildBaseEnv(
+      {
+        HOME: '/Users/tester',
+        https_proxy: 'http://user-lowercase:9443',
+      },
+      false,
+      {},
+    );
+
+    expect(env.HTTPS_PROXY).toBe('http://user-lowercase:9443');
+    expect(env.NODE_USE_ENV_PROXY).toBe('1');
+    if (process.platform !== 'win32') {
+      expect(env.https_proxy).toBe('http://user-lowercase:9443');
+    }
+  });
+
+  it('can skip injecting system proxy env into the packaged daemon base env', () => {
+    const env = resolvePackagedChildBaseEnv(
+      {
+        HOME: '/Users/tester',
+      },
+      true,
+      {
+        HTTP_PROXY: 'http://system-proxy:8080',
+        HTTPS_PROXY: 'http://system-proxy:8443',
+        NODE_USE_ENV_PROXY: '1',
+      },
+      false,
+    );
+
+    expect(env).toMatchObject({
+      HOME: '/Users/tester',
+    });
+    expect(env.HTTP_PROXY).toBeUndefined();
+    expect(env.HTTPS_PROXY).toBeUndefined();
+    expect(env.NODE_USE_ENV_PROXY).toBeUndefined();
   });
 
   it('adds custom VP_HOME/bin to the packaged PATH builder', () => {

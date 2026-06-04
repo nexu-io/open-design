@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
+import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { useAnalytics } from './analytics/provider';
 import {
   trackFileUploadResult,
@@ -12,6 +13,7 @@ import {
   projectKindToTracking,
   fidelityToTracking,
 } from '@open-design/contracts/analytics';
+import type { AmrModelsResponse, ChatSessionMode } from '@open-design/contracts';
 import { EntryView } from './components/EntryView';
 import type { IntegrationTab } from './components/IntegrationsView';
 import { MarketplaceView } from './components/MarketplaceView';
@@ -22,11 +24,16 @@ import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
 import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
+import { TooltipLayer } from './components/TooltipLayer';
 import { openWorkspaceTab, WorkspaceTabsBar } from './components/WorkspaceTabsBar';
 import {
   DesignSystemCreationFlow,
   DesignSystemDetailView,
 } from './components/DesignSystemFlow';
+import {
+  IframeKeepAliveProvider,
+  useIframeKeepAlivePool,
+} from './components/IframeKeepAlivePool';
 import {
   SettingsDialog,
   switchApiProtocolConfig,
@@ -38,14 +45,19 @@ import { PrivacyConsentModal } from './components/PrivacyConsentModal';
 import {
   daemonIsLive,
   fetchAppVersionInfo,
-  fetchAgents,
+  fetchAgentsStream,
   fetchDesignSystems,
   fetchDesignTemplates,
   fetchPromptTemplates,
   fetchSkills,
   uploadProjectFiles,
 } from './providers/registry';
-import { RUNS_CHANGED_EVENT, listProjectRuns } from './providers/daemon';
+import {
+  RUNS_CHANGED_EVENT,
+  fetchAmrModels,
+  listProjectRuns,
+  type VelaLoginStatus,
+} from './providers/daemon';
 import { navigate, useRoute } from './router';
 import {
   fetchDaemonConfig,
@@ -76,6 +88,7 @@ import {
   deleteTemplate,
   patchProject,
 } from './state/projects';
+import { useModalWindowDragGuard } from './hooks/useModalWindowDragGuard';
 import type {
   PluginShareAction,
   PluginShareProjectOutcome,
@@ -92,6 +105,7 @@ import type {
   DesignSystemSummary,
   Project,
   ProjectTemplate,
+  ProviderModelOption,
   PromptTemplateSummary,
   SkillSummary,
 } from './types';
@@ -116,6 +130,11 @@ function normalizeSavedComposioConfig(config: AppConfig['composio']): AppConfig[
   return { ...(config ?? {}) };
 }
 
+type ProjectListRequest = {
+  generation: number;
+  mutationVersion: number;
+};
+
 export async function persistComposioConfigChange(
   current: AppConfig,
   composio: AppConfig['composio'],
@@ -130,9 +149,18 @@ export async function persistComposioConfigChange(
 }
 
 export function buildPersistedConfig(next: AppConfig, current: AppConfig): AppConfig {
+  const stalePrivacySnapshot =
+    current.privacyDecisionAt != null && next.privacyDecisionAt == null;
   return {
     ...next,
     onboardingCompleted: current.onboardingCompleted ? true : next.onboardingCompleted,
+    ...(stalePrivacySnapshot
+      ? {
+          installationId: current.installationId,
+          privacyDecisionAt: current.privacyDecisionAt,
+          telemetry: current.telemetry,
+        }
+      : {}),
     composio: next.composio
       ? {
           apiKey: '',
@@ -171,9 +199,105 @@ export function resolveSettingsCloseConfig(
   return base.onboardingCompleted ? base : { ...base, onboardingCompleted: true };
 }
 
+function mergeAmrModelsIntoAgents(
+  agents: AgentInfo[],
+  amrModels: AmrModelsResponse | null,
+): AgentInfo[] {
+  if (!amrModels || amrModels.models.length === 0) return agents;
+  return agents.map((agent) => {
+    if (agent.id !== 'amr') return agent;
+    const shouldPreferAgentModels =
+      amrModels.source === 'preset' &&
+      Array.isArray(agent.models) &&
+      agent.models.length > 0;
+    if (shouldPreferAgentModels) return agent;
+    return { ...agent, models: amrModels.models, modelsSource: 'live' };
+  });
+}
+
+const CANONICAL_AGENT_ORDER = [
+  'amr',
+  'claude',
+  'codex',
+  'devin',
+  'gemini',
+  'opencode',
+  'hermes',
+  'trae-cli',
+  'grok-build',
+  'kimi',
+  'cursor-agent',
+  'qwen',
+  'qoder',
+  'copilot',
+  'pi',
+  'kiro',
+  'kilo',
+  'vibe',
+  'deepseek',
+  'aider',
+  'antigravity',
+  'reasonix',
+] as const;
+
+const CANONICAL_AGENT_ORDER_INDEX = new Map<string, number>(
+  CANONICAL_AGENT_ORDER.map((id, index) => [id, index]),
+);
+
+function orderAgentsByRegistry(agents: AgentInfo[]): AgentInfo[] {
+  return agents
+    .map((agent, index) => ({ agent, index }))
+    .sort((left, right) => {
+      const leftRank =
+        CANONICAL_AGENT_ORDER_INDEX.get(left.agent.id) ??
+        CANONICAL_AGENT_ORDER.length;
+      const rightRank =
+        CANONICAL_AGENT_ORDER_INDEX.get(right.agent.id) ??
+        CANONICAL_AGENT_ORDER.length;
+      if (leftRank !== rightRank) return leftRank - rightRank;
+      return left.index - right.index;
+    })
+    .map(({ agent }) => agent);
+}
+
+function upsertAgent(agents: AgentInfo[], agent: AgentInfo): AgentInfo[] {
+  const index = agents.findIndex((item) => item.id === agent.id);
+  if (index === -1) return [...agents, agent];
+  const next = agents.slice();
+  next[index] = agent;
+  return next;
+}
+
+function isAbortError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'name' in err &&
+    (err as { name?: unknown }).name === 'AbortError'
+  );
+}
+
 export function App() {
+  // `reducedMotion="user"` makes every motion/react component honor the OS
+  // `prefers-reduced-motion` setting: transform/layout animations are zeroed
+  // out while opacity-only changes are kept. The CSS `@media (prefers-reduced-
+  // motion: reduce)` block covers the CSS-keyframe surfaces, but the dialogs,
+  // toasts and popovers that moved to motion/react need this gate too — without
+  // it they keep springing/sliding for users who asked us not to animate.
+  return (
+    <MotionConfig reducedMotion="user">
+      <IframeKeepAliveProvider>
+        <AppInner />
+      </IframeKeepAliveProvider>
+    </MotionConfig>
+  );
+}
+
+function AppInner() {
   const { t } = useI18n();
+  const iframeKeepAlivePool = useIframeKeepAlivePool();
   const clientType = useMemo(() => detectClientType(), []);
+  useModalWindowDragGuard();
   // Observability marker. `apps/web/src/observability/white-screen.ts`
   // keys its "app actually mounted" success condition on this attribute
   // because the dynamic-import loading shell (`<div class="od-loading-shell">
@@ -198,6 +322,12 @@ export function App() {
   const [integrationInitialTab, setIntegrationInitialTab] = useState<IntegrationTab>('mcp');
   const [daemonLive, setDaemonLive] = useState(false);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const amrModelsRef = useRef<AmrModelsResponse | null>(null);
+  const agentStreamRequestSeqRef = useRef(0);
+  const [amrPollRestartToken, setAmrPollRestartToken] = useState(0);
+  const [providerModelsCache, setProviderModelsCache] = useState<
+    Record<string, ProviderModelOption[]>
+  >({});
   // Functional skills (capabilities the agent invokes mid-task) — stays
   // small and lives under the Settings → Skills surface.
   const [skills, setSkills] = useState<SkillSummary[]>([]);
@@ -212,6 +342,11 @@ export function App() {
     queued: [],
     recent: [],
   });
+  const pendingLocalProjectIdsRef = useRef<Set<string>>(new Set());
+  const locallyDeletedProjectIdsRef = useRef<Map<string, number>>(new Map());
+  const projectListMutationVersionRef = useRef(0);
+  const projectListRequestGenerationRef = useRef(0);
+  const latestAppliedProjectListGenerationRef = useRef(0);
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
   const [promptTemplates, setPromptTemplates] = useState<
     PromptTemplateSummary[]
@@ -253,11 +388,117 @@ export function App() {
   const route = useRoute();
   const analytics = useAnalytics();
 
+  const beginAgentStreamRequest = useCallback(() => {
+    agentStreamRequestSeqRef.current += 1;
+    return agentStreamRequestSeqRef.current;
+  }, []);
+
+  const isCurrentAgentStreamRequest = useCallback((requestId: number) => {
+    return agentStreamRequestSeqRef.current === requestId;
+  }, []);
+
   // v2 schema removed the standalone `app_launch` event; the initial
   // page_view fires from each top-level page surface (home / projects /
   // automations / plugins / design_systems / integrations) instead.
   // `detectClientType` still feeds analytics identity via the provider.
   void detectClientType;
+
+  const rememberLocalProject = useCallback((projectId: string) => {
+    pendingLocalProjectIdsRef.current.add(projectId);
+    locallyDeletedProjectIdsRef.current.delete(projectId);
+    projectListMutationVersionRef.current += 1;
+  }, []);
+
+  const clearLocalProject = useCallback((projectId: string, options?: { deleted?: boolean }) => {
+    pendingLocalProjectIdsRef.current.delete(projectId);
+    projectListMutationVersionRef.current += 1;
+    if (options?.deleted) {
+      locallyDeletedProjectIdsRef.current.set(
+        projectId,
+        projectListMutationVersionRef.current,
+      );
+    }
+  }, []);
+
+  const beginProjectListRequest = useCallback((): ProjectListRequest => {
+    projectListRequestGenerationRef.current += 1;
+    return {
+      generation: projectListRequestGenerationRef.current,
+      mutationVersion: projectListMutationVersionRef.current,
+    };
+  }, []);
+
+  const reconcileFetchedProjects = useCallback((list: Project[], request: ProjectListRequest) => {
+    const pendingLocalProjectIds = pendingLocalProjectIdsRef.current;
+    const locallyDeletedProjectIds = locallyDeletedProjectIdsRef.current;
+    const fetchedIds = new Set(list.map((project) => project.id));
+    if (request.generation < latestAppliedProjectListGenerationRef.current) {
+      const visibleList =
+        locallyDeletedProjectIds.size > 0
+          ? list.filter((project) => !locallyDeletedProjectIds.has(project.id))
+          : list;
+      if (visibleList.length === 0) return false;
+      const hydratableProjects = visibleList.filter(
+        (project) =>
+          pendingLocalProjectIds.has(project.id),
+      );
+      if (hydratableProjects.length === 0) return false;
+      const hydratableById = new Map(
+        hydratableProjects.map((project) => [project.id, project]),
+      );
+      for (const project of hydratableProjects) {
+        pendingLocalProjectIds.delete(project.id);
+      }
+      setProjects((current) => {
+        let changed = false;
+        const currentIds = new Set<string>();
+        const next = current.map((project) => {
+          currentIds.add(project.id);
+          const hydrated = hydratableById.get(project.id);
+          if (!hydrated) return project;
+          changed = true;
+          hydratableById.delete(project.id);
+          return hydrated;
+        });
+        for (const project of hydratableById.values()) {
+          if (currentIds.has(project.id)) continue;
+          changed = true;
+          next.push(project);
+        }
+        return changed ? next : current;
+      });
+      return true;
+    }
+    latestAppliedProjectListGenerationRef.current = request.generation;
+    for (const id of fetchedIds) pendingLocalProjectIds.delete(id);
+    for (const [id, deletedAtMutationVersion] of locallyDeletedProjectIds) {
+      if (
+        request.mutationVersion >= deletedAtMutationVersion
+        && !fetchedIds.has(id)
+      ) {
+        locallyDeletedProjectIds.delete(id);
+      }
+    }
+    const activeDeletedProjectIds = new Set(locallyDeletedProjectIds.keys());
+    const visibleList =
+      activeDeletedProjectIds.size > 0
+        ? list.filter((project) => !activeDeletedProjectIds.has(project.id))
+        : list;
+    const visibleFetchedIds =
+      activeDeletedProjectIds.size > 0
+        ? new Set(visibleList.map((project) => project.id))
+        : fetchedIds;
+    setProjects((current) => {
+      const preserved = current.filter(
+        (project) =>
+          pendingLocalProjectIds.has(project.id) &&
+          !visibleFetchedIds.has(project.id) &&
+          !activeDeletedProjectIds.has(project.id),
+      );
+      return preserved.length > 0 ? [...preserved, ...visibleList] : visibleList;
+    });
+    return true;
+  }, []);
 
   // Propagate the Privacy toggle through to PostHog without a reload —
   // posthog-js's opt_out_capturing flips a localStorage flag that makes
@@ -285,7 +526,7 @@ export function App() {
   // changes; the next capture inherits the fresh values, so dashboards
   // can segment by execution setup without per-helper boilerplate.
   //
-  // Gated on `agentsLoading` so the cold-start probe (`fetchAgents()`
+  // Gated on `agentsLoading` so the cold-start probe (`fetchAgentsStream()`
   // lands asynchronously after this effect's first run) does not stamp
   // the first home/projects/plugins page_view with
   // has_available_configure_cli=false / configure_availability=unavailable
@@ -365,6 +606,43 @@ export function App() {
     });
   }, [activeProjectId, activeFileName]);
 
+  useEffect(() => {
+    if (!daemonLive) return;
+    let cancelled = false;
+    let timer: number | null = null;
+    const pollDelayMs = 1_000;
+    const maxPresetPolls = 10;
+    let presetPolls = 0;
+
+    const applyAmrModels = async () => {
+      const result = await fetchAmrModels();
+      if (cancelled || !result || !Array.isArray(result.models) || result.models.length === 0) return;
+      amrModelsRef.current = result;
+      setAgents((current) => mergeAmrModelsIntoAgents(current, result));
+      const shouldPollPreset =
+        result.source === 'preset' &&
+        !result.remoteError &&
+        presetPolls < maxPresetPolls;
+      if (shouldPollPreset) {
+        presetPolls += 1;
+        timer = window.setTimeout(() => {
+          void applyAmrModels();
+        }, pollDelayMs);
+      }
+    };
+
+    void applyAmrModels();
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [amrPollRestartToken, daemonLive]);
+
+  const handleAmrLoginStatusChange = useCallback((status: VelaLoginStatus | null) => {
+    if (status?.loggedIn !== true) return;
+    setAmrPollRestartToken((current) => current + 1);
+  }, []);
+
   // Bootstrap — detect daemon, then fan out independent fetches so each
   // entry-view tab can render the moment its own data lands. Earlier this
   // was one Promise.all behind a global "Loading workspace…" placeholder,
@@ -372,6 +650,7 @@ export function App() {
   // gate every tab including the ones that don't need agents at all.
   useEffect(() => {
     let cancelled = false;
+    const agentStreamAbort = new AbortController();
     (async () => {
       const alive = await daemonIsLive();
       if (cancelled) return;
@@ -392,11 +671,42 @@ export function App() {
         return;
       }
 
-      void fetchAgents().then((list) => {
-        if (cancelled) return;
-        setAgents(list);
-        setAgentsLoading(false);
-      });
+      const agentRequestId = beginAgentStreamRequest();
+      void fetchAgentsStream({
+        signal: agentStreamAbort.signal,
+        onAgent: (agent) => {
+          if (cancelled || !isCurrentAgentStreamRequest(agentRequestId)) return;
+          setAgents((current) =>
+            mergeAmrModelsIntoAgents(
+              upsertAgent(current, agent),
+              amrModelsRef.current,
+            ),
+          );
+        },
+      })
+        .then((list) => {
+          if (cancelled || !isCurrentAgentStreamRequest(agentRequestId)) return;
+          setAgents(
+            mergeAmrModelsIntoAgents(
+              orderAgentsByRegistry(list),
+              amrModelsRef.current,
+            ),
+          );
+        })
+        .catch((err) => {
+          if (
+            cancelled ||
+            isAbortError(err) ||
+            !isCurrentAgentStreamRequest(agentRequestId)
+          ) {
+            return;
+          }
+          setAgents([]);
+        })
+        .finally(() => {
+          if (cancelled || !isCurrentAgentStreamRequest(agentRequestId)) return;
+          setAgentsLoading(false);
+        });
 
       // Functional skills + design templates land independently. Both
       // gate `skillsLoading` together so the EntryView stops rendering
@@ -427,9 +737,10 @@ export function App() {
         setDsLoading(false);
       });
 
+      const request = beginProjectListRequest();
       void listProjects().then((list) => {
         if (cancelled) return;
-        setProjects(list);
+        reconcileFetchedProjects(list, request);
         setProjectsLoading(false);
       });
 
@@ -532,8 +843,14 @@ export function App() {
     })();
     return () => {
       cancelled = true;
+      agentStreamAbort.abort();
     };
-  }, []);
+  }, [
+    beginAgentStreamRequest,
+    beginProjectListRequest,
+    isCurrentAgentStreamRequest,
+    reconcileFetchedProjects,
+  ]);
 
   // Auto-pick the first available agent once both the daemon-stored config
   // and the agents listing have landed. Splitting this out of bootstrap
@@ -600,9 +917,10 @@ export function App() {
   }, []);
 
   const refreshProjects = useCallback(async () => {
+    const request = beginProjectListRequest();
     const list = await listProjects();
-    setProjects(list);
-  }, []);
+    reconcileFetchedProjects(list, request);
+  }, [beginProjectListRequest, reconcileFetchedProjects]);
 
   const refreshDesignSystems = useCallback(async () => {
     const list = await fetchDesignSystems();
@@ -794,15 +1112,40 @@ export function App() {
     async (options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] }) => {
       if (options && Object.prototype.hasOwnProperty.call(options, 'agentCliEnv')) {
         const nextConfig = { ...config, agentCliEnv: options.agentCliEnv ?? {} };
+        amrModelsRef.current = null;
         saveConfig(nextConfig);
         await syncConfigToDaemon(nextConfig);
         setConfig(nextConfig);
       }
-      const next = await fetchAgents({ throwOnError: options?.throwOnError });
-      setAgents(next);
-      return next;
+      const agentRequestId = beginAgentStreamRequest();
+      setAgentsLoading(true);
+      try {
+        const next = await fetchAgentsStream({
+          onAgent: (agent) => {
+            if (!isCurrentAgentStreamRequest(agentRequestId)) return;
+            setAgents((current) =>
+              mergeAmrModelsIntoAgents(
+                upsertAgent(current, agent),
+                amrModelsRef.current,
+              ),
+            );
+          },
+        });
+        const ordered = orderAgentsByRegistry(next);
+        if (isCurrentAgentStreamRequest(agentRequestId)) {
+          setAgents(mergeAmrModelsIntoAgents(ordered, amrModelsRef.current));
+          setAgentsLoading(false);
+        }
+        return ordered;
+      } catch (err) {
+        if (!isCurrentAgentStreamRequest(agentRequestId)) return [];
+        setAgentsLoading(false);
+        if (options?.throwOnError) throw err;
+        setAgents([]);
+        return [];
+      }
     },
-    [config],
+    [beginAgentStreamRequest, config, isCurrentAgentStreamRequest],
   );
 
   const handleCreateProject = useCallback(
@@ -812,6 +1155,7 @@ export function App() {
         pluginId?: string;
         appliedPluginSnapshotId?: string;
         pluginInputs?: Record<string, unknown>;
+        conversationMode?: ChatSessionMode;
         autoSendFirstMessage?: boolean;
         requestId?: string;
         pendingFiles?: File[];
@@ -835,6 +1179,7 @@ export function App() {
         designSystemId: input.designSystemId,
         pendingPrompt: derivedPendingPrompt,
         metadata: input.metadata,
+        ...(input.conversationMode ? { conversationMode: input.conversationMode } : {}),
         ...(input.pluginId ? { pluginId: input.pluginId } : {}),
         ...(input.appliedPluginSnapshotId
           ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
@@ -934,6 +1279,7 @@ export function App() {
             appliedPluginSnapshotId: result.appliedPluginSnapshotId,
           }
         : result.project;
+      rememberLocalProject(project.id);
       flushSync(() => {
         setProjects((curr) => [
           project,
@@ -949,7 +1295,7 @@ export function App() {
       navigate(projectRoute);
       return true;
     },
-    [analytics.track],
+    [analytics.track, rememberLocalProject],
   );
 
   const handleCreatePluginShareProject = useCallback(
@@ -975,6 +1321,7 @@ export function App() {
             appliedPluginSnapshotId: outcome.appliedPluginSnapshotId,
           }
         : outcome.project;
+      rememberLocalProject(project.id);
       setProjects((curr) => [
         project,
         ...curr.filter((p) => p.id !== project.id),
@@ -986,7 +1333,7 @@ export function App() {
       });
       return outcome;
     },
-    [],
+    [rememberLocalProject],
   );
 
   const handleImportClaudeDesign = useCallback(async (
@@ -994,6 +1341,7 @@ export function App() {
   ): Promise<ImportClaudeDesignOutcome> => {
     try {
       const result = await importClaudeDesignZip(file);
+      rememberLocalProject(result.project.id);
       setProjects((curr) => [
         result.project,
         ...curr.filter((p) => p.id !== result.project.id),
@@ -1010,36 +1358,56 @@ export function App() {
         message: err instanceof Error ? err.message : 'The ZIP could not be imported.',
       };
     }
-  }, []);
+  }, [rememberLocalProject]);
 
   const handleImportFolder = useCallback(async (baseDir: string) => {
     const result = await importFolderProject({ baseDir });
+    rememberLocalProject(result.project.id);
     setProjects((curr) => [result.project, ...curr.filter((p) => p.id !== result.project.id)]);
     navigate({
       kind: 'project',
       projectId: result.project.id,
       fileName: result.entryFile,
     });
-  }, []);
+  }, [rememberLocalProject]);
 
   // PR #974: on desktop, the host bridge owns the picker and import POST
   // atomically. The renderer never sees the path, token, or daemon DTO;
   // it receives host-owned project identifiers and refreshes project state
   // through the normal daemon API.
   const handleImportFolderResponse = useCallback(async (result: OpenDesignHostProjectImportSuccess) => {
+    rememberLocalProject(result.projectId);
     const project = await getProject(result.projectId);
     if (project != null) {
       setProjects((curr) => [project, ...curr.filter((p) => p.id !== project.id)]);
     } else {
+      // Daemon hasn't materialized the full record yet (race between the
+      // host's import POST and our /api/projects read). Seed a minimal
+      // placeholder so the route stays alive and ProjectView mounts; the
+      // pending-local id keeps reconcileFetchedProjects from evicting the
+      // stub until a project-list snapshot actually includes it, and the
+      // next refresh swaps it for the real Project record. Without the
+      // stub, a stale `[]` list response would replace `projects` with `[]`
+      // and the route-guard effect would bounce the user back to Home.
+      const stub: Project = {
+        id: result.projectId,
+        name: '',
+        skillId: null,
+        designSystemId: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      setProjects((curr) => [stub, ...curr.filter((p) => p.id !== stub.id)]);
+      const request = beginProjectListRequest();
       const list = await listProjects();
-      setProjects(list);
+      reconcileFetchedProjects(list, request);
     }
     navigate({
       kind: 'project',
       projectId: result.projectId,
       fileName: result.entryFile,
     });
-  }, []);
+  }, [beginProjectListRequest, rememberLocalProject, reconcileFetchedProjects]);
 
   const handleOpenProject = useCallback((id: string) => {
     navigate({ kind: 'project', projectId: id, fileName: null });
@@ -1078,12 +1446,14 @@ export function App() {
   const handleDeleteProject = useCallback(async (id: string) => {
     const ok = await deleteProjectApi(id);
     if (!ok) return false;
+    clearLocalProject(id, { deleted: true });
+    iframeKeepAlivePool.evictProject(id, { includeActive: true });
     setProjects((curr) => curr.filter((p) => p.id !== id));
     if (route.kind === 'project' && route.projectId === id) {
       navigate({ kind: 'home', view: 'home' });
     }
     return true;
-  }, [route]);
+  }, [clearLocalProject, iframeKeepAlivePool, route]);
 
   const handleRenameProject = useCallback(async (id: string, name: string) => {
     const trimmed = name.trim();
@@ -1120,8 +1490,70 @@ export function App() {
   }, [route]);
 
   const handleProjectChange = useCallback((updated: Project) => {
-    setProjects((curr) => curr.map((p) => (p.id === updated.id ? updated : p)));
-  }, []);
+    setProjects((curr) => {
+      const previous = curr.find((p) => p.id === updated.id);
+      if (
+        previous
+        && (
+          previous.skillId !== updated.skillId
+          || previous.designSystemId !== updated.designSystemId
+          || previous.customInstructions !== updated.customInstructions
+        )
+      ) {
+        iframeKeepAlivePool.evictProject(updated.id, { includeActive: true });
+      }
+      return curr.map((p) => (p.id === updated.id ? updated : p));
+    });
+  }, [iframeKeepAlivePool]);
+
+  // ProjectView's prompt-context signature derives from SkillSummary /
+  // DesignSystemSummary fields, so a body-only registry edit (same name,
+  // description, etc.) leaves every signature unchanged and the active
+  // preview keeps serving stale prompt context. Settings → Skills /
+  // Settings → Design Systems call back through these handlers after
+  // every successful mutation; we drop any pool entry whose project
+  // depends on the affected id — active or parked — so the next mount
+  // recomposes the system prompt with the new body. A ref tracks
+  // projects so the callback is stable across renders.
+  const projectsRef = useRef<Project[]>(projects);
+  useEffect(() => {
+    projectsRef.current = projects;
+  }, [projects]);
+
+  const handleSkillsChanged = useCallback(
+    (affectedSkillId?: string) => {
+      void fetchSkills().then((list) => setSkills(list));
+      void fetchDesignTemplates().then((list) => setDesignTemplates(list));
+      iframeKeepAlivePool.evictMatching(
+        (entry) => {
+          const proj = projectsRef.current.find((p) => p.id === entry.projectId);
+          if (!proj) return false;
+          if (affectedSkillId) return proj.skillId === affectedSkillId;
+          return proj.skillId != null;
+        },
+        { includeActive: true },
+      );
+    },
+    [iframeKeepAlivePool],
+  );
+
+  const handleDesignSystemsChanged = useCallback(
+    (affectedDesignSystemId?: string) => {
+      void fetchDesignSystems().then((list) => setDesignSystems(list));
+      iframeKeepAlivePool.evictMatching(
+        (entry) => {
+          const proj = projectsRef.current.find((p) => p.id === entry.projectId);
+          if (!proj) return false;
+          if (affectedDesignSystemId) {
+            return proj.designSystemId === affectedDesignSystemId;
+          }
+          return proj.designSystemId != null;
+        },
+        { includeActive: true },
+      );
+    },
+    [iframeKeepAlivePool],
+  );
 
   const activeProject =
     route.kind === 'project'
@@ -1150,17 +1582,25 @@ export function App() {
         });
         return;
       }
+      const request = beginProjectListRequest();
       const list = await listProjects();
       if (cancelled) return;
-      setProjects(list);
-      if (!list.find((p) => p.id === route.projectId)) {
+      const applied = reconcileFetchedProjects(list, request);
+      if (!applied) return;
+      const fetchedProject = locallyDeletedProjectIdsRef.current.has(route.projectId)
+        ? undefined
+        : list.find((p) => p.id === route.projectId);
+      const staleRequest = request.mutationVersion < projectListMutationVersionRef.current;
+      const knownLocalProject =
+        staleRequest && pendingLocalProjectIdsRef.current.has(route.projectId);
+      if (!fetchedProject && !knownLocalProject) {
         navigate({ kind: 'home', view: 'home' }, { replace: true });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [route, activeProject, projects, daemonLive]);
+  }, [route, activeProject, projects, daemonLive, beginProjectListRequest, reconcileFetchedProjects]);
 
   const openSettings = useCallback((
     section: SettingsSection = 'execution',
@@ -1391,6 +1831,7 @@ export function App() {
         onAgentChange={handleAgentChange}
         onAgentModelChange={handleAgentModelChange}
         onRefreshAgents={refreshAgents}
+        onThemeChange={handleThemeChange}
         onOpenSettings={openSettings}
         onOpenAmrSettings={openAmrSettings}
         onOpenMcpSettings={openMcpSettings}
@@ -1419,6 +1860,8 @@ export function App() {
         defaultDesignSystemId={config.designSystemId}
         agents={agents}
         config={config}
+        providerModelsCache={providerModelsCache}
+        onProviderModelsCacheChange={setProviderModelsCache}
         integrationInitialTab={integrationInitialTab}
         composioConfigLoading={composioConfigLoading}
         daemonLive={daemonLive}
@@ -1496,7 +1939,9 @@ export function App() {
           route={route}
           projects={projects}
         />
-        <div className="workspace-shell__body">{appMain}</div>
+        <div className="workspace-shell__body">
+          {appMain}
+        </div>
       </div>
       {clientType === 'desktop' ? null : (
         <PetOverlay
@@ -1505,6 +1950,8 @@ export function App() {
           onOpenProject={handleOpenProject}
         />
       )}
+      <TooltipLayer />
+      <AnimatePresence>
       {settingsOpen ? (
         <SettingsDialog
           initial={config}
@@ -1535,13 +1982,20 @@ export function App() {
             setSettingsHighlight(null);
           }}
           onRefreshAgents={refreshAgents}
+          onAmrLoginStatusChange={handleAmrLoginStatusChange}
           onSkillsRefresh={refreshSkills}
           daemonMediaProviders={daemonMediaProviders}
           daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
           mediaProvidersNotice={mediaProvidersNotice}
           onReloadMediaProviders={reloadMediaProvidersFromDaemon}
+          onProjectsRefresh={refreshProjects}
+          onSkillsChanged={handleSkillsChanged}
+          onDesignSystemsChanged={handleDesignSystemsChanged}
+          providerModelsCache={providerModelsCache}
+          onProviderModelsCacheChange={setProviderModelsCache}
         />
       ) : null}
+      </AnimatePresence>
       <MemoryToast onOpenMemory={() => openSettings('memory')} />
       {/* First-run privacy consent banner. It waits for daemon config
           hydration because privacyDecisionAt is daemon-owned and stripped
@@ -1550,7 +2004,14 @@ export function App() {
           finish both flip the flag). Independent of Settings: z-index in
           index.css sits above modal backdrops so opening Settings does
           not hide the banner. */}
+      <AnimatePresence>
       {showPrivacyConsent ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 10, scale: 0.97 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+        >
         <PrivacyConsentModal
           onAccept={() => {
             // Default opt-in: clicking "I get it" enables the same telemetry
@@ -1569,7 +2030,9 @@ export function App() {
             });
           }}
         />
+      </motion.div>
       ) : null}
+      </AnimatePresence>
     </>
   );
 }

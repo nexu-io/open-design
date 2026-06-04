@@ -197,6 +197,83 @@ test('gemini stream emits init text and usage events', () => {
   ]);
 });
 
+test('gemini stream handles real stream-json user, tool, and error frames', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  const fatalResult = {
+    type: 'result',
+    status: 'error',
+    error: { type: 'FatalAuthenticationError', message: 'Authentication failed' },
+    stats: { input_tokens: 11, output_tokens: 0, cached: 0, duration_ms: 42 },
+  };
+
+  handler.feed(
+    JSON.stringify({ type: 'message', role: 'user', content: 'make a video' }) + '\n' +
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_file',
+      tool_id: 'tool-1',
+      parameters: { path: 'timeline.json' },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'tool_result',
+      tool_id: 'tool-1',
+      status: 'success',
+      output: 'wrote timeline.json',
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'error',
+      severity: 'warning',
+      message: 'Agent execution blocked: retrying without shell',
+    }) +
+    '\n' +
+    JSON.stringify(fatalResult) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'tool_use', id: 'tool-1', name: 'write_file', input: { path: 'timeline.json' } },
+    { type: 'tool_result', toolUseId: 'tool-1', content: 'wrote timeline.json', isError: false },
+    { type: 'status', label: 'warning', detail: 'Agent execution blocked: retrying without shell' },
+    { type: 'error', message: 'Authentication failed', raw: JSON.stringify(fatalResult) },
+  ]);
+});
+
+test('gemini stream treats terminal error frames as fatal error events', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  const terminalError = {
+    type: 'error',
+    severity: 'error',
+    message: 'Maximum session turns exceeded',
+  };
+  const unknownSeverityError = {
+    type: 'error',
+    severity: 'critical',
+    error: { message: 'Invalid stream: malformed tool call' },
+  };
+
+  handler.feed(
+    JSON.stringify(terminalError) + '\n' +
+    JSON.stringify(unknownSeverityError) + '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'Maximum session turns exceeded',
+      raw: JSON.stringify(terminalError),
+    },
+    {
+      type: 'error',
+      message: 'Invalid stream: malformed tool call',
+      raw: JSON.stringify(unknownSeverityError),
+    },
+  ]);
+});
+
 test('cursor stream emits partial text once and usage events', () => {
   const { events, handler } = collectEvents('cursor-agent');
 

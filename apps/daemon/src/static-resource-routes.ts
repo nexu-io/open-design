@@ -1,7 +1,7 @@
 import type { Express } from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
-import { detectAgents } from './agents.js';
+import { detectAgents, detectAgentsStream } from './agents.js';
 import {
   SkillImportError,
   deleteUserSkill,
@@ -56,13 +56,56 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     return false;
   };
 
-  app.get('/api/agents', async (_req, res) => {
+  app.get('/api/agents', async (req, res) => {
+    const wantsStream =
+      req.query.stream === '1' || req.query.stream === 'true';
+    let config;
     try {
-      const config = await readAppConfig(RUNTIME_DATA_DIR);
-      const list = await detectAgents(config.agentCliEnv ?? {});
-      res.json({ agents: list });
+      config = await readAppConfig(RUNTIME_DATA_DIR);
     } catch (err: any) {
       res.status(500).json({ error: String(err) });
+      return;
+    }
+    const agentCliEnv = config.agentCliEnv ?? {};
+
+    if (!wantsStream) {
+      try {
+        const list = await detectAgents(agentCliEnv);
+        res.json({ agents: list });
+      } catch (err: any) {
+        res.status(500).json({ error: String(err) });
+      }
+      return;
+    }
+
+    // Server-Sent Events: emit each agent as its probe settles so the client
+    // can paint cards incrementally instead of waiting for the slowest CLI.
+    // Each `agent` event carries one AgentInfo; a terminal `done` event lets
+    // the client distinguish "stream finished" from a dropped connection.
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    let aborted = false;
+    req.on('close', () => {
+      aborted = true;
+    });
+    try {
+      for await (const agent of detectAgentsStream(agentCliEnv)) {
+        if (aborted) break;
+        res.write(`event: agent\ndata: ${JSON.stringify(agent)}\n\n`);
+      }
+      if (!aborted) {
+        res.write('event: done\ndata: {}\n\n');
+      }
+    } catch (err: any) {
+      if (!aborted) {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: String(err) })}\n\n`);
+      }
+    } finally {
+      res.end();
     }
   });
 

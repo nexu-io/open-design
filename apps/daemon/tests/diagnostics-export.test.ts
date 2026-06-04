@@ -127,4 +127,89 @@ describe('diagnostics export handler — packaged (runtime) layout', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('reports missing packaged log files under logical log paths without duplicating runtime segments', async () => {
+    const root = join(tmpdir(), `od-diag-missing-${randomUUID()}`);
+    const namespaceRoot = join(root, 'namespaces', 'release-beta');
+    const daemonLogPath = join(namespaceRoot, 'logs', APP_KEYS.DAEMON, 'latest.log');
+    try {
+      await mkdir(dirname(daemonLogPath), { recursive: true });
+      await writeFile(daemonLogPath, 'daemon ok\n', 'utf8');
+
+      const runtime: SidecarRuntimeContext<SidecarStamp> = {
+        app: APP_KEYS.DAEMON,
+        base: join(namespaceRoot, 'runtime'),
+        ipc: '/tmp/od-diag-missing.sock',
+        mode: SIDECAR_MODES.RUNTIME,
+        namespace: 'release-beta',
+        source: SIDECAR_SOURCES.PACKAGED,
+      };
+
+      const handler = createDiagnosticsExportHandler({ runtime, projectRoot: '/tmp/test-project' });
+      const res = mockResponse();
+      await handler({} as never, res as never, () => undefined);
+
+      expect(res.capturedStatus).toBe(200);
+      const zip = await JSZip.loadAsync(res.capturedPayload!);
+      const manifest = JSON.parse(await zip.file('summary/manifest.json')!.async('string')) as {
+        files: Array<{ name: string; bytes?: number; error?: string }>;
+      };
+      const fileNames = manifest.files.map((file) => file.name);
+      expect(fileNames).toContain('logs/daemon/latest.log');
+      expect(fileNames).toContain('logs/web/latest.log');
+      expect(fileNames).toContain('logs/desktop/latest.log');
+      expect(fileNames.some((name) => name.includes('runtime/release-beta/logs'))).toBe(false);
+
+      const webLog = manifest.files.find((file) => file.name === 'logs/web/latest.log');
+      const desktopLog = manifest.files.find((file) => file.name === 'logs/desktop/latest.log');
+      expect(webLog?.error).toBeTruthy();
+      expect(desktopLog?.error).toBeTruthy();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+});
+
+describe('diagnostics export handler — run event logs', () => {
+  it('bundles recent per-run events.jsonl logs for agent stream forensics', async () => {
+    const root = join(tmpdir(), `od-diag-runs-${randomUUID()}`);
+    const runsDir = join(root, 'runs');
+    const runLogPath = join(runsDir, 'run-3165', 'events.jsonl');
+    const marker = 'Agent stalled without emitting any new output for 600s';
+    try {
+      await mkdir(dirname(runLogPath), { recursive: true });
+      await writeFile(
+        runLogPath,
+        JSON.stringify({
+          event: 'agent',
+          data: { type: 'raw', line: marker },
+        }) + '\n',
+        'utf8',
+      );
+
+      const handler = createDiagnosticsExportHandler({
+        runtime: null,
+        projectRoot: '/tmp/test-project',
+        runsDir,
+      });
+      const res = mockResponse();
+      await handler({} as never, res as never, () => undefined);
+
+      expect(res.capturedStatus).toBe(200);
+      const zip = await JSZip.loadAsync(res.capturedPayload!);
+      const runEntry = zip.file('runs/run-3165/events.jsonl');
+      expect(runEntry).not.toBeNull();
+      expect(await runEntry!.async('string')).toContain(marker);
+
+      const manifest = JSON.parse(await zip.file('summary/manifest.json')!.async('string')) as {
+        files: { name: string; bytes: number; error?: string }[];
+      };
+      const runFile = manifest.files.find((file) => file.name === 'runs/run-3165/events.jsonl');
+      expect(runFile?.error).toBeUndefined();
+      expect(runFile?.bytes ?? 0).toBeGreaterThan(0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

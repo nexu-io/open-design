@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ToolCard } from "./ToolCard";
 import { FileOpsSummary } from "./FileOpsSummary";
 import {
@@ -20,16 +20,20 @@ import {
   trackFeedbackSubmitResult,
 } from "../analytics/events";
 import {
+  feedbackAgentProviderIdToTracking,
+  modelIdForTracking,
   normalizeCustomReason,
+  type TrackingFeedbackProviderId,
   type TrackingFeedbackReasonCode,
   type TrackingFeedbackRatingWithNone,
   type TrackingProjectKind,
 } from "@open-design/contracts/analytics";
 import {
   splitOnQuestionForms,
+  stripTrailingOpenQuestionForm,
   type QuestionForm,
 } from "../artifacts/question-form";
-import { stripArtifact } from "../artifacts/strip";
+import { splitStreamingArtifact, stripArtifact } from "../artifacts/strip";
 import { QuestionFormView, parseSubmittedAnswers } from "./QuestionForm";
 import {
   getPluginFolderCandidates,
@@ -37,6 +41,7 @@ import {
 } from "./design-files/pluginFolders";
 import type { PluginFolderAgentAction } from "./design-files/pluginFolderActions";
 import { Icon } from "./Icon";
+import { copyToClipboard } from "../lib/copy-to-clipboard";
 import { useT } from "../i18n";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
 import {
@@ -45,12 +50,14 @@ import {
   type TodoItem,
 } from "../runtime/todos";
 import type { Dict } from "../i18n/types";
-import { agentDisplayName, exactAgentDisplayName } from "../utils/agentLabels";
+import { agentDisplayName, agentIconId, exactAgentDisplayName } from "../utils/agentLabels";
+import { AgentIcon } from "./AgentIcon";
 import {
   exactDateTime,
   messageTime,
   relativeTimeLong,
 } from "../utils/chatTime";
+import { filterImplicitProducedFiles } from "../produced-files";
 import type {
   AgentEvent,
   ChatMessage,
@@ -278,6 +285,11 @@ function SkillPluginCandidateCard({
 interface Props {
   message: ChatMessage;
   streaming: boolean;
+  // Live-only streaming tool-input partials keyed by tool-use id (raw,
+  // mid-token JSON accumulated from `input_json_delta`). Used to render an
+  // in-flight Write/Edit's code in real time before the full `tool_use`
+  // arrives. Never persisted.
+  liveToolInput?: Record<string, { name: string; text: string }>;
   projectId: string | null;
   // Analytics context for the assistant_feedback_* events. Defaults
   // applied at the call site keep AssistantMessage usable in tests
@@ -308,11 +320,61 @@ interface Props {
   // Submit handler the form fires when the user picks answers — opaque
   // to AssistantMessage; ProjectView wires it into onSend.
   onSubmitForm?: (text: string) => void;
+  // Open the right-hand Questions tab. The active discovery form renders
+  // there (Claude-Design style) instead of inline; this assistant message
+  // shows a banner that focuses the tab on click.
+  onOpenQuestions?: () => void;
   onContinueRemainingTasks?: (todos: TodoItem[]) => void;
+  onForkFromMessage?: () => void;
+  forking?: boolean;
   onFeedback?: (change: ChatMessageFeedbackChange) => void;
   suppressDirectionForms?: boolean;
   hasDesignSystemContext?: boolean;
 }
+
+// Props compared by reference to decide whether a memoized AssistantMessage can
+// skip re-rendering. The four interaction callbacks (onSubmitForm,
+// onContinueRemainingTasks, onForkFromMessage, onFeedback) are DELIBERATELY
+// excluded: ChatPane re-creates them per render, but routes them through a ref
+// so their behavior is reference-stable — comparing them would defeat the memo
+// on every streamed frame. `isLast` is compared, which captures the only state
+// transition those callbacks' presence depends on. The remaining context props
+// (projectFiles, the Set props, handlers) come from ProjectView as stable
+// useState/useMemo/useCallback values, so reference comparison is correct and
+// cheap.
+const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
+  'message',
+  'streaming',
+  'projectId',
+  'projectKind',
+  'conversationId',
+  'projectFiles',
+  'projectFileNames',
+  'onRequestOpenFile',
+  'onRequestPluginFolderAgentAction',
+  'activePluginActionPaths',
+  'hiddenPluginActionPaths',
+  'isLast',
+  'errorCardOwnerId',
+  'nextUserContent',
+  'forking',
+  'suppressDirectionForms',
+  'hasDesignSystemContext',
+];
+
+function areAssistantMessagePropsEqual(prev: Props, next: Props): boolean {
+  for (const key of ASSISTANT_MESSAGE_COMPARED_PROPS) {
+    if (!Object.is(prev[key], next[key])) return false;
+  }
+  return true;
+}
+
+/**
+ * Memoized so a streamed frame only re-renders the ONE assistant message whose
+ * `message` object changed identity (the streaming turn), not all N messages in
+ * the conversation. See `areAssistantMessagePropsEqual` for the comparison.
+ */
+export const AssistantMessage = memo(AssistantMessageImpl, areAssistantMessagePropsEqual);
 
 /**
  * Renders an assistant message as an interleaved flow of:
@@ -323,9 +385,10 @@ interface Props {
  *     the individual tool cards. Mirrors the chat surface in screenshot 9.
  *   - status pills
  */
-export function AssistantMessage({
+function AssistantMessageImpl({
   message,
   streaming,
+  liveToolInput,
   projectId,
   projectKind = null,
   conversationId = null,
@@ -339,7 +402,10 @@ export function AssistantMessage({
   errorCardOwnerId = null,
   nextUserContent,
   onSubmitForm,
+  onOpenQuestions,
   onContinueRemainingTasks,
+  onForkFromMessage,
+  forking = false,
   onFeedback,
   suppressDirectionForms = false,
   hasDesignSystemContext = false,
@@ -354,11 +420,33 @@ export function AssistantMessage({
   // The chat-pane-level PinnedTodoBar renders the canonical TodoWrite card
   // above the composer, so we strip any TodoWrite tool-groups out of the
   // per-message flow to avoid the same task list rendering twice.
-  const blocks = stripTodoToolGroups(
-    suppressDuplicateQuestionForms(
-      suppressAskUserQuestionFallbackText(buildBlocks(events)),
+  const persistedBlocks = stripTodoToolGroups(
+    stripEmptyThinkingBlocks(
+      suppressDuplicateQuestionForms(
+        suppressAskUserQuestionFallbackText(buildBlocks(events)),
+      ),
     ),
   );
+  // Synthesize live code boxes for tool calls whose JSON input is still
+  // streaming (no full `tool_use` event yet). Gated to code-writing tools so
+  // a Bash/Grep/TodoWrite input stream doesn't spawn a code panel. These
+  // append after the persisted blocks since the in-flight tool is the latest
+  // activity. Disappear automatically once the full `tool_use` lands (the id
+  // leaves `liveToolInput`) or the run ends (the map is wiped upstream).
+  const liveBlocks = useMemo<Block[]>(() => {
+    if (!streaming || !liveToolInput) return [];
+    const settledUseIds = new Set(
+      events.filter((e) => e.kind === "tool_use").map((e) => e.id),
+    );
+    const out: Block[] = [];
+    for (const [id, entry] of Object.entries(liveToolInput)) {
+      if (settledUseIds.has(id)) continue;
+      if (!isLiveCodeToolName(entry.name)) continue;
+      out.push({ kind: "live-tool", id, name: entry.name, raw: entry.text });
+    }
+    return out;
+  }, [streaming, liveToolInput, events]);
+  const blocks = liveBlocks.length ? [...persistedBlocks, ...liveBlocks] : persistedBlocks;
   const fileOps = useMemo(() => deriveFileOps(events), [events]);
   const produced = message.producedFiles ?? [];
   const displayedProduced = useMemo(
@@ -443,7 +531,8 @@ export function AssistantMessage({
   const usage = events.find((e) => e.kind === "usage") as
     | Extract<AgentEvent, { kind: "usage" }>
     | undefined;
-  const roleLabel = assistantRoleLabel(message, t);
+  const roleName = assistantRoleName(message, t);
+  const roleIconId = agentIconId(message.agentId, message.agentName);
   const hasEmptyResponse = events.some(
     (e) => e.kind === "status" && e.label === "empty_response"
   );
@@ -456,6 +545,8 @@ export function AssistantMessage({
     !!isLast &&
     unfinishedTodos.length > 0 &&
     !!onContinueRemainingTasks;
+  const canFork = !streaming && !!onForkFromMessage;
+  const copyMarkdown = message.content.trim().length > 0 ? message.content : undefined;
   const showFeedback =
     !!onFeedback &&
     isFeedbackEligible({
@@ -471,7 +562,22 @@ export function AssistantMessage({
     !!message.endedAt ||
     !!usage ||
     unfinishedTodos.length > 0 ||
-    hasEmptyResponse;
+    hasEmptyResponse ||
+    !!copyMarkdown ||
+    canFork;
+  // Pre-output vs working: before any real content (text / thinking / tools /
+  // files) the footer shimmers "Preparing…"; the moment content lands it
+  // flips to "Working" and the elapsed clock restarts from that instant.
+  const hasContent = blocks.some((b) => b.kind !== "status") || fileOps.length > 0;
+  const preparing = streaming && !hasContent;
+  const [outputStartedAt, setOutputStartedAt] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    if (streaming && hasContent) {
+      setOutputStartedAt((prev) => prev ?? Date.now());
+    } else if (!streaming) {
+      setOutputStartedAt(undefined);
+    }
+  }, [streaming, hasContent]);
   // Track which forms the user submitted in this session so we lock them
   // immediately on click (without waiting for the parent to re-render).
   const [locallySubmitted, setLocallySubmitted] = useState<Set<string>>(
@@ -497,19 +603,23 @@ export function AssistantMessage({
     [isLast, message.runId],
   );
 
+  // Index of the trailing text block — the streaming caret rides the end of
+  // the last prose block so it tracks the final character as tokens arrive.
+  let lastTextBlockIndex = -1;
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    if (blocks[i]?.kind === "text") {
+      lastTextBlockIndex = i;
+      break;
+    }
+  }
+
   return (
     <div className="msg assistant">
       <div className="role">
-        <span>{roleLabel}</span>
-        <MessageTimestamp message={message} t={t} />
+        <AgentIcon id={roleIconId} size={20} className="role-agent-icon" />
+        <span className="role-name">{roleName}</span>
       </div>
       <div className="assistant-flow">
-        {blocks.length === 0 && streaming ? (
-          <WaitingPill
-            startedAt={message.startedAt}
-            latestStatus={latestStatusLabel(events)}
-          />
-        ) : null}
         {fileOps.length > 0 ? (
           <FileOpsSummary
             entries={fileOps}
@@ -526,6 +636,7 @@ export function AssistantMessage({
                 text={b.text}
                 isLastAssistant={!!isLast}
                 streaming={streaming}
+                showStreamCursor={streaming && i === lastTextBlockIndex}
                 nextUserContent={nextUserContent}
                 locallySubmitted={locallySubmitted}
                 suppressDirectionForms={suppressDirectionForms}
@@ -537,11 +648,21 @@ export function AssistantMessage({
                   });
                   onSubmitForm?.(text);
                 }}
+                onOpenQuestions={onOpenQuestions}
                 onRequestOpenFile={onRequestOpenFile}
               />
             );
           if (b.kind === "thinking")
-            return <ThinkingBlock key={i} text={b.text} />;
+            // Thinking is only "in progress" while this is the trailing block.
+            // Once any block (prose / tools) lands after it, the model has
+            // moved past thinking, so the block flips to its finished state.
+            return (
+              <ThinkingBlock
+                key={i}
+                text={b.text}
+                streaming={streaming && i === blocks.length - 1}
+              />
+            );
           if (b.kind === "tool-group") {
             return (
               <ToolGroupCard
@@ -556,6 +677,9 @@ export function AssistantMessage({
                 onAnswerToolUse={onAnswerToolUse}
               />
             );
+          }
+          if (b.kind === "live-tool") {
+            return <LiveCodeBox key={b.id} name={b.name} raw={b.raw} />;
           }
           if (b.kind === "plugin-candidate") {
             if (dismissedCandidateIds.has(b.candidateId)) return null;
@@ -582,6 +706,9 @@ export function AssistantMessage({
             // this no longer the last assistant message — keep their pill so
             // the error detail still survives reload / history review.
             if (b.label === "error" && message.id === errorCardOwnerId) return null;
+            // The pre-output "initializing" status is surfaced by the footer's
+            // shimmering "Preparing…" label instead of its own pill.
+            if (b.label === "initializing") return null;
             return <StatusPill key={i} label={b.label} detail={b.detail} />;
           }
           return null;
@@ -644,6 +771,8 @@ export function AssistantMessage({
                 conversationId={conversationId}
                 runId={message.runId ?? null}
                 assistantMessageId={message.id}
+                modelId={modelIdForTracking(assistantFeedbackModelId(message))}
+                agentProviderId={feedbackAgentProviderIdToTracking(message.agentId)}
                 producedFileCount={displayedProduced.length}
                 hasDesignSystemContext={hasDesignSystemContext}
                 footerProps={{
@@ -653,7 +782,14 @@ export function AssistantMessage({
                   usage,
                   hasUnfinishedTodos: unfinishedTodos.length > 0,
                   hasEmptyResponse,
+                  preparing,
+                  outputStartedAt,
+                  copyMarkdown,
+                  onFork: canFork ? onForkFromMessage : undefined,
+                  forking,
                   forceVisible: true,
+                  message,
+                  isLast: !!isLast,
                 }}
               />
             ) : (
@@ -664,6 +800,13 @@ export function AssistantMessage({
                 usage={usage}
                 hasUnfinishedTodos={unfinishedTodos.length > 0}
                 hasEmptyResponse={hasEmptyResponse}
+                preparing={preparing}
+                outputStartedAt={outputStartedAt}
+                copyMarkdown={copyMarkdown}
+                onFork={canFork ? onForkFromMessage : undefined}
+                forking={forking}
+                message={message}
+                isLast={!!isLast}
               />
             )}
           </div>
@@ -693,14 +836,14 @@ function inferProducedFilesFromTurn({
   if (fileOps.length > 0) return [];
   const start = message.startedAt - 1_000;
   const end = message.endedAt + 60_000;
-  return projectFiles
-    .filter((file) => {
+  return filterImplicitProducedFiles(
+    projectFiles.filter((file) => {
       if (file.type === "dir") return false;
       if (!file.name || file.name.startsWith(".")) return false;
       if (file.name.includes("/.")) return false;
       return file.mtime >= start && file.mtime <= end;
-    })
-    .sort((a, b) => b.mtime - a.mtime);
+    }),
+  ).sort((a, b) => b.mtime - a.mtime);
 }
 
 function isFeedbackEligible({
@@ -739,6 +882,25 @@ function MessageTimestamp({
   );
 }
 
+// The agent name without the trailing model id — the role header shows the
+// brand logo + name only, so the `· model` suffix is dropped there.
+export function assistantRoleName(
+  message: ChatMessage,
+  t: TranslateFn
+): string {
+  const fromName = message.agentName?.trim();
+  if (fromName) {
+    const base = fromName.split(" · ")[0]?.trim() || fromName;
+    return exactAgentDisplayName(base) ?? base;
+  }
+  const fromId = agentDisplayName(message.agentId);
+  if (fromId) return fromId;
+  const starting = message.events?.find(
+    (e) => e.kind === "status" && e.label === "starting" && e.detail
+  ) as Extract<AgentEvent, { kind: "status" }> | undefined;
+  return agentDisplayName(starting?.detail) ?? t("assistant.role");
+}
+
 export function assistantRoleLabel(
   message: ChatMessage,
   t: TranslateFn
@@ -767,6 +929,16 @@ function assistantModelDetail(message: ChatMessage): string | null {
   return detail;
 }
 
+function assistantFeedbackModelId(message: ChatMessage): string | null {
+  const detail = assistantModelDetail(message);
+  if (detail) return detail;
+  const displayName = message.agentName?.trim();
+  if (!displayName) return null;
+  const parts = displayName.split(" · ");
+  const model = parts.length > 1 ? parts[parts.length - 1]?.trim() : "";
+  return model || null;
+}
+
 function appendRoleModel(label: string, model: string | null): string {
   if (!model || label.includes(" · ")) return label;
   return `${label} · ${model}`;
@@ -779,8 +951,20 @@ interface AssistantFooterProps {
   usage: Extract<AgentEvent, { kind: "usage" }> | undefined;
   hasUnfinishedTodos: boolean;
   hasEmptyResponse: boolean;
+  // Pre-output phase: streaming but nothing rendered yet. The label shimmers
+  // "Preparing…"; once content lands it flips to "Working" and the elapsed
+  // counter restarts from `outputStartedAt` (the moment content appeared).
+  preparing?: boolean;
+  outputStartedAt?: number | undefined;
+  copyMarkdown?: string;
+  onFork?: () => void;
+  forking?: boolean;
   feedbackControls?: ReactNode;
   forceVisible?: boolean;
+  message?: ChatMessage;
+  // The most recent assistant reply keeps its footer permanently visible
+  // (not hover-gated), matching Lobe Chat's persistent last-message footer.
+  isLast?: boolean;
 }
 
 function AssistantFooter({
@@ -790,29 +974,54 @@ function AssistantFooter({
   usage,
   hasUnfinishedTodos,
   hasEmptyResponse,
+  preparing = false,
+  outputStartedAt,
+  copyMarkdown,
+  onFork,
+  forking = false,
   feedbackControls,
   forceVisible = false,
+  message,
+  isLast = false,
 }: AssistantFooterProps) {
   const t = useT();
-  const elapsed = useLiveElapsed(streaming, startedAt, endedAt, usage?.durationMs);
+  // While "working" (streaming with content) the timer counts from when
+  // content first appeared, not from the run start, so it reads as a fresh
+  // generation clock. Preparing and the final done state both use startedAt.
+  const elapsedStart =
+    streaming && !preparing ? outputStartedAt ?? startedAt : startedAt;
+  const elapsed = useLiveElapsed(streaming, elapsedStart, endedAt, usage?.durationMs);
+  const formattedCost =
+    typeof usage?.costUsd === "number" &&
+    Number.isFinite(usage.costUsd) &&
+    usage.costUsd > 0
+      ? usage.costUsd.toFixed(4)
+      : "";
+  const costLabel = formattedCost && formattedCost !== "0.0000" ? ` · $${formattedCost}` : "";
   if (
     !forceVisible &&
     !streaming &&
     !elapsed &&
     !usage &&
     !hasUnfinishedTodos &&
-    !hasEmptyResponse
+    !hasEmptyResponse &&
+    !copyMarkdown &&
+    !onFork
   )
     return null;
   return (
     <div
       className="assistant-footer"
       data-unfinished={hasUnfinishedTodos ? "true" : "false"}
+      data-streaming={streaming ? "true" : "false"}
+      data-last={isLast ? "true" : "false"}
     >
       <span className="dot" data-active={streaming ? "true" : "false"} />
-      <span className="assistant-label">
+      <span className={`assistant-label${streaming && preparing ? " shimmer-text shimmer-prepare" : ""}`}>
         {streaming
-          ? t("assistant.workingLabel")
+          ? preparing
+            ? t("assistant.statusPreparing")
+            : t("assistant.workingLabel")
           : hasEmptyResponse
           ? t("assistant.emptyResponseLabel")
           : hasUnfinishedTodos
@@ -824,12 +1033,90 @@ function AssistantFooter({
         {usage?.outputTokens != null
           ? ` · ${t("assistant.outTokens", { n: usage.outputTokens })}`
           : ""}
-        {typeof usage?.costUsd === "number"
-          ? ` · $${usage.costUsd.toFixed(4)}`
-          : ""}
+        {costLabel}
       </span>
-      {feedbackControls}
+      {copyMarkdown || onFork || feedbackControls ? (
+        <span className="assistant-footer-controls">
+          {copyMarkdown ? <AssistantMarkdownCopyButton markdown={copyMarkdown} /> : null}
+          {onFork ? (
+            <AssistantForkButton
+              disabled={forking}
+              onFork={onFork}
+            />
+          ) : null}
+          {feedbackControls}
+        </span>
+      ) : null}
+      {!streaming && message ? <MessageTimestamp message={message} t={t} /> : null}
     </div>
+  );
+}
+
+function AssistantForkButton({
+  disabled,
+  onFork,
+}: {
+  disabled: boolean;
+  onFork: () => void;
+}) {
+  const t = useT();
+  const label = disabled
+    ? t("assistant.forkingConversation")
+    : t("assistant.forkConversation");
+  return (
+    <button
+      type="button"
+      className="assistant-copy-button od-tooltip"
+      disabled={disabled}
+      data-tooltip={label}
+      data-tooltip-placement="top"
+      onClick={onFork}
+      aria-label={label}
+      title={label}
+    >
+      <Icon name={disabled ? "spinner" : "fork"} size={13} />
+    </button>
+  );
+}
+
+function AssistantMarkdownCopyButton({ markdown }: { markdown: string }) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  async function handleCopy() {
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    const ok = await copyToClipboard(markdown);
+    if (!ok) return;
+    setCopied(true);
+    copyTimerRef.current = setTimeout(() => {
+      setCopied(false);
+      copyTimerRef.current = undefined;
+    }, 2000);
+  }
+
+  const label = copied ? t("chat.copyDone") : t("assistant.copyMarkdown");
+  return (
+    <button
+      type="button"
+      className="assistant-copy-button od-tooltip"
+      data-copied={copied ? "true" : "false"}
+      data-tooltip={label}
+      data-tooltip-placement="top"
+      onClick={() => {
+        void handleCopy();
+      }}
+      aria-label={label}
+      title={label}
+    >
+      <Icon name={copied ? "check" : "copy"} size={13} />
+    </button>
   );
 }
 
@@ -843,6 +1130,8 @@ function AssistantFeedback({
   conversationId,
   runId,
   assistantMessageId,
+  modelId,
+  agentProviderId,
   producedFileCount,
 }: {
   feedback: ChatMessage["feedback"];
@@ -854,6 +1143,8 @@ function AssistantFeedback({
   conversationId: string | null;
   runId: string | null;
   assistantMessageId: string;
+  modelId: string;
+  agentProviderId: TrackingFeedbackProviderId;
   producedFileCount: number;
 }) {
   const t = useT();
@@ -908,6 +1199,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? null,
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: reasonRating,
       });
     }
@@ -919,6 +1212,8 @@ function AssistantFeedback({
     conversationId,
     assistantMessageId,
     runId,
+    agentProviderId,
+    modelId,
   ]);
   const toggleFeedback = (rating: ChatMessageFeedbackRating) => {
     const nextRating = selected === rating ? null : rating;
@@ -942,6 +1237,8 @@ function AssistantFeedback({
       conversation_id: conversationId,
       assistant_message_id: assistantMessageId,
       run_id: runId ?? "",
+      agent_provider_id: agentProviderId,
+      model_id: modelId,
       rating,
       rating_before: ratingBefore,
       has_produced_files: producedFileCount > 0,
@@ -961,6 +1258,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? null,
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: ratingAfter,
         rating_before: ratingBefore,
         has_produced_files: producedFileCount > 0,
@@ -1000,6 +1299,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? "",
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: reasonRating,
         ...(reasonJoined ? { reason: reasonJoined } : {}),
         reason_count: reasonCodes.length,
@@ -1024,6 +1325,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? "",
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: reasonRating,
         ...(reasonJoined ? { reason: reasonJoined } : {}),
         reason_count: reasonCodes.length,
@@ -1047,6 +1350,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? null,
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: reasonRating,
         reason: reasons,
         reason_count: reasons.length,
@@ -1100,8 +1405,10 @@ function AssistantFeedback({
     >
       <button
         type="button"
-        className="assistant-feedback-button"
+        className="assistant-feedback-button od-tooltip"
         data-selected={selected === "positive" ? "true" : "false"}
+        data-tooltip={t("assistant.feedbackPositive")}
+        data-tooltip-placement="top"
         aria-pressed={selected === "positive"}
         aria-label={t("assistant.feedbackPositive")}
         title={t("assistant.feedbackPositive")}
@@ -1125,8 +1432,10 @@ function AssistantFeedback({
       </button>
       <button
         type="button"
-        className="assistant-feedback-button"
+        className="assistant-feedback-button od-tooltip"
         data-selected={selected === "negative" ? "true" : "false"}
+        data-tooltip={t("assistant.feedbackNegative")}
+        data-tooltip-placement="top"
         aria-pressed={selected === "negative"}
         aria-label={t("assistant.feedbackNegative")}
         title={t("assistant.feedbackNegative")}
@@ -1568,86 +1877,53 @@ function hasPluginFinalActionHint(content: string): boolean {
   );
 }
 
-/**
- * The pre-first-block waiting indicator. Shows "Waiting for first output…"
- * normally, the latest status label (initializing / starting / thinking /
- * streaming) once we have one, plus a soft hint after ~12 seconds telling
- * the user they can stop the run if it really seems stuck.
- */
-function WaitingPill({
-  startedAt,
-  latestStatus,
-}: {
-  startedAt?: number;
-  latestStatus?: { label: string; detail?: string | undefined };
-}) {
-  const t = useT();
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
-  const elapsedSec = startedAt
-    ? Math.max(0, Math.round((now - startedAt) / 1000))
-    : 0;
-  const slow = elapsedSec >= 12;
-  const label = latestStatus?.label
-    ? humanizeStatus(latestStatus.label, t)
-    : t("assistant.waitingFirstOutput");
-  return (
-    <div className="op-waiting">
-      <span className="op-waiting-dot" aria-hidden />
-      <span className="op-waiting-label">{label}</span>
-      {latestStatus?.detail ? (
-        <code className="op-waiting-detail">{latestStatus.detail}</code>
-      ) : null}
-      {slow ? (
-        <span className="op-waiting-hint">{t("assistant.slowHint")}</span>
-      ) : null}
-    </div>
-  );
-}
-
-function humanizeStatus(label: string, t: (k: keyof Dict) => string): string {
-  if (label === "initializing") return t("assistant.statusBootingAgent");
-  if (label === "starting") return t("assistant.statusStarting");
-  if (label === "requesting") return t("assistant.statusRequesting");
-  if (label === "thinking") return t("assistant.statusThinking");
-  if (label === "streaming") return t("assistant.statusStreaming");
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
-
-function latestStatusLabel(
-  events: AgentEvent[]
-): { label: string; detail?: string | undefined } | undefined {
-  for (let i = events.length - 1; i >= 0; i--) {
-    const ev = events[i]!;
-    if (ev.kind === "status") return { label: ev.label, detail: ev.detail };
-  }
-  return undefined;
-}
 
 function ProseBlock({
   text,
   isLastAssistant,
   streaming,
+  showStreamCursor,
   nextUserContent,
   locallySubmitted,
   suppressDirectionForms,
   onSubmitForm,
+  onOpenQuestions,
   onRequestOpenFile,
 }: {
   text: string;
   isLastAssistant: boolean;
   streaming: boolean;
+  showStreamCursor?: boolean;
   nextUserContent?: string;
   locallySubmitted: Set<string>;
   suppressDirectionForms: boolean;
   onSubmitForm: (formId: string, text: string) => void;
+  onOpenQuestions?: () => void;
   onRequestOpenFile?: (name: string) => void;
 }) {
+  const t = useT();
   const cleaned = useMemo(() => stripArtifact(text), [text]);
-  const segments = useMemo(() => splitOnQuestionForms(cleaned), [cleaned]);
+  // While the latest turn is still streaming a not-yet-closed question-form,
+  // drop the partial `<question-form>{…` markup from the prose so the chat
+  // doesn't flash raw JSON; we surface a banner for it instead. The actual
+  // form streams into the right-hand Questions tab.
+  const { text: visibleText, hadOpenForm } = useMemo(
+    () =>
+      isLastAssistant && streaming
+        ? stripTrailingOpenQuestionForm(cleaned)
+        : { text: cleaned, hadOpenForm: false },
+    [cleaned, isLastAssistant, streaming],
+  );
+  // While an `<artifact type="text/html">` is still streaming (no closing tag
+  // yet), surface its body in a live code panel instead of leaking the raw
+  // tag + half-written HTML as Markdown text. Once it closes, stripArtifact
+  // removes it and the file/preview panel takes over — so this only fires
+  // mid-stream.
+  const { head, live } = useMemo(
+    () => (streaming ? splitStreamingArtifact(visibleText) : { head: visibleText, live: null }),
+    [visibleText, streaming]
+  );
+  const segments = useMemo(() => splitOnQuestionForms(head), [head]);
   // Route relative file-link clicks (`template.html`, `subdir/hero.html`)
   // through the workspace tab opener. Without this, Electron's window-open
   // handler creates a new app window whose relative href can't resolve, and
@@ -1688,9 +1964,9 @@ function ProseBlock({
       }));
     }
   );
-  if (renderable.length === 0) return null;
+  if (renderable.length === 0 && !live) return null;
   return (
-    <div className="prose-block">
+    <div className="prose-block" data-stream-cursor={showStreamCursor && !live ? "true" : undefined}>
       {renderable.map((seg) => {
         if (seg.kind === "reminder") {
           return <SystemReminderBlock key={seg.key} text={seg.text} />;
@@ -1716,14 +1992,44 @@ function ProseBlock({
             key={seg.key}
             form={seg.form}
             isLastAssistant={isLastAssistant}
-            streaming={streaming}
             nextUserContent={nextUserContent}
             locallySubmitted={locallySubmitted}
             onSubmitForm={onSubmitForm}
+            onOpenQuestions={onOpenQuestions}
           />
         );
       })}
+      {live ? (
+        <StreamingCodeCard
+          titleLabel={t("tool.write")}
+          metaLabel={live.title || live.identifier || undefined}
+          code={live.content}
+        />
+      ) : null}
+      {hadOpenForm ? <QuestionsBanner onOpen={onOpenQuestions} /> : null}
     </div>
+  );
+}
+
+// Chat-side banner that points to the right-hand Questions tab where the
+// active discovery form lives. Clicking it focuses that tab.
+function QuestionsBanner({ onOpen }: { onOpen?: () => void }) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      className="questions-banner"
+      data-testid="questions-banner"
+      onClick={() => onOpen?.()}
+    >
+      <span className="questions-banner-icon" aria-hidden>
+        <Icon name="help-circle" size={15} />
+      </span>
+      <span className="questions-banner-label">{t("questions.banner")}</span>
+      <span className="questions-banner-cta" aria-hidden>
+        <Icon name="chevron-right" size={14} />
+      </span>
+    </button>
   );
 }
 
@@ -1736,17 +2042,17 @@ function isDirectionForm(form: QuestionForm): boolean {
 function FormBlock({
   form,
   isLastAssistant,
-  streaming,
   nextUserContent,
   locallySubmitted,
   onSubmitForm,
+  onOpenQuestions,
 }: {
   form: QuestionForm;
   isLastAssistant: boolean;
-  streaming: boolean;
   nextUserContent?: string;
   locallySubmitted: Set<string>;
   onSubmitForm: (formId: string, text: string) => void;
+  onOpenQuestions?: () => void;
 }) {
   // Reconstruct prior answers from a follow-up user message so older
   // forms in the scrollback render in their answered state.
@@ -1755,15 +2061,18 @@ function FormBlock({
     return parseSubmittedAnswers(form, nextUserContent);
   }, [form, nextUserContent]);
   const wasSubmittedLocally = locallySubmitted.has(form.id);
-  const interactive =
-    isLastAssistant &&
-    !streaming &&
-    !submittedFromHistory &&
-    !wasSubmittedLocally;
+  // The live, still-unanswered form lives in the right-hand Questions tab —
+  // even mid-stream. In chat we only show a banner that focuses it, so the
+  // left side never renders the form itself. Answered / historical forms stay
+  // inline so the scrollback reads naturally.
+  const showBanner = isLastAssistant && !submittedFromHistory && !wasSubmittedLocally;
+  if (showBanner) {
+    return <QuestionsBanner onOpen={onOpenQuestions} />;
+  }
   return (
     <QuestionFormView
       form={form}
-      interactive={interactive}
+      interactive={false}
       submittedAnswers={submittedFromHistory ?? undefined}
       onSubmit={(text) => onSubmitForm(form.id, text)}
     />
@@ -1801,26 +2110,51 @@ function SystemReminderBlock({ text }: { text: string }) {
   );
 }
 
-function ThinkingBlock({ text }: { text: string }) {
+function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const preview = text.trim().slice(0, 140);
+  const isThinking = streaming === true;
+  // Thinking events carry no server timestamps, so the "用时 X 秒" duration is
+  // measured client-side: stamp the start when streaming begins and freeze the
+  // elapsed once it ends. Blocks restored from history never stream, so they
+  // fall back to the plain "已深度思考" label with no seconds.
+  const startRef = useRef<number | null>(null);
+  const [elapsedSec, setElapsedSec] = useState<number | null>(null);
+  useEffect(() => {
+    if (isThinking) {
+      if (startRef.current === null) startRef.current = Date.now();
+      setElapsedSec(null);
+    } else if (startRef.current !== null) {
+      setElapsedSec(Math.max(1, Math.round((Date.now() - startRef.current) / 1000)));
+      startRef.current = null;
+    }
+  }, [isThinking]);
+  const label = isThinking
+    ? t("assistant.thinking")
+    : elapsedSec != null
+      ? t("assistant.thoughtFor", { s: elapsedSec })
+      : t("assistant.thought");
   return (
     <div className="thinking-block">
       <button className="thinking-toggle" onClick={() => setOpen((o) => !o)}>
-        <span className="thinking-icon" aria-hidden>
-          <Icon name="sparkles" size={12} />
+        <span className={`thinking-status${isThinking ? ' op-status-running' : open ? ' thinking-status-active' : ''}`} aria-hidden>
+          {isThinking
+            ? <Icon name="spinner" size={14} />
+            : <Icon name="sparkles" size={14} />
+          }
         </span>
-        <span className="thinking-label">{t("assistant.thinking")}</span>
-        <span className="thinking-preview">
-          {open ? "" : preview}
-          {!open && text.length > 140 ? "…" : ""}
+        <span className={`thinking-label${isThinking ? ' shimmer-text' : ''}`}>
+          {label}
         </span>
         <span className="thinking-chev">
           <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
         </span>
       </button>
-      {open ? <pre className="thinking-body">{text}</pre> : null}
+      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
+        <div className="accordion-collapsible-inner">
+          <div className="thinking-body">{renderMarkdown(text)}</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1832,8 +2166,13 @@ function StatusPill({
   label: string;
   detail?: string | undefined;
 }) {
+  const variant =
+    label === "error" ? "error" : label === "warning" ? "warning" : undefined;
   return (
-    <div className="status-pill">
+    <div
+      className={`status-pill${variant ? ` is-${variant}` : ""}`}
+      data-status={label}
+    >
       <span className="status-label">{label}</span>
       {detail ? <span className="status-detail">{renderStatusDetail(detail)}</span> : null}
     </div>
@@ -1842,7 +2181,7 @@ function StatusPill({
 
 function renderStatusDetail(detail: string): ReactNode {
   const segments: ReactNode[] = [];
-  const urlRe = /(https?:\/\/[^\s)<>]+)/g;
+  const urlRe = /(https?:\/\/[^\s)<>"}\]]+)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let key = 0;
@@ -1875,7 +2214,7 @@ function renderStatusDetail(detail: string): ReactNode {
 }
 
 function splitStatusDetailUrlPunctuation(url: string): [string, string] {
-  const match = /([.,!?;:，。！？；：、'"」』】》〉）]+)$/.exec(url);
+  const match = /([.,!?;:，。！？；：、'"」』】》〉）}\]]+)$/.exec(url);
   if (!match?.[1]) return [url, ''];
   const trimmed = url.slice(0, -match[1].length);
   return trimmed ? [trimmed, match[1]] : [url, ''];
@@ -1937,6 +2276,139 @@ function dedupeSnapshotToolRetries(items: ToolItem[]): ToolItem[] {
   return collapsed;
 }
 
+// Tools whose streaming JSON input is worth previewing as live code. Other
+// tools (Bash, Grep, TodoWrite, …) stream JSON too but a code panel for them
+// would be noise.
+const LIVE_CODE_TOOL_NAMES = new Set([
+  "Write",
+  "write",
+  "Edit",
+  "edit",
+  "MultiEdit",
+  "multiedit",
+  "NotebookEdit",
+]);
+
+function isLiveCodeToolName(name: string): boolean {
+  return LIVE_CODE_TOOL_NAMES.has(name);
+}
+
+// Pull the (possibly still-streaming) value of a top-level JSON string field
+// out of a raw, not-yet-closed JSON fragment. Returns the decoded text up to
+// wherever the stream currently ends — an unterminated escape or \u sequence
+// at the tail is dropped rather than throwing. Returns null when the field /
+// its opening quote hasn't arrived yet. Good enough for a live preview; the
+// authoritative value comes from the parsed `tool_use.input` once complete.
+function extractStreamingJsonString(raw: string, field: string): string | null {
+  const marker = `"${field}"`;
+  const mi = raw.indexOf(marker);
+  if (mi === -1) return null;
+  let i = mi + marker.length;
+  // Advance to the value's opening quote, past the `:` and any whitespace.
+  while (i < raw.length && raw[i] !== '"') i++;
+  if (i >= raw.length) return null;
+  i++; // step past the opening quote
+  let out = "";
+  while (i < raw.length) {
+    const ch = raw[i]!;
+    if (ch === "\\") {
+      const next = raw[i + 1];
+      if (next === undefined) break; // incomplete escape at the streaming tail
+      switch (next) {
+        case "n": out += "\n"; break;
+        case "t": out += "\t"; break;
+        case "r": out += "\r"; break;
+        case '"': out += '"'; break;
+        case "\\": out += "\\"; break;
+        case "/": out += "/"; break;
+        case "b": out += "\b"; break;
+        case "f": out += "\f"; break;
+        case "u": {
+          const hex = raw.slice(i + 2, i + 6);
+          if (hex.length < 4) return out; // incomplete \u escape at the tail
+          out += String.fromCharCode(parseInt(hex, 16));
+          i += 6;
+          continue;
+        }
+        default: out += next;
+      }
+      i += 2;
+      continue;
+    }
+    if (ch === '"') break; // closing quote → value complete
+    out += ch;
+    i++;
+  }
+  return out;
+}
+
+// Presentational in-flight code panel: a boxed header (spinner + shimmer
+// title + optional meta) over a monospace body with a typing caret. Plain
+// monospace on purpose — shiki highlighting is async and would thrash on
+// every streamed delta; the finished, highlighted view is taken over by the
+// normal card once the write/artifact completes. Shared by the tool-call
+// path (LiveCodeBox) and the streaming-artifact path (ProseBlock).
+function StreamingCodeCard({
+  titleLabel,
+  metaLabel,
+  code,
+}: {
+  titleLabel: string;
+  metaLabel?: string;
+  code: string;
+}) {
+  const preRef = useRef<HTMLPreElement | null>(null);
+  // Keep the latest streamed line in view as code grows.
+  useEffect(() => {
+    const el = preRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [code]);
+  return (
+    <div className="op-card op-file live-code-box">
+      <div className="op-card-head live-code-head">
+        <span className="action-card-status op-status-running" aria-hidden>
+          <Icon name="spinner" size={14} />
+        </span>
+        <span className="op-title shimmer-text">{titleLabel}</span>
+        {metaLabel ? <span className="op-meta">{metaLabel}</span> : null}
+      </div>
+      {code ? (
+        <pre className="live-code-pre" ref={preRef}>
+          <code>
+            {code}
+            <span className="live-code-caret" aria-hidden />
+          </code>
+        </pre>
+      ) : null}
+    </div>
+  );
+}
+
+// In-flight code panel rendered from a tool call whose JSON input is still
+// streaming. The finished view is taken over by the normal tool card once
+// `tool_use` lands.
+function LiveCodeBox({ name, raw }: { name: string; raw: string }) {
+  const t = useT();
+  const file =
+    extractStreamingJsonString(raw, "file_path") ??
+    extractStreamingJsonString(raw, "filePath") ??
+    extractStreamingJsonString(raw, "path") ??
+    "";
+  const baseName = file ? file.split("/").pop() ?? file : "";
+  const code =
+    extractStreamingJsonString(raw, "content") ??
+    extractStreamingJsonString(raw, "new_string") ??
+    "";
+  const isEdit = /edit/i.test(name);
+  return (
+    <StreamingCodeCard
+      titleLabel={isEdit ? t("tool.edit") : t("tool.write")}
+      metaLabel={baseName || undefined}
+      code={code}
+    />
+  );
+}
+
 function ToolGroupCard({
   items,
   runStreaming,
@@ -1988,6 +2460,7 @@ function ToolGroupCard({
 
   const summary = summarizeGroup(items, t, runStreaming, runSucceeded);
   const running = runStreaming && items.some((it) => !it.result);
+  const hasError = items.some((it) => it.result?.isError);
   return (
     <div className="action-card">
       <button
@@ -1996,11 +2469,16 @@ function ToolGroupCard({
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
-        <span className="ico" aria-hidden>
-          {summary.icon}
+        <span className={`action-card-status ${running ? 'op-status-running' : hasError ? 'op-status-error' : 'op-status-ok'}`} aria-hidden>
+          {running
+            ? <Icon name="spinner" size={14} />
+            : hasError
+            ? <Icon name="close" size={14} />
+            : <Icon name="check" size={14} />
+          }
         </span>
-        <span className="summary">
-          <strong>{summary.label}</strong>
+        <span className={`summary${running ? ' shimmer-text' : ''}`}>
+          {summary.label}
         </span>
         <span className="chev" aria-hidden>
           <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
@@ -2124,6 +2602,7 @@ type Block =
   | { kind: "text"; text: string }
   | { kind: "thinking"; text: string }
   | { kind: "tool-group"; items: ToolItem[] }
+  | { kind: "live-tool"; id: string; name: string; raw: string }
   | {
       kind: "plugin-candidate";
       candidateId: string;
@@ -2148,6 +2627,13 @@ function stripTodoToolGroups(blocks: Block[]): Block[] {
   return blocks.filter((block) => {
     if (block.kind !== "tool-group") return true;
     return !block.items.every((it) => isTodoWriteToolName(it.use.name));
+  });
+}
+
+function stripEmptyThinkingBlocks(blocks: Block[]): Block[] {
+  return blocks.filter((block) => {
+    if (block.kind !== "thinking") return true;
+    return block.text.trim().length > 0;
   });
 }
 
@@ -2256,6 +2742,7 @@ function buildBlocks(events: AgentEvent[]): Block[] {
       if (
         ev.label === "streaming" ||
         ev.label === "starting" ||
+        ev.label === "running" ||
         ev.label === "requesting" ||
         ev.label === "thinking" ||
         ev.label === "empty_response"

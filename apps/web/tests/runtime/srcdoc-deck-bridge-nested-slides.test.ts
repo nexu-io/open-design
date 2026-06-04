@@ -62,6 +62,12 @@ function lastSlideState(parentPostMessage: ReturnType<typeof vi.fn>) {
   return messages.at(-1);
 }
 
+function postSlide(win: ReturnType<typeof setupDeckBridge>['win'], action: 'next' | 'prev') {
+  win.dispatchEvent(new win.window.MessageEvent('message', {
+    data: { type: 'od:slide', action },
+  }));
+}
+
 describe('deck bridge — nested slide markup (#1530)', () => {
   it('counts nested .slide elements through a fallback when no structured container matches', async () => {
     // 8 slides nested two levels deep — none of `.deck > .slide`,
@@ -98,5 +104,98 @@ describe('deck bridge — nested slide markup (#1530)', () => {
     const state = lastSlideState(parentPostMessage);
     expect(state).toBeDefined();
     expect(state.count).toBe(3);
+  });
+
+  it('advances transform-track decks that do not expose active classes or scroll state', async () => {
+    const { win, parentPostMessage } = setupDeckBridge(`
+      <style>
+        html, body { margin: 0; overflow: hidden; }
+        #deck { display: flex; width: 300vw; transform: translateX(0); }
+        .slide { flex: 0 0 100vw; width: 100vw; height: 100vh; }
+      </style>
+      <div id="deck">
+        <section class="slide">One</section>
+        <section class="slide">Two</section>
+        <section class="slide">Three</section>
+      </div>
+    `);
+    const deck = win.document.getElementById('deck') as HTMLElement;
+
+    postSlide(win, 'next');
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 350));
+
+    expect(deck.style.transform).toBe('translateX(-100vw)');
+    const state = lastSlideState(parentPostMessage);
+    expect(state).toMatchObject({ active: 1, count: 3 });
+  });
+
+  it('scrolls documentElement when body looks horizontally scrollable in a sandboxed Simple Deck', async () => {
+    const { win, parentPostMessage } = setupDeckBridge(`
+      <style>
+        html, body { margin: 0; height: 100%; }
+        body { display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; }
+        .slide { flex: 0 0 100vw; width: 100vw; height: 100vh; scroll-snap-align: start; }
+      </style>
+      <section class="slide">One</section>
+      <section class="slide">Two</section>
+      <section class="slide">Three</section>
+    `);
+    Object.defineProperty(win, 'innerWidth', { configurable: true, value: 1000 });
+    Object.defineProperties(win.document.body, {
+      scrollWidth: { configurable: true, value: 3000 },
+      clientWidth: { configurable: true, value: 1000 },
+    });
+    Object.defineProperties(win.document.documentElement, {
+      scrollWidth: { configurable: true, value: 3000 },
+      clientWidth: { configurable: true, value: 1000 },
+    });
+    const bodyScrollTo = vi.fn();
+    const htmlScrollTo = vi.fn((options?: ScrollToOptions | number) => {
+      const left = typeof options === 'number' ? options : Number(options?.left || 0);
+      win.document.documentElement.scrollLeft = left;
+    });
+    win.document.body.scrollTo = bodyScrollTo;
+    win.document.documentElement.scrollTo = htmlScrollTo;
+
+    postSlide(win, 'next');
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 450));
+
+    expect(bodyScrollTo).toHaveBeenCalledWith({ left: 1000, behavior: 'smooth' });
+    expect(htmlScrollTo).toHaveBeenCalledWith({ left: 1000, behavior: 'smooth' });
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 1, count: 3 });
+  });
+
+  it('updates Simple Deck direct progress fill when host navigation drives the slide', async () => {
+    const { win } = setupDeckBridge(`
+      <style>
+        html, body { margin: 0; height: 100%; }
+        body { display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; }
+        .slide { flex: 0 0 100vw; width: 100vw; height: 100vh; scroll-snap-align: start; }
+        .deck-progress { position: fixed; top: 0; left: 0; height: 3px; width: 0; }
+      </style>
+      <section class="slide">One</section>
+      <section class="slide">Two</section>
+      <section class="slide">Three</section>
+      <div class="deck-progress" id="deck-progress" aria-hidden></div>
+    `);
+    Object.defineProperty(win, 'innerWidth', { configurable: true, value: 1000 });
+    Object.defineProperties(win.document.body, {
+      scrollWidth: { configurable: true, value: 3000 },
+      clientWidth: { configurable: true, value: 1000 },
+    });
+    Object.defineProperties(win.document.documentElement, {
+      scrollWidth: { configurable: true, value: 3000 },
+      clientWidth: { configurable: true, value: 1000 },
+    });
+    win.document.body.scrollTo = vi.fn();
+    win.document.documentElement.scrollTo = vi.fn((options?: ScrollToOptions | number) => {
+      const left = typeof options === 'number' ? options : Number(options?.left || 0);
+      win.document.documentElement.scrollLeft = left;
+    });
+
+    postSlide(win, 'next');
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 450));
+
+    expect((win.document.getElementById('deck-progress') as HTMLElement).style.width).toBe('66.66666666666666%');
   });
 });

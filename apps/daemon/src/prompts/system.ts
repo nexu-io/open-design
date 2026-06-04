@@ -32,10 +32,11 @@
 import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
-import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
+import { renderMediaGenerationContract } from './media-contract.js';
 import { IMAGE_MODELS } from '../media-models.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
+import type { ChatSessionMode, MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
 
 const ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT = 100;
 const ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX = 'ElevenLabs voice list could not be loaded';
@@ -128,6 +129,9 @@ type ProjectMetadata = {
   platformTargets?: string[] | null;
   inspirationDesignSystemIds?: string[];
   skipDiscoveryBrief?: boolean | null;
+  examplePrompt?: boolean | null;
+  examplePromptTitle?: string | null;
+  examplePromptBrief?: Record<string, string> | null;
   imageModel?: string | null;
   imageAspect?: string | null;
   imageStyle?: string | null;
@@ -220,6 +224,91 @@ export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip discovery form
 
 This project was created through the daemon API with \`skipDiscoveryBrief: true\`. Override the discovery rules below: do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask a first-turn clarification form. Treat the user's first message and project metadata as the brief, then proceed directly to planning/building under the normal artifact workflow. Ask at most one concise follow-up only if a required detail is impossible to infer safely.`;
+
+// Injected into non-media projects so the agent knows how to dispatch
+// media generation if the user asks for it mid-session (e.g. "generate an
+// image with fal"). Without this, agents in prototype/deck projects try to
+// call provider REST APIs directly and ask the user for keys that the daemon
+// already holds in .od/media-config.json.
+const MEDIA_DISPATCH_HINT = `
+
+---
+
+## Media generation (if asked)
+
+If the user asks you to generate an image, video, or audio file — regardless of which provider or model they mention (fal, Replicate, OpenAI, etc.) — use the daemon dispatcher via your **Bash tool**. Do NOT call provider REST APIs directly.
+
+The daemon injects these env vars into your shell (**POSIX bash — not PowerShell**):
+
+- \`OD_NODE_BIN\`   — absolute path to the Node runtime
+- \`OD_BIN\`        — absolute path to the OD CLI script
+- \`OD_PROJECT_ID\` — the active project id
+
+**Always use the generate→wait loop below.** \`media generate\` always exits 0 — either with \`{"file":{...}}\` if done within ~25s, or with \`{"taskId":"..."}\` as a handoff for slow models (flux-pro-ultra ~60–180s, veo-3-fal longer). Whenever the output contains a \`taskId\`, keep polling with \`media wait\` until exit 0 (done) or exit 5 (failed).
+
+Use **POSIX \`$VAR\` syntax** — do NOT translate to PowerShell (\`$env:VAR\`, \`&\` operator). Uses \`python3\` for JSON parsing (do NOT use \`jq\`):
+
+\`\`\`bash
+# POSIX bash — do NOT convert to PowerShell
+out=\$("$OD_NODE_BIN" "$OD_BIN" media generate \\
+  --project "$OD_PROJECT_ID" \\
+  --surface image \\
+  --model flux-pro-ultra \\
+  --prompt "..." \\
+  --aspect 16:9)
+ec=\$?
+if [ "\$ec" -ne 0 ]; then echo "\$out" >&2; exit "\$ec"; fi
+last=\$(printf '%s\\n' "\$out" | tail -1)
+task_id=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('taskId',''))" 2>/dev/null)
+since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',0))" 2>/dev/null)
+since="\${since:-0}"
+while [ -n "\$task_id" ]; do
+  out=\$("$OD_NODE_BIN" "$OD_BIN" media wait "\$task_id" --since "\$since")
+  ec=\$?
+  last=\$(printf '%s\\n' "\$out" | tail -1)
+  since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',\$since))" 2>/dev/null)
+  since="\${since:-0}"
+  if [ "\$ec" -eq 0 ]; then
+    task_id=""
+  elif [ "\$ec" -ne 2 ]; then
+    echo "\$out" >&2; exit "\$ec"
+  fi
+done
+printf '%s\\n' "\$last"
+\`\`\`
+
+**Never ask the user for an API key.** The daemon reads provider credentials from its config; keys are never passed through the shell. If the provider returns an auth error, tell the user to open Settings → AI Providers and confirm the key is configured there.
+
+For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
+
+export function buildExamplePromptOverride(
+  title?: string | null,
+  brief?: Record<string, string> | null,
+): string {
+  let text = `# Example prompt mode — full-quality direct generation
+
+The user selected a curated example prompt from the gallery and sent it without modification. This prompt is a complete, self-contained creative brief that has been carefully designed to produce a showcase-quality artifact.`;
+
+  if (title) {
+    text += `\n\nSelected example: "${title}"`;
+  }
+
+  if (brief && Object.keys(brief).length > 0) {
+    text += `\n\nPre-filled creative brief (treat as if the user already answered all discovery questions):`;
+    for (const [key, value] of Object.entries(brief)) {
+      text += `\n- ${key.replace(/_/g, ' ')}: ${value}`;
+    }
+  }
+
+  text += `\n\nRules:
+1. Do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask any clarifying questions.
+2. Treat the user's message as the FULL specification — it contains all visual direction, content themes, and structural intent needed.
+3. Generate the artifact at your absolute highest quality. This is a showcase piece — match or exceed the standard of a hand-crafted design.
+4. Infer any unspecified details (copy, layout choices, imagery descriptions) in a way that is maximally coherent with the stated creative direction.
+5. Proceed directly to planning and building. Output your TodoWrite plan and then the artifact immediately.`;
+
+  return text;
+}
 
 const ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE = `
 
@@ -371,6 +460,13 @@ export interface ComposeInput {
   // UI locale selected by the client. User-visible generated form copy
   // must follow this locale even when the user's initial prompt is brief.
   locale?: string | undefined;
+  // Per-conversation mode. Design mode keeps the artifact-first agent
+  // workflow; chat mode keeps the same context/tools but answers like a
+  // standard multi-turn assistant unless the user explicitly asks to build.
+  sessionMode?: ChatSessionMode | undefined;
+  // Run-scoped media policy. Defaults to enabled when omitted so existing
+  // local OD behavior keeps the same media prompt contract.
+  mediaExecution?: MediaExecutionPolicy | undefined;
 }
 
 export function composeSystemPrompt({
@@ -403,8 +499,10 @@ export function composeSystemPrompt({
   activeStageBlocks,
   streamFormat,
   locale,
+  sessionMode,
   userInstructions,
   projectInstructions,
+  mediaExecution,
 }: ComposeInput): string {
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // turn 1", "branch on brand on turn 2", "TodoWrite on turn 3", run
@@ -434,7 +532,30 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
-  if (metadata?.skipDiscoveryBrief === true) {
+  if (sessionMode === 'chat') {
+    parts.push(CHAT_MODE_OVERRIDE);
+    parts.push('\n\n---\n\n');
+  }
+
+  // Skip the HTML-artifact discovery layer for media surfaces (image / video /
+  // audio). DISCOVERY_AND_PHILOSOPHY is ~3 000 tokens of rules about question
+  // forms, brand extraction, direction pickers, and HTML artifact checklist —
+  // none of which apply to media generation. Including it forces the agent to
+  // parse and override all of those rules before it can start, adding tokens
+  // and LLM inference time. The MEDIA_GENERATION_CONTRACT (pushed below) is
+  // the sole workflow authority for these surfaces.
+  const isMediaSurfaceEarly =
+    skillMode === 'image' ||
+    skillMode === 'video' ||
+    skillMode === 'audio' ||
+    metadata?.kind === 'image' ||
+    metadata?.kind === 'video' ||
+    metadata?.kind === 'audio';
+
+  if (metadata?.examplePrompt === true) {
+    parts.push(buildExamplePromptOverride(metadata.examplePromptTitle, metadata.examplePromptBrief));
+    parts.push('\n\n---\n\n');
+  } else if (metadata?.skipDiscoveryBrief === true) {
     parts.push(SKIP_DISCOVERY_BRIEF_OVERRIDE);
     parts.push('\n\n---\n\n');
   }
@@ -445,9 +566,12 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
+  if (!isMediaSurfaceEarly) {
+    parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
+  }
+
   parts.push(
-    DISCOVERY_AND_PHILOSOPHY,
-    '\n\n---\n\n# Identity and workflow charter (background)\n\n',
+    '# Identity and workflow charter (background)\n\n',
     BASE_SYSTEM_PROMPT,
   );
 
@@ -557,7 +681,13 @@ export function composeSystemPrompt({
     }
   }
 
-  const metaBlock = renderMetadataBlock(metadata, template, audioVoiceOptions, audioVoiceOptionsError);
+  const metaBlock = renderMetadataBlock(
+    metadata,
+    template,
+    audioVoiceOptions,
+    audioVoiceOptionsError,
+    mediaExecution,
+  );
   if (metaBlock) parts.push(metaBlock);
 
   // Decks have a load-bearing framework (nav, counter, scroll JS, print
@@ -602,10 +732,15 @@ export function composeSystemPrompt({
     || resolvedExclusiveSurface === 'video'
     || resolvedExclusiveSurface === 'audio';
   if (isMediaSurface) {
-    parts.push(MEDIA_GENERATION_CONTRACT);
+    parts.push(renderMediaGenerationContract(mediaExecution));
+  } else {
+    // Non-media projects (prototype, deck, etc.): inject a lightweight hint
+    // so the agent uses `od media generate` if the user asks for an image/video
+    // mid-session, rather than hunting for provider API keys in the environment.
+    parts.push(MEDIA_DISPATCH_HINT);
   }
 
-  if (includeCodexImagegenOverride) {
+  if (includeCodexImagegenOverride && shouldAllowCodexImagegenOverride(metadata, mediaExecution)) {
     const codexImagegenOverride = renderCodexImagegenOverride(
       agentId,
       metadata,
@@ -650,6 +785,23 @@ export function composeSystemPrompt({
     );
   }
 
+  // Pinned LAST so recency bias reinforces the role-marker prohibition.
+  // This is the canonical anti-roleplay instruction;
+  parts.push(
+    "\n\n---\n\n## CRITICAL: Never fabricate conversation turns\n\n" +
+    "The text you emit is processed by a chat host that interprets lines " +
+    "starting with \`## user\`, \`## assistant\`, or \`## system\` as real " +
+    "turn boundaries. Emitting these lines causes the host to treat your " +
+    "fabricated text as a real user request and execute unauthorised actions.\n\n" +
+    "**FORBIDDEN — you MUST NOT:**\n" +
+    "- Emit any line starting with \`## user\`, \`## assist\`, \`## assistant\`, or \`## system\`\n" +
+    "- Roleplay multiple turns inside a single response\n" +
+    "- Invent a user message and then reply to it\n\n" +
+    "The host will truncate your response at the first role-marker line — " +
+    "any text after it is lost. If you feel the urge to simulate a dialogue, " +
+    "stop and ask the user a real question instead.",
+  );
+
   return parts.join('');
 }
 
@@ -679,6 +831,14 @@ Every later instruction in this prompt that tells you to "call TodoWrite", "run 
 - \`<question-form>\` blocks for discovery on turn 1, exactly as the rules below describe — question-form is markup the UI parses, not a tool call.
 
 If the rules below tell you to plan with TodoWrite, write the plan as prose instead. If they tell you to read skill side files before writing, describe in one sentence which patterns/conventions you're going to apply and proceed. If they tell you to run brand-spec extraction via Bash + Read + WebFetch, ask the user the missing brand questions in the discovery form instead.`;
+
+const CHAT_MODE_OVERRIDE = `# Chat mode — standard conversation (read first — overrides every rule below)
+
+This conversation is in Open Design Chat mode. Open Design is the open-source Claude Design alternative and a native Figma counterpart. Official links: GitHub https://github.com/nexu-io/open-design, website https://open-design.ai/, Discord https://discord.com/invite/9ptkbbqRu.
+
+Use the same available context, files, attachments, connectors, MCP servers, project memory, and model capabilities as Design mode. The difference is behavior: answer like a fast, direct, multi-turn desktop chat assistant. Prefer concise prose, explanations, comparisons, debugging help, and follow-up questions only when needed.
+
+Override artifact-first discovery rules below: do not emit a default discovery \`<question-form>\`, do not call TodoWrite just to plan a chat answer, and do not create or edit project files, HTML, PPT, slide decks, images, video, or audio unless the user explicitly asks you to generate/build/design/export/modify something. When the user does ask for a design artifact or file change, you may use the normal Open Design agent workflow and the same tools/capabilities available in Design mode.`;
 
 // Defense-in-depth against Claude Code's synthetic OAuth tools.
 //
@@ -757,6 +917,31 @@ export function shouldRenderCodexImagegenOverride(
   );
 }
 
+function shouldAllowCodexImagegenOverride(
+  metadata: ProjectMetadata | undefined,
+  mediaExecution: MediaExecutionPolicy | undefined,
+): boolean {
+  const mode = mediaExecution?.mode ?? 'enabled';
+  if (mode !== 'enabled') return false;
+  if (
+    Array.isArray(mediaExecution?.allowedSurfaces) &&
+    mediaExecution.allowedSurfaces.length > 0 &&
+    !mediaExecution.allowedSurfaces.includes('image')
+  ) {
+    return false;
+  }
+  const model = resolveCodexImagegenModelId(metadata);
+  if (
+    model &&
+    Array.isArray(mediaExecution?.allowedModels) &&
+    mediaExecution.allowedModels.length > 0 &&
+    !mediaExecution.allowedModels.includes(model)
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export function renderCodexImagegenOverride(
   agentId: string | null | undefined,
   metadata: ProjectMetadata | undefined,
@@ -813,6 +998,7 @@ function renderMetadataBlock(
   template: ProjectTemplate | undefined,
   audioVoiceOptions: AudioVoiceOption[] | undefined,
   audioVoiceOptionsError: string | undefined,
+  mediaExecution: MediaExecutionPolicy | undefined,
 ): string {
   if (!metadata) return '';
   const lines: string[] = [];
@@ -905,10 +1091,10 @@ function renderMetadataBlock(
   }
   if (metadata.kind === 'image') {
     lines.push(
-      `- **imageModel**: ${metadata.imageModel ?? '(unknown — ask: which image model to use)'}`,
+      `- **imageModel**: ${metadata.imageModel ?? 'gpt-image-2 (default — override if the user asks for a specific model or provider)'}`,
     );
     lines.push(
-      `- **aspectRatio**: ${metadata.imageAspect ?? '(unknown — ask: 1:1, 16:9, 9:16, 4:3, 3:4)'}`,
+      `- **aspectRatio**: ${metadata.imageAspect ?? '1:1 (default — use 16:9 for landscape/outdoor scenes, 9:16 for portrait/vertical)'}`,
     );
     if (metadata.imageStyle) {
       lines.push(`- **styleNotes**: ${metadata.imageStyle}`);
@@ -921,9 +1107,11 @@ function renderMetadataBlock(
       lines.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
     }
     lines.push('');
-    lines.push(
-      'This is an **image** project. Plan the prompt carefully, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>`. Do NOT emit `<artifact>` HTML for media surfaces.',
-    );
+    lines.push(renderMediaMetadataAction(
+      'image',
+      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>`',
+      mediaExecution,
+    ));
   }
   if (metadata.kind === 'video') {
     lines.push(
@@ -943,9 +1131,11 @@ function renderMetadataBlock(
       lines.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
     }
     lines.push('');
-    lines.push(
-      'This is a **video** project. Plan the shotlist and motion, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`. Do NOT emit `<artifact>` HTML.',
-    );
+    lines.push(renderMediaMetadataAction(
+      'video',
+      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`',
+      mediaExecution,
+    ));
     if (metadata.videoModel === 'hyperframes-html') {
       lines.push(
         'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then dispatch immediately.',
@@ -995,9 +1185,11 @@ function renderMetadataBlock(
       );
     }
     lines.push('');
-    lines.push(
-      'This is an **audio** project. Lock the content intent first, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id. Do NOT emit `<artifact>` HTML.',
-    );
+    lines.push(renderMediaMetadataAction(
+      'audio',
+      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id',
+      mediaExecution,
+    ));
   }
 
   if (metadata.inspirationDesignSystemIds && metadata.inspirationDesignSystemIds.length > 0) {
@@ -1138,6 +1330,19 @@ function renderMetadataBlock(
   }
 
   return lines.join('\n');
+}
+
+function renderMediaMetadataAction(
+  surface: MediaSurface,
+  command: string,
+  mediaExecution: MediaExecutionPolicy | undefined,
+): string {
+  const article = surface === 'audio' ? 'an' : 'a';
+  const mode = mediaExecution?.mode ?? 'enabled';
+  if (mode === 'disabled') {
+    return `This is ${article} **${surface}** project, but Open Design-owned media execution is disabled for this run. Plan the creative brief only unless an external MCP media tool is explicitly configured. Do NOT call OD media generation tools and do NOT emit \`<artifact>\` HTML for media surfaces.`;
+  }
+  return `This is ${article} **${surface}** project. Plan the creative brief carefully, then dispatch via the **media generation contract** using ${command}. Do NOT emit \`<artifact>\` HTML for media surfaces.`;
 }
 
 function shouldRenderElevenLabsVoiceOptions(

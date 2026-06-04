@@ -8,6 +8,7 @@ const repoRoot = resolve(scriptDir, "..");
 
 const buildTargets = [
   "packages/contracts",
+  "packages/components",
   "packages/platform",
   "packages/download",
   "packages/host",
@@ -17,6 +18,7 @@ const buildTargets = [
   "packages/sidecar-proto",
   "packages/sidecar",
   "packages/diagnostics",
+  "apps/daemon",
   "tools/dev",
   "tools/pack",
   "tools/serve",

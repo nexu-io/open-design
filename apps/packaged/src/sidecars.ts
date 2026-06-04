@@ -23,6 +23,8 @@ import {
 } from "@open-design/sidecar";
 import {
   createProcessStampArgs,
+  mergeProxyAwareEnv,
+  resolveSystemProxyEnv,
   stopProcesses,
   waitForProcessExit,
   wellKnownUserToolchainBins,
@@ -39,11 +41,13 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "LANG",
   "LC_ALL",
   "LOGNAME",
+  "ALL_PROXY",
   "NODE_USE_ENV_PROXY",
   "NO_PROXY",
   "TMPDIR",
   "USER",
   "VP_HOME",
+  "all_proxy",
   "http_proxy",
   "https_proxy",
   "no_proxy",
@@ -248,14 +252,18 @@ export function resolvePackagedPathEnv(basePath = process.env.PATH ?? ""): strin
 export function resolvePackagedChildBaseEnv(
   env: NodeJS.ProcessEnv = process.env,
   includeProviderSecrets = false,
+  systemProxyEnv: NodeJS.ProcessEnv = resolveSystemProxyEnv(),
+  includeSystemProxyEnv = true,
 ): NodeJS.ProcessEnv {
-  const baseEnv: NodeJS.ProcessEnv = {};
+  const forwardedEnv: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(env)) {
     if (value != null && value.length > 0 && shouldForwardPackagedChildEnv(key, includeProviderSecrets)) {
-      baseEnv[key] = value;
+      forwardedEnv[key] = value;
     }
   }
-  return baseEnv;
+  return includeSystemProxyEnv
+    ? mergeProxyAwareEnv(process.platform, systemProxyEnv, forwardedEnv)
+    : mergeProxyAwareEnv(process.platform, forwardedEnv);
 }
 
 function createPackagedDaemonManagedPathEnv(
@@ -369,7 +377,12 @@ async function spawnSidecarChild(options: {
     base: options.paths.runtimeRoot,
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
     extraEnv: {
-      ...resolvePackagedChildBaseEnv(process.env, options.app === APP_KEYS.DAEMON),
+      ...resolvePackagedChildBaseEnv(
+        process.env,
+        options.app === APP_KEYS.DAEMON,
+        resolveSystemProxyEnv(),
+        options.app !== APP_KEYS.DAEMON,
+      ),
       ...options.env,
       NODE_ENV: "production",
       PATH: resolvePackagedPathEnv(),

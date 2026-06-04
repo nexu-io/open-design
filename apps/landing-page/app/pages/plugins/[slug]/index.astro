@@ -15,7 +15,7 @@
  */
 import Layout from '../../../_components/sub-page-layout.astro';
 import {
-  getBundledPlugins,
+  getDetailPlugins,
   resolveBundledDescription,
   resolveBundledTitle,
   type BundledPluginRecord,
@@ -24,8 +24,8 @@ import { getPluginsCopy } from '../../../_lib/plugins-i18n';
 import { localeFromPath, localizedHref } from '../../../i18n';
 
 export async function getStaticPaths() {
-  return getBundledPlugins().map((plugin) => ({
-    params: { slug: plugin.manifestId },
+  return getDetailPlugins().map((plugin) => ({
+    params: { slug: plugin.detailSlug },
     props: { plugin },
   }));
 }
@@ -44,6 +44,12 @@ const pcopy = getPluginsCopy(locale);
 // the per-locale lookup happens here.
 const pluginTitle = resolveBundledTitle(plugin, locale);
 const pluginDescription = resolveBundledDescription(plugin, locale);
+// `community` plugins carry a non-localized label: the i18n bucket map only
+// covers the _official buckets, so narrow before indexing it.
+const bucketLabel =
+  plugin.bucket === 'community'
+    ? 'Community'
+    : pcopy.detailBucketLabel[plugin.bucket];
 
 /*
  * Author normalisation. First-party manifests authored by Open Design
@@ -110,7 +116,7 @@ const jsonLd = [
   <article class="detail">
     <header class="detail-head">
       <span class="label">
-        {pcopy.hubLabel} · {pcopy.detailBucketLabel[plugin.bucket]}
+        {pcopy.hubLabel} · {bucketLabel}
       </span>
       <h1 class="display">{pluginTitle}<span class="dot">.</span></h1>
       <p class="lead">{description}</p>
