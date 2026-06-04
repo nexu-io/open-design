@@ -136,6 +136,7 @@ interface Props {
   onPickWorkingDir?: () => void;
   onClearWorkingDir?: () => void;
   onExamplePromptStatusChange?: (info: ExamplePromptInfo | null) => void;
+  executionSwitcher?: ReactNode;
 }
 
 interface HomeHeroDesignSystemOption {
@@ -243,6 +244,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onPickWorkingDir,
     onClearWorkingDir,
     onExamplePromptStatusChange,
+    executionSwitcher,
   },
   ref,
 ) {
@@ -1239,6 +1241,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               onChange={onSessionModeChange}
               disabled={Boolean(submitDisabled)}
             />
+            {executionSwitcher ? (
+              <div className="home-hero__execution-switcher">
+                {executionSwitcher}
+              </div>
+            ) : null}
             {activeCreateChip ? (
               <ActiveTypeChip chip={activeCreateChip} onClear={onClearActiveChip} />
             ) : null}

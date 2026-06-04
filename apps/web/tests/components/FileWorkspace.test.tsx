@@ -747,6 +747,143 @@ describe('FileWorkspace launcher tab creation', () => {
     });
   });
 
+  it('appends a new browser after stale-anchor browser tabs', async () => {
+    const onTabsStateChange = vi.fn();
+    const staleBrowserTab = {
+      id: '__browser__:1',
+      insertAfter: 'deleted.html',
+      label: 'Browser',
+    };
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['cover.html'],
+          active: 'cover.html',
+          browserTabs: [staleBrowserTab],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(await screen.findByRole('button', { name: /New Browser/i }));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html'],
+        active: '__browser__:2',
+        browserTabs: [
+          staleBrowserTab,
+          {
+            id: '__browser__:2',
+            insertAfter: '__browser__:1',
+            label: 'Browser 2',
+          },
+        ],
+      });
+    });
+  });
+
+  it('reanchors stale browser tabs before appending a new terminal', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ terminal: { id: 'term-2' } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+    const onTabsStateChange = vi.fn();
+    const staleBrowserTab = {
+      id: '__browser__:1',
+      insertAfter: 'deleted.html',
+      label: 'Browser',
+    };
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['cover.html'],
+          active: 'cover.html',
+          browserTabs: [staleBrowserTab],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(await screen.findByRole('button', { name: /New Terminal/i }));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html', 'terminal:term-2'],
+        active: 'terminal:term-2',
+        browserTabs: [
+          {
+            ...staleBrowserTab,
+            insertAfter: 'cover.html',
+          },
+        ],
+      });
+    });
+  });
+
+  it('reanchors stale browser tabs before appending a file from the launcher', async () => {
+    const onTabsStateChange = vi.fn();
+    const staleBrowserTab = {
+      id: '__browser__:1',
+      insertAfter: 'deleted.html',
+      label: 'Browser',
+    };
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html'), workspaceFile('notes.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['cover.html'],
+          active: 'cover.html',
+          browserTabs: [staleBrowserTab],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(await screen.findByRole('button', { name: /notes\.html/i }));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html', 'notes.html'],
+        active: 'notes.html',
+        browserTabs: [
+          {
+            ...staleBrowserTab,
+            insertAfter: 'cover.html',
+          },
+        ],
+      });
+    });
+  });
+
   it('opens the Design Files tab launcher with the browser new-tab shortcut', async () => {
     render(
       <FileWorkspace

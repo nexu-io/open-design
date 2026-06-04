@@ -25,7 +25,7 @@ interface Props {
   ) => void;
   onApiModelChange?: (model: string) => void;
   providerModelsCache?: Record<string, ProviderModelOption[]>;
-  onOpenSettings: () => void;
+  onOpenSettings: (section?: 'execution') => void;
   onRefreshAgents: () => void;
   onBack?: () => void;
   placement?: 'down' | 'up';
@@ -286,7 +286,7 @@ export function AvatarMenu({
               if (config.mode === 'daemon') {
                 setOpen(false);
                 if (!daemonLive) {
-                  onOpenSettings();
+                  onOpenSettings('execution');
                 }
                 return;
               }
@@ -295,7 +295,7 @@ export function AvatarMenu({
                 // No daemon — let user know via settings page rather than
                 // silently failing.
                 setOpen(false);
-                onOpenSettings();
+                onOpenSettings('execution');
               }
             }}
             disabled={!daemonLive && config.mode !== 'daemon'}
@@ -475,6 +475,19 @@ export function AvatarMenu({
 
           <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
 
+          <button
+            type="button"
+            className="avatar-item avatar-item--execution-settings"
+            onClick={() => {
+              setOpen(false);
+              onOpenSettings('execution');
+            }}
+          >
+            <span className="avatar-item-icon" aria-hidden>
+              <RemixIcon name="settings-3-line" size={15} />
+            </span>
+            <span>{t('inlineSwitcher.openFullSettings')}</span>
+          </button>
 
           {onBack ? (
             <>

@@ -725,9 +725,15 @@ export function FileWorkspace({
       setActiveTab(name);
       return;
     }
+    const isNewTab = !persistedTabs.includes(name);
+    const nextBrowserTabs = isNewTab
+      ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
+      : browserTabs;
+    if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
     onTabsStateChange(workspaceTabsState(
-      persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
+      isNewTab ? [...persistedTabs, name] : persistedTabs,
       name,
+      nextBrowserTabs,
     ));
     setActiveTab(name);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -772,8 +778,13 @@ export function FileWorkspace({
     // resolves a new terminal/side-chat id), so the closure could be stale and
     // clobber tabs added in the meantime.
     const currentTabs = tabsStateRef.current.tabs;
+    const isNewTab = !currentTabs.includes(name);
+    const nextBrowserTabs = isNewTab
+      ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
+      : browserTabs;
     const nextTabs = currentTabs.includes(name) ? currentTabs : [...currentTabs, name];
-    commitTabsState(workspaceTabsState(nextTabs, name));
+    if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
+    commitTabsState(workspaceTabsState(nextTabs, name, nextBrowserTabs));
     setActiveTab(name);
   }
 
@@ -3813,6 +3824,34 @@ function maxBrowserTabSequence(tabs: BrowserWorkspaceTab[]): number {
 
 function lastWorkspaceTabId(tabs: WorkspaceOrderedTab[]): string | null {
   return tabs[tabs.length - 1]?.id ?? null;
+}
+
+function reanchorBrowserTabsToCurrentOrder(
+  orderedTabs: WorkspaceOrderedTab[],
+  browserTabs: BrowserWorkspaceTab[],
+): BrowserWorkspaceTab[] {
+  if (browserTabs.length === 0) return browserTabs;
+  const anchorByBrowserId = new Map<string, string | null>();
+  let previousId: string | null = DESIGN_FILES_TAB;
+  for (const entry of orderedTabs) {
+    if (entry.kind === 'browser') {
+      anchorByBrowserId.set(entry.browserTab.id, previousId);
+      previousId = entry.browserTab.id;
+    } else {
+      previousId = entry.name;
+    }
+  }
+
+  let changed = false;
+  const nextTabs = browserTabs.map((tab) => {
+    if (!anchorByBrowserId.has(tab.id)) return tab;
+    const nextInsertAfter = anchorByBrowserId.get(tab.id) ?? null;
+    const currentInsertAfter = tab.insertAfter ?? null;
+    if (currentInsertAfter === nextInsertAfter) return tab;
+    changed = true;
+    return { ...tab, insertAfter: nextInsertAfter };
+  });
+  return changed ? nextTabs : browserTabs;
 }
 
 function orderWorkspaceTabs(

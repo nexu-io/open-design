@@ -16,7 +16,7 @@ const composerMocks = vi.hoisted(() => ({
 }));
 
 const translations: Record<string, string> = {
-  'chat.mode.chat.label': 'Chat',
+  'chat.mode.chat.label': 'Ask',
   'chat.mode.design.label': 'Design Agent',
   'chat.queuedHeader': 'Queued',
   'chat.queuedToSend': 'to Send',
