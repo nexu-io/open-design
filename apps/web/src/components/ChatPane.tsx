@@ -728,6 +728,7 @@ export function ChatPane({
   const anchorPendingRef = useRef(false);
   const anchorActiveRef = useRef(false);
   const tailSpacerRef = useRef<HTMLDivElement | null>(null);
+  const prevStreamingRef = useRef(streaming);
   const prevLastUserIdRef = useRef<string | undefined>(undefined);
   // AssistantMessage's interaction callbacks are re-created per render and
   // excluded from its memo comparison (so streaming doesn't re-render every
@@ -926,9 +927,14 @@ export function ChatPane({
   useEffect(() => {
     didInitialScrollRef.current = false;
     // A new conversation should land at the bottom (its own initial
-    // scroll), not inherit the previous conversation's saved position.
+    // scroll), not inherit the previous conversation's saved position —
+    // including any anchor-to-top reserve still held by the tail spacer, which
+    // would otherwise strand the freshly opened conversation below a dead gap.
     savedChatScrollRef.current = null;
     scrolledToFormRef.current = new Set();
+    anchorActiveRef.current = false;
+    anchorPendingRef.current = false;
+    resetTailSpacer();
   }, [activeConversationId]);
 
   // ChatComposer's internal `seededRef` latches after the first
@@ -1010,6 +1016,26 @@ export function ChatPane({
     // then re-runs when the user returns to Chat and the element is
     // available, scrolling the new conversation to its initial bottom.
   }, [activeConversationId, messages.length, tab]);
+
+  // When a turn finishes streaming, release the anchor-to-top reserve. The
+  // tail spacer only exists to give a streaming reply room to grow while the
+  // user message stays pinned at the top; once the reply is final it must not
+  // linger, or a short turn (typical of a fresh fork) is left with a large
+  // dead gap below it. Collapsing the spacer lets the bottom-anchored layout
+  // settle the finished transcript against the composer.
+  useEffect(() => {
+    const was = prevStreamingRef.current;
+    prevStreamingRef.current = streaming;
+    // The tail spacer only ever holds the anchor-to-top reserve for an actively
+    // streaming reply, so once the turn ends it must collapse unconditionally —
+    // even if a mid-turn scroll already cleared `anchorActiveRef` (which leaves
+    // the spacer sized). Collapsing it lets the bottom-anchored layout settle a
+    // finished short turn against the composer instead of below a dead gap.
+    if (was && !streaming) {
+      anchorActiveRef.current = false;
+      resetTailSpacer();
+    }
+  }, [streaming]);
 
   useEffect(() => {
     const el = logRef.current;
