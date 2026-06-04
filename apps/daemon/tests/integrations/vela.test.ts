@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   forgetVelaLogin,
+  readVelaCredentialRevision,
   readVelaLoginStatus,
   resolveAmrProfile,
   spawnVelaLogin,
@@ -279,6 +280,38 @@ describe('readVelaLoginStatus', () => {
     expect(status.user?.id).toBe('');
     expect(status.user?.email).toBe('');
     expect(status.user?.plan).toBeUndefined();
+  });
+});
+
+describe('readVelaCredentialRevision', () => {
+  it('changes when file-backed logout clears the active profile credentials', async () => {
+    writeConfig({
+      profiles: {
+        local: {
+          runtimeKey: 'rt-local',
+          user: { id: 'u-local', email: 'local@example.com' },
+        },
+      },
+    });
+    const before = readVelaCredentialRevision({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    expect(before).toMatchObject({
+      authSource: 'file',
+      loggedIn: true,
+      userId: 'u-local',
+      userEmail: 'local@example.com',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    forgetVelaLogin({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+
+    const after = readVelaCredentialRevision({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    expect(after).toMatchObject({
+      authSource: 'none',
+      loggedIn: false,
+      userId: '',
+      userEmail: '',
+    });
+    expect(after.configMtimeMs).not.toBe(before.configMtimeMs);
   });
 });
 

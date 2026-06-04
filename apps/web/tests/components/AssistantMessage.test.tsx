@@ -6,7 +6,7 @@
  * streaming turns, failed runs, and empty responses.
  */
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
@@ -60,6 +60,80 @@ function producedFile(name: string): ProjectFile {
 }
 
 describe('AssistantMessage feedback gate', () => {
+  it('copies the raw assistant markdown from the completion footer', async () => {
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText,
+      },
+    });
+    try {
+      const message = baseMessage({
+        content: '**Done.**\n\n- Keep the markdown',
+        events: [
+          {
+            kind: 'text',
+            text: '**Done.**\n\n- Keep the markdown',
+          } as ChatMessage['events'][number],
+        ],
+      });
+      render(
+        <AssistantMessage
+          message={message}
+          streaming={false}
+          projectId="proj-1"
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Copy response markdown' }));
+
+      await waitFor(() => {
+        expect(writeText).toHaveBeenCalledWith(message.content);
+      });
+      expect(screen.getByRole('button', { name: 'Copied!' })).toBeTruthy();
+    } finally {
+      if (originalClipboard) {
+        Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      } else {
+        delete (navigator as { clipboard?: Clipboard }).clipboard;
+      }
+    }
+  });
+
+  it('calls the fork handler from completed assistant turns', () => {
+    const onForkFromMessage = vi.fn();
+    render(
+      <AssistantMessage
+        message={baseMessage()}
+        streaming={false}
+        projectId="proj-1"
+        onForkFromMessage={onForkFromMessage}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fork from here' }));
+
+    expect(onForkFromMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not show the fork action while the assistant is streaming', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          runStatus: 'running',
+          endedAt: undefined,
+        })}
+        streaming
+        projectId="proj-1"
+        onForkFromMessage={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Fork from here' })).toBeNull();
+  });
+
   it('shows the feedback widget after a successful turn that produced files', () => {
     render(
       <AssistantMessage
@@ -132,6 +206,35 @@ describe('AssistantMessage feedback gate', () => {
       />,
     );
     expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
+  });
+});
+
+describe('AssistantMessage re-renders on live tool input changes', () => {
+  it('updates the streaming card when only liveToolInput changes (memo includes it)', () => {
+    // Same message object across renders — only liveToolInput differs, the way
+    // a burst of tool_input_delta arrives. The memo comparator must compare
+    // liveToolInput or the card freezes at its first frame.
+    const message = baseMessage({ content: '', runStatus: 'running', endedAt: undefined, events: [] });
+    const { container, rerender } = render(
+      <AssistantMessage
+        message={message}
+        streaming
+        projectId="proj-1"
+        liveToolInput={{ t1: { name: 'AskUserQuestion', text: '{"questions":[{"question":"Which databa","options":[]}]}', seq: 0 } }}
+      />,
+    );
+    expect(container.querySelector('.op-ask-question-prompt')?.textContent).toBe('Which databa');
+
+    rerender(
+      <AssistantMessage
+        message={message}
+        streaming
+        projectId="proj-1"
+        liveToolInput={{ t1: { name: 'AskUserQuestion', text: '{"questions":[{"question":"Which database?","options":[]}]}', seq: 0 } }}
+      />,
+    );
+    // Re-rendered to the grown prompt rather than frozen at "Which databa".
+    expect(container.querySelector('.op-ask-question-prompt')?.textContent).toBe('Which database?');
   });
 });
 
@@ -218,6 +321,45 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
   });
 });
 
+describe('AssistantMessage thinking blocks', () => {
+  it('does not render an empty thinking block for whitespace-only thinking deltas', () => {
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [
+            { kind: 'status', label: 'thinking' } as ChatMessage['events'][number],
+            { kind: 'thinking', text: '\n  \t' } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(container.querySelector('.thinking-block')).toBeNull();
+  });
+
+  it('keeps non-empty thinking content visible after leading whitespace deltas', () => {
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [
+            { kind: 'thinking', text: '\n  ' } as ChatMessage['events'][number],
+            { kind: 'thinking', text: 'Reading the directory listing.' } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(container.querySelector('.thinking-block')).toBeTruthy();
+    expect(screen.getByText('Reading the directory listing.')).toBeTruthy();
+  });
+});
+
 describe('AssistantMessage question forms', () => {
   it('renders only the first question form for a repeated form id in one assistant turn', () => {
     const firstForm = [
@@ -249,6 +391,11 @@ describe('AssistantMessage question forms', () => {
       '</question-form>',
     ].join('\n');
 
+    // A historical (non-last) assistant turn renders its question forms
+    // inline in the scrollback. The live, still-unanswered form on the most
+    // recent turn lives in the right-hand Questions tab (chat shows only a
+    // focus banner), so the dedup behavior is asserted on a historical turn
+    // where the form markup is rendered in place.
     render(
       <AssistantMessage
         message={baseMessage({
@@ -261,7 +408,6 @@ describe('AssistantMessage question forms', () => {
         })}
         streaming={false}
         projectId="proj-1"
-        isLast
       />,
     );
 
@@ -300,5 +446,145 @@ describe('AssistantMessage recovered produced files', () => {
     );
 
     expect(screen.getByText('iphone-device-reveal.mp4')).toBeTruthy();
+  });
+
+  it('does not infer user sketches as turn output files', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [
+            { kind: 'status', label: 'starting', detail: 'Claude' } as ChatMessage['events'][number],
+            { kind: 'status', label: 'initializing', detail: 'claude-opus' } as ChatMessage['events'][number],
+          ],
+          producedFiles: [],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectFiles={[
+          {
+            name: 'board.sketch.json',
+            path: 'board.sketch.json',
+            size: 2048,
+            mtime: 1700000004,
+            kind: 'sketch',
+            mime: 'application/json',
+          } as ProjectFile,
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText('board.sketch.json')).toBeNull();
+  });
+
+  it('still infers generated svg files classified as sketches', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [
+            { kind: 'status', label: 'starting', detail: 'Claude' } as ChatMessage['events'][number],
+            { kind: 'status', label: 'initializing', detail: 'claude-opus' } as ChatMessage['events'][number],
+          ],
+          producedFiles: [],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectFiles={[
+          {
+            name: 'diagram.svg',
+            path: 'diagram.svg',
+            size: 2048,
+            mtime: 1700000004,
+            kind: 'sketch',
+            mime: 'image/svg+xml',
+          } as ProjectFile,
+          {
+            name: 'board.sketch.json',
+            path: 'board.sketch.json',
+            size: 2048,
+            mtime: 1700000004,
+            kind: 'sketch',
+            mime: 'application/json',
+          } as ProjectFile,
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('diagram.svg')).toBeTruthy();
+    expect(screen.queryByText('board.sketch.json')).toBeNull();
+  });
+
+  it('keeps explicitly recorded sketch outputs visible', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          producedFiles: [
+            {
+              name: 'agent-sketch.sketch.json',
+              path: 'agent-sketch.sketch.json',
+              size: 2048,
+              mtime: 1700000004,
+              kind: 'sketch',
+              mime: 'application/json',
+            } as ProjectFile,
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(screen.getByText('agent-sketch.sketch.json')).toBeTruthy();
+  });
+});
+
+describe('AssistantMessage live AskUserQuestion fallback suppression', () => {
+  it('keeps preamble before a live AskUserQuestion but drops hedging after it', () => {
+    const message = baseMessage({
+      content: '',
+      runStatus: 'running',
+      endedAt: undefined,
+      // event[0] = preamble (before the tool call), event[1] = duplicate
+      // hedging the model emitted after starting the tool call.
+      events: [
+        { kind: 'text', text: 'INTROPREAMBLEXYZ' } as ChatMessage['events'][number],
+        { kind: 'text', text: 'HEDGINGDUPEXYZ' } as ChatMessage['events'][number],
+      ],
+    });
+    const { container } = render(
+      <AssistantMessage
+        message={message}
+        streaming
+        projectId="proj-1"
+        // seq=1 → the tool call started after event[0], so it sits between the
+        // preamble and the hedging.
+        liveToolInput={{
+          t1: {
+            name: 'AskUserQuestion',
+            text: '{"questions":[{"question":"Which database?","options":[{"label":"Postgres"}]}]}',
+            seq: 1,
+          },
+        }}
+      />,
+    );
+    expect(container.querySelector('[data-testid="ask-user-question"]')).not.toBeNull();
+    // Preamble before the card is preserved…
+    expect(container.textContent).toContain('INTROPREAMBLEXYZ');
+    // …hedging after the card is suppressed.
+    expect(container.textContent).not.toContain('HEDGINGDUPEXYZ');
+  });
+
+  it('keeps assistant prose when no live AskUserQuestion is present', () => {
+    const message = baseMessage({
+      content: '',
+      runStatus: 'running',
+      endedAt: undefined,
+      events: [{ kind: 'text', text: 'UNIQUENORMALPROSEXYZ' } as ChatMessage['events'][number]],
+    });
+    const { container } = render(
+      <AssistantMessage message={message} streaming projectId="proj-1" />,
+    );
+    expect(container.textContent).toContain('UNIQUENORMALPROSEXYZ');
   });
 });

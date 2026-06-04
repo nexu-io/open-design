@@ -9,6 +9,7 @@ import type {
   OrbitConfig,
   PetConfig,
 } from '../types';
+import { resolveFixedOriginBaseUrl } from './apiProtocols';
 import {
   DEFAULT_ACCENT_COLOR,
   normalizeAccentColor,
@@ -82,6 +83,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   pet: DEFAULT_PET,
   notifications: DEFAULT_NOTIFICATIONS,
   orbit: DEFAULT_ORBIT,
+  projectLocations: [],
+  defaultProjectLocationId: 'default',
   // Telemetry defaults to ON so fresh-install users emit onboarding /
   // ui_click events from the first frame. The disclosure modal still
   // appears after `onboardingCompleted` flips, and Settings → Privacy
@@ -159,6 +162,22 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-4o',
     models: ['gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
+  },
+  {
+    label: 'OpenRouter',
+    protocol: 'openai',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    model: 'anthropic/claude-3.7-sonnet',
+    models: [
+      'anthropic/claude-3.7-sonnet',
+      'anthropic/claude-3.5-sonnet',
+      'google/gemini-2.5-flash',
+      'google/gemini-2.5-pro',
+      'openai/gpt-4o',
+      'openai/o3-mini',
+      'deepseek/deepseek-chat',
+      'deepseek/deepseek-r1',
+    ],
   },
   {
     label: 'Azure OpenAI',
@@ -286,6 +305,23 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
       'MiniMax-M2.7',
     ],
   },
+  {
+    label: 'AIHubMix',
+    protocol: 'aihubmix',
+    baseUrl: 'https://aihubmix.com/v1',
+    model: 'gpt-5.5',
+    models: [
+      'gpt-5.5',
+      'gpt-4o',
+      'gpt-4o-mini',
+      'claude-opus-4-8',
+      'claude-sonnet-4-5',
+      'claude-haiku-4-5',
+      'gemini-2.0-flash',
+      'deepseek-chat',
+      'deepseek-reasoner',
+    ],
+  },
 ];
 
 function normalizePet(input: Partial<PetConfig> | undefined): PetConfig {
@@ -331,6 +367,10 @@ function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
     // and the BYOK tab UI stay consistent with the protocol the user
     // picked — even though the on-wire shape is OpenAI-compatible.
     if (normalized.includes('senseaudio.cn')) return 'senseaudio';
+    // AIHubMix host routes to its own proxy so the daemon injects the
+    // APP-Code attribution header even though the wire shape is
+    // OpenAI-compatible.
+    if (normalized.includes('aihubmix.com')) return 'aihubmix';
     return isOpenAICompatible(model, baseUrl) ? 'openai' : 'anthropic';
   } catch {
     // Preserve the rest of the user's settings even if an old saved base URL is
@@ -402,6 +442,15 @@ export function loadConfig(): AppConfig {
         merged.apiProviderBaseUrl = knownProvider?.baseUrl ?? null;
       }
       merged.configMigrationVersion = CONFIG_MIGRATION_VERSION;
+    }
+
+    // Fixed-origin gateways (e.g. AIHubMix) hide the Base URL field, so a config
+    // persisted before the origin was auto-resolved can carry an empty baseUrl.
+    // Backfill it here so every consumer (Settings form, top-bar switcher, chat)
+    // sees the canonical origin — an empty value otherwise blocks the live
+    // model-list fetch and leaves only the static suggestion list.
+    if (merged.apiProtocol) {
+      merged.baseUrl = resolveFixedOriginBaseUrl(merged.apiProtocol, merged.baseUrl);
     }
 
     return merged;
@@ -688,6 +737,12 @@ export function mergeDaemonConfig(
   if (daemonConfig.customInstructions !== undefined) {
     next.customInstructions = daemonConfig.customInstructions ?? undefined;
   }
+  if (daemonConfig.projectLocations !== undefined) {
+    next.projectLocations = daemonConfig.projectLocations;
+  }
+  if (daemonConfig.defaultProjectLocationId !== undefined) {
+    next.defaultProjectLocationId = daemonConfig.defaultProjectLocationId ?? 'default';
+  }
   return next;
 }
 
@@ -802,6 +857,8 @@ export async function syncConfigToDaemon(
     telemetry: config.telemetry,
     privacyDecisionAt: config.privacyDecisionAt,
     customInstructions: config.customInstructions ?? null,
+    projectLocations: config.projectLocations ?? [],
+    defaultProjectLocationId: config.defaultProjectLocationId ?? 'default',
   };
   try {
     const response = await fetch('/api/app-config', {

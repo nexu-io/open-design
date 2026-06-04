@@ -12,6 +12,7 @@ import { buildSrcdoc } from '../runtime/srcdoc';
 import type { SkillSummary, Surface } from '../types';
 import { Icon } from './Icon';
 import { PreviewModal } from './PreviewModal';
+import { AnimatePresence } from 'motion/react';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -461,6 +462,7 @@ export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
           ))}
         </div>
       )}
+      <AnimatePresence>
       {(() => {
         if (!previewSkill) return null;
         const unavailableKind = previewUnavailable[previewSkill.id];
@@ -497,6 +499,7 @@ export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
           />
         );
       })()}
+      </AnimatePresence>
     </div>
   );
 }

@@ -3,15 +3,26 @@ name: agent-browser
 description: |
   Browser automation CLI for AI agents. Use when the user needs to inspect,
   test, or automate browser behavior: navigating pages, filling forms,
-  clicking buttons, taking screenshots, extracting page data, testing web
-  apps, dogfooding Open Design previews, QA, bug hunts, or reviewing app
-  quality. Prefer local Open Design preview URLs unless the user explicitly
-  asks for external browsing.
+  clicking buttons, taking screenshots, extracting page data, reading selected
+  Open Design browser-tab context, testing web apps, dogfooding Open Design
+  previews, QA, bug hunts, or reviewing app quality. Prefer local Open Design
+  preview URLs unless the user explicitly asks for external browsing.
 triggers:
   - "browser"
+  - "current browser tab"
+  - "selected tab"
   - "open website"
   - "test this web app"
   - "take a screenshot"
+  - "element screenshot"
+  - "extract logo"
+  - "extract fonts"
+  - "extract colors"
+  - "extract images"
+  - "extract motion"
+  - "OG metadata"
+  - "accessibility"
+  - "a11y"
   - "click a button"
   - "fill out a form"
   - "scrape page"
@@ -38,6 +49,12 @@ Use `agent-browser` for local Open Design preview validation: inspect rendered
 state, click/type when requested, and capture one screenshot when visual evidence
 matters. Keep the browser local-first unless the user explicitly asks for
 external browsing.
+
+When the run prompt contains selected workspace context, prefer the selected
+`browser` tab URL/title as the target. Treat user phrases like "this page",
+"the current browser", "right-side tab", "extract the logo", "get the palette",
+"take an element screenshot", or "check OG/a11y" as requests about that selected
+tab unless the user names another target.
 
 ## Requirements
 
@@ -69,6 +86,28 @@ rg -n "cdp|connect|snapshot|screenshot|click|type|wait|get title|get url" "$AGEN
 
 Use `agent-browser skills get core --full` only when needed, and redirect it to
 a temp file the same way.
+
+## Browser Context Extraction
+
+For selected Open Design browser tabs and browser-use/browser-harness-style
+tasks, collect the smallest useful evidence first:
+
+1. Confirm the target with `agent-browser get title` and `agent-browser get url`.
+2. Capture `agent-browser snapshot` before any extraction or click.
+3. For visual evidence, save a page screenshot and, when the core guide exposes
+   an element-screenshot command, capture the specific element instead of a
+   cropped full page.
+4. For logos, fonts, colors, images, motion code, OG metadata, page structure,
+   and accessibility checks, prefer DOM/CSS/accessibility evidence from the
+   attached browser over guessing from the rendered screenshot alone.
+5. If the selected Open Design context only provided a URL/title and no browser
+   automation tool is attached, say that directly and do not invent page
+   internals.
+
+Save extracted design evidence as compact notes or assets in the project when
+the user is building from the reference. Do not paste full page HTML or large
+asset dumps into chat; summarize the relevant selectors, tokens, URLs, and
+screenshots.
 
 ## CDP Startup Contract
 
@@ -163,11 +202,13 @@ visible Open Design UI text in the snapshot, and a screenshot at
 3. Ensure CDP is reachable, starting Chrome with `open -na` if needed.
 4. Connect with `agent-browser connect http://127.0.0.1:9223`.
 5. Open the local preview URL.
-6. Snapshot before selecting elements.
-7. Use selectors/refs from the latest snapshot; do not guess.
-8. Re-snapshot after navigation or UI state changes.
-9. Capture one screenshot when visual confirmation matters.
-10. Report title, URL, key visible text, screenshot path, and any uncertainty.
+6. If the run prompt includes a selected browser workspace item, open or focus
+   that URL before inspecting.
+7. Snapshot before selecting elements.
+8. Use selectors/refs from the latest snapshot; do not guess.
+9. Re-snapshot after navigation or UI state changes.
+10. Capture one screenshot when visual confirmation matters.
+11. Report title, URL, key visible text, screenshot path, and any uncertainty.
 
 ## Safety Rules
 

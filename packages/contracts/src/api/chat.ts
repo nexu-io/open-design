@@ -1,5 +1,6 @@
 import type { ProjectFile } from './files';
 import type {
+  PreviewCommentAttachment,
   PreviewCommentMember,
   PreviewCommentPosition,
   PreviewCommentSelectionKind,
@@ -9,8 +10,11 @@ import type {
 import type { ResearchOptions } from './research';
 import type { RunContextSelection } from './context.js';
 import type { MediaExecutionPolicy } from './media.js';
+import type { AppliedPluginSnapshot } from '../plugins/apply.js';
+import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp';
 
 export type ChatRole = 'user' | 'assistant';
+export type ChatSessionMode = 'design' | 'chat';
 export type ChatCommentSelectionKind = PreviewCommentSelectionKind | 'visual';
 
 export interface ChatRequest {
@@ -21,6 +25,7 @@ export interface ChatRequest {
   systemPrompt?: string;
   projectId?: string | null;
   conversationId?: string | null;
+  sessionMode?: ChatSessionMode;
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
@@ -39,12 +44,19 @@ export interface ChatRequest {
   locale?: string;
   research?: ResearchOptions;
   context?: RunContextSelection;
+  appliedPluginSnapshotId?: string | null;
   /**
    * Run-scoped media execution policy. Omitted means current Open Design
    * behavior: media generation is enabled and OD may execute its configured
    * local providers.
    */
   mediaExecution?: MediaExecutionPolicy;
+  /**
+   * Run-scoped tool bundle supplied by an external orchestrator.
+   * These servers are made available only to the spawned agent for this run
+   * and are never written into the persistent Settings MCP registry.
+   */
+  toolBundle?: RunScopedToolBundle;
   /**
    * Optional analytics context for the v2 run_created / run_finished
    * events. The daemon never trusts these for behavior — they only
@@ -109,6 +121,31 @@ export interface ChatAnalyticsHints {
   designSystemRunContext?: ChatAnalyticsDesignSystemRunContext;
 }
 
+export interface RunScopedMcpServerConfig extends Omit<McpServerConfig, 'enabled'> {
+  /**
+   * Omitted means enabled for this run. The daemon normalizes run-scoped
+   * inputs through the same sanitizer as persisted MCP config, but callers
+   * should not need to send persisted-settings boilerplate for disposable
+   * tool bundles.
+   */
+  enabled?: boolean;
+}
+
+export interface RunScopedToolBundle {
+  mcpServers?: RunScopedMcpServerConfig[];
+}
+
+export interface RunScopedToolBundleSummary {
+  mcpServers: Array<{
+    id: string;
+    label?: string;
+    templateId?: string;
+    transport: McpTransport;
+    enabled: boolean;
+    authMode?: McpAuthMode;
+  }>;
+}
+
 export interface ChatRunCreateRequest extends ChatRequest {
   projectId: string;
   conversationId: string;
@@ -130,6 +167,8 @@ export interface McpRunCreateRequest {
   pluginId?: string;
   model?: string;
   pluginInputs?: Record<string, unknown>;
+  mediaExecution?: MediaExecutionPolicy;
+  toolBundle?: RunScopedToolBundle;
 }
 
 export type ChatRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
@@ -219,6 +258,8 @@ export interface ChatRunStatusResponse {
   eventsLogPath?: string | null;
   /** Present on daemon run status responses that know the effective run policy. */
   mediaExecution?: MediaExecutionPolicy;
+  /** Run-scoped tool bundle summary with secrets and command details redacted. */
+  toolBundle?: RunScopedToolBundleSummary;
 }
 
 export interface ChatRunListResponse {
@@ -234,6 +275,11 @@ export interface ChatAttachment {
   name: string;
   kind: 'image' | 'file';
   size?: number;
+  /**
+   * User-visible attachment order for this turn. Older messages may omit it;
+   * consumers should fall back to array position.
+   */
+  order?: number;
 }
 
 export interface ChatCommentAttachment {
@@ -251,9 +297,15 @@ export interface ChatCommentAttachment {
   selectionKind?: ChatCommentSelectionKind;
   memberCount?: number;
   podMembers?: PreviewCommentMember[];
+  // Zero-based slide the marked element lives on, for deck artifacts. Carried
+  // so the host can flip the preview to that slide when the send starts.
+  slideIndex?: number;
   screenshotPath?: string;
   markKind?: PreviewVisualMarkKind;
   intent?: string;
+  imageAttachments?: PreviewCommentAttachment[];
+  /** `'query'` means `comment` was promoted to the message text; keep target data as context only. */
+  commentContext?: 'context' | 'query';
   source?: 'saved-comment' | 'board-batch';
 }
 
@@ -308,6 +360,9 @@ export interface ChatMessage {
   lastRunEventId?: string;
   startedAt?: number;
   endedAt?: number;
+  sessionMode?: ChatSessionMode;
+  runContext?: RunContextSelection;
+  appliedPluginSnapshot?: AppliedPluginSnapshot;
   attachments?: ChatAttachment[];
   commentAttachments?: ChatCommentAttachment[];
   producedFiles?: ProjectFile[];

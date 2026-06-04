@@ -40,20 +40,20 @@
   align-items: flex-start;
   gap: 2px;
   padding: 7px 11px;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 8px;
-  background: var(--bg-panel);
+  background: var(--bg-fill-tertiary);
   color: var(--text);
   font-size: 12.5px;
   font-family: inherit;
   cursor: pointer;
   text-align: left;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition: background 120ms ease;
 }
-.op-ask-question-option:hover { border-color: var(--accent); }
+.op-ask-question-option:hover { background: var(--bg-fill-secondary); }
 .op-ask-question-option.on {
-  border-color: var(--accent);
-  background: var(--accent-bg, var(--bg-subtle));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
 }
 .op-ask-question-option:disabled {
   cursor: default;
@@ -102,22 +102,66 @@
  * would wipe the selected state and the card would look unanswered.
  */
 .op-ask-question-locked .op-ask-question-option:not(.on) {
-  border-color: var(--border-soft);
-  background: transparent;
+  background: var(--bg-fill-tertiary);
   color: var(--text-muted);
+  opacity: 0.6;
 }
 .op-ask-question-locked .op-ask-question-option.on {
-  border-color: var(--accent);
-  background: var(--accent-bg, var(--bg-subtle));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
   cursor: default;
 }
 .op-ask-question-locked .op-ask-question-option.on .op-ask-question-option-desc {
   color: var(--text-muted);
 }
+
+/*
+ * Streaming state: the tool's input JSON is still arriving token-by-token
+ * (rendered from the live `tool_input_delta` accumulation, before the full
+ * tool_use lands). The card frame paints immediately; each question field and
+ * option mounts the moment its text settles in the partial parse and animates
+ * in once. The live card is replaced by the interactive (persisted) card when
+ * the tool_use completes, so the reveal never replays.
+ */
+@keyframes op-auq-reveal {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.op-ask-question-streaming .op-ask-question-field,
+.op-ask-question-streaming .op-ask-question-option {
+  animation: op-auq-reveal 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+/* Three pulsing dots standing in for the "still writing" status pill — no
+ * text, so it needs no translation. */
+.op-ask-question-typing {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: auto;
+  align-items: center;
+}
+.op-ask-question-typing i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: op-auq-typing 1s ease-in-out infinite;
+}
+.op-ask-question-typing i:nth-child(2) { animation-delay: 0.15s; }
+.op-ask-question-typing i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes op-auq-typing {
+  0%, 100% { opacity: 0.25; transform: translateY(0); }
+  50% { opacity: 0.9; transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .op-ask-question-streaming .op-ask-question-field,
+  .op-ask-question-streaming .op-ask-question-option { animation: none; }
+  .op-ask-question-typing i { animation: none; opacity: 0.6; }
+}
+
 .op-meta { color: var(--text-muted); font-size: 11.5px; }
 .op-desc { font-style: italic; }
 .op-path {
-  background: var(--bg-subtle);
+  background: var(--bg-fill-tertiary);
   padding: 1px 6px;
   border-radius: 4px;
   font-size: 11px;
@@ -129,81 +173,75 @@
   max-width: min(220px, 100%);
 }
 .op-status {
-  margin-left: auto;
-  font-size: 10.5px;
-  padding: 2px 9px;
-  border-radius: var(--radius-pill);
-  letter-spacing: 0.02em;
-  border: 1px solid var(--border);
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 0;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-panel);
   color: var(--text-muted);
-  background: var(--bg-subtle);
+  flex-shrink: 0;
+  font-size: 12px;
 }
-.op-status-running {
-  border-color: var(--purple-border);
-  background: var(--purple-bg);
-  color: var(--purple);
-  animation: pulse 1.6s ease-in-out infinite;
-}
-/*
- * Static waiting-for-input variant. Same purple chrome as `op-status-running`
- * but no pulse: an AskUserQuestion card is parked until the user clicks, not
- * actively working, so the animation is misleading.
- */
-.op-status-awaiting {
-  border-color: var(--purple-border);
-  background: var(--purple-bg);
-  color: var(--purple);
-}
-.op-status-ok { border-color: var(--green-border); background: var(--green-bg); color: var(--green); }
-.op-status-error { border-color: var(--red-border); background: var(--red-bg); color: var(--red); }
+.op-status-running { color: var(--purple); }
+.op-status-awaiting { color: var(--purple); }
+.op-status-ok { color: var(--green); }
+.op-status-error { color: var(--red); }
 .op-toggle {
   font-size: 10.5px;
   padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: transparent;
+  border: none;
+  border-radius: 6px;
+  background: none;
   color: var(--text-muted);
 }
 .op-open {
   font-size: 10.5px;
-  padding: 2px 9px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--text);
+  padding: 2px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
   cursor: pointer;
 }
 .op-open:hover {
-  background: var(--bg-subtle);
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--bg-fill-tertiary);
+  color: var(--text);
 }
 
 .produced-files {
-  margin-top: 4px;
-  padding: 12px 14px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  margin-top: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
 }
 .produced-files-label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-  font-weight: 600;
+  color: var(--text-soft);
+  margin-bottom: 6px;
+  font-weight: 500;
 }
-.produced-files-list { display: flex; flex-direction: column; gap: 4px; }
+.produced-files-list { display: flex; flex-direction: column; gap: 2px; }
 .produced-file {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-radius: 6px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  font-size: 12px;
+  border-radius: 8px;
+  background: none;
+  border: none;
+  font-size: 12.5px;
+  box-shadow: none;
+  transition: background 160ms ease;
+}
+.produced-file:hover {
+  background: var(--bg-fill-tertiary);
 }
 .produced-file-icon { width: 22px; text-align: center; color: var(--text-muted); }
 .produced-file-name {
@@ -219,11 +257,20 @@
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
-.produced-file-actions { display: flex; gap: 6px; }
+.produced-file-actions { display: flex; gap: 4px; }
 .produced-file-actions .ghost,
 .produced-file-actions .ghost-link {
   font-size: 11px;
-  padding: 3px 9px;
+  padding: 2px 8px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  border-radius: 6px;
+}
+.produced-file-actions .ghost:hover,
+.produced-file-actions .ghost-link:hover {
+  background: var(--bg-fill-tertiary);
+  color: var(--text);
 }
 
 .plugin-action-panel {
@@ -730,7 +777,7 @@
   top: calc(100% + 6px);
   right: 0;
   z-index: 50;
-  min-width: 240px;
+  min-width: 300px;
   padding: 4px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -767,6 +814,17 @@
   justify-content: center;
   text-align: center;
   font-size: 13px;
+}
+.share-menu-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.share-menu-text small {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.25;
 }
 .share-menu-divider { height: 1px; background: var(--border); margin: 4px 6px; }
 .template-share-popover {
@@ -929,6 +987,27 @@
   max-height: calc(100vh - 32px);
   overflow: auto;
 }
+.deploy-flow-backdrop.modal-backdrop {
+  box-sizing: border-box;
+  padding: clamp(48px, 7vh, 88px) 16px;
+}
+.deploy-flow-modal.modal {
+  /* --modal-padding feeds the .deploy-form horizontal padding below. */
+  --modal-padding: 22px;
+  max-height: min(760px, calc(100vh - 112px));
+  max-height: min(760px, calc(100dvh - 112px));
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+}
+.deploy-flow-modal__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 22px 18px;
+  scrollbar-width: thin;
+}
 .image-export-modal.modal {
   width: min(430px, calc(100vw - 32px));
   gap: 0;
@@ -1045,16 +1124,75 @@
 .deploy-flow-modal .modal-foot {
   padding-top: 16px;
 }
+.deploy-flow-modal .modal-foot .viewer-action.primary {
+  justify-content: center;
+  min-width: 104px;
+}
+.deploy-flow-modal .deploy-form {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--modal-padding) 18px;
+  margin-top: 0;
+}
 .deploy-form {
   display: flex;
   flex-direction: column;
   gap: 14px;
   margin-top: 18px;
 }
+.deploy-flow-modal .deploy-form {
+  gap: 12px;
+  margin-top: 16px;
+}
 .deploy-provider-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+.deploy-form .deploy-field-title {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.deploy-form label.deploy-field-title {
+  display: inline;
+}
+.deploy-form .deploy-field-title.required::after {
+  content: ' *';
+  color: var(--accent);
+  font-weight: 700;
+}
+.deploy-token-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+.deploy-token-input-row input {
+  min-width: 0;
+}
+.deploy-token-input-row .button-like {
+  min-height: 44px;
+}
+.deploy-field-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.deploy-field-inline-action {
+  border: 0;
+  padding: 0 2px;
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.deploy-field-inline-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .field-label-row {
   display: flex;
@@ -1062,15 +1200,15 @@
   justify-content: space-between;
   gap: 16px;
 }
-.field-label-note {
+.deploy-token-label-row {
+  margin-bottom: -2px;
+}
+.deploy-token-hints {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
   gap: 4px;
-  max-width: min(420px, 70%);
-  text-align: right;
 }
-.field-label-note .hint {
+.deploy-token-hints .hint {
   margin: 0;
   font-size: 12px;
   line-height: 1.35;

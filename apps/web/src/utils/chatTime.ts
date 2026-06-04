@@ -24,6 +24,13 @@ export function dayLabel(ts: number): string {
   });
 }
 
+export function shortTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export function exactDateTime(ts: number): string {
   return new Date(ts).toLocaleString(undefined, {
     dateStyle: 'medium',

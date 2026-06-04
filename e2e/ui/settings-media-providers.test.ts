@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { ensureRailOpen } from '@/playwright/rail';
 import type { Page, Route } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
@@ -145,6 +146,7 @@ async function openMediaSettingsFromCurrentPage(page: Page) {
 }
 
 async function openNewProjectImageModelPicker(page: Page) {
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-new-project').click();
   await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await page.getByTestId('new-project-tab-media').click();
@@ -154,7 +156,7 @@ async function openNewProjectImageModelPicker(page: Page) {
 }
 
 test.describe('Settings media providers flows', () => {
-  test('autosaves media provider edits and restores them after closing and reopening settings', async ({ page }) => {
+  test('[P1] autosaves media provider edits and restores them after closing and reopening settings', async ({ page }) => {
     await seedSettingsBase(page);
 
     const mediaConfigWrites: Array<Record<string, unknown>> = [];
@@ -191,7 +193,7 @@ test.describe('Settings media providers flows', () => {
     await expect(dialog.getByLabel('FishAudio Base URL')).toHaveValue('https://fish.example.com');
   });
 
-  test('reloads media provider settings from daemon after an initial load failure', async ({ page }) => {
+  test('[P1] reloads media provider settings from daemon after an initial load failure', async ({ page }) => {
     await seedSettingsBase(page);
 
     let daemonMediaStatus: 'error' | 'ok' = 'error';
@@ -231,7 +233,7 @@ test.describe('Settings media providers flows', () => {
     await expect(dialog.getByLabel('OpenAI Base URL')).toHaveValue('https://daemon.example/v1');
   });
 
-  test('saved media provider config is consumed by the new-project media picker across pages', async ({ page }) => {
+  test('[P1] saved media provider config is consumed by the new-project media picker across pages', async ({ page }) => {
     await seedSettingsBase(page);
     await routeBootstrapApis(page);
 

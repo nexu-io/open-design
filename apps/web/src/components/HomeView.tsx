@@ -7,9 +7,11 @@
 // surface by lifting its plugin orchestration up here so the prompt
 // textarea can live centered in the hero.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import type {
   ApplyResult,
+  ChatSessionMode,
   ConnectorDetail,
   InputFieldSpec,
   McpServerConfig,
@@ -35,13 +37,19 @@ import {
   resolvePluginQueryFallback,
 } from '../state/projects';
 import { fetchMcpServers } from '../state/mcp';
-import { useI18n } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import {
   localizeSkillName,
   localizeSkillPrompt,
 } from '../i18n/content';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
-import { fetchProjectFiles, projectFileUrl } from '../providers/registry';
+import { IMAGE_MODELS } from '../media/models';
+import {
+  mergeAihubmixImageModels,
+  useAIHubMixImageModels,
+} from '../media/aihubmix-image-models';
+import { fetchProjectFiles, openFolderDialog, projectFileUrl } from '../providers/registry';
+import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type {
   DesignSystemSummary,
   Project,
@@ -50,8 +58,10 @@ import type {
   PromptTemplateSummary,
   SkillSummary,
 } from '../types';
-import { inlineMentionToken } from '../utils/inlineMentions';
-import { HomeHero } from './HomeHero';
+import { inlineMentionToken, mentionTokenPresent } from '../utils/inlineMentions';
+import { missingRequiredInputs, pluginInputsAreValid } from '../utils/pluginRequiredInputs';
+import { HomeHero, type ExamplePromptInfo, type HomeHeroHandle } from './HomeHero';
+import { Icon } from './Icon';
 import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
 import {
   buildHomeMediaComposer,
@@ -68,11 +78,15 @@ import {
   type HomePromptHandoff,
 } from './home-hero/plugin-authoring';
 import { PluginDetailsModal } from './PluginDetailsModal';
+import { HomeTemplatesReveal } from './HomeTemplatesReveal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import type { FacetSelection } from './plugins-home/facets';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
+import { AnimatePresence } from 'motion/react';
+import { Toast } from './Toast';
+import { useOpenFolderImport } from './useOpenFolderImport';
 
 interface ActivePlugin {
   record: InstalledPluginRecord;
@@ -110,16 +124,26 @@ interface ActivePlugin {
   suppressPromptSync: boolean;
 }
 
+// `inlineBacked` distinguishes a context inserted as an inline `@mention` pill
+// (added through the mention picker / plus menu, which writes a token into the
+// prompt) from a context-only selection made through the plain `Use` action
+// (which stages the context without touching the prompt). Inline-backed
+// contexts are dropped once their `@` token is deleted; context-only ones stay
+// selected until explicitly removed. Conflating the two drops plain `Use`
+// selections from the submit payload because they never carry a token.
 interface SelectedPluginContext {
   record: InstalledPluginRecord;
+  inlineBacked: boolean;
 }
 
 interface SelectedMcpContext {
   server: McpServerConfig;
+  inlineBacked: boolean;
 }
 
 interface SelectedConnectorContext {
   connector: ConnectorDetail;
+  inlineBacked: boolean;
 }
 
 interface PendingReplacement {
@@ -174,6 +198,10 @@ interface Props {
   onOpenProject: (id: string) => void;
   onViewAllProjects: () => void;
   onBrowseRegistry?: () => void;
+  onOpenIntegrations?: () => void;
+  onOpenMcp?: () => void;
+  onImportFolder?: (baseDir: string) => Promise<void> | void;
+  onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
   // Stage B: optional callbacks the rail's migration chips need.
   // HomeView itself never imports them; EntryShell threads them
   // through so the dispatcher can stay declarative.
@@ -183,6 +211,7 @@ interface Props {
   skillsLoading?: boolean;
   connectors?: ConnectorDetail[];
   promptTemplates?: PromptTemplateSummary[];
+  executionSwitcher?: ReactNode;
 }
 
 const EMPTY_DESIGN_SYSTEMS: DesignSystemSummary[] = [];
@@ -199,12 +228,17 @@ export function HomeView({
   onOpenProject,
   onViewAllProjects,
   onBrowseRegistry,
+  onOpenIntegrations,
+  onOpenMcp,
+  onImportFolder,
+  onImportFolderResponse,
   onOpenNewProject,
   promptHandoff,
   skills = EMPTY_SKILLS,
   skillsLoading = false,
   connectors = EMPTY_CONNECTORS,
   promptTemplates = EMPTY_PROMPT_TEMPLATES,
+  executionSwitcher,
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -231,19 +265,36 @@ export function HomeView({
   const [fallbackProjectMetadata, setFallbackProjectMetadata] =
     useState<ProjectMetadata | null>(null);
   const [active, setActive] = useState<ActivePlugin | null>(null);
+  const [sessionMode, setSessionMode] = useState<ChatSessionMode>('design');
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [selectedPluginContexts, setSelectedPluginContexts] = useState<SelectedPluginContext[]>([]);
   const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
   const [selectedConnectorContexts, setSelectedConnectorContexts] = useState<SelectedConnectorContext[]>([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  const [workingDir, setWorkingDir] = useState<string | null>(null);
+  // Token paired with `workingDir` when picked through the desktop host's
+  // native dialog. Spent on the post-creation working-dir POST so the
+  // daemon's desktop-auth gate accepts the path. Null for web picks.
+  const [workingDirToken, setWorkingDirToken] = useState<string | null>(null);
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
   const [mcpLoading, setMcpLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
   const [promptEditedByUser, setPromptEditedByUser] = useState(false);
+  const examplePromptInfoRef = useRef<ExamplePromptInfo | null>(null);
+  const handleExamplePromptStatusChange = useCallback((info: ExamplePromptInfo | null) => {
+    examplePromptInfoRef.current = info;
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [designSystemLogoById, setDesignSystemLogoById] = useState<Record<string, string>>({});
   const [elevenLabsVoices, setElevenLabsVoices] = useState<AudioVoiceOption[]>([]);
   const [elevenLabsVoicesLoading, setElevenLabsVoicesLoading] = useState(false);
+  // Live AIHubMix image catalogue merged into the home media composer's model
+  // picker (replaces the static aihubmix seeds when the fetch resolves).
+  const aihubmixImageModels = useAIHubMixImageModels();
+  const composerImageModels = useMemo(
+    () => mergeAihubmixImageModels(IMAGE_MODELS, aihubmixImageModels),
+    [aihubmixImageModels],
+  );
   const [elevenLabsVoicesLoaded, setElevenLabsVoicesLoaded] = useState(false);
   const [elevenLabsVoicesError, setElevenLabsVoicesError] = useState<string | null>(null);
   const [detailsRecord, setDetailsRecord] = useState<InstalledPluginRecord | null>(null);
@@ -265,10 +316,16 @@ export function HomeView({
       area: 'plugin_replacement_modal',
     });
   }, [pendingReplacement, analytics.track]);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const inputRef = useRef<HomeHeroHandle | null>(null);
   const consumedHandoffIdRef = useRef<number | null>(null);
   const pendingPromptFocusEndRef = useRef(false);
   const activePluginApplyRequestRef = useRef(0);
+  const importSkillId = useMemo(() => {
+    const prototypeSkills = skills.filter((skill) => skill.mode === 'prototype');
+    return prototypeSkills.find((skill) => skill.defaultFor.includes('prototype'))?.id
+      ?? prototypeSkills[0]?.id
+      ?? null;
+  }, [skills]);
 
   useEffect(() => {
     let cancelled = false;
@@ -349,6 +406,7 @@ export function HomeView({
       {
         elevenLabsVoiceWarning,
         elevenLabsVoicesLoading,
+        imageModels: composerImageModels,
       },
     );
     const nextRendered = renderPluginBriefTemplate(composer.queryTemplate, composer.inputs);
@@ -380,17 +438,12 @@ export function HomeView({
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [promptTemplates, elevenLabsVoices, elevenLabsVoiceWarning, elevenLabsVoicesLoading]);
+  }, [promptTemplates, elevenLabsVoices, elevenLabsVoiceWarning, elevenLabsVoicesLoading, composerImageModels]);
 
   useEffect(() => {
     if (!pendingPromptFocusEndRef.current) return;
     pendingPromptFocusEndRef.current = false;
-    const input = inputRef.current;
-    if (!input) return;
-    input.focus();
-    const position = input.value.length;
-    input.setSelectionRange(position, position);
-    input.scrollTop = input.scrollHeight;
+    inputRef.current?.focusEnd();
   }, [prompt]);
 
   useEffect(() => {
@@ -435,21 +488,36 @@ export function HomeView({
         : 0,
     [active],
   );
-  const contextItemCount = useMemo(
-    () =>
+  // Inline-backed contexts are already represented in the composer as `@mention`
+  // pills, so they must NOT also drive the active context row — otherwise
+  // selecting only an inline-mentioned connector mounts an empty row (count
+  // label, no visible children) above the editor. Context-only `Use` selections
+  // have no inline representation, so they are the only ones the row should
+  // surface (and count).
+  const contextItemCount = useMemo(() => {
+    const contextOnlyPlugins = selectedPluginContexts.filter(
+      (item) => !item.inlineBacked,
+    ).length;
+    const contextOnlyMcp = selectedMcpContexts.filter(
+      (item) => !item.inlineBacked,
+    ).length;
+    const contextOnlyConnectors = selectedConnectorContexts.filter(
+      (item) => !item.inlineBacked,
+    ).length;
+    return (
       activeContextItemCount +
-      selectedPluginContexts.length +
-      selectedMcpContexts.length +
-      selectedConnectorContexts.length +
-      stagedFiles.length,
-    [
-      activeContextItemCount,
-      selectedConnectorContexts.length,
-      selectedMcpContexts.length,
-      selectedPluginContexts.length,
-      stagedFiles.length,
-    ],
-  );
+      contextOnlyPlugins +
+      contextOnlyMcp +
+      contextOnlyConnectors +
+      stagedFiles.length
+    );
+  }, [
+    activeContextItemCount,
+    selectedConnectorContexts,
+    selectedMcpContexts,
+    selectedPluginContexts,
+    stagedFiles.length,
+  ]);
 
   // The Home chip rail and the Community grid share a mental
   // model — "Prototype" up top is the same artifact intent as the
@@ -540,12 +608,7 @@ export function HomeView({
 
   function focusPromptAtEnd() {
     requestAnimationFrame(() => {
-      const input = inputRef.current;
-      if (!input) return;
-      input.focus();
-      const position = input.value.length;
-      input.setSelectionRange(position, position);
-      input.scrollTop = input.scrollHeight;
+      inputRef.current?.focusEnd();
     });
   }
 
@@ -770,7 +833,7 @@ export function HomeView({
     let shouldFocusOnly = true;
     setSelectedPluginContexts((prev) => {
       if (prev.some((item) => item.record.id === record.id)) return prev;
-      return [...prev, { record }];
+      return [...prev, { record, inlineBacked: false }];
     });
     if (action === 'use-with-query') {
       const queryPrompt = renderPluginContextPrompt(record, inputs);
@@ -861,7 +924,7 @@ export function HomeView({
   function addPluginContext(record: InstalledPluginRecord, nextPrompt: string | null) {
     setSelectedPluginContexts((prev) => {
       if (prev.some((item) => item.record.id === record.id)) return prev;
-      return [...prev, { record }];
+      return [...prev, { record, inlineBacked: true }];
     });
     if (nextPrompt !== null) setPrompt(nextPrompt);
     setError(null);
@@ -896,7 +959,7 @@ export function HomeView({
     if (!extracted) return;
     const nextInputs = { ...active.inputs, ...extracted };
     const normalizedInputs = active.mediaSurface
-      ? normalizeHomeMediaInputs(active.mediaSurface, nextInputs, promptTemplates, elevenLabsVoices)
+      ? normalizeHomeMediaInputs(active.mediaSurface, nextInputs, promptTemplates, elevenLabsVoices, composerImageModels)
       : nextInputs;
     const inputsValid = pluginInputsAreValid(active.inputFields, normalizedInputs);
     const inputsChanged = !inputsEqual(active.inputs, normalizedInputs);
@@ -926,15 +989,50 @@ export function HomeView({
     setStagedFiles((current) => current.filter((_, i) => i !== index));
   }
 
+  async function handlePickWorkingDir() {
+    // On desktop the working-dir POST is gated behind a host-minted token, so
+    // pick through the host bridge to capture { baseDir, token } together.
+    if (isOpenDesignHostAvailable()) {
+      const result = await pickHostWorkingDir();
+      if (result.ok) {
+        setWorkingDir(result.baseDir);
+        setWorkingDirToken(result.token);
+        return;
+      }
+      // The user explicitly cancelled the host picker — respect that and do
+      // not pop a second dialog.
+      if ('canceled' in result && result.canceled) return;
+      // The host is present but could not service the pick (mixed-version
+      // upgrade where the preload lacks `project.pickWorkingDir`, or a host
+      // error). We must NOT fall back to openFolderDialog() here: the browser
+      // dialog yields a raw path with no host-minted token, so the later
+      // POST /api/projects/:id/working-dir would be rejected by the desktop
+      // auth gate and surface as a confusing late create-time failure.
+      // Surface the host error instead and keep the existing working dir.
+      setError(
+        `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update Open Design and try again.`,
+      );
+      return;
+    }
+    // Pure web path: no desktop host, so there is no token gate — the raw
+    // browser folder path is the expected, working input.
+    const picked = await openFolderDialog();
+    if (picked) {
+      setWorkingDir(picked);
+      setWorkingDirToken(null);
+    }
+  }
+
   function updateActiveInputs(next: Record<string, unknown>) {
     if (!active) return;
     const normalized = active.mediaSurface
-      ? normalizeHomeMediaInputs(active.mediaSurface, next, promptTemplates, elevenLabsVoices)
+      ? normalizeHomeMediaInputs(active.mediaSurface, next, promptTemplates, elevenLabsVoices, composerImageModels)
       : next;
     const mediaComposer = active.mediaSurface
       ? buildHomeMediaComposer(active.mediaSurface, promptTemplates, normalized, elevenLabsVoices, {
           elevenLabsVoiceWarning,
           elevenLabsVoicesLoading,
+          imageModels: composerImageModels,
         })
       : null;
     const inputFields = mediaComposer?.fields ?? active.inputFields;
@@ -1013,23 +1111,47 @@ export function HomeView({
     setSelectedMcpContexts((current) => (
       current.some((item) => item.server.id === _server.id)
         ? current
-        : [...current, { server: _server }]
+        : [...current, { server: _server, inlineBacked: true }]
     ));
     setPrompt(nextPrompt);
     setError(null);
     focusPromptAtEnd();
   }
 
+  function removeMcpContext(serverId: string) {
+    const server = selectedMcpContexts.find((item) => item.server.id === serverId)?.server ?? null;
+    setSelectedMcpContexts((current) => current.filter((item) => item.server.id !== serverId));
+    if (server) {
+      setPrompt((current) => removeContextMentionsFromPrompt(current, [
+        server.label || server.id,
+        server.id,
+      ]));
+      setPromptEditedByUser(true);
+    }
+  }
+
   function useConnector(connector: ConnectorDetail, nextPrompt: string) {
     setSelectedConnectorContexts((current) => (
       current.some((item) => item.connector.id === connector.id)
         ? current
-        : [...current, { connector }]
+        : [...current, { connector, inlineBacked: true }]
     ));
     setPrompt(nextPrompt);
     setPromptEditedByUser(false);
     setError(null);
     focusPromptAtEnd();
+  }
+
+  function removeConnectorContext(connectorId: string) {
+    const connector = selectedConnectorContexts.find((item) => item.connector.id === connectorId)?.connector ?? null;
+    setSelectedConnectorContexts((current) => current.filter((item) => item.connector.id !== connectorId));
+    if (connector) {
+      setPrompt((current) => removeContextMentionsFromPrompt(current, [
+        connector.name,
+        connector.id,
+      ]));
+      setPromptEditedByUser(true);
+    }
   }
 
   function queuePluginAuthoring(chipId: string | null, goal?: string) {
@@ -1120,6 +1242,7 @@ export function HomeView({
             {
               elevenLabsVoiceWarning,
               elevenLabsVoicesLoading,
+              imageModels: composerImageModels,
             },
           );
           requestActivePlugin(record, undefined, {
@@ -1194,7 +1317,15 @@ export function HomeView({
     });
     let submittedActive = active;
     if (submittedActive && !submittedActive.inputsValid) {
-      setError('Fill the required plugin parameters before running.');
+      const missing = missingRequiredInputs(
+        submittedActive.inputFields,
+        submittedActive.inputs,
+      );
+      setError(
+        missing.length > 0
+          ? `Fill the required plugin ${missing.length === 1 ? 'parameter' : 'parameters'} before running: ${missing.join(', ')}.`
+          : 'Fill the required plugin parameters before running.',
+      );
       return;
     }
     const defaultInputs = { prompt: trimmed };
@@ -1222,28 +1353,41 @@ export function HomeView({
       submittedActive = { ...submittedActive, result, inputs: submittedPluginInputs };
       setActive(submittedActive);
     }
-    const contextPlugins = selectedPluginContexts.map((item) => ({
-      id: item.record.id,
-      title: item.record.title,
-      ...(item.record.manifest?.description
-        ? { description: item.record.manifest.description }
-        : {}),
-    }));
-    const contextMcpServers = selectedMcpContexts.map((item) => ({
-      id: item.server.id,
-      ...(item.server.label ? { label: item.server.label } : {}),
-      ...(item.server.transport ? { transport: item.server.transport } : {}),
-      ...(item.server.url ? { url: item.server.url } : {}),
-      ...(item.server.command ? { command: item.server.command } : {}),
-    }));
-    const contextConnectors = selectedConnectorContexts.map((item) => ({
-      id: item.connector.id,
-      name: item.connector.name,
-      provider: item.connector.provider,
-      category: item.connector.category,
-      status: item.connector.status,
-      ...(item.connector.accountLabel ? { accountLabel: item.connector.accountLabel } : {}),
-    }));
+    // Reconcile each selected context against the serialized prompt text before
+    // forwarding it. Inline-backed contexts (inserted as `@mention` pills) are
+    // only sent while their token survives in the prompt — the Lexical composer
+    // lets users delete a mention pill (backspace, edit), and when they do that
+    // plugin/MCP/connector should stop being sent. Context-only `Use`
+    // selections never carry a token, so they stay in the payload until the
+    // user explicitly clears them.
+    const contextPlugins = selectedPluginContexts
+      .filter((item) => !item.inlineBacked || mentionTokenPresent(trimmed, item.record.title))
+      .map((item) => ({
+        id: item.record.id,
+        title: item.record.title,
+        ...(item.record.manifest?.description
+          ? { description: item.record.manifest.description }
+          : {}),
+      }));
+    const contextMcpServers = selectedMcpContexts
+      .filter((item) => !item.inlineBacked || mentionTokenPresent(trimmed, item.server.label || item.server.id))
+      .map((item) => ({
+        id: item.server.id,
+        ...(item.server.label ? { label: item.server.label } : {}),
+        ...(item.server.transport ? { transport: item.server.transport } : {}),
+        ...(item.server.url ? { url: item.server.url } : {}),
+        ...(item.server.command ? { command: item.server.command } : {}),
+      }));
+    const contextConnectors = selectedConnectorContexts
+      .filter((item) => !item.inlineBacked || mentionTokenPresent(trimmed, item.connector.name))
+      .map((item) => ({
+        id: item.connector.id,
+        name: item.connector.name,
+        provider: item.connector.provider,
+        category: item.connector.category,
+        status: item.connector.status,
+        ...(item.connector.accountLabel ? { accountLabel: item.connector.accountLabel } : {}),
+      }));
     const submittedProjectKind =
       submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other';
     const submittedProjectMetadata = submittedActive?.mediaSurface
@@ -1256,9 +1400,13 @@ export function HomeView({
     // Scenario plugins (chips / preset cards) and explicit skill picks are
     // mutually exclusive routing sources — never send both (#2972).
     const resolvedSkillId = submittedActive ? null : activeSkill?.id ?? null;
+    const routedPluginId =
+      sessionMode === 'design'
+        ? submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
+        : submittedActive?.record.id ?? null;
     onSubmit({
       prompt: trimmed,
-      pluginId: submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
+      pluginId: routedPluginId,
       skillId: resolvedSkillId,
       appliedPluginSnapshotId: submittedActive?.result?.appliedPlugin?.snapshotId ?? null,
       pluginTitle: submittedActive?.record.title ?? null,
@@ -1271,6 +1419,16 @@ export function HomeView({
       contextMcpServers,
       contextConnectors,
       attachments: stagedFiles,
+      ...(workingDir ? { workingDir } : {}),
+      ...(workingDirToken ? { workingDirToken } : {}),
+      conversationMode: sessionMode,
+      ...(() => {
+        if (!examplePromptInfoRef.current) return {};
+        const key = 'od:example-prompt-used';
+        if (localStorage.getItem(key)) return {};
+        localStorage.setItem(key, '1');
+        return { examplePromptContext: examplePromptInfoRef.current };
+      })(),
     });
   }
 
@@ -1281,6 +1439,8 @@ export function HomeView({
         prompt={prompt}
         onPromptChange={handlePromptChange}
         onSubmit={submit}
+        sessionMode={sessionMode}
+        onSessionModeChange={setSessionMode}
         activePluginTitle={activeBadgeTitle}
         activePluginRecord={active?.record ?? null}
         activeSkillId={activeSkill?.id ?? null}
@@ -1291,7 +1451,17 @@ export function HomeView({
         onClearActiveChip={clearActiveChipSelection}
         onClearActiveSkill={() => setActiveSkill(null)}
         selectedPluginContexts={selectedPluginContexts.map((item) => item.record)}
+        selectedMcpContexts={selectedMcpContexts.map((item) => item.server)}
+        selectedConnectorContexts={selectedConnectorContexts.map((item) => item.connector)}
+        contextOnlyPlugins={selectedPluginContexts.filter((item) => !item.inlineBacked).map((item) => item.record)}
+        contextOnlyMcpServers={selectedMcpContexts.filter((item) => !item.inlineBacked).map((item) => item.server)}
+        contextOnlyConnectors={selectedConnectorContexts.filter((item) => !item.inlineBacked).map((item) => item.connector)}
         onRemovePluginContext={removePluginContext}
+        onRemoveMcpContext={removeMcpContext}
+        onRemoveConnectorContext={removeConnectorContext}
+        onAddPlugin={onBrowseRegistry}
+        onAddConnector={onOpenIntegrations}
+        onAddMcp={onOpenMcp}
         onOpenPluginDetails={setDetailsRecord}
         pluginInputFields={active?.inputFields ?? []}
         pluginInputValues={active?.inputs ?? {}}
@@ -1300,11 +1470,6 @@ export function HomeView({
         inlineEditableInputNames={active?.editableInputNames ?? []}
         footerInputNames={footerInputNamesForChip(active?.chipId ?? null)}
         designSystemOptions={designSystemOptions}
-        onPluginInputValidityChange={(valid) => {
-          setActive((prev) => (
-            prev && prev.inputsValid !== valid ? { ...prev, inputsValid: valid } : prev
-          ));
-        }}
         stagedFiles={stagedFiles}
         onAddFiles={stageFiles}
         onRemoveFile={removeStagedFile}
@@ -1330,6 +1495,20 @@ export function HomeView({
         onPickChip={pickChip}
         contextItemCount={contextItemCount}
         error={error}
+        workingDir={workingDir}
+        onPickWorkingDir={handlePickWorkingDir}
+        onClearWorkingDir={() => {
+          setWorkingDir(null);
+          setWorkingDirToken(null);
+        }}
+        onExamplePromptStatusChange={handleExamplePromptStatusChange}
+        executionSwitcher={executionSwitcher}
+      />
+
+      <HomeExistingProjectAction
+        skillId={importSkillId}
+        onImportFolder={onImportFolder}
+        onImportFolderResponse={onImportFolderResponse}
       />
 
       <RecentProjectsStrip
@@ -1361,26 +1540,32 @@ export function HomeView({
         }}
       />
 
-      <PluginsHomeSection
-        plugins={plugins}
-        loading={pluginsLoading}
-        activePluginId={active?.record.id ?? null}
-        pendingApplyId={pendingApplyId}
-        onUse={(record, action) => requestPluginContextUse(record, action)}
-        onOpenDetails={setDetailsRecord}
-        onBrowseRegistry={onBrowseRegistry}
-        preferDefaultFacet={false}
-        presetSelection={presetStartersSelection}
-      />
-
-      {detailsRecord ? (
-        <PluginDetailsModal
-          record={detailsRecord}
-          onClose={() => setDetailsRecord(null)}
-          onUse={(record) => requestPluginContextUse(record, 'use')}
-          isApplying={pendingApplyId === detailsRecord.id}
+      <HomeTemplatesReveal
+        enabled={!projectsLoading && projects.length === 0}
+      >
+        <PluginsHomeSection
+          plugins={plugins}
+          loading={pluginsLoading}
+          activePluginId={active?.record.id ?? null}
+          pendingApplyId={pendingApplyId}
+          onUse={(record, action) => requestPluginContextUse(record, action)}
+          onOpenDetails={setDetailsRecord}
+          onBrowseRegistry={onBrowseRegistry}
+          preferDefaultFacet={false}
+          presetSelection={presetStartersSelection}
         />
-      ) : null}
+      </HomeTemplatesReveal>
+
+      <AnimatePresence>
+        {detailsRecord ? (
+          <PluginDetailsModal
+            record={detailsRecord}
+            onClose={() => setDetailsRecord(null)}
+            onUse={(record) => requestPluginContextUse(record, 'use')}
+            isApplying={pendingApplyId === detailsRecord.id}
+          />
+        ) : null}
+      </AnimatePresence>
       {pendingReplacement ? (
         <div className="home-hero-confirm__backdrop" role="presentation">
           <div
@@ -1459,6 +1644,60 @@ export function HomeView({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function HomeExistingProjectAction({
+  skillId,
+  onImportFolder,
+  onImportFolderResponse,
+}: {
+  skillId: string | null;
+  onImportFolder?: (baseDir: string) => Promise<void> | void;
+  onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
+}) {
+  const t = useT();
+  const folderImport = useOpenFolderImport({
+    skillId,
+    onImportFolder,
+    onImportFolderResponse,
+  });
+  if (!folderImport.available) return null;
+
+  return (
+    <section className="home-existing-project" data-testid="home-existing-project">
+      <form
+        className="home-existing-project__form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void folderImport.openFolder();
+        }}
+      >
+        <button
+          type="submit"
+          className="home-existing-project__button"
+          disabled={folderImport.importing}
+        >
+          <Icon name="folder" size={14} />
+          <span>
+            {folderImport.importing
+              ? t('home.openExistingProjectOpening')
+              : t('home.openExistingProject')}
+          </span>
+        </button>
+      </form>
+      <p className="home-existing-project__subtitle">
+        {t('home.chooseFolderSubtitle')}
+      </p>
+      {folderImport.error ? (
+        <Toast
+          message={folderImport.error.message}
+          details={folderImport.error.details ?? null}
+          ttlMs={6000}
+          onDismiss={folderImport.clearError}
+        />
+      ) : null}
+    </section>
   );
 }
 
@@ -1822,17 +2061,6 @@ function hydratePluginInputs(
   return next;
 }
 
-function pluginInputsAreValid(
-  fields: InputFieldSpec[],
-  values: Record<string, unknown>,
-): boolean {
-  return fields.every((field) => {
-    if (!field.required) return true;
-    const value = values[field.name];
-    return value !== undefined && value !== null && value !== '';
-  });
-}
-
 const TEMPLATE_INPUT_PATTERN = /\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g;
 
 function extractPluginInputsFromPrompt(
@@ -1899,6 +2127,17 @@ function removePluginMentionFromPrompt(prompt: string, record: InstalledPluginRe
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n[ \t]+/g, '\n')
     .trim();
+}
+
+function removeContextMentionsFromPrompt(prompt: string, labels: string[]): string {
+  const uniqueLabels = Array.from(new Set(labels.filter(Boolean)));
+  return uniqueLabels.reduce((current, label) => {
+    const token = inlineMentionToken(label);
+    return current.replace(
+      new RegExp(`(^|[\\s([{"'])${escapeRegExp(token)}(?=$|\\s|[.,;:!?)}\\]"'])([^\\S\\r\\n])?`, 'g'),
+      '$1',
+    );
+  }, prompt);
 }
 
 function appendPromptQuery(current: string, query: string): string {

@@ -10,7 +10,6 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 
 import { HomeHero } from '../../src/components/HomeHero';
@@ -119,6 +118,20 @@ describe('HomeHero intent rail', () => {
     }
   });
 
+  it('renders execution switcher inside the input footer when provided', () => {
+    renderHero({
+      executionSwitcher: (
+        <button type="button" data-testid="home-execution-switcher">
+          Local CLI
+        </button>
+      ),
+    });
+
+    const switcher = screen.getByTestId('home-execution-switcher');
+    const footer = switcher.closest('.home-hero__input-foot');
+    expect(footer).toBeTruthy();
+  });
+
   it('forwards the matching chip descriptor when clicked', () => {
     const { onPickChip } = renderHero();
     fireEvent.click(screen.getByTestId('home-hero-rail-image'));
@@ -184,47 +197,8 @@ describe('HomeHero intent rail', () => {
     expect(onPromptChange).toHaveBeenCalledWith(
       'Research the market opportunity for a product launch, including competitors, target users, pricing hypotheses, and launch narrative',
     );
-    expect(screen.getByTestId('home-hero-active-example').textContent).toContain('Example prompts: Research the market opportunity');
-    expect(screen.getByTestId('home-hero-active-example').textContent).toContain('...');
-  });
-
-  it('clears the prompt input when the selected example chip is removed', () => {
-    function StatefulHero() {
-      const [prompt, setPrompt] = useState('');
-      return (
-        <HomeHero
-          prompt={prompt}
-          onPromptChange={setPrompt}
-          onSubmit={() => undefined}
-          activePluginTitle={null}
-          activeChipId="deck"
-          onClearActivePlugin={() => undefined}
-          pluginOptions={[]}
-          pluginsLoading={false}
-          pendingPluginId={null}
-          pendingChipId={null}
-          onPickPlugin={() => undefined}
-          onPickExamplePlugin={() => undefined}
-          onPickChip={() => undefined}
-          onClearActiveChip={() => undefined}
-          contextItemCount={0}
-          error={null}
-        />
-      );
-    }
-
-    render(<StatefulHero />);
-
-    const examples = screen.getAllByTestId('home-hero-prompt-example');
-    fireEvent.click(examples[0]!);
-
-    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
-    expect(input.value).toContain('Research the market opportunity');
-    expect(screen.getByTestId('home-hero-active-example')).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId('home-hero-active-example').querySelector('.home-hero__active-clear')!);
-
-    expect(input.value).toBe('');
+    // The top "selected example" pill was removed from the composer; picking an
+    // example still seeds the prompt but no longer surfaces a dismissible chip.
     expect(screen.queryByTestId('home-hero-active-example')).toBeNull();
   });
 
@@ -238,8 +212,9 @@ describe('HomeHero intent rail', () => {
 
     const presets = screen.getAllByTestId('home-hero-plugin-preset');
     expect(presets).toHaveLength(1);
+    // The preset card is now a thumbnail + name only; the prompt blurb was
+    // dropped from the card face but is still passed through on click below.
     expect(presets[0]?.textContent).toContain('Investor deck');
-    expect(presets[0]?.textContent).toContain('a focused brief');
 
     fireEvent.click(presets[0]!);
     expect(onPickExamplePlugin).toHaveBeenCalledWith(
@@ -247,7 +222,6 @@ describe('HomeHero intent rail', () => {
       'deck',
       'Create with a focused brief using Investor deck',
     );
-    expect(screen.getByTestId('home-hero-active-example').textContent).toContain('Example prompts: Investor deck');
   });
 
   it('orders curated example presets first for the selected artifact type', () => {

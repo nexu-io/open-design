@@ -30,6 +30,7 @@ export const NSIS_INSTALLER_LANGUAGE_BY_WEB_LOCALE = {
   "zh-TW": "zh_TW",
 } as const;
 export const INTERNAL_PACKAGES = [
+  { directory: "packages/components", name: "@open-design/components" },
   { directory: "packages/contracts", name: "@open-design/contracts" },
   { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
   { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },

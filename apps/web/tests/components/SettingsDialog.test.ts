@@ -8,6 +8,7 @@ import {
   isOrbitRunDisabled,
   isValidApiBaseUrl,
   mergeProviderModelOptions,
+  providerModelsCacheKey,
   sanitizeSettingsSavePayload,
   shouldEnableSettingsSave,
   shouldShowCustomModelInput,
@@ -40,6 +41,24 @@ afterEach(() => {
 });
 
 describe('SettingsDialog API protocol switching', () => {
+  it('builds provider model cache keys without exposing raw API keys', () => {
+    const key = providerModelsCacheKey(
+      'anthropic',
+      'https://api.anthropic.com/',
+      'sk-secret-value',
+    );
+
+    expect(key).toContain('https://api.anthropic.com');
+    expect(key).not.toContain('sk-secret-value');
+    expect(key).toBe(
+      providerModelsCacheKey(
+        'anthropic',
+        'https://api.anthropic.com',
+        'sk-secret-value',
+      ),
+    );
+  });
+
   it('stores the current custom protocol config while preserving custom endpoint details', () => {
     const config: AppConfig = {
       ...baseConfig,

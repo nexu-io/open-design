@@ -48,6 +48,10 @@ export function codexNeedsDangerFullAccessSandbox(
   platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
+  // Operator override for deployments where Codex cannot create its
+  // workspace-write sandbox, for example unprivileged Linux containers.
+  // Only danger-full-access is accepted; unknown values keep the default path.
+  if (env.OD_CODEX_SANDBOX?.trim() === 'danger-full-access') return true;
   if (platform === 'win32') return true;
   // WSL reports `linux` but Codex still hits the Windows read-only
   // workspace-write sandbox path when launched from there (#2834).

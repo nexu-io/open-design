@@ -36,6 +36,16 @@ const WRITE_OR_EDIT_TOOL_NAMES: ReadonlySet<string> = new Set([
   'multi_edit',
 ]);
 
+// Tool names the daemon recognizes as an intent-clarification card. Claude
+// emits `AskUserQuestion`; the ACP/MCP snake_case proxy shape emits
+// `ask_user_question`. Keep aligned with the AskUserQuestion detection in
+// `apps/daemon/src/server.ts` and the card rendering in
+// `apps/web/src/components/ToolCard.tsx`.
+const ASK_USER_QUESTION_TOOL_NAMES: ReadonlySet<string> = new Set([
+  'AskUserQuestion',
+  'ask_user_question',
+]);
+
 function extractToolFilePath(input: unknown): string | null {
   if (!input || typeof input !== 'object') return null;
   const obj = input as { file_path?: unknown; path?: unknown };
@@ -196,4 +206,27 @@ export function countNewHtmlArtifacts(events: readonly RunEventLike[]): number {
     writtenPaths.add(path);
   }
   return writtenPaths.size;
+}
+
+// True iff the run raised an AskUserQuestion clarification card. Fed into
+// `run_finished.asked_user_question`. A clarification turn is the agent
+// stopping to ask the user a finite-choice question; it inherently produces
+// no artifact, so the dashboard uses this flag to exclude such runs from the
+// "run finished -> has artifact" funnel rather than scoring them as
+// artifact-generation failures.
+export function runAskedUserQuestion(
+  events: readonly RunEventLike[],
+): boolean {
+  if (!events || events.length === 0) return false;
+  for (const rec of events) {
+    if (rec?.event !== 'agent') continue;
+    const data = rec.data as
+      | { type?: string; name?: unknown }
+      | null
+      | undefined;
+    if (data?.type !== 'tool_use') continue;
+    if (typeof data.name !== 'string') continue;
+    if (ASK_USER_QUESTION_TOOL_NAMES.has(data.name)) return true;
+  }
+  return false;
 }

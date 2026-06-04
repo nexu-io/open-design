@@ -87,6 +87,19 @@ describe('agent runtime tool environment', () => {
     expect(env.OD_DATA_DIR).toBe(process.env.OD_DATA_DIR);
   });
 
+  it('keeps non-sandbox NO_PROXY behavior unchanged', () => {
+    const env = createAgentRuntimeEnv(
+      { PATH: '/bin', HTTP_PROXY: 'http://127.0.0.1:9', NO_PROXY: '' },
+      'http://127.0.0.1:7456',
+      { token: 'fresh-token' },
+      '/opt/open-design/bin/node',
+    );
+
+    expect(env.HTTP_PROXY).toBe('http://127.0.0.1:9');
+    expect(env.NO_PROXY).toBe('');
+    expect(env.no_proxy).toBeUndefined();
+  });
+
   it('passes the daemon sidecar IPC path from the explicit base env into agent wrapper sessions', () => {
     const env = createAgentRuntimeEnv(
       { PATH: '/bin', [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/daemon.sock' },
@@ -141,13 +154,13 @@ describe('agent runtime tool environment', () => {
 describe('applyAgentLaunchEnv', () => {
   it('returns env unchanged when childPathPrepend is empty and no node dir is provided', () => {
     const base = { Path: ['/usr/local/bin', '/usr/bin'].join(path.delimiter), OTHER: 'val' };
-    const result = applyAgentLaunchEnv(base, { childPathPrepend: [] }, '');
+    const result = applyAgentLaunchEnv(base, { childPathPrepend: [] }, '', []);
     expect(result).toBe(base);
   });
 
   it('prepends childPathPrepend entries to PATH when key is uppercase', () => {
     const base = { PATH: '/usr/bin' };
-    const result = applyAgentLaunchEnv(base, { childPathPrepend: ['/opt/copilot'] }, '');
+    const result = applyAgentLaunchEnv(base, { childPathPrepend: ['/opt/copilot'] }, '', []);
     expect(result.PATH).toBe(`/opt/copilot${path.delimiter}/usr/bin`);
     expect(result.Path).toBeUndefined();
   });
@@ -160,7 +173,7 @@ describe('applyAgentLaunchEnv', () => {
     // Pure POSIX paths + path.delimiter keep the assertion correct on all platforms;
     // the real Windows C:\...;... shape is covered by winTest in launch.test.ts.
     const base = { Path: ['/opt/nodejs', '/usr/bin'].join(path.delimiter) };
-    const result = applyAgentLaunchEnv(base, { childPathPrepend: ['/opt/agent/bin'] }, '');
+    const result = applyAgentLaunchEnv(base, { childPathPrepend: ['/opt/agent/bin'] }, '', []);
 
     // The existing 'Path' key must be updated in place.
     expect(result.Path).toBe(
@@ -173,7 +186,7 @@ describe('applyAgentLaunchEnv', () => {
   it('deduplicates entries already present in Path', () => {
     const existing = ['/opt/bin', '/usr/bin'].join(path.delimiter);
     const base = { Path: existing };
-    const result = applyAgentLaunchEnv(base, { childPathPrepend: ['/opt/bin'] }, '');
+    const result = applyAgentLaunchEnv(base, { childPathPrepend: ['/opt/bin'] }, '', []);
     expect(result.Path).toBe(existing);
   });
 });

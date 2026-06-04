@@ -10,7 +10,7 @@ import {
   createSidecarLaunchEnv,
   resolveAppIpcPath,
 } from "@open-design/sidecar";
-import { applyOsLocaleSwitch } from "@open-design/desktop/main";
+import { applyOsLocaleSwitch, createSplashWindow } from "@open-design/desktop/main";
 import { readProcessStamp } from "@open-design/platform";
 import { join } from "node:path";
 import { app, dialog } from "electron";
@@ -92,6 +92,15 @@ async function main(): Promise<void> {
   const identity = await writePackagedDesktopIdentity({ paths, stamp });
   await app.whenReady();
 
+  // Show the brand splash IMMEDIATELY, before we await the daemon/web sidecars
+  // below. Cold boot otherwise leaves the user staring at no window at all for
+  // the few seconds the sidecars take to come up; putting the animation on
+  // screen in parallel masks that gap, and the runtime keeps it up until the
+  // real app has mounted (see createDesktopRuntime). The handle carries the
+  // creation timestamp so the runtime's minimum-hold timer counts from here —
+  // BEFORE the sidecar boot below — rather than re-adding the delay afterwards.
+  const splash = createSplashWindow();
+
   applyLaunchEnv(paths.runtimeRoot, stamp);
 
   const runtime = bootstrapSidecarRuntime(stamp, process.env, {
@@ -122,6 +131,8 @@ async function main(): Promise<void> {
 
   const { runDesktopMain } = await import("@open-design/desktop/main");
   await runDesktopMain(runtime, {
+    splashWindow: splash.window,
+    splashStartedAt: splash.startedAt,
     async beforeShutdown() {
       try {
         await sidecars.close();

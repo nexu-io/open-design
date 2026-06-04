@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { act } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HomeView } from '../../src/components/HomeView';
@@ -9,6 +10,14 @@ import {
   PLUGIN_AUTHORING_DEFAULT_GOAL,
   PLUGIN_AUTHORING_PROMPT,
 } from '../../src/components/home-hero/plugin-authoring';
+// HomeHero's `home-hero-input` is now the project composer's Lexical
+// contenteditable, not a <textarea>. These helpers drive/read it through the
+// live editor instead of synthetic `fireEvent.change` / `.value` (which are
+// no-ops on a contenteditable).
+import {
+  homeHeroPromptText,
+  setHomeHeroPrompt,
+} from '../helpers/home-hero-lexical';
 
 const AUTHORING_PLUGIN = {
   id: 'od-plugin-authoring',
@@ -414,7 +423,7 @@ describe('HomeView prompt handoff', () => {
 
     const input = await screen.findByTestId('home-hero-input');
     await waitFor(() => {
-      expect((input as HTMLTextAreaElement).value).toBe(PLUGIN_AUTHORING_PROMPT);
+      expect(homeHeroPromptText()).toBe(PLUGIN_AUTHORING_PROMPT);
       expect(document.activeElement).toBe(input);
     });
     const inputCard = input.closest('.home-hero__input-card') as HTMLElement | null;
@@ -433,7 +442,7 @@ describe('HomeView prompt handoff', () => {
       expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
     });
 
-    fireEvent.change(input, { target: { value: 'User edited prompt' } });
+    await setPromptAndSettle('User edited prompt');
 
     rerender(
       <HomeView
@@ -445,7 +454,7 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    expect((input as HTMLTextAreaElement).value).toBe('User edited prompt');
+    expect(homeHeroPromptText()).toBe('User edited prompt');
   });
 
   it('uses the same authoring prompt from the Home rail chip', async () => {
@@ -480,7 +489,7 @@ describe('HomeView prompt handoff', () => {
 
     const input = await screen.findByTestId('home-hero-input');
     await waitFor(() => {
-      expect((input as HTMLTextAreaElement).value).toBe(PLUGIN_AUTHORING_PROMPT);
+      expect(homeHeroPromptText()).toBe(PLUGIN_AUTHORING_PROMPT);
       expect(document.activeElement).toBe(input);
     });
     expect(screen.queryByRole('alert')).toBeNull();
@@ -509,11 +518,15 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
+    // The per-plugin context badge row was removed; staged plugin context now
+    // only renders as an inline @mention pill (or, when the prompt is empty as
+    // here, surfaces via the active context row's resolved-count label). Assert
+    // the plugin was staged through that count rather than the dropped badge.
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-context-plugin-example-web-prototype')).toBeTruthy();
+      expect(screen.getByLabelText(/1 context items resolved/i)).toBeTruthy();
     });
-    expect((await screen.findByTestId('home-hero-input') as HTMLTextAreaElement).value)
-      .toBe('');
+    await screen.findByTestId('home-hero-input');
+    expect(homeHeroPromptValue()).toBe('');
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
   });
 
@@ -539,8 +552,8 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    const input = await screen.findByTestId('home-hero-input');
-    fireEvent.change(input, { target: { value: 'Make a launch page for a robotics studio' } });
+    await screen.findByTestId('home-hero-input');
+    await setPromptAndSettle('Make a launch page for a robotics studio');
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
     expect(screen.queryByTestId('home-hero-active-plugin')).toBeNull();
@@ -598,8 +611,7 @@ describe('HomeView prompt handoff', () => {
       },
     });
     await waitFor(() => {
-      expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value)
-        .toBe(PLUGIN_AUTHORING_PROMPT);
+      expect(homeHeroPromptText()).toBe(PLUGIN_AUTHORING_PROMPT);
       expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
     });
     fireEvent.click(screen.getByTestId('home-hero-submit'));
@@ -663,17 +675,20 @@ describe('HomeView prompt handoff', () => {
     ).toContain('Refly Design System');
     expect(screen.getByTestId('home-hero-footer-option-fidelity')).toBeTruthy();
     expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy();
-    expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toBe('');
+    expect(homeHeroPromptValue()).toBe('');
     expect(screen.getByTestId('home-hero-plugin-presets')).toBeTruthy();
+    // Inline `{{slot}}` prompt widgets were removed in the Lexical migration;
+    // these null checks now confirm the migrated editor never renders them.
     expect(screen.queryByTestId('home-hero-prompt-slot-fidelity')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-artifactKind')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-designSystem')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-template')).toBeNull();
+    // The inline plugin inputs form was removed from the Home composer, so the
+    // non-footer inputs (artifactKind / audience / template) no longer render;
+    // fidelity / designSystem still surface as footer options above.
     expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
 
-    fireEvent.change(screen.getByTestId('home-hero-input'), {
-      target: { value: 'Build a pricing-page prototype.' },
-    });
+    await setPromptAndSettle('Build a pricing-page prototype.');
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
@@ -740,9 +755,9 @@ describe('HomeView prompt handoff', () => {
     fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
     fireEvent.click(await screen.findByTestId('home-hero-plugin-preset'));
 
-    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
+    screen.getByTestId('home-hero-input');
     await waitFor(() => {
-      expect(input.value).toBe(
+      expect(homeHeroPromptText()).toBe(
         'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
       );
     });
@@ -754,11 +769,16 @@ describe('HomeView prompt handoff', () => {
       screen.getByTestId('home-hero-footer-option-designSystem').textContent,
     ).toContain('Refly Design System');
     expect(screen.getByTestId('home-hero-footer-option-fidelity').textContent).toContain('High fidelity');
-    expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
+    // Inline `{{slot}}` prompt widgets were removed in the Lexical migration.
     expect(screen.queryByTestId('home-hero-prompt-slot-fidelity')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-artifactKind')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-designSystem')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-template')).toBeNull();
+    // The inline plugin inputs form was removed from the Home composer; the
+    // preset card still seeds the prompt and keeps the chip's structured inputs
+    // in state (submitted below), but no inputs form renders. fidelity /
+    // designSystem stay in the footer options above.
+    expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
 
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
@@ -769,6 +789,12 @@ describe('HomeView prompt handoff', () => {
     const applyCall = fetchMock.mock.calls.find(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
     ));
+    // The preset card seeds the prompt as plain text while preserving the
+    // chip's structured inputs (artifactKind / fidelity / audience /
+    // designSystem / template all round-trip). Seeding the editor does NOT
+    // re-run the host's prompt-extraction (HomeHero suppresses the seed echo
+    // in onChange), so designSystem keeps the chip/footer default rather than
+    // being re-read from the prompt text.
     expect(JSON.parse(String((applyCall?.[1] as RequestInit).body))).toMatchObject({
       inputs: {
         artifactKind: 'web prototype',
@@ -834,9 +860,9 @@ describe('HomeView prompt handoff', () => {
     }
     fireEvent.click(liveArtifactTemplatePreset);
 
-    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
+    screen.getByTestId('home-hero-input');
     await waitFor(() => {
-      expect(input.value).toBe('Create a refreshable Notion dashboard live artifact.');
+      expect(homeHeroPromptText()).toBe('Create a refreshable Notion dashboard live artifact.');
     });
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/apply')
@@ -901,9 +927,7 @@ describe('HomeView prompt handoff', () => {
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-live-artifact/apply')
     ))).toBe(false);
-    fireEvent.change(screen.getByTestId('home-hero-input'), {
-      target: { value: 'Build a refreshable Stripe revenue dashboard.' },
-    });
+    await setPromptAndSettle('Build a refreshable Stripe revenue dashboard.');
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
@@ -973,9 +997,7 @@ describe('HomeView prompt handoff', () => {
     fireEvent.click(await screen.findByRole('option', { name: '15-20 pages' }));
     expect(screen.getByTestId('home-hero-footer-option-slideCount').textContent).toContain('15-20 pages');
 
-    fireEvent.change(screen.getByTestId('home-hero-input'), {
-      target: { value: 'Create an investor deck for a local-first design tool.' },
-    });
+    await setPromptAndSettle('Create an investor deck for a local-first design tool.');
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
@@ -1034,8 +1056,8 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    const input = await screen.findByTestId('home-hero-input');
-    fireEvent.change(input, { target: { value: 'Keep my current brief' } });
+    await screen.findByTestId('home-hero-input');
+    await setPromptAndSettle('Keep my current brief');
     await clearActiveTypeChip();
     fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
 
@@ -1045,7 +1067,7 @@ describe('HomeView prompt handoff', () => {
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
     ))).toBe(false);
-    expect((input as HTMLTextAreaElement).value).toBe('Keep my current brief');
+    expect(homeHeroPromptText()).toBe('Keep my current brief');
     expect(screen.queryByRole('dialog', { name: /replace current prompt/i })).toBeNull();
   });
 
@@ -1096,9 +1118,11 @@ describe('HomeView prompt handoff', () => {
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-simple-deck/apply')
     ))).toBe(false);
-    expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toBe(
-      'Create a pitch deck for decision makers about the user brief with 10-15 pages. Speaker notes: include speaker notes. Use the active project design system.',
-    );
+    await waitFor(() => {
+      expect(homeHeroPromptText()).toBe(
+        'Create a pitch deck for decision makers about the user brief with 10-15 pages. Speaker notes: include speaker notes. Use the active project design system.',
+      );
+    });
 
     await clearActiveTypeChip();
     fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
@@ -1109,9 +1133,11 @@ describe('HomeView prompt handoff', () => {
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
     ))).toBe(false);
-    expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toBe(
-      'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
-    );
+    await waitFor(() => {
+      expect(homeHeroPromptText()).toBe(
+        'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
+      );
+    });
   });
 
   it('appends a plugin-use query handoff without replacing an existing prompt', async () => {
@@ -1136,8 +1162,8 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    const input = await screen.findByTestId('home-hero-input');
-    fireEvent.change(input, { target: { value: 'Keep my current brief' } });
+    await screen.findByTestId('home-hero-input');
+    await setPromptAndSettle('Keep my current brief');
 
     rerender(
       <HomeView
@@ -1156,13 +1182,16 @@ describe('HomeView prompt handoff', () => {
       '',
       'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
     ].join('\n');
+    // The caret-at-end assertion (selectionStart/selectionEnd) is not
+    // meaningful on a contenteditable; the appended-text behavior is what this
+    // test guards, so we keep the text assertion and drop the caret offsets.
     await waitFor(() => {
-      expect((input as HTMLTextAreaElement).value).toBe(expectedPrompt);
-      expect((input as HTMLTextAreaElement).selectionStart).toBe(expectedPrompt.length);
-      expect((input as HTMLTextAreaElement).selectionEnd).toBe(expectedPrompt.length);
+      expect(homeHeroPromptText()).toBe(expectedPrompt);
     });
     expect(screen.queryByRole('dialog', { name: /replace current prompt/i })).toBeNull();
-    expect(screen.getByTestId('home-hero-context-plugin-example-web-prototype')).toBeTruthy();
+    // Plugin context stays staged across the appended-prompt handoff; the
+    // dropped per-plugin badge is replaced by the active context row's count.
+    expect(screen.getByLabelText(/1 context items resolved/i)).toBeTruthy();
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
   });
 
@@ -1206,9 +1235,9 @@ describe('HomeView prompt handoff', () => {
       expect(badge.textContent).toContain('Create plugin');
       expect(badge.textContent).not.toContain('Plugin authoring');
     });
-    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
+    const input = screen.getByTestId('home-hero-input');
     const inputCard = input.closest('.home-hero__input-card') as HTMLElement | null;
-    expect(input.value).toBe(PLUGIN_AUTHORING_PROMPT);
+    expect(homeHeroPromptText()).toBe(PLUGIN_AUTHORING_PROMPT);
     expect(inputCard?.classList.contains('home-hero__input-card--compact-authoring')).toBe(true);
     expect(inputCard?.style.getPropertyValue('--home-hero-prompt-max-height')).toBe('132px');
     fireEvent.click(await screen.findByTestId('home-hero-submit'));
@@ -1259,17 +1288,12 @@ describe('HomeView prompt handoff', () => {
     ));
 
     const rewrittenGoal = 'catalog internal research notes into a reusable knowledge workflow';
-    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
-    fireEvent.change(input, {
-      target: {
-        value: input.value.replace(
-          PLUGIN_AUTHORING_DEFAULT_GOAL,
-          rewrittenGoal,
-        ),
-      },
-    });
+    screen.getByTestId('home-hero-input');
+    await setPromptAndSettle(
+      homeHeroPromptText().replace(PLUGIN_AUTHORING_DEFAULT_GOAL, rewrittenGoal),
+    );
     await waitFor(() => {
-      expect(input.value).toContain(rewrittenGoal);
+      expect(homeHeroPromptText()).toContain(rewrittenGoal);
     });
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
@@ -1314,9 +1338,9 @@ describe('HomeView prompt handoff', () => {
 
     await clearActiveTypeChip();
     await clickHomeShortcut('create-plugin');
-    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
+    const input = screen.getByTestId('home-hero-input');
     const inputCard = input.closest('.home-hero__input-card') as HTMLElement | null;
-    expect(input.value).toBe(PLUGIN_AUTHORING_PROMPT);
+    expect(homeHeroPromptText()).toBe(PLUGIN_AUTHORING_PROMPT);
     expect(inputCard?.classList.contains('home-hero__input-card--compact-authoring')).toBe(true);
     expect(inputCard?.style.getPropertyValue('--home-hero-prompt-max-height')).toBe('132px');
     fireEvent.click(await screen.findByTestId('home-hero-submit'));
@@ -1337,6 +1361,29 @@ describe('HomeView prompt handoff', () => {
     }));
   });
 });
+
+// An empty Lexical editor renders `<p><br></p>` (a placeholder break node), so
+// the DOM serializer in `homeHeroPromptText()` reads that lone `<br>` back as
+// `'\n'`. The editor's real text is empty — `.textContent` is `''` — so this
+// reads the empty case precisely without weakening the genuine-content path.
+function homeHeroPromptValue(): string {
+  const text = homeHeroPromptText();
+  if (text === '\n' && (screen.getByTestId('home-hero-input').textContent ?? '') === '') {
+    return '';
+  }
+  return text;
+}
+
+// Replace the Lexical editor's text the way a user edit would, then let the
+// editor's OnChange → host `onPromptChange` React state update flush a
+// microtask (mirrors lexical-composer's `typeAndSettle`) so flows that submit
+// right after editing read the latest draft.
+async function setPromptAndSettle(value: string): Promise<void> {
+  setHomeHeroPrompt(value);
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
 
 async function clearActiveTypeChip() {
   const chip = screen.queryByTestId('home-hero-active-type-chip');

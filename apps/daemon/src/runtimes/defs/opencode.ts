@@ -7,11 +7,16 @@ export const opencodeAgentDef = {
     bin: 'opencode-cli',
     fallbackBins: ['opencode'],
     versionArgs: ['--version'],
-    // `opencode models` prints `provider/model` per line.
+    // `opencode models` prints `provider/model` per line. Real-world
+    // `opencode models` calls can take >8s (network round-trip to the
+    // provider registry), so the previous 8s budget timed out and fell back
+    // to the hardcoded `fallbackModels`, hiding the user's actual catalog.
+    // 15s matches the listModels budget the rest of the agent defs use
+    // (devin, hermes, kiro, kilo, kimi, trae-cli, vibe, reasonix).
     listModels: {
       args: ['models'],
       parse: parseLineSeparatedModels,
-      timeoutMs: 8000,
+      timeoutMs: 15_000,
     },
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
@@ -22,6 +27,12 @@ export const opencodeAgentDef = {
       { id: 'openai/gpt-5', label: 'openai/gpt-5' },
       { id: 'google/gemini-2.5-pro', label: 'google/gemini-2.5-pro' },
     ],
+    // OpenCode's CLI help currently exposes model selection and session
+    // controls, but not an explicit per-run reasoning / effort flag. Keep
+    // `reasoningOptions` undefined and do not synthesize argv for
+    // `options.reasoning`; that would advertise a control the adapter cannot
+    // actually pass through. See issue #2828.
+    //
     // Prompt delivered via stdin (`opencode run` with no message argv) to
     // avoid Windows `spawn ENAMETOOLONG` while preserving OpenCode's
     // structured stream. A literal `-` is parsed as a positional message by

@@ -1,11 +1,13 @@
 import type http from 'node:http';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
+import { memoryDir, writeMemoryConfig } from '../src/memory.js';
+import { resolveLegacyMediaRouteGrant } from '../src/media-routes.js';
 
 type FakeMediaEndpoint = 'tool' | 'legacy';
 
@@ -19,6 +21,7 @@ describe('run-scoped media policy routes', () => {
   let binDir: string;
   let oldPath: string | undefined;
   let oldCapture: string | undefined;
+  let oldMemoryConfigRaw: string | null = null;
   let server: http.Server | null = null;
   let shutdown: (() => Promise<void> | void) | undefined;
 
@@ -28,6 +31,12 @@ describe('run-scoped media policy routes', () => {
     oldPath = process.env.PATH;
     oldCapture = process.env.OD_CAPTURE_MEDIA_RESPONSE;
     process.env.PATH = `${binDir}${path.delimiter}${oldPath ?? ''}`;
+    const memoryConfig = memoryConfigPath();
+    oldMemoryConfigRaw = await readFile(memoryConfig, 'utf8').catch(() => null);
+    await writeMemoryConfig(process.env.OD_DATA_DIR!, {
+      chatExtractionEnabled: false,
+      extraction: null,
+    });
   });
 
   afterEach(async () => {
@@ -41,6 +50,14 @@ describe('run-scoped media policy routes', () => {
     else process.env.PATH = oldPath;
     if (oldCapture === undefined) delete process.env.OD_CAPTURE_MEDIA_RESPONSE;
     else process.env.OD_CAPTURE_MEDIA_RESPONSE = oldCapture;
+    const memoryConfig = memoryConfigPath();
+    if (oldMemoryConfigRaw === null) {
+      await rm(memoryConfig, { force: true });
+    } else {
+      await mkdir(path.dirname(memoryConfig), { recursive: true });
+      await writeFile(memoryConfig, oldMemoryConfigRaw);
+    }
+    oldMemoryConfigRaw = null;
     await rm(tempDir, { recursive: true, force: true });
     await rm(binDir, { recursive: true, force: true });
   });
@@ -429,6 +446,76 @@ describe('run-scoped media policy routes', () => {
     expect(body.error).toMatchObject({ code: 'TOOL_TOKEN_INVALID' });
   });
 
+  it('requires a run token for the legacy media route only in sandbox mode', () => {
+    const requestProjectOverride = (projectId: string, tokenProjectId: string) =>
+      projectId !== tokenProjectId;
+
+    expect(
+      resolveLegacyMediaRouteGrant({
+        grant: null,
+        projectId: 'project-1',
+        requestProjectOverride,
+        sandboxMode: false,
+      }),
+    ).toEqual({ ok: true, grant: null });
+
+    expect(
+      resolveLegacyMediaRouteGrant({
+        grant: null,
+        projectId: 'project-1',
+        requestProjectOverride,
+        sandboxMode: true,
+      }),
+    ).toMatchObject({
+      code: 'TOOL_TOKEN_MISSING',
+      ok: false,
+      status: 401,
+    });
+  });
+
+  it('rejects project overrides on token-bearing legacy media requests in sandbox mode', () => {
+    const decision = resolveLegacyMediaRouteGrant({
+      grant: {
+        allowedEndpoints: ['/api/tools/media/generate'],
+        allowedOperations: ['media:generate'],
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        issuedAt: new Date().toISOString(),
+        projectId: 'token-project',
+        runId: 'run-1',
+        token: 'token',
+      },
+      projectId: 'other-project',
+      requestProjectOverride: (projectId, tokenProjectId) => projectId !== tokenProjectId,
+      sandboxMode: true,
+    });
+
+    expect(decision).toMatchObject({
+      code: 'FORBIDDEN',
+      details: { suppliedProjectId: 'other-project' },
+      ok: false,
+      status: 403,
+    });
+  });
+
+  it('preserves token-bearing legacy project overrides outside sandbox mode', () => {
+    const decision = resolveLegacyMediaRouteGrant({
+      grant: {
+        allowedEndpoints: ['/api/tools/media/generate'],
+        allowedOperations: ['media:generate'],
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        issuedAt: new Date().toISOString(),
+        projectId: 'token-project',
+        runId: 'run-1',
+        token: 'token',
+      },
+      projectId: 'other-project',
+      requestProjectOverride: (projectId, tokenProjectId) => projectId !== tokenProjectId,
+      sandboxMode: false,
+    });
+
+    expect(decision).toMatchObject({ ok: true });
+  });
+
   async function startProjectServer(name: string): Promise<{
     url: string;
     projectId: string;
@@ -466,6 +553,10 @@ describe('run-scoped media policy routes', () => {
       projectId,
       conversationId: projectBody.conversationId,
     };
+  }
+
+  function memoryConfigPath(): string {
+    return path.join(memoryDir(process.env.OD_DATA_DIR!), '.config.json');
   }
 
   async function writeFakeAgent(

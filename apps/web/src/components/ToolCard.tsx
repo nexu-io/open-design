@@ -12,7 +12,16 @@ import { useState } from 'react';
 import { useT } from '../i18n';
 import { isTodoWriteToolName, parseTodoWriteInput } from '../runtime/todos';
 import { getToolRenderer, toRenderProps } from '../runtime/tool-renderers';
+import {
+  parseAskUserQuestionInput,
+  parsePartialAskUserQuestion,
+} from '../runtime/ask-user-question';
 import type { AgentEvent } from '../types';
+import { Icon } from './Icon';
+
+export function isAskUserQuestionName(name: string): boolean {
+  return name === 'AskUserQuestion' || name === 'ask_user_question';
+}
 
 interface Props {
   use: Extract<AgentEvent, { kind: 'tool_use' }>;
@@ -76,7 +85,7 @@ export function ToolCard({
     }
   }
   const ctx: FileToolCtx = { projectFileNames, onRequestOpenFile };
-  if (name === 'AskUserQuestion' || name === 'ask_user_question')
+  if (isAskUserQuestionName(name))
     return (
       <AskUserQuestionCard
         toolUseId={use.id}
@@ -99,8 +108,8 @@ export function ToolCard({
   if (name === 'Bash') return <BashCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   if (name === 'Glob' || name === 'list_files') return <GlobCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   if (name === 'Grep') return <GrepCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
-  if (name === 'WebFetch' || name === 'web_fetch') return <WebFetchCard input={use.input} />;
-  if (name === 'WebSearch' || name === 'web_search') return <WebSearchCard input={use.input} />;
+  if (name === 'WebFetch' || name === 'web_fetch') return <WebFetchCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
+  if (name === 'WebSearch' || name === 'web_search') return <WebSearchCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   return <GenericCard name={name} input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
 }
 
@@ -141,42 +150,73 @@ function OpenInTabButton({ filePath, ctx }: { filePath: string; ctx: FileToolCtx
 //   { questions: [{ question, header, options: [{ label, description }],
 //     multiSelect }, ...] }
 // We accept either array of objects or array of plain strings for `options`
-// to stay tolerant of small protocol drift.
-type AuqOption = { label: string; description?: string };
-type AuqQuestion = {
-  question: string;
-  header?: string;
-  options: AuqOption[];
-  multiSelect: boolean;
-};
+// to stay tolerant of small protocol drift. Parsing lives in
+// `../runtime/ask-user-question` (strict for finished input, lenient +
+// truncation-tolerant for the streaming pass).
 
-function parseAskUserQuestionInput(input: unknown): AuqQuestion[] {
-  const obj = (input ?? {}) as { questions?: unknown };
-  if (!Array.isArray(obj.questions)) return [];
-  const result: AuqQuestion[] = [];
-  for (const raw of obj.questions) {
-    if (!raw || typeof raw !== 'object') continue;
-    const q = raw as Record<string, unknown>;
-    const question = typeof q.question === 'string' ? q.question : '';
-    if (!question) continue;
-    const header = typeof q.header === 'string' ? q.header : undefined;
-    const multiSelect = q.multiSelect === true;
-    const rawOptions = Array.isArray(q.options) ? q.options : [];
-    const options: AuqOption[] = [];
-    for (const opt of rawOptions) {
-      if (typeof opt === 'string') options.push({ label: opt });
-      else if (opt && typeof opt === 'object') {
-        const o = opt as Record<string, unknown>;
-        const label = typeof o.label === 'string' ? o.label : '';
-        if (!label) continue;
-        const description = typeof o.description === 'string' ? o.description : undefined;
-        options.push(description ? { label, description } : { label });
-      }
-    }
-    if (options.length === 0) continue;
-    result.push({ question, header, options, multiSelect });
+/**
+ * Read-only AskUserQuestion card rendered from the still-streaming raw JSON
+ * input (the daemon's accumulated `tool_input_delta` for this tool id). It
+ * grows token-by-token via the tolerant parser and plays the reveal; once the
+ * full `tool_use` lands, the id leaves `liveToolInput` and the interactive
+ * card (the persisted block) takes over.
+ */
+export function StreamingAskUserQuestionCard({ raw }: { raw: string }) {
+  const t = useT();
+  const questions = parsePartialAskUserQuestion(raw);
+  if (questions.length === 0) {
+    // Frame-only: the questions array hasn't produced a prompt yet.
+    return (
+      <div className="op-card op-ask-question op-ask-question-locked op-ask-question-streaming" data-testid="ask-user-question" aria-busy>
+        <div className="op-card-head">
+          <span className="op-icon" aria-hidden>?</span>
+          <span className="op-title">{t('tool.askQuestion')}</span>
+          <span className="op-ask-question-typing" aria-hidden><i /><i /><i /></span>
+        </div>
+      </div>
+    );
   }
-  return result;
+  return (
+    <div
+      className="op-card op-ask-question op-ask-question-locked op-ask-question-streaming"
+      data-testid="ask-user-question"
+      aria-busy
+    >
+      <div className="op-card-head">
+        <span className="op-icon" aria-hidden>?</span>
+        <span className="op-title">{t('tool.askQuestion')}</span>
+        <span className="op-ask-question-typing" aria-hidden><i /><i /><i /></span>
+      </div>
+      <div className="op-ask-question-body">
+        {/* Positional keys: the prompt/label strings are themselves growing
+            token-by-token, so keying on them would remount each field/option
+            every delta and replay the reveal. Questions and options only
+            append during streaming, so the index is stable and each node
+            mounts once and updates its text in place. */}
+        {questions.map((q, qi) => (
+          <div key={qi} className="op-ask-question-field">
+            {q.header ? <div className="op-ask-question-header">{q.header}</div> : null}
+            <div className="op-ask-question-prompt">{q.question}</div>
+            <div className="op-ask-question-options">
+              {q.options.map((opt, oi) => (
+                <button
+                  key={`${qi}:${oi}`}
+                  type="button"
+                  className="op-ask-question-option"
+                  disabled
+                >
+                  <span className="op-ask-question-option-label">{opt.label}</span>
+                  {opt.description ? (
+                    <span className="op-ask-question-option-desc">{opt.description}</span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function AskUserQuestionCard({
@@ -483,21 +523,31 @@ function FileWriteCard({
   ctx: FileToolCtx;
 }) {
   const t = useT();
+  const [open, setOpen] = useState(false);
   const obj = (input ?? {}) as { file_path?: string; filePath?: string; path?: string; content?: string };
   const file = obj.file_path ?? obj.filePath ?? obj.path ?? '(unnamed)';
+  const baseName = file.split('/').pop() ?? file;
   const lines = typeof obj.content === 'string' ? obj.content.split('\n').length : null;
+  const isRunning = runStreaming && !result;
   return (
     <div className="op-card op-file">
-      <div className="op-card-head">
-        <span className="op-icon op-icon-write" aria-hidden>+</span>
-        <span className="op-title">{t('tool.write')}</span>
-        <code className="op-path">{file}</code>
-        {lines !== null ? (
-          <span className="op-meta">{t('tool.lines', { n: lines })}</span>
-        ) : null}
+      <button type="button" className="op-card-head" onClick={() => setOpen((o) => !o)}>
         <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
-        <OpenInTabButton filePath={file} ctx={ctx} />
+        <span className={`op-title${isRunning ? ' shimmer-text' : ''}`}>{t('tool.write')}</span>
+        <span className="op-meta">{baseName}{lines !== null ? ` · ${t('tool.lines', { n: lines })}` : ''}</span>
+        <span className="op-expand-chev" aria-hidden>
+          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
+        </span>
+      </button>
+      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
+        <div className="accordion-collapsible-inner">
+          <div className="op-card-detail">
+            <code className="op-path">{file}</code>
+            <OpenInTabButton filePath={file} ctx={ctx} />
+          </div>
+        </div>
       </div>
+      <FileErrorDetail result={result} />
     </div>
   );
 }
@@ -516,6 +566,7 @@ function FileEditCard({
   ctx: FileToolCtx;
 }) {
   const t = useT();
+  const [open, setOpen] = useState(false);
   const obj = (input ?? {}) as {
     file_path?: string;
     filePath?: string;
@@ -525,19 +576,28 @@ function FileEditCard({
     edits?: { old_string?: string; new_string?: string }[];
   };
   const file = obj.file_path ?? obj.filePath ?? obj.path ?? '(unnamed)';
+  const baseName = file.split('/').pop() ?? file;
   const editCount = Array.isArray(obj.edits) ? obj.edits.length : 1;
+  const isRunning = runStreaming && !result;
   return (
     <div className="op-card op-file">
-      <div className="op-card-head">
-        <span className="op-icon op-icon-edit" aria-hidden>✎</span>
-        <span className="op-title">{t('tool.edit')}</span>
-        <code className="op-path">{file}</code>
-        <span className="op-meta">
-          {editCount} {editCount === 1 ? t('tool.changeSingular') : t('tool.changePlural')}
-        </span>
+      <button type="button" className="op-card-head" onClick={() => setOpen((o) => !o)}>
         <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
-        <OpenInTabButton filePath={file} ctx={ctx} />
+        <span className={`op-title${isRunning ? ' shimmer-text' : ''}`}>{t('tool.edit')}</span>
+        <span className="op-meta">{baseName} · {editCount} {editCount === 1 ? t('tool.changeSingular') : t('tool.changePlural')}</span>
+        <span className="op-expand-chev" aria-hidden>
+          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
+        </span>
+      </button>
+      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
+        <div className="accordion-collapsible-inner">
+          <div className="op-card-detail">
+            <code className="op-path">{file}</code>
+            <OpenInTabButton filePath={file} ctx={ctx} />
+          </div>
+        </div>
       </div>
+      <FileErrorDetail result={result} />
     </div>
   );
 }
@@ -556,17 +616,30 @@ function FileReadCard({
   ctx: FileToolCtx;
 }) {
   const t = useT();
+  const [open, setOpen] = useState(false);
   const obj = (input ?? {}) as { file_path?: string; filePath?: string; path?: string };
   const file = obj.file_path ?? obj.filePath ?? obj.path ?? '(unnamed)';
+  const baseName = file.split('/').pop() ?? file;
+  const isRunning = runStreaming && !result;
   return (
     <div className="op-card op-file">
-      <div className="op-card-head">
-        <span className="op-icon op-icon-read" aria-hidden>↗</span>
-        <span className="op-title">{t('tool.read')}</span>
-        <code className="op-path">{file}</code>
+      <button type="button" className="op-card-head" onClick={() => setOpen((o) => !o)}>
         <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
-        <OpenInTabButton filePath={file} ctx={ctx} />
+        <span className={`op-title${isRunning ? ' shimmer-text' : ''}`}>{t('tool.read')}</span>
+        <span className="op-meta">{baseName}</span>
+        <span className="op-expand-chev" aria-hidden>
+          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
+        </span>
+      </button>
+      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
+        <div className="accordion-collapsible-inner">
+          <div className="op-card-detail">
+            <code className="op-path">{file}</code>
+            <OpenInTabButton filePath={file} ctx={ctx} />
+          </div>
+        </div>
       </div>
+      <FileErrorDetail result={result} />
     </div>
   );
 }
@@ -577,25 +650,25 @@ function BashCard({ input, result, runStreaming, runSucceeded }: { input: unknow
   const command = obj.command ?? '';
   const desc = obj.description;
   const [open, setOpen] = useState(false);
+  const isRunning = runStreaming && !result;
   return (
     <div className="op-card op-bash">
-      <div className="op-card-head">
-        <span className="op-icon" aria-hidden>$</span>
-        <span className="op-title">{t('tool.bash')}</span>
-        {desc ? <span className="op-meta op-desc">{desc}</span> : null}
+      <button type="button" className="op-card-head" onClick={() => setOpen((o) => !o)}>
         <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
-        {result && result.content ? (
-          <button className="op-toggle" onClick={() => setOpen((o) => !o)}>
-            {open ? t('tool.hide') : t('tool.output')}
-          </button>
-        ) : null}
-      </div>
-      <pre className="op-command">{truncate(command, 400)}</pre>
-      <div className={`accordion-collapsible${open && result ? ' open' : ''}`}>
+        <span className={`op-title${isRunning ? ' shimmer-text' : ''}`}>{t('tool.bash')}</span>
+        {desc ? <span className="op-meta op-desc">{desc}</span> : null}
+        <span className="op-expand-chev" aria-hidden>
+          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
+        </span>
+      </button>
+      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
         <div className="accordion-collapsible-inner">
-          {result ? (
-            <pre className="op-output">{truncate(result.content, 4000)}</pre>
-          ) : null}
+          <div className="op-card-detail">
+            <pre className="op-command">{truncate(command, 400)}</pre>
+            {result?.content ? (
+              <pre className="op-output">{truncate(result.content, 4000)}</pre>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
@@ -608,13 +681,9 @@ function GlobCard({ input, result, runStreaming, runSucceeded }: { input: unknow
   return (
     <div className="op-card op-search">
       <div className="op-card-head">
-        <span className="op-icon" aria-hidden>⌕</span>
-        <span className="op-title">{t('tool.glob')}</span>
-        <code className="op-path">{obj.pattern ?? '*'}</code>
-        {obj.path ? (
-          <span className="op-meta">{t('tool.in', { path: obj.path })}</span>
-        ) : null}
         <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
+        <span className="op-title">{t('tool.glob')}</span>
+        <span className="op-meta">{obj.pattern ?? '*'}{obj.path ? ` in ${obj.path}` : ''}</span>
       </div>
     </div>
   );
@@ -626,41 +695,37 @@ function GrepCard({ input, result, runStreaming, runSucceeded }: { input: unknow
   return (
     <div className="op-card op-search">
       <div className="op-card-head">
-        <span className="op-icon" aria-hidden>⌕</span>
-        <span className="op-title">{t('tool.grep')}</span>
-        <code className="op-path">{obj.pattern ?? ''}</code>
-        {obj.path ? (
-          <span className="op-meta">{t('tool.in', { path: obj.path })}</span>
-        ) : null}
         <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
+        <span className="op-title">{t('tool.grep')}</span>
+        <span className="op-meta">{obj.pattern ?? ''}{obj.path ? ` in ${obj.path}` : ''}</span>
       </div>
     </div>
   );
 }
 
-function WebFetchCard({ input }: { input: unknown }) {
+function WebFetchCard({ input, result, runStreaming, runSucceeded }: { input: unknown; result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {
   const t = useT();
   const obj = (input ?? {}) as { url?: string };
   return (
     <div className="op-card op-web">
       <div className="op-card-head">
-        <span className="op-icon" aria-hidden>↬</span>
+        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
         <span className="op-title">{t('tool.fetch')}</span>
-        <code className="op-path">{obj.url ?? ''}</code>
+        <span className="op-meta">{obj.url ?? ''}</span>
       </div>
     </div>
   );
 }
 
-function WebSearchCard({ input }: { input: unknown }) {
+function WebSearchCard({ input, result, runStreaming, runSucceeded }: { input: unknown; result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {
   const t = useT();
   const obj = (input ?? {}) as { query?: string };
   return (
     <div className="op-card op-web">
       <div className="op-card-head">
-        <span className="op-icon" aria-hidden>⌕</span>
+        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
         <span className="op-title">{t('tool.search')}</span>
-        <code className="op-path">{obj.query ?? ''}</code>
+        <span className="op-meta">{obj.query ?? ''}</span>
       </div>
     </div>
   );
@@ -683,10 +748,9 @@ function GenericCard({
   return (
     <div className="op-card op-generic">
       <div className="op-card-head">
-        <span className="op-icon" aria-hidden>·</span>
+        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
         <span className="op-title">{name}</span>
         {summary ? <span className="op-meta">{truncate(summary, 200)}</span> : null}
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
       </div>
     </div>
   );
@@ -694,10 +758,15 @@ function GenericCard({
 
 function ResultBadge({ result, runStreaming, runSucceeded }: { result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {
   const t = useT();
-  if (!result && runStreaming) return <span className="op-status op-status-running">{t('tool.running')}</span>;
-  if (!result && !runSucceeded) return <span className="op-status op-status-error">{t('tool.error')}</span>;
-  if (result?.isError) return <span className="op-status op-status-error">{t('tool.error')}</span>;
-  return <span className="op-status op-status-ok">{t('tool.done')}</span>;
+  if (!result && runStreaming) return <span className="op-status op-status-running" title={t('tool.running')}><Icon name="spinner" size={14} /></span>;
+  if (!result && !runSucceeded) return <span className="op-status op-status-error" title={t('tool.error')}><Icon name="close" size={14} /></span>;
+  if (result?.isError) return <span className="op-status op-status-error" title={result.content || t('tool.error')}><Icon name="close" size={14} /></span>;
+  return <span className="op-status op-status-ok" title={t('tool.done')}><Icon name="check" size={14} /></span>;
+}
+
+function FileErrorDetail({ result }: { result?: Props['result'] }) {
+  if (!result?.isError || !result.content.trim()) return null;
+  return <pre className="op-output">{truncate(result.content, 1200)}</pre>;
 }
 
 function describeInput(input: unknown): string {

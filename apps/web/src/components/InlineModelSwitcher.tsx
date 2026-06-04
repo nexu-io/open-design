@@ -8,16 +8,28 @@
 // upward through the same callbacks `AvatarMenu` already uses, so the
 // switcher inherits autosave + daemon sync without re-implementing it.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 import { useT } from '../i18n';
+import { useAnalytics } from '../analytics/provider';
+import { recordAmrEntry, type AmrEntryAttribution } from '../analytics/amr-attribution';
 import { KNOWN_PROVIDERS } from '../state/config';
+import { fetchProviderModels } from '../providers/provider-models';
+import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
 import {
   cancelVelaLogin,
   fetchVelaLoginStatus,
   startVelaLogin,
   type VelaLoginStatus,
 } from '../providers/daemon';
-import type { AgentInfo, ApiProtocol, AppConfig, ExecMode, ProviderModelOption } from '../types';
+import type { AgentInfo, ApiProtocol, AppConfig, ExecMode } from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
 import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
@@ -31,10 +43,17 @@ import {
 } from './amrLoginPolling';
 import { normalizeAgentModelChoice } from './agentModelSelection';
 import { SearchableModelSelect } from './modelOptions';
+import {
+  mergeProviderModelOptions,
+  providerModelsCacheKey,
+  type ProviderModelsCache,
+} from './providerModelsCache';
 
 interface Props {
   config: AppConfig;
   agents: AgentInfo[];
+  providerModelsCache?: ProviderModelsCache;
+  compact?: boolean;
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
   onAgentChange: (id: string) => void;
@@ -44,7 +63,10 @@ interface Props {
   ) => void;
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
-  providerModelsCache?: Record<string, ProviderModelOption[]>;
+  /** Lets the home picker warm the shared cache itself. Without it the picker
+   *  only READS the cache (warmed by Settings/onboarding), so on a fresh load
+   *  the BYOK list falls back to the small static seed list. */
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
   onOpenSettings: (
     section?:
       | 'execution'
@@ -63,6 +85,7 @@ const API_PROTOCOL_TABS: Array<{ id: ApiProtocol; title: string }> = [
   { id: 'openai', title: 'OpenAI' },
   { id: 'azure', title: 'Azure' },
   { id: 'google', title: 'Google' },
+  { id: 'aihubmix', title: 'AIHubMix' },
 ];
 
 const AMR_REMINDER_SEEN_KEY = 'open-design:inline-amr-cli-reminder-seen:v2';
@@ -103,21 +126,25 @@ function displayAgentChipName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
 export function InlineModelSwitcher({
   config,
   agents,
+  providerModelsCache,
+  compact = false,
   daemonLive,
   onModeChange,
   onAgentChange,
   onAgentModelChange,
   onApiProtocolChange,
   onApiModelChange,
-  providerModelsCache,
+  onProviderModelsCacheChange,
   onOpenSettings,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const providerModelsFetchingRef = useRef<Set<string>>(new Set());
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
-  const [amrLoginError, setAmrLoginError] = useState(false);
+  const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
   const [amrReminderSeen, setAmrReminderSeen] = useState(readAmrReminderSeen);
   const [showAmrReminderInPopover, setShowAmrReminderInPopover] =
     useState(false);
@@ -172,34 +199,36 @@ export function InlineModelSwitcher({
         }
         amrLoginStartedAtRef.current = null;
         setAmrLoginPending(false);
-        setAmrLoginError(true);
+        setAmrLoginError(t('settings.amrLoginErrorCompact'));
       }
     };
     amrPollRef.current = window.setInterval(() => {
       void tick();
     }, AMR_LOGIN_POLL_INTERVAL_MS);
-  }, [refreshAmrStatus, stopAmrPolling]);
+  }, [refreshAmrStatus, stopAmrPolling, t]);
 
-  const handleAmrSignIn = useCallback(async () => {
+  const handleAmrSignIn = useCallback(async (
+    attribution?: AmrEntryAttribution | null,
+  ) => {
     const startedAt = Date.now();
     amrLoginStartedAtRef.current = startedAt;
-    setAmrLoginError(false);
+    setAmrLoginError(null);
     setAmrLoginPending(true);
-    const result = await startVelaLogin();
+    const result = await startVelaLogin(attribution);
     if (!result.ok && !result.alreadyRunning) {
       amrLoginStartedAtRef.current = null;
       setAmrLoginPending(false);
-      setAmrLoginError(true);
+      setAmrLoginError(result.error || t('settings.amrLoginErrorCompact'));
       return;
     }
     notifyAmrLoginStatusChanged('login-started');
     startAmrPolling(startedAt);
-  }, [startAmrPolling]);
+  }, [startAmrPolling, t]);
 
   const handleAmrCancelLogin = useCallback(async () => {
     stopAmrPolling();
     amrLoginStartedAtRef.current = null;
-    setAmrLoginError(false);
+    setAmrLoginError(null);
     setAmrLoginPending(false);
     await cancelVelaLogin();
     notifyAmrLoginStatusChanged('login-canceled');
@@ -214,12 +243,17 @@ export function InlineModelSwitcher({
         await handleAmrCancelLogin();
         return;
       }
+      const attribution = recordAmrEntry(
+        analytics.track,
+        'inline_model_switcher_amr_row',
+      );
       const latest = await refreshAmrStatus();
       if (latest?.loggedIn) return;
-      await handleAmrSignIn();
+      await handleAmrSignIn(attribution);
     },
     [
       amrLoginPending,
+      analytics.track,
       handleAmrCancelLogin,
       handleAmrSignIn,
       onAgentChange,
@@ -231,7 +265,20 @@ export function InlineModelSwitcher({
     if (!open) return;
     const onClick = (e: MouseEvent) => {
       if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (wrapRef.current.contains(target)) return;
+      // The model picker (`SearchableModelSelect`) renders its option list in a
+      // portal on `document.body`, so a click on an option lands OUTSIDE
+      // `wrapRef`. Without this guard the mousedown would close the whole
+      // switcher panel before the option's click fires, unmounting the picker
+      // and dropping the selection — the model would never change.
+      if (
+        target instanceof Element &&
+        target.closest('.model-select-searchable__popover')
+      ) {
+        return;
+      }
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
@@ -257,7 +304,7 @@ export function InlineModelSwitcher({
       if (reason === 'login-started') {
         const startedAt = Date.now();
         amrLoginStartedAtRef.current = startedAt;
-        setAmrLoginError(false);
+        setAmrLoginError(null);
         setAmrLoginPending(true);
         startAmrPolling(startedAt);
       } else if (reason === 'login-canceled') {
@@ -337,7 +384,7 @@ export function InlineModelSwitcher({
       : t('settings.amrSignIn');
   const amrPendingHoverLabel = t('settings.amrCancelSignIn');
   const amrInlineStatus = amrLoginError
-    ? t('settings.amrLoginErrorCompact')
+    ? amrLoginError
     : amrLoggedIn
       ? t('settings.amrSignedIn')
       : amrLoginPending
@@ -350,12 +397,6 @@ export function InlineModelSwitcher({
         : null;
 
   const apiProtocol = config.apiProtocol ?? 'anthropic';
-  const providerModelsInputKey = [
-    apiProtocol,
-    config.baseUrl.trim().replace(/\/+$/, ''),
-    config.apiKey.trim(),
-    config.apiVersion?.trim() ?? '',
-  ].join('\n');
   const providerForProtocol = useMemo(
     () =>
       KNOWN_PROVIDERS.find(
@@ -367,16 +408,91 @@ export function InlineModelSwitcher({
       ) ?? KNOWN_PROVIDERS.find((p) => p.protocol === apiProtocol),
     [apiProtocol, config.apiProviderBaseUrl],
   );
-  const fetchedProviderModels = providerModelsCache?.[providerModelsInputKey] ?? [];
-  const apiModelOptions = useMemo(() => {
-    const discovered = fetchedProviderModels.map((model) => model.id);
-    const staticOptions = providerForProtocol?.models ?? [];
-    const merged = new Set<string>([...discovered, ...staticOptions]);
-    if (config.model.trim()) merged.add(config.model.trim());
-    return Array.from(merged);
-  }, [config.model, fetchedProviderModels, providerForProtocol?.models]);
+  const providerModelsKey = useMemo(
+    () =>
+      providerModelsCacheKey(
+        apiProtocol,
+        config.baseUrl,
+        config.apiKey,
+        config.apiVersion ?? '',
+      ),
+    [apiProtocol, config.apiKey, config.apiVersion, config.baseUrl],
+  );
+  const fetchedApiModelOptions = providerModelsCache?.[providerModelsKey] ?? [];
+
+  // Warm the shared provider-models cache from the home picker itself. The
+  // picker otherwise depends on Settings/onboarding having fetched first, so on
+  // a fresh load the BYOK list shows only the small static seed list instead of
+  // the live catalogue. We fetch when the panel is open in BYOK mode and the
+  // preconditions for the active protocol are met (AIHubMix's catalogue is
+  // public, so it needs no key; every other protocol needs one). Results are
+  // keyed identically to Settings (`providerModelsKey`), so a single fetch
+  // serves both surfaces and replaces any stale slot.
+  useEffect(() => {
+    if (!open || config.mode !== 'api' || !onProviderModelsCacheChange) return;
+    if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
+    if (apiProtocol !== 'aihubmix' && !config.apiKey.trim()) return;
+    const baseUrl = config.baseUrl.trim();
+    if (!/^https?:\/\//i.test(baseUrl)) return;
+    const key = providerModelsKey;
+    if (fetchedApiModelOptions.length) return;
+    if (providerModelsFetchingRef.current.has(key)) return;
+    providerModelsFetchingRef.current.add(key);
+    let active = true;
+    void fetchProviderModels({
+      protocol: apiProtocol,
+      baseUrl,
+      apiKey: config.apiKey,
+    })
+      .then((result) => {
+        if (active && result.ok && result.models?.length) {
+          onProviderModelsCacheChange((current) => ({
+            ...current,
+            [key]: result.models ?? [],
+          }));
+        }
+      })
+      .catch(() => {
+        // Non-fatal: the picker falls back to the static seed list.
+      })
+      .finally(() => {
+        providerModelsFetchingRef.current.delete(key);
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    open,
+    config.mode,
+    config.apiKey,
+    config.baseUrl,
+    apiProtocol,
+    providerModelsKey,
+    fetchedApiModelOptions.length,
+    onProviderModelsCacheChange,
+  ]);
+
+  const suggestedApiModelIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          providerForProtocol?.models?.length
+            ? providerForProtocol.models
+            : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
+        ),
+      ),
+    [apiProtocol, providerForProtocol],
+  );
+  const apiModelOptions = useMemo(
+    () => mergeProviderModelOptions(fetchedApiModelOptions, suggestedApiModelIds),
+    [fetchedApiModelOptions, suggestedApiModelIds],
+  );
+  const apiModelIds = useMemo(
+    () => apiModelOptions.map((model) => model.id),
+    [apiModelOptions],
+  );
   const apiModelChoices = useMemo(
-    () => apiModelOptions.map((id) => ({ id, label: id })),
+    () => apiModelOptions.map((model) => ({ id: model.id, label: model.label })),
     [apiModelOptions],
   );
 
@@ -419,7 +535,7 @@ export function InlineModelSwitcher({
 
   return (
     <div
-      className="inline-switcher"
+      className={`inline-switcher${compact ? ' inline-switcher--compact' : ''}`}
       ref={wrapRef}
       data-testid="inline-model-switcher"
     >
@@ -433,7 +549,9 @@ export function InlineModelSwitcher({
         onClick={handleChipClick}
         aria-haspopup="menu"
         aria-expanded={open}
-        title={t('inlineSwitcher.chipTitle')}
+        aria-label={`${chipMode} · ${chipPrimary} · ${chipModel}`}
+        title={`${chipMode} · ${chipPrimary} · ${chipModel}`}
+        data-tooltip={`${chipMode} · ${chipPrimary} · ${chipModel}`}
       >
         {showAmrReminder ? (
           <span
@@ -712,7 +830,7 @@ export function InlineModelSwitcher({
                     value={config.model}
                     onChange={(nextValue) => onApiModelChange?.(nextValue)}
                     additionalOptions={
-                      config.model && !apiModelOptions.includes(config.model)
+                      config.model && !apiModelIds.includes(config.model)
                         ? [
                             {
                               value: config.model,

@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatRunStatus } from './chat.js';
+import type { ChatMessage, ChatRunStatus, ChatSessionMode } from './chat.js';
 import type {
   ProjectContextConnectorRef,
   ProjectContextMcpServerRef,
@@ -115,6 +115,9 @@ export interface ProjectMetadata {
   // directly inside the user's folder. Stored as the realpath() result so
   // symlinks can't redirect writes after import time.
   baseDir?: string;
+  // Project library location that owns baseDir when the project was created
+  // under a configured project location root.
+  projectLocationId?: string;
   // PR #974: marker stamped by the daemon's HMAC-gated import handler
   // when a folder import passed the desktop-main-process trust gate.
   // Only set on folder-imported projects (`baseDir` set) and only when
@@ -150,6 +153,14 @@ export interface ProjectMetadata {
   // Batch/API-created projects can opt out of the initial discovery form so
   // the first agent turn builds immediately from the submitted brief.
   skipDiscoveryBrief?: boolean;
+  // Set when the user submits an unmodified curated example prompt from the
+  // gallery. Skips discovery AND requests full-quality direct generation,
+  // treating the curated title/brief as the complete creative brief. Honored
+  // by both the daemon and contracts (API/BYOK) system-prompt composers so the
+  // feature is not mode-dependent.
+  examplePrompt?: boolean;
+  examplePromptTitle?: string;
+  examplePromptBrief?: Record<string, string>;
   // Plugins selected through @ mentions on Home. These are additive
   // context references; the explicit "Use plugin" snapshot, when present,
   // remains the primary executable plugin for the run.
@@ -189,12 +200,32 @@ export interface ProjectTemplate {
   createdAt: number;
 }
 
+export interface ProjectBrowserWorkspaceTab {
+  id: string;
+  insertAfter?: string | null;
+  label: string;
+  title?: string;
+  url?: string;
+  iconUrl?: string;
+}
+
+export interface ProjectTabsState {
+  tabs: string[];
+  active: string | null;
+  browserTabs?: ProjectBrowserWorkspaceTab[];
+  hasSavedState?: boolean;
+  updatedAt?: number;
+}
+
 export interface Conversation {
   id: string;
   projectId: string;
   title: string | null;
+  sessionMode?: ChatSessionMode;
+  messageCount?: number;
   createdAt: number;
   updatedAt: number;
+  totalDurationMs?: number;
   latestRun?: {
     status: ChatRunStatus;
     startedAt?: number;
@@ -205,6 +236,8 @@ export interface Conversation {
 
 export interface CreateProjectRequest {
   name: string;
+  /** Optional project library location id. Omit or use `default` for .od/projects. */
+  projectLocationId?: string;
   skillId?: string | null;
   designSystemId?: string | null;
   pendingPrompt?: string;
@@ -212,6 +245,8 @@ export interface CreateProjectRequest {
   pluginId?: string;
   appliedPluginSnapshotId?: string;
   pluginInputs?: Record<string, unknown>;
+  /** Session mode for the default conversation seeded with the project. */
+  conversationMode?: ChatSessionMode;
   customInstructions?: string;
   /** Persisted to metadata.skipDiscoveryBrief for automated project runs. */
   skipDiscoveryBrief?: boolean;
@@ -248,6 +283,39 @@ export interface ProjectDetailResponse extends ProjectResponse {
 export interface CreateProjectResponse extends ProjectResponse {
   conversationId?: string;
   appliedPluginSnapshotId?: string;
+}
+
+export interface ProjectLocation {
+  id: string;
+  name: string;
+  path: string;
+  builtIn?: boolean;
+}
+
+export interface ProjectLocationsResponse {
+  locations: ProjectLocation[];
+  removedProjectIds?: string[];
+}
+
+export interface UpdateProjectLocationsRequest {
+  locations: Array<{ id?: string; name?: string; path: string }>;
+}
+
+export interface ProjectManifest {
+  schemaVersion: 1;
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  skillId?: string | null;
+  designSystemId?: string | null;
+}
+
+export interface ScanProjectLocationsResponse {
+  scanned: number;
+  imported: Project[];
+  existing: string[];
+  skipped: Array<{ path: string; reason: string }>;
 }
 
 // POST /api/import/folder — create a project rooted at an existing local
@@ -287,10 +355,38 @@ export interface ConversationResponse {
 
 export interface CreateConversationRequest {
   title?: string | null;
+  sessionMode?: ChatSessionMode;
+  /**
+   * Seed the new conversation with another conversation's context by copying
+   * its messages. The source must belong to the same project; a missing or
+   * foreign id is ignored and an empty conversation is created. Powers the
+   * "Side Chat" launcher, which forks the current chat's context into a new
+   * conversation.
+   */
+  seedFromConversationId?: string | null;
+  /**
+   * When paired with `seedFromConversationId`, copy only source messages up to
+   * and including this message. Used by the chat "Fork" action so the new
+   * conversation resumes from a specific assistant turn instead of inheriting
+   * future follow-ups from the source conversation.
+   */
+  forkAfterMessageId?: string | null;
+  /**
+   * Client-supplied snapshot of the messages to seed the fork with, in order,
+   * up to and including the fork point. When present, the daemon copies these
+   * instead of reading the source conversation from the database by id. This
+   * makes "Fork" resilient to a fork point that was never persisted — e.g. an
+   * assistant turn whose run errored or had its connection reset before the
+   * message reached the database. Without it, such a fork would 404 on
+   * `forkAfterMessageId` and silently fail. When absent, the daemon falls back
+   * to copying from `seedFromConversationId` (the original Side Chat path).
+   */
+  seedMessages?: ChatMessage[];
 }
 
 export interface UpdateConversationRequest {
   title?: string | null;
+  sessionMode?: ChatSessionMode;
 }
 
 export interface MessagesResponse {

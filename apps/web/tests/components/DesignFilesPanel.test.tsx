@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ComponentProps } from 'react';
 
-import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
-import type { ProjectFile, ProjectFileKind } from '../../src/types';
+import { DesignFilesPanel, type DesignFilesNavState } from '../../src/components/DesignFilesPanel';
+import type { ProjectFile, ProjectFileKind, ProjectFolder } from '../../src/types';
+
+function folder(path: string): ProjectFolder {
+  return { name: path.split('/').pop() ?? path, path, type: 'dir', size: 0, mtime: 1700000000 };
+}
 
 // Stub localStorage so the component's view-state persistence writes to an
 // in-memory store. Cleared in beforeEach so no test bleeds state into the next.
@@ -52,9 +57,13 @@ function generateFiles(count: number): ProjectFile[] {
   });
 }
 
-function renderPanel(files: ProjectFile[]) {
+function renderPanel(
+  files: ProjectFile[],
+  overrides: Partial<ComponentProps<typeof DesignFilesPanel>> = {},
+) {
   const onOpenFile = vi.fn();
   const onDeleteFiles = vi.fn();
+  const onClearUploadError = vi.fn();
   const result = render(
     <DesignFilesPanel
       projectId="test-project"
@@ -70,376 +79,127 @@ function renderPanel(files: ProjectFile[]) {
       onUploadFiles={vi.fn()}
       onPaste={vi.fn()}
       onNewSketch={vi.fn()}
+      onClearUploadError={onClearUploadError}
+      {...overrides}
     />,
   );
-  return { ...result, onDeleteFiles, onOpenFile };
+  return { ...result, onDeleteFiles, onOpenFile, onClearUploadError };
 }
 
-function getPageInfo(container: HTMLElement): string {
-  const el = container.querySelector('.df-page-info');
-  return el?.textContent?.trim() ?? '';
+function sectionLabels(): string[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('.df-section-label')).map(
+    (el) => el.textContent ?? '',
+  );
 }
 
-/** page-btn order: bottom-Prev=0, bottom-Next=1 */
-function getPageBtns(container: HTMLElement) {
-  return Array.from(container.querySelectorAll<HTMLButtonElement>('.df-page-btn'));
-}
-
-function getSelects(container: HTMLElement) {
-  return Array.from(container.querySelectorAll<HTMLSelectElement>('select'));
-}
-
-describe('DesignFilesPanel grouping', () => {
-  beforeEach(() => {
-    lsStore.clear();
-  });
-
+describe('DesignFilesPanel sections', () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
   });
 
-  it('does not show grouping controls when only live artifacts are available', () => {
-    render(
-      <DesignFilesPanel
-        projectId="project-1"
-        files={[]}
-        liveArtifacts={[
-          {
-            kind: 'live-artifact',
-            artifactId: 'artifact-1',
-            tabId: 'live:artifact-1',
-            projectId: 'project-1',
-            title: 'Live Preview',
-            slug: 'live-preview',
-            status: 'active',
-            refreshStatus: 'idle',
-            pinned: false,
-            preview: { type: 'html', entry: 'index.html' },
-            hasDocument: true,
-            updatedAt: '2026-05-09T12:00:00.000Z',
-          },
-        ]}
-        onRefreshFiles={vi.fn()}
-        onOpenFile={vi.fn()}
-        onOpenLiveArtifact={vi.fn()}
-        onRenameFile={vi.fn()}
-        onDeleteFile={vi.fn()}
-        onDeleteFiles={vi.fn()}
-        onUpload={vi.fn()}
-        onUploadFiles={vi.fn()}
-        onPaste={vi.fn()}
-        onNewSketch={vi.fn()}
-      />,
-    );
+  it('does not show grouping, sort, filter, or pagination chrome', () => {
+    renderPanel(generateFiles(60));
 
     expect(screen.queryByRole('group', { name: 'Group by' })).toBeNull();
-    expect(screen.getByTestId('design-file-row-live:artifact-1')).toBeTruthy();
+    expect(document.querySelector('.df-table')).toBeNull();
+    expect(document.querySelector('.df-th-sortable')).toBeNull();
+    expect(document.querySelector('.df-kind-filter')).toBeNull();
+    expect(document.querySelector('.df-pagination')).toBeNull();
+    expect(document.querySelector('.df-page-btn')).toBeNull();
   });
 
-  it('groups files by kind when kind grouping is selected', () => {
+  it('renders a single-line toolbar with file actions and no up/refresh buttons', () => {
+    renderPanel([file({ name: 'page.html', kind: 'html' })]);
+
+    expect(document.querySelector('.df-topbar')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Up' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Refresh' })).toBeNull();
+    expect(document.querySelector('.df-up-btn')).toBeNull();
+    expect(document.querySelector('.df-refresh-control')).toBeNull();
+    expect(screen.getByTestId('design-files-upload-trigger')).toBeTruthy();
+  });
+
+  it('groups files into semantic sections by category', () => {
     renderPanel([
       file({ name: 'page.html', kind: 'html', mime: 'text/html' }),
       file({ name: 'chart.png', kind: 'image', mime: 'image/png' }),
     ]);
 
-    const sectionLabels = Array.from(
-      document.querySelectorAll<HTMLElement>('.df-section-label'),
-    ).map((el) => el.textContent ?? '');
-    expect(sectionLabels.some((text) => text.includes('HTML page'))).toBe(true);
-    expect(sectionLabels.some((text) => text.includes('Image'))).toBe(true);
+    const labels = sectionLabels();
+    expect(labels.some((text) => text.includes('Pages'))).toBe(true);
+    expect(labels.some((text) => text.includes('Images'))).toBe(true);
     expect(screen.getByTestId('design-file-row-page.html')).toBeTruthy();
     expect(screen.getByTestId('design-file-row-chart.png')).toBeTruthy();
-    expect(screen.queryByText('Today')).toBeNull();
   });
 
-  it('keeps kind grouping selected by default', () => {
+  it('splits stylesheets into their own section with a Stylesheet subtitle', () => {
     renderPanel([
-      file({ name: 'page.html', kind: 'html', mime: 'text/html' }),
-      file({ name: 'chart.png', kind: 'image', mime: 'image/png' }),
+      file({ name: 'styles.css', kind: 'code', mime: 'text/css' }),
+      file({ name: 'app.ts', kind: 'code', mime: 'text/typescript' }),
     ]);
 
-    const groupControls = screen.getByRole('group', { name: 'Group by' });
-    const kindGroupButton = within(groupControls).getByRole('button', { name: 'Kind' });
-    expect(kindGroupButton.getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByText('Name')).toBeTruthy();
-    expect(document.querySelector('.df-th-kind')?.textContent).toContain('Kind');
-    expect(screen.queryByText('Today')).toBeNull();
+    const labels = sectionLabels();
+    expect(labels.some((text) => text.includes('Stylesheets'))).toBe(true);
+    expect(labels.some((text) => text.includes('Scripts'))).toBe(true);
+
+    const cssRow = screen.getByTestId('design-file-row-styles.css');
+    expect(cssRow.querySelector('.df-row-sub')?.textContent).toBe('Stylesheet');
+    const tsRow = screen.getByTestId('design-file-row-app.ts');
+    expect(tsRow.querySelector('.df-row-sub')?.textContent).toBe('Script');
   });
 
-  it('can group files by modified date and collapse a date group', () => {
-    const now = new Date(2026, 4, 9, 12).getTime();
-    vi.useFakeTimers();
-    vi.setSystemTime(now);
+  it('shows the type as the row subtitle instead of file size', () => {
+    renderPanel([file({ name: 'chart.png', kind: 'image', size: 4096 })]);
 
-    renderPanel([
-      file({ name: 'today.html', mtime: new Date(2026, 4, 9, 11).getTime() }),
-      file({ name: 'yesterday.html', mtime: new Date(2026, 4, 8, 12).getTime() }),
-    ]);
-
-    expect(screen.queryByText('Today')).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
-
-    expect(screen.getByText('Today')).toBeTruthy();
-    expect(screen.getByText('Yesterday')).toBeTruthy();
-    expect(screen.getByTestId('design-file-row-today.html')).toBeTruthy();
-    expect(screen.getByTestId('design-file-row-yesterday.html')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: /Collapse Today/i }));
-
-    expect(screen.queryByTestId('design-file-row-today.html')).toBeNull();
-    expect(screen.getByTestId('design-file-row-yesterday.html')).toBeTruthy();
+    const row = screen.getByTestId('design-file-row-chart.png');
+    expect(row.querySelector('.df-row-sub')?.textContent).toBe('Image');
+    expect(row.textContent).not.toContain('KB');
   });
 
-  it('keeps files from seven calendar days ago in the previous 7 days group', () => {
-    const now = new Date(2026, 4, 9, 12).getTime();
-    vi.useFakeTimers();
-    vi.setSystemTime(now);
+  it('renders a static useful-info footer', () => {
+    renderPanel([file({ name: 'page.html', kind: 'html' })]);
 
-    renderPanel([file({ name: 'week-old.html', mtime: new Date(2026, 4, 2, 12).getTime() })]);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
-
-    expect(screen.getByText('Previous 7 days')).toBeTruthy();
-    expect(screen.queryByText('Previous 30 days')).toBeNull();
-    expect(screen.getByTestId('design-file-row-week-old.html')).toBeTruthy();
-  });
-
-  it('keeps files at the seven calendar day boundary in the previous 7 days group', () => {
-    const now = new Date(2026, 4, 9, 12).getTime();
-    vi.useFakeTimers();
-    vi.setSystemTime(now);
-
-    renderPanel([
-      file({ name: 'week-boundary.html', mtime: new Date(2026, 4, 2, 0, 0, 0, 0).getTime() }),
-    ]);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
-
-    expect(screen.getByText('Previous 7 days')).toBeTruthy();
-    expect(screen.queryByText('Previous 30 days')).toBeNull();
-    expect(screen.getByTestId('design-file-row-week-boundary.html')).toBeTruthy();
-  });
-
-  it('keeps files from thirty calendar days ago in the previous 30 days group', () => {
-    const now = new Date(2026, 4, 9, 12).getTime();
-    vi.useFakeTimers();
-    vi.setSystemTime(now);
-
-    renderPanel([
-      file({ name: 'month-old.html', mtime: new Date(2026, 3, 9, 12).getTime() }),
-    ]);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
-
-    expect(screen.getByText('Previous 30 days')).toBeTruthy();
-    expect(screen.queryByText('Older')).toBeNull();
-    expect(screen.getByTestId('design-file-row-month-old.html')).toBeTruthy();
-  });
-
-  it('keeps files at the thirty calendar day boundary in the previous 30 days group', () => {
-    const now = new Date(2026, 4, 9, 12).getTime();
-    vi.useFakeTimers();
-    vi.setSystemTime(now);
-
-    renderPanel([
-      file({
-        name: 'month-boundary.html',
-        mtime: new Date(2026, 3, 9, 0, 0, 0, 0).getTime(),
-      }),
-    ]);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
-
-    expect(screen.getByText('Previous 30 days')).toBeTruthy();
-    expect(screen.queryByText('Older')).toBeNull();
-    expect(screen.getByTestId('design-file-row-month-boundary.html')).toBeTruthy();
-  });
-
-  it('groups files older than thirty calendar days into older', () => {
-    const now = new Date(2026, 4, 9, 12).getTime();
-    vi.useFakeTimers();
-    vi.setSystemTime(now);
-
-    renderPanel([file({ name: 'archive.html', mtime: new Date(2026, 3, 8, 12).getTime() })]);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
-
-    expect(screen.getByText('Older')).toBeTruthy();
-    expect(screen.queryByText('Previous 30 days')).toBeNull();
-    expect(screen.getByTestId('design-file-row-archive.html')).toBeTruthy();
-  });
-
-  it('groups only the current page so large file lists stay paginated', () => {
-    const now = new Date(2026, 4, 9, 12).getTime();
-    vi.useFakeTimers();
-    vi.setSystemTime(now);
-
-    renderPanel(
-      Array.from({ length: 31 }, (_, i) =>
-        file({ name: `today-${String(i + 1).padStart(2, '0')}.html`, mtime: now - i }),
-      ),
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
-
-    expect(screen.getByTestId('design-file-row-today-01.html')).toBeTruthy();
-    expect(screen.queryByTestId('design-file-row-today-31.html')).toBeNull();
-    expect(getPageInfo(document.body)).toContain('1–30 of 31');
-  });
-
-  it('updates modified date groups when the local day changes', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 4, 9, 23, 59, 50));
-
-    renderPanel([file({ name: 'late-edit.html', mtime: new Date(2026, 4, 9, 23, 59).getTime() })]);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
-
-    expect(screen.getByText('Today')).toBeTruthy();
-    expect(screen.queryByText('Yesterday')).toBeNull();
-
-    act(() => {
-      vi.advanceTimersByTime(10_001);
-    });
-
-    expect(screen.getByText('Yesterday')).toBeTruthy();
-    expect(screen.queryByText('Today')).toBeNull();
-    expect(screen.getByTestId('design-file-row-late-edit.html')).toBeTruthy();
+    expect(document.querySelector('.df-useful-info-label')?.textContent).toBe('Useful info');
+    expect(document.querySelector('.df-useful-info-tip')?.textContent).toContain('Double-click');
   });
 });
 
-describe('DesignFilesPanel large-list regression', () => {
-  beforeEach(() => {
-    lsStore.clear();
-  });
+describe('DesignFilesPanel large list', () => {
+  afterEach(() => cleanup());
 
-  afterEach(() => {
-    cleanup();
-  });
-
-  it('renders only the default page size (30) rows with 500 files', () => {
-    const files = generateFiles(500);
-    const { container } = renderPanel(files);
-    expect(container.querySelectorAll('.df-file-row').length).toBe(30);
-  });
-
-  it('shows all 500 rows when page size is set to All', () => {
-    const files = generateFiles(500);
-    const { container } = renderPanel(files);
-
-    const selects = getSelects(container);
-    fireEvent.change(selects[0]!, { target: { value: 'all' } });
-
+  it('renders all rows at once (no pagination)', () => {
+    const { container } = renderPanel(generateFiles(500));
     expect(container.querySelectorAll('.df-file-row').length).toBe(500);
   });
 
-  it('shows 60 rows when page size is changed to 60', () => {
+  it('renders 500 files within a reasonable time', () => {
     const files = generateFiles(500);
-    const { container } = renderPanel(files);
-
-    const selects = getSelects(container);
-    fireEvent.change(selects[0]!, { target: { value: '60' } });
-
-    expect(container.querySelectorAll('.df-file-row').length).toBe(60);
+    const start = performance.now();
+    renderPanel(files);
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(2000);
   });
+});
 
-  it('navigates pages with Next button and updates row content', () => {
-    const files = generateFiles(500);
-    const { container } = renderPanel(files);
+describe('DesignFilesPanel selection', () => {
+  afterEach(() => cleanup());
 
-    expect(container.querySelectorAll('.df-file-row').length).toBe(30);
-    expect(container.querySelector('.df-file-row')!.textContent).toContain('file-1');
+  it('shows the batch bar and passes every selected file to batch delete', () => {
+    const files = generateFiles(3);
+    const { container, onDeleteFiles } = renderPanel(files);
+    const rows = Array.from(container.querySelectorAll('.df-file-row'));
 
-    const btns = getPageBtns(container);
-    fireEvent.click(btns[1]!);
+    const firstName = rows[0]!.getAttribute('data-testid')!.replace(/^design-file-row-/, '');
+    const secondName = rows[1]!.getAttribute('data-testid')!.replace(/^design-file-row-/, '');
+    fireEvent.click(rows[0]!.querySelector('.df-row-check')!);
+    fireEvent.click(rows[1]!.querySelector('.df-row-check')!);
 
-    expect(container.querySelectorAll('.df-file-row').length).toBe(30);
-    expect(container.querySelector('.df-file-row')!.textContent).toContain('file-31');
-  });
+    expect(container.querySelector('[data-testid="design-files-batch-bar"]')).toBeTruthy();
 
-  it('shows disabled Previous on first page and Next on last page', () => {
-    const files = generateFiles(45);
-    const { container } = renderPanel(files);
-
-    const btns = getPageBtns(container);
-    expect(btns[0]!.disabled).toBe(true);
-    expect(btns[1]!.disabled).toBe(false);
-
-    fireEvent.click(btns[1]!);
-    const btns2 = getPageBtns(container);
-    expect(btns2[0]!.disabled).toBe(false);
-
-    fireEvent.click(getPageBtns(container)[1]!);
-    fireEvent.click(getPageBtns(container)[1]!);
-    expect(getPageBtns(container)[1]!.disabled).toBe(true);
-  });
-
-  it('jumps to a specific page via page dropdown at bottom', () => {
-    const files = generateFiles(200);
-    const { container } = renderPanel(files);
-
-    const selects = getSelects(container);
-    fireEvent.change(selects[1]!, { target: { value: '3' } });
-
-    expect(container.querySelector('.df-file-row')!.textContent).toContain('file-91');
-  });
-
-  it('updates page info text when navigating', () => {
-    const files = generateFiles(500);
-    const { container } = renderPanel(files);
-
-    expect(getPageInfo(container)).toContain('1–30 of 500');
-
-    const btns = getPageBtns(container);
-    fireEvent.click(btns[1]!);
-
-    expect(getPageInfo(container)).toContain('31–60 of 500');
-  });
-
-  it('keeps the bulk toolbar focused on the all-files action instead of duplicating page select', () => {
-    const { container } = renderPanel(generateFiles(20));
-
-    const toolbar = container.querySelector('.df-select-bar');
-    expect(toolbar?.textContent).toContain('Select everything');
-    expect(toolbar?.textContent).not.toContain('Select all on page');
-  });
-
-  it('hides redundant pagination controls for a single small page', () => {
-    const { container } = renderPanel(generateFiles(3));
-
-    expect(container.querySelector('.df-pagination')).toBeNull();
-    expect(container.querySelector('.df-page-btn')).toBeNull();
-    expect(container.querySelector('.df-select-bar')).toBeNull();
-  });
-
-  it('uses non-control table cells as file row click targets', () => {
-    const files = generateFiles(1);
-    const { container, onOpenFile } = renderPanel(files);
-    const row = container.querySelector('.df-file-row')!;
-
-    fireEvent.click(row.querySelector('.df-cell-icon')!);
-    expect(container.querySelector('[data-testid="design-file-preview"]')?.textContent).toContain(
-      'file-1.html',
-    );
-
-    fireEvent.click(row.querySelector('.df-cell-kind')!);
-    expect(container.querySelector('[data-testid="design-file-preview"]')?.textContent).toContain(
-      'file-1.html',
-    );
-
-    fireEvent.click(row.querySelector('.df-cell-name')!);
-    expect(container.querySelector('[data-testid="design-file-preview"]')?.textContent).toContain(
-      'file-1.html',
-    );
-
-    fireEvent.doubleClick(row.querySelector('.df-cell-name')!);
-    expect(onOpenFile).toHaveBeenCalledWith('file-1.html');
-    onOpenFile.mockClear();
-
-    fireEvent.doubleClick(row.querySelector('.df-cell-time')!);
-    expect(onOpenFile).toHaveBeenCalledWith('file-1.html');
+    fireEvent.click(container.querySelector('[data-testid="design-files-batch-delete"]')!);
+    expect(onDeleteFiles).toHaveBeenCalledTimes(1);
+    expect(onDeleteFiles).toHaveBeenCalledWith([firstName, secondName]);
   });
 
   it('does not preview or open files from row controls', () => {
@@ -454,6 +214,36 @@ describe('DesignFilesPanel large-list regression', () => {
     fireEvent.click(row.querySelector('.df-row-menu')!);
     expect(container.querySelector('[data-testid="design-file-preview"]')).toBeNull();
     expect(onOpenFile).not.toHaveBeenCalled();
+  });
+
+  it('uses non-control row targets to preview and open', () => {
+    const files = generateFiles(1);
+    const { container, onOpenFile } = renderPanel(files);
+    const row = container.querySelector('.df-file-row')!;
+
+    fireEvent.click(row.querySelector('.df-row-icon')!);
+    expect(container.querySelector('[data-testid="design-file-preview"]')?.textContent).toContain(
+      'file-1.html',
+    );
+
+    fireEvent.doubleClick(row.querySelector('.df-row-name-btn')!);
+    expect(onOpenFile).toHaveBeenCalledWith('file-1.html');
+    onOpenFile.mockClear();
+
+    fireEvent.doubleClick(row.querySelector('.df-row-time')!);
+    expect(onOpenFile).toHaveBeenCalledWith('file-1.html');
+  });
+});
+
+describe('DesignFilesPanel preview', () => {
+  afterEach(() => cleanup());
+
+  it('shows the file extension in the preview stats', () => {
+    const { container } = renderPanel([file({ name: 'chart.png', kind: 'image', size: 4096 })]);
+    fireEvent.click(container.querySelector('.df-file-row .df-row-icon')!);
+
+    const stats = container.querySelector('.df-preview-stats')?.textContent ?? '';
+    expect(stats).toContain('PNG');
   });
 
   it('renders sketch files with the static sketch preview instead of a broken image', async () => {
@@ -492,29 +282,6 @@ describe('DesignFilesPanel large-list regression', () => {
     expect(container.querySelector('.df-preview-thumb img')).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith('/api/projects/test-project/raw/board.sketch.json', { cache: 'no-store' });
   });
-
-  it('passes every selected file to batch delete', () => {
-    const files = generateFiles(3);
-    const { container, onDeleteFiles } = renderPanel(files);
-    const rows = Array.from(container.querySelectorAll('.df-file-row'));
-
-    const firstName = rows[0]!.getAttribute('data-testid')!.replace(/^design-file-row-/, '');
-    const secondName = rows[1]!.getAttribute('data-testid')!.replace(/^design-file-row-/, '');
-    fireEvent.click(rows[0]!.querySelector('.df-row-check')!);
-    fireEvent.click(rows[1]!.querySelector('.df-row-check')!);
-    fireEvent.click(container.querySelector('[data-testid="design-files-batch-delete"]')!);
-
-    expect(onDeleteFiles).toHaveBeenCalledTimes(1);
-    expect(onDeleteFiles).toHaveBeenCalledWith([firstName, secondName]);
-  });
-
-  it('renders 500 files within a reasonable time', () => {
-    const files = generateFiles(500);
-    const start = performance.now();
-    renderPanel(files);
-    const elapsed = performance.now() - start;
-    expect(elapsed).toBeLessThan(2000);
-  });
 });
 
 describe('DesignFilesPanel directory navigation', () => {
@@ -532,6 +299,15 @@ describe('DesignFilesPanel directory navigation', () => {
     expect(dirRows.length).toBe(1);
     expect(dirRows[0]!.textContent).toContain('assets');
     expect(dirRows[0]!.textContent).toContain('2');
+  });
+
+  it('pins folders into a Folders section', () => {
+    renderPanel([
+      file({ name: 'assets/logo.png', kind: 'image' }),
+      file({ name: 'top.html', kind: 'html' }),
+    ]);
+
+    expect(sectionLabels().some((text) => text.includes('Folders'))).toBe(true);
   });
 
   it('clicking a folder row navigates into it and shows only basenames and nested dirs', () => {
@@ -554,6 +330,26 @@ describe('DesignFilesPanel directory navigation', () => {
     expect(dirRows[0]!.textContent).toContain('icons');
   });
 
+  it('always renders the root breadcrumb on the default-root view', () => {
+    // Regression: managed-storage projects have currentDir==='' and no
+    // rootDirName, which previously collapsed the whole breadcrumb nav to null
+    // and left the toolbar blank on the left for the most common path. The root
+    // crumb must always render, falling back to the t('designFiles.crumbs')
+    // label when no rootDirName exists.
+    renderPanel([file({ name: 'top.html', kind: 'html' })]);
+
+    expect(document.querySelector('.df-breadcrumbs')).toBeTruthy();
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('project');
+  });
+
+  it('shows rootDirName as the root breadcrumb when one is provided', () => {
+    renderPanel([file({ name: 'top.html', kind: 'html' })], {
+      rootDirName: 'my-folder',
+    });
+
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('my-folder');
+  });
+
   it('clicking the root breadcrumb navigates back to root', () => {
     renderPanel([
       file({ name: 'assets/logo.png', kind: 'image' }),
@@ -565,12 +361,75 @@ describe('DesignFilesPanel directory navigation', () => {
 
     fireEvent.click(document.querySelector('.df-breadcrumb-btn')!);
 
-    expect(document.querySelector('.df-breadcrumbs')).toBeNull();
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).not.toBe('assets');
     expect(screen.getByTestId('design-file-row-top.html')).toBeTruthy();
     expect(document.querySelectorAll('.df-dir-row').length).toBe(1);
   });
 
-  it('clears selection and resets page when navigating into or out of a directory', () => {
+  it('includes subdirectory files in the flat root-level list', () => {
+    renderPanel([
+      file({ name: 'assets/logo.png', kind: 'image' }),
+      file({ name: 'top.html', kind: 'html' }),
+    ]);
+
+    expect(document.querySelectorAll('.df-dir-row').length).toBe(1);
+    expect(screen.getByTestId('design-file-row-assets/logo.png')).toBeTruthy();
+    expect(screen.getByTestId('design-file-row-top.html')).toBeTruthy();
+  });
+
+  it('preserves the current directory when remounted with navState from a previous render', () => {
+    let saved: DesignFilesNavState | undefined;
+
+    function makePanel(nav?: DesignFilesNavState) {
+      return (
+        <DesignFilesPanel
+          projectId="test-project"
+          files={[
+            file({ name: 'assets/logo.png', kind: 'image' }),
+            file({ name: 'top.html', kind: 'html' }),
+          ]}
+          liveArtifacts={[]}
+          navState={nav}
+          onNavStateChange={(state) => { saved = state; }}
+          onRefreshFiles={vi.fn()}
+          onOpenFile={vi.fn()}
+          onOpenLiveArtifact={vi.fn()}
+          onRenameFile={vi.fn()}
+          onDeleteFile={vi.fn()}
+          onDeleteFiles={vi.fn()}
+          onUpload={vi.fn()}
+          onUploadFiles={vi.fn()}
+          onPaste={vi.fn()}
+          onNewSketch={vi.fn()}
+        />
+      );
+    }
+
+    const { unmount } = render(makePanel());
+
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
+
+    unmount();
+    render(makePanel(saved));
+
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
+    expect(screen.getByTestId('design-file-row-assets/logo.png')).toBeTruthy();
+  });
+
+  it('navigates up one level via the parent breadcrumb', () => {
+    renderPanel([file({ name: 'assets/icons/star.svg', kind: 'image' })]);
+
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('icons');
+
+    const crumbs = Array.from(document.querySelectorAll('.df-breadcrumb-btn'));
+    fireEvent.click(crumbs[crumbs.length - 1]!);
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
+  });
+
+  it('clears selection when navigating into or out of a directory', () => {
     renderPanel([
       file({ name: 'assets/logo.png', kind: 'image' }),
       file({ name: 'top.html', kind: 'html' }),
@@ -620,16 +479,51 @@ describe('DesignFilesPanel directory navigation', () => {
 
     rerender(makePanel([file({ name: 'top.html', kind: 'html' })]));
 
-    expect(document.querySelector('.df-breadcrumbs')).toBeNull();
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).not.toBe('assets');
     expect(screen.getByTestId('design-file-row-top.html')).toBeTruthy();
   });
+});
 
-  it('does not show the select-all header as checked when the page contains only directory rows', () => {
-    renderPanel([
-      file({ name: 'assets/logo.png', kind: 'image' }),
-    ]);
+describe('DesignFilesPanel current-directory sync', () => {
+  afterEach(() => cleanup());
 
-    const headerCheck = document.querySelector('.df-th-check .df-row-check');
-    expect(headerCheck?.textContent).toBe('☐');
+  it('reports the active folder so new files are created under it, not the root', () => {
+    const onCurrentDirChange = vi.fn();
+    renderPanel(
+      [
+        file({ name: 'top.html', kind: 'html' }),
+        file({ name: 'assets/logo.png', kind: 'image' }),
+      ],
+      { onCurrentDirChange },
+    );
+    // Mounts at the root.
+    expect(onCurrentDirChange).toHaveBeenLastCalledWith('');
+    // Navigate into the folder — the parent must learn the new target dir, or
+    // upload / paste / new-sketch would create at the project root (#3358 regression).
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(onCurrentDirChange).toHaveBeenLastCalledWith('assets');
+  });
+});
+
+describe('DesignFilesPanel persisted (empty) folders', () => {
+  afterEach(() => cleanup());
+
+  it('shows an empty persisted folder that has no files under it', () => {
+    // Only a root file + an empty persisted folder; the folder must still
+    // appear (it would vanish if we derived dirs from file paths alone).
+    renderPanel([file({ name: 'top.html', kind: 'html' })], { folders: [folder('assets')] });
+    const dirRows = [...document.querySelectorAll('.df-dir-row')];
+    expect(dirRows.some((r) => r.textContent?.includes('assets'))).toBe(true);
+  });
+
+  it('surfaces a nested empty persisted folder after navigating into its parent', () => {
+    renderPanel([], { folders: [folder('assets'), folder('assets/icons')] });
+    // Zero files, but the persisted folder still renders the tree (not the
+    // empty state), so 'assets' is navigable at the root.
+    const rootDirs = [...document.querySelectorAll('.df-dir-row .df-row-name')].map((e) => e.textContent);
+    expect(rootDirs).toContain('assets');
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    const nestedDirs = [...document.querySelectorAll('.df-dir-row .df-row-name')].map((e) => e.textContent);
+    expect(nestedDirs).toContain('icons');
   });
 });

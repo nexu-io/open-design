@@ -41,6 +41,7 @@ import path from 'node:path';
 import { MEDIA_PROVIDERS } from './media-models.js';
 import { expandHomePrefix } from './home-expansion.js';
 import { resolveXAIBearer } from './xai-credentials.js';
+import { isSandboxModeEnabled } from './sandbox-mode.js';
 
 const PROVIDER_IDS = MEDIA_PROVIDERS.map((p) => p.id);
 type ProviderEntry = { apiKey?: string; baseUrl?: string; model?: string };
@@ -87,6 +88,7 @@ const ENV_KEYS: Record<string, string[]> = {
   grok: ['OD_GROK_API_KEY', 'XAI_API_KEY'],
   nanobanana: ['OD_NANOBANANA_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
   imagerouter: ['OD_IMAGEROUTER_API_KEY', 'IMAGEROUTER_API_KEY'],
+  openrouter: ['OD_OPENROUTER_API_KEY', 'OPENROUTER_API_KEY'],
   'custom-image': ['OD_CUSTOM_IMAGE_API_KEY', 'CUSTOM_IMAGE_API_KEY'],
   bfl: ['OD_BFL_API_KEY', 'BFL_API_KEY'],
   fal: ['OD_FAL_KEY', 'FAL_KEY'],
@@ -100,6 +102,7 @@ const ENV_KEYS: Record<string, string[]> = {
   elevenlabs: ['OD_ELEVENLABS_API_KEY', 'ELEVENLABS_API_KEY'],
   fishaudio: ['OD_FISHAUDIO_API_KEY', 'FISH_AUDIO_API_KEY'],
   senseaudio: ['OD_SENSEAUDIO_API_KEY', 'SENSEAUDIO_API_KEY'],
+  aihubmix: ['OD_AIHUBMIX_API_KEY', 'AIHUBMIX_API_KEY'],
   tavily: ['OD_TAVILY_API_KEY', 'TAVILY_API_KEY'],
   leonardo: ['OD_LEONARDO_API_KEY', 'LEONARDO_API_KEY'],
 };
@@ -291,6 +294,7 @@ function apiKeyFromCodexAuth(data: unknown): string {
 }
 
 async function resolveOpenAIAuthFileCredential(): Promise<OAuthCredential | null> {
+  if (isSandboxModeEnabled(process.env)) return null;
   const home = os.homedir();
   const codexAuth = await readJsonIfPresent(
     path.join(home, '.codex', 'auth.json'),
@@ -317,6 +321,8 @@ async function resolveXAIOAuthCredential(
       source: `oauth-xai-${odBearer.source}`,
     };
   }
+
+  if (isSandboxModeEnabled(process.env)) return null;
 
   // 2. Borrow the xAI OAuth token Hermes wrote to ~/.hermes/auth.json
   //    when the user ran `hermes auth add xai-oauth`. A user who has already authorized

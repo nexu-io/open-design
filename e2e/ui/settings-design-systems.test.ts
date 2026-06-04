@@ -192,7 +192,7 @@ async function openDesignSystemsSettings(page: Page) {
 }
 
 test.describe('Settings design systems flows', () => {
-  test('imports a local design system and makes it visible immediately', async ({ page }) => {
+  test('[P1] imports a local design system and makes it visible immediately', async ({ page }) => {
     await seedSettingsBase(page);
     const systems: DesignSystemFixture[] = [];
     const importedSystem: DesignSystemFixture = {
@@ -228,7 +228,7 @@ test.describe('Settings design systems flows', () => {
     await expect(dialog.getByText('Imported Acme product design system.')).toBeVisible();
   });
 
-  test('renames an editable design system and keeps the new title after reopening settings', async ({ page }) => {
+  test('[P1] renames an editable design system and keeps the new title after reopening settings', async ({ page }) => {
     await seedSettingsBase(page);
     const systems: DesignSystemFixture[] = [
       {
@@ -272,7 +272,7 @@ test.describe('Settings design systems flows', () => {
     await expect(dialog.getByText('Brand Kit', { exact: true })).toHaveCount(0);
   });
 
-  test('shows an inline error when importing a broken local design system package', async ({ page }) => {
+  test('[P1] shows an inline error when importing a broken local design system package', async ({ page }) => {
     await seedSettingsBase(page);
     const systems: DesignSystemFixture[] = [];
 
