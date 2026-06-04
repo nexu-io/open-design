@@ -17,7 +17,12 @@ import { execFile } from "node:child_process";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
-import { APP_KEYS, SIDECAR_ENV, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
+import {
+  APP_KEYS,
+  SIDECAR_SOURCES,
+  resolveSidecarModeFromEnv,
+} from "@open-design/sidecar-proto";
+import { findAncestorWithApps } from "./workspace-root.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -48,24 +53,16 @@ function resolveElectronBinary(): string {
  */
 function resolveWorkspaceRootForTray(): string {
   // Walk up from the electron binary until we find the workspace marker
-  // (`apps/` directory). This works for both the pnpm-hoisted layout
+  // (`apps/` directory). Works for both the pnpm-hoisted layout
   // (`<workspace>/node_modules/.pnpm/electron@x/node_modules/electron/dist/electron.exe`)
   // and a future non-hoisted layout, without hardcoding a level count
   // that pnpm changes every other release.
-  const electronExe = resolveElectronBinary();
-  let cursor = dirname(electronExe);
-  for (let i = 0; i < 12; i++) {
-    if (existsSync(join(cursor, "apps"))) return cursor;
-    const parent = dirname(cursor);
-    if (parent === cursor) break;
-    cursor = parent;
-  }
+  const fromBinary = findAncestorWithApps(dirname(resolveElectronBinary()));
+  if (fromBinary) return fromBinary;
   // Fallback: walk up from this module's URL (dev mode, when electron is
   // launched via tsx/pnpm and the binary resolver is the same source path).
-  const selfPath = fileURLToPath(import.meta.url);
-  const parts = selfPath.split(/[/\\]/);
-  const appsIdx = parts.indexOf("apps");
-  if (appsIdx >= 1) return parts.slice(0, appsIdx).join("/");
+  const fromSource = findAncestorWithApps(dirname(fileURLToPath(import.meta.url)));
+  if (fromSource) return fromSource;
   throw new Error("Could not resolve workspace root for tray auto-start");
 }
 
@@ -158,13 +155,13 @@ function buildRunCommand(namespace: string, ipc: string): string {
   // Stamp values are individually quoted so namespace/ipc that contain
   // spaces or other cmd metacharacters survive the round-trip through
   // `cmd /c start`. The double quotes around `""` after `start` are the
-  // explicit empty window title. Mode defaults to "dev" so dev tooling
-  // (tools-dev, tsx) gets a working auto-start without configuration;
-  // packaged launchers set `OD_SIDECAR_MODE=runtime` before invoking.
-  const mode = process.env[SIDECAR_ENV.MODE] ?? "dev";
+  // explicit empty window title. Mode reads from `OD_SIDECAR_MODE` via
+  // sidecar-proto (defaulting to "dev" for dev tooling, "runtime" for
+  // packaged launchers); a typo in the env var throws at boot instead
+  // of writing an unrecognised stamp.
   const stamp = [
     `--od-stamp-app=${APP_KEYS.TRAY}`,
-    `--od-stamp-mode=${mode}`,
+    `--od-stamp-mode=${resolveSidecarModeFromEnv()}`,
     `--od-stamp-namespace="${namespace}"`,
     `--od-stamp-ipc="${ipc}"`,
     `--od-stamp-source=${SIDECAR_SOURCES.TOOLS_DEV}`,
@@ -328,7 +325,7 @@ function generatePlist(exePath: string, appId: string, namespace: string, ipc: s
     `<string>${escapeXml(exePath)}</string>`,
     `<string>${escapeXml(entryScript)}</string>`,
     `<string>--od-stamp-app=${APP_KEYS.TRAY}</string>`,
-    `<string>--od-stamp-mode=dev</string>`,
+    `<string>--od-stamp-mode=${resolveSidecarModeFromEnv()}</string>`,
     `<string>--od-stamp-namespace=${escapeXml(namespace)}</string>`,
     `<string>--od-stamp-ipc=${escapeXml(ipc)}</string>`,
     `<string>--od-stamp-source=${SIDECAR_SOURCES.TOOLS_DEV}</string>`,

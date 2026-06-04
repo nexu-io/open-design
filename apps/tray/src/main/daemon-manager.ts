@@ -5,8 +5,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 
-import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT, SIDECAR_MESSAGES, SIDECAR_SOURCES, type DaemonStatusSnapshot } from "@open-design/sidecar-proto";
+import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT, SIDECAR_MESSAGES, SIDECAR_SOURCES, resolveSidecarModeFromEnv, type DaemonStatusSnapshot } from "@open-design/sidecar-proto";
 import { requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
+import { findAncestorWithApps } from "./workspace-root.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -35,24 +36,21 @@ function resolveNodeExe(): string {
 // Resolve workspace root: tray app is at apps/tray/dist/main/index.js
 // Go up: dist -> tray -> apps -> workspace
 function getWorkspaceRoot(): string {
-  // 1. Derive from the resolved node.exe path: <workspace>/nodejs/node.exe → <workspace>
+  // 1. From node.exe (one level up — node is typically <workspace>/node)
   const nodeExe = resolveNodeExe();
   if (nodeExe !== "node") {
-    const candidate = resolve(nodeExe, "..");
-    // Verify it has apps/ to confirm we found the right root
-    if (existsSync(join(candidate, "apps"))) return candidate;
+    const fromBinary = findAncestorWithApps(resolve(nodeExe, ".."));
+    if (fromBinary) return fromBinary;
   }
 
-  // 2. Walk up from __dirname as fallback (dev mode)
-  const parts = __dirname.split(/[/\\]/);
-  const appsIdx = parts.indexOf("apps");
-  if (appsIdx >= 2) return parts.slice(0, appsIdx).join("/");
+  // 2. From this module's directory (dev mode)
+  const fromSource = findAncestorWithApps(__dirname);
+  if (fromSource) return fromSource;
 
-  // 3. Try PWD environment variable
+  // 3. From PWD environment variable
   if (process.env.PWD) {
-    const pwdParts = process.env.PWD.split(/[/\\]/);
-    const pwdAppsIdx = pwdParts.indexOf("apps");
-    if (pwdAppsIdx >= 2) return pwdParts.slice(0, pwdAppsIdx).join("/");
+    const fromPwd = findAncestorWithApps(process.env.PWD);
+    if (fromPwd) return fromPwd;
   }
 
   // Last resort — this should not happen in a normal dev environment
@@ -111,7 +109,7 @@ export class DaemonManager {
     return [
       `--od-stamp-app=${APP_KEYS.DAEMON}`,
       `--od-stamp-ipc=${ipc}`,
-      `--od-stamp-mode=dev`,
+      `--od-stamp-mode=${resolveSidecarModeFromEnv()}`,
       `--od-stamp-namespace=${this.namespace}`,
       `--od-stamp-source=${SIDECAR_SOURCES.TOOLS_DEV}`,
     ];

@@ -470,6 +470,24 @@ export function normalizeSidecarMode(mode: unknown): SidecarMode {
   return mode;
 }
 
+/**
+ * Read the sidecar mode from the configured env var, defaulting to "dev".
+ *
+ * Centralised here (not in tray/dev/packaged) so every launcher that
+ * builds an auto-start command gets the same fallback, the same
+ * validation, and the same source of truth for the env var name.
+ * Unset → SIDECAR_MODES.DEV. Set to an invalid value → throws, so a
+ * typo like `OD_SIDECAR_MODE=run` fails loudly at boot instead of
+ * silently writing an unrecognised stamp.
+ */
+export function resolveSidecarModeFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): SidecarMode {
+  const raw = env[SIDECAR_ENV.MODE];
+  if (raw === undefined || raw === "") return SIDECAR_MODES.DEV;
+  return normalizeSidecarMode(raw);
+}
+
 export function isAppKey(value: unknown): value is AppKey {
   return Object.values(APP_KEYS).includes(value as AppKey);
 }

@@ -16,8 +16,8 @@
   },
   "scripts": {
     "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
-    "postinstall": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
-    "prepack": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "postinstall": "npm run build",
+    "prepack": "npm run build",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
