@@ -2009,7 +2009,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               data-testid="composer-active-file"
               title={activeFileContext}
             >
-              <span className="composer-active-file__label">Editing</span>
+              <span className="composer-active-file__label">{t('chat.activeFileEditingLabel')}</span>
               <span className="composer-active-file__name">{activeFileContext}</span>
             </div>
           ) : null}
@@ -2069,7 +2069,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               draft={draft}
               placeholder={
                 activeFileDisplayName
-                  ? `Ask Open Design to change ${activeFileDisplayName}...`
+                  ? t('chat.activeFilePlaceholder', { file: activeFileDisplayName })
                   : t('chat.composerPlaceholder')
               }
               title={activeFileDisplayName ?? t('chat.composerPlaceholder')}

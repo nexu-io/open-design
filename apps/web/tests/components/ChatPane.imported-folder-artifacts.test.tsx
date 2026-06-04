@@ -13,9 +13,16 @@ const composerMocks = vi.hoisted(() => ({
   setDraft: vi.fn(),
 }));
 
+const translate = (key: string, vars?: Record<string, string | number>) => {
+  if (key === 'chat.designArtifactsShowMore') {
+    return `Show ${vars?.count ?? ''} more design files`;
+  }
+  return key;
+};
+
 vi.mock('../../src/i18n', () => ({
-  useI18n: () => ({ locale: 'en', setLocale: () => undefined, t: (key: string) => key }),
-  useT: () => (key: string) => key,
+  useI18n: () => ({ locale: 'en', setLocale: () => undefined, t: translate }),
+  useT: () => translate,
 }));
 
 vi.mock('../../src/components/ChatComposer', () => ({
@@ -144,7 +151,7 @@ describe('ChatPane imported folder artifacts', () => {
     expect(within(artifactGrid).queryByText('README.md')).toBeNull();
 
     const moreButton = screen.getByTestId('chat-design-artifacts-more');
-    expect(moreButton.textContent).toContain('2 more');
+    expect(moreButton.textContent).toContain('Show 2 more design files');
     fireEvent.click(moreButton);
 
     expect(screen.getAllByTestId(/chat-design-artifact-\d+/)).toHaveLength(7);

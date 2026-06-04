@@ -262,6 +262,7 @@ function ImportedFolderArtifacts({
   const visibleFiles = files.slice(0, visibleCount);
   const hiddenCount = Math.max(0, files.length - visibleFiles.length);
   const revealCount = Math.min(IMPORTED_ARTIFACTS_REVEAL_COUNT, hiddenCount);
+  const revealLabel = t('chat.designArtifactsShowMore', { count: revealCount });
 
   return (
     <div className="chat-design-artifacts" data-testid="chat-design-artifacts">
@@ -312,8 +313,8 @@ function ImportedFolderArtifacts({
           type="button"
           className="chat-design-artifact chat-design-artifact-more"
           data-testid="chat-design-artifacts-more"
-          aria-label={`Show ${revealCount} more design files`}
-          title={`Show ${revealCount} more design files`}
+          aria-label={revealLabel}
+          title={revealLabel}
           onClick={() => {
             setVisibleCount((current) =>
               Math.min(files.length, current + IMPORTED_ARTIFACTS_REVEAL_COUNT),
@@ -324,7 +325,7 @@ function ImportedFolderArtifacts({
             +
           </span>
           <span className="chat-design-artifact-more-count">
-            {hiddenCount} more
+            {revealLabel}
           </span>
         </button>
       ) : null}

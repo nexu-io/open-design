@@ -37,7 +37,7 @@ import {
   resolvePluginQueryFallback,
 } from '../state/projects';
 import { fetchMcpServers } from '../state/mcp';
-import { useI18n } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import {
   localizeSkillName,
   localizeSkillPrompt,
@@ -1533,6 +1533,7 @@ function HomeExistingProjectAction({
   onImportFolder?: (baseDir: string) => Promise<void> | void;
   onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
 }) {
+  const t = useT();
   const folderImport = useOpenFolderImport({
     skillId,
     onImportFolder,
@@ -1555,11 +1556,15 @@ function HomeExistingProjectAction({
           disabled={folderImport.importing}
         >
           <Icon name="folder" size={14} />
-          <span>{folderImport.importing ? 'Opening...' : 'Open existing project'}</span>
+          <span>
+            {folderImport.importing
+              ? t('home.openExistingProjectOpening')
+              : t('home.openExistingProject')}
+          </span>
         </button>
       </form>
       <p className="home-existing-project__subtitle">
-        Choose a folder from your disk.
+        {t('home.chooseFolderSubtitle')}
       </p>
       {folderImport.error ? (
         <Toast
