@@ -109,7 +109,7 @@ describe('AmrAccountControl', () => {
     expect(screen.queryByText('local')).toBeNull();
   });
 
-  it('renders compact login errors with AMR-labeled text', () => {
+  it('renders compact login errors with daemon-provided text', () => {
     renderAccountControl({
       status: 'error',
       compact: true,
@@ -117,8 +117,8 @@ describe('AmrAccountControl', () => {
       onSignIn: vi.fn(),
     });
 
-    expect(screen.getByText('AMR sign-in failed.')).toBeTruthy();
-    expect(screen.queryByText('command failed')).toBeNull();
+    expect(screen.getByRole('alert').textContent).toBe('command failed');
+    expect(screen.queryByText('AMR sign-in failed.')).toBeNull();
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
   });
 });
@@ -281,7 +281,10 @@ describe('AmrLoginPill', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeTruthy();
     });
-    expect(screen.getByText('AMR sign-in failed.')).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toBe(
+      'profile "prod" api URL: is not configured',
+    );
+    expect(screen.queryByText('AMR sign-in failed.')).toBeNull();
     expect(screen.queryByText('Signing in…')).toBeNull();
   });
 

@@ -4,6 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { HomeView } from '../../src/components/HomeView';
 import { I18nProvider } from '../../src/i18n';
+// HomeHero's prompt input is now the same Lexical contenteditable as the
+// project composer, so `home-hero-input` has no `.value`. Read its serialized
+// text through the shared helper instead.
+import { homeHeroPromptText } from '../helpers/home-hero-lexical';
 
 const PLUGIN_ROW = {
   id: 'localized-plugin',
@@ -97,7 +101,12 @@ describe('HomeView plugin i18n', () => {
     fireEvent.click(await waitFor(() => screen.getByTestId('plugins-home-use-localized-plugin')));
 
     expect(screen.getByTestId('home-hero-context-plugin-localized-plugin')).toBeTruthy();
-    expect((await screen.findByTestId('home-hero-input') as HTMLTextAreaElement).value).toBe('');
+    // "Use" adds the plugin as context only — it must NOT hydrate the query into
+    // the prompt editor, so the Lexical editor stays empty. An empty Lexical
+    // contenteditable serializes to whitespace, so assert via the composer's
+    // clear-empty convention (`homeHeroPromptText().trim()` === '').
+    await screen.findByTestId('home-hero-input');
+    expect(homeHeroPromptText().trim()).toBe('');
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
   });
 
@@ -133,11 +142,13 @@ describe('HomeView plugin i18n', () => {
     fireEvent.click(await waitFor(() => screen.getByTestId('plugins-home-use-menu-localized-plugin')));
     fireEvent.click(screen.getByTestId('plugins-home-use-with-query-localized-plugin'));
 
-    const input = await screen.findByTestId('home-hero-input');
+    await screen.findByTestId('home-hero-input');
+    // The localized query hydrates the Lexical editor's serialized text. The
+    // caret-at-end assertion (selectionStart/selectionEnd) is dropped: a
+    // contenteditable has no selectionStart/End, and the caret is placed by the
+    // editor's own selection model, not observable through the textarea API.
     await waitFor(() => {
-      expect((input as HTMLTextAreaElement).value).toBe('生成一份关于 设计系统 的简报。');
-      expect((input as HTMLTextAreaElement).selectionStart).toBe('生成一份关于 设计系统 的简报。'.length);
-      expect((input as HTMLTextAreaElement).selectionEnd).toBe('生成一份关于 设计系统 的简报。'.length);
+      expect(homeHeroPromptText()).toBe('生成一份关于 设计系统 的简报。');
     });
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
   });

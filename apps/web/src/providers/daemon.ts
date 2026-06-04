@@ -10,6 +10,7 @@
  *                 non-zero (tail appended to the error message).
  */
 import type { AgentEvent, ChatCommentAttachment, ChatMessage } from '../types';
+import type { AmrEntryAttribution } from '../analytics/amr-attribution';
 import type {
   ChatAnalyticsHints,
   ChatRunCreateResponse,
@@ -17,9 +18,11 @@ import type {
   ChatRunStatus,
   ChatRunStatusResponse,
   ChatRequest,
+  ChatSessionMode,
   ChatSseEvent,
   ChatSseStartPayload,
   DaemonAgentPayload,
+  AmrModelsResponse,
   MediaExecutionPolicy,
   ResearchOptions,
   RunContextSelection,
@@ -187,6 +190,14 @@ export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: st
 
 export interface DaemonStreamHandlers extends StreamHandlers {
   onAgentEvent: (ev: AgentEvent) => void;
+  /**
+   * Live-only incremental tool-input fragment (Claude `input_json_delta`).
+   * Kept off `AgentEvent`/`PersistedAgentEvent` because it is ephemeral and
+   * never persisted — consumers accumulate by tool-use `id` for real-time
+   * display and discard once the full `tool_use` event arrives. `name` is the
+   * tool name so the UI can gate the live preview to code-writing tools.
+   */
+  onToolInputDelta?: (id: string, name: string, delta: string) => void;
 }
 
 export interface DaemonStreamOptions {
@@ -204,6 +215,7 @@ export interface DaemonStreamOptions {
   // workspace.
   projectId?: string | null;
   conversationId?: string | null;
+  sessionMode?: ChatSessionMode;
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
@@ -224,6 +236,7 @@ export interface DaemonStreamOptions {
   reasoning?: string | null;
   research?: ResearchOptions;
   context?: RunContextSelection;
+  appliedPluginSnapshotId?: string | null;
   mediaExecution?: MediaExecutionPolicy;
   locale?: string;
   initialLastEventId?: string | null;
@@ -300,6 +313,7 @@ export async function streamViaDaemon({
   handlers,
   projectId,
   conversationId,
+  sessionMode,
   assistantMessageId,
   clientRequestId,
   skillId,
@@ -311,6 +325,7 @@ export async function streamViaDaemon({
   reasoning,
   research,
   context,
+  appliedPluginSnapshotId,
   mediaExecution,
   locale,
   initialLastEventId,
@@ -333,6 +348,7 @@ export async function streamViaDaemon({
     currentPrompt: latestUserPromptFromHistory(history),
     projectId: projectId ?? null,
     conversationId: conversationId ?? null,
+    sessionMode,
     assistantMessageId: assistantMessageId ?? null,
     clientRequestId: clientRequestId ?? null,
     skillId: skillId ?? null,
@@ -343,6 +359,7 @@ export async function streamViaDaemon({
     model: model ?? null,
     reasoning: reasoning ?? null,
     locale,
+    ...(appliedPluginSnapshotId ? { appliedPluginSnapshotId } : {}),
     ...(context ? { context } : {}),
     ...(research ? { research } : {}),
     ...(mediaExecution ? { mediaExecution } : {}),
@@ -518,6 +535,16 @@ export async function fetchVelaLoginStatus(): Promise<VelaLoginStatus | null> {
   }
 }
 
+export async function fetchAmrModels(): Promise<AmrModelsResponse | null> {
+  try {
+    const resp = await fetch('/api/amr/models', { cache: 'no-store' });
+    if (!resp.ok) return null;
+    return (await resp.json()) as AmrModelsResponse;
+  } catch {
+    return null;
+  }
+}
+
 export interface StartVelaLoginResult {
   ok: boolean;
   status: number;
@@ -526,9 +553,15 @@ export interface StartVelaLoginResult {
   error?: string;
 }
 
-export async function startVelaLogin(): Promise<StartVelaLoginResult> {
+export async function startVelaLogin(
+  attribution?: AmrEntryAttribution | null,
+): Promise<StartVelaLoginResult> {
   try {
-    const resp = await fetch('/api/integrations/vela/login', { method: 'POST' });
+    const resp = await fetch('/api/integrations/vela/login', {
+      method: 'POST',
+      headers: attribution ? { 'Content-Type': 'application/json' } : undefined,
+      body: attribution ? JSON.stringify({ attribution }) : undefined,
+    });
     if (resp.ok) {
       const body = (await resp.json()) as { pid?: number };
       return { ok: true, status: resp.status, pid: body.pid };
@@ -719,6 +752,16 @@ async function consumeDaemonRun({
           }
 
           if (event.event === 'agent') {
+            if (event.data.type === 'tool_input_delta') {
+              if (
+                typeof event.data.id === 'string' &&
+                typeof event.data.name === 'string' &&
+                typeof event.data.delta === 'string'
+              ) {
+                handlers.onToolInputDelta?.(event.data.id, event.data.name, event.data.delta);
+              }
+              continue;
+            }
             const translated = translateAgentEvent(event.data);
             if (!translated) continue;
             if (translated.kind === 'text') {

@@ -17,6 +17,7 @@ Other docs:
 - Agent adapters → [`agent-adapters.md`](agent-adapters.md)
 - Modes → [`modes.md`](modes.md)
 - Automations self-evolution → [`../specs/current/automation-self-evolution.md`](../specs/current/automation-self-evolution.md)
+- Run reliability optimization plan → [`../specs/current/run-reliability-optimization-plan.md`](../specs/current/run-reliability-optimization-plan.md)
 - References & credits → [`references.md`](references.md)
 - Roadmap → [`roadmap.md`](roadmap.md)
 

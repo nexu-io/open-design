@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 
 import { Icon } from './Icon';
+import { popoverIn } from '../motion';
 import {
   deriveUpdaterModel,
   openUpdaterInstaller,
@@ -285,39 +287,45 @@ export function UpdaterPopup() {
           <Icon name="arrow-up" size={18} strokeWidth={2.25} />
         </span>
       </button>
-      {panelOpen ? (
-        <section
-          aria-labelledby="updater-popup-title"
-          className="updater-popup is-ready"
-          data-testid="updater-popup"
-          role="dialog"
-        >
-          <div className="updater-popup__icon">
-            <Icon name="arrow-up" size={20} strokeWidth={2.2} />
-          </div>
-          <div className="updater-popup__body">
-            <h2 id="updater-popup-title">{t('updater.ready')}</h2>
-            <p>{versionText(t, model)}</p>
-            {channelLabel != null ? <span className="updater-popup__badge">{channelLabel}</span> : null}
-          </div>
-          <div className="updater-popup__actions">
-            <button className="updater-popup__button" disabled={installBusy} type="button" onClick={close}>
-              {t('updater.later')}
-            </button>
-            <button
-              className="updater-popup__button updater-popup__button--primary"
-              data-testid="updater-install-button"
-              disabled={installBusy}
-              type="button"
-              onClick={() => {
-                void installAndQuit();
-              }}
-            >
-              {installBusy ? t('updater.opening') : t('updater.openInstaller')}
-            </button>
-          </div>
-        </section>
-      ) : null}
+      <AnimatePresence>
+        {panelOpen ? (
+          <motion.section
+            aria-labelledby="updater-popup-title"
+            className="updater-popup is-ready"
+            data-testid="updater-popup"
+            role="dialog"
+            variants={popoverIn}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+          >
+            <div className="updater-popup__icon">
+              <Icon name="arrow-up" size={20} strokeWidth={2.2} />
+            </div>
+            <div className="updater-popup__body">
+              <h2 id="updater-popup-title">{t('updater.ready')}</h2>
+              <p>{versionText(t, model)}</p>
+              {channelLabel != null ? <span className="updater-popup__badge">{channelLabel}</span> : null}
+            </div>
+            <div className="updater-popup__actions">
+              <button className="updater-popup__button" disabled={installBusy} type="button" onClick={close}>
+                {t('updater.later')}
+              </button>
+              <button
+                className="updater-popup__button updater-popup__button--primary"
+                data-testid="updater-install-button"
+                disabled={installBusy}
+                type="button"
+                onClick={() => {
+                  void installAndQuit();
+                }}
+              >
+                {installBusy ? t('updater.opening') : t('updater.openInstaller')}
+              </button>
+            </div>
+          </motion.section>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

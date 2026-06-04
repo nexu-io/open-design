@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  __forTestRetryFinalResultForRunStatus,
+  __forTestRunRetryEventsForAnalytics,
   __forTestResolveRunProjectKindForAnalytics,
+  __forTestScanRunEventsForRetrySideEffects,
   __forTestScanRunEventsForFinishedProps,
 } from '../src/server.js';
+import { hasExplicitRequestedModelForAnalytics } from '../src/run-analytics-observability.js';
 
 describe('run lifecycle analytics', () => {
   it('falls back to stored project metadata when analytics hints omit project kind', () => {
@@ -93,6 +97,14 @@ describe('scanRunEventsForFinishedProps', () => {
     // ignores it when reqBodyModel is set — no assertion on its value here.
   });
 
+  it('treats synthetic default request model as unresolved and reads the agent model', () => {
+    const events = [initializingEvent('gpt-5.4-mini'), usageEvent(30, 40)];
+    const result = __forTestScanRunEventsForFinishedProps(events, 'default');
+    expect(result.agentReportedModel).toBe('gpt-5.4-mini');
+    expect(result.inputTokens).toBe(30);
+    expect(result.outputTokens).toBe(40);
+  });
+
   it('returns null agentReportedModel when no status event is present', () => {
     const events = [usageEvent(5, 10)];
     const result = __forTestScanRunEventsForFinishedProps(events, '');
@@ -121,5 +133,58 @@ describe('scanRunEventsForFinishedProps', () => {
     expect(result.agentReportedModel).toBe('claude-opus-4');
     expect(result.inputTokens).toBe(500);
     expect(result.outputTokens).toBe(750);
+  });
+});
+
+describe('hasExplicitRequestedModelForAnalytics', () => {
+  it('only treats concrete non-default model strings as explicit selections', () => {
+    expect(hasExplicitRequestedModelForAnalytics(null)).toBe(false);
+    expect(hasExplicitRequestedModelForAnalytics('')).toBe(false);
+    expect(hasExplicitRequestedModelForAnalytics(' default ')).toBe(false);
+    expect(hasExplicitRequestedModelForAnalytics('claude-opus-4-7')).toBe(true);
+  });
+});
+
+describe('run retry analytics helpers', () => {
+  it('detects retry-blocking side effects from run events', () => {
+    expect(__forTestScanRunEventsForRetrySideEffects([
+      { event: 'stderr', data: { chunk: 'HTTP 503' } },
+    ])).toEqual({
+      userVisibleOutputSeen: false,
+      toolCallSeen: false,
+      artifactWriteSeen: false,
+      liveArtifactSeen: false,
+    });
+
+    expect(__forTestScanRunEventsForRetrySideEffects([
+      { event: 'agent', data: { type: 'text_delta', delta: 'hello' } },
+      { event: 'agent', data: { type: 'tool_use', id: 't1', name: 'Read', input: {} } },
+      { event: 'agent', data: { type: 'live_artifact' } },
+    ])).toMatchObject({
+      userVisibleOutputSeen: true,
+      toolCallSeen: true,
+      liveArtifactSeen: true,
+    });
+  });
+
+  it('derives retry final result from terminal status and attempt count', () => {
+    expect(__forTestRetryFinalResultForRunStatus('succeeded', 0)).toBe('not_attempted');
+    expect(__forTestRetryFinalResultForRunStatus('failed', 0)).toBe('suppressed');
+    expect(__forTestRetryFinalResultForRunStatus('succeeded', 1)).toBe('success');
+    expect(__forTestRetryFinalResultForRunStatus('failed', 1)).toBe('failed');
+    expect(__forTestRetryFinalResultForRunStatus('canceled', 1)).toBe('suppressed');
+  });
+
+  it('selects retry events for daemon-side analytics replay', () => {
+    const events = [
+      { event: 'start', data: {} },
+      { event: 'run_retry_attempted', data: { retry_attempt_index: 1 } },
+      { event: 'run_retry_finished', data: { retry_result: 'success' } },
+      { event: 'end', data: {} },
+    ];
+    expect(__forTestRunRetryEventsForAnalytics(events).map((event) => event.event)).toEqual([
+      'run_retry_attempted',
+      'run_retry_finished',
+    ]);
   });
 });

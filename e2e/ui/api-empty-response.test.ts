@@ -48,7 +48,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('API empty stream shows No output instead of Done', async ({ page }) => {
+test('[P0] API empty stream shows No output instead of Done', async ({ page }) => {
   await page.route('**/api/proxy/openai/stream', async (route) => {
     await route.fulfill({
       status: 200,
@@ -66,7 +66,7 @@ test('API empty stream shows No output instead of Done', async ({ page }) => {
   await sendPrompt(page, 'Create a login page');
 
   await expect(page.locator('.assistant-label', { hasText: 'No output' })).toBeVisible();
-  await expect(page.getByText(/provider ended the request/i)).toBeVisible();
+  await expect(page.getByTestId('generation-preview-stage').getByText(/provider ended the request/i)).toBeVisible();
   await expect(page.locator('.assistant-label', { hasText: 'Done' })).toHaveCount(0);
 });
 

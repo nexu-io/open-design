@@ -161,22 +161,5 @@ const isVideoPreview = record.previewType === 'video' && record.previewVideo;
 
   <div class="tpl-actions">
     <a class="tpl-cta" href={detailHref}>{pcopy.cardUseTemplate}</a>
-    <button
-      type="button"
-      class="tpl-share"
-      data-tpl-card-share
-      data-share-text={shareText}
-      data-share-url={shareUrl}
-      data-share-title={name}
-      aria-label={pcopy.cardShareAria(name)}
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="18" cy="5" r="3" />
-        <circle cx="6" cy="12" r="3" />
-        <circle cx="18" cy="19" r="3" />
-        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-      </svg>
-    </button>
   </div>
 </article>

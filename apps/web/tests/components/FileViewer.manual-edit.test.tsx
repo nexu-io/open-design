@@ -20,15 +20,50 @@ describe('FileViewer manual edit regressions', () => {
     fireEvent.click(screen.getByTestId(testId));
   }
 
-  async function hoverManualEditTarget(target = heroTarget()) {
-    const frame = await waitFor(() => {
+  async function previewFrame() {
+    return waitFor(() => {
       const node = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       if (!node.contentWindow) throw new Error('Preview frame not ready');
       return node;
     });
+  }
+
+  async function hoverManualEditTarget(target = heroTarget()) {
+    const frame = await previewFrame();
     act(() => {
       window.dispatchEvent(new MessageEvent('message', {
         data: { type: 'od-edit-hover', target },
+        source: frame.contentWindow,
+      }));
+    });
+    // Hover only surfaces the affordance; it must not open any panel.
+    await waitFor(() => {
+      expect(screen.getByTestId('manual-edit-hover-open')).toBeTruthy();
+    });
+  }
+
+  // Clicking the empty canvas is the gesture that opens the compact page card.
+  async function clickManualEditBackground() {
+    const frame = await previewFrame();
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'od-edit-background' },
+        source: frame.contentWindow,
+      }));
+    });
+    await waitFor(() => {
+      expect(document.querySelector('.manual-edit-right')).not.toBeNull();
+    });
+  }
+
+  // Hover only surfaces the "edit params" affordance; pinning the inspector to
+  // a target now requires an explicit click (mirrors clicking that affordance
+  // or a container/image body in the bridge).
+  async function selectManualEditTarget(target = heroTarget()) {
+    const frame = await previewFrame();
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'od-edit-select', target },
         source: frame.contentWindow,
       }));
     });
@@ -76,7 +111,7 @@ describe('FileViewer manual edit regressions', () => {
     expect(cancelManualEditPendingStyleSnapshot(otherTargetPending, 'cta', ['fontSize'])).toBe(otherTargetPending);
   });
 
-  it('opens the page edit panel before a target is hovered or selected', async () => {
+  it('opens edit mode with a clean canvas and no docked panel', async () => {
     const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
     vi.stubGlobal('fetch', vi.fn(async () =>
       new Response(source, { status: 200, headers: { 'Content-Type': 'text/html' } }),
@@ -89,11 +124,60 @@ describe('FileViewer manual edit regressions', () => {
     );
 
     clickManualTool('manual-edit-mode-toggle');
-    expect(document.querySelector('.manual-edit-right')).not.toBeNull();
-    expect(screen.getByText('PAGE')).toBeTruthy();
+    // No panel auto-pops; the canvas stays clean.
+    expect(document.querySelector('.manual-edit-right')).toBeNull();
+    expect(screen.queryByText('PAGE')).toBeNull();
 
+    // Hovering surfaces only the click affordance, still no panel.
     await hoverManualEditTarget();
-    expect(document.querySelector('.manual-edit-right')).not.toBeNull();
+    expect(document.querySelector('.manual-edit-right')).toBeNull();
+    expect(screen.queryByText('PAGE')).toBeNull();
+    expect(screen.getByTestId('manual-edit-hover-open')).toBeTruthy();
+  });
+
+  it('opens the compact page-styles card when the empty canvas is clicked', async () => {
+    const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response(source, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+    ));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={source}
+      />,
+    );
+
+    clickManualTool('manual-edit-mode-toggle');
+    await clickManualEditBackground();
+
+    expect(screen.getByText('PAGE')).toBeTruthy();
+    expect(document.querySelector('.manual-edit-page-card')).not.toBeNull();
+  });
+
+  it('pins the inspector to a target only after clicking the hover affordance', async () => {
+    const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response(source, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+    ));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={source}
+      />,
+    );
+
+    clickManualTool('manual-edit-mode-toggle');
+    await hoverManualEditTarget();
+    // No panel until the affordance is clicked.
+    expect(document.querySelector('.manual-edit-right')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('manual-edit-hover-open'));
+
+    // Selected target inspector exposes the typography "Size" control.
+    await findStyleInput('Size');
+    expect(screen.queryByText('PAGE')).toBeNull();
+    // Affordance hides once its element is the pinned selection.
+    expect(screen.queryByTestId('manual-edit-hover-open')).toBeNull();
   });
 
   it('does not let a pending manual edit style save survive a file switch', async () => {
@@ -117,7 +201,7 @@ describe('FileViewer manual edit regressions', () => {
     );
 
     fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
-    await hoverManualEditTarget();
+    await selectManualEditTarget();
     const baseSizeInput = await findStyleInput('Size');
     fireEvent.change(baseSizeInput, { target: { value: '18' } });
 
@@ -162,7 +246,7 @@ describe('FileViewer manual edit regressions', () => {
         {},
       ));
       fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
-      await hoverManualEditTarget();
+      await selectManualEditTarget();
       const baseSizeInput = await findStyleInput('Size');
       fireEvent.change(baseSizeInput, { target: { value: '18' } });
 
@@ -213,7 +297,7 @@ describe('FileViewer manual edit regressions', () => {
     );
 
     clickManualTool('manual-edit-mode-toggle');
-    await hoverManualEditTarget();
+    await selectManualEditTarget();
     const baseSizeInput = await findStyleInput('Size');
 
     fireEvent.change(baseSizeInput, { target: { value: '18' } });
@@ -229,7 +313,7 @@ describe('FileViewer manual edit regressions', () => {
     });
   });
 
-  it('closes manual edit without saving when footer cancel is clicked', async () => {
+  it('closes the inspector without saving on cancel, staying in edit mode', async () => {
     const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
     const fetchMock = vi.fn(async () =>
       new Response(source, { status: 200, headers: { 'Content-Type': 'text/html' } }),
@@ -243,7 +327,7 @@ describe('FileViewer manual edit regressions', () => {
     );
 
     clickManualTool('manual-edit-mode-toggle');
-    await hoverManualEditTarget();
+    await selectManualEditTarget();
     const baseSizeInput = await findStyleInput('Size');
 
     fireEvent.change(baseSizeInput, { target: { value: '18' } });
@@ -252,13 +336,14 @@ describe('FileViewer manual edit regressions', () => {
     await waitFor(() => {
       expect(document.querySelector('.manual-edit-right')).toBeNull();
     });
+    expect(document.querySelector('.manual-edit-workspace')).not.toBeNull();
     expect(fetchMock).not.toHaveBeenCalledWith(
       '/api/projects/project-1/files',
       expect.objectContaining({ method: 'POST' }),
     );
   });
 
-  it('closes manual edit after footer save succeeds', async () => {
+  it('closes the inspector after save succeeds, staying in edit mode', async () => {
     const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
@@ -279,7 +364,7 @@ describe('FileViewer manual edit regressions', () => {
     );
 
     clickManualTool('manual-edit-mode-toggle');
-    await hoverManualEditTarget();
+    await selectManualEditTarget();
     const baseSizeInput = await findStyleInput('Size');
 
     fireEvent.change(baseSizeInput, { target: { value: '18' } });
@@ -292,6 +377,7 @@ describe('FileViewer manual edit regressions', () => {
       );
       expect(document.querySelector('.manual-edit-right')).toBeNull();
     });
+    expect(document.querySelector('.manual-edit-workspace')).not.toBeNull();
   });
 });
 

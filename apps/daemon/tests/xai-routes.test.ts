@@ -58,7 +58,7 @@ import {
   extractAnswerText,
   extractUrlCitations,
   registerXaiRoutes,
-} from '../src/xai-routes.js';
+} from '../src/routes/xai.js';
 import {
   XAI_OAUTH_AUTHORIZATION_ENDPOINT,
   XAI_OAUTH_TOKEN_ENDPOINT,

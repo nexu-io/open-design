@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatFormAnswers, splitOnQuestionForms } from '../../src/artifacts/question-form';
+import {
+  formatFormAnswers,
+  splitOnQuestionForms,
+  parsePartialQuestionForm,
+} from '../../src/artifacts/question-form';
 
 const VALID_BODY = `{
   "questions": [
@@ -121,5 +125,131 @@ describe('splitOnQuestionForms', () => {
     if (out[1]?.kind === 'form') {
       expect(out[1].form.id).toBe('x');
     }
+  });
+});
+
+describe('parsePartialQuestionForm (true token-by-token streaming)', () => {
+  it('surfaces a question before its object closes, then grows its options', () => {
+    const midLabel = '<question-form id="discovery">{"questions":[{"id":"platform","label":"Platform"';
+    expect(parsePartialQuestionForm(midLabel)?.questions.map((q) => q.label)).toEqual(['Platform']);
+
+    const oneOption =
+      '<question-form id="discovery">{"questions":[{"id":"platform","label":"Platform","type":"radio","options":["Mobile"';
+    expect(parsePartialQuestionForm(oneOption)?.questions[0]?.options?.map((o) => o.label)).toEqual([
+      'Mobile',
+    ]);
+
+    const twoOptions =
+      '<question-form id="discovery">{"questions":[{"id":"platform","label":"Platform","type":"radio","options":["Mobile","Desktop"';
+    expect(parsePartialQuestionForm(twoOptions)?.questions[0]?.options?.map((o) => o.label)).toEqual([
+      'Mobile',
+      'Desktop',
+    ]);
+  });
+
+  it('holds back a trailing question until its label exists (no id placeholder flicker)', () => {
+    const buf =
+      '<question-form id="discovery">{"questions":[{"id":"a","label":"First","type":"text"},{"id":"b"';
+    expect(parsePartialQuestionForm(buf)?.questions.map((q) => q.label)).toEqual(['First']);
+  });
+
+  it('reads title/id from the open tag before any question arrives', () => {
+    const f = parsePartialQuestionForm('<question-form id="discovery" title="Quick brief">{"questions":[');
+    expect(f?.id).toBe('discovery');
+    expect(f?.title).toBe('Quick brief');
+    expect(f?.questions).toEqual([]);
+  });
+
+  it('does not let a nested question id/description masquerade as form metadata', () => {
+    // No form-level id on the tag or top-level body — only a question-level
+    // id. The form id must stay the stable fallback, not adopt "platform"
+    // (which would change the live panel's identity mid-stream).
+    const f = parsePartialQuestionForm(
+      '<question-form>{"questions":[{"id":"platform","label":"Platform","description":"nested"',
+    );
+    expect(f?.id).toBe('discovery');
+    expect(f?.description).toBeUndefined();
+    expect(f?.questions.map((q) => q.label)).toEqual(['Platform']);
+  });
+
+  it('keeps streaming through a closed ```json fence before the close tag arrives', () => {
+    // Fenced body fully written, trailing ``` present, but </question-form>
+    // not yet — the preview must stay populated, not drop to empty.
+    const buf =
+      '<question-form id="discovery">```json\n{"questions":[{"id":"a","label":"First","type":"text"}]}\n```';
+    expect(parsePartialQuestionForm(buf)?.questions.map((q) => q.label)).toEqual(['First']);
+  });
+
+  it('keeps streaming while only a partial trailing fence has arrived', () => {
+    const buf =
+      '<question-form id="discovery">```json\n{"questions":[{"id":"a","label":"First","type":"text"}]}\n``';
+    expect(parsePartialQuestionForm(buf)?.questions.map((q) => q.label)).toEqual(['First']);
+  });
+
+  it('does not strip backticks that are content of a label still being typed', () => {
+    // The trailing ``` here is inside an open string value, not a closing
+    // fence — it must survive into the preview, not be trimmed to "Use ".
+    const buf = '<question-form id="discovery">{"questions":[{"id":"a","label":"Use ```';
+    expect(parsePartialQuestionForm(buf)?.questions[0]?.label).toContain('```');
+  });
+
+  it('carries a custom submitLabel through the streaming preview', () => {
+    const buf =
+      '<question-form id="discovery">{"submitLabel":"Generate brief","questions":[{"id":"a","label":"First","type":"text"}';
+    expect(parsePartialQuestionForm(buf)?.submitLabel).toBe('Generate brief');
+  });
+
+  it('keeps already-visible questions when a boolean value is split across deltas', () => {
+    // `required` cut mid-`true` must not drop the question already shown.
+    const buf = '<question-form id="discovery">{"questions":[{"id":"a","label":"Q","required":t';
+    expect(parsePartialQuestionForm(buf)?.questions.map((q) => q.label)).toEqual(['Q']);
+  });
+
+  it('streams a single closed no-id question before the close tag arrives', () => {
+    // The object is complete (its `}` streamed) but has no explicit id and no
+    // `]`/close tag yet. Its fallback id (q1) is already final, so it should
+    // show now rather than waiting for the close tag.
+    const buf = '<question-form id="discovery">{"questions":[{"label":"First","type":"text"}';
+    expect(parsePartialQuestionForm(buf)?.questions.map((q) => q.label)).toEqual(['First']);
+    expect(parsePartialQuestionForm(buf)?.questions.map((q) => q.id)).toEqual(['q1']);
+  });
+
+  it('still holds a no-id question whose object is not yet closed', () => {
+    // Same content but the object is still open (no `}`): it might still gain
+    // an id, so surfacing it now risks an id swap that orphans an answer.
+    const buf = '<question-form id="discovery">{"questions":[{"label":"First","type":"text"';
+    expect(parsePartialQuestionForm(buf)?.questions).toEqual([]);
+  });
+
+  it('holds a label-first question until its canonical id is determinable', () => {
+    // label streamed, the in-flight object has no id yet — surfacing it now
+    // would force a later id swap that orphans an in-progress answer, so it
+    // waits. Once the id streams it appears with the canonical id.
+    const labelFirst = parsePartialQuestionForm(
+      '<question-form id="discovery">{"questions":[{"label":"Platform"',
+    );
+    expect(labelFirst?.questions).toEqual([]);
+    const idLater = parsePartialQuestionForm(
+      '<question-form id="discovery">{"questions":[{"label":"Platform","id":"platform"',
+    );
+    expect(idLater?.questions[0]?.id).toBe('platform');
+  });
+
+  it('gives preview question ids identical to the final parse (no orphaned answers on swap)', () => {
+    const finalIds = (input: string) => {
+      const seg = splitOnQuestionForms(input).find((s) => s.kind === 'form');
+      return seg && seg.kind === 'form' ? seg.form.questions.map((q) => q.id) : [];
+    };
+    // id-bearing question: preview id == final canonical id.
+    const withId =
+      '<question-form id="discovery">{"questions":[{"id":"platform","label":"Platform","type":"radio","options":["A"]}';
+    expect(parsePartialQuestionForm(withId)?.questions.map((q) => q.id)).toEqual(['platform']);
+    expect(finalIds(`${withId}]}</question-form>`)).toEqual(['platform']);
+    // no-id question that has closed (not in-flight): preview falls back to the
+    // same index id the final parse will assign.
+    const noId =
+      '<question-form id="discovery">{"questions":[{"label":"First","type":"text"},{"id":"b"';
+    expect(parsePartialQuestionForm(noId)?.questions.map((q) => q.id)).toEqual(['q1']);
+    expect(finalIds('<question-form id="discovery">{"questions":[{"label":"First","type":"text"}]}</question-form>')).toEqual(['q1']);
   });
 });

@@ -8,6 +8,7 @@ const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   google: 'Google Gemini',
   ollama: 'Ollama Cloud API',
   senseaudio: 'SenseAudio API',
+  aihubmix: 'AIHubMix API',
 };
 
 const API_PROTOCOL_AGENT_IDS: Record<ApiProtocol, string> = {
@@ -17,6 +18,7 @@ const API_PROTOCOL_AGENT_IDS: Record<ApiProtocol, string> = {
   google: 'google-gemini-api',
   ollama: 'ollama-cloud-api',
   senseaudio: 'senseaudio-api',
+  aihubmix: 'aihubmix-api',
 };
 
 export function apiProtocolLabel(protocol: ApiProtocol | undefined): string {
@@ -42,6 +44,7 @@ export function usesAnthropicProxy(cfg: AppConfig): boolean {
     cfg.apiProtocol === 'ollama' ||
     cfg.apiProtocol === 'google' ||
     cfg.apiProtocol === 'senseaudio' ||
+    cfg.apiProtocol === 'aihubmix' ||
     cfg.apiProtocol === 'openai'
   ) {
     return false;

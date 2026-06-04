@@ -29,7 +29,11 @@ const saveTabs = vi.fn();
 // no-op renderer (the real component pulls in markdown + chat
 // streaming machinery that isn't relevant to the projects-refresh
 // regression we want to pin).
-const chatPaneProps: { onDeleteConversation?: (id: string) => Promise<void> | void } = {};
+const chatPaneProps: {
+  onDeleteConversation?: (id: string) => Promise<void> | void;
+  activeConversationId?: string | null;
+  conversations?: Array<{ id: string; title?: string | null }>;
+} = {};
 
 vi.mock('../../src/i18n', () => ({
   useI18n: () => ({
@@ -90,8 +94,14 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 }));
 
 vi.mock('../../src/components/ChatPane', () => ({
-  ChatPane: (props: { onDeleteConversation?: (id: string) => Promise<void> | void }) => {
+  ChatPane: (props: {
+    onDeleteConversation?: (id: string) => Promise<void> | void;
+    activeConversationId?: string | null;
+    conversations?: Array<{ id: string; title?: string | null }>;
+  }) => {
     chatPaneProps.onDeleteConversation = props.onDeleteConversation;
+    chatPaneProps.activeConversationId = props.activeConversationId;
+    chatPaneProps.conversations = props.conversations;
     return null;
   },
 }));
@@ -138,6 +148,8 @@ describe('ProjectView conversation delete', () => {
     cleanup();
     vi.clearAllMocks();
     chatPaneProps.onDeleteConversation = undefined;
+    chatPaneProps.activeConversationId = undefined;
+    chatPaneProps.conversations = undefined;
   });
 
   // Issue #1202: the home `Needs input` badge is rendered from the
@@ -214,5 +226,66 @@ describe('ProjectView conversation delete', () => {
 
     expect(deleteConversation).toHaveBeenCalledWith('project-1', 'conv-1');
     expect(onProjectsRefresh).not.toHaveBeenCalled();
+  });
+
+  it('switches the active conversation to the next available history item after deleting the current one', async () => {
+    listConversations.mockResolvedValue([
+      { id: 'conv-1', title: 'Conversation 1' },
+      { id: 'conv-2', title: 'Conversation 2' },
+    ]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    reattachDaemonRun.mockResolvedValue(undefined);
+    deleteConversation.mockResolvedValue(true);
+
+    renderProjectView(vi.fn());
+
+    await waitFor(() => expect(chatPaneProps.onDeleteConversation).toBeDefined());
+    await waitFor(() => expect(chatPaneProps.activeConversationId).toBe('conv-1'));
+
+    await act(async () => {
+      await chatPaneProps.onDeleteConversation!('conv-1');
+    });
+
+    await waitFor(() => expect(chatPaneProps.activeConversationId).toBe('conv-2'));
+    expect(chatPaneProps.conversations?.map((conversation) => conversation.id)).toEqual(['conv-2']);
+  });
+
+  it('re-seeds a fresh conversation when deleting the last remaining history item', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation 1' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    reattachDaemonRun.mockResolvedValue(undefined);
+    deleteConversation.mockResolvedValue(true);
+    createConversation.mockResolvedValue({ id: 'conv-fresh', title: 'Fresh conversation' });
+
+    renderProjectView(vi.fn());
+
+    await waitFor(() => expect(chatPaneProps.onDeleteConversation).toBeDefined());
+    await waitFor(() => expect(chatPaneProps.activeConversationId).toBe('conv-1'));
+
+    await act(async () => {
+      await chatPaneProps.onDeleteConversation!('conv-1');
+    });
+
+    await waitFor(() => expect(createConversation).toHaveBeenCalledWith('project-1'));
+    await waitFor(() => expect(chatPaneProps.activeConversationId).toBe('conv-fresh'));
+    expect(chatPaneProps.conversations?.map((conversation) => conversation.id)).toEqual(['conv-fresh']);
   });
 });

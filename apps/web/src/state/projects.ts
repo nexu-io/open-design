@@ -8,13 +8,17 @@
 import type {
   AppliedPluginSnapshot,
   ApplyResult,
+  ChatSessionMode,
+  CreateConversationRequest,
   CreatePluginShareProjectResponse,
+  CreateTerminalRequest,
   ImportFolderRequest,
   ImportFolderResponse,
   InstalledPluginRecord,
   PluginInstallOutcome,
   PluginShareAction,
   ProjectPluginFolderInstallRequest,
+  TerminalSession,
 } from '@open-design/contracts';
 import { randomUUID } from '../utils/uuid';
 import type {
@@ -58,6 +62,7 @@ export async function createProject(input: {
   designSystemId: string | null;
   pendingPrompt?: string;
   metadata?: ProjectMetadata;
+  conversationMode?: ChatSessionMode;
   // Plan §3.A1 / spec §11.5 — POST /api/projects accepts a pluginId
   // (or pre-applied snapshot id) to resolve and pin a plugin to the new
   // project. Used by the PluginLoopHome flow on Home.
@@ -242,14 +247,32 @@ export async function listConversations(
 export async function createConversation(
   projectId: string,
   title?: string,
+  // Side Chat: seed the new conversation with another conversation's context
+  // by copying its messages. `forkAfterMessageId` narrows that copy to a
+  // specific point in the source history.
+  opts?: {
+    seedFromConversationId?: string | null;
+    forkAfterMessageId?: string | null;
+    sessionMode?: ChatSessionMode;
+  },
 ): Promise<Conversation | null> {
   try {
+    const body: CreateConversationRequest = { title };
+    if (opts?.sessionMode) {
+      body.sessionMode = opts.sessionMode;
+    }
+    if (opts?.seedFromConversationId) {
+      body.seedFromConversationId = opts.seedFromConversationId;
+    }
+    if (opts?.forkAfterMessageId) {
+      body.forkAfterMessageId = opts.forkAfterMessageId;
+    }
     const resp = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title }),
+        body: JSON.stringify(body),
       },
     );
     if (!resp.ok) return null;
@@ -348,17 +371,197 @@ export async function saveMessage(
   }
 }
 
+// ---------- terminals ----------
+//
+// Interactive PTY sessions rooted at the project working directory. The daemon
+// streams output down over SSE (`GET .../stream`) and accepts keystrokes /
+// resizes back up over plain POST — see `packages/contracts/src/api/terminals.ts`.
+// `<TerminalViewer>` drives `terminalStreamUrl` directly via EventSource; these
+// helpers cover the request/response endpoints.
+
+export async function createTerminal(
+  projectId: string,
+  init?: CreateTerminalRequest,
+): Promise<TerminalSession | null> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/terminals`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(init ?? {}),
+      },
+    );
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { terminal: TerminalSession };
+    return json.terminal ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** SSE endpoint a `<TerminalViewer>` subscribes to for raw PTY output. */
+export function terminalStreamUrl(projectId: string, terminalId: string): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/terminals/${encodeURIComponent(terminalId)}/stream`;
+}
+
+export async function sendTerminalStdin(
+  projectId: string,
+  terminalId: string,
+  data: string,
+): Promise<boolean> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/terminals/${encodeURIComponent(terminalId)}/stdin`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data }),
+      },
+    );
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function resizeTerminal(
+  projectId: string,
+  terminalId: string,
+  cols: number,
+  rows: number,
+): Promise<boolean> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/terminals/${encodeURIComponent(terminalId)}/resize`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cols, rows }),
+      },
+    );
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function killTerminal(
+  projectId: string,
+  terminalId: string,
+  // Page-unload paths set keepalive so the kill survives document teardown,
+  // mirroring `saveMessage`. Without it the browser cancels the fetch and the
+  // PTY leaks until the daemon GCs it.
+  options: { keepalive?: boolean } = {},
+): Promise<boolean> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/terminals/${encodeURIComponent(terminalId)}/kill`,
+      {
+        method: 'POST',
+        ...(options.keepalive ? { keepalive: true } : {}),
+      },
+    );
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
 // ---------- tabs ----------
 
+const PROJECT_TABS_CACHE_PREFIX = 'open-design:project-tabs:v1:';
+
+function tabsCacheKey(projectId: string): string {
+  return `${PROJECT_TABS_CACHE_PREFIX}${projectId}`;
+}
+
+function normalizeTabsState(value: unknown): OpenTabsState | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.tabs) || !record.tabs.every((tab) => typeof tab === 'string')) {
+    return null;
+  }
+  const browserTabs = Array.isArray(record.browserTabs)
+    ? record.browserTabs.filter(
+        (tab) =>
+          Boolean(tab) &&
+          typeof tab === 'object' &&
+          !Array.isArray(tab) &&
+          typeof (tab as Record<string, unknown>).id === 'string' &&
+          typeof (tab as Record<string, unknown>).label === 'string',
+      ) as OpenTabsState['browserTabs']
+    : undefined;
+  const state: OpenTabsState = {
+    tabs: record.tabs.slice() as string[],
+    active: typeof record.active === 'string' ? record.active : null,
+  };
+  if (browserTabs && browserTabs.length > 0) state.browserTabs = browserTabs;
+  if (record.hasSavedState === true) state.hasSavedState = true;
+  if (typeof record.updatedAt === 'number' && Number.isFinite(record.updatedAt)) {
+    state.updatedAt = record.updatedAt;
+  }
+  return state;
+}
+
+function readCachedTabs(projectId: string): OpenTabsState | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return normalizeTabsState(JSON.parse(window.localStorage.getItem(tabsCacheKey(projectId)) ?? 'null'));
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedTabs(projectId: string, state: OpenTabsState): OpenTabsState {
+  const next: OpenTabsState = {
+    ...state,
+    updatedAt: Date.now(),
+  };
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.setItem(tabsCacheKey(projectId), JSON.stringify(next));
+    } catch {
+      // Ignore quota/private-mode failures. The daemon save below is canonical.
+    }
+  }
+  return next;
+}
+
+function newestTabsState(
+  first: OpenTabsState | null,
+  second: OpenTabsState | null,
+): OpenTabsState {
+  if (!first && !second) return { tabs: [], active: null };
+  if (!first) return second!;
+  if (!second) return first;
+  return (second.updatedAt ?? 0) > (first.updatedAt ?? 0) ? second : first;
+}
+
+async function persistTabsToDaemon(projectId: string, state: OpenTabsState): Promise<void> {
+  await fetch(`/api/projects/${encodeURIComponent(projectId)}/tabs`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(state),
+    keepalive: true,
+  });
+}
+
 export async function loadTabs(projectId: string): Promise<OpenTabsState> {
+  const cached = readCachedTabs(projectId);
   try {
     const resp = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/tabs`,
     );
-    if (!resp.ok) return { tabs: [], active: null };
-    return (await resp.json()) as OpenTabsState;
+    if (!resp.ok) return cached ?? { tabs: [], active: null };
+    const saved = normalizeTabsState(await resp.json());
+    const latest = newestTabsState(cached, saved);
+    if (cached && latest === cached && (cached.updatedAt ?? 0) > (saved?.updatedAt ?? 0)) {
+      void persistTabsToDaemon(projectId, cached).catch(() => {});
+    }
+    return latest;
   } catch {
-    return { tabs: [], active: null };
+    return cached ?? { tabs: [], active: null };
   }
 }
 
@@ -366,14 +569,35 @@ export async function saveTabs(
   projectId: string,
   state: OpenTabsState,
 ): Promise<void> {
+  const next = writeCachedTabs(projectId, state);
   try {
-    await fetch(`/api/projects/${encodeURIComponent(projectId)}/tabs`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(state),
-    });
+    await persistTabsToDaemon(projectId, next);
   } catch {
     // best-effort
+  }
+}
+
+/**
+ * Write tab state to the local cache ONLY (synchronous localStorage), returning
+ * the `updatedAt`-stamped state. Callers that debounce the canonical daemon
+ * write use this so the cache is always current — `loadTabs` reconciles cache
+ * vs daemon by `updatedAt`, so a debounced (or dropped) daemon PUT never loses
+ * data: a newer cache is re-pushed on next load.
+ */
+export function cacheTabsLocally(projectId: string, state: OpenTabsState): OpenTabsState {
+  return writeCachedTabs(projectId, state);
+}
+
+/** Persist already-stamped tab state to the daemon (the debounced write). */
+export async function persistTabsToDaemonNow(
+  projectId: string,
+  state: OpenTabsState,
+): Promise<void> {
+  try {
+    await persistTabsToDaemon(projectId, state);
+  } catch {
+    // best-effort; the local cache (written via cacheTabsLocally) is canonical
+    // and will re-push on the next loadTabs reconciliation.
   }
 }
 
