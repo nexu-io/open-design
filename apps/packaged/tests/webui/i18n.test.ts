@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveWebuiLocale, webuiMessages, type WebuiLocale } from "../src/webui-i18n.js";
+import { resolveWebuiLocale, webuiMessages, type WebuiLocale } from "../../src/webui/i18n.js";
 
 describe("resolveWebuiLocale", () => {
   it("prefers explicit --lang over config and env", () => {

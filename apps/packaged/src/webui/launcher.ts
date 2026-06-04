@@ -22,12 +22,12 @@ import {
 import { isProcessAlive, spawnBackgroundProcess } from "@open-design/platform";
 import { openBrowser } from "@open-design/daemon/browser-open";
 
-import type { PackagedConfig } from "./config.js";
-import { writePackagedDesktopIdentity, writePackagedWebIdentity } from "./identity.js";
-import { resolvePackagedNamespacePaths, resolveWebuiNamespacesRoot } from "./paths.js";
-import { readSidecarLogTail, startPackagedSidecars } from "./sidecars.js";
-import { probeWebuiStatus } from "./webui-ipc.js";
-import { resolveWebuiLocale, webuiMessages } from "./webui-i18n.js";
+import type { PackagedConfig } from "../config.js";
+import { writePackagedDesktopIdentity, writePackagedWebIdentity } from "../identity.js";
+import { resolvePackagedNamespacePaths, resolveWebuiNamespacesRoot } from "../paths.js";
+import { readSidecarLogTail, startPackagedSidecars } from "../sidecars.js";
+import { probeWebuiStatus } from "./ipc.js";
+import { resolveWebuiLocale, webuiMessages } from "./i18n.js";
 import {
   assertExplicitConfigExists,
   composeHttpUrl,
@@ -44,7 +44,7 @@ import {
   resolveWebuiConfig,
   type ResolvedWebuiConfig,
   type WebuiConfigFile,
-} from "./webui-config.js";
+} from "./config.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 // This module's own path, re-executed (with the `__serve` arg) as the detached

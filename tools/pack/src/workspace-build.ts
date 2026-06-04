@@ -3,7 +3,7 @@ import { access, cp, lstat, mkdir, readdir, readFile, stat, symlink, unlink, wri
 import { dirname, join, relative } from "node:path";
 
 import { hashJson, hashPath, ToolPackCache } from "./cache.js";
-import type { ToolPackConfig } from "./config.js";
+import type { ToolPackBuildOnlyConfig } from "./config.js";
 import { hashPackageSourcePath } from "./package-source-hash.js";
 
 const WORKSPACE_BUILD_PACKAGES = [
@@ -73,7 +73,7 @@ async function readPackageManager(workspaceRoot: string): Promise<unknown> {
   return rootPackageJson.packageManager;
 }
 
-async function createWorkspaceBuildCacheKey(config: ToolPackConfig): Promise<string> {
+async function createWorkspaceBuildCacheKey(config: ToolPackBuildOnlyConfig): Promise<string> {
   const packageHashes: Record<string, string> = {};
   for (const packageInfo of WORKSPACE_BUILD_PACKAGES) {
     packageHashes[packageInfo.name] = await hashPackageSourcePath(join(config.workspaceRoot, packageInfo.directory));
@@ -93,7 +93,7 @@ async function createWorkspaceBuildCacheKey(config: ToolPackConfig): Promise<str
   });
 }
 
-function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
+function workspaceBuildOutputFiles(config: ToolPackBuildOnlyConfig): string[] {
   const webStandaloneServerCandidates = [
     "apps/web/.next/standalone/apps/web/server.js",
     "apps/web/.next/standalone/server.js",
@@ -134,7 +134,7 @@ function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
   ];
 }
 
-function workspaceBuildArtifacts(config: ToolPackConfig): WorkspaceBuildArtifact[] {
+function workspaceBuildArtifacts(config: ToolPackBuildOnlyConfig): WorkspaceBuildArtifact[] {
   const artifacts = [
     "packages/components/dist",
     "packages/contracts/dist",
@@ -236,7 +236,7 @@ async function hoistStandaloneNextPeerDeps(standaloneRoot: string): Promise<void
   }
 }
 
-async function copyWorkspaceBuildArtifactsToCache(config: ToolPackConfig, entryRoot: string): Promise<void> {
+async function copyWorkspaceBuildArtifactsToCache(config: ToolPackBuildOnlyConfig, entryRoot: string): Promise<void> {
   for (const artifact of workspaceBuildArtifacts(config)) {
     const sourcePath = join(config.workspaceRoot, artifact.workspacePath);
     // Strip dangling symlinks first: that clears any leftover from a
@@ -253,7 +253,7 @@ async function copyWorkspaceBuildArtifactsToCache(config: ToolPackConfig, entryR
   }
 }
 
-async function missingWorkspaceBuildOutput(config: ToolPackConfig): Promise<string | null> {
+async function missingWorkspaceBuildOutput(config: ToolPackBuildOnlyConfig): Promise<string | null> {
   for (const output of workspaceBuildOutputFiles(config)) {
     const candidates = output.split("|");
     const exists = await Promise.any(
@@ -268,7 +268,7 @@ async function missingWorkspaceBuildOutput(config: ToolPackConfig): Promise<stri
 }
 
 export async function ensureWorkspaceBuildArtifacts(
-  config: ToolPackConfig,
+  config: ToolPackBuildOnlyConfig,
   cache: ToolPackCache,
   build: () => Promise<void>,
 ): Promise<void> {

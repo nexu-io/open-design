@@ -9,11 +9,17 @@ import {
   collectWorkspaceTarballs,
   copyResourceTree,
   readPackagedVersion,
-} from "./assemble.js";
-import { ToolPackCache } from "./cache.js";
-import type { ToolPackArch, ToolPackConfig, ToolPackPlatform } from "./config.js";
-import { webuiResourcesRoot, winResources } from "./resources.js";
-import { ensureWorkspaceBuildArtifacts } from "./workspace-build.js";
+} from "../assemble.js";
+import { ToolPackCache } from "../cache.js";
+import {
+  resolveToolPackBuildOnlyConfig,
+  type ToolPackArch,
+  type ToolPackBuildOnlyConfig,
+  type ToolPackCliOptions,
+  type ToolPackPlatform,
+} from "../config.js";
+import { webuiResourcesRoot, winResources } from "../resources.js";
+import { ensureWorkspaceBuildArtifacts } from "../workspace-build.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -192,7 +198,17 @@ export async function stageWebuiLauncherResources(
   }
 }
 
-export async function buildPackedWebui(config: ToolPackConfig): Promise<WebuiBuildResult> {
+export function resolveWebuiPackConfig(
+  platform: ToolPackPlatform,
+  options: ToolPackCliOptions = {},
+): ToolPackBuildOnlyConfig {
+  // WebUI is a build-only archive lane. It reuses the shared workspace/node-app
+  // assembly primitives but deliberately avoids Electron builder, installer
+  // identity, signing, and updater config.
+  return resolveToolPackBuildOnlyConfig(platform, options, { webOutputMode: "server" });
+}
+
+export async function buildPackedWebui(config: ToolPackBuildOnlyConfig): Promise<WebuiBuildResult> {
   const platform = config.platform;
   const arch = config.arch;
   const version = await readPackagedVersion(config);

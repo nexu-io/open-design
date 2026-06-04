@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 
 import { createPackageManagerInvocation } from "@open-design/platform";
 
-import type { ToolPackConfig } from "./config.js";
+import type { ToolPackBuildOnlyConfig } from "./config.js";
 import { copyBundledResourceTrees } from "./resources.js";
 import { copyOptionalVelaCliBinary } from "./vela-cli.js";
 import { electronBuilderVersionForAppVersion, readRuntimeAppVersion } from "./versions.js";
@@ -43,7 +43,7 @@ export type PackedTarballInfo = {
 };
 
 async function runPnpm(
-  config: ToolPackConfig,
+  config: ToolPackBuildOnlyConfig,
   args: string[],
   extraEnv: NodeJS.ProcessEnv = {},
 ): Promise<void> {
@@ -94,7 +94,7 @@ async function runProductionInstall(appRoot: string): Promise<void> {
   });
 }
 
-export async function readPackagedVersion(config: ToolPackConfig): Promise<string> {
+export async function readPackagedVersion(config: ToolPackBuildOnlyConfig): Promise<string> {
   return readRuntimeAppVersion(config);
 }
 
@@ -103,7 +103,7 @@ export async function readPackagedVersion(config: ToolPackConfig): Promise<strin
 // the prior directory listing so the produced tarball is matched to its package
 // even when pnpm emits a versioned filename.
 export async function collectWorkspaceTarballs(
-  config: ToolPackConfig,
+  config: ToolPackBuildOnlyConfig,
   tarballsRoot: string,
 ): Promise<PackedTarballInfo[]> {
   await rm(tarballsRoot, { force: true, recursive: true });
@@ -129,7 +129,7 @@ export async function collectWorkspaceTarballs(
 // Node binary; the WebUI distribution sets `includeNodeBinary: false` because it
 // requires the user's installed system Node.
 export async function copyResourceTree(
-  config: ToolPackConfig,
+  config: ToolPackBuildOnlyConfig,
   resourceRoot: string,
   options: { includeNodeBinary?: boolean } = {},
 ): Promise<void> {
@@ -163,7 +163,7 @@ export async function assembleNodeApp({
   tarballsRoot,
   packed,
 }: {
-  config: ToolPackConfig;
+  config: ToolPackBuildOnlyConfig;
   appRoot: string;
   tarballsRoot: string;
   packed: PackedTarballInfo[];
@@ -202,7 +202,7 @@ export async function assembleNodeApp({
 // protocol packages, daemon, web (server output mode), and packaged/desktop.
 // Shared by the Linux AppImage lane and the WebUI distribution lane.
 // The caller is responsible for any caching layer (e.g. ensureWorkspaceBuildArtifacts).
-export async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
+export async function buildWorkspaceArtifacts(config: ToolPackBuildOnlyConfig): Promise<void> {
   const webNextEnvPath = join(config.workspaceRoot, "apps", "web", "next-env.d.ts");
   const previousWebNextEnv = await readFile(webNextEnvPath, "utf8").catch(() => null);
 

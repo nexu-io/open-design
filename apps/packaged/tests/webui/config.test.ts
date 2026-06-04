@@ -21,7 +21,7 @@ import {
   resolveRuntimeNamespace,
   resolveWebuiConfig,
   type ResolvedWebuiConfig,
-} from "../src/webui-config.js";
+} from "../../src/webui/config.js";
 
 describe("parseWebuiArgs", () => {
   it("parses command + flags", () => {

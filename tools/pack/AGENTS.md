@@ -12,7 +12,7 @@ Follow the root `AGENTS.md` and `tools/AGENTS.md` first. This tool owns the repo
 - Linux AppImage build/install/start/stop/logs/uninstall/cleanup smoke commands.
 - Linux headless (no-Electron) install/start/stop via `--headless` flag on `install`, `start`, and `stop`.
 - Linux containerized builds via `electronuserland/builder` Docker image for distro-agnostic glibc compat.
-- Cross-platform WebUI (no-Electron) build via `tools-pack webui build --platform <mac|win|linux> [--arch <x64|arm64>]`: produces a per-platform archive (zip for mac/win, tar.gz for linux) bundling the daemon+web (server output mode) node app + the target's prebuilt `better-sqlite3` + a terminal launcher (`open-design start|stop|status`) + double-click wrappers. Requires the user's system Node 24 at runtime; configurable web port + daemon port/host/token via flags (`--port`, `--daemon-port`, `--host`, `--token`) or `webui.config.json` (auto-created on first start); opens a browser when a display is present. After the production install, `pruneBuildOnlyNativeModules` strips the `@next/swc-*` native compiler (~125MB) — SWC is build-only and the `next start` server never loads it (Next's own `standalone` output excludes it), so this halves the bundle without touching the validated server runtime. Daemon resource-root note: the packaged daemon runs under the user's system Node, so `resolveProcessResourcesPath` (apps/daemon) recognizes the `<appRoot>/node_modules/@open-design/daemon` install layout and accepts the sibling `<appRoot>/resources` as the OD_RESOURCE_ROOT safe base.
+- Cross-platform WebUI archive build via `tools-pack webui build --platform <mac|win|linux> [--arch <x64|arm64>]`.
 - Consuming sidecar/process/path primitives from `@open-design/sidecar-proto`, `@open-design/sidecar`, and `@open-design/platform`.
 
 ## Does not own
@@ -21,6 +21,7 @@ Follow the root `AGENTS.md` and `tools/AGENTS.md` first. This tool owns the repo
 - Sidecar protocol definitions.
 - A second process identity model.
 - Product/business update runtime integration.
+- WebUI installer identity, signing, auto-update, or release-channel lifecycle.
 
 ## Rules
 
@@ -30,6 +31,7 @@ Follow the root `AGENTS.md` and `tools/AGENTS.md` first. This tool owns the repo
 - Do not let namespace-named `.app` installs change data/log/runtime/cache path conventions.
 - Use `--portable` for public/release artifacts so packaged config does not bake local tools-pack runtime roots from the build machine.
 - Pack resource files used by electron-builder belong under `tools/pack/resources/`; do not point pack logic at Downloads, web public assets, docs assets, or other app-owned resource paths.
+- Keep WebUI as a build-only archive lane. Its code belongs under `tools/pack/src/webui/`, its launcher runtime belongs under `apps/packaged/src/webui/`, and its resources belong under `tools/pack/resources/webui/`. It may reuse shared node-app assembly primitives, but it must not depend on Electron builder config, installer identity, signing, auto-update, or release-channel lifecycle.
 - For ordinary Windows NSIS smoke tests, use short namespaces such as `rg`, `smoke`, or `nsis-a`. NSIS extracts deeply nested Next.js standalone files under the namespace-scoped install directory; long namespaces can push installed paths past the traditional Windows 260-character limit even when builder `win-unpacked` output is correct. During merge regression, namespace `regression-merge-nsis` produced an installed path length of 264 characters and missed `next/dist/server/route-matcher-providers/helpers/cached-route-matcher-provider.js` in the installed directory, while the same NSIS smoke passed with namespace `rg`. Use long namespaces only when intentionally testing installer path-length behavior.
 
 ## Packaged auto-update architecture and harness

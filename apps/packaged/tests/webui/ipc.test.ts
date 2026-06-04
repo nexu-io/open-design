@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { probeWebuiStatus, type WebuiIpcRequester } from "../src/webui-ipc.js";
+import { probeWebuiStatus, type WebuiIpcRequester } from "../../src/webui/ipc.js";
 
 // A requester that rejects with a Node-style error (optionally carrying a code).
 const rejectWith = (message: string, code?: string): WebuiIpcRequester => {

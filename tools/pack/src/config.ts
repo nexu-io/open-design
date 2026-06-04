@@ -125,6 +125,33 @@ export type ToolPackConfig = {
   workspaceRoot: string;
 };
 
+export type ToolPackBuildOnlyRoots = {
+  output: Pick<ToolPackRoots["output"], "namespaceRoot" | "platformRoot" | "root">;
+  runtime: ToolPackRoots["runtime"];
+  cacheRoot: string;
+  toolPackRoot: string;
+};
+
+export type ToolPackBuildOnlyConfig = Omit<
+  Pick<
+    ToolPackConfig,
+    | "appVersion"
+    | "arch"
+    | "namespace"
+    | "platform"
+    | "posthogCliApiKey"
+    | "posthogCliHost"
+    | "posthogCliProjectId"
+    | "requireVelaCli"
+    | "roots"
+    | "webOutputMode"
+    | "workspaceRoot"
+  >,
+  "roots"
+> & {
+  roots: ToolPackBuildOnlyRoots;
+};
+
 function resolveToolPackBuildOutput(platform: ToolPackPlatform, value: string | undefined): ToolPackBuildOutput {
   if (value == null || value.length === 0) return platform === "win" ? "nsis" : "all";
   if (platform === "mac" && (value === "all" || value === "app" || value === "dmg" || value === "zip")) return value;
@@ -357,6 +384,55 @@ export function resolveToolPackConfig(
     posthogCliHost: resolveToolPackPosthogCliHost(process.env.POSTHOG_CLI_HOST),
     to: resolveToolPackBuildOutput(platform, options.to),
     webOutputMode: resolveToolPackWebOutputMode(platform, process.env.OD_WEB_OUTPUT_MODE),
+    workspaceRoot: WORKSPACE_ROOT,
+  };
+}
+
+export function resolveToolPackBuildOnlyConfig(
+  platform: ToolPackPlatform,
+  options: ToolPackCliOptions = {},
+  overrides: { webOutputMode?: ToolPackWebOutputMode } = {},
+): ToolPackBuildOnlyConfig {
+  const appVersion = resolveToolPackAppVersion(options.appVersion);
+  const namespace = resolveNamespace({
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    env: process.env,
+    namespace: options.namespace ?? defaultNamespaceForAppVersion(platform, appVersion),
+  });
+  const toolPackRoot = resolve(options.dir ?? join(WORKSPACE_ROOT, ".tmp", "tools-pack"));
+  const cacheRoot = resolve(options.cacheDir ?? join(toolPackRoot, "cache"));
+  const outputRoot = join(toolPackRoot, "out");
+  const outputPlatformRoot = join(outputRoot, platform);
+  const outputNamespaceRoot = join(outputPlatformRoot, "namespaces", namespace);
+  const runtimeNamespaceBaseRoot = join(toolPackRoot, "runtime", platform, "namespaces");
+
+  return {
+    appVersion,
+    arch: resolveToolPackArch(options.arch),
+    namespace,
+    platform,
+    roots: {
+      output: {
+        namespaceRoot: outputNamespaceRoot,
+        platformRoot: outputPlatformRoot,
+        root: outputRoot,
+      },
+      runtime: {
+        namespaceBaseRoot: runtimeNamespaceBaseRoot,
+        namespaceRoot: join(runtimeNamespaceBaseRoot, namespace),
+      },
+      cacheRoot,
+      toolPackRoot,
+    },
+    requireVelaCli: options.requireVelaCli === true,
+    posthogCliApiKey: resolveToolPackPosthogCliApiKey(
+      process.env.POSTHOG_CLI_API_KEY ?? process.env.POSTHOG_PERSONAL_API_KEY,
+    ),
+    posthogCliProjectId: resolveToolPackPosthogCliProjectId(
+      process.env.POSTHOG_CLI_PROJECT_ID ?? process.env.POSTHOG_PROJECT_ID,
+    ),
+    posthogCliHost: resolveToolPackPosthogCliHost(process.env.POSTHOG_CLI_HOST),
+    webOutputMode: overrides.webOutputMode ?? resolveToolPackWebOutputMode(platform, process.env.OD_WEB_OUTPUT_MODE),
     workspaceRoot: WORKSPACE_ROOT,
   };
 }

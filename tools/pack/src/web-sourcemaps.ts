@@ -42,7 +42,7 @@ import { join } from "node:path";
 
 import { createPackageManagerInvocation } from "@open-design/platform";
 
-import type { ToolPackConfig } from "./config.js";
+import type { ToolPackBuildOnlyConfig } from "./config.js";
 import { execFileAsync } from "./mac/commands.js";
 
 const POSTHOG_CLI_VERSION = "0.7.11";
@@ -104,7 +104,7 @@ async function deleteMapFiles(dir: string): Promise<number> {
   return maps.length;
 }
 
-function readUploadEnv(config: ToolPackConfig): SourcemapCliEnv | null {
+function readUploadEnv(config: ToolPackBuildOnlyConfig): SourcemapCliEnv | null {
   if (config.posthogCliApiKey == null || config.posthogCliApiKey.length === 0) return null;
   if (config.posthogCliProjectId == null || config.posthogCliProjectId.length === 0) return null;
   return {
@@ -123,7 +123,7 @@ function log(line: string): void {
 }
 
 async function runPnpm(
-  config: ToolPackConfig,
+  config: ToolPackBuildOnlyConfig,
   args: string[],
   extraEnv: NodeJS.ProcessEnv = {},
 ): Promise<void> {
@@ -140,7 +140,7 @@ async function runPnpm(
 }
 
 export async function processWebSourcemaps(
-  config: ToolPackConfig,
+  config: ToolPackBuildOnlyConfig,
   options: WebSourcemapOptions = {},
 ): Promise<void> {
   const chunksDir = resolveBrowserChunksDir(config.workspaceRoot);

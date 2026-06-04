@@ -22,6 +22,6 @@ await build({
 
 await build({
   ...sharedOptions,
-  entryPoints: ["./src/webui-launcher.ts"],
+  entryPoints: ["./src/webui/launcher.ts"],
   outfile: "./dist/webui-launcher.mjs",
 });

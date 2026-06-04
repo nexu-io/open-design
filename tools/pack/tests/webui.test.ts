@@ -7,10 +7,11 @@ import { describe, expect, it } from "vitest";
 import {
   prebuiltSqliteTarget,
   pruneBuildOnlyNativeModules,
+  resolveWebuiPackConfig,
   stageWebuiLauncherResources,
   webuiArchiveName,
   webuiArchiveKind,
-} from "../src/webui.js";
+} from "../src/webui/build.js";
 
 describe("webuiArchiveName", () => {
   it("names per platform/arch/version", () => {
@@ -28,6 +29,20 @@ describe("webuiArchiveKind", () => {
     expect(webuiArchiveKind("linux")).toBe("tar.gz");
     expect(webuiArchiveKind("mac")).toBe("zip");
     expect(webuiArchiveKind("win")).toBe("zip");
+  });
+});
+
+describe("resolveWebuiPackConfig", () => {
+  it("stays on a build-only server-mode config surface", () => {
+    const config = resolveWebuiPackConfig("mac", { namespace: "webui-boundary" });
+
+    expect(config.webOutputMode).toBe("server");
+    expect(config.namespace).toBe("webui-boundary");
+    expect("electronVersion" in config).toBe(false);
+    expect("electronBuilderCliPath" in config).toBe(false);
+    expect("signed" in config).toBe(false);
+    expect("to" in config).toBe(false);
+    expect("appBuilderRoot" in config.roots.output).toBe(false);
   });
 });
 

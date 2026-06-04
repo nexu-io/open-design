@@ -2,7 +2,7 @@ import { cac } from "cac";
 import type { CAC } from "cac";
 
 import { resolveToolPackConfig, type ToolPackCliOptions, type ToolPackPlatform } from "./config.js";
-import { buildPackedWebui } from "./webui.js";
+import { buildPackedWebui, resolveWebuiPackConfig } from "./webui/build.js";
 import {
   cleanupPackedMacNamespace,
   installPackedMacDmg,
@@ -252,9 +252,7 @@ addSharedOptions(
     .option("--arch <arch>", "Target arch: x64|arm64 (default: host arch)"),
 ).action(async (action: string, options: CliOptions) => {
   const platform = resolveWebuiPlatform(options.platform);
-  // The webui two-process layout always uses server mode (same as the existing
-  // Linux headless path, verified to run).
-  const config = { ...resolveToolPackConfig(platform, options), webOutputMode: "server" as const };
+  const config = resolveWebuiPackConfig(platform, options);
   switch (action) {
     case "build":
       printJson(await buildPackedWebui(config));

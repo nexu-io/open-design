@@ -1,7 +1,7 @@
 import { requestJsonIpc } from "@open-design/sidecar";
 import { SIDECAR_MESSAGES } from "@open-design/sidecar-proto";
 
-import { isNotRunningIpcError } from "./webui-config.js";
+import { isNotRunningIpcError } from "./config.js";
 
 // The IPC request shape probeWebuiStatus depends on. Injectable so the
 // classify-vs-rethrow behavior can be unit-tested without a real socket.
