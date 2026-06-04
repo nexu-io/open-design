@@ -33,6 +33,7 @@
 // (where it sits next to app-config.json and behaves like the legacy
 // path — fine for dev because dev doesn't have namespace churn).
 
+import { readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
@@ -58,27 +59,43 @@ function installationFilePath(installationDir: string): string {
   return join(installationDir, 'installation.json');
 }
 
+function parseInstallationFile(raw: string): InstallationFile {
+  const parsed: unknown = JSON.parse(raw);
+  if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {};
+  }
+  const obj = parsed as Record<string, unknown>;
+  const out: InstallationFile = {};
+  if (typeof obj.installationId === 'string' && obj.installationId.length > 0) {
+    out.installationId = obj.installationId;
+  }
+  return out;
+}
+
 export async function readInstallationFile(
   installationDir: string,
 ): Promise<InstallationFile> {
   try {
-    const raw = await readFile(installationFilePath(installationDir), 'utf8');
-    const parsed: unknown = JSON.parse(raw);
-    if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return {};
-    }
-    const obj = parsed as Record<string, unknown>;
-    const out: InstallationFile = {};
-    if (typeof obj.installationId === 'string' && obj.installationId.length > 0) {
-      out.installationId = obj.installationId;
-    }
-    return out;
-  } catch (err) {
-    const e = err as { code?: string; name?: string };
-    if (e.code === 'ENOENT') return {};
-    if (e.name === 'SyntaxError') return {};
-    // Anything else (permission denied, EIO) — treat as empty so the
+    return parseInstallationFile(
+      await readFile(installationFilePath(installationDir), 'utf8'),
+    );
+  } catch {
+    // ENOENT, malformed JSON, permission denied, EIO — treat as empty so the
     // fallback path through app-config.json keeps the daemon alive.
+    return {};
+  }
+}
+
+// Synchronous mirror of readInstallationFile for callers on a sync path (e.g.
+// building the spawn env for the vela CLI). Same parse + same fail-soft.
+export function readInstallationFileSync(
+  installationDir: string,
+): InstallationFile {
+  try {
+    return parseInstallationFile(
+      readFileSync(installationFilePath(installationDir), 'utf8'),
+    );
+  } catch {
     return {};
   }
 }

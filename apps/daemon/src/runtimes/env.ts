@@ -1,8 +1,8 @@
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { mergeProxyAwareEnv, resolveSystemProxyEnv } from '@open-design/platform';
+import { readAppConfigSync } from '../app-config.js';
 import { resolveProjectRelativePath } from '../home-expansion.js';
 import { expandConfiguredEnv } from './paths.js';
 import { resolveAmrOpenCodeExecutable } from './executables.js';
@@ -52,58 +52,30 @@ const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
 // the child. Iterate keys and compare case-insensitively to close that.
 // When the daemon launches the vela (amr) CLI, forward this installation's id
 // so vela's analytics can be correlated back to it. spawnEnvForAgent is
-// synchronous, so read the config files synchronously and best-effort.
-//
-// This mirrors readAppConfig / the /api/analytics/config handler so vela's
-// correlation tracks exactly what the web analytics config already emits:
-//   - a missing or corrupt app-config.json is treated as an empty config, NOT
-//     a hard failure — we still consult the channel-root installation.json;
-//   - telemetry defaults to on (opt-out model, see applyTelemetryDefaults): the
-//     id is forwarded unless the user has explicitly set telemetry.metrics to a
-//     value other than true;
-//   - channel-root installation.json is authoritative for the id and wins over
-//     the legacy app-config.json field.
-// Withheld consent or a missing id simply omits the env (vela reports without
-// it).
+// synchronous, so this uses readAppConfigSync — the synchronous mirror of
+// readAppConfig — to resolve consent and the installationId through the exact
+// same parsing/validation/defaulting the daemon and web analytics config use.
+// That keeps vela's correlation in lockstep with what the web side already
+// emits: telemetry defaults to on (opt-out), the id is withheld only when the
+// user has explicitly opted out (metrics !== true) or no id exists, and an
+// unreadable config simply omits the env (vela reports without it).
 function amrAnalyticsIdentityEnv(
   env: NodeJS.ProcessEnv,
 ): Record<string, string> {
   const dataDir = env.OD_DATA_DIR?.trim();
   if (!dataDir) return {};
-  // `undefined` means "telemetry field absent" → defaults on; an explicit
-  // boolean (or a present-but-non-true value, captured as false) is honored.
-  let telemetryMetrics: boolean | undefined;
-  let installationId = '';
+  let cfg: { telemetry?: { metrics?: boolean }; installationId?: string | null };
   try {
-    const appCfg = JSON.parse(
-      readFileSync(path.join(dataDir, 'app-config.json'), 'utf8'),
-    ) as { telemetry?: { metrics?: unknown }; installationId?: unknown };
-    if (appCfg?.telemetry !== undefined) {
-      telemetryMetrics = appCfg.telemetry.metrics === true;
-    }
-    if (typeof appCfg?.installationId === 'string') {
-      installationId = appCfg.installationId;
-    }
+    cfg = readAppConfigSync(dataDir);
   } catch {
-    // Missing/corrupt app-config.json → empty config; telemetry stays default-on
-    // and we still fall through to the channel-root installation.json.
+    return {};
   }
-  try {
-    const installationDir = env.OD_INSTALLATION_DIR?.trim() || dataDir;
-    const installation = JSON.parse(
-      readFileSync(path.join(installationDir, 'installation.json'), 'utf8'),
-    ) as { installationId?: unknown };
-    if (
-      typeof installation?.installationId === 'string' &&
-      installation.installationId.length > 0
-    ) {
-      installationId = installation.installationId;
-    }
-  } catch {
-    // Channel-root file absent/unreadable — fall back to app-config.json value.
+  // Matches the analytics gate in analytics.ts (`telemetry?.metrics !== true`).
+  if (cfg.telemetry?.metrics !== true) return {};
+  const installationId = cfg.installationId;
+  if (typeof installationId !== 'string' || installationId.length === 0) {
+    return {};
   }
-  const consented = telemetryMetrics !== false;
-  if (!consented || installationId.length === 0) return {};
   return { OD_INSTALLATION_ID: installationId };
 }
 
