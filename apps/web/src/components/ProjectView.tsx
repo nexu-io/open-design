@@ -169,7 +169,10 @@ import {
   useCritiqueTheaterEnabled,
 } from './Theater';
 import { useIframeKeepAlivePool } from './IframeKeepAlivePool';
-import { decideAutoOpenAfterWrite } from './auto-open-file';
+import {
+  decideAutoOpenAfterWrite,
+  selectAutoOpenProducedHtml,
+} from './auto-open-file';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
 import { FileWorkspace } from './FileWorkspace';
@@ -2596,6 +2599,8 @@ export function ProjectView({
                 }
                 const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
                 const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
+                const producedHtmlToOpen = selectAutoOpenProducedHtml(produced);
+                if (producedHtmlToOpen) requestOpenFile(producedHtmlToOpen);
                 if (produced.length > 0) {
                   updateMessageById(
                     message.id,
@@ -3286,6 +3291,8 @@ export function ProjectView({
               nextFiles = await refreshProjectFiles();
             }
             const produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+            const producedHtmlToOpen = selectAutoOpenProducedHtml(produced);
+            if (producedHtmlToOpen) requestOpenFile(producedHtmlToOpen);
             setMessages((curr) => {
               const updated = curr.map((m) =>
                 m.id === assistantId
