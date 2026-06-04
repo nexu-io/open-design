@@ -1,0 +1,213 @@
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>阿西莫夫宇宙 · 跨越两万年的未来史</title>
+  <style>
+    :root {
+      --bg: oklch(14% 0.025 60);
+      --fg: oklch(94% 0.02 80);
+      --muted: oklch(62% 0.04 75);
+      --accent: oklch(72% 0.15 70);
+      --cold: oklch(58% 0.08 240);
+      --surface: oklch(18% 0.028 60);
+      --border: oklch(28% 0.02 60);
+      --shell: oklch(6% 0.012 60);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: var(--shell); color: var(--fg);
+      font: 18px/1.5 -apple-system, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    }
+    .deck-shell { position: fixed; inset: 0; overflow: hidden; }
+    .deck-stage { width: 1920px; height: 1080px; background: var(--bg); position: relative; transform-origin: top left; box-shadow: 0 30px 80px rgba(0,0,0,0.6); }
+    .slide { position: absolute; inset: 0; overflow: hidden; }
+    .slide:not(.active) { display: none !important; }
+    :where(.slide.active) { display: flex; flex-direction: column; }
+    .deck-counter { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 4px; background: rgba(10,8,6,0.92); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); padding: 6px; border-radius: 999px; border: 1px solid rgba(255,220,170,0.12); color: #fff; font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.18em; z-index: 1000; }
+    .deck-counter button { width: 36px; height: 36px; background: transparent; color: #fff; border: 0; border-radius: 50%; font-size: 18px; line-height: 1; cursor: pointer; display: grid; place-items: center; transition: background 0.15s; }
+    .deck-counter button:hover { background: rgba(255,220,170,0.14); }
+    .deck-counter button[disabled] { opacity: 0.3; cursor: default; }
+    .deck-counter .deck-count { padding: 0 14px; letter-spacing: 0.22em; }
+    .deck-counter .deck-count .total { color: rgba(255,255,255,0.5); }
+    .deck-hint { position: fixed; bottom: 26px; right: 28px; color: rgba(255,220,170,0.4); font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.2em; text-transform: uppercase; z-index: 999; pointer-events: none; }
+    @media print {
+      @page { size: 1920px 1080px; margin: 0; }
+      html, body { width: 1920px !important; height: auto !important; overflow: visible !important; background: #fff !important; }
+      .deck-shell { position: static !important; display: block !important; inset: auto !important; }
+      .deck-stage { width: 1920px !important; height: auto !important; transform: none !important; box-shadow: none !important; position: static !important; }
+      .slide { display: flex !important; position: relative !important; inset: auto !important; width: 1920px !important; height: 1080px !important; page-break-after: always; break-after: page; }
+      .slide:last-child { page-break-after: auto; break-after: auto; }
+      .deck-counter, .deck-hint { display: none !important; }
+    }
+  </style>
+  <style>
+    :where(.slide.active) { padding: 96px 120px; color: var(--fg); font-family: -apple-system, "PingFang SC", "Helvetica Neue", system-ui, sans-serif; position: relative; }
+    .atmosphere { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+    .atmosphere::before { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse 80% 55% at 22% 95%, oklch(70% 0.15 65 / 0.35), transparent 60%), radial-gradient(ellipse 70% 50% at 92% 8%, oklch(40% 0.07 240 / 0.30), transparent 65%), linear-gradient(180deg, oklch(16% 0.03 250 / 0.35) 0%, transparent 35%, transparent 70%, oklch(22% 0.05 60 / 0.45) 100%); }
+    .atmosphere::after { content: ""; position: absolute; inset: 0; background-image: radial-gradient(rgba(255,210,150,0.06) 1px, transparent 1px), radial-gradient(rgba(255,180,120,0.04) 1px, transparent 1px); background-size: 3px 3px, 7px 7px; background-position: 0 0, 1px 2px; mix-blend-mode: screen; opacity: 0.5; }
+    .horizon { position: absolute; left: 0; right: 0; bottom: 18%; height: 1px; background: linear-gradient(90deg, transparent, oklch(72% 0.15 70 / 0.55) 30%, oklch(72% 0.15 70 / 0.55) 70%, transparent); z-index: 1; pointer-events: none; }
+    .anomaly { position: absolute; top: 14%; right: 14%; width: 8px; height: 8px; border-radius: 50%; background: oklch(94% 0.02 80); box-shadow: 0 0 24px 4px oklch(94% 0.02 80 / 0.55), 0 0 80px 12px oklch(72% 0.15 70 / 0.25); z-index: 1; }
+    .content { position: relative; z-index: 2; flex: 1; display: flex; flex-direction: column; }
+    .kicker { font: 13px/1 ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace; letter-spacing: 0.32em; text-transform: uppercase; color: var(--accent); }
+    .kicker .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); vertical-align: middle; margin-right: 12px; box-shadow: 0 0 12px oklch(72% 0.15 70 / 0.7); }
+    .display { font-family: "Iowan Old Style", "Charter", "Songti SC", "STSong", Georgia, serif; font-weight: 500; letter-spacing: -0.012em; line-height: 1.02; color: oklch(96% 0.025 80); }
+    .display em { font-style: italic; color: var(--accent); font-weight: 500; }
+    .body-serif { font-family: "Iowan Old Style", "Charter", "Songti SC", Georgia, serif; color: var(--fg); }
+    .muted { color: var(--muted); }
+    .deck-footer { position: absolute; left: 120px; right: 120px; bottom: 56px; display: flex; justify-content: space-between; align-items: baseline; font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.28em; text-transform: uppercase; color: oklch(70% 0.04 75 / 0.7); z-index: 3; }
+    .deck-footer .right { color: oklch(70% 0.04 75 / 0.55); }
+    .s-cover { justify-content: flex-end; }
+    .s-cover .content { justify-content: flex-end; max-width: 1500px; }
+    .s-cover .display { font-size: 132px; max-width: 1400px; }
+    .s-cover .sub { margin-top: 28px; font-size: 24px; letter-spacing: 0.12em; color: oklch(86% 0.03 75); }
+    .s-cover .latin { margin-top: 14px; font: 14px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.42em; text-transform: uppercase; color: var(--accent); opacity: 0.85; }
+    .s-timeline { padding-bottom: 140px; }
+    .s-timeline .display { font-size: 66px; max-width: 1200px; margin-top: 24px; }
+    .s-timeline .lead { margin-top: 22px; max-width: 920px; font-size: 21px; line-height: 1.55; color: oklch(82% 0.025 75); }
+    .timeline { margin-top: 64px; flex: 1; display: grid; grid-template-columns: 200px 1fr; gap: 24px 40px; align-content: start; }
+    .era-row { display: contents; }
+    .era-time { font: 14px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.18em; color: var(--accent); padding-top: 6px; }
+    .era-time small { display: block; color: oklch(60% 0.04 75); font-size: 11px; letter-spacing: 0.24em; margin-top: 4px; }
+    .era-body { border-left: 1px solid oklch(72% 0.15 70 / 0.35); padding: 0 0 22px 32px; position: relative; }
+    .era-body::before { content: ""; position: absolute; left: -5px; top: 8px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 18px oklch(72% 0.15 70 / 0.7); }
+    .era-name { font-family: "Iowan Old Style", "Charter", "Songti SC", Georgia, serif; font-size: 30px; line-height: 1.1; color: oklch(96% 0.02 80); }
+    .era-desc { margin-top: 8px; font-size: 16px; line-height: 1.55; color: oklch(78% 0.025 75); max-width: 1100px; }
+    .era-works { margin-top: 8px; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.06em; color: oklch(60% 0.04 75); }
+    .s-robots .num { font: 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.32em; color: var(--accent); }
+    .s-robots .display { font-size: 72px; margin-top: 16px; max-width: 1300px; }
+    .s-robots .row { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 80px; margin-top: 56px; flex: 1; }
+    .laws { display: flex; flex-direction: column; gap: 22px; }
+    .law { display: grid; grid-template-columns: 56px 1fr; gap: 20px; align-items: start; }
+    .law-n { font-family: "Iowan Old Style", "Charter", Georgia, serif; font-size: 38px; color: var(--accent); line-height: 1; padding-top: 4px; }
+    .law-text { font-family: "Iowan Old Style", "Charter", "Songti SC", Georgia, serif; font-size: 22px; line-height: 1.45; color: oklch(92% 0.02 80); }
+    .law-text small { display: block; margin-top: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: oklch(60% 0.04 75); }
+    .robots-side { border-left: 1px solid var(--border); padding-left: 56px; display: flex; flex-direction: column; gap: 24px; }
+    .panel-label { font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.32em; text-transform: uppercase; color: var(--accent); }
+    .panel-body { font-family: "Iowan Old Style", "Charter", "Songti SC", Georgia, serif; font-size: 19px; line-height: 1.55; color: oklch(86% 0.025 75); }
+    .works-list { display: grid; gap: 10px; margin-top: 6px; }
+    .works-list li { list-style: none; display: grid; grid-template-columns: 80px 1fr; gap: 16px; align-items: baseline; font-size: 15px; line-height: 1.4; padding: 8px 0; border-top: 1px dashed oklch(28% 0.02 60); }
+    .works-list .yr { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.1em; color: var(--accent); font-variant-numeric: tabular-nums; }
+    .works-list .ttl { font-family: "Iowan Old Style", "Charter", "Songti SC", Georgia, serif; color: oklch(92% 0.02 80); }
+    .works-list .ttl em { font-style: italic; color: oklch(78% 0.025 75); margin-left: 8px; font-size: 13px; }
+    .s-foundation .display { font-size: 72px; margin-top: 16px; max-width: 1300px; }
+    .s-foundation .lead { margin-top: 22px; max-width: 1200px; font-family: "Iowan Old Style", "Charter", "Songti SC", Georgia, serif; font-size: 22px; line-height: 1.5; color: oklch(86% 0.025 75); }
+    .s-foundation .lead em { color: var(--accent); font-style: italic; }
+    .pillars { margin-top: 56px; flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 56px; }
+    .pillar { display: flex; flex-direction: column; gap: 14px; }
+    .pillar .head { display: flex; align-items: baseline; gap: 18px; padding-bottom: 14px; border-bottom: 1px solid oklch(72% 0.15 70 / 0.4); }
+    .pillar .num { font: 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.28em; color: var(--accent); }
+    .pillar .ttl { font-family: "Iowan Old Style", "Charter", "Songti SC", Georgia, serif; font-size: 28px; color: oklch(96% 0.02 80); line-height: 1.1; }
+    .pillar .body { font-family: "Iowan Old Style", "Charter", "Songti SC", Georgia, serif; font-size: 17px; line-height: 1.55; color: oklch(82% 0.025 75); }
+    .pillar .meta { margin-top: auto; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.18em; text-transform: uppercase; color: oklch(58% 0.04 75); padding-top: 14px; }
+    .s-unify { justify-content: flex-start; }
+    .s-unify .display { font-size: 88px; max-width: 1400px; margin-top: 18px; line-height: 1.04; }
+    .s-unify .quote { margin-top: 64px; max-width: 1100px; font-family: "Iowan Old Style", "Charter", "Songti SC", Georgia, serif; font-style: italic; font-size: 28px; line-height: 1.45; color: oklch(90% 0.025 75); padding-left: 32px; border-left: 2px solid var(--accent); }
+    .s-unify .quote .src { display: block; margin-top: 16px; font-style: normal; font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.28em; text-transform: uppercase; color: var(--accent); }
+    .arc { margin-top: 56px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border-top: 1px solid oklch(72% 0.15 70 / 0.35); border-bottom: 1px solid oklch(72% 0.15 70 / 0.15); }
+    .arc-step { padding: 22px 24px 22px 0; border-right: 1px dashed oklch(28% 0.02 60); }
+    .arc-step:last-child { border-right: 0; }
+    .arc-step .y { font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.2em; color: var(--accent); }
+    .arc-step .l { margin-top: 10px; font-family: "Iowan Old Style", "Charter", "Songti SC", Georgia, serif; font-size: 20px; color: oklch(94% 0.02 80); line-height: 1.2; }
+    .arc-step .d { margin-top: 8px; font-size: 14px; line-height: 1.5; color: oklch(72% 0.04 75); }
+  </style>
+</head>
+<body>
+  <div class="deck-shell">
+    <div class="deck-stage" id="deck-stage">
+      <section class="slide active s-cover" data-screen-label="01 Cover">
+        <div class="atmosphere"></div><div class="horizon"></div><div class="anomaly"></div>
+        <div class="content">
+          <div class="kicker"><span class="dot"></span>ISAAC ASIMOV · 1920—1992</div>
+          <h1 class="display" style="margin-top: 36px;">阿西莫夫宇宙<br><em>跨越两万年的</em>未来史</h1>
+          <div class="sub">机器人 · 银河帝国 · 基地 — 三河汇流</div>
+          <div class="latin">FROM A CORNFIELD ON EARTH · TO A GALAXY OF TRILLIONS</div>
+        </div>
+        <div class="deck-footer"><span>OVERVIEW · 5 SLIDES</span><span class="right">A QUIET WARNING FROM A WARMER SUN</span></div>
+      </section>
+      <section class="slide s-timeline" data-screen-label="02 Timeline">
+        <div class="atmosphere"></div>
+        <div class="content">
+          <div class="kicker"><span class="dot"></span>ONE FUTURE HISTORY · THREE SERIES</div>
+          <h2 class="display">从一片<em>玉米田</em>，<br>到一个银河文明的潮起潮落。</h2>
+          <p class="lead">阿西莫夫晚年把三条原本独立的故事线缝成同一部未来史 —— 机器人走出工厂、人类走出地球、银河帝国崛起又衰落、基地重启文明。时间跨度，约两万年。</p>
+          <div class="timeline">
+            <div class="era-row"><div class="era-time">公元 1990s — 5000<small>近未来 · 走出地球</small></div><div class="era-body"><div class="era-name">机器人系列 · The Robot Era</div><div class="era-desc">U.S. Robots 公司、三大法则诞生、地球与外世界（Spacers）的对峙；机器人侦探 Daneel 与人类警探 Baley 联手，把"星际定居"从禁忌变为命运。</div><div class="era-works">I, ROBOT · THE CAVES OF STEEL · THE NAKED SUN · THE ROBOTS OF DAWN · ROBOTS AND EMPIRE</div></div></div>
+            <div class="era-row"><div class="era-time">公元 ~10,000 — 12,000<small>银河时代 · 千万星系</small></div><div class="era-body"><div class="era-name">银河帝国系列 · The Empire Era</div><div class="era-desc">2500 万颗有人居住的行星，统一在川陀（Trantor）金属穹顶之下。帝国如午后斜阳——壮丽、稳定、并已开始下坠。</div><div class="era-works">THE STARS, LIKE DUST · THE CURRENTS OF SPACE · PEBBLE IN THE SKY</div></div></div>
+            <div class="era-row"><div class="era-time">公元 ~12,020 — 13,000+<small>基地时代 · 缩短黑暗</small></div><div class="era-body"><div class="era-name">基地系列 · The Foundation Era</div><div class="era-desc">心灵史学家 Hari Seldon 预言帝国将崩塌、随之而来的是三万年黑暗。两座基地被秘密埋下，把这段黑暗压缩为一千年。</div><div class="era-works">PRELUDE · FORWARD · FOUNDATION TRILOGY · EDGE · EARTH</div></div></div>
+          </div>
+        </div>
+        <div class="deck-footer"><span>02 / 05 · TIMELINE</span><span class="right">~20,000 YEARS · ONE STORY</span></div>
+      </section>
+      <section class="slide s-robots" data-screen-label="03 Robots">
+        <div class="atmosphere"></div>
+        <div class="content">
+          <div class="num">CHAPTER 01 · THE ROBOT ERA</div>
+          <h2 class="display">三条法则，<br>和一个守护人类<em>两万年</em>的机器人。</h2>
+          <div class="row">
+            <div class="laws">
+              <div class="law"><div class="law-n">I.</div><div class="law-text">机器人不得伤害人类，或坐视人类受到伤害。<small>FIRST LAW · INACTION COUNTS</small></div></div>
+              <div class="law"><div class="law-n">II.</div><div class="law-text">机器人必须服从人类的命令——除非命令与第一法则冲突。<small>SECOND LAW · UNLESS IT WOULD HURT US</small></div></div>
+              <div class="law"><div class="law-n">III.</div><div class="law-text">机器人必须保护自身存在——只要不与第一、第二法则冲突。<small>THIRD LAW · LAST IN PRIORITY</small></div></div>
+              <div class="law"><div class="law-n">0.</div><div class="law-text">机器人不得伤害人类整体，或坐视整个人类受到伤害。<small>ZEROTH LAW · DERIVED, AND TERRIBLE</small></div></div>
+            </div>
+            <aside class="robots-side">
+              <div><div class="panel-label">R. DANEEL OLIVAW</div><p class="panel-body" style="margin-top: 10px;">一个外形与人类无异的机器人。<br>Baley 警探的搭档，几个世纪后悄然现身于川陀的帝国心脏，又在两万年后引导基地走向终局。</p></div>
+              <div><div class="panel-label">KEY WORKS</div><ul class="works-list">
+                <li><span class="yr">1950</span><span class="ttl">I, Robot<em>短篇集</em></span></li>
+                <li><span class="yr">1954</span><span class="ttl">The Caves of Steel<em>钢穴</em></span></li>
+                <li><span class="yr">1957</span><span class="ttl">The Naked Sun<em>裸阳</em></span></li>
+                <li><span class="yr">1983</span><span class="ttl">The Robots of Dawn<em>曙光中的机器人</em></span></li>
+                <li><span class="yr">1985</span><span class="ttl">Robots and Empire<em>承前启后</em></span></li>
+              </ul></div>
+            </aside>
+          </div>
+        </div>
+        <div class="deck-footer"><span>03 / 05 · ROBOTS</span><span class="right">"A ROBOT MAY NOT INJURE A HUMAN BEING…"</span></div>
+      </section>
+      <section class="slide s-foundation" data-screen-label="04 Foundation">
+        <div class="atmosphere"></div>
+        <div class="content">
+          <div class="kicker"><span class="dot"></span>CHAPTER 02 · THE FOUNDATION ERA</div>
+          <h2 class="display"><em>心灵史学</em>：<br>用方程，预言整个银河的命运。</h2>
+          <p class="lead">数学家 Hari Seldon 把社会学化作可计算的概率云：个体不可测，但 <em>千万亿人</em> 的总和，落在一道窄窄的统计曲线上。<br>帝国必将崩塌——但崩塌之后的三万年黑暗，可以被压缩成一千年。</p>
+          <div class="pillars">
+            <div class="pillar"><div class="head"><div class="num">01</div><div class="ttl">第一基地</div></div><div class="body">银河边缘的 Terminus。表面是百科全书工程，实则是科学与技术的火种——商人、市长、自由港，一次次靠"赛顿危机"度过关口。</div><div class="meta">SCIENCE · COMMERCE · DIPLOMACY</div></div>
+            <div class="pillar"><div class="head"><div class="num">02</div><div class="ttl">第二基地</div></div><div class="body">隐匿在银河"星辰之末"的心灵学者们。他们不造星舰，只调整方程的偏差；当骡（The Mule）这个变量出现时，他们必须现身。</div><div class="meta">PSYCHIC · UNSEEN · COURSE-CORRECTING</div></div>
+            <div class="pillar"><div class="head"><div class="num">03</div><div class="ttl">盖娅 / 银河</div></div><div class="body">Daneel 在两万年后给出的第三种答案：让整个银河成为一个共鸣的有机体——Galaxia。秩序、个体与延续，最后一次被放在同一张天平上。</div><div class="meta">UNIFIED MIND · DANEEL'S BET</div></div>
+          </div>
+        </div>
+        <div class="deck-footer"><span>04 / 05 · FOUNDATION</span><span class="right">SHORTEN THE DARK · 30,000 → 1,000 YEARS</span></div>
+      </section>
+      <section class="slide s-unify" data-screen-label="05 Unification">
+        <div class="atmosphere"></div><div class="anomaly"></div>
+        <div class="content">
+          <div class="kicker"><span class="dot"></span>EPILOGUE · ONE UNIVERSE</div>
+          <h2 class="display">三条河汇成一条，<br><em>守护者</em>始终未眠。</h2>
+          <div class="quote">"他静静站在川陀的废墟之上，已经活了将近两万年。<br>他把人类带出地球，带过帝国，带向一个还没有名字的未来。"<span class="src">— ECHOES OF FOUNDATION AND EARTH, 1986</span></div>
+          <div class="arc">
+            <div class="arc-step"><div class="y">~ 2050</div><div class="l">玉米田与第一台正子脑</div><div class="d">从地球的一个农业郊区开始——三大法则被写进硅与正子的回路里。</div></div>
+            <div class="arc-step"><div class="y">~ 5000</div><div class="l">人类星散，Daneel 隐去</div><div class="d">外世界凋零、定居者扩张；机器人退入历史的暗面，但从未离场。</div></div>
+            <div class="arc-step"><div class="y">~ 12000</div><div class="l">川陀陷落 · 基地启动</div><div class="d">帝国如夕阳沉入麦浪。Seldon 计划取代它的位置，作为新的引力中心。</div></div>
+            <div class="arc-step"><div class="y">~ 20000</div><div class="l">Galaxia · 一颗有意识的银河</div><div class="d">Daneel 选择了第三条路——不是统治，不是遗弃，而是让银河自己学会呼吸。</div></div>
+          </div>
+        </div>
+        <div class="deck-footer"><span>05 / 05 · END</span><span class="right">A QUIET WARNING FROM A WARMER SUN</span></div>
+      </section>
+    </div>
+  </div>
+  <nav class="deck-counter" role="navigation" aria-label="Deck navigation">
+    <button type="button" id="deck-prev" aria-label="Previous slide">‹</button>
+    <span class="deck-count"><span id="deck-cur">01</span> <span class="total">/ <span id="deck-total">01</span></span></span>
+    <button type="button" id="deck-next" aria-label="Next slide">›</button>
+  </nav>
+  <div class="deck-hint">← / → · space</div>
+  <script>
+    (function(){var stage=document.getElementById('deck-stage');var slides=Array.prototype.slice.call(document.querySelectorAll('.slide'));var prev=document.getElementById('deck-prev');var next=document.getElementById('deck-next');var cur=document.getElementById('deck-cur');var total=document.getElementById('deck-total');var STORE='deck:idx:'+(location.pathname||'/');var idx=0;function fit(){var sw=window.innerWidth;var sh=window.innerHeight;var pad=32;var s=Math.min((sw-pad)/1920,(sh-pad)/1080);if(!isFinite(s)||s<=0)s=1;var tx=(sw-1920*s)/2;var ty=(sh-1080*s)/2;stage.style.transform='translate('+tx+'px,'+ty+'px) scale('+s+')';}function pad2(n){return(n<10?'0':'')+n;}function paint(){slides.forEach(function(el,i){el.classList.toggle('active',i===idx);});if(cur)cur.textContent=pad2(idx+1);if(total)total.textContent=pad2(slides.length);if(prev)prev.toggleAttribute('disabled',idx<=0);if(next)next.toggleAttribute('disabled',idx>=slides.length-1);}function go(i){idx=Math.max(0,Math.min(slides.length-1,i));paint();try{localStorage.setItem(STORE,String(idx));}catch(_){}}function onKey(e){var t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return;if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){e.preventDefault();go(idx+1);}else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(idx-1);}else if(e.key==='Home'){e.preventDefault();go(0);}else if(e.key==='End'){e.preventDefault();go(slides.length-1);}}window.addEventListener('keydown',onKey,true);document.addEventListener('keydown',onKey,true);if(prev)prev.addEventListener('click',function(){go(idx-1);});if(next)next.addEventListener('click',function(){go(idx+1);});document.body.setAttribute('tabindex','-1');document.body.style.outline='none';function focusDeck(){try{window.focus();document.body.focus({preventScroll:true});}catch(_){}}document.addEventListener('mousedown',focusDeck);window.addEventListener('load',focusDeck);try{var saved=parseInt(localStorage.getItem(STORE)||'0',10);if(!isNaN(saved)&&saved>=0&&saved<slides.length)idx=saved;}catch(_){}window.addEventListener('resize',fit);fit();paint();focusDeck();})();
+  </script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "asimov-interstellar-deck",
+  "title": "Asimov × Interstellar Deck",
+  "title_i18n": {
+    "en": "Asimov × Interstellar Deck",
+    "zh-CN": "阿西莫夫 × 星际穿越 Deck",
+    "zh-TW": "艾西莫夫 × 星際效應 Deck",
+    "ja": "アシモフ × インターステラー デッキ",
+    "ko": "아시모프 × 인터스텔라 덱"
+  },
+  "version": "0.1.0",
+  "description": "Cinematic 5-slide deck for narrating Asimov's Robots/Empire/Foundation universe in an Interstellar 'cornfield + warm pre-apocalypse dusk' tone.",
+  "description_i18n": {
+    "en": "Cinematic 5-slide deck for narrating Asimov's Robots/Empire/Foundation universe in an Interstellar 'cornfield + warm pre-apocalypse dusk' tone.",
+    "zh-CN": "用《星际穿越》的玉米田 + 末日前夜暖光氛围,讲述阿西莫夫机器人/银河帝国/基地全宇宙的 5 页 deck。",
+    "zh-TW": "以《星際效應》玉米田與末日前夕暖光,述說艾西莫夫機器人/銀河帝國/基地宇宙的 5 頁簡報。",
+    "ja": "『インターステラー』の「コーンフィールド+黄昏」のトーンで、アシモフのロボット/銀河帝国/ファウンデーション宇宙を語る5枚のシネマティック・デッキ。",
+    "ko": "『인터스텔라』의 옥수수밭과 황혼의 따뜻한 분위기로 아시모프의 로봇/은하제국/파운데이션 우주를 이야기하는 5장짜리 시네마틱 덱."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "leilei926524-tech",
+    "url": "https://github.com/leilei926524-tech"
+  },
+  "plugin": {
+    "repo": "leilei926524-tech/asimov-interstellar-deck"
+  },
+  "tags": [
+    "deck",
+    "narrative",
+    "editorial",
+    "cinematic",
+    "interstellar",
+    "sci-fi",
+    "asimov"
+  ],
+  "compat": {
+    "agentSkills": [
+      { "path": "./SKILL.md" }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "narrative",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./examples/example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Asimov × Interstellar Deck template to turn my content into a cinematic 5-slide horizontal deck with deep navy/charcoal canvas, warm amber accent (oklch(72% 0.15 70)), serif italic emphasis, and a single distant 'anomaly' light. Cover · Timeline · Three pillars · Quote/closing rhythm.",
+        "zh-CN": "用「阿西莫夫 × 星际穿越 Deck」模板,把我的内容做成一套电影感 5 页横向 deck:深蓝/炭灰画布 + 琥珀暖色重音 oklch(72% 0.15 70) + 衬线斜体强调 + 远处的一颗「异常」亮点。封面 · 时间线 · 三柱 · 引文/收束的节奏。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./examples/example.html",
+          "title": "Asimov Universe — 20,000 Years (Interstellar tone)",
+          "title_i18n": {
+            "en": "Asimov Universe — 20,000 Years (Interstellar tone)",
+            "zh-CN": "阿西莫夫宇宙 · 跨越两万年的未来史"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        { "path": "./SKILL.md" }
+      ],
+      "assets": [
+        "./examples/example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}
