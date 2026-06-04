@@ -582,26 +582,6 @@ body::before {
   text-transform: uppercase;
   color: var(--ink-faint);
 }
-/* Disabled placeholder item (e.g. Weekly Newsletter before it ships). */
-.nav-dropdown .dropdown-disabled {
-  display: block;
-  padding: 10px 12px;
-  font-family: var(--sans);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink-faint);
-  opacity: 0.55;
-  cursor: default;
-}
-/* Agent dropdown carries AMR + 17 adapters — too tall for one column.
- * Lay the items out in two columns; the menu widens to fit. */
-.nav-dropdown-agents {
-  min-width: 460px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 4px;
-  align-content: start;
-}
 /* Solution dropdown is tall (two groups, 11 items). Cap height and let it
  * scroll rather than run off the bottom of short viewports. */
 .nav-dropdown-solution {

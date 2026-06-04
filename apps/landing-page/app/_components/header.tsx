@@ -72,33 +72,6 @@ const SOLUTION_USE_CASES: ReadonlyArray<{
 //   { name: 'Marketing', href: '/for/marketing/' },
 // ];
 
-/*
- * Agent dropdown — AMR (the design Agent) plus the 17 first-party coding-agent
- * adapters. Display names are verbatim from the Header spec; `slug` maps to the
- * agent's anchor on the /agents/ hub (apps/landing-page/app/pages/agents/
- * index.astro). Per-agent detail pages are a later milestone — until then the
- * anchor is the destination. Agent product names are not localized.
- */
-const AGENT_LINKS: ReadonlyArray<{ name: string; slug: string }> = [
-  { name: 'Codex CLI', slug: 'codex' },
-  { name: 'Devin for Terminal', slug: 'devin' },
-  { name: 'OpenCode', slug: 'opencode' },
-  { name: 'Kimi CLI', slug: 'kimi' },
-  { name: 'Qwen Code', slug: 'qwen' },
-  { name: 'Qoder CLI', slug: 'qoder' },
-  { name: 'GitHub Copilot CLI', slug: 'copilot' },
-  { name: 'Pi', slug: 'pi' },
-  { name: 'Kiro CLI', slug: 'kiro' },
-  { name: 'Kilo', slug: 'kilo' },
-  { name: 'Mistral Vibe CLI', slug: 'vibe' },
-  { name: 'DeepSeek TUI', slug: 'deepseek' },
-  { name: 'Claude Code', slug: 'claude-code' },
-  { name: 'Gemini CLI', slug: 'gemini' },
-  { name: 'Hermes', slug: 'hermes' },
-  { name: 'Grok Build', slug: 'grok' },
-  { name: 'Cursor Agent', slug: 'cursor' },
-];
-
 export interface HeaderProps {
   /** Nav highlight target. `'home'` is the default for `/`. */
   active?:
@@ -306,9 +279,9 @@ export function Header({
             </li>
             {/*
               Agent — for now this dropdown lists only AMR (the design Agent).
-              The 17 first-party coding-agent adapters (see AGENT_LINKS) and the
-              per-agent /agents/ hub anchors are intentionally held back for a
-              later pass; re-add the AGENT_LINKS map below when that ships.
+              The first-party coding-agent adapters and per-agent /agents/ hub
+              anchors are intentionally held back for a later pass; add that
+              adapter map next to this dropdown when that ships.
             */}
             <li className='has-dropdown'>
               <a
