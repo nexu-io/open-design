@@ -221,6 +221,17 @@
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--text-muted) 18%, transparent) transparent;
 }
+/* Bottom-anchor the transcript so a short conversation (e.g. a fresh fork)
+   rests against the composer instead of stranding its messages at the top with
+   a large blank area below. The auto top margin absorbs the free space above
+   the first row when the content is shorter than the viewport; once the content
+   outgrows the viewport the auto margin resolves to 0 and the log scrolls
+   normally with the top fully reachable (unlike `justify-content: flex-end`,
+   which clips overflowing content above the scroll range). The empty/loading
+   states own their own vertical layout, so they're excluded. */
+.chat-log > :first-child:not(.chat-empty-wrap):not(.chat-loading-state) {
+  margin-top: auto;
+}
 .chat-log::-webkit-scrollbar {
   width: 8px;
 }
