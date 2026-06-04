@@ -3055,12 +3055,30 @@ function HtmlViewer({
     () => htmlPreviewSlideState.get(previewStateKey) ?? null,
   );
   const previewBodyRef = useRef<HTMLDivElement | null>(null);
+  const previewZoomRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const shareRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     liveCommentTargetsRef.current = liveCommentTargets;
   }, [liveCommentTargets]);
+
+  useEffect(() => {
+    const el = previewZoomRef.current;
+    if (!el) return;
+    const onWheel = (event: globalThis.WheelEvent) => {
+      if (event.ctrlKey) return;
+      event.preventDefault();
+      const delta = event.deltaY;
+      if (delta > 0) {
+        bumpZoom(-25);
+      } else if (delta < 0) {
+        bumpZoom(25);
+      }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [bumpZoom]);
 
   useEffect(() => {
     if (liveHtml !== undefined) {
@@ -4505,7 +4523,7 @@ function HtmlViewer({
                 }}
               />
             ) : null}
-            <div className={manualEditMode ? 'manual-edit-canvas' : 'comment-frame-clip'}>
+            <div className={manualEditMode ? 'manual-edit-canvas' : 'comment-frame-clip'} ref={previewZoomRef}>
               <div
                 style={{
                   width: `${100 / previewScale}%`,

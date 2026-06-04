@@ -202,6 +202,43 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).not.toContain('data-od-render-mode="url-load"');
   });
 
+  it('updates the design-preview zoom when the mouse wheel is scrolled over the preview', () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    const preview = document.querySelector('.comment-frame-clip');
+    expect(preview).toBeTruthy();
+
+    fireEvent.wheel(preview!, { deltaY: -100, ctrlKey: false });
+    expect(screen.getByText('125%')).toBeTruthy();
+
+    fireEvent.wheel(preview!, { deltaY: 100, ctrlKey: false });
+    expect(screen.getByText('100%')).toBeTruthy();
+
+    fireEvent.wheel(preview!, { deltaY: -100, ctrlKey: true });
+    expect(screen.getByText('100%')).toBeTruthy();
+  });
+
   it('shows Cloudflare Pages as a deploy action without requiring a project name input', async () => {
     const file = baseFile({
       name: 'index.html',
