@@ -127,6 +127,28 @@ describe('HomeView media composer options', () => {
     expect(within(menu).getByText('Official preset')).toBeTruthy();
   });
 
+  it('opens the Home style picker without duplicate group key warnings', async () => {
+    stubFetch();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      renderHome({
+        defaultDesignSystemId: 'official-default',
+        designSystems: [
+          designSystem('official-default', 'Official Default', 'built-in', 'published'),
+          designSystem('official-alt', 'Official Alt', 'built-in', 'published'),
+        ],
+      });
+
+      await clickHomeRailChip('image');
+      await openOption('designSystem');
+
+      const messages = consoleError.mock.calls.map((call) => call.map(String).join(' '));
+      expect(messages.some((message) => message.includes('Encountered two children with the same key'))).toBe(false);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it('switches media chips without opening the replacement dialog', async () => {
     stubFetch();
     renderHome();
