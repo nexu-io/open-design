@@ -570,7 +570,7 @@ process.stdin.on('end', () => {
 process.stdin.resume();
 process.stdin.on('end', () => {
   console.log(JSON.stringify({ type: 'step_start' }));
-  console.log(JSON.stringify({ type: 'text', part: { text: '先确认几个问题再开始搭建。\\n<question-form id="discovery" title="Plugin brief">\\n<field name="purpose" type="text" label="What should it do?" />\\n</question-form>' } }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '先确认几个问题再开始搭建。\\n<question-form id="discovery" title="Plugin brief">\\n{"questions":[{"id":"purpose","label":"What should it do?","type":"text"}]}\\n</question-form>' } }));
   console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
   process.exit(0);
 });
@@ -634,7 +634,7 @@ process.stdin.on('end', () => {
 process.stdin.resume();
 process.stdin.on('end', () => {
   console.log(JSON.stringify({ type: 'step_start' }));
-  console.log(JSON.stringify({ type: 'text', part: { text: '先确认几个问题再开始搭建。\\n<ask-question id="discovery" title="Plugin brief">\\n<field name="purpose" type="text" label="What should it do?" />\\n</ask-question>' } }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '先确认几个问题再开始搭建。\\n<ask-question id="discovery" title="Plugin brief">\\n{"questions":[{"id":"purpose","label":"What should it do?","type":"text"}]}\\n</ask-question>' } }));
   console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
   process.exit(0);
 });
@@ -661,6 +661,69 @@ process.stdin.on('end', () => {
         expect(eventsBody).toContain('<ask-question');
         expect(eventsBody).not.toContain('ended before generating the required generated-plugin artifacts');
         expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
+  it('still fails plugin authoring when a question-form tag wraps a non-renderable (non-JSON) body', async () => {
+    // The clarification carve-out must match the web parser's renderable-form
+    // contract (JSON body with a `questions` array), not just the opening
+    // tag. A `<question-form>` whose body is not valid form JSON renders as
+    // raw prose in the UI — no usable brief card — so suppressing the
+    // missing-artifacts failure for it would turn a hard failure into a false
+    // success. This pins that the guard stays gated on a renderable body.
+    const projectId = `proj-plugin-authoring-badform-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin authoring malformed-form fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.status).toBe(200);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '先确认几个问题。\\n<question-form id="discovery">\\nWhat should it do? (free text)\\n</question-form>' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            pluginId: 'od-plugin-authoring',
+            message: '帮我做个插件。',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('ended before generating the required generated-plugin artifacts');
+        expect(statusBody.status).not.toBe('succeeded');
       },
     );
   });
