@@ -16,7 +16,7 @@ const composerMocks = vi.hoisted(() => ({
 }));
 
 const translations: Record<string, string> = {
-  'chat.mode.chat.label': 'Chat',
+  'chat.mode.chat.label': 'Ask',
   'chat.mode.design.label': 'Design Agent',
   'chat.queuedHeader': 'Queued',
   'chat.queuedToSend': 'to Send',
@@ -106,6 +106,12 @@ class MockResizeObserver {
 
   trigger(target: Element) {
     this.callback([{ target } as ResizeObserverEntry], this as unknown as ResizeObserver);
+  }
+
+  static triggerObserved(target: Element) {
+    for (const instance of MockResizeObserver.instances) {
+      if (instance.observed.has(target)) instance.trigger(target);
+    }
   }
 }
 
@@ -777,7 +783,7 @@ Expected output:
       },
     });
 
-    MockResizeObserver.instances[0]?.trigger(strip);
+    MockResizeObserver.triggerObserved(strip);
 
     expect(log!.scrollTop).toBe(600);
   });

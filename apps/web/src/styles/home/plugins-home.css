@@ -980,3 +980,141 @@ button.plugins-home__use-menu-item:focus-visible {
     pointer-events: auto;
   }
 }
+
+/* ============================================================
+   New-user templates reveal (HomeTemplatesReveal)
+   Collapsed by default for users with no projects so the hero
+   composer owns the first screen; a bottom hint + upward scroll
+   gesture smoothly reveals the Community gallery.
+   ============================================================ */
+.home-templates-reveal {
+  display: flex;
+  flex-direction: column;
+}
+/* Collapsed: clip the gallery to zero height and fade it out. The large
+   max-height ceiling lets the expand transition animate to natural height
+   without measuring it. */
+.home-templates-reveal__body {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition:
+    max-height 420ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 320ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.home-templates-reveal.is-revealed .home-templates-reveal__body {
+  max-height: 6000px;
+  opacity: 1;
+  /* Leave room for the fixed collapse pill so it never covers the last row. */
+  padding-bottom: 64px;
+}
+
+/* Bottom hint — pinned to the very bottom of the viewport, intentionally
+   faint so it sits at the edge of attention. An up arrow bobs gently to
+   suggest the scroll-up gesture without pulling focus from the hero. */
+.home-templates-reveal__hint {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  opacity: 0.7;
+  transition:
+    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.home-templates-reveal__hint:hover {
+  opacity: 1;
+  color: var(--text-muted);
+}
+.home-templates-reveal__hint:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  opacity: 1;
+}
+.home-templates-reveal__hint-arrow {
+  animation: home-templates-bob 1.8s ease-in-out infinite;
+}
+/* Fade + lift the arrow on each cycle so the affordance reads clearly:
+   it rises and brightens, then settles and dims — a gentle "pull me up". */
+@keyframes home-templates-bob {
+  0% {
+    transform: translateY(3px);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(3px);
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-templates-reveal__hint-arrow,
+  .home-templates-reveal__collapse {
+    animation: none;
+  }
+  .home-templates-reveal__hint-arrow {
+    opacity: 0.85;
+  }
+  .home-templates-reveal__body {
+    transition: none;
+  }
+}
+
+/* Collapse control — pinned to the bottom of the viewport (mirroring the
+   hint slot) so it's always reachable while the gallery is open, instead of
+   being stranded far below the fold. Reversible: folds the gallery away. */
+.home-templates-reveal__collapse {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 15px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm, 0 4px 14px rgba(0, 0, 0, 0.08));
+  animation: home-templates-fade-in 220ms cubic-bezier(0.23, 1, 0.32, 1);
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.home-templates-reveal__collapse:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text-strong, #111);
+}
+.home-templates-reveal__collapse:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@keyframes home-templates-fade-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}

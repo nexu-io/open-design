@@ -5,7 +5,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 
 import { DesignFilesPanel, type DesignFilesNavState } from '../../src/components/DesignFilesPanel';
-import type { ProjectFile, ProjectFileKind } from '../../src/types';
+import type { ProjectFile, ProjectFileKind, ProjectFolder } from '../../src/types';
+
+function folder(path: string): ProjectFolder {
+  return { name: path.split('/').pop() ?? path, path, type: 'dir', size: 0, mtime: 1700000000 };
+}
 
 // Stub localStorage so the component's view-state persistence writes to an
 // in-memory store. Cleared in beforeEach so no test bleeds state into the next.
@@ -498,5 +502,28 @@ describe('DesignFilesPanel current-directory sync', () => {
     // upload / paste / new-sketch would create at the project root (#3358 regression).
     fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
     expect(onCurrentDirChange).toHaveBeenLastCalledWith('assets');
+  });
+});
+
+describe('DesignFilesPanel persisted (empty) folders', () => {
+  afterEach(() => cleanup());
+
+  it('shows an empty persisted folder that has no files under it', () => {
+    // Only a root file + an empty persisted folder; the folder must still
+    // appear (it would vanish if we derived dirs from file paths alone).
+    renderPanel([file({ name: 'top.html', kind: 'html' })], { folders: [folder('assets')] });
+    const dirRows = [...document.querySelectorAll('.df-dir-row')];
+    expect(dirRows.some((r) => r.textContent?.includes('assets'))).toBe(true);
+  });
+
+  it('surfaces a nested empty persisted folder after navigating into its parent', () => {
+    renderPanel([], { folders: [folder('assets'), folder('assets/icons')] });
+    // Zero files, but the persisted folder still renders the tree (not the
+    // empty state), so 'assets' is navigable at the root.
+    const rootDirs = [...document.querySelectorAll('.df-dir-row .df-row-name')].map((e) => e.textContent);
+    expect(rootDirs).toContain('assets');
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    const nestedDirs = [...document.querySelectorAll('.df-dir-row .df-row-name')].map((e) => e.textContent);
+    expect(nestedDirs).toContain('icons');
   });
 });

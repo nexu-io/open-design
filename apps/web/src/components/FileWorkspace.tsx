@@ -132,6 +132,8 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
+  preferredPreviewFile?: string | null;
+  autoPreviewDesignArtifacts?: boolean;
   focusMode?: boolean;
   onFocusModeChange?: (next: boolean) => void;
   designSystemProject?: DesignSystemSummary | null;
@@ -232,6 +234,10 @@ const BROWSER_TAB_PREFIX = '__browser__:';
 // We keep an LRU of the most-recently-activated browser tabs live and unmount
 // the rest; switching back to an evicted tab remounts (reloads) it.
 const BROWSER_KEEPALIVE_CAP = 3;
+
+// Stable empty folder list so the render-phase project-switch reset is
+// idempotent (passing a fresh `[]` each render would re-trigger the reset).
+const EMPTY_PROJECT_FOLDERS: ProjectFolder[] = [];
 type TabDropEdge = 'before' | 'after';
 type BrowserWorkspaceTab = ProjectBrowserWorkspaceTab;
 type WorkspaceOrderedTab =
@@ -367,6 +373,8 @@ export function FileWorkspace({
   onPluginFolderAgentAction,
   activePluginActionPaths,
   hiddenPluginActionPaths,
+  preferredPreviewFile = null,
+  autoPreviewDesignArtifacts = false,
   focusMode = false,
   onFocusModeChange,
   designSystemProject = null,
@@ -457,7 +465,20 @@ export function FileWorkspace({
   const [uploadDir, setUploadDir] = useState<string>('');
   const [sketches, setSketches] = useState<Record<string, SketchState>>({});
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
-  const [projectFolders, setProjectFolders] = useState<ProjectFolder[]>([]);
+  const [projectFolders, setProjectFolders] = useState<ProjectFolder[]>(EMPTY_PROJECT_FOLDERS);
+  // Reset the folder list during render — NOT in an effect — when the project
+  // changes. DesignFilesPanel is keyed by `projectId`, so an effect-based reset
+  // would let the new panel mount once with the previous project's folders and
+  // briefly suppress the new project's empty state (the exact regression this
+  // fix removes). Adjusting state during render discards this render before the
+  // child commits, so the new panel never sees stale folders. Mirrors the
+  // designFilesNav ref reset above. The stable empty constant keeps this
+  // idempotent (no re-entrant render loop).
+  const projectFoldersProjectIdRef = useRef(projectId);
+  if (projectFoldersProjectIdRef.current !== projectId) {
+    projectFoldersProjectIdRef.current = projectId;
+    setProjectFolders(EMPTY_PROJECT_FOLDERS);
+  }
   const [browserTabs, setBrowserTabs] = useState<BrowserWorkspaceTab[]>(
     () => browserTabsFromState(tabsState.browserTabs),
   );
@@ -525,6 +546,8 @@ export function FileWorkspace({
 
   useEffect(() => {
     let cancelled = false;
+    // The synchronous clear happens during render (see projectFoldersProjectIdRef
+    // above); here we only fetch the new project's folders.
     void fetchProjectFolders(projectId).then((next) => {
       if (!cancelled) setProjectFolders(next);
     });
@@ -721,9 +744,15 @@ export function FileWorkspace({
       setActiveTab(name);
       return;
     }
+    const isNewTab = !persistedTabs.includes(name);
+    const nextBrowserTabs = isNewTab
+      ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
+      : browserTabs;
+    if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
     onTabsStateChange(workspaceTabsState(
-      persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
+      isNewTab ? [...persistedTabs, name] : persistedTabs,
       name,
+      nextBrowserTabs,
     ));
     setActiveTab(name);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -768,8 +797,13 @@ export function FileWorkspace({
     // resolves a new terminal/side-chat id), so the closure could be stale and
     // clobber tabs added in the meantime.
     const currentTabs = tabsStateRef.current.tabs;
+    const isNewTab = !currentTabs.includes(name);
+    const nextBrowserTabs = isNewTab
+      ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
+      : browserTabs;
     const nextTabs = currentTabs.includes(name) ? currentTabs : [...currentTabs, name];
-    commitTabsState(workspaceTabsState(nextTabs, name));
+    if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
+    commitTabsState(workspaceTabsState(nextTabs, name, nextBrowserTabs));
     setActiveTab(name);
   }
 
@@ -2070,6 +2104,7 @@ export function FileWorkspace({
             rootDirName={rootDirName}
             reloading={reloading}
             files={visibleFiles}
+            folders={projectFolders}
             liveArtifacts={liveArtifactEntries}
             onRefreshFiles={onRefreshFiles}
             onCurrentDirChange={setUploadDir}
@@ -2121,6 +2156,8 @@ export function FileWorkspace({
             }}
             uploadError={uploadError}
             onClearUploadError={() => setUploadError(null)}
+            preferredPreviewFile={preferredPreviewFile}
+            autoPreviewDesignArtifacts={autoPreviewDesignArtifacts}
             onPluginFolderAgentAction={onPluginFolderAgentAction}
             activePluginActionPaths={activePluginActionPaths}
             hiddenPluginActionPaths={hiddenPluginActionPaths}
@@ -3807,6 +3844,34 @@ function maxBrowserTabSequence(tabs: BrowserWorkspaceTab[]): number {
 
 function lastWorkspaceTabId(tabs: WorkspaceOrderedTab[]): string | null {
   return tabs[tabs.length - 1]?.id ?? null;
+}
+
+function reanchorBrowserTabsToCurrentOrder(
+  orderedTabs: WorkspaceOrderedTab[],
+  browserTabs: BrowserWorkspaceTab[],
+): BrowserWorkspaceTab[] {
+  if (browserTabs.length === 0) return browserTabs;
+  const anchorByBrowserId = new Map<string, string | null>();
+  let previousId: string | null = DESIGN_FILES_TAB;
+  for (const entry of orderedTabs) {
+    if (entry.kind === 'browser') {
+      anchorByBrowserId.set(entry.browserTab.id, previousId);
+      previousId = entry.browserTab.id;
+    } else {
+      previousId = entry.name;
+    }
+  }
+
+  let changed = false;
+  const nextTabs = browserTabs.map((tab) => {
+    if (!anchorByBrowserId.has(tab.id)) return tab;
+    const nextInsertAfter = anchorByBrowserId.get(tab.id) ?? null;
+    const currentInsertAfter = tab.insertAfter ?? null;
+    if (currentInsertAfter === nextInsertAfter) return tab;
+    changed = true;
+    return { ...tab, insertAfter: nextInsertAfter };
+  });
+  return changed ? nextTabs : browserTabs;
 }
 
 function orderWorkspaceTabs(

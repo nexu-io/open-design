@@ -421,6 +421,10 @@ export function EntryShell({
   const view: EntryViewKind = route.kind === 'home' ? route.view : 'home';
   const [previewSystemId, setPreviewSystemId] = useState<string | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  // The entry nav rail is collapsed by default (Manus-style) so the entry
+  // view opens clean and full-width; the panel toggle in the topbar opens it
+  // as an overlay that dismisses on selection / backdrop click / Escape.
+  const [railOpen, setRailOpen] = useState(false);
   const [localProviderModelsCache, setLocalProviderModelsCache] =
     useState<ProviderModelsCache>({});
   const hasSharedProviderModelsCache =
@@ -612,23 +616,53 @@ export function EntryShell({
     );
   }
 
+  const executionSwitcher = (
+    <InlineModelSwitcher
+      config={config}
+      agents={agents}
+      providerModelsCache={activeProviderModelsCache}
+      onProviderModelsCacheChange={activeSetProviderModelsCache}
+      compact={view === 'home'}
+      daemonLive={daemonLive}
+      onModeChange={onModeChange}
+      onAgentChange={onAgentChange}
+      onAgentModelChange={onAgentModelChange}
+      onApiProtocolChange={onApiProtocolChange}
+      onApiModelChange={onApiModelChange}
+      onOpenSettings={onOpenSettings}
+    />
+  );
+
   return (
     <div className="entry-shell entry-shell--no-header">
-      <div className="entry">
+      <div className={`entry${railOpen ? ' entry--rail-open' : ''}`}>
         <EntryNavRail
           view={view}
           onViewChange={changeView}
           onNewProject={() => openNewProject()}
+          open={railOpen}
+          onClose={() => setRailOpen(false)}
         />
         <main className="entry-main entry-main--scroll">
           <div className="entry-main__topbar">
-            <div className="entry-main__topbar-chips">
+            <button
+              type="button"
+              className="entry-rail-toggle"
+              onClick={() => setRailOpen((prev) => !prev)}
+              aria-label={t('entry.navExpand')}
+              aria-expanded={railOpen}
+              data-testid="entry-rail-toggle"
+            >
+              <Icon name="panel-left" size={20} />
+            </button>
+            <div className="entry-main__topbar-chips entry-main__topbar-chips--icon-only">
               <GithubStarBadge />
               <a
                 className="entry-discord-badge"
                 href={DISCORD_URL}
                 aria-label={discordAriaLabel}
                 title={discordAriaLabel}
+                data-tooltip={discordAriaLabel}
                 data-testid="entry-discord-badge"
               >
                 <Icon name="discord" size={14} className="entry-discord-badge__icon" />
@@ -644,19 +678,7 @@ export function EntryShell({
                   </>
                 ) : null}
               </a>
-              <InlineModelSwitcher
-                config={config}
-                agents={agents}
-                providerModelsCache={activeProviderModelsCache}
-                onProviderModelsCacheChange={activeSetProviderModelsCache}
-                daemonLive={daemonLive}
-                onModeChange={onModeChange}
-                onAgentChange={onAgentChange}
-                onAgentModelChange={onAgentModelChange}
-                onApiProtocolChange={onApiProtocolChange}
-                onApiModelChange={onApiModelChange}
-                onOpenSettings={onOpenSettings}
-              />
+              {view === 'home' ? null : executionSwitcher}
               <button
                 type="button"
                 className="use-everywhere-chip"
@@ -668,7 +690,7 @@ export function EntryShell({
                   });
                   openIntegrationTab('use-everywhere');
                 }}
-                title={t('entry.useEverywhereTitle')}
+                data-tooltip={t('entry.useEverywhereTitle')}
                 aria-label={t('entry.useEverywhereAria')}
                 data-testid="entry-use-everywhere-button"
               >
@@ -698,6 +720,8 @@ export function EntryShell({
                 onOpenProject={onOpenProject}
                 onViewAllProjects={() => changeView('projects')}
                 onBrowseRegistry={() => changeView('plugins')}
+                onImportFolder={onImportFolder}
+                onImportFolderResponse={onImportFolderResponse}
                 onOpenNewProject={(tab) => {
                   openNewProject(tab);
                 }}
@@ -706,6 +730,7 @@ export function EntryShell({
                 skillsLoading={skillsLoading}
                 connectors={connectors}
                 promptTemplates={promptTemplates}
+                executionSwitcher={view === 'home' ? executionSwitcher : null}
               />
             </div>
             <div data-testid="entry-view-projects" data-active={view === 'projects' ? 'true' : 'false'} {...inactiveViewProps(view === 'projects')}>

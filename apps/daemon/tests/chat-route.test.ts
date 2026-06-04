@@ -536,6 +536,259 @@ process.stdin.on('end', () => {
       },
     );
   });
+  it('does not fail plugin authoring when the turn-1 reply is a clarifying question-form awaiting the brief', async () => {
+    // The `od-plugin-authoring` plugin's turn-1 flow is to emit a
+    // `<question-form>` collecting the plugin brief, then STOP and wait for
+    // the user to answer — artifacts only land on the follow-up turn. The
+    // missing-artifacts guard must not treat that expected pause as a
+    // failure (regression: "Plugin authoring ended before generating the
+    // required generated-plugin artifacts.").
+    const projectId = `proj-plugin-authoring-question-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin authoring question-form fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.status).toBe(200);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '先确认几个问题再开始搭建。\\n<question-form id="discovery" title="Plugin brief">\\n{"questions":[{"id":"purpose","label":"What should it do?","type":"text"}]}\\n</question-form>' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            pluginId: 'od-plugin-authoring',
+            message: '帮我做个插件。',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('<question-form');
+        expect(eventsBody).not.toContain('ended before generating the required generated-plugin artifacts');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
+  it('does not fail plugin authoring when the clarifying form uses the <ask-question> alias', async () => {
+    // `<ask-question>` is the alias the web form parser accepts alongside
+    // the canonical `<question-form>` (apps/web/src/artifacts/question-form.ts).
+    // Models sometimes drift to it; the UI still renders a valid brief form,
+    // so the daemon's missing-artifacts guard must recognize the alias too —
+    // otherwise the same "ended before generating…" regression returns for a
+    // supported clarification shape.
+    const projectId = `proj-plugin-authoring-alias-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin authoring ask-question alias fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.status).toBe(200);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '先确认几个问题再开始搭建。\\n<ask-question id="discovery" title="Plugin brief">\\n{"questions":[{"id":"purpose","label":"What should it do?","type":"text"}]}\\n</ask-question>' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            pluginId: 'od-plugin-authoring',
+            message: '帮我做个插件。',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('<ask-question');
+        expect(eventsBody).not.toContain('ended before generating the required generated-plugin artifacts');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
+  it('still fails plugin authoring when a question-form tag wraps a non-renderable (non-JSON) body', async () => {
+    // The clarification carve-out must match the web parser's renderable-form
+    // contract (JSON body with a `questions` array), not just the opening
+    // tag. A `<question-form>` whose body is not valid form JSON renders as
+    // raw prose in the UI — no usable brief card — so suppressing the
+    // missing-artifacts failure for it would turn a hard failure into a false
+    // success. This pins that the guard stays gated on a renderable body.
+    const projectId = `proj-plugin-authoring-badform-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin authoring malformed-form fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.status).toBe(200);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '先确认几个问题。\\n<question-form id="discovery">\\nWhat should it do? (free text)\\n</question-form>' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            pluginId: 'od-plugin-authoring',
+            message: '帮我做个插件。',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('ended before generating the required generated-plugin artifacts');
+        expect(statusBody.status).not.toBe('succeeded');
+      },
+    );
+  });
+  it('does not fail plugin authoring when a valid form follows a Unicode preamble that expands under toLowerCase', async () => {
+    // The mirrored close-tag scan must stay in the original-string coordinate
+    // space. Some code points expand under toLowerCase ("İ" -> "i̇"), so
+    // lowercasing the whole buffer before indexing would desync the close-tag
+    // offset and corrupt the JSON body slice, failing a valid form. The
+    // preamble here contains "İ" before a well-formed form block.
+    const projectId = `proj-plugin-authoring-unicode-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin authoring unicode-preamble fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.status).toBe(200);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'İstanbul brief — 先确认几个问题。\\n<ask-question id="discovery" title="Plugin brief">\\n{"questions":[{"id":"purpose","label":"What should it do?","type":"text"}]}\\n</ask-question>' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            pluginId: 'od-plugin-authoring',
+            message: '帮我做个插件。',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).not.toContain('ended before generating the required generated-plugin artifacts');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
   it('closes the # Instructions block with an explicit "do not echo" guard so models do not parrot the prompt back', async () => {
     // claude-opus-4-7 (and a few other instruction-tuned models) start
     // their reply by echoing the # Instructions block verbatim, which

@@ -271,10 +271,20 @@
   margin-top: 0;
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
+.home-hero__input-card:has(.inline-switcher__popover),
 .home-hero__input-card:has(.session-mode-toggle__popover),
 .home-hero__input-card:has(.home-hero__plugin-picker) {
   z-index: 1700;
   overflow: visible;
+}
+/* The mode toggle's description card (chat.css) anchors upward and is only
+   shown on the home hero — it is `display:none` inside the chat composer.
+   The home-hero toggle sits well down the composer, so the card grows up
+   toward the page header; at its default 360px it crowds (and on smaller
+   windows clips) the top chrome. Cap it shorter here so it always clears the
+   header, and keep the inner scroll for the overflow. */
+.home-hero__input-card .session-mode-toggle__popover-card {
+  max-height: min(300px, calc(100vh - 120px));
 }
 .home-hero__input-card--compact-authoring {
   max-width: 640px;
@@ -769,6 +779,47 @@
   flex: 1 1 auto;
   flex-wrap: nowrap;
   overflow: visible;
+}
+.home-hero__execution-switcher {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.home-hero__execution-switcher .inline-switcher {
+  min-width: 0;
+  max-width: 48px;
+}
+.home-hero__execution-switcher .inline-switcher__chip {
+  height: 30px;
+  max-width: 48px;
+  padding: 0 7px;
+  gap: 4px;
+  border-radius: var(--radius-sm);
+}
+.home-hero__foot-left .session-mode-toggle {
+  height: 30px;
+}
+.home-hero__foot-left .session-mode-toggle__trigger {
+  height: 30px;
+  max-width: 120px;
+  padding: 0 8px;
+  gap: 6px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+.home-hero__foot-left .session-mode-toggle__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-hero__execution-switcher .inline-switcher__popover {
+  right: auto;
+  left: 0;
+  z-index: 1503;
+}
+.home-hero__execution-switcher .inline-switcher__agent-grid {
+  grid-template-columns: 1fr;
 }
 .home-hero__tool {
   appearance: none;
@@ -2017,6 +2068,14 @@
     gap: 8px;
     min-width: 0;
     max-width: 100%;
+  }
+  .home-hero__execution-switcher {
+    flex-basis: auto;
+  }
+  .home-hero__execution-switcher .inline-switcher,
+  .home-hero__execution-switcher .inline-switcher__chip {
+    width: auto;
+    max-width: 48px;
   }
 }
 

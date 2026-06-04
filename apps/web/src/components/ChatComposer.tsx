@@ -206,6 +206,7 @@ const DESIGN_TOOLBOX_ACTIONS: DesignToolboxAction[] = [
 interface Props {
   projectId: string | null;
   projectFiles: ProjectFile[];
+  activeProjectFileName?: string | null;
   streaming: boolean;
   sessionMode?: ChatSessionMode;
   onSessionModeChange?: (mode: ChatSessionMode) => void;
@@ -667,6 +668,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     {
       projectId,
       projectFiles,
+      activeProjectFileName = null,
       streaming,
       sessionMode = 'design',
       onSessionModeChange,
@@ -720,7 +722,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
   ) {
     const t = useT();
     const analytics = useAnalytics();
+    const activeFileContext =
+      projectMetadata?.importedFrom === 'folder' && activeProjectFileName
+        ? activeProjectFileName
+        : null;
+    const activeFileDisplayName = activeFileContext ? lastPathSegment(activeFileContext) : null;
     const [draft, setDraft] = useState(() => initialDraft ?? loadComposerDraft(draftStorageKey) ?? "");
+    const composerRootRef = useRef<HTMLDivElement | null>(null);
     // Synchronous mirror of `draft`. Event handlers that mutate the draft off
     // a captured render closure (notably the annotation listener, where two
     // uploads can resolve concurrently) read/write this ref so their edits
@@ -752,9 +760,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // Lexical owns the caret, so the mention/slash trigger state only carries
     // the typed query — no cursor offset.
     const [mention, setMention] = useState<{ q: string } | null>(null);
-    // Active-row index for the @-popover's visible union (files → plugins →
-    // skills → mcp → connectors). Resets to 0 whenever the query identity or
-    // tab changes; drives the visual highlight + Enter/Tab target.
+    // Active-row index for the @-popover's visible union (files → tabs →
+    // plugins → skills → mcp → connectors). Resets to 0 whenever the query
+    // identity or tab changes; drives the visual highlight + Enter/Tab target.
     const [mentionIndex, setMentionIndex] = useState(0);
     const [mentionTab, setMentionTab] = useState<MentionTab>('all');
     // Viewport caret box the floating popover anchors against. Sampled by the
@@ -1307,13 +1315,62 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     ): boolean {
       setStreamingAnnotationSendPending(false);
       if (!prompt && attachments.length === 0 && nextCommentAttachments.length === 0) return false;
-      onSend(prompt, attachments, nextCommentAttachments, meta);
+      const nextAttachments =
+        activeFileContext && !attachments.some((attachment) => attachment.path === activeFileContext)
+          ? [
+              {
+                path: activeFileContext,
+                name: activeFileDisplayName ?? activeFileContext,
+                kind: 'file' as const,
+              },
+              ...attachments,
+            ]
+          : attachments;
+      onSend(prompt, nextAttachments, nextCommentAttachments, meta);
       reset();
       return true;
     }
 
     function queueMeta(meta?: ChatSendMeta): ChatSendMeta {
       return { ...(meta ?? {}), queueOnly: true };
+    }
+
+    function reserveAttachmentOrders(count: number): number {
+      const orderStart = Math.max(nextAttachmentOrderRef.current, nextChatAttachmentOrder(staged));
+      nextAttachmentOrderRef.current = orderStart + count;
+      return orderStart;
+    }
+
+    function appendOrderedStagedAttachments(attachments: ChatAttachment[]) {
+      if (attachments.length === 0) return;
+      setStaged((current) => {
+        const knownPaths = new Set(current.map((attachment) => attachment.path));
+        const nextAttachments = attachments.filter((attachment) => !knownPaths.has(attachment.path));
+        if (nextAttachments.length === 0) return current;
+        const next = sortChatAttachmentsByOrder([...current, ...nextAttachments]);
+        nextAttachmentOrderRef.current = Math.max(
+          nextAttachmentOrderRef.current,
+          nextChatAttachmentOrder(next),
+        );
+        return next;
+      });
+    }
+
+    function appendContextAttachment(filePath: string) {
+      setStaged((current) => {
+        if (current.some((item) => item.path === filePath)) return current;
+        const order = Math.max(nextAttachmentOrderRef.current, nextChatAttachmentOrder(current));
+        nextAttachmentOrderRef.current = order + 1;
+        return sortChatAttachmentsByOrder([
+          ...current,
+          {
+            path: filePath,
+            name: filePath.split("/").pop() || filePath,
+            kind: looksLikeImage(filePath) ? "image" : "file",
+            order,
+          },
+        ]);
+      });
     }
 
     function replaceEditorDraft(text: string) {
@@ -1435,18 +1492,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
       if (resource.kind === 'file') {
         const path = resource.file.path ?? resource.file.name;
-        setStaged((current) =>
-          current.some((item) => item.path === path)
-            ? current
-            : [
-                ...current,
-                {
-                  path,
-                  name: path.split('/').pop() || path,
-                  kind: looksLikeImage(path) ? 'image' : 'file',
-                },
-              ],
-        );
+        appendContextAttachment(path);
         applyDesignToolboxDraft(`${inlineMentionToken(path)}\n${prompt}`);
         return;
       }
@@ -1521,13 +1567,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // file_upload_result per surface so this path reports
       // `page_name='chat_panel'` / `area='chat_composer'`.
       const cohort = deriveUploadCohort(files);
-      const orderStart = nextAttachmentOrderRef.current;
-      nextAttachmentOrderRef.current += files.length;
+      const orderStart = reserveAttachmentOrders(files.length);
       try {
         const result = await uploadProjectFiles(id, files);
         if (result.uploaded.length > 0) {
           const orderedUploaded = assignChatAttachmentOrders(result.uploaded, orderStart);
-          setStaged((s) => sortChatAttachmentsByOrder([...s, ...orderedUploaded]));
+          appendOrderedStagedAttachments(orderedUploaded);
         }
         const partial = result.failed.length > 0;
         if (partial) {
@@ -1610,8 +1655,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               (f): f is File => Boolean(f),
             );
             if (annotationFiles.length > 0) {
-              const orderStart = nextAttachmentOrderRef.current;
-              nextAttachmentOrderRef.current += annotationFiles.length;
+              const orderStart = reserveAttachmentOrders(annotationFiles.length);
               const id = await ensureProject();
               if (!id) {
                 ack({ ok: false, message: t('chat.annotationProjectCreateFailed') });
@@ -1660,7 +1704,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
             const appendAnnotationToComposer = () => {
               if (uploaded.length > 0) {
-                setStaged((s) => sortChatAttachmentsByOrder([...s, ...uploaded]));
+                appendOrderedStagedAttachments(uploaded);
               }
               if (visualAttachmentInput) {
                 setStagedVisualComments((current) => [
@@ -1872,6 +1916,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       anchorRect: CaretRect | null;
     }) {
       setCaretRect(anchorRect);
+      if (nextMention) {
+        setToolsOpen(false);
+        setDesignToolboxOpen(false);
+      }
       if (nextMention && !mention) {
         setMentionTab('all');
       } else if (!nextMention) {
@@ -2013,14 +2061,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         entity: { id: filePath, kind: 'file', label: filePath },
       });
       if (!staged.some((s) => s.path === filePath)) {
-        setStaged((s) => [
-          ...s,
-          {
-            path: filePath,
-            name: filePath.split("/").pop() || filePath,
-            kind: looksLikeImage(filePath) ? "image" : "file",
-          },
-        ]);
+        appendContextAttachment(filePath);
       }
       setMention(null);
     }
@@ -2244,8 +2285,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     return (
       <div
-        className={`composer${dragActive ? " drag-active" : ""}`}
+        className={[
+          'composer',
+          dragActive ? 'drag-active' : '',
+          activeFileContext ? 'composer-active-file-mode' : '',
+        ].filter(Boolean).join(' ')}
         data-testid="chat-composer"
+        ref={composerRootRef}
         onDragOver={(e) => {
           e.preventDefault();
           setDragActive(true);
@@ -2328,6 +2374,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               ))}
             </div>
           ) : null}
+          {activeFileContext ? (
+            <div
+              className="composer-active-file"
+              data-testid="composer-active-file"
+              title={activeFileContext}
+            >
+              <span className="composer-active-file__label">{t('chat.activeFileEditingLabel')}</span>
+              <span className="composer-active-file__name">{activeFileContext}</span>
+            </div>
+          ) : null}
           {currentCommentAttachments().length > 0 ? (
             <StagedCommentAttachments
               attachments={currentCommentAttachments()}
@@ -2349,8 +2405,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             <LexicalComposerInput
               ref={editorRef}
               draft={draft}
-              placeholder={t('chat.composerPlaceholder')}
-              title={t('chat.composerPlaceholder')}
+              placeholder={
+                activeFileDisplayName
+                  ? t('chat.activeFilePlaceholder', { file: activeFileDisplayName })
+                  : t('chat.composerPlaceholder')
+              }
+              title={activeFileDisplayName ?? t('chat.composerPlaceholder')}
               knownEntities={composerMentionEntities}
               onChange={handleEditorChange}
               onTrigger={handleEditorTrigger}
@@ -2364,7 +2424,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               }}
             />
           </div>
-          <CaretFloatingLayer caret={caretRect} open={Boolean(mention)}>
+          <CaretFloatingLayer
+            caret={caretRect}
+            open={Boolean(mention)}
+            boundaryRef={composerRootRef}
+          >
             <MentionPopover
               files={filteredFiles}
               workspaceContexts={filteredWorkspaceContexts}
@@ -2391,6 +2455,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           <CaretFloatingLayer
             caret={caretRect}
             open={Boolean(slash && filteredSlash.length > 0)}
+            boundaryRef={composerRootRef}
           >
             <SlashPopover
               commands={filteredSlash}
@@ -2422,11 +2487,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   setToolsOpen((v) => {
                     const next = !v;
                     if (next) {
+                      setComposerEngaged(true);
                       setDesignToolboxOpen(false);
-                      // P0 ui_click resources_popover_trigger — only emit on
-                      // the open transition so accidental double-clicks
-                      // don't pair an open + close into a "double tap" the
-                      // dashboard can't interpret.
+                      setMention(null);
+                      setSlash(null);
+                      setSlashIndex(0);
                       trackChatPanelClick(analytics.track, {
                         page_name: 'chat_panel',
                         area: 'chat_panel',
@@ -2441,6 +2506,38 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 aria-haspopup="menu"
                 aria-expanded={toolsOpen}
                 aria-label={t('chat.cliSettingsAria')}
+              >
+                <Icon name="sliders" size={15} />
+              </button>
+              <button
+                type="button"
+                data-testid="chat-mention-trigger"
+                className={`icon-btn composer-tools-trigger od-tooltip${mention ? ' active' : ''}`}
+                onClick={() => {
+                  if (mention) {
+                    setMention(null);
+                    setMentionTab('all');
+                    return;
+                  }
+                  setComposerEngaged(true);
+                  setToolsOpen(false);
+                  setDesignToolboxOpen(false);
+                  setSlash(null);
+                  setSlashIndex(0);
+                  editorRef.current?.focus();
+                  editorRef.current?.insertText('@');
+                  trackChatPanelClick(analytics.track, {
+                    page_name: 'chat_panel',
+                    area: 'chat_panel',
+                    element: 'mention_popover_trigger',
+                  });
+                }}
+                title={t('chat.mentionTabsAria')}
+                data-tooltip={t('chat.mentionTabsAria')}
+                aria-haspopup="listbox"
+                aria-controls={mention ? 'mention-listbox' : undefined}
+                aria-expanded={Boolean(mention)}
+                aria-label={t('chat.mentionTabsAria')}
               >
                 <span className="composer-tools-at" aria-hidden>
                   @
@@ -3023,7 +3120,24 @@ function workspaceContextTitle(item: WorkspaceContextItem): string {
 }
 
 function workspaceContextDescription(item: WorkspaceContextItem): string {
+  if (item.kind === 'design-files') return item.path || 'Project files';
+  if (item.kind === 'terminal') return item.title || 'Terminal session';
   return item.url || item.path || item.absolutePath || item.title || item.tabId || item.id;
+}
+
+function lastPathSegment(path: string): string {
+  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
+  return normalized.split('/').filter(Boolean).pop() || path;
+}
+
+function projectFileMentionTitle(file: ProjectFile, fallback: string): string {
+  return file.name || lastPathSegment(fallback);
+}
+
+function projectFileMentionDescription(file: ProjectFile, fallback: string): string {
+  const label = projectFileMentionTitle(file, fallback);
+  if (fallback && fallback !== label) return fallback;
+  return [file.kind, file.mime].filter(Boolean).join(' · ');
 }
 
 function workspaceContextSearchText(item: WorkspaceContextItem): string {
@@ -4749,9 +4863,14 @@ function MentionPopover({
                   onClick={() => onPickFile(key)}
                 >
                   <Icon name="file" size={12} />
-                  <code>{key}</code>
+                  <span className="mention-item-body">
+                    <strong>{projectFileMentionTitle(f, key)}</strong>
+                    <span className="mention-meta mention-meta--desc mention-meta--path">
+                      {projectFileMentionDescription(f, key)}
+                    </span>
+                  </span>
                   {f.size != null ? (
-                    <span className="mention-meta">{prettySize(f.size)}</span>
+                    <span className="mention-meta mention-item-kind">{prettySize(f.size)}</span>
                   ) : null}
                 </button>
               );
@@ -4784,7 +4903,7 @@ function MentionPopover({
                       {workspaceContextDescription(item)}
                     </span>
                   </span>
-                  <span className="mention-meta">{workspaceContextKindLabel(item.kind)}</span>
+                  <span className="mention-meta mention-item-kind">{workspaceContextKindLabel(item.kind)}</span>
                 </button>
               );
             })}
@@ -4816,7 +4935,7 @@ function MentionPopover({
                       {p.manifest?.description ?? p.id}
                     </span>
                   </span>
-                  <span className="mention-meta">{pluginSourceLabel(p, t)}</span>
+                  <span className="mention-meta mention-item-kind">{pluginSourceLabel(p, t)}</span>
                 </button>
               );
             })}
@@ -4849,7 +4968,7 @@ function MentionPopover({
                       {localizeSkillDescription(locale, skill) || skill.id}
                     </span>
                   </span>
-                  <span className="mention-meta">{isCurrent ? t('chat.mentionActiveSkill') : skill.mode}</span>
+                  <span className="mention-meta mention-item-kind">{isCurrent ? t('chat.mentionActiveSkill') : skill.mode}</span>
                 </button>
               );
             })}
@@ -4881,7 +5000,7 @@ function MentionPopover({
                       {server.url || server.command || server.id}
                     </span>
                   </span>
-                  <span className="mention-meta">{server.transport}</span>
+                  <span className="mention-meta mention-item-kind">{server.transport}</span>
                 </button>
               );
             })}
@@ -4913,7 +5032,7 @@ function MentionPopover({
                       {connector.description || connector.provider || connector.id}
                     </span>
                   </span>
-                  <span className="mention-meta">{connector.accountLabel ?? connector.provider}</span>
+                  <span className="mention-meta mention-item-kind">{connector.accountLabel ?? connector.provider}</span>
                 </button>
               );
             })}

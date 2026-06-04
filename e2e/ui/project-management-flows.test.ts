@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { ensureRailOpen } from '@/playwright/rail';
 import type { Locator, Page, Request } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
@@ -1429,6 +1430,7 @@ async function createProject(
 
 async function openNewProjectPanel(page: Page) {
   if (await page.getByTestId('new-project-panel').isVisible()) return;
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-new-project').click();
   await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
@@ -1436,6 +1438,7 @@ async function openNewProjectPanel(page: Page) {
 
 async function expectDesignsView(page: Page) {
   if (!/\/projects$/.test(new URL(page.url()).pathname)) {
+    await ensureRailOpen(page);
     await page.getByTestId('entry-nav-projects').click();
   }
   await expect(page).toHaveURL(/\/projects$/);

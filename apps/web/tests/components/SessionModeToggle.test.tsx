@@ -18,7 +18,7 @@ describe('SessionModeToggle', () => {
     fireEvent.click(screen.getByTestId('session-mode-trigger'));
 
     expect(screen.getByRole('menuitemradio', { name: /Design Agent mode/i }).getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('menuitemradio', { name: /Chat mode/i }).getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByRole('menuitemradio', { name: /Ask mode/i }).getAttribute('aria-checked')).toBe('false');
   });
 
   it('switches mode from the menu', () => {
@@ -26,7 +26,7 @@ describe('SessionModeToggle', () => {
     render(<SessionModeToggle mode="design" onChange={onChange} />);
 
     fireEvent.click(screen.getByTestId('session-mode-trigger'));
-    fireEvent.click(screen.getByRole('menuitemradio', { name: /Chat mode/i }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Ask mode/i }));
 
     expect(onChange).toHaveBeenCalledWith('chat');
     expect(screen.queryByRole('menu')).toBeNull();
@@ -45,7 +45,7 @@ describe('SessionModeToggle', () => {
     expect(screen.queryByRole('tooltip')).toBeNull();
 
     fireEvent.click(trigger);
-    expect(screen.getByRole('tooltip').textContent).toContain('Chat 模式');
+    expect(screen.getByRole('tooltip').textContent).toContain('Ask 模式');
     expect(screen.getByRole('tooltip').textContent).toContain('总结这份稿子，并指出还缺什么。');
 
     const designOption = screen.getByRole('menuitemradio', { name: /Design Agent 模式/i });
