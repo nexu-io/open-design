@@ -2443,8 +2443,8 @@ function MediaProjectOptions(props:
 
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['openai', 'volcengine', 'grok', 'nanobanana']),
-    video: new Set(['volcengine', 'hyperframes', 'grok']),
+    image: new Set(['openai', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image']),
+    video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter']),
     audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine']),
   };
   return models.filter((model) => {

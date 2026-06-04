@@ -7,7 +7,7 @@ import {
   waitForVisualProjects,
 } from '@/playwright/visual';
 
-test('captures the visual home harness', async ({ page }) => {
+test('[P2] captures the visual home harness', async ({ page }) => {
   await configureVisualPage(page, { projects: [] });
   await gotoVisualHome(page);
 
@@ -18,36 +18,44 @@ test('captures the visual home harness', async ({ page }) => {
   await captureVisual(page, 'visual-home');
 });
 
-test('captures the home plugin catalog surface', async ({ page }) => {
+test('[P2] captures the home plugin catalog surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
+  // The redesigned entry shell keeps every view mounted (only the active one
+  // is visible) so tab switches don't reload thumbnails. That means
+  // `plugins-home-section` exists in both the home and plugins views, so
+  // scope the lookup to the home view to keep these strict-mode locators
+  // unambiguous.
+  const home = page.getByTestId('entry-view-home');
   await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
-  await expect(page.getByTestId('plugins-home-section')).toBeVisible();
-  await expect(page.getByTestId('plugins-home-chip-saved')).toBeVisible();
+  await expect(home.getByTestId('plugins-home-section')).toBeVisible();
+  await expect(home.getByTestId('plugins-home-chip-saved')).toBeVisible();
 
   await captureVisual(page, 'visual-home-catalog');
 });
 
-test('captures the home plugin filtered surface', async ({ page }) => {
+test('[P2] captures the home plugin filtered surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
-  await page.getByTestId('plugins-home-pill-category-deck').click();
-  await expect(page.locator('article.plugins-home__card[data-plugin-id="visual-deck-writer"]')).toBeVisible();
+  const home = page.getByTestId('entry-view-home');
+  await home.getByTestId('plugins-home-pill-category-deck').click();
+  await expect(home.locator('article.plugins-home__card[data-plugin-id="visual-deck-writer"]')).toBeVisible();
 
   await captureVisual(page, 'visual-home-plugin-filter');
 });
 
-test('captures the home plugin detail surface', async ({ page }) => {
+test('[P2] captures the home plugin detail surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
-  await page.getByTestId('plugins-home-pill-category-deck').click();
-  const card = page.locator('article.plugins-home__card[data-plugin-id="visual-deck-writer"]');
+  const home = page.getByTestId('entry-view-home');
+  await home.getByTestId('plugins-home-pill-category-deck').click();
+  const card = home.locator('article.plugins-home__card[data-plugin-id="visual-deck-writer"]');
   await expect(card).toBeVisible();
   await card.hover();
-  await page.getByTestId('plugins-home-details-visual-deck-writer').click({ force: true });
+  await home.getByTestId('plugins-home-details-visual-deck-writer').click({ force: true });
   await expect(page.getByRole('dialog', { name: /Deck Writer preview/i })).toBeVisible();
   await expect(page.getByTestId('plugin-details-use-visual-deck-writer')).toBeVisible();
   await expect(page.locator('.ds-modal-stage-iframe-scaler iframe')).toBeVisible();
@@ -55,7 +63,7 @@ test('captures the home plugin detail surface', async ({ page }) => {
   await captureVisual(page, 'visual-plugin-details');
 });
 
-test('captures the home context picker surface', async ({ page }) => {
+test('[P2] captures the home context picker surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -66,7 +74,7 @@ test('captures the home context picker surface', async ({ page }) => {
   await captureVisual(page, 'visual-home-context-picker');
 });
 
-test('captures the new project modal surface', async ({ page }) => {
+test('[P2] captures the new project modal surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -78,33 +86,35 @@ test('captures the new project modal surface', async ({ page }) => {
   await captureVisual(page, 'visual-new-project-modal');
 });
 
-test('captures the projects page surface', async ({ page }) => {
+test('[P2] captures the projects page surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
   await page.getByTestId('entry-nav-projects').click();
   await expect(page).toHaveURL(/\/projects$/);
-  await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
-  await expect(page.getByText('Launchpad dashboard')).toBeVisible();
+  const projects = page.getByTestId('entry-view-projects');
+  await expect(projects.getByRole('heading', { name: 'Projects' })).toBeVisible();
+  await expect(projects.getByText('Launchpad dashboard').first()).toBeVisible();
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-projects');
 });
 
-test('captures the projects kanban surface', async ({ page }) => {
+test('[P2] captures the projects kanban surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
   await page.getByTestId('entry-nav-projects').click();
-  await page.getByTestId('designs-view-kanban').click();
-  await expect(page.getByTestId('designs-view-kanban')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByText('Launchpad dashboard')).toBeVisible();
+  const projects = page.getByTestId('entry-view-projects');
+  await projects.getByTestId('designs-view-kanban').click();
+  await expect(projects.getByTestId('designs-view-kanban')).toHaveAttribute('aria-pressed', 'true');
+  await expect(projects.getByText('Launchpad dashboard').first()).toBeVisible();
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-projects-kanban');
 });
 
-test('captures the design systems page surface', async ({ page }) => {
+test('[P2] captures the design systems page surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -119,21 +129,22 @@ test('captures the design systems page surface', async ({ page }) => {
   await captureVisual(page, 'visual-design-systems');
 });
 
-test('captures the plugins page surface', async ({ page }) => {
+test('[P2] captures the plugins page surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
   await page.getByTestId('entry-nav-plugins').click();
   await expect(page).toHaveURL(/\/plugins$/);
-  await expect(page.getByRole('heading', { name: 'Plugins', exact: true })).toBeVisible();
-  await expect(page.getByTestId('plugins-tab-installed')).toBeVisible();
-  await expect(page.getByText('Prototype Starter').first()).toBeVisible();
+  const plugins = page.getByTestId('entry-view-plugins');
+  await expect(plugins.getByRole('heading', { name: 'Plugins', exact: true })).toBeVisible();
+  await expect(plugins.getByTestId('plugins-tab-installed')).toBeVisible();
+  await expect(plugins.getByText('Prototype Starter').first()).toBeVisible();
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-plugins');
 });
 
-test('captures the integrations page surface', async ({ page }) => {
+test('[P2] captures the integrations page surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -146,7 +157,7 @@ test('captures the integrations page surface', async ({ page }) => {
   await captureVisual(page, 'visual-integrations');
 });
 
-test('captures the integrations use everywhere surface', async ({ page }) => {
+test('[P2] captures the integrations use everywhere surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -159,7 +170,7 @@ test('captures the integrations use everywhere surface', async ({ page }) => {
   await captureVisual(page, 'visual-integrations-use-everywhere');
 });
 
-test('captures the tasks page surface', async ({ page }) => {
+test('[P2] captures the tasks page surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -172,7 +183,7 @@ test('captures the tasks page surface', async ({ page }) => {
   await captureVisual(page, 'visual-tasks');
 });
 
-test('captures the topbar execution switcher surface', async ({ page }) => {
+test('[P2] captures the topbar execution switcher surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -183,26 +194,25 @@ test('captures the topbar execution switcher surface', async ({ page }) => {
   await captureVisual(page, 'visual-topbar-execution-switcher');
 });
 
-test('captures the avatar menu surface', async ({ page }) => {
+test('[P2] captures the avatar menu surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
   const menu = await openAvatarMenu(page);
-  await expect(menu.getByRole('button', { name: /^Settings\b/i })).toBeVisible();
+  // Settings moved out of the avatar menu to the header gear (footer-toolbar
+  // layout); assert an agent option is present instead.
+  await expect(menu.locator('.avatar-item').first()).toBeVisible();
 
   await captureVisual(page, 'visual-avatar-menu');
 });
 
-test('captures the settings execution surface', async ({ page }) => {
+test('[P2] captures the settings execution surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
-  const menu = await openAvatarMenu(page);
-  await menu.getByRole('button', { name: /^Settings\b/i }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
+  const dialog = await openSettingsDetailsFromHeader(page);
   await expect(dialog.getByRole('tab', { name: /Local CLI/i })).toBeVisible();
   await expect(dialog.getByRole('tablist', { name: 'Execution mode' })).toBeVisible();
   await waitForVisualFonts(page);
@@ -210,15 +220,12 @@ test('captures the settings execution surface', async ({ page }) => {
   await captureVisual(page, 'visual-settings-execution');
 });
 
-test('captures the settings BYOK surface', async ({ page }) => {
+test('[P2] captures the settings BYOK surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
-  const menu = await openAvatarMenu(page);
-  await menu.getByRole('button', { name: /^Settings\b/i }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
+  const dialog = await openSettingsDetailsFromHeader(page);
   await dialog.getByRole('tab', { name: 'BYOK' }).click();
   await expect(dialog.getByRole('tablist', { name: 'API protocol' })).toBeVisible();
   await expect(dialog.getByRole('heading', { name: 'Anthropic API' })).toBeVisible();
@@ -232,6 +239,15 @@ async function openAvatarMenu(page: Parameters<typeof configureVisualPage>[0]) {
   const menu = page.locator('.avatar-popover[role="dialog"]');
   await expect(menu).toBeVisible();
   return menu;
+}
+
+async function openSettingsDetailsFromHeader(page: Parameters<typeof configureVisualPage>[0]) {
+  await page.locator('.settings-icon-btn').click();
+  await expect(page.getByTestId('entry-settings-menu')).toBeVisible();
+  await page.getByTestId('entry-settings-open-details').click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
 
 async function gotoVisualWorkspace(page: Parameters<typeof configureVisualPage>[0]) {

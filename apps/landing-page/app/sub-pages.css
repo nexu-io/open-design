@@ -1972,9 +1972,7 @@ body.sub-page {
 }
 
 .tpl-actions {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
+  display: block;
 }
 .tpl-cta {
   display: flex;
@@ -1992,19 +1990,6 @@ body.sub-page {
   transition: background 0.16s ease;
 }
 .tpl-cta:hover { background: var(--coral); border-color: var(--coral); }
-.tpl-share {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  background: var(--bone);
-  color: var(--ink);
-  border: 1.5px solid var(--ink);
-  cursor: pointer;
-  transition: background 0.16s ease;
-}
-.tpl-share:hover { background: var(--paper-warm); }
 
 /*
  * ─── FAQ section (YouMind-style accordion) ─────────────────────

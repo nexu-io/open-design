@@ -1,0 +1,47 @@
+/* Shared desktop window drag strip for full-screen modal backdrops.
+   The dialog body still owns interaction; only the uncovered top
+   backdrop band behaves like the app chrome drag area. */
+:where(
+  .modal-backdrop,
+  .new-project-modal-backdrop,
+  .automation-modal-backdrop,
+  .use-everywhere-modal-backdrop,
+  .plugin-details-modal-backdrop,
+  .plugins-import-modal__backdrop,
+  .ds-modal-backdrop,
+  .prompt-template-modal-backdrop,
+  .prompt-template-lightbox-backdrop,
+  .project-instructions-modal-backdrop,
+  .home-hero-confirm__backdrop,
+  .project-ds-picker-fullscreen,
+  .staged-preview-modal,
+  .qs-overlay
+) {
+  --modal-window-drag-strip-height: 56px;
+}
+
+:where(
+  .modal-backdrop,
+  .new-project-modal-backdrop,
+  .automation-modal-backdrop,
+  .use-everywhere-modal-backdrop,
+  .plugin-details-modal-backdrop,
+  .plugins-import-modal__backdrop,
+  .ds-modal-backdrop,
+  .prompt-template-modal-backdrop,
+  .prompt-template-lightbox-backdrop,
+  .project-instructions-modal-backdrop,
+  .home-hero-confirm__backdrop,
+  .project-ds-picker-fullscreen,
+  .staged-preview-modal,
+  .qs-overlay
+)::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--modal-window-drag-strip-height);
+  pointer-events: auto;
+  -webkit-app-region: drag !important;
+}

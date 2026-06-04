@@ -40,6 +40,7 @@ import { TrustBadge } from './TrustBadge';
 import { useI18n } from '../i18n';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import type { PluginUseAction } from './plugins-home/useActions';
+import { AnimatePresence } from 'motion/react';
 
 type PluginsTab = 'installed' | 'available' | 'sources' | 'team';
 
@@ -523,24 +524,28 @@ export function PluginsView({
         {activeTab === 'team' ? <TeamPanel t={t} /> : null}
       </div>
 
-      {detailsRecord ? (
-        <PluginDetailsModal
-          record={detailsRecord}
-          onClose={() => setDetailsRecord(null)}
-          onUse={(record) => void handleUsePlugin(record, 'use')}
-          isApplying={pendingApplyId === detailsRecord.id}
-        />
-      ) : null}
-      {availableDetails ? (
-        <AvailablePluginDetailsModal
-          plugin={availableDetails}
-          pending={pendingInstallEntry === availableDetails.key}
-          onClose={() => {
-            if (pendingInstallEntry !== availableDetails.key) setAvailableDetails(null);
-          }}
-          onInstall={(plugin) => void handleInstallAvailable(plugin)}
-        />
-      ) : null}
+      <AnimatePresence>
+        {detailsRecord ? (
+          <PluginDetailsModal
+            record={detailsRecord}
+            onClose={() => setDetailsRecord(null)}
+            onUse={(record) => void handleUsePlugin(record, 'use')}
+            isApplying={pendingApplyId === detailsRecord.id}
+          />
+        ) : null}
+      </AnimatePresence>
+      <AnimatePresence>
+        {availableDetails ? (
+          <AvailablePluginDetailsModal
+            plugin={availableDetails}
+            pending={pendingInstallEntry === availableDetails.key}
+            onClose={() => {
+              if (pendingInstallEntry !== availableDetails.key) setAvailableDetails(null);
+            }}
+            onInstall={(plugin) => void handleInstallAvailable(plugin)}
+          />
+        ) : null}
+      </AnimatePresence>
       {shareConfirm ? (
         <PluginShareConfirmModal
           sourceRecord={shareConfirm.sourceRecord}

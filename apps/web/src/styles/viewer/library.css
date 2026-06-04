@@ -355,63 +355,63 @@
 
 /* Slash-command popover in the chat composer */
 
+/* Slash-command popover — FLOATING (positioned by CaretFloatingLayer). */
 .slash-popover {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
-  margin-bottom: 4px;
-  max-height: 260px;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: var(--cfl-max-h, 320px);
+  overflow: hidden;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-md);
-  z-index: 10;
-  padding: 6px;
+  box-shadow: var(--shadow-lg);
+  padding: 5px;
+  /* removed: position, bottom, left, right, margin-bottom, fixed max-height, z-index */
 }
-
 .slash-popover-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  padding: 4px 6px 6px 6px;
-  border-bottom: 1px solid var(--border);
+  padding: 5px 7px 7px;
+  border-bottom: 1px solid var(--border-soft);
   margin-bottom: 4px;
-  font-size: 11px;
-  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-soft);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
-
 .slash-popover-hint {
   font-size: 10px;
+  font-weight: 400;
   text-transform: none;
   letter-spacing: 0;
   color: var(--text-muted);
 }
-
 .slash-item {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 9px;
   width: 100%;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  padding: 8px 9px;
   text-align: left;
   cursor: pointer;
   font: inherit;
+  min-height: 34px;
+  transition: background-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-
-.slash-item:hover,
-.slash-item.active {
-  background: var(--bg-subtle);
-  border-color: var(--border);
+.slash-item:hover { background: var(--bg-subtle); }
+.slash-item.active,
+.slash-item[aria-selected='true'] {
+  background: var(--accent-tint);
+  border-color: var(--accent-soft);
+  box-shadow: inset 2px 0 0 0 var(--accent);
 }
-
 .slash-item-icon {
   display: inline-flex;
   align-items: center;
@@ -424,39 +424,21 @@
   flex-shrink: 0;
   margin-top: 1px;
 }
-
-.slash-item-body {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
-}
-
-.slash-item-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
+.slash-item-body { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.slash-item-row { display: flex; align-items: baseline; gap: 8px; }
 .slash-item-label {
   font-size: 12px;
   font-weight: 600;
-  color: var(--text);
+  color: var(--text-strong);
   background: transparent;
   padding: 0;
 }
-
 .slash-item-arg {
   font-size: 10px;
   color: var(--text-muted);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
 }
-
-.slash-item-desc {
-  font-size: 11px;
-  color: var(--text-muted);
-  line-height: 1.35;
-}
+.slash-item-desc { font-size: 11px; color: var(--text-muted); line-height: 1.35; }
 
 /* --- CJK (Chinese / Japanese / Korean) Comfort Pass --- */
 :lang(zh), :lang(zh-CN), :lang(zh-TW), :lang(ja), :lang(ko) {

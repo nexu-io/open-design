@@ -46,6 +46,7 @@ import {
   cursorAuthGuidance,
   probeAgentAuthStatus,
 } from './runtimes/auth.js';
+import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import {
   buildLegacyMaxTokensParam,
   buildMaxCompletionTokensParam,
@@ -1026,6 +1027,10 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${apiKey}`,
+          ...(new URL(baseUrl).hostname === 'openrouter.ai' ? {
+            'HTTP-Referer': 'https://opendesign.dev',
+            'X-Title': 'Open Design',
+          } : {}),
         },
         body: {
           model,
@@ -1865,7 +1870,20 @@ async function testAgentConnectionInternal(
       undefined,
       { resolvedBin: executableResolution.selectedPath },
     );
-    const env = applyAgentLaunchEnv(baseEnv, executableResolution);
+    const mmdRouteLaunchEnv = input.agentId === 'claude'
+      ? await loadMmdRouteLaunchEnv(
+          {
+            ...process.env,
+            ...(def.env || {}),
+            ...configuredAgentEnv,
+          },
+          model,
+        ).catch(() => null)
+      : null;
+    const env = applyAgentLaunchEnv({
+      ...baseEnv,
+      ...(mmdRouteLaunchEnv || {}),
+    }, executableResolution);
     const auth = await probeAgentAuthStatus(input.agentId, executableResolution.launchPath, env);
     if (auth?.status === 'missing') {
       // Preflight auth probe runs after binary resolution but before the

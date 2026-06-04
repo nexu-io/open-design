@@ -42,8 +42,20 @@ export interface ProjectFile {
   stubGuardWarning?: ProjectFileStubGuardWarning;
 }
 
+export interface ProjectFolder {
+  name: string;
+  path: string;
+  type: 'dir';
+  size: 0;
+  mtime: number;
+}
+
 export interface ProjectFilesResponse {
   files: ProjectFile[];
+}
+
+export interface ProjectFoldersResponse {
+  folders: ProjectFolder[];
 }
 
 export type ProjectExportManifestFileRole =
@@ -81,13 +93,27 @@ export interface ProjectExportManifestResponse {
   artifacts: ProjectExportManifestArtifact[];
 }
 
+export interface ProjectPreviewUrlResponse {
+  url: string;
+  file: string;
+  csp: string;
+  iframeSandbox: string;
+  opaqueOrigin: true;
+}
+
 export interface ProjectFileResponse {
   file: ProjectFile;
+}
+
+export interface ProjectFolderResponse {
+  folder: ProjectFolder;
 }
 
 export interface UploadProjectFilesResponse extends ProjectFilesResponse {}
 
 export interface DeleteProjectFileResponse extends OkResponse {}
+
+export interface DeleteProjectFolderResponse extends OkResponse {}
 
 export interface RenameProjectFileRequest {
   from: string;

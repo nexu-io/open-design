@@ -78,7 +78,11 @@ export async function allocateToolsDevRuntime(): Promise<ToolsDevRuntime> {
   };
 }
 
-export async function startToolsDevWeb(suite: SmokeSuite, runtime: ToolsDevRuntime): Promise<ToolsDevStartResult> {
+export async function startToolsDevWeb(
+  suite: SmokeSuite,
+  runtime: ToolsDevRuntime,
+  env: Record<string, string | undefined> = {},
+): Promise<ToolsDevStartResult> {
   // Keep both ports reserved until immediately before tools-dev starts so
   // parallel Vitest workers do not race each other for the same "free" port.
   await runtime.release();
@@ -97,10 +101,14 @@ export async function startToolsDevWeb(suite: SmokeSuite, runtime: ToolsDevRunti
       String(runtime.webPort),
       '--json',
     ],
+    env,
   );
 }
 
-export async function stopToolsDevWeb(suite: SmokeSuite): Promise<unknown> {
+export async function stopToolsDevWeb(
+  suite: SmokeSuite,
+  env: Record<string, string | undefined> = {},
+): Promise<unknown> {
   return await runToolsDevJson<unknown>(
     suite,
     [
@@ -112,10 +120,14 @@ export async function stopToolsDevWeb(suite: SmokeSuite): Promise<unknown> {
       suite.toolsDevRoot,
       '--json',
     ],
+    env,
   );
 }
 
-export async function inspectToolsDevStatus(suite: SmokeSuite): Promise<ToolsDevStatusResult> {
+export async function inspectToolsDevStatus(
+  suite: SmokeSuite,
+  env: Record<string, string | undefined> = {},
+): Promise<ToolsDevStatusResult> {
   return await runToolsDevJson<ToolsDevStatusResult>(
     suite,
     [
@@ -126,10 +138,14 @@ export async function inspectToolsDevStatus(suite: SmokeSuite): Promise<ToolsDev
       suite.toolsDevRoot,
       '--json',
     ],
+    env,
   );
 }
 
-export async function inspectToolsDevCheck(suite: SmokeSuite): Promise<ToolsDevCheckResult> {
+export async function inspectToolsDevCheck(
+  suite: SmokeSuite,
+  env: Record<string, string | undefined> = {},
+): Promise<ToolsDevCheckResult> {
   return await runToolsDevJson<ToolsDevCheckResult>(
     suite,
     [
@@ -140,10 +156,14 @@ export async function inspectToolsDevCheck(suite: SmokeSuite): Promise<ToolsDevC
       suite.toolsDevRoot,
       '--json',
     ],
+    env,
   );
 }
 
-export async function readToolsDevLogs(suite: SmokeSuite): Promise<Record<string, ToolsDevLogResult>> {
+export async function readToolsDevLogs(
+  suite: SmokeSuite,
+  env: Record<string, string | undefined> = {},
+): Promise<Record<string, ToolsDevLogResult>> {
   return await runToolsDevJson<Record<string, ToolsDevLogResult>>(
     suite,
     [
@@ -154,6 +174,7 @@ export async function readToolsDevLogs(suite: SmokeSuite): Promise<Record<string
       suite.toolsDevRoot,
       '--json',
     ],
+    env,
   );
 }
 
@@ -165,7 +186,11 @@ export function isToolsDevPortConflict(error: unknown): boolean {
     (text.includes('is already running in namespace') && text.includes('stop it or choose another namespace'));
 }
 
-async function runToolsDevJson<T>(suite: SmokeSuite, args: string[]): Promise<T> {
+async function runToolsDevJson<T>(
+  suite: SmokeSuite,
+  args: string[],
+  extraEnv: Record<string, string | undefined> = {},
+): Promise<T> {
   const useNpmExecPathWithNode = process.env.OD_E2E_PNPM_COMMAND == null
     && pnpmExecPath != null
     && nodeLoadablePackageManagerExtensions.has(extname(pnpmExecPath).toLowerCase());
@@ -179,6 +204,7 @@ async function runToolsDevJson<T>(suite: SmokeSuite, args: string[]): Promise<T>
     cwd: e2eWorkspaceRoot(),
     env: {
       ...process.env,
+      ...extraEnv,
       CODEX_HOME: suite.codexHomeDir,
       OD_DATA_DIR: suite.dataDir,
       OD_MEDIA_CONFIG_DIR: suite.dataDir,

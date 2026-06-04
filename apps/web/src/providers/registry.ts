@@ -12,6 +12,8 @@ import type {
   ImportLocalDesignSystemRequest,
   ImportLocalDesignSystemResponse,
   ReplaceProjectWorkingDirResponse,
+  SocialShareRequest,
+  SocialShareResponse,
 } from '@open-design/contracts';
 import type {
   AgentInfo,
@@ -50,6 +52,7 @@ import type {
   PromptTemplateDetail,
   PromptTemplateSummary,
   ProjectFile,
+  ProjectFolder,
   RenameProjectFileResponse,
   SkillDetail,
   SkillSummary,
@@ -1232,6 +1235,24 @@ export async function checkDeploymentLink(
   return (await resp.json()) as WebDeployProjectFileResponse;
 }
 
+export async function createSocialSharePayload(
+  input: SocialShareRequest,
+): Promise<SocialShareResponse> {
+  const resp = await fetch('/api/social-share', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!resp.ok) {
+    const payload = await resp.json().catch(() => null) as {
+      error?: { message?: string };
+      message?: string;
+    } | null;
+    throw new Error(payload?.error?.message || payload?.message || `Share payload failed (${resp.status})`);
+  }
+  return (await resp.json()) as SocialShareResponse;
+}
+
 // Project files — all paths are scoped under .od/projects/<id>/ on disk.
 
 export async function fetchProjectFiles(projectId: string): Promise<ProjectFile[]> {
@@ -1242,6 +1263,51 @@ export async function fetchProjectFiles(projectId: string): Promise<ProjectFile[
     return json.files ?? [];
   } catch {
     return [];
+  }
+}
+
+export async function fetchProjectFolders(projectId: string): Promise<ProjectFolder[]> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/folders`);
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { folders?: ProjectFolder[] };
+    return json.folders ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function createProjectFolder(
+  projectId: string,
+  name: string,
+): Promise<ProjectFolder | null> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/folders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { folder?: ProjectFolder };
+    return json.folder ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteProjectFolder(
+  projectId: string,
+  folderPath: string,
+): Promise<boolean> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/folders`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: folderPath }),
+    });
+    return resp.ok;
+  } catch {
+    return false;
   }
 }
 
@@ -1671,17 +1737,23 @@ export interface UploadProjectFilesResult {
 export async function uploadProjectFiles(
   projectId: string,
   files: File[],
+  dir?: string,
 ): Promise<UploadProjectFilesResult> {
   if (files.length === 0) return { uploaded: [], failed: [] };
 
   const uploaded: ChatAttachment[] = [];
   const failed: ProjectUploadFailure[] = [];
   let error: string | undefined;
+  const targetDir = dir?.trim() ?? '';
 
   for (let i = 0; i < files.length; i += PROJECT_UPLOAD_BATCH_SIZE) {
     const batch = files.slice(i, i + PROJECT_UPLOAD_BATCH_SIZE);
     const remaining = files.slice(i + PROJECT_UPLOAD_BATCH_SIZE);
     const form = new FormData();
+    // The `dir` field MUST be appended before the file parts: the daemon's
+    // multer destination resolver reads req.body.dir as each file streams in,
+    // and busboy only exposes fields parsed earlier in the multipart body.
+    if (targetDir) form.append('dir', targetDir);
     for (const f of batch) form.append('files', f);
 
     try {

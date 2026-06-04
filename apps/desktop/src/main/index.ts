@@ -47,7 +47,12 @@ import {
 // runtime. They are part of the security boundary for child-window
 // navigation (see `setWindowOpenHandler` in `runtime.ts`), so
 // pinning them is worth the small extra surface.
-export { isAllowedChildWindowUrl, isHttpUrl, resolveDesktopStatusUrl } from "./runtime.js";
+export {
+  isAllowedChildWindowUrl,
+  isAllowedEmbeddedBrowserUrl,
+  isHttpUrl,
+  resolveDesktopStatusUrl,
+} from "./runtime.js";
 
 // Re-export the path-validation helpers for the same reason (#974).
 // shell.openPath is privileged main-process behaviour; pinning the
@@ -236,11 +241,31 @@ function installDesktopMenu(
       },
       {
         label: "Help",
+        role: "help",
         submenu: [
           {
-            label: "Open Design",
+            label: "Documentation",
             click() {
-              void shell.openExternal("https://github.com/nexu-io/open-design");
+              void shell.openExternal("https://github.com/nexu-io/open-design#readme");
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Contact Us",
+            click() {
+              void shell.openExternal("https://x.com/nexudotio");
+            },
+          },
+          {
+            label: "Report Issue",
+            click() {
+              void shell.openExternal("https://github.com/nexu-io/open-design/issues/new");
+            },
+          },
+          {
+            label: "Join Discord",
+            click() {
+              void shell.openExternal("https://discord.gg/mHAjSMV6gz");
             },
           },
           { type: "separator" },

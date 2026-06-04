@@ -15,11 +15,11 @@ import type {
   SkillSummary,
 } from '../../src/types';
 import {
+  cacheTabsLocally,
   createConversation,
   listConversations,
   listMessages,
   loadTabs,
-  saveTabs,
 } from '../../src/state/projects';
 import { fetchPreviewComments, fetchProjectFiles } from '../../src/providers/registry';
 
@@ -77,12 +77,14 @@ vi.mock('../../src/state/projects', async () => {
   );
   return {
     ...actual,
+    cacheTabsLocally: vi.fn((_projectId: string, state: { tabs: string[]; active: string | null }) => state),
     createConversation: vi.fn(),
     listConversations: vi.fn(),
     listMessages: vi.fn(),
     loadTabs: vi.fn(),
     patchConversation: vi.fn(),
     patchProject: vi.fn(),
+    persistTabsToDaemonNow: vi.fn(),
     saveMessage: vi.fn(),
     saveTabs: vi.fn(),
   };
@@ -128,7 +130,7 @@ const mockedListConversations = vi.mocked(listConversations);
 const mockedCreateConversation = vi.mocked(createConversation);
 const mockedListMessages = vi.mocked(listMessages);
 const mockedLoadTabs = vi.mocked(loadTabs);
-const mockedSaveTabs = vi.mocked(saveTabs);
+const mockedCacheTabsLocally = vi.mocked(cacheTabsLocally);
 const mockedFetchPreviewComments = vi.mocked(fetchPreviewComments);
 const mockedFetchProjectFiles = vi.mocked(fetchProjectFiles);
 const mockedNavigate = vi.mocked(navigate);
@@ -296,15 +298,20 @@ describe('ProjectView tab URL hydration', () => {
     renderProjectView();
 
     await waitFor(() => expect(screen.getByTestId('workspace-active-tab').textContent).toBe('index.html'));
-    expect(mockedSaveTabs).toHaveBeenCalledWith(project.id, { tabs: ['index.html'], active: 'index.html' });
+    // Tab state persists synchronously through cacheTabsLocally (the daemon PUT
+    // is debounced via persistTabsToDaemonNow); assert on the synchronous cache
+    // write so the test stays deterministic without driving the debounce timer.
+    expect(mockedCacheTabsLocally).toHaveBeenCalledWith(project.id, { tabs: ['index.html'], active: 'index.html' });
 
     fireEvent.click(screen.getByTestId('close-all-tabs'));
 
     await waitFor(() => expect(screen.getByTestId('workspace-active-tab').textContent).toBe(''));
     await waitFor(() => {
-      expect(mockedSaveTabs.mock.calls.at(-1)).toEqual([project.id, { tabs: [], active: null }]);
+      expect(mockedCacheTabsLocally.mock.calls.at(-1)).toEqual([project.id, { tabs: [], active: null }]);
     });
-    expect(mockedSaveTabs).toHaveBeenCalledTimes(2);
+    // Exactly two writes — the initial primary open and the close-all — proving
+    // the primary file is not silently reopened after the last tab closes.
+    expect(mockedCacheTabsLocally).toHaveBeenCalledTimes(2);
   });
 
   it('does not auto-open the primary file when saved tabs were explicitly empty', async () => {
@@ -333,6 +340,6 @@ describe('ProjectView tab URL hydration', () => {
     renderProjectView();
 
     await waitFor(() => expect(screen.getByTestId('workspace-active-tab').textContent).toBe(''));
-    expect(mockedSaveTabs).not.toHaveBeenCalled();
+    expect(mockedCacheTabsLocally).not.toHaveBeenCalled();
   });
 });

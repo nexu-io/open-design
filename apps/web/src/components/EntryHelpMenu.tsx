@@ -11,6 +11,8 @@
 // in the user's language.
 
 import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { popoverIn } from '../motion';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackHelpPopoverClick,
@@ -93,11 +95,16 @@ export function EntryHelpMenu() {
       >
         <Icon name="help-circle" size={18} />
       </button>
-      {open ? (
-        <div
+      <AnimatePresence>
+        {open ? (
+        <motion.div
           className="entry-help-popover"
           role="menu"
           aria-label={t('entry.helpMenuAria')}
+          variants={popoverIn}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
         >
           <a
             className="entry-help-popover__item"
@@ -191,7 +198,7 @@ export function EntryHelpMenu() {
             <span className="entry-help-popover__icon" aria-hidden>
               <Icon name="external-link" size={14} />
             </span>
-            <span>Follow @nexudotio on X</span>
+            <span>{t('entry.followXLabel')}</span>
           </a>
           <a
             className="entry-help-popover__item"
@@ -203,10 +210,11 @@ export function EntryHelpMenu() {
             <span className="entry-help-popover__icon" aria-hidden>
               <Icon name="discord" size={14} />
             </span>
-            <span>Join Discord</span>
+            <span>{t('entry.discordLabel')}</span>
           </a>
-        </div>
+        </motion.div>
       ) : null}
+      </AnimatePresence>
     </div>
   );
 }

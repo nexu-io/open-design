@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -7,6 +8,25 @@ import { EntryShell } from '../../src/components/EntryShell';
 import { AMR_LOGIN_TIMEOUT_MS } from '../../src/components/amrLoginPolling';
 import { I18nProvider } from '../../src/i18n';
 import type { AgentInfo, AppConfig } from '../../src/types';
+
+const analyticsMocks = vi.hoisted(() => ({
+  track: vi.fn(),
+}));
+
+vi.mock('../../src/analytics/provider', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/analytics/provider')>();
+  return {
+    ...actual,
+    useAnalytics: () => ({
+      newRequestId: vi.fn(() => 'request-1'),
+      setConfigureGlobals: vi.fn(),
+      setConsent: vi.fn(),
+      setIdentity: vi.fn(),
+      track: analyticsMocks.track,
+    }),
+    useAppVersion: () => null,
+  };
+});
 
 const originalFetch = globalThis.fetch;
 
@@ -93,6 +113,72 @@ function renderOnboarding(
     ...overrides,
   };
 
+  function Harness() {
+    const [config, setConfig] = useState(props.config);
+    return (
+      <I18nProvider initial="en">
+        <EntryShell
+          {...props}
+          config={config}
+          onConfigPersist={(next) => {
+            props.onConfigPersist(next);
+            setConfig(next as AppConfig);
+          }}
+        />
+      </I18nProvider>
+    );
+  }
+
+  render(
+    <Harness />,
+  );
+
+  return props;
+}
+
+function renderHome(
+  overrides: Partial<React.ComponentProps<typeof EntryShell>> = {},
+) {
+  window.history.replaceState(null, '', '/');
+  const props: React.ComponentProps<typeof EntryShell> = {
+    skills: [],
+    designTemplates: [],
+    designSystems: [],
+    projects: [],
+    templates: [],
+    promptTemplates: [],
+    defaultDesignSystemId: null,
+    connectors: [],
+    connectorsLoading: false,
+    config: baseConfig({
+      agentId: 'claude-code',
+      agentModels: { 'claude-code': { model: 'sonnet' } },
+      theme: 'system',
+    }),
+    agents: [cliAgent()],
+    daemonLive: true,
+    onModeChange: vi.fn(),
+    onAgentChange: vi.fn(),
+    onAgentModelChange: vi.fn(),
+    onApiProtocolChange: vi.fn(),
+    onApiModelChange: vi.fn(),
+    onConfigPersist: vi.fn(),
+    onRefreshAgents: vi.fn(() => [cliAgent()]),
+    onThemeChange: vi.fn(),
+    onCreateProject: vi.fn(),
+    onCreatePluginShareProject: vi.fn(),
+    onImportClaudeDesign: vi.fn(),
+    onOpenProject: vi.fn(),
+    onOpenLiveArtifact: vi.fn(),
+    onDeleteProject: vi.fn(),
+    onRenameProject: vi.fn(),
+    onChangeDefaultDesignSystem: vi.fn(),
+    onPersistComposioKey: vi.fn(),
+    onOpenSettings: vi.fn(),
+    onCompleteOnboarding: vi.fn(),
+    ...overrides,
+  };
+
   render(
     <I18nProvider initial="en">
       <EntryShell {...props} />
@@ -102,14 +188,102 @@ function renderOnboarding(
   return props;
 }
 
+function trackedEvents(name: string) {
+  return analyticsMocks.track.mock.calls.filter(([eventName]) => eventName === name);
+}
+
+function latestTrackedEvent<T extends Record<string, unknown>>(name: string): T {
+  const calls = trackedEvents(name);
+  expect(calls.length).toBeGreaterThan(0);
+  return calls[calls.length - 1]?.[1] as T;
+}
+
+function findTrackedEvent<T extends Record<string, unknown>>(
+  name: string,
+  predicate: (payload: T) => boolean,
+): T {
+  const payload = trackedEvents(name)
+    .map(([, eventPayload]) => eventPayload as T)
+    .find(predicate);
+  expect(payload).toBeTruthy();
+  return payload as T;
+}
+
+function chooseDropdownOption(label: string, option: string | RegExp) {
+  const field = screen
+    .getAllByText(label)
+    .map((node) => node.closest('.onboarding-view__select-field'))
+    .find((node): node is HTMLElement => node instanceof HTMLElement);
+  if (!field) throw new Error(`dropdown field not found: ${label}`);
+  const trigger = field.querySelector('button');
+  if (!(trigger instanceof HTMLButtonElement)) {
+    throw new Error(`dropdown trigger not found: ${label}`);
+  }
+  fireEvent.click(trigger);
+  fireEvent.click(
+    screen.getByRole('option', {
+      name: option instanceof RegExp ? option : new RegExp(option, 'i'),
+    }),
+  );
+}
+
 afterEach(() => {
   cleanup();
   globalThis.fetch = originalFetch;
   vi.useRealTimers();
+  analyticsMocks.track.mockReset();
+  window.sessionStorage.clear();
 });
 
 beforeEach(() => {
   globalThis.fetch = originalFetch;
+  analyticsMocks.track.mockReset();
+});
+
+describe('EntryShell settings menu', () => {
+  it('opens quick actions before opening the full settings dialog', async () => {
+    globalThis.fetch = vi.fn(async (input) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.endsWith('/api/community/discord')) {
+        return jsonResponse({
+          inviteCode: 'mHAjSMV6gz',
+          inviteUrl: 'https://discord.gg/mHAjSMV6gz',
+          onlineCount: 1234,
+          memberCount: 4321,
+          fetchedAt: Date.now(),
+          stale: false,
+        });
+      }
+      if (url.endsWith('/api/github/open-design')) {
+        return jsonResponse({
+          repo: 'nexu-io/open-design',
+          stargazers_count: 56100,
+          fetchedAt: Date.now(),
+          stale: false,
+        });
+      }
+      return jsonResponse({});
+    }) as typeof fetch;
+    const props = renderHome();
+
+    await waitFor(() => {
+      expect(screen.getByText('1.2k online')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('entry-settings-menu-trigger'));
+
+    expect(props.onOpenSettings).not.toHaveBeenCalled();
+    expect(screen.getByTestId('entry-settings-menu')).toBeTruthy();
+    expect(screen.getByText('Language')).toBeTruthy();
+    expect(screen.getByText('Appearance')).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Join Discord/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /1.2k online/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Follow @nexudotio on X/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('entry-settings-open-details'));
+
+    expect(props.onOpenSettings).toHaveBeenCalledWith();
+  });
 });
 
 describe('EntryShell onboarding Open Design AMR runtime', () => {
@@ -191,7 +365,24 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await act(async () => {});
 
     await vi.waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login', { method: 'POST' });
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/integrations/vela/login',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: expect.any(String),
+        }),
+      );
+    });
+    const loginInit = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith('/api/integrations/vela/login'),
+    )?.[1] as RequestInit;
+    expect(JSON.parse(String(loginInit.body))).toMatchObject({
+      attribution: {
+        entryId: expect.stringMatching(/^od-amr-/u),
+        sourceProduct: 'open_design',
+        sourceDetail: 'onboarding_amr_sign_in_continue',
+      },
     });
     expect(screen.getByText('Signing in…')).toBeTruthy();
     expect(screen.queryByText('Not signed in')).toBeNull();
@@ -265,7 +456,14 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login', { method: 'POST' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/integrations/vela/login',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: expect.any(String),
+      }),
+    );
     expect(screen.getByText('Signing in…')).toBeTruthy();
 
     await act(async () => {
@@ -378,6 +576,137 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
   });
 
+  it('tracks onboarding page views and about-you submission payload on completion', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({
+        loggedIn: true,
+        profile: 'prod',
+        configPath: '/x',
+        user: { id: 'u', email: 'user@example.com' },
+      }),
+    ) as typeof fetch;
+    const props = renderOnboarding();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    });
+
+    chooseDropdownOption('Your role', 'Engineer');
+    chooseDropdownOption('Organization size', /Growth company/i);
+    chooseDropdownOption('Use case', /Product design/i);
+    chooseDropdownOption('Where did you hear about us?', /Search/i);
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+
+    expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
+
+    const pageViews = trackedEvents('page_view').map(([, payload]) => payload);
+    expect(pageViews).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          page_name: 'onboarding',
+          area: 'runtime',
+          step_index: '1',
+          step_name: 'connect',
+        }),
+        expect.objectContaining({
+          page_name: 'onboarding',
+          area: 'about_you',
+          step_index: '2',
+          step_name: 'about_you',
+        }),
+      ]),
+    );
+
+    expect(findTrackedEvent('ui_click', (payload) => payload.element === 'about_you_submit')).toMatchObject({
+      page_name: 'onboarding',
+      area: 'about_you',
+      element: 'about_you_submit',
+      action: 'continue',
+      role: 'engineer',
+      organization_size: 'growth',
+      use_cases: ['product'],
+      discovery_source: 'search',
+    });
+
+    expect(latestTrackedEvent('onboarding_complete_result')).toMatchObject({
+      page_name: 'onboarding',
+      area: 'onboarding',
+      result: 'completed',
+      completion_type: 'completed_without_design_system',
+      runtime_type: 'amr_cloud',
+      has_about_you: true,
+      has_design_system_request: false,
+      role: 'engineer',
+      organization_size: 'growth',
+      use_cases: ['product'],
+      discovery_source: 'search',
+    });
+  });
+
+  it('persists the BYOK config before finishing onboarding', async () => {
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/provider/models') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 10,
+          models: [
+            { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+            { id: 'claude-opus-4-8', label: 'Claude Opus 4.8' },
+          ],
+        });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 12,
+          model: 'claude-opus-4-8',
+          sample: 'Connected',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    const props = renderOnboarding();
+
+    fireEvent.click(screen.getByRole('button', { name: /Bring your own key/i }));
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'test-api-key' } });
+    fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: 'https://api.anthropic.com' } });
+    fireEvent.click(screen.getByRole('button', { name: /Fetch models/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Fetched 2 models.')).toBeTruthy();
+    });
+    chooseDropdownOption('Model', /claude-opus-4-8/i);
+    fireEvent.click(screen.getByRole('button', { name: /^Test$/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Connected\. Replied in 12 ms/i)).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+
+    expect(props.onModeChange).toHaveBeenCalledWith('api');
+    expect(props.onApiModelChange).toHaveBeenCalledWith('claude-opus-4-8');
+    expect(props.onConfigPersist).toHaveBeenCalled();
+    expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
+    expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
+      mode: 'api',
+      apiProtocol: 'anthropic',
+      apiKey: 'test-api-key',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-opus-4-8',
+      apiProviderBaseUrl: null,
+    });
+  });
+
   it('lets Skip exit onboarding without starting AMR login', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
       jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
@@ -388,6 +717,20 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     fireEvent.click(screen.getByRole('button', { name: /Skip/i }));
 
     expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
+    expect(props.onConfigPersist).not.toHaveBeenCalled();
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/integrations/vela/login'))).toBe(false);
+    expect(findTrackedEvent('ui_click', (payload) => payload.element === 'skip')).toMatchObject({
+      page_name: 'onboarding',
+      area: 'runtime',
+      element: 'skip',
+      action: 'skip',
+    });
+    expect(latestTrackedEvent('onboarding_complete_result')).toMatchObject({
+      page_name: 'onboarding',
+      area: 'onboarding',
+      result: 'skipped',
+      completion_type: 'skipped',
+      runtime_type: 'amr_cloud',
+    });
   });
 });

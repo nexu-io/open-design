@@ -77,6 +77,155 @@ pnpm typecheck                 # workspace の typecheck
 
 ローカル開発中、`tools-dev` は最初に daemon を起動し、そのポートを `apps/web` に渡します。`apps/web/next.config.ts` は `/api/*`、`/artifacts/*`、`/frames/*` をその daemon ポートに書き換えるため、App Router アプリは CORS 設定なしで隣接する Express プロセスと通信できます。
 
+## Docker セットアップ
+
+Node.js や pnpm をローカルにインストールせずに、完全にコンテナ化された環境で Open Design を実行できます。
+
+### 必要条件
+
+* Docker Desktop
+* Docker Compose v2
+
+Docker が正しくインストールされていることを確認：
+
+```bash
+docker compose version
+```
+
+---
+
+## Open Design を起動
+
+リポジトリルートから：
+
+1. deploy ディレクトリに移動し、環境テンプレートをコピーします：
+
+   ```bash
+   cd deploy
+   cp .env.example .env
+   ```
+
+2. セキュアなトークンを生成します：
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+3. エディタで `.env` を開き、`OD_API_TOKEN=` を見つけて、生成したトークンを貼り付けます。
+
+サービスを起動します：
+
+```bash
+docker compose up -d
+```
+
+ブラウザでアプリを開きます：
+
+```text
+http://localhost:7456
+```
+
+初回起動時は、Docker が最新イメージをプルするため数秒かかる場合があります。
+
+---
+
+## よく使う Docker コマンド
+
+### ログを表示
+
+```bash
+docker compose logs -f
+```
+
+### コンテナを再起動
+
+```bash
+docker compose restart
+```
+
+### コンテナを停止
+
+```bash
+docker compose down
+```
+
+### 最新イメージをプル
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### すべてのローカルアプリデータを削除
+
+```bash
+docker compose down -v
+```
+
+---
+
+## 環境設定
+
+`deploy/.env` ファイルを作成して、デフォルト設定を上書きします。提供された例から始めます：
+
+```bash
+cp deploy/.env.example deploy/.env
+```
+
+`deploy/.env` を編集して、自分のトークンを設定し、必要に応じて他の値を調整します：
+
+```env
+# ホストで公開するポート
+OPEN_DESIGN_PORT=7456
+
+# コンテナのメモリ制限
+OPEN_DESIGN_MEM_LIMIT=384m
+
+# 許可する CORS オリジン
+OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
+
+# Docker イメージタグ
+OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
+
+# Daemon セキュリティに必要な API トークン
+# 次のコマンドで生成：openssl rand -hex 32
+OD_API_TOKEN=
+```
+
+---
+
+## 永続ストレージ
+
+Open Design はプロジェクトと SQLite データを Docker ボリュームに保存します：
+
+```text
+open_design_data
+```
+
+ボリュームは以下にマウントされます：
+
+```text
+/app/.od
+```
+
+データはコンテナの再起動とイメージ更新後も保持されます。
+
+ボリュームを確認：
+
+```bash
+docker volume inspect open-design_open_design_data
+```
+
+---
+
+## 注意事項
+
+* Docker モードは、ローカルに Node.js や pnpm をインストールしたくないコントリビューターに最適です。
+* コンテナは本番用 daemon ビルドをポート `7456` で直接公開します。
+* 開発ワークフローや高度なローカル設定については、この Quickstart ガイドの残りの部分を参照してください。
+
+---
+
 ## メディア生成 / エージェントディスパッチャーチェック
 
 Image、Video、Audio、HyperFrames スキルは、daemon がエージェントを起動する際に注入する環境変数を通じてローカル `od` CLI を呼び出します：

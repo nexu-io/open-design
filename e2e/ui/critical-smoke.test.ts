@@ -9,7 +9,7 @@ test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
 });
 
-test('home loads with the primary entry controls', async ({ page }) => {
+test('[P0] home loads with the primary entry controls', async ({ page }) => {
   await gotoEntryHome(page);
 
   await expect(page.getByTestId('entry-nav-logo')).toBeVisible();
@@ -18,16 +18,19 @@ test('home loads with the primary entry controls', async ({ page }) => {
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
 });
 
-test('settings dialog is reachable from home', async ({ page }) => {
+test('[P0] settings dialog is reachable from home', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await page.getByRole('button', { name: 'Open settings' }).click();
+  // The home settings entry is a menu: open it, then the "Settings" item
+  // opens the full execution-mode dialog.
+  await page.getByTestId('entry-settings-menu-trigger').click();
+  await page.getByTestId('entry-settings-open-details').click();
   const settingsDialog = page.getByRole('dialog');
   await expect(settingsDialog).toBeVisible();
   await expect(settingsDialog.getByRole('heading', { name: 'Execution mode' })).toBeVisible();
 });
 
-test('prototype project creation reaches the workspace shell', async ({ page }) => {
+test('[P0] prototype project creation reaches the workspace shell', async ({ page }) => {
   await gotoEntryHome(page);
   await openNewProjectModal(page);
   await page.getByTestId('new-project-tab-prototype').click();

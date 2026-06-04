@@ -1,16 +1,17 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane } from '../../src/components/ChatPane';
+import { trackRunFailedToastSurfaceView } from '../../src/analytics/events';
 import type { ChatMessage, Conversation } from '../../src/types';
 
 vi.mock('../../src/i18n', () => ({
   useT: () => (key: string, vars?: Record<string, string | number>) => {
-    if (key === 'chat.renameConversationLabel') {
-      return `chat.renameConversationLabel ${vars?.title ?? ''}`;
+    if (vars && Object.keys(vars).length > 0) {
+      return `${key} ${Object.values(vars).join(' ')}`;
     }
     return key;
   },
@@ -26,237 +27,139 @@ vi.mock('../../src/components/ChatComposer', () => ({
   ChatComposer: forwardRef((_props, _ref) => <div data-testid="composer" />),
 }));
 
-afterEach(() => {
-  cleanup();
+vi.mock('../../src/analytics/events', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/analytics/events')>();
+  return {
+    ...actual,
+    trackChatPanelClick: vi.fn(),
+    trackRunFailedToastSurfaceView: vi.fn(),
+  };
 });
 
-describe('ChatPane conversation title', () => {
-  it('shows the active conversation title in the chat header', () => {
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+// Session rename was removed by design — chats are not renamed. These tests
+// cover what the session switcher does keep: the icon-only history trigger
+// opens a menu listing conversations, and selecting / deleting one calls back.
+describe('ChatPane session switcher', () => {
+  it('opens the conversation history menu from the icon trigger', () => {
     renderChatPane({
-      conversations: [conversation({ id: 'conv-1', title: 'Contract review draft' })],
+      conversations: [
+        conversation({ id: 'conv-1', title: 'Contract review draft' }),
+        conversation({ id: 'conv-2', title: 'Pricing page copy' }),
+      ],
       activeConversationId: 'conv-1',
     });
 
-    expect(screen.getByTestId('chat-active-conversation-title').textContent).toBe('Contract review draft');
+    expect(screen.queryByTestId('conversation-history-menu')).toBeNull();
+    fireEvent.click(screen.getByTestId('conversation-history-trigger'));
+
+    expect(screen.getByTestId('conversation-history-menu')).toBeTruthy();
+    expect(screen.getByTestId('conversation-select-conv-1').textContent).toBe('Contract review draft');
+    expect(screen.getByTestId('conversation-select-conv-2').textContent).toBe('Pricing page copy');
   });
 
-  it('renames the active conversation from the chat header', () => {
-    const onRenameConversation = vi.fn();
+  it('selects a conversation from the history menu', () => {
+    const onSelectConversation = vi.fn();
     renderChatPane({
-      conversations: [conversation({ id: 'conv-1', title: 'Contract review draft' })],
+      conversations: [
+        conversation({ id: 'conv-1', title: 'Contract review draft' }),
+        conversation({ id: 'conv-2', title: 'Pricing page copy' }),
+      ],
       activeConversationId: 'conv-1',
-      onRenameConversation,
+      onSelectConversation,
     });
 
-    fireEvent.click(screen.getByLabelText('chat.renameConversationLabel Contract review draft'));
-    const input = screen.getByTestId('chat-active-conversation-rename-input');
-    fireEvent.change(input, { target: { value: '  Contract review v2  ' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-    fireEvent.blur(input);
+    fireEvent.click(screen.getByTestId('conversation-history-trigger'));
+    fireEvent.click(screen.getByTestId('conversation-select-conv-2'));
 
-    expect(onRenameConversation).toHaveBeenCalledTimes(1);
-    expect(onRenameConversation).toHaveBeenCalledWith('conv-1', 'Contract review v2');
+    expect(onSelectConversation).toHaveBeenCalledTimes(1);
+    expect(onSelectConversation).toHaveBeenCalledWith('conv-2');
   });
 
-  it('cancels the active conversation rename without saving', () => {
-    const onRenameConversation = vi.fn();
-    renderChatPane({
-      conversations: [conversation({ id: 'conv-1', title: 'Contract review draft' })],
-      activeConversationId: 'conv-1',
-      onRenameConversation,
-    });
-
-    fireEvent.click(screen.getByLabelText('chat.renameConversationLabel Contract review draft'));
-    const input = screen.getByTestId('chat-active-conversation-rename-input');
-    fireEvent.change(input, { target: { value: 'Do not save this' } });
-    fireEvent.keyDown(input, { key: 'Escape' });
-    fireEvent.blur(input);
-
-    expect(onRenameConversation).not.toHaveBeenCalled();
-    expect(screen.getByTestId('chat-active-conversation-title').textContent).toBe('Contract review draft');
-  });
-
-  it('does not save unchanged titles', () => {
-    const onRenameConversation = vi.fn();
-    renderChatPane({
-      conversations: [conversation({ id: 'conv-1', title: 'Contract review draft' })],
-      activeConversationId: 'conv-1',
-      onRenameConversation,
-    });
-
-    fireEvent.click(screen.getByLabelText('chat.renameConversationLabel Contract review draft'));
-    const input = screen.getByTestId('chat-active-conversation-rename-input');
-    fireEvent.change(input, { target: { value: '  Contract review draft  ' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    expect(onRenameConversation).not.toHaveBeenCalled();
-  });
-
-  it('submits an empty title when clearing an existing title', () => {
-    const onRenameConversation = vi.fn();
-    renderChatPane({
-      conversations: [conversation({ id: 'conv-1', title: 'Contract review draft' })],
-      activeConversationId: 'conv-1',
-      onRenameConversation,
-    });
-
-    fireEvent.click(screen.getByLabelText('chat.renameConversationLabel Contract review draft'));
-    const input = screen.getByTestId('chat-active-conversation-rename-input');
-    fireEvent.change(input, { target: { value: '   ' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    expect(onRenameConversation).toHaveBeenCalledTimes(1);
-    expect(onRenameConversation).toHaveBeenCalledWith('conv-1', '');
-  });
-
-  it('does not submit an empty title when the conversation is already untitled', () => {
-    const onRenameConversation = vi.fn();
+  it('shows an untitled label for conversations without a title', () => {
     renderChatPane({
       conversations: [conversation({ id: 'conv-1', title: null })],
       activeConversationId: 'conv-1',
-      onRenameConversation,
-    });
-
-    fireEvent.click(screen.getByLabelText('chat.renameConversationLabel chat.untitledConversation'));
-    const input = screen.getByTestId('chat-active-conversation-rename-input');
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    expect(onRenameConversation).not.toHaveBeenCalled();
-  });
-
-  it('does not show a rename control when there is no active conversation', () => {
-    renderChatPane({
-      conversations: [],
-      activeConversationId: null,
-    });
-
-    expect(screen.getByTestId('chat-active-conversation-title').textContent).toBe('chat.conversationsHeading');
-    expect(screen.queryByLabelText(/^chat\.renameConversationLabel /)).toBeNull();
-  });
-
-  it('does not show a rename control when rename handling is unavailable', () => {
-    renderChatPane({
-      conversations: [conversation({ id: 'conv-1', title: 'Contract review draft' })],
-      activeConversationId: 'conv-1',
-      onRenameConversation: undefined,
-    });
-
-    expect(screen.getByTestId('chat-active-conversation-title').textContent).toBe('Contract review draft');
-    expect(screen.queryByLabelText(/^chat\.renameConversationLabel /)).toBeNull();
-  });
-
-  it('trims the conversation history rename flow the same way as the header', () => {
-    const onRenameConversation = vi.fn();
-    renderChatPane({
-      conversations: [conversation({ id: 'conv-1', title: 'Contract review draft' })],
-      activeConversationId: 'conv-1',
-      onRenameConversation,
     });
 
     fireEvent.click(screen.getByTestId('conversation-history-trigger'));
-    fireEvent.doubleClick(screen.getByTestId('conversation-select-conv-1'));
-
-    const input = screen.getByDisplayValue('Contract review draft');
-    fireEvent.change(input, { target: { value: '  Contract review v2  ' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    expect(onRenameConversation).toHaveBeenCalledTimes(1);
-    expect(onRenameConversation).toHaveBeenCalledWith('conv-1', 'Contract review v2');
+    expect(screen.getByTestId('conversation-select-conv-1').textContent).toBe('chat.untitledConversation');
   });
 
-  it('does not save unchanged titles from the conversation history menu', () => {
-    const onRenameConversation = vi.fn();
+  it('does not expose any inline rename affordance', () => {
     renderChatPane({
       conversations: [conversation({ id: 'conv-1', title: 'Contract review draft' })],
       activeConversationId: 'conv-1',
-      onRenameConversation,
     });
 
     fireEvent.click(screen.getByTestId('conversation-history-trigger'));
-    fireEvent.doubleClick(screen.getByTestId('conversation-select-conv-1'));
-
-    const input = screen.getByDisplayValue('Contract review draft');
-    fireEvent.change(input, { target: { value: '  Contract review draft  ' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    expect(onRenameConversation).not.toHaveBeenCalled();
+    // The select button is a plain selector now — no rename input is rendered.
+    expect(screen.queryByTestId('chat-active-conversation-rename-input')).toBeNull();
+    expect(screen.queryByDisplayValue('Contract review draft')).toBeNull();
   });
 
-  it('exits title editing when the active conversation changes', () => {
-    const onRenameConversation = vi.fn();
-    const { rerender } = renderChatPane({
-      conversations: [
-        conversation({ id: 'conv-1', title: 'First conversation' }),
-        conversation({ id: 'conv-2', title: 'Second conversation' }),
-      ],
-      activeConversationId: 'conv-1',
-      onRenameConversation,
+  it('tracks run_failed_toast exposure for AMR balance guidance', async () => {
+    render(
+      <ChatPane
+        messages={[
+          failedAssistantMessage({
+            id: 'msg-amr-balance',
+            runId: 'run-amr-balance',
+            code: 'AMR_INSUFFICIENT_BALANCE',
+            agentId: 'amr',
+          }),
+        ]}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectKindForTracking="prototype"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        onRetry={vi.fn()}
+        conversations={[conversation({ id: 'conv-1', title: 'Current' })]}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(trackRunFailedToastSurfaceView).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(trackRunFailedToastSurfaceView).mock.calls[0]![1]).toMatchObject({
+      page_name: 'chat_panel',
+      area: 'chat_panel',
+      element: 'run_failed_toast',
+      error_code: 'AMR_INSUFFICIENT_BALANCE',
+      project_id: 'project-1',
+      project_kind: 'prototype',
+      conversation_id: 'conv-1',
+      assistant_message_id: 'msg-amr-balance',
+      run_id: 'run-amr-balance',
     });
-
-    fireEvent.click(screen.getByLabelText('chat.renameConversationLabel First conversation'));
-    fireEvent.change(screen.getByTestId('chat-active-conversation-rename-input'), {
-      target: { value: 'Unsaved draft' },
-    });
-
-    rerender(chatPaneElement({
-      conversations: [
-        conversation({ id: 'conv-1', title: 'First conversation' }),
-        conversation({ id: 'conv-2', title: 'Second conversation' }),
-      ],
-      activeConversationId: 'conv-2',
-      onRenameConversation,
-    }));
-
-    expect(screen.queryByTestId('chat-active-conversation-rename-input')).toBeNull();
-    expect(screen.getByTestId('chat-active-conversation-title').textContent).toBe('Second conversation');
-    expect(onRenameConversation).not.toHaveBeenCalled();
-  });
-
-  it('exits title editing when the active conversation record disappears', () => {
-    const onRenameConversation = vi.fn();
-    const { rerender } = renderChatPane({
-      conversations: [conversation({ id: 'conv-1', title: 'First conversation' })],
-      activeConversationId: 'conv-1',
-      onRenameConversation,
-    });
-
-    fireEvent.click(screen.getByLabelText('chat.renameConversationLabel First conversation'));
-    fireEvent.change(screen.getByTestId('chat-active-conversation-rename-input'), {
-      target: { value: 'Unsaved draft' },
-    });
-
-    rerender(chatPaneElement({
-      conversations: [],
-      activeConversationId: 'conv-1',
-      onRenameConversation,
-    }));
-
-    expect(screen.queryByTestId('chat-active-conversation-rename-input')).toBeNull();
-    expect(screen.getByTestId('chat-active-conversation-title').textContent).toBe('chat.conversationsHeading');
-    expect(onRenameConversation).not.toHaveBeenCalled();
   });
 });
 
-function renderChatPane({
-  conversations,
-  activeConversationId,
-  onRenameConversation,
-}: {
+function renderChatPane(props: {
   conversations: Conversation[];
   activeConversationId: string | null;
-  onRenameConversation?: (id: string, title: string) => void;
+  onSelectConversation?: (id: string) => void;
 }) {
-  return render(chatPaneElement({ conversations, activeConversationId, onRenameConversation }));
+  return render(chatPaneElement(props));
 }
 
 function chatPaneElement({
   conversations,
   activeConversationId,
-  onRenameConversation,
+  onSelectConversation,
 }: {
   conversations: Conversation[];
   activeConversationId: string | null;
-  onRenameConversation?: ((id: string, title: string) => void) | undefined;
+  onSelectConversation?: (id: string) => void;
 }) {
   return (
     <ChatPane
@@ -270,19 +173,48 @@ function chatPaneElement({
       onStop={vi.fn()}
       conversations={conversations}
       activeConversationId={activeConversationId}
-      onSelectConversation={vi.fn()}
+      onSelectConversation={onSelectConversation ?? vi.fn()}
       onDeleteConversation={vi.fn()}
-      onRenameConversation={onRenameConversation}
     />
   );
 }
 
-function conversation(input: { id: string; title: string | null }): Conversation {
+function conversation(overrides: Partial<Conversation> & { id: string }): Conversation {
   return {
-    id: input.id,
     projectId: 'project-1',
-    title: input.title,
+    title: null,
     createdAt: 1,
     updatedAt: 1,
+    ...overrides,
+  };
+}
+
+function failedAssistantMessage({
+  id,
+  runId,
+  code,
+  agentId,
+}: {
+  id: string;
+  runId: string;
+  code: string;
+  agentId: string;
+}): ChatMessage {
+  return {
+    id,
+    role: 'assistant',
+    content: '',
+    createdAt: 1,
+    runId,
+    runStatus: 'failed',
+    agentId,
+    events: [
+      {
+        kind: 'status',
+        label: 'error',
+        detail: 'AMR balance empty',
+        code,
+      },
+    ],
   };
 }

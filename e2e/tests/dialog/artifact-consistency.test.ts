@@ -205,7 +205,7 @@ async function sendPrompt(page: Page, prompt: string) {
   await playwrightExpect(input).toBeVisible({ timeout: 5_000 });
   await input.click();
   await input.fill(prompt);
-  await playwrightExpect(input).toHaveValue(prompt);
+  await playwrightExpect(input).toHaveText(prompt);
   await playwrightExpect(sendButton).toBeEnabled();
   const responsePromise = page.waitForResponse((response) => {
     const url = new URL(response.url());
