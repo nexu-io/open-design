@@ -50,7 +50,7 @@ const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
 const LARGE_TOOL_RESULT_CHARS = 8_000;
 const HIGH_INPUT_TOKEN_WARNING_THRESHOLD = 200_000;
 const FABRICATED_ASSISTANT_ROLE_MARKER_RE =
-  /(?:^|\n)[ \t]*##[ \t]+(?:user|assistant|assist|system)(?=[^a-z])/;
+  /(?:^|\n)[ \t]*##[ \t]+(?:user|assistant|assist|system)(?:$|(?=[^a-z]))/;
 
 export function latestUserPromptFromHistory(history: ChatMessage[]): string {
   for (let i = history.length - 1; i >= 0; i -= 1) {
