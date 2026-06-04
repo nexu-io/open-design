@@ -5,7 +5,6 @@ import type { ComponentProps } from 'react';
 import { KEY_ENTER_COMMAND } from 'lexical';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
-  InputFieldSpec,
   InstalledPluginRecord,
   McpServerConfig,
   PluginSourceKind,
@@ -15,7 +14,6 @@ import type {
 import { HomeHero } from '../../src/components/HomeHero';
 import {
   getHomeHeroEditor,
-  homeHeroPromptText,
   setHomeHeroPrompt,
 } from '../helpers/home-hero-lexical';
 
@@ -451,87 +449,6 @@ describe('HomeHero plugin picker', () => {
     // the picker closed once the pick landed.
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.queryByTestId('home-hero-plugin-picker')).toBeNull();
-  });
-
-  it('renders rendered plugin input values in the inputs form below the editor', async () => {
-    // The inline `{{slot}}` widget (`home-hero-prompt-slot-*`) in the prompt
-    // body is gone with the Lexical migration. Every non-footer plugin input now
-    // renders in the structured PluginInputsForm (`plugin-inputs-form`) below the
-    // editor, so this test asserts the input surfaces (and reflects its value)
-    // there instead of as an inline pill.
-    const fields: InputFieldSpec[] = [
-      {
-        name: 'source',
-        label: 'Import source',
-        type: 'select',
-        options: ['folder', 'zip', 'github', 'marketplace'],
-        default: 'marketplace',
-      },
-    ];
-    const prompt =
-      'Create a compact import receipt for community-import-smoke-test installed from marketplace.';
-
-    const { rerender } = render(
-      <HomeHero
-        prompt={prompt}
-        onPromptChange={() => undefined}
-        onSubmit={() => undefined}
-        activePluginTitle="Community Import Smoke Test"
-        activeChipId={null}
-        onClearActivePlugin={() => undefined}
-        pluginInputFields={fields}
-        pluginInputValues={{ source: 'marketplace' }}
-        pluginInputTemplate="Create a compact import receipt for community-import-smoke-test installed from {{source}}."
-        pluginOptions={[]}
-        pluginsLoading={false}
-        pendingPluginId={null}
-        pendingChipId={null}
-        onPickPlugin={() => undefined}
-        onPickChip={() => undefined}
-        contextItemCount={0}
-        error={null}
-      />,
-    );
-
-    await settle();
-
-    const form = screen.getByTestId('plugin-inputs-form');
-    expect(form).toBeTruthy();
-    const select = form.querySelector<HTMLSelectElement>('select[data-field-name="source"]');
-    expect(select).toBeTruthy();
-    expect(select?.value).toBe('marketplace');
-    expect(select?.tagName).toBe('SELECT');
-    // The field's label wrapper marks the rendered value as filled.
-    expect(select?.closest('label')?.getAttribute('data-filled')).toBe('true');
-
-    // Extra prompt text no longer removes any inline slot (there are none); the
-    // structured inputs form keeps rendering the field so the value stays
-    // editable below the editor.
-    rerender(
-      <HomeHero
-        prompt={`${prompt} Extra user edit.`}
-        onPromptChange={() => undefined}
-        onSubmit={() => undefined}
-        activePluginTitle="Community Import Smoke Test"
-        activeChipId={null}
-        onClearActivePlugin={() => undefined}
-        pluginInputFields={fields}
-        pluginInputValues={{ source: 'marketplace' }}
-        pluginInputTemplate="Create a compact import receipt for community-import-smoke-test installed from {{source}}."
-        pluginOptions={[]}
-        pluginsLoading={false}
-        pendingPluginId={null}
-        pendingChipId={null}
-        onPickPlugin={() => undefined}
-        onPickChip={() => undefined}
-        contextItemCount={0}
-        error={null}
-      />,
-    );
-    await settle();
-
-    expect(screen.getByTestId('plugin-inputs-form')).toBeTruthy();
-    expect(homeHeroPromptText()).toContain('Extra user edit.');
   });
 
   it('opens active plugin details from the active plugin chip', () => {

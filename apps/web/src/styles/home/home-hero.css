@@ -326,12 +326,6 @@
 .home-hero__active-chip--file {
   background: color-mix(in srgb, var(--bg-panel) 92%, var(--accent-tint));
 }
-.home-hero__active-chip--example {
-  max-width: 100%;
-  background: color-mix(in srgb, var(--accent-tint) 48%, var(--bg-panel));
-  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
-  color: color-mix(in srgb, var(--accent) 80%, var(--text));
-}
 .home-hero__active-file-group {
   display: contents;
 }
@@ -769,6 +763,12 @@
   flex: 1 1 auto;
   flex-wrap: nowrap;
   overflow: visible;
+}
+.home-hero__foot-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
 }
 .home-hero__tool {
   appearance: none;

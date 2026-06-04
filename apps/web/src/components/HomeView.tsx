@@ -54,7 +54,7 @@ import type {
 } from '../types';
 import { inlineMentionToken } from '../utils/inlineMentions';
 import { HomeHero, type ExamplePromptInfo, type HomeHeroHandle } from './HomeHero';
-import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
+import { findChip, type HomeHeroChip } from './home-hero/chips';
 import {
   buildHomeMediaComposer,
   homeMediaSurfaceForChipId,
@@ -1381,11 +1381,6 @@ export function HomeView({
         inlineEditableInputNames={active?.editableInputNames ?? []}
         footerInputNames={footerInputNamesForChip(active?.chipId ?? null)}
         designSystemOptions={designSystemOptions}
-        onPluginInputValidityChange={(valid) => {
-          setActive((prev) => (
-            prev && prev.inputsValid !== valid ? { ...prev, inputsValid: valid } : prev
-          ));
-        }}
         stagedFiles={stagedFiles}
         onAddFiles={stageFiles}
         onRemoveFile={removeStagedFile}
@@ -1912,15 +1907,15 @@ function hydratePluginInputs(
   return next;
 }
 
+// The inline plugin inputs form was removed from the Home composer, so there
+// is no UI to satisfy required inputs. Treat inputs as always valid; default
+// values still flow to the backend via reconciledInputs, and fields without a
+// default are inferred by the agent from the prompt body.
 function pluginInputsAreValid(
-  fields: InputFieldSpec[],
-  values: Record<string, unknown>,
+  _fields: InputFieldSpec[],
+  _values: Record<string, unknown>,
 ): boolean {
-  return fields.every((field) => {
-    if (!field.required) return true;
-    const value = values[field.name];
-    return value !== undefined && value !== null && value !== '';
-  });
+  return true;
 }
 
 const TEMPLATE_INPUT_PATTERN = /\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g;

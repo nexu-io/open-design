@@ -8,9 +8,8 @@
 //   - The active + pending UI states light up the right chip and
 //     disable all chips while a plugin is mid-apply.
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 
 import { HomeHero } from '../../src/components/HomeHero';
@@ -18,11 +17,6 @@ import {
   HOME_HERO_CHIPS,
   findChip,
 } from '../../src/components/home-hero/chips';
-// HomeHero's prompt input is now the project composer's Lexical
-// contenteditable (data-testid="home-hero-input"), not a <textarea>. It has no
-// `.value`, so editor-text assertions read through the Lexical-aware helper
-// which serializes the editor's nodes back to plain text.
-import { homeHeroPromptText } from '../helpers/home-hero-lexical';
 
 afterEach(() => {
   cleanup();
@@ -189,62 +183,8 @@ describe('HomeHero intent rail', () => {
     expect(onPromptChange).toHaveBeenCalledWith(
       'Research the market opportunity for a product launch, including competitors, target users, pricing hypotheses, and launch narrative',
     );
-    expect(screen.getByTestId('home-hero-active-example').textContent).toContain('Example prompts: Research the market opportunity');
-    expect(screen.getByTestId('home-hero-active-example').textContent).toContain('...');
-  });
-
-  it('clears the prompt input when the selected example chip is removed', async () => {
-    function StatefulHero() {
-      const [prompt, setPrompt] = useState('');
-      return (
-        <HomeHero
-          prompt={prompt}
-          onPromptChange={setPrompt}
-          onSubmit={() => undefined}
-          activePluginTitle={null}
-          activeChipId="deck"
-          onClearActivePlugin={() => undefined}
-          pluginOptions={[]}
-          pluginsLoading={false}
-          pendingPluginId={null}
-          pendingChipId={null}
-          onPickPlugin={() => undefined}
-          onPickExamplePlugin={() => undefined}
-          onPickChip={() => undefined}
-          onClearActiveChip={() => undefined}
-          contextItemCount={0}
-          error={null}
-        />
-      );
-    }
-
-    render(<StatefulHero />);
-
-    // Picking an example seeds the prompt: HomeHero now drives the Lexical
-    // editor via `editorRef.current?.setText(...)` (it used to set the textarea
-    // value). Read the editor text through the Lexical-aware helper instead of
-    // the removed `.value`, awaiting the onChange → state flush.
-    await act(async () => {
-      fireEvent.click(screen.getAllByTestId('home-hero-prompt-example')[0]!);
-      await Promise.resolve();
-    });
-
-    expect(homeHeroPromptText()).toContain('Research the market opportunity');
-    expect(screen.getByTestId('home-hero-active-example')).toBeTruthy();
-
-    // Removing the example chip calls `editorRef.current?.clear()` (formerly a
-    // textarea reset). The editor serializes back to empty text.
-    await act(async () => {
-      fireEvent.click(
-        screen.getByTestId('home-hero-active-example').querySelector('.home-hero__active-clear')!,
-      );
-      await Promise.resolve();
-    });
-
-    // An emptied Lexical editor serializes to a single empty paragraph (jsdom
-    // keeps a `<br>` placeholder), so assert on trimmed text — the project
-    // composer's clear-empty convention (`composerText().trim()` === '').
-    expect(homeHeroPromptText().trim()).toBe('');
+    // The top "selected example" pill was removed from the composer; picking an
+    // example still seeds the prompt but no longer surfaces a dismissible chip.
     expect(screen.queryByTestId('home-hero-active-example')).toBeNull();
   });
 
@@ -267,7 +207,6 @@ describe('HomeHero intent rail', () => {
       'deck',
       'Create with a focused brief using Investor deck',
     );
-    expect(screen.getByTestId('home-hero-active-example').textContent).toContain('Example prompts: Investor deck');
   });
 
   it('orders curated example presets first for the selected artifact type', () => {

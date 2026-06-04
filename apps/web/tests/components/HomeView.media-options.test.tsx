@@ -206,11 +206,9 @@ describe('HomeView media composer options', () => {
     // The old full editor grid is gone: "Audio type" is now a footer pill (a
     // listbox-trigger button), not a native <select> combobox.
     expect(screen.queryByRole('combobox', { name: 'Audio type' })).toBeNull();
-    // The "Text" input moved out of the old grid into the PluginInputsForm
-    // (the new surface for non-footer plugin inputs), so it is scoped there
-    // rather than rendered as a free-standing grid control.
-    const textInput = screen.getByRole('textbox', { name: 'Text' });
-    expect(textInput.closest('[data-testid="plugin-inputs-form"]')).not.toBeNull();
+    // The inline plugin inputs form was removed from the Home composer, so the
+    // non-footer "Text" input no longer renders as a free-standing control.
+    expect(screen.queryByRole('textbox', { name: 'Text' })).toBeNull();
     expect(promptIsEmpty()).toBe(true);
   });
 
