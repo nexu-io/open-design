@@ -2,7 +2,11 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import type Database from 'better-sqlite3';
 
-import { getAgentSessionRecord } from './db.js';
+import {
+  clearAgentSession,
+  getAgentSessionRecord,
+  upsertAgentSession,
+} from './db.js';
 
 type SqliteDb = Database.Database;
 
@@ -16,6 +20,8 @@ export interface AgentResumeContext {
   /** Hash of the stable instruction block last sent on this session, or null. */
   storedStablePromptHash: string | null;
 }
+
+export type CapturedAgentSessionResult = 'stored' | 'cleared' | 'skipped';
 
 /**
  * Decide whether a resume-capable adapter should continue its stored CLI
@@ -35,6 +41,37 @@ export function resolveAgentResumeContext(
     isResuming: resumeSessionId != null,
     storedStablePromptHash: record?.stablePromptHash ?? null,
   };
+}
+
+/**
+ * Persist a captured upstream session for a successful run.
+ *
+ * A missing captured session on a successful run means the adapter could not
+ * safely identify the child session it just created (for example, ambiguous pi
+ * `.jsonl` writes in a shared cwd). Clear the stored row so the next turn does
+ * not resume stale history; it will start fresh and seed from the transcript.
+ */
+export function persistCapturedAgentSession(
+  db: SqliteDb,
+  input: {
+    conversationId: string | null | undefined;
+    agentId: string;
+    sessionId: string | null;
+    stablePromptHash?: string | null;
+  },
+): CapturedAgentSessionResult {
+  if (!input.conversationId) return 'skipped';
+  if (input.sessionId) {
+    upsertAgentSession(db, {
+      conversationId: input.conversationId,
+      agentId: input.agentId,
+      sessionId: input.sessionId,
+      stablePromptHash: input.stablePromptHash ?? null,
+    });
+    return 'stored';
+  }
+  clearAgentSession(db, input.conversationId, input.agentId);
+  return 'cleared';
 }
 
 // Signatures Claude Code prints to stderr when a `--resume <id>` target no

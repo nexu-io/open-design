@@ -427,7 +427,13 @@ import {
   upsertMessage,
   upsertPreviewComment,
 } from './db.js';
-import { resolveAgentResumeContext, isClaudeResumeFailure, hashStableInstructions, computeIncludeStable } from './agent-session-resume.js';
+import {
+  computeIncludeStable,
+  hashStableInstructions,
+  isClaudeResumeFailure,
+  persistCapturedAgentSession,
+  resolveAgentResumeContext,
+} from './agent-session-resume.js';
 import {
   createLiveArtifact,
   deleteLiveArtifact,
@@ -13313,8 +13319,8 @@ export async function startServer({
       // another conversation in the same cwd cannot inherit this history.
       if (acpSession && typeof acpSession.getLastSessionPath === 'function') {
         const sessionPath = acpSession.getLastSessionPath();
-        if (status === 'succeeded' && sessionPath && run.conversationId && def.streamFormat === 'pi-rpc') {
-          upsertAgentSession(db, {
+        if (status === 'succeeded' && def.streamFormat === 'pi-rpc') {
+          persistCapturedAgentSession(db, {
             conversationId: run.conversationId,
             agentId: def.id,
             sessionId: sessionPath,
