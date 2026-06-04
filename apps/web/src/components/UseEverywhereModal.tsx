@@ -9,10 +9,12 @@
 // modal only owns rendering + clipboard interactions.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { motion } from 'motion/react';
 import { useAnalytics } from '../analytics/provider';
 import { trackIntegrationsUseEverywhereTabClick } from '../analytics/events';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
+import { modalOverlay, modalContent } from '../motion';
 import type { Dict } from '../i18n/types';
 import {
   buildAgentGuideMarkdown,
@@ -82,7 +84,7 @@ export function UseEverywhereModal({
   }, []);
 
   return (
-    <div
+    <motion.div
       className="use-everywhere-modal-backdrop"
       role="dialog"
       aria-modal="true"
@@ -91,8 +93,18 @@ export function UseEverywhereModal({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
+      variants={modalOverlay}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
     >
-      <div className="use-everywhere-modal">
+      <motion.div
+        className="use-everywhere-modal"
+        variants={modalContent}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+      >
         <header className="use-everywhere-modal__head">
           <div className="use-everywhere-modal__head-titles">
             <span className="use-everywhere-modal__kicker">{t('integrations.kicker')}</span>
@@ -120,8 +132,8 @@ export function UseEverywhereModal({
           daemonUrl={daemonUrl}
           versionHint={versionHint}
         />
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 

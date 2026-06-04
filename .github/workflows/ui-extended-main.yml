@@ -1,0 +1,76 @@
+name: ui-extended-main
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    # 02:00 UTC = 10:00 Asia/Shanghai
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "UI suite to run"
+        required: true
+        default: p0p1
+        type: choice
+        options:
+          - p0p1
+          - full
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-extended-main-${{ github.event_name }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  ui_extended:
+    name: Extended UI regression
+    if: ${{ github.repository == 'nexu-io/open-design' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Setup Playwright
+        uses: ./.github/actions/setup-playwright
+        with:
+          package-json-path: e2e/package.json
+          install-command: pnpm -C e2e exec playwright install --with-deps chromium
+
+      - name: Prebuild workspace type declarations
+        run: |
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/web build:sidecar
+
+      - name: Clean Playwright state
+        run: pnpm -C e2e exec tsx scripts/playwright.ts clean
+
+      - name: Run UI P0/P1
+        if: ${{ github.event_name != 'schedule' && inputs.suite != 'full' }}
+        run: pnpm -C e2e test:ui:p0p1
+
+      - name: Run full UI
+        if: ${{ github.event_name == 'schedule' || inputs.suite == 'full' }}
+        run: pnpm -C e2e test:ui
+
+      - name: Upload Playwright debug artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-extended-main-${{ github.run_id }}
+          path: |
+            e2e/ui/reports/playwright-html-report
+            e2e/ui/reports/test-results
+            e2e/ui/reports/results.json
+            e2e/ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7

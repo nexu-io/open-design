@@ -8,8 +8,10 @@
 // be dropped into App.tsx with no other plumbing.
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import type { MemoryChangeEvent } from '@open-design/contracts';
 import { useT } from '../i18n';
+import { toastSlideUp } from '../motion';
 
 interface ActiveToast {
   key: number;
@@ -76,18 +78,14 @@ export function MemoryToast({ onOpenMemory }: Props) {
     };
   }, [toast]);
 
-  if (!toast) return null;
-
-  const label = t('settings.memoryToastChanged');
-  const detail =
-    toast.source === 'llm'
+  const label = toast ? t('settings.memoryToastChanged') : '';
+  const detail = toast
+    ? toast.source === 'llm'
       ? `(${toast.count} · LLM)`
-      : `(${toast.count})`;
-  const clickHint = t('settings.memoryToastClickHint');
+      : `(${toast.count})`
+    : '';
+  const clickHint = toast ? t('settings.memoryToastClickHint') : '';
 
-  // Reset native button styling. The pill needs to look identical to
-  // the previous div + carry button semantics so screen readers and
-  // keyboard users can activate it.
   const pillStyle: CSSProperties = {
     position: 'fixed',
     bottom: 20,
@@ -109,49 +107,58 @@ export function MemoryToast({ onOpenMemory }: Props) {
     transition: 'transform 0.15s ease, box-shadow 0.15s ease',
   };
 
-  if (!onOpenMemory) {
-    return (
-      <div role="status" aria-live="polite" style={pillStyle}>
-        <span aria-hidden style={{ fontSize: 14 }}>✦</span>
-        <span>{label}</span>
-        <span style={{ opacity: 0.65 }}>{detail}</span>
-      </div>
-    );
-  }
-
   return (
-    <button
-      type="button"
-      aria-live="polite"
-      aria-label={`${label} ${detail} — ${clickHint}`}
-      title={clickHint}
-      onClick={onOpenMemory}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-1px)';
-        e.currentTarget.style.boxShadow = '0 10px 28px rgba(0,0,0,0.24)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = '0 6px 24px rgba(0,0,0,0.18)';
-      }}
-      style={pillStyle}
-    >
-      <span aria-hidden style={{ fontSize: 14 }}>✦</span>
-      <span>{label}</span>
-      <span style={{ opacity: 0.65 }}>{detail}</span>
-      <span
-        aria-hidden
-        style={{
-          marginLeft: 4,
-          paddingLeft: 8,
-          borderLeft: '1px solid rgba(255,255,255,0.18)',
-          opacity: 0.85,
-          fontSize: 12,
-          fontWeight: 500,
-        }}
-      >
-        {clickHint} →
-      </span>
-    </button>
+    <AnimatePresence>
+      {toast ? (
+        !onOpenMemory ? (
+          <motion.div
+            key={toast.key}
+            role="status"
+            aria-live="polite"
+            style={pillStyle}
+            variants={toastSlideUp}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+          >
+            <span aria-hidden style={{ fontSize: 14 }}>✦</span>
+            <span>{label}</span>
+            <span style={{ opacity: 0.65 }}>{detail}</span>
+          </motion.div>
+        ) : (
+          <motion.button
+            key={toast.key}
+            type="button"
+            aria-live="polite"
+            aria-label={`${label} ${detail} — ${clickHint}`}
+            title={clickHint}
+            onClick={onOpenMemory}
+            whileHover={{ y: -1, boxShadow: '0 10px 28px rgba(0,0,0,0.24)' }}
+            style={pillStyle}
+            variants={toastSlideUp}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+          >
+            <span aria-hidden style={{ fontSize: 14 }}>✦</span>
+            <span>{label}</span>
+            <span style={{ opacity: 0.65 }}>{detail}</span>
+            <span
+              aria-hidden
+              style={{
+                marginLeft: 4,
+                paddingLeft: 8,
+                borderLeft: '1px solid rgba(255,255,255,0.18)',
+                opacity: 0.85,
+                fontSize: 12,
+                fontWeight: 500,
+              }}
+            >
+              {clickHint} →
+            </span>
+          </motion.button>
+        )
+      ) : null}
+    </AnimatePresence>
   );
 }

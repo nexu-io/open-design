@@ -29,6 +29,11 @@
 //                              for grok-imagine-video (t2v + i2v + audio)
 //   * provider 'imagerouter'→ ImageRouter OpenAI-compatible image/video
 //                              generation endpoints
+//   * provider 'openrouter' → OpenRouter unified gateway: synchronous
+//                              /chat/completions for image generation
+//                              (Gemini Flash, Flux, Recraft) and async
+//                              /videos submit + poll for video
+//                              (Seedance 2.0, Veo 3.1, Wan 2.7)
 //   * provider 'custom-image'→ user-supplied OpenAI-compatible
 //                              /v1/images/generations + /v1/images/edits
 //                              endpoints
@@ -111,6 +116,8 @@ type MediaContext = {
   compositionDir: string | null;
   imageRef: ImageRef | null;
   requestInit: MediaRequestInit;
+  /** Additional reference images for multi-image i2v / style reference flows. */
+  imageRefs: ImageRef[];
 };
 type RenderResult = { bytes: Buffer; providerNote: string; suggestedExt?: string };
 type JsonRecord = Record<string, unknown>;
@@ -288,7 +295,7 @@ export async function generateMedia(args: {
   projectRoot: string; projectsRoot: string; projectId: string; surface: MediaSurface; model: string;
   prompt?: string; output?: string; aspect?: string; length?: number; duration?: number; voice?: string;
   audioKind?: AudioKind; language?: string; loop?: boolean; promptInfluence?: number;
-  compositionDir?: string; image?: string; onProgress?: ProgressFn; requestInit?: MediaRequestInit;
+  compositionDir?: string; image?: string; images?: string[]; onProgress?: ProgressFn; requestInit?: MediaRequestInit;
 }) {
   const {
     projectRoot,
@@ -400,6 +407,19 @@ export async function generateMedia(args: {
   // and decide how to splice the data URL into their request.
   const imageRef = await resolveProjectImage(image, dir);
 
+  // Multi-image support: resolve additional images from the `images`
+  // array param. The first resolved image (imageRef) is the primary
+  // reference; additional images flow as style/content references.
+  const extraImages = Array.isArray(args.images) ? args.images : [];
+  const imageRefs: ImageRef[] = [];
+  if (imageRef) imageRefs.push(imageRef);
+  for (const imgPath of extraImages) {
+    const ref = await resolveProjectImage(imgPath, dir);
+    if (ref && !imageRefs.some((r) => r.abs === ref.abs)) {
+      imageRefs.push(ref);
+    }
+  }
+
   // Resolve any user-configured model alias BEFORE we hand the id to a
   // dispatcher (issue #1277). Catalog lookup + surface validation above
   // ran against the original id so we still enforce the registered
@@ -434,6 +454,7 @@ export async function generateMedia(args: {
     // the agent didn't pass --image. See resolveProjectImage below.
     imageRef,
     requestInit: requestInit || {},
+    imageRefs,
   };
 
   const credentials = await resolveProviderConfig(projectRoot, def.provider);
@@ -528,6 +549,16 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'custom-image' && surface === 'image') {
       const result = await renderCustomOpenAIImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'openrouter' && surface === 'image') {
+      const result = await renderOpenRouterImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'openrouter' && surface === 'video') {
+      const result = await renderOpenRouterVideo(ctx, credentials, args.onProgress);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -1606,6 +1637,379 @@ function sniffImageExt(bytes: Buffer): string {
     return '.webp';
   }
   return '.png';
+}
+
+
+// ---------------------------------------------------------------------------
+// Provider: OpenRouter — Unified video generation gateway (asynchronous).
+//
+// Docs: https://openrouter.ai/docs/guides/overview/multimodal/video-generation
+//
+// ---------------------------------------------------------------------------
+// OpenRouter image generation via Chat Completions API
+// ---------------------------------------------------------------------------
+// Unlike the dedicated /videos endpoint (async polling), image generation
+// goes through /chat/completions with `modalities: ["image"]` (or
+// `["image", "text"]` for multi-modal models like Gemini).  The response
+// embeds generated images as base64 data URLs in
+// `choices[0].message.images[].image_url.url`.
+//
+// Model IDs follow the same `openrouter/`-prefix convention as video.
+// ---------------------------------------------------------------------------
+
+async function renderOpenRouterImage(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no OpenRouter API key — configure it in Settings or set OPENROUTER_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
+
+  // Respect model-alias contract: credentials.model (from stored config)
+  // overrides ctx.wireModel (from OD_MEDIA_MODEL_ALIASES / resolveModelAlias).
+  // Then strip the `openrouter/` catalogue prefix so the wire model name
+  // matches OpenRouter's canonical slug.
+  const resolved = (credentials.model || ctx.wireModel).trim();
+  const wireModel = resolved.startsWith('openrouter/')
+    ? resolved.slice('openrouter/'.length)
+    : resolved;
+
+  // Multi-modal models (Gemini variants) accept both image and text
+  // output; image-only models (Flux, Recraft, Sourceful) only accept
+  // ["image"]. We use a simple heuristic on the slug.
+  const modalities: string[] = wireModel.includes('gemini')
+    ? ['image', 'text']
+    : ['image'];
+
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    messages: [
+      {
+        role: 'user',
+        content: ctx.prompt || 'A high-quality reference image.',
+      },
+    ],
+    modalities,
+    stream: false,
+  };
+
+  // Pass aspect ratio + image size through image_config when specified.
+  const aspectRatio = openRouterAspectFor(ctx.aspect);
+  const imageConfig: Record<string, unknown> = {
+    aspect_ratio: aspectRatio,
+    image_size: '1K',
+  };
+  body.image_config = imageConfig;
+
+  const resp = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+      'HTTP-Referer': 'https://opendesign.dev',
+      'X-Title': 'Open Design',
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`openrouter image ${resp.status}: ${truncate(text, 240)}`);
+  }
+
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`openrouter image non-JSON response: ${truncate(text, 200)}`);
+  }
+
+  // Extract the first generated image from the response.
+  const images: any[] | undefined =
+    data?.choices?.[0]?.message?.images;
+  if (!images || images.length === 0) {
+    throw new Error(
+      `openrouter image response contained no images for model ${wireModel}: `
+      + truncate(text, 200),
+    );
+  }
+
+  const dataUrl: string | undefined = images[0]?.image_url?.url;
+  if (!dataUrl) {
+    throw new Error(
+      `openrouter image response missing image_url.url: ${truncate(text, 200)}`,
+    );
+  }
+
+  // Strip the data URL prefix (e.g. "data:image/png;base64,") and
+  // decode the remaining base64 payload.
+  const b64Match = dataUrl.match(/^data:image\/[^;]+;base64,(.+)$/s);
+  let bytes: Buffer;
+  if (b64Match) {
+    bytes = Buffer.from(b64Match[1]!, 'base64');
+  } else if (dataUrl.startsWith('http')) {
+    // Some models may return a plain URL instead of inline base64.
+    const imgResp = await fetch(dataUrl);
+    if (!imgResp.ok) throw new Error(`openrouter image download ${imgResp.status}`);
+    bytes = Buffer.from(await imgResp.arrayBuffer());
+  } else {
+    // Assume raw base64 without prefix.
+    bytes = Buffer.from(dataUrl, 'base64');
+  }
+
+  return {
+    bytes,
+    providerNote: `openrouter/${wireModel} · ${aspectRatio} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// OpenRouter's video API is a normalised, asynchronous interface sitting
+// in front of multiple upstream providers (ByteDance Seedance 2.0,
+// Google Veo 3.1, Alibaba Wan 2.7, etc.). The workflow mirrors the
+// Grok / Volcengine pattern used elsewhere in this file:
+//
+//   1. POST /api/v1/videos  → {id, polling_url, status:"pending"}
+//   2. Poll GET  polling_url until status flips to completed/failed
+//   3. Fetch the binary from unsigned_urls[0]
+//
+// Model IDs in our registry are prefixed with `openrouter/` (e.g.
+// `openrouter/bytedance/seedance-2.0`); we strip the prefix before
+// sending the wire request so OpenRouter receives the canonical slug
+// (e.g. `bytedance/seedance-2.0`).
+//
+// Image-to-video (i2v) is supported via `frame_images` with
+// `frame_type: "first_frame"` — the dispatcher already resolved the
+// project image into a base64 data URL in `ctx.imageRef`.
+// ---------------------------------------------------------------------------
+
+async function renderOpenRouterVideo(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  onProgress?: ProgressFn,
+): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no OpenRouter API key — configure it in Settings or set OPENROUTER_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
+
+  // Respect model-alias contract: credentials.model (from stored config)
+  // overrides ctx.wireModel (from OD_MEDIA_MODEL_ALIASES / resolveModelAlias).
+  // Then strip the `openrouter/` catalogue prefix so the wire model name
+  // matches OpenRouter's canonical slug (e.g. `bytedance/seedance-2.0`).
+  const resolved = (credentials.model || ctx.wireModel).trim();
+  const afterPrefix = resolved.startsWith('openrouter/')
+    ? resolved.slice('openrouter/'.length)
+    : resolved;
+
+  // Parse optional resolution suffix encoded in the model ID
+  // (e.g. `bytedance/seedance-2.0:1080p` → model `bytedance/seedance-2.0`,
+  // resolution `1080p`). When no suffix is present, default to 720p.
+  const RESOLUTION_SUFFIX_RE = /:(\d+p)$/;
+  const resSuffixMatch = afterPrefix.match(RESOLUTION_SUFFIX_RE);
+  const wireModel = resSuffixMatch
+    ? afterPrefix.slice(0, -resSuffixMatch[0].length)
+    : afterPrefix;
+  const resolution = resSuffixMatch?.[1] ?? '720p';
+
+  const aspectRatio = openRouterAspectFor(ctx.aspect);
+
+  // Build the request body.
+  const durationSec = ctx.length || 5;
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    prompt: ctx.prompt || 'A short cinematic clip.',
+    aspect_ratio: aspectRatio,
+    resolution,
+    duration: durationSec,
+  };
+
+  // Image-to-video: pass reference images via OpenRouter's
+  // `frame_images` + `input_references` arrays. Seedance 2.0 supports
+  // up to 9 images, 3 video clips, and 3 audio clips as inputs.
+  // The first image is treated as the first_frame for i2v; additional
+  // images go into input_references for style/content guidance.
+  if (ctx.imageRefs.length > 0) {
+    const [primary, ...extras] = ctx.imageRefs;
+    body.frame_images = [
+      {
+        type: 'image_url',
+        image_url: { url: primary!.dataUrl },
+        frame_type: 'first_frame',
+      },
+    ];
+    if (extras.length > 0) {
+      body.input_references = extras.map((ref) => ({
+        type: 'image_url',
+        image_url: { url: ref.dataUrl },
+      }));
+    }
+  } else if (ctx.imageRef && ctx.imageRef.dataUrl) {
+    // Backward compat: single --image param without --images.
+    body.frame_images = [
+      {
+        type: 'image_url',
+        image_url: { url: ctx.imageRef.dataUrl },
+        frame_type: 'first_frame',
+      },
+    ];
+  }
+
+  // ── Step 1: Submit the generation request ──────────────────────────
+  const submitResp = await fetch(`${baseUrl}/videos`, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+      // OpenRouter attribution headers per
+      // https://openrouter.ai/docs/app-attribution
+      'HTTP-Referer': 'https://opendesign.dev',
+      'X-Title': 'Open Design',
+    },
+    body: JSON.stringify(body),
+  });
+  const submitText = await submitResp.text();
+  if (!submitResp.ok) {
+    throw new Error(
+      `openrouter video submit ${submitResp.status}: ${truncate(submitText, 240)}`,
+    );
+  }
+  let submitData: any;
+  try {
+    submitData = JSON.parse(submitText);
+  } catch {
+    throw new Error(`openrouter video non-JSON: ${truncate(submitText, 200)}`);
+  }
+
+  const jobId = submitData?.id;
+  const pollingUrl = submitData?.polling_url;
+  if (!jobId || !pollingUrl) {
+    throw new Error(
+      `openrouter video submit returned no job id or polling_url: ${truncate(submitText, 200)}`,
+    );
+  }
+
+  // ── Step 2: Poll until completion ──────────────────────────────────
+  const startedAt = Date.now();
+  const configuredMaxMs = Number(process.env.OD_OPENROUTER_VIDEO_MAX_POLL_MS);
+  const maxMs =
+    Number.isFinite(configuredMaxMs) && configuredMaxMs >= 60_000
+      ? configuredMaxMs
+      : 30 * 60 * 1000; // 30 minutes default
+
+  let lastStatus = submitData?.status || 'pending';
+  let videoUrls: string[] | null = null;
+
+  if (typeof onProgress === 'function') {
+    const mode = ctx.imageRef ? 'i2v' : 't2v';
+    onProgress(
+      `openrouter ${mode} job ${jobId} (${wireModel}) accepted; polling status…`,
+    );
+  }
+
+  while (Date.now() - startedAt < maxMs) {
+    await sleep(8000);
+    const pollResp = await fetch(pollingUrl, {
+      headers: {
+        'authorization': `Bearer ${credentials.apiKey}`,
+        'HTTP-Referer': 'https://opendesign.dev',
+        'X-Title': 'Open Design',
+      },
+    });
+    const pollText = await pollResp.text();
+    if (!pollResp.ok) {
+      throw new Error(
+        `openrouter poll ${pollResp.status}: ${truncate(pollText, 240)}`,
+      );
+    }
+    let pollData: any;
+    try {
+      pollData = JSON.parse(pollText);
+    } catch {
+      throw new Error(`openrouter poll non-JSON: ${truncate(pollText, 200)}`);
+    }
+
+    lastStatus = pollData?.status || '';
+    if (typeof onProgress === 'function') {
+      const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+      onProgress(
+        `openrouter job ${jobId} status=${lastStatus || 'pending'} (elapsed ${elapsedSec}s)`,
+      );
+    }
+
+    if (lastStatus === 'completed') {
+      videoUrls = pollData?.unsigned_urls || null;
+      break;
+    }
+    if (
+      lastStatus === 'failed'
+      || lastStatus === 'expired'
+      || lastStatus === 'cancelled'
+    ) {
+      const reasonRaw =
+        pollData?.error?.message || pollData?.error || lastStatus;
+      const reason =
+        typeof reasonRaw === 'string' ? reasonRaw : JSON.stringify(reasonRaw);
+      throw new Error(`openrouter job ${lastStatus}: ${reason}`);
+    }
+  }
+
+  if (!videoUrls || videoUrls.length === 0) {
+    const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+    const ceilingSec = Math.round(maxMs / 1000);
+    throw new Error(
+      `openrouter video timed out after ${elapsedSec}s waiting for status=completed `
+      + `(last status: ${lastStatus || 'pending'}, ceiling ${ceilingSec}s). `
+      + `If your jobs legitimately need longer, raise OD_OPENROUTER_VIDEO_MAX_POLL_MS.`,
+    );
+  }
+
+  // ── Step 3: Download the video binary ──────────────────────────────
+  // unsigned_urls are often third-party CDNs where sending our API key
+  // would leak credentials. However, sometimes OpenRouter returns a proxied
+  // openrouter.ai URL that still requires authorization. We only attach the
+  // auth header if the host is explicitly allowlisted as openrouter.ai.
+  const contentUrl = videoUrls[0]!;
+  const parsedContentUrl = new URL(contentUrl);
+
+  const dlHeaders: Record<string, string> = {};
+  if (parsedContentUrl.hostname === 'openrouter.ai') {
+    dlHeaders['authorization'] = `Bearer ${credentials.apiKey}`;
+  }
+
+  const dlResp = await fetch(contentUrl, { headers: dlHeaders });
+  if (!dlResp.ok) {
+    throw new Error(`openrouter video download ${dlResp.status}`);
+  }
+  const arr = await dlResp.arrayBuffer();
+  const bytes = Buffer.from(arr);
+
+  return {
+    bytes,
+    providerNote: `openrouter/${wireModel} · ${aspectRatio} · ${bytes.length} bytes`,
+    suggestedExt: '.mp4',
+  };
+}
+
+function openRouterAspectFor(aspect?: string): string {
+  // OpenRouter normalises aspect ratios across providers. Our
+  // MEDIA_ASPECTS vocabulary is a strict subset — pass known values
+  // through, default to 16:9 for video.
+  if (
+    aspect === '1:1'
+    || aspect === '16:9'
+    || aspect === '9:16'
+    || aspect === '4:3'
+    || aspect === '3:4'
+  ) {
+    return aspect;
+  }
+  return '16:9';
 }
 
 async function renderLeonardoImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {

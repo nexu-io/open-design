@@ -24,6 +24,7 @@ import { skillCwdAliasSegment, SKILLS_CWD_ALIAS } from "./cwd-aliases.js";
 export const SKILL_ID_ALIASES = Object.freeze({
   "editorial-collage": "open-design-landing",
   "editorial-collage-deck": "open-design-landing-deck",
+  "taste-skill": "design-taste-frontend",
 });
 
 type SkillMode = "image" | "video" | "audio" | "deck" | "design-system" | "template" | "prototype";

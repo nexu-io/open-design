@@ -123,7 +123,11 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       toolUseId?: unknown;
       content?: unknown;
       isError?: unknown;
+      runId?: unknown;
     };
+    if (typeof body.runId === 'string' && body.runId.length > 0 && body.runId !== req.params.id) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'runId must match the path run id');
+    }
     const toolUseId = typeof body.toolUseId === 'string' ? body.toolUseId : '';
     const content = typeof body.content === 'string' ? body.content : '';
     const isError = body.isError === true;
@@ -828,6 +832,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
+          ...(validated.parsed!.hostname === 'openrouter.ai' ? {
+            'HTTP-Referer': 'https://opendesign.dev',
+            'X-Title': 'Open Design',
+          } : {}),
         },
         body: JSON.stringify(payload),
         redirect: 'error',

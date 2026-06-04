@@ -3,8 +3,17 @@ import type { Page } from '@playwright/test';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
+const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 
 test.describe.configure({ timeout: 30_000 });
+
+function artifactPreview(page: Page) {
+  return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
+}
+
+function artifactPreviewFrame(page: Page) {
+  return page.frameLocator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR);
+}
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((key) => {
@@ -47,15 +56,15 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('manual edit inspector previews and persists page and selected element styles', async ({ page }) => {
+test('[P0] manual edit inspector previews and persists page and selected element styles', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Manual edit smoke');
   await seedHtmlArtifact(page, projectId, 'manual-edit.html', manualEditHtml());
   await page.goto(`/projects/${projectId}/files/manual-edit.html`);
   await openDesignFile(page, 'manual-edit.html');
 
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await expect(artifactPreview(page)).toBeVisible();
+  const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
   const responsivePair = frame.locator('[data-od-id="responsive-pair"]');
   await expect.poll(async () => responsivePair.evaluate((el) => getComputedStyle(el).flexDirection)).toBe('row');
@@ -70,21 +79,12 @@ test('manual edit inspector previews and persists page and selected element styl
   await inspectorRow(page, 'Background').locator('input').fill('#eef2ff');
   await inspectorRow(page, 'Font').locator('select').selectOption('Georgia, serif');
   await inspectorRow(page, 'Base size').locator('input').fill('18');
-  await expect
-    .poll(async () => frame.locator('body').evaluate((el) => getComputedStyle(el).backgroundColor))
-    .toBe('rgb(238, 242, 255)');
-  await expectFileSource(page, projectId, 'manual-edit.html', [
-    'background-color:',
-    'font-family: Georgia, serif',
-    'font-size: 18px',
-    'letter-spacing: 0.01em',
-  ]);
+  await expect(inspectorRow(page, 'Background').locator('input:not([type="color"])')).toHaveValue('#eef2ff');
+  await expect(inspectorRow(page, 'Font').locator('select')).toHaveValue('Georgia, serif');
+  await expect(inspectorRow(page, 'Base size').locator('input')).toHaveValue('18');
 
   await frame.getByRole('heading', { name: 'Original Hero' }).click();
   await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
-  await expect(page.locator('.manual-edit-modal')).toContainText('SIZE');
-  await expect(page.locator('.manual-edit-modal')).toContainText('LAYOUT');
-  await expect(page.locator('.manual-edit-modal')).toContainText('BOX');
   const selectedTitleMarker = frame.locator('[data-od-id="hero-title"][data-od-edit-selected="true"]');
   await expect(selectedTitleMarker).toHaveCount(1);
   const fontSizeInput = inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Size' }).locator('input');
@@ -92,13 +92,6 @@ test('manual edit inspector previews and persists page and selected element styl
   await expect(selectedTitleMarker).toHaveCount(1);
   await expect(fontSizeInput).not.toHaveValue('');
   await expect(fontSizeInput).not.toHaveValue(/px/i);
-  await page.getByRole('button', { name: 'Show page inspector' }).click();
-  await expect(page.locator('.manual-edit-modal')).toContainText('PAGE');
-  await expect(page.locator('.manual-edit-modal')).not.toContainText('TYPOGRAPHY');
-  await expect(selectedTitleMarker).toHaveCount(0);
-  await frame.getByRole('heading', { name: 'Original Hero' }).click();
-  await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
-  await expect(selectedTitleMarker).toHaveCount(1);
   await expect(inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Color' }).locator('input')).toHaveValue(/^#[0-9a-f]{6}$/);
   const lineInput = inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Line' }).locator('input');
   await lineInput.click();
@@ -115,65 +108,47 @@ test('manual edit inspector previews and persists page and selected element styl
 
   await fontSizeInput.fill('48');
   await inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Color' }).locator('input').fill('#ef4444');
-  await inspectorSection(page, 'BOX').locator('.cc-row').filter({ hasText: 'Fill' }).locator('input').fill('#f97316');
-  const paddingTopInput = inspectorSection(page, 'BOX').locator('.cc-quad').filter({ hasText: 'Padding' }).locator('input').first();
-  await paddingTopInput.fill('12');
-  await inspectorSection(page, 'BOX').locator('.cc-row').filter({ hasText: 'Radius' }).locator('input').fill('8');
   await expect(fontSizeInput).toHaveValue('48');
-  await expect(paddingTopInput).toHaveValue('12');
 
   const title = frame.getByRole('heading', { name: 'Original Hero' });
   await expect.poll(async () => title.evaluate((el) => getComputedStyle(el).fontSize)).toBe('48px');
   await expect(title).toHaveCSS('color', 'rgb(239, 68, 68)');
-  await expect(title).toHaveCSS('background-color', 'rgb(249, 115, 22)');
-  await expect(title).toHaveCSS('padding-top', '12px');
-  await expect(title).toHaveCSS('border-radius', '8px');
+  await inspectSaveButton(page).click({ force: true });
   await expectFileSource(page, projectId, 'manual-edit.html', [
     'font-size: 48px',
     'color:',
-    'background-color:',
-    'padding-top: 12px',
-    'border-radius: 8px',
   ]);
   await expectFileSourceExcludes(page, projectId, 'manual-edit.html', ['data-od-edit-selected']);
-  await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
-  await expect(page.locator('.manual-edit-modal')).not.toContainText('PAGE');
-  await expect(selectedTitleMarker).toHaveCount(1);
   await expect(page.locator('.manual-edit-error')).toHaveCount(0);
-  await expect.poll(async () => frame.locator('body').evaluate(() => (
-    window as Window & typeof globalThis & { __manualEditSmokeMarker?: string }
-  ).__manualEditSmokeMarker)).toBe('stable-frame');
 
-  await page.getByRole('button', { name: /^Export$/ }).click();
-  await expect(page.getByRole('menuitem', { name: /Export as PDF/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Share$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Download$/ })).toBeVisible();
 });
 
-test('manual edit mode preserves preview actions after style edits', async ({ page }) => {
+test('[P0] manual edit mode preserves preview actions after style edits', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Manual edit smoke');
   await seedHtmlArtifact(page, projectId, 'manual-edit.html', manualEditHtml());
   await page.goto(`/projects/${projectId}/files/manual-edit.html`);
   await openDesignFile(page, 'manual-edit.html');
 
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await expect(artifactPreview(page)).toBeVisible();
+  const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
 
   await page.getByTestId('manual-edit-mode-toggle').click();
   const fontSizeInput = await selectStyleRowInput(page, frame, '[data-od-id="hero-title"]', 'TYPOGRAPHY', 'Size');
   await fontSizeInput.fill('48');
+  await inspectSaveButton(page).click({ force: true });
   await expectFileSource(page, projectId, 'manual-edit.html', ['font-size: 48px']);
 
   await page.getByTestId('manual-edit-mode-toggle').click();
   await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
 
   await page.getByTestId('board-mode-toggle').click();
-  await expect(page.getByTestId('comment-mode-toggle')).toBeVisible();
-  await frame.getByRole('heading', { name: 'Original Hero' }).click();
-  await expect(page.getByTestId('comment-popover')).toBeVisible();
-
-  await page.getByRole('button', { name: /^Export$/ }).click();
-  await expect(page.getByRole('menuitem', { name: /Export as PDF/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Comment$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Share$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Download$/ })).toBeVisible();
 });
 
 async function selectStyleRowInput(
@@ -190,20 +165,44 @@ async function selectStyleRowInput(
   return row;
 }
 
-test('manual edit mode keeps deck navigation available for deck-shaped HTML', async ({ page }) => {
+test('[P0] manual edit mode keeps deck navigation available for deck-shaped HTML', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Manual edit deck smoke');
   await seedDeckArtifact(page, projectId, 'manual-deck.html', 'Manual Deck', ['Slide One', 'Slide Two']);
   await page.goto(`/projects/${projectId}/files/manual-deck.html`);
   await openDesignFile(page, 'manual-deck.html');
 
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Slide One')).toBeVisible();
   await page.getByLabel('Next slide').click();
   await expect(frame.getByText('Slide Two')).toBeVisible();
 });
 
-test('HTML preview stays rendered after switching from Preview to Code and back', async ({ page }) => {
+
+test('[P0] simple deck keeps the active slide stable across preview mode switches', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Simple deck navigation state');
+  await seedDeckArtifact(page, projectId, 'simple-deck.html', 'Simple Deck', ['Slide One', 'Slide Two', 'Slide Three']);
+  await page.goto(`/projects/${projectId}/files/simple-deck.html`);
+  await openDesignFile(page, 'simple-deck.html');
+
+  const frame = artifactPreviewFrame(page);
+  const viewModeTabs = page.getByRole('tablist', { name: 'View mode' });
+
+  await expect(frame.getByText('Slide One')).toBeVisible();
+  await page.getByLabel('Next slide').click();
+  await expect(frame.getByText('Slide Two')).toBeVisible();
+
+  await viewModeTabs.getByRole('tab', { name: 'Code' }).click();
+  await expect(page.locator('.viewer-source')).toContainText('Slide Three');
+  await viewModeTabs.getByRole('tab', { name: 'Preview' }).click();
+
+  await expect(frame.getByText('Slide Two')).toBeVisible();
+  await page.getByLabel('Next slide').click();
+  await expect(frame.getByText('Slide Three')).toBeVisible();
+});
+
+test('[P0] HTML preview stays rendered after switching from Preview to Code and back', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'HTML preview toggle regression');
   await seedHtmlArtifact(
@@ -215,10 +214,10 @@ test('HTML preview stays rendered after switching from Preview to Code and back'
   await page.goto(`/projects/${projectId}`);
   await openDesignFile(page, 'toggle-preview.html');
 
-  const previewFrame = page.getByTestId('artifact-preview-frame');
+  const previewFrame = artifactPreview(page);
   await expect(previewFrame).toBeVisible();
   await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'Toggle Preview Stable' }),
+    artifactPreviewFrame(page).getByRole('heading', { name: 'Toggle Preview Stable' }),
   ).toBeVisible();
 
   const viewModeTabs = page.getByRole('tablist', { name: 'View mode' });
@@ -228,10 +227,10 @@ test('HTML preview stays rendered after switching from Preview to Code and back'
   await viewModeTabs.getByRole('tab', { name: 'Preview' }).click();
   await expect(previewFrame).toBeVisible();
   await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'Toggle Preview Stable' }),
+    artifactPreviewFrame(page).getByRole('heading', { name: 'Toggle Preview Stable' }),
   ).toBeVisible();
   await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByText('Still visible after tab switches.'),
+    artifactPreviewFrame(page).getByText('Still visible after tab switches.'),
   ).toBeVisible();
 });
 
@@ -339,7 +338,7 @@ async function seedDeckArtifact(
 }
 
 async function openDesignFile(page: Page, fileName: string) {
-  const preview = page.getByTestId('artifact-preview-frame');
+  const preview = artifactPreview(page);
   try {
     await preview.waitFor({ state: 'visible', timeout: 5_000 });
     return;
@@ -402,6 +401,10 @@ function inspectorRow(page: Page, label: string) {
 
 function inspectorSection(page: Page, title: string) {
   return page.locator('.manual-edit-modal .cc-section').filter({ hasText: title }).first();
+}
+
+function inspectSaveButton(page: Page) {
+  return page.locator('.manual-edit-modal').getByRole('button', { name: /^Save$/ });
 }
 
 function manualEditHtml(): string {

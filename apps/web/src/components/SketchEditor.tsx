@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button, Input } from '@open-design/components';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
 import { readDefaultSketchToolColor } from './sketch-colors';
@@ -245,30 +246,30 @@ export function SketchEditor({
           className="sketch-size"
         />
         <span className="sketch-divider" />
-        <button className="ghost" onClick={handleUndo} disabled={items.length === 0}>
+        <Button variant="ghost" onClick={handleUndo} disabled={items.length === 0}>
           {t('sketch.undo')}
-        </button>
-        <button className="ghost" onClick={handleClear} disabled={!canClear}>
+        </Button>
+        <Button variant="ghost" onClick={handleClear} disabled={!canClear}>
           {t('sketch.clear')}
-        </button>
+        </Button>
         <span className="sketch-spacer" />
         <span className="sketch-name" title={fileName}>
           {fileName}
           {dirty ? ' •' : ''}
         </span>
         {onCancel ? (
-          <button className="ghost" onClick={onCancel}>
+          <Button variant="ghost" onClick={onCancel}>
             {t('sketch.close')}
-          </button>
+          </Button>
         ) : null}
-        <button
-          className="primary"
+        <Button
+          variant="primary"
           onClick={handleSave}
           disabled={saving || !canSave}
           aria-label={saving ? t('sketch.saving') : showSaved ? t('sketch.saved') : t('common.save')}
         >
           {saving ? t('sketch.saving') : showSaved ? <Icon name="check" size={14} /> : t('common.save')}
-        </button>
+        </Button>
       </div>
       <div className="sketch-canvas-wrap" ref={wrapRef}>
         <canvas
@@ -288,7 +289,7 @@ export function SketchEditor({
             </div>
             <label>
               <span>{t('sketch.textPrompt')}</span>
-              <input
+              <Input
                 type="text"
                 value={textModalValue}
                 autoFocus
@@ -305,17 +306,16 @@ export function SketchEditor({
               />
             </label>
             <div className="modal-foot">
-              <button type="button" className="ghost" onClick={cancelTextModal}>
+              <Button variant="ghost" onClick={cancelTextModal}>
                 {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                className="primary"
+              </Button>
+              <Button
+                variant="primary"
                 disabled={!textModalValue.trim()}
                 onClick={submitTextModal}
               >
                 {t('common.save')}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

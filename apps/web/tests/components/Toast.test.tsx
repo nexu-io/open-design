@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Toast } from '../../src/components/Toast';
@@ -36,12 +36,30 @@ describe('Toast', () => {
     expect(onDismiss).not.toHaveBeenCalled();
   });
 
-  it('auto-dismisses after ttlMs when code is not present', () => {
+  it('auto-dismisses at ttlMs when code is not present, with the exit fade playing inside the window', () => {
     vi.useFakeTimers();
     const onDismiss = vi.fn();
-    render(<Toast message="folder opened" ttlMs={2000} onDismiss={onDismiss} />);
-    vi.advanceTimersByTime(2001);
+    const { container } = render(
+      <Toast message="folder opened" ttlMs={2000} onDismiss={onDismiss} />,
+    );
+    // The fade-out begins before the deadline (ttlMs - exit), so the toast is
+    // already in its leaving state just shy of ttlMs but has not unmounted yet.
+    act(() => {
+      vi.advanceTimersByTime(1999);
+    });
+    expect(container.querySelector('.od-toast.leaving')).not.toBeNull();
+    expect(onDismiss).not.toHaveBeenCalled();
+    // onDismiss (which unmounts the toast) fires at exactly ttlMs, so the exit
+    // animation does not extend the toast's lifetime beyond ttlMs.
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a leading status glyph for the success tone', () => {
+    const { container } = render(<Toast message="Screenshot copied to clipboard" tone="success" />);
+    expect(container.querySelector('.od-toast.tone-success .od-toast-icon')).not.toBeNull();
   });
 
   it('renders a Dismiss button when both code and onDismiss are present', () => {

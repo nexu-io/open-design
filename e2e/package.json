@@ -1,10 +1,19 @@
 {
   "name": "@open-design/e2e",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "vitest run -c vitest.config.ts",
+    "test:p0": "vitest run -c vitest.config.ts tests specs -t '\\[P0\\]'",
+    "test:p0p1": "vitest run -c vitest.config.ts tests specs -t '\\[P[01]\\]'",
+    "test:p1": "vitest run -c vitest.config.ts tests specs -t '\\[P1\\]'",
+    "test:p2": "vitest run -c vitest.config.ts tests specs -t '\\[P2\\]'",
+    "test:ui": "playwright test -c playwright.config.ts ui",
+    "test:ui:p0": "playwright test -c playwright.config.ts ui --grep '\\[P0\\]'",
+    "test:ui:p0p1": "playwright test -c playwright.config.ts ui --grep '\\[P[01]\\]'",
+    "test:ui:p1": "playwright test -c playwright.config.ts ui --grep '\\[P1\\]'",
+    "test:ui:p2": "playwright test -c playwright.config.ts ui --grep '\\[P2\\]'",
     "test:ui:critical": "playwright test -c playwright.config.ts ui/critical-smoke.test.ts ui/entry-chrome-flows.test.ts",
     "test:ui:extended": "OD_PLAYWRIGHT_TIMEOUT=10000 playwright test -c playwright.config.ts ui/app.test.ts ui/api-empty-response.test.ts ui/app-restoration.test.ts ui/app-manual-edit.test.ts ui/app-design-files.test.ts ui/entry-configuration-flows.test.ts ui/project-management-flows.test.ts ui/settings-connectors-auth-happy-path.test.ts ui/settings-connectors-auth-recovery.test.ts ui/settings-api-protocol.test.ts ui/settings-local-cli-codex-fallback.test.ts ui/settings-memory-routines.test.ts ui/workspace-keyboard-flows.test.ts ui/real-daemon-run.test.ts ui/critique-theater.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"

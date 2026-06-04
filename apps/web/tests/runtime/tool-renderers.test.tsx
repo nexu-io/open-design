@@ -211,4 +211,17 @@ describe('ToolCard dispatch', () => {
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
   });
+
+  it('shows file edit error details alongside the target path', () => {
+    const markup = renderToStaticMarkup(
+      <ToolCard
+        use={use({ file_path: 'C:\\repo\\canvas2-nodes.jsx', old_string: 'a', new_string: 'b' }, 'Edit')}
+        result={err('String to replace was not found in C:\\repo\\canvas2-nodes.jsx')}
+        runStreaming={false}
+      />,
+    );
+
+    expect(markup).toContain('C:\\repo\\canvas2-nodes.jsx');
+    expect(markup).toContain('String to replace was not found');
+  });
 });

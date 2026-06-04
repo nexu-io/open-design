@@ -16,7 +16,7 @@ Parameters:
     Description: 'REQUIRED: The full repository URI and tag for the Open Design Docker image (e.g., your-registry/open-design:latest). You must provide an explicit image as the public Docker Hub baseline is currently unmaintained.'
   AllowedSourceIp:
     Type: String
-    AllowedPattern: '^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/(1[6-9]|2[0-9]|3[0-2])$'    
+    AllowedPattern: '^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/(1[6-9]|2[0-9]|3[0-2])$'
     ConstraintDescription: 'Must be a valid IPv4 CIDR range with a subnet mask between /16 and /32 (e.g., 192.168.1.0/24 or 10.0.0.1/32).'
     MinLength: 1
     Description: 'REQUIRED: The specific IPv4 CIDR block allowlisted to access the ALB. Ensure this is your VPN or corporate range to avoid unintended public exposure. Accepts any valid IPv4 range with a subnet mask between /16 and /32.'
@@ -421,7 +421,7 @@ Resources:
           Image: !Ref DockerImage
           Environment:
             - Name: OD_ALLOWED_ORIGINS
-              Value: !If 
+              Value: !If
                 - UseCustomDomain
                 - !Sub 'https://${CustomDomainName}'
                 - !Sub 'http://${LoadBalancer.DNSName}'
@@ -463,7 +463,7 @@ Resources:
               cat << 'EOF' > /tmp/default.conf.template
               server {
                   listen ${PROXY_PORT};
-                  
+
                   location / {
                       proxy_pass http://${OD_BIND_HOST}:${OD_WEB_PORT};
                       proxy_set_header Host $host;
@@ -480,9 +480,9 @@ Resources:
                       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
                       proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
                       proxy_set_header X-Forwarded-Host $http_x_forwarded_host;
-                      
+
                       proxy_set_header Authorization "Bearer ${PROXY_API_TOKEN}";
-                      
+
                       proxy_buffering off;
                       proxy_read_timeout 600s;
                       proxy_send_timeout 600s;
@@ -537,7 +537,7 @@ Resources:
 Outputs:
   AppUrl:
     Description: 'URL of the Load Balancer/Custom Domain'
-    Value: !If 
+    Value: !If
       - UseCustomDomain
       - !Sub 'https://${CustomDomainName}'
       - !Sub 'http://${LoadBalancer.DNSName}'

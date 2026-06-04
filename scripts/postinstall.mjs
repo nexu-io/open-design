@@ -8,6 +8,7 @@ const repoRoot = resolve(scriptDir, "..");
 
 const buildTargets = [
   "packages/contracts",
+  "packages/components",
   "packages/platform",
   "packages/download",
   "packages/host",

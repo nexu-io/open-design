@@ -140,3 +140,37 @@ COLIMA_BUILD_SWAP_CLEANUP_FORCE=1 COLIMA_BUILD_SWAPFILE=/custom-swapfile deploy/
 `cleanup` removes the default helper path and the old helper path. If you set a
 custom `COLIMA_BUILD_SWAPFILE`, cleanup refuses to remove it unless
 `COLIMA_BUILD_SWAP_CLEANUP_FORCE=1` is also set.
+
+### Docker Desktop on macOS
+
+When running Docker Compose on macOS with `OD_API_TOKEN` enabled, Docker Desktop bridge networking may cause the daemon to see API requests as non-loopback peers. In that case, the web UI can fail with:
+
+`Authorization: Bearer <OD_API_TOKEN> required`
+
+Workaround:
+
+1. Enable host networking in Docker Desktop:
+   `Docker Desktop → Settings → Resources → Network → Enable host networking → Apply and restart`
+
+2. Use a local override to docker-compose.yml:
+
+   ```yaml
+   services:
+     open-design:
+       network_mode: host
+       ports: []
+   ```
+
+3. Recreate the container:
+
+   ```bash
+   docker compose down
+   docker compose up -d --force-recreate
+   ```
+
+4. Verify:
+
+   ```bash
+   docker inspect open-design --format '{{.HostConfig.NetworkMode}}'
+   # host
+   ```

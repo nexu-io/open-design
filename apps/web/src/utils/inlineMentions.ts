@@ -3,6 +3,7 @@ export type InlineMentionKind =
   | 'skill'
   | 'mcp'
   | 'file'
+  | 'workspace'
   | 'connector'
   | 'unknown';
 
@@ -35,6 +36,7 @@ export function buildInlineMentionParts(
   options: { highlightUnknown?: boolean } = {},
 ): InlineMentionPart[] | null {
   if (!text) return null;
+  if (!text.includes('@')) return null;
   const highlightUnknown = options.highlightUnknown ?? true;
   const known = normalizeEntities(entities);
   const parts: InlineMentionPart[] = [];
@@ -66,9 +68,17 @@ export function buildInlineMentionParts(
   return found ? coalesceTextParts(parts) : null;
 }
 
+// Cache the normalized+sorted list keyed by the input array's identity. The
+// composer feeds the SAME memoized `knownEntities` array on every keystroke, so
+// without this the full map/filter/sort re-ran per character (and per render
+// for the highlight path). A WeakMap lets the entry GC when the array changes.
+const normalizedEntitiesCache = new WeakMap<InlineMentionEntity[], InlineMentionEntity[]>();
+
 function normalizeEntities(entities: InlineMentionEntity[]): InlineMentionEntity[] {
+  const cached = normalizedEntitiesCache.get(entities);
+  if (cached) return cached;
   const seen = new Set<string>();
-  return entities
+  const normalized = entities
     .map((entity) => {
       const token = entity.token ?? inlineMentionToken(entity.label);
       return { ...entity, token };
@@ -81,6 +91,8 @@ function normalizeEntities(entities: InlineMentionEntity[]): InlineMentionEntity
       return true;
     })
     .sort((a, b) => (b.token?.length ?? 0) - (a.token?.length ?? 0));
+  normalizedEntitiesCache.set(entities, normalized);
+  return normalized;
 }
 
 function findNextKnownMention(
