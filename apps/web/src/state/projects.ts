@@ -254,6 +254,11 @@ export async function createConversation(
     seedFromConversationId?: string | null;
     forkAfterMessageId?: string | null;
     sessionMode?: ChatSessionMode;
+    // Fork snapshot: the exact in-memory messages to copy (up to the fork
+    // point). Lets the daemon fork from what the user sees even when the fork
+    // point was never persisted (e.g. a run that errored before its assistant
+    // message reached the database).
+    seedMessages?: ChatMessage[];
   },
 ): Promise<Conversation | null> {
   try {
@@ -266,6 +271,9 @@ export async function createConversation(
     }
     if (opts?.forkAfterMessageId) {
       body.forkAfterMessageId = opts.forkAfterMessageId;
+    }
+    if (opts?.seedMessages && opts.seedMessages.length > 0) {
+      body.seedMessages = opts.seedMessages;
     }
     const resp = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations`,
