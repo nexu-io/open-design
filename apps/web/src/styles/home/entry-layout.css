@@ -2318,9 +2318,11 @@
 }
 
 .onboarding-view__model-select-wrap .onboarding-view__model-select {
+  appearance: none;
   width: 100%;
   min-height: 42px;
   padding: 0 34px 0 13px;
+  border: 1px solid var(--border);
   border-radius: 8px;
   background-color: var(--bg-panel);
   color: var(--text-strong);
@@ -2339,6 +2341,15 @@
 .onboarding-view__model-select-wrap .onboarding-view__model-select:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
   outline-offset: 2px;
+}
+
+.onboarding-view__model-select-chevron {
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  color: var(--text-muted);
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 
 .onboarding-view__benefits {
@@ -3706,4 +3717,783 @@
     max-width: min(240px, calc(100% - 72px));
   }
 
+}
+
+/* Notion-style centered onboarding visual treatment. */
+.entry-shell--onboarding {
+  --bg: #fcfbf9;
+  --bg-app: #fcfbf9;
+  --bg-panel: #ffffff;
+  --bg-subtle: #f6f6f3;
+  --bg-muted: #eeeeea;
+  --bg-elevated: #ffffff;
+  --border: #e7e5df;
+  --border-strong: #c9c6bd;
+  --border-soft: #f0eee9;
+  --text: #2a2925;
+  --text-strong: #11110f;
+  --text-muted: #77736a;
+  --text-soft: #9d998f;
+  --text-faint: #c8c5bb;
+  --accent: #10a37f;
+  --accent-strong: #0f8f70;
+  --accent-hover: #0f8f70;
+  --accent-contrast: #ffffff;
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.entry-shell--onboarding .entry-onboarding-modal {
+  height: 100dvh;
+  background: var(--bg);
+}
+
+.entry-shell--onboarding .onboarding-view {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  justify-items: center;
+  width: min(820px, 100%);
+  min-height: 100dvh;
+  padding: 88px 24px 44px;
+  overflow: hidden;
+}
+
+.entry-shell--onboarding .onboarding-view::after {
+  display: none;
+}
+
+.entry-shell--onboarding .onboarding-view__hero,
+.entry-shell--onboarding .onboarding-view__steps,
+.entry-shell--onboarding .onboarding-view__body {
+  position: relative;
+  z-index: 1;
+  grid-column: 1;
+  grid-row: auto;
+}
+
+.entry-shell--onboarding .onboarding-view__hero {
+  display: none;
+  justify-items: center;
+  gap: 4px;
+  max-width: 560px;
+  padding: 0;
+  text-align: center;
+}
+
+.entry-shell--onboarding .onboarding-view__hero::before {
+  display: none;
+}
+
+.entry-shell--onboarding .onboarding-view__kicker {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 560;
+  text-transform: none;
+}
+
+.entry-shell--onboarding .onboarding-view__hero h1 {
+  margin: 0;
+  color: var(--text-strong);
+  font-family: "OpenAI Sans", Inter, var(--sans);
+  font-size: 34px;
+  font-weight: 610;
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+
+.entry-shell--onboarding .onboarding-view__hero p {
+  max-width: 42ch;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.entry-shell--onboarding .onboarding-view__steps {
+  display: none;
+  flex-wrap: wrap;
+  justify-content: center;
+  justify-self: center;
+  align-self: center;
+  gap: 10px;
+  width: auto;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+}
+
+.entry-shell--onboarding .onboarding-view__steps li {
+  display: inline-flex;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+}
+
+.entry-shell--onboarding .onboarding-view__steps li:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-strong);
+}
+
+.entry-shell--onboarding .onboarding-view__steps li span {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 520;
+}
+
+.entry-shell--onboarding .onboarding-view__steps li button {
+  color: inherit;
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.entry-shell--onboarding .onboarding-view__steps li.is-active {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-strong);
+  box-shadow: none;
+}
+
+.entry-shell--onboarding .onboarding-view__steps li.is-active span {
+  border-color: var(--text-strong);
+  background: var(--text-strong);
+  color: var(--bg-panel);
+}
+
+.entry-shell--onboarding .onboarding-view__steps li.is-done {
+  color: var(--accent-strong);
+}
+
+.entry-shell--onboarding .onboarding-view__steps li.is-done span {
+  border-color: var(--accent);
+  background: transparent;
+  color: var(--accent-strong);
+}
+
+.entry-shell--onboarding .onboarding-view__body {
+  width: min(760px, 100%);
+  align-self: auto;
+  justify-items: center;
+  margin: 0;
+}
+
+.entry-shell--onboarding .onboarding-view__content {
+  display: grid;
+  justify-items: center;
+  width: 100%;
+  gap: 24px;
+}
+
+.entry-shell--onboarding .onboarding-view__panel,
+.entry-shell--onboarding .onboarding-view__design-system-create {
+  width: 100%;
+  gap: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.entry-shell--onboarding .onboarding-view__panel-head {
+  justify-items: center;
+  gap: 10px;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 0;
+  text-align: center;
+}
+
+.entry-shell--onboarding .onboarding-view__panel-head h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 31px;
+  font-weight: 620;
+  line-height: 1.18;
+}
+
+.entry-shell--onboarding .onboarding-view__panel-head p {
+  max-width: 58ch;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.entry-shell--onboarding .onboarding-view__runtime-stack,
+.entry-shell--onboarding .onboarding-view__grid,
+.entry-shell--onboarding .onboarding-view__form-grid,
+.entry-shell--onboarding .onboarding-view__ds-intro {
+  gap: 18px;
+}
+
+.entry-shell--onboarding .onboarding-view__alternatives,
+.entry-shell--onboarding .onboarding-view__form-grid,
+.entry-shell--onboarding .onboarding-view__ds-points {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 20px;
+}
+
+.entry-shell--onboarding .onboarding-view__grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.entry-shell--onboarding .onboarding-view__card,
+.entry-shell--onboarding .onboarding-view__card--featured,
+.entry-shell--onboarding .onboarding-view__card--featured:not(.is-selected),
+.entry-shell--onboarding .onboarding-view__card--featured.is-selected,
+.entry-shell--onboarding .onboarding-view__setup-panel,
+.entry-shell--onboarding .onboarding-view__handoff-status,
+.entry-shell--onboarding .onboarding-view__test-status,
+.entry-shell--onboarding .onboarding-view__scan-status,
+.entry-shell--onboarding .onboarding-view__empty-slice,
+.entry-shell--onboarding .onboarding-view__ds-points > div,
+.entry-shell--onboarding .onboarding-view__select-menu {
+  border-color: var(--border);
+  background: var(--bg-panel);
+  box-shadow: none;
+}
+
+.entry-shell--onboarding .onboarding-view__card {
+  grid-template-columns: 34px minmax(0, 1fr);
+  min-height: 88px;
+  padding: 14px;
+  border-radius: 10px;
+  gap: 12px;
+}
+
+.entry-shell--onboarding .onboarding-view__alternatives .onboarding-view__card {
+  grid-template-columns: 34px minmax(0, 1fr);
+  min-height: 88px;
+  padding: 14px;
+}
+
+.entry-shell--onboarding
+  .onboarding-view__runtime-stack > .onboarding-view__alternatives
+  .onboarding-view__card {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  justify-items: center;
+  min-height: 238px;
+  padding: 30px 26px 28px;
+  text-align: center;
+}
+
+.entry-shell--onboarding
+  .onboarding-view__runtime-stack > .onboarding-view__alternatives
+  .onboarding-view__icon {
+  width: 148px;
+  height: 108px;
+  margin-bottom: 16px;
+  border: 0;
+  border-radius: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+.entry-shell--onboarding
+  .onboarding-view__runtime-stack > .onboarding-view__alternatives
+  .onboarding-view__card:nth-child(1)
+  .onboarding-view__icon {
+  background-image: url("/onboarding-local-agent-cutout.png");
+}
+
+.entry-shell--onboarding
+  .onboarding-view__runtime-stack > .onboarding-view__alternatives
+  .onboarding-view__card:nth-child(2)
+  .onboarding-view__icon {
+  background-image: url("/onboarding-model-key-cutout.png");
+}
+
+.entry-shell--onboarding
+  .onboarding-view__runtime-stack > .onboarding-view__alternatives
+  .onboarding-view__icon
+  svg {
+  display: none;
+}
+
+.entry-shell--onboarding
+  .onboarding-view__runtime-stack > .onboarding-view__alternatives
+  .onboarding-view__card-copy,
+.entry-shell--onboarding
+  .onboarding-view__runtime-stack > .onboarding-view__alternatives
+  .onboarding-view__card-top {
+  justify-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.entry-shell--onboarding
+  .onboarding-view__runtime-stack > .onboarding-view__alternatives
+  .onboarding-view__card-copy {
+  gap: 10px;
+}
+
+.entry-shell--onboarding
+  .onboarding-view__runtime-stack > .onboarding-view__alternatives
+  .onboarding-view__card strong {
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.entry-shell--onboarding
+  .onboarding-view__runtime-stack > .onboarding-view__alternatives
+  .onboarding-view__card small {
+  max-width: 31ch;
+  font-size: 13px;
+  line-height: 1.58;
+}
+
+.entry-shell--onboarding .onboarding-view__card:hover {
+  border-color: var(--border-strong);
+  background: #ffffff;
+  box-shadow: none;
+  transform: none;
+}
+
+.entry-shell--onboarding .onboarding-view__card.is-selected,
+.entry-shell--onboarding .onboarding-view__card--featured.is-selected {
+  border-color: var(--text-strong);
+  background: var(--bg-panel);
+  box-shadow: none;
+}
+
+.entry-shell--onboarding .onboarding-view__card.is-selected::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border: 1px solid var(--text-strong);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.entry-shell--onboarding .onboarding-view__amr-cloud-card {
+  width: 100%;
+}
+
+.entry-shell--onboarding .onboarding-view__card--featured.onboarding-view__card--amr {
+  grid-template-areas:
+    "amr-art amr-identity"
+    "amr-art amr-benefits"
+    "amr-art amr-model";
+  grid-template-columns: minmax(190px, 0.42fr) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 28px;
+  row-gap: 10px;
+  min-height: 236px;
+  padding: 26px 30px;
+  overflow: hidden;
+}
+
+.entry-shell--onboarding .onboarding-view__card--featured.onboarding-view__card--amr::before {
+  content: "";
+  grid-area: amr-art;
+  align-self: center;
+  justify-self: center;
+  width: min(230px, 100%);
+  aspect-ratio: 420 / 260;
+  background: url("/onboarding-amr-cloud-cutout.png") center / contain no-repeat;
+}
+
+.entry-shell--onboarding .onboarding-view__card--featured.onboarding-view__card--amr::after {
+  z-index: 2;
+}
+
+.entry-shell--onboarding .onboarding-view__identity {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.entry-shell--onboarding .onboarding-view__card--amr .onboarding-view__identity {
+  grid-area: amr-identity;
+  align-self: end;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  align-items: center;
+}
+
+.entry-shell--onboarding .onboarding-view__card--amr.is-selected .onboarding-view__identity {
+  border-color: transparent;
+  background: transparent;
+}
+
+.entry-shell--onboarding .onboarding-view__card--amr .onboarding-view__identity > .onboarding-view__icon {
+  display: none;
+}
+
+.entry-shell--onboarding .onboarding-view__card--amr .onboarding-view__card-model {
+  grid-area: amr-model;
+  align-self: stretch;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.entry-shell--onboarding .onboarding-view__benefit-aside {
+  grid-area: amr-benefits;
+  width: 100%;
+}
+
+.entry-shell--onboarding .onboarding-view__card--amr .onboarding-view__benefit-stack {
+  display: block;
+}
+
+.entry-shell--onboarding .onboarding-view__card--amr .onboarding-view__benefits,
+.entry-shell--onboarding .onboarding-view__card--amr .onboarding-view__upcoming-benefits {
+  gap: 8px;
+}
+
+.entry-shell--onboarding .onboarding-view__card--amr .onboarding-view__upcoming-benefits {
+  display: none;
+}
+
+.entry-shell--onboarding .onboarding-view__card--amr .onboarding-view__benefits {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.entry-shell--onboarding .onboarding-view__card--amr .onboarding-view__benefit,
+.entry-shell--onboarding
+  .onboarding-view__card--amr
+  .onboarding-view__benefit-aside
+  .onboarding-view__benefits
+  > .onboarding-view__benefit {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.entry-shell--onboarding .onboarding-view__card--amr .onboarding-view__benefit:not(:last-child)::after {
+  content: "·";
+  margin-left: 8px;
+  color: var(--text-faint);
+}
+
+.entry-shell--onboarding .onboarding-view__icon,
+.entry-shell--onboarding .onboarding-view__card--featured .onboarding-view__icon {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-strong);
+}
+
+.entry-shell--onboarding .onboarding-view__icon.onboarding-view__icon--asset,
+.entry-shell--onboarding
+  .onboarding-view__card--featured
+  .onboarding-view__icon.onboarding-view__icon--asset {
+  border: 0;
+  background: transparent;
+}
+
+.entry-shell--onboarding .onboarding-view__card strong {
+  font-size: 14px;
+  font-weight: 620;
+}
+
+.entry-shell--onboarding .onboarding-view__card--featured strong {
+  font-size: 16px;
+}
+
+.entry-shell--onboarding .onboarding-view__card small,
+.entry-shell--onboarding .onboarding-view__setup-head p,
+.entry-shell--onboarding .onboarding-view__scan-hint,
+.entry-shell--onboarding .onboarding-view__handoff-status small {
+  color: var(--text-muted);
+}
+
+.entry-shell--onboarding .onboarding-view__badge,
+.entry-shell--onboarding .onboarding-view__benefit,
+.entry-shell--onboarding .onboarding-view__benefit--hero,
+.entry-shell--onboarding .onboarding-view__benefit--upcoming,
+.entry-shell--onboarding
+  .onboarding-view__benefit-aside
+  .onboarding-view__benefits
+  > .onboarding-view__benefit {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+  font-weight: 520;
+}
+
+.entry-shell--onboarding .onboarding-view__badge {
+  color: var(--text-strong);
+}
+
+.entry-shell--onboarding .onboarding-view__setup-panel {
+  gap: 16px;
+  padding: 18px;
+}
+
+.entry-shell--onboarding .onboarding-view__setup-head {
+  gap: 10px;
+}
+
+.entry-shell--onboarding .onboarding-view__setup-head strong {
+  font-size: 12px;
+}
+
+.entry-shell--onboarding .onboarding-view__setup-head p {
+  font-size: 11.5px;
+}
+
+.entry-shell--onboarding .onboarding-view__agent-strip {
+  gap: 8px;
+}
+
+.entry-shell--onboarding .onboarding-view__agent-chip {
+  min-height: 44px;
+  padding: 8px 10px;
+}
+
+.entry-shell--onboarding .onboarding-view__model-select-wrap .onboarding-view__model-select,
+.entry-shell--onboarding .onboarding-view__select-trigger,
+.entry-shell--onboarding .onboarding-view__inline-field input,
+.entry-shell--onboarding .onboarding-view__mini-button,
+.entry-shell--onboarding .onboarding-view__field-row button,
+.entry-shell--onboarding .onboarding-view__protocol-strip button,
+.entry-shell--onboarding .onboarding-view__ds-skip,
+.entry-shell--onboarding .onboarding-view__agent-chip {
+  border-color: var(--border);
+  background: var(--bg-panel);
+  box-shadow: none;
+}
+
+.entry-shell--onboarding .onboarding-view__select-field {
+  gap: 9px;
+}
+
+.entry-shell--onboarding .onboarding-view__select-label {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.entry-shell--onboarding .onboarding-view__select-trigger {
+  min-height: 48px;
+  padding-inline: 14px;
+  font-size: 13px;
+}
+
+.entry-shell--onboarding .onboarding-view__select-menu {
+  max-height: min(360px, 50vh);
+  padding-block: 8px;
+}
+
+.entry-shell--onboarding .onboarding-view__select-option {
+  min-height: 42px;
+}
+
+.entry-shell--onboarding
+  .onboarding-view__model-select-wrap
+  .onboarding-view__model-select:hover,
+.entry-shell--onboarding .onboarding-view__select-trigger:hover,
+.entry-shell--onboarding .onboarding-view__select-trigger.is-open,
+.entry-shell--onboarding .onboarding-view__inline-field input:hover,
+.entry-shell--onboarding .onboarding-view__mini-button:hover,
+.entry-shell--onboarding .onboarding-view__field-row button:hover,
+.entry-shell--onboarding .onboarding-view__protocol-strip button:hover,
+.entry-shell--onboarding .onboarding-view__ds-skip:hover,
+.entry-shell--onboarding .onboarding-view__agent-chip:hover {
+  border-color: var(--border-strong);
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.entry-shell--onboarding .onboarding-view__agent-chip.is-selected,
+.entry-shell--onboarding .onboarding-view__protocol-strip button.is-selected {
+  border-color: var(--text-strong);
+  background: var(--bg-panel);
+  box-shadow: none;
+}
+
+.entry-shell--onboarding .onboarding-view__select-trigger.is-open,
+.entry-shell--onboarding .onboarding-view__select-menu {
+  box-shadow: none;
+}
+
+.entry-shell--onboarding .onboarding-view__select-option:hover {
+  background: var(--bg-subtle);
+}
+
+.entry-shell--onboarding .onboarding-view__select-option.is-selected {
+  background: var(--bg-muted);
+  color: var(--text-strong);
+}
+
+.entry-shell--onboarding .onboarding-view__actions {
+  gap: 14px;
+  justify-content: center;
+  width: min(560px, 100%);
+  margin-top: 2px;
+}
+
+.entry-shell--onboarding .onboarding-view__actions .onboarding-view__primary {
+  width: min(200px, 100%);
+}
+
+.entry-shell--onboarding .onboarding-view__primary,
+.entry-shell--onboarding .onboarding-view__secondary,
+.entry-shell--onboarding .onboarding-view__ghost {
+  min-height: 44px;
+  border-radius: 999px;
+  padding: 0 24px;
+  font-size: 13.5px;
+  font-weight: 580;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.entry-shell--onboarding .onboarding-view__primary {
+  border-color: #30302d;
+  background: #30302d;
+  color: var(--bg-panel);
+}
+
+.entry-shell--onboarding .onboarding-view__primary:disabled {
+  border-color: var(--border);
+  background: var(--bg-muted);
+  color: var(--text-soft);
+  cursor: default;
+}
+
+.entry-shell--onboarding .onboarding-view__primary:hover:not(:disabled) {
+  border-color: var(--text-strong);
+  background: var(--text-strong);
+  box-shadow: none;
+  transform: none;
+}
+
+.entry-shell--onboarding .onboarding-view__secondary {
+  border-color: var(--border-strong);
+  background: var(--bg-panel);
+  color: var(--text-strong);
+}
+
+.entry-shell--onboarding .onboarding-view__secondary:hover,
+.entry-shell--onboarding .onboarding-view__ghost:hover {
+  background: #ffffff;
+  transform: none;
+}
+
+.entry-shell--onboarding .onboarding-view__check {
+  background: var(--text-strong);
+  color: var(--bg-panel);
+  box-shadow: none;
+}
+
+.entry-shell--onboarding .onboarding-view__primary:focus-visible,
+.entry-shell--onboarding .onboarding-view__secondary:focus-visible,
+.entry-shell--onboarding .onboarding-view__ghost:focus-visible,
+.entry-shell--onboarding .onboarding-view__steps li button:focus-visible,
+.entry-shell--onboarding .onboarding-view__card:focus-visible,
+.entry-shell--onboarding .onboarding-view__select-trigger:focus-visible,
+.entry-shell--onboarding .onboarding-view__select-option:focus-visible,
+.entry-shell--onboarding .onboarding-view__inline-field input:focus-visible,
+.entry-shell--onboarding .onboarding-view__agent-chip:focus-visible,
+.entry-shell--onboarding .onboarding-view__mini-button:focus-visible,
+.entry-shell--onboarding .onboarding-view__field-row button:focus-visible,
+.entry-shell--onboarding .onboarding-view__protocol-strip button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+@media (max-width: 760px) {
+  .entry-shell--onboarding .onboarding-view {
+    align-content: start;
+    gap: 18px;
+    padding: 82px 18px 32px;
+  }
+
+  .entry-shell--onboarding .onboarding-view::after {
+    top: 24px;
+    right: 12px;
+    left: auto;
+    bottom: auto;
+    width: 76px;
+    height: 76px;
+    opacity: 0.3;
+  }
+
+  .entry-shell--onboarding .onboarding-view__hero h1 {
+    font-size: 31px;
+  }
+
+  .entry-shell--onboarding .onboarding-view__body {
+    width: 100%;
+  }
+
+  .entry-shell--onboarding .onboarding-view__card--featured.onboarding-view__card--amr {
+    grid-template-areas:
+      "amr-art"
+      "amr-identity"
+      "amr-benefits"
+      "amr-model";
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    min-height: 0;
+    padding: 24px 18px;
+    text-align: center;
+  }
+
+  .entry-shell--onboarding .onboarding-view__card--featured.onboarding-view__card--amr::before {
+    width: min(210px, 88%);
+  }
+
+  .entry-shell--onboarding .onboarding-view__card--amr .onboarding-view__identity,
+  .entry-shell--onboarding .onboarding-view__card--amr .onboarding-view__benefits {
+    justify-items: center;
+    justify-content: center;
+  }
+
+  .entry-shell--onboarding .onboarding-view__alternatives,
+  .entry-shell--onboarding .onboarding-view__form-grid,
+  .entry-shell--onboarding .onboarding-view__ds-points,
+  .entry-shell--onboarding .onboarding-view__grid,
+  .entry-shell--onboarding .onboarding-view__agent-strip,
+  .entry-shell--onboarding .onboarding-view__compact-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .entry-shell--onboarding .onboarding-view__card,
+  .entry-shell--onboarding .onboarding-view__alternatives .onboarding-view__card {
+    min-height: 0;
+  }
+
+  .entry-shell--onboarding .onboarding-view__actions {
+    gap: 12px;
+    justify-content: center;
+  }
+
+  .entry-shell--onboarding .onboarding-view__primary,
+  .entry-shell--onboarding .onboarding-view__secondary,
+  .entry-shell--onboarding .onboarding-view__ghost {
+    flex: 1 1 0;
+    max-width: 200px;
+    min-width: 142px;
+  }
 }
