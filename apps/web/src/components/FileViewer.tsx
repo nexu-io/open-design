@@ -80,6 +80,7 @@ import {
 } from '../runtime/exports';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
+import { shouldConsumeSlideNav } from '../runtime/slide-nav';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
 import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
 import {
@@ -518,13 +519,13 @@ function PreviewViewportControls({
     <div className="viewer-viewport-switcher" ref={menuRef}>
       <button
         type="button"
-        className="viewer-action viewer-viewport-trigger od-tooltip"
+        className={`viewer-action viewer-viewport-trigger${open ? '' : ' od-tooltip'}`}
         aria-label={t('fileViewer.viewportAria')}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
         title={t(activePreset.titleKey)}
-        data-tooltip={t(activePreset.titleKey)}
+        data-tooltip={open ? undefined : t(activePreset.titleKey)}
         data-tooltip-placement="bottom"
         tabIndex={tabIndex}
         onClick={() => setOpen((value) => !value)}
@@ -953,6 +954,12 @@ interface Props {
   onOpenFileReplacing?: (openName: string, closeName: string) => void;
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
+  // Bumped nonce asking this viewer to open its Share/Export menu (chat-side
+  // "Share" next-step action). Only HTML artifacts expose a Share menu.
+  shareRequest?: { nonce: number } | null;
+  // Bumped nonce asking a deck preview to flip to `slideIndex` (a queued chat
+  // send for this file just started processing).
+  slideNavRequest?: { slideIndex: number; nonce: number } | null;
 }
 
 export function FileViewer({
@@ -974,6 +981,8 @@ export function FileViewer({
   onOpenFileReplacing,
   commentPortalId,
   onCommentModeChange,
+  shareRequest,
+  slideNavRequest,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
     file,
@@ -1015,6 +1024,8 @@ export function FileViewer({
         onFileSaved={onFileSaved}
         commentPortalId={commentPortalId}
         onCommentModeChange={onCommentModeChange}
+        shareRequest={shareRequest}
+        slideNavRequest={slideNavRequest}
       />
     );
   }
@@ -2341,6 +2352,7 @@ export function CommentSidePanel({
   sending,
   queueOnSend = false,
   sendDisabled = false,
+  renderCreateForm = true,
   t,
   composer,
 }: {
@@ -2360,6 +2372,7 @@ export function CommentSidePanel({
   sending: boolean;
   queueOnSend?: boolean;
   sendDisabled?: boolean;
+  renderCreateForm?: boolean;
   t: TranslateFn;
   composer?: ReactNode;
 }) {
@@ -2619,7 +2632,7 @@ export function CommentSidePanel({
         </div>
       ) : null}
       {composer ? <div className="comment-side-composer">{composer}</div> : null}
-      {onCreateComment ? (
+      {renderCreateForm && onCreateComment ? (
         <form
           className="comment-side-new-comment composer"
           onSubmit={(event) => {
@@ -2713,6 +2726,24 @@ function reorderPreviewCommentIds(
   return ids;
 }
 
+export function appendSavedPreviewCommentOrder(
+  currentOrderIds: string[],
+  visibleComments: Array<Pick<PreviewComment, 'id'>>,
+  savedId: string,
+): string[] {
+  if (!savedId) return currentOrderIds;
+  const visibleIds = visibleComments.map((comment) => comment.id);
+  if (currentOrderIds.includes(savedId) || visibleIds.includes(savedId)) {
+    return currentOrderIds;
+  }
+  const visibleIdSet = new Set(visibleIds);
+  const kept = currentOrderIds.filter((id) => visibleIdSet.has(id));
+  const missingVisibleIds = visibleIds.filter((id) => !kept.includes(id));
+  const base = currentOrderIds.length > 0 ? [...kept, ...missingVisibleIds] : visibleIds;
+  const next = [...base, savedId];
+  return next.join('\0') === currentOrderIds.join('\0') ? currentOrderIds : next;
+}
+
 function CommentSideDock({
   comments,
   projectId,
@@ -2730,6 +2761,7 @@ function CommentSideDock({
   sending,
   queueOnSend = false,
   sendDisabled = false,
+  renderCreateForm = true,
   t,
   composer,
 }: {
@@ -2749,6 +2781,7 @@ function CommentSideDock({
   sending: boolean;
   queueOnSend?: boolean;
   sendDisabled?: boolean;
+  renderCreateForm?: boolean;
   t: TranslateFn;
   composer?: ReactNode;
 }) {
@@ -2774,6 +2807,7 @@ function CommentSideDock({
         sending={sending}
         queueOnSend={queueOnSend}
         sendDisabled={sendDisabled}
+        renderCreateForm={renderCreateForm}
         t={t}
         composer={composer}
       />
@@ -3489,6 +3523,7 @@ function CommentPreviewOverlays({
   hoveredTarget,
   hoveredPodMemberId,
   activeTarget,
+  activeExistingCommentId = null,
   boardTool,
   showActivePin = false,
   scale,
@@ -3503,6 +3538,7 @@ function CommentPreviewOverlays({
   hoveredTarget: PreviewCommentSnapshot | null;
   hoveredPodMemberId: string | null;
   activeTarget: PreviewCommentSnapshot | null;
+  activeExistingCommentId?: string | null;
   boardTool: BoardTool;
   showActivePin?: boolean;
   scale: number;
@@ -3516,15 +3552,15 @@ function CommentPreviewOverlays({
   const visibleComments = useMemo(
     () =>
       comments
-        .filter((comment) => commentVisibleOnDeckSlide(comment, activeSlideIndex))
-        .map((comment, index) => ({
+        .map((comment, globalIndex) => ({
           comment,
-          index,
+          markerNumber: globalIndex + 1,
           snapshot: liveSnapshotForComment(comment, liveTargets),
         }))
-        .filter((item): item is { comment: PreviewComment; index: number; snapshot: PreviewCommentSnapshot } =>
+        .filter((item): item is { comment: PreviewComment; markerNumber: number; snapshot: PreviewCommentSnapshot } =>
           Boolean(item.snapshot),
-        ),
+        )
+        .filter(({ comment }) => commentVisibleOnDeckSlide(comment, activeSlideIndex)),
     [comments, liveTargets, activeSlideIndex],
   );
   // `onOpenComment` is an inline arrow from the parent (new identity every
@@ -3540,7 +3576,7 @@ function CommentPreviewOverlays({
   // comments reuses the whole subtree and React skips reconciling it.
   const savedMarkers = useMemo(
     () =>
-      visibleComments.map(({ comment, index, snapshot }) => {
+      visibleComments.map(({ comment, markerNumber, snapshot }) => {
         const bounds = overlayBoundsFromSnapshot(snapshot, scale, overlayOffset);
         const label = commentTargetDisplayName(comment);
         return (
@@ -3564,22 +3600,22 @@ function CommentPreviewOverlays({
                 event.stopPropagation();
                 onOpenCommentRef.current(comment, snapshot);
               }}
-              title={`${index + 1}. ${label}: ${comment.note}`}
+              title={`${markerNumber}. ${label}: ${comment.note}`}
               aria-label={`Open comment for ${label}`}
             >
-              {index + 1}
+              {markerNumber}
             </button>
           </div>
         );
       }),
     [visibleComments, scale, overlayOffset],
   );
-  const activeSavedIndex = activeTarget
-    ? visibleComments.findIndex(({ snapshot }) => snapshot.elementId === activeTarget.elementId)
+  const activeSavedIndex = activeExistingCommentId
+    ? comments.findIndex((comment) => comment.id === activeExistingCommentId)
     : -1;
   const activePinNumber = activeSavedIndex >= 0
     ? activeSavedIndex + 1
-    : visibleComments.length + 1;
+    : comments.length + 1;
   const targetOverlay = activeTarget ?? hoveredTarget;
   return (
     <div className="comment-overlay-layer" aria-hidden={false}>
@@ -4385,6 +4421,8 @@ function HtmlViewer({
   onFileSaved,
   commentPortalId,
   onCommentModeChange,
+  shareRequest,
+  slideNavRequest,
 }: {
   projectId: string;
   projectKind: TrackingProjectKind;
@@ -4403,6 +4441,8 @@ function HtmlViewer({
   onFileSaved?: () => Promise<void> | void;
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
+  shareRequest?: { nonce: number } | null;
+  slideNavRequest?: { slideIndex: number; nonce: number } | null;
 }) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -7016,6 +7056,7 @@ function HtmlViewer({
         boardImages,
       );
       if (saved) {
+        rememberSavedPreviewCommentOrder(saved.id);
         clearBoardComposer();
         setActiveCommentExistingAttachments(saved.attachments ?? []);
         setBoardMode(true);
@@ -7051,6 +7092,7 @@ function HtmlViewer({
     try {
       const saved = await onSavePreviewComment(target, cleanNote, false);
       if (saved) {
+        rememberSavedPreviewCommentOrder(saved.id);
         setCommentSavedToast(t('chat.comments.savedToast'));
         if (activeCommentTarget) clearBoardComposer();
       }
@@ -7091,6 +7133,50 @@ function HtmlViewer({
     const timeout = window.setTimeout(() => setExportReadyNudge(false), 1800);
     return () => window.clearTimeout(timeout);
   }, [canShare, file.name, projectId]);
+
+  // Chat-side "Share" next-step action: when a new share request arrives, open
+  // the share menu (the toolbar's "Share" button → deploy menu, which holds the
+  // share-link items AND the "publish online" providers). This is the right
+  // surface for "share" — publishing is the prerequisite for a shareable link,
+  // and that publish step lives here; the download menu is export-to-disk, a
+  // different intent. The artifact source may still be loading when the request
+  // lands (the file was just auto-opened), so we defer until `canShare` flips
+  // true and only consume each nonce once.
+  const consumedShareNonceRef = useRef<number | null>(null);
+  useEffect(() => {
+    const nonce = shareRequest?.nonce;
+    if (nonce == null) return;
+    if (consumedShareNonceRef.current === nonce) return;
+    if (!canShare) return;
+    consumedShareNonceRef.current = nonce;
+    setExportReadyNudge(false);
+    markExportReadyNudgeSeen(projectId, file.name);
+    setDownloadMenuOpen(false);
+    setDeployMenuOpen(true);
+  }, [shareRequest?.nonce, canShare, projectId, file.name]);
+
+  // A queued chat send for this deck just started: flip the preview to the
+  // slide its marked element lives on. We write the cached slide state first so
+  // a freshly-mounted iframe (the tab may have just been activated) restores to
+  // the target on load via syncCachedSlideStateToIframe(), then post directly
+  // to cover the already-loaded iframe. The consume-once guard lives in
+  // `shouldConsumeSlideNav` (keyed by file outside this component) so it holds
+  // across remounts — switching away from and back to the deck must not replay
+  // the stale request and yank the preview off wherever the user navigated.
+  useEffect(() => {
+    const nonce = slideNavRequest?.nonce;
+    if (nonce == null) return;
+    if (!effectiveDeck) return;
+    const requested = slideNavRequest?.slideIndex;
+    if (typeof requested !== 'number' || !Number.isFinite(requested) || requested < 0) return;
+    if (!shouldConsumeSlideNav(previewStateKey, nonce)) return;
+    const target = Math.floor(requested);
+    const cachedCount = htmlPreviewSlideState.get(previewStateKey)?.count;
+    const count = slideState?.count ?? cachedCount ?? target + 1;
+    setSlideStateCached(previewStateKey, { active: target, count });
+    setSlideState({ active: target, count });
+    syncCachedSlideStateToIframe();
+  }, [slideNavRequest?.nonce, slideNavRequest?.slideIndex, effectiveDeck, previewStateKey, slideState?.count]);
 
   const openDownloadMenu = () => {
     fireArtifactHeaderClick('share_dropdown');
@@ -7286,6 +7372,11 @@ function HtmlViewer({
     const missing = creationSortedSideComments.filter((comment) => !orderedIds.has(comment.id));
     return [...ordered, ...missing];
   }, [creationSortedSideComments, commentOrderIds]);
+  function rememberSavedPreviewCommentOrder(savedId: string) {
+    setCommentOrderIds((current) =>
+      appendSavedPreviewCommentOrder(current, visibleSideComments, savedId),
+    );
+  }
   const activeSideCommentId = activePreviewCommentId;
   const activeCommentTargetVisible = commentTargetIntersectsPreview(
     activeCommentTarget,
@@ -7781,6 +7872,7 @@ function HtmlViewer({
       sending={sendingBoardBatch}
       queueOnSend={commentQueueOnSend}
       sendDisabled={commentSendDisabled}
+      renderCreateForm={!commentPortalHost}
       t={t}
       composer={null}
     />
@@ -8315,7 +8407,7 @@ function HtmlViewer({
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'preview' ? (
           <div
-            className={`${manualEditMode ? 'manual-edit-workspace' : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}`}
+            className={`${manualEditMode ? 'manual-edit-workspace' : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}${drawOverlayOpen ? ' preview-draw-active' : ''}`}
             data-testid={manualEditMode ? undefined : 'comment-preview-layout'}
             style={previewViewportStyle(previewViewport, previewScale, boardPreviewCanvasSize, boardPreviewScaleOptions)}
             onMouseLeave={manualEditMode ? clearManualEditHover : undefined}
@@ -8469,6 +8561,7 @@ function HtmlViewer({
                   hoveredTarget={hoveredCommentTarget}
                   hoveredPodMemberId={hoveredPodMemberId}
                   activeTarget={activeCommentTarget}
+                  activeExistingCommentId={activeComposerComment?.id ?? null}
                   boardTool={boardTool}
                   showActivePin={commentCreateMode}
                   scale={overlayPreviewScale}

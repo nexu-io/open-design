@@ -66,6 +66,11 @@ function consumeWorkspaceTabShortcut(event: KeyboardEvent) {
   event.stopPropagation();
 }
 
+function shouldDeferShortcutToProjectWorkspace(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.querySelector('[data-testid="file-workspace"]') !== null;
+}
+
 export function openWorkspaceTab(route: Route): void {
   window.dispatchEvent(
     new CustomEvent<{ route: Route }>(OPEN_WORKSPACE_TAB_EVENT, {
@@ -575,6 +580,15 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
       const primaryModifier = event.metaKey || event.ctrlKey;
       const primaryWithoutAlt = primaryModifier && !event.altKey;
       const ctrlWithoutPlatformModifiers = event.ctrlKey && !event.metaKey && !event.altKey;
+      const isBrowserStyleTabShortcut =
+        (primaryWithoutAlt && !event.shiftKey && (lowerKey === 't' || lowerKey === 'w'))
+        || (ctrlWithoutPlatformModifiers && key === 'Tab')
+        || (ctrlWithoutPlatformModifiers && !event.shiftKey && (key === 'PageDown' || key === 'PageUp'))
+        || (primaryWithoutAlt && !event.shiftKey && /^[1-9]$/u.test(key));
+
+      if (isBrowserStyleTabShortcut && shouldDeferShortcutToProjectWorkspace()) {
+        return;
+      }
 
       if (primaryWithoutAlt && !event.shiftKey && lowerKey === 't') {
         consumeWorkspaceTabShortcut(event);

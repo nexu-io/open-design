@@ -273,6 +273,24 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     expect(navigate).toHaveBeenCalledWith(homeRoute);
   });
 
+  it('defers browser tab shortcuts when the project file workspace is mounted', () => {
+    render(
+      <>
+        <div data-testid="file-workspace" />
+        <WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />
+      </>,
+    );
+
+    const allowedDefault = fireEvent.keyDown(document, {
+      key: 't',
+      metaKey: true,
+    });
+
+    expect(allowedDefault).toBe(true);
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
   it('maps the browser close-tab shortcut to the active workspace tab', async () => {
     window.localStorage.setItem(
       'open-design:workspace-tabs:v1',

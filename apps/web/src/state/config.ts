@@ -9,6 +9,7 @@ import type {
   OrbitConfig,
   PetConfig,
 } from '../types';
+import { resolveFixedOriginBaseUrl } from './apiProtocols';
 import {
   DEFAULT_ACCENT_COLOR,
   normalizeAccentColor,
@@ -304,6 +305,23 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
       'MiniMax-M2.7',
     ],
   },
+  {
+    label: 'AIHubMix',
+    protocol: 'aihubmix',
+    baseUrl: 'https://aihubmix.com/v1',
+    model: 'gpt-5.5',
+    models: [
+      'gpt-5.5',
+      'gpt-4o',
+      'gpt-4o-mini',
+      'claude-opus-4-8',
+      'claude-sonnet-4-5',
+      'claude-haiku-4-5',
+      'gemini-2.0-flash',
+      'deepseek-chat',
+      'deepseek-reasoner',
+    ],
+  },
 ];
 
 function normalizePet(input: Partial<PetConfig> | undefined): PetConfig {
@@ -349,6 +367,10 @@ function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
     // and the BYOK tab UI stay consistent with the protocol the user
     // picked — even though the on-wire shape is OpenAI-compatible.
     if (normalized.includes('senseaudio.cn')) return 'senseaudio';
+    // AIHubMix host routes to its own proxy so the daemon injects the
+    // APP-Code attribution header even though the wire shape is
+    // OpenAI-compatible.
+    if (normalized.includes('aihubmix.com')) return 'aihubmix';
     return isOpenAICompatible(model, baseUrl) ? 'openai' : 'anthropic';
   } catch {
     // Preserve the rest of the user's settings even if an old saved base URL is
@@ -420,6 +442,15 @@ export function loadConfig(): AppConfig {
         merged.apiProviderBaseUrl = knownProvider?.baseUrl ?? null;
       }
       merged.configMigrationVersion = CONFIG_MIGRATION_VERSION;
+    }
+
+    // Fixed-origin gateways (e.g. AIHubMix) hide the Base URL field, so a config
+    // persisted before the origin was auto-resolved can carry an empty baseUrl.
+    // Backfill it here so every consumer (Settings form, top-bar switcher, chat)
+    // sees the canonical origin — an empty value otherwise blocks the live
+    // model-list fetch and leaves only the static suggestion list.
+    if (merged.apiProtocol) {
+      merged.baseUrl = resolveFixedOriginBaseUrl(merged.apiProtocol, merged.baseUrl);
     }
 
     return merged;

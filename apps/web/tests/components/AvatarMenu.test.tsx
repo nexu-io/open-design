@@ -69,6 +69,7 @@ type AgentModelChangeHandler = (
   choice: { model?: string; reasoning?: string; serviceTier?: string },
 ) => void;
 type VoidHandler = () => void;
+type OpenSettingsHandler = (section?: 'execution') => void;
 
 function renderMenu({
   config = baseConfig,
@@ -77,7 +78,7 @@ function renderMenu({
   onModeChange = vi.fn<ModeChangeHandler>(),
   onAgentChange = vi.fn<AgentChangeHandler>(),
   onAgentModelChange = vi.fn<AgentModelChangeHandler>(),
-  onOpenSettings = vi.fn<VoidHandler>(),
+  onOpenSettings = vi.fn<OpenSettingsHandler>(),
   onRefreshAgents = vi.fn<VoidHandler>(),
 }: {
   config?: AppConfig;
@@ -86,7 +87,7 @@ function renderMenu({
   onModeChange?: ReturnType<typeof vi.fn<ModeChangeHandler>>;
   onAgentChange?: ReturnType<typeof vi.fn<AgentChangeHandler>>;
   onAgentModelChange?: ReturnType<typeof vi.fn<AgentModelChangeHandler>>;
-  onOpenSettings?: ReturnType<typeof vi.fn<VoidHandler>>;
+  onOpenSettings?: ReturnType<typeof vi.fn<OpenSettingsHandler>>;
   onRefreshAgents?: ReturnType<typeof vi.fn<VoidHandler>>;
 } = {}) {
   render(
@@ -131,7 +132,19 @@ describe('AvatarMenu', () => {
     openMenu();
     fireEvent.click(screen.getByRole('button', { name: /avatar.useLocal/i }));
 
-    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    expect(onOpenSettings).toHaveBeenCalledWith('execution');
+  });
+
+  it('opens execution settings from the popover action', () => {
+    const onOpenSettings = vi.fn<OpenSettingsHandler>();
+    renderMenu({ onOpenSettings });
+
+    openMenu();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'inlineSwitcher.openFullSettings' }),
+    );
+
+    expect(onOpenSettings).toHaveBeenCalledWith('execution');
   });
 
   it('rescans agents and re-renders newly available CLI entries', async () => {

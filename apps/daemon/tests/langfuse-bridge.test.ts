@@ -309,7 +309,19 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     const trace = batch[0].body;
     const generation = bodyOf(batch, 'generation-create', 'llm');
     expect(trace.input).toBe('design a coffee landing page');
-    expect(generation.input).toBe('design a coffee landing page');
+    expect(generation.input).toMatchObject({
+      type: 'open-design.prompt-stack',
+      sections: [
+        expect.objectContaining({
+          kind: 'daemonSystemPrompt',
+          redactedContent: expect.stringContaining('[REDACTED:path]'),
+        }),
+        expect.objectContaining({
+          kind: 'userRequest',
+          redactedContent: 'design a coffee landing page',
+        }),
+      ],
+    });
     expect(trace.metadata.promptStack.sections[0].redactedContent).toContain(
       '[REDACTED:path]',
     );

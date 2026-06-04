@@ -1151,6 +1151,20 @@
 .agent-card.disabled.agent-card-unavailable {
   opacity: 0.72;
 }
+/* Unavailable cards stack vertically: the logo/name/links live in a single
+   top row, and any diagnostic reason gets its own full-width row underneath
+   instead of being wedged into the middle column. */
+.agent-card.agent-card-unavailable {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+.agent-card-unavailable-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
 .agent-card-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1189,6 +1203,21 @@
 }
 .agent-card-link--muted:hover {
   color: var(--text);
+}
+/* Docs as a compact icon button: same height as the Install ghost button so
+   the inline action row stays aligned, but square and borderless. The accessible
+   name lives in title/aria-label, surfaced as a hover tooltip. */
+.agent-card-link--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+}
+.agent-card-link--icon:hover {
+  background: var(--bg-subtle);
+  text-decoration: none;
 }
 /* Install link: primary affordance for an unavailable card, styled as
    a ghost button (transparent + outlined) so it reads as a real
@@ -1396,7 +1425,23 @@
   cursor: default;
   opacity: 0.62;
 }
-.agent-card-amr-auth .amr-account-control__error,
+.agent-card-amr-auth .amr-account-control--error {
+  width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  row-gap: 6px;
+  padding: 6px 12px;
+}
+.agent-card-amr-auth .amr-account-control__error {
+  flex: 1 1 100%;
+  max-width: 100%;
+  color: var(--danger-text, #991b1b);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
 .agent-card-amr-auth .amr-login-pill-badge {
   display: none;
 }
@@ -2057,7 +2102,7 @@
    of inventing local variants.
 
    Heights
-     text input ............ 30px   (.newproj-name, .newproj-folder-input)
+     text input ............ 30px   (.newproj-name)
      dropdown trigger ...... 38px   (.newproj-section .ds-picker-trigger)
      compact toggle ........ 36px   (.compact-toggle)
      popover item .......... 38px   (.ds-picker-item)
@@ -2523,26 +2568,6 @@
   flex-direction: column;
   gap: 6px;
   margin-top: 2px;
-}
-.newproj-folder-input {
-  width: 100%;
-  height: 30px;
-  padding: 0 10px;
-  font-size: 12px;
-  font-family: var(--font-mono, monospace);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-input, var(--bg));
-  color: var(--text);
-  box-sizing: border-box;
-}
-.newproj-folder-input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.newproj-folder-input::placeholder {
-  color: var(--text-muted);
-  opacity: 0.7;
 }
 .newproj-footer {
   padding: 6px 24px 16px;

@@ -584,6 +584,11 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.system-reminder-block.injection .system-reminder-icon,
+.system-reminder-block.injection .system-reminder-label,
+.system-reminder-block.injection .system-reminder-chev {
+  color: var(--warning, #d97706);
+}
 
 /* Waiting-on-input pill (richer than the simple italic version above). */
 .op-waiting {
@@ -667,7 +672,7 @@
  */
 .chat-pinned-todo {
   position: relative;
-  padding: 0 10px;
+  padding: 0 16px;
   transition:
     transform 220ms cubic-bezier(0.23, 1, 0.32, 1),
     opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -2195,7 +2200,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 .chat-history-menu-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 7px;
   padding: 6px 8px 5px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg));
@@ -2206,6 +2211,12 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   letter-spacing: 0.05em;
   color: var(--text-muted);
   font-weight: 600;
+}
+.chat-history-menu-count {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
 }
 .chat-history-search {
   display: flex;
@@ -2271,6 +2282,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  margin-left: auto;
   height: 22px;
   padding: 0 7px;
   font-size: 10.5px;

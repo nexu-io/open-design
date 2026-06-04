@@ -4,7 +4,11 @@ name: notify-release-feishu
 # release-stable (channel=nightly), then post a Feishu card with the download
 # links (macOS arm64 + Intel, Windows, and Linux when enabled) and the changelog
 # since the previously published nightly. Consecutive pushes to the same branch
-# are debounced: a newer push cancels the in-flight build.
+# are throttled, not debounced: an in-flight build is allowed to finish (so a
+# busy release branch always produces a nightly), while pushes that arrive
+# during it coalesce into a single trailing build of the latest commit. With
+# cancel-in-progress the previous behavior starved — pushes spaced closer than
+# the build duration kept cancelling each other and no package was ever cut.
 
 on:
   push:
@@ -17,7 +21,12 @@ permissions:
 
 concurrency:
   group: feishu-release-${{ github.ref }}
-  cancel-in-progress: true
+  # Throttle, not debounce: let the running build finish and coalesce the
+  # queued pushes into one trailing build. GitHub keeps the in-progress run and
+  # only the newest pending run in the group (older pending runs are cancelled),
+  # so a busy release branch still cuts a nightly and converges on the latest
+  # commit, at most one build running plus one queued.
+  cancel-in-progress: false
 
 jobs:
   build:

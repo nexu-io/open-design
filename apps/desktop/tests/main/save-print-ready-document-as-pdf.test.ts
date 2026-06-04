@@ -18,6 +18,7 @@ import { describe, expect, test } from 'vitest';
 import {
   pdfFilenameFromDocument,
   savePrintReadyDocumentAsPdf,
+  waitForPrintableContent,
   type PrintReadyPdfTarget,
 } from '../../src/main/pdf-export.js';
 
@@ -211,5 +212,30 @@ describe('pdfFilenameFromDocument', () => {
       'artifact.pdf',
     );
     expect(pdfFilenameFromDocument('<title>   </title>')).toBe('artifact.pdf');
+  });
+});
+
+describe('waitForPrintableContent', () => {
+  test('waits for fonts, document images, CSS image URLs, and stable animation frames', async () => {
+    const scripts: string[] = [];
+    const window = {
+      webContents: {
+        async executeJavaScript(script: string) {
+          scripts.push(script);
+          return true;
+        },
+      },
+    };
+
+    await waitForPrintableContent(window as Parameters<typeof waitForPrintableContent>[0]);
+
+    expect(scripts).toHaveLength(1);
+    expect(scripts[0]).toContain('document.fonts.ready');
+    expect(scripts[0]).toContain('document.images');
+    expect(scripts[0]).toContain('waitForCssBackgroundImages');
+    expect(scripts[0]).toContain('style.backgroundImage');
+    expect(scripts[0]).toContain('style.borderImageSource');
+    expect(scripts[0]).toContain('style.listStyleImage');
+    expect(scripts[0]).toContain('.then(nextFrame)');
   });
 });

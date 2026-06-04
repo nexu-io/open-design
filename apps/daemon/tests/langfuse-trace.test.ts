@@ -327,7 +327,25 @@ describe('buildTracePayload', () => {
     const trace = bodyOf(batch, 'trace-create');
     const generation = bodyOf(batch, 'generation-create', 'llm');
     expect(trace.input).toBe('Make a landing page for a coffee shop.');
-    expect(generation.input).toBe('Make a landing page for a coffee shop.');
+    expect(generation.input).toMatchObject({
+      type: 'open-design.prompt-stack',
+      redactionVersion: 'prompt-stack-redaction-v1',
+      sectionCount: 3,
+      sections: [
+        expect.objectContaining({
+          kind: 'daemonSystemPrompt',
+          redactedContent: expect.stringContaining('[REDACTED:path]'),
+        }),
+        expect.objectContaining({
+          kind: 'userRequest',
+          redactedContent: 'Build a card',
+        }),
+        expect.objectContaining({
+          kind: 'attachments',
+          contentMode: 'metadata-only',
+        }),
+      ],
+    });
     expect(trace.metadata.promptStack).toMatchObject({
       redactionVersion: 'prompt-stack-redaction-v1',
       sectionCount: 3,
@@ -337,7 +355,7 @@ describe('buildTracePayload', () => {
       '[REDACTED:path]',
     );
     expect(trace.metadata.promptStack.sections[2].redactedContent).toBeUndefined();
-    expect(trace.metadata.promptStack_section_daemonSystemPrompt_present).toBe(true);
+    expect(trace.metadata.promptStack_section_daemonSystemPrompt_present).toBeUndefined();
     expect(trace.metadata.promptStack_section_attachments_present).toBeUndefined();
     expect(trace.metadata.promptStack_section_daemonSystemPrompt_rawBytes).toBeUndefined();
     expect(trace.metadata.promptStack_promptFingerprint).toMatch(/^sha256:/);
@@ -355,9 +373,15 @@ describe('buildTracePayload', () => {
     ]) {
       const batch = buildTracePayload(makeCtx({ prefs, promptTelemetry }));
       const trace = bodyOf(batch, 'trace-create');
+      const generation = bodyOf(batch, 'generation-create', 'llm');
       expect(trace.input).toBeUndefined();
       expect(trace.metadata.promptStack.sections[0].redactedContent).toBeUndefined();
       expect(trace.metadata.promptStack.redactedContentBytes).toBe(0);
+      expect(generation.input).toMatchObject({
+        type: 'open-design.prompt-stack',
+        redactedContentBytes: 0,
+        sections: [expect.not.objectContaining({ redactedContent: expect.any(String) })],
+      });
     }
   });
 
@@ -659,6 +683,54 @@ describe('buildTracePayload', () => {
     expect(metadata.time_to_first_token_ms).toBe(40);
     expect(metadata.tool_call_count).toBe(2);
     expect(metadata.total_duration_ms).toBe(100);
+  });
+
+  it('adds duration spans for run timing marks', () => {
+    const batch = buildTracePayload(
+      makeCtx({
+        run: {
+          runId: 'run-spans',
+          status: 'succeeded',
+          startedAt: 1_700_000_000_000,
+          endedAt: 1_700_000_004_500,
+          timingMarks: {
+            startChatRunStartedAt: 1_700_000_000_100,
+            promptBuildStartAt: 1_700_000_000_200,
+            promptBuildEndAt: 1_700_000_000_260,
+            processSpawnStartedAt: 1_700_000_000_300,
+            processSpawnedAt: 1_700_000_000_380,
+            modelCallStartAt: 1_700_000_000_420,
+            firstTokenAt: 1_700_000_001_000,
+            finalizeStartAt: 1_700_000_004_200,
+          },
+        },
+      }),
+    );
+
+    const spans = (batch as any[])
+      .filter((item) => item.type === 'span-create')
+      .map((item) => item.body);
+    expect(spans.map((span) => span.name)).toEqual(
+      expect.arrayContaining([
+        'queue',
+        'prompt-build',
+        'spawn',
+        'model-call',
+        'stream-output',
+        'finalize',
+      ]),
+    );
+    expect(bodyOf(batch, 'span-create', 'spawn')).toMatchObject({
+      id: 'run-spans-phase-spawn',
+      parentObservationId: 'run-spans-gen',
+      metadata: {
+        durationMs: 80,
+        boundary: 'processSpawnStartedAt -> processSpawnedAt',
+      },
+    });
+    expect(bodyOf(batch, 'span-create', 'tool:Bash').parentObservationId).toBe(
+      'run-spans-phase-model-call',
+    );
   });
 
   it('passes through anonymous installationId as userId', () => {

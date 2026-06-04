@@ -178,6 +178,80 @@
   flex: 0 0 34px;
   padding: 7px;
 }
+
+/* Second-level sub-type rail — lighter/smaller than the primary type tabs
+   so it reads as a child row, mirroring Manus's website sub-category pills. */
+.home-hero__subtype-row {
+  width: 100%;
+  max-width: 720px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+  margin: 6px 0 0;
+  padding: 0 12px;
+}
+.home-hero__subtype-chip {
+  appearance: none;
+  position: relative;
+  justify-content: center;
+  min-width: 0;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 540;
+  line-height: 1.3;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
+}
+.home-hero__subtype-chip:hover:not(:disabled) {
+  color: var(--text-strong);
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg-subtle));
+  transform: translateY(-0.5px);
+}
+.home-hero__subtype-chip.is-active {
+  background: var(--accent-tint);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  color: var(--accent);
+}
+.home-hero__subtype-chip.is-active:hover:not(:disabled) {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.home-hero__subtype-chip.is-pending {
+  opacity: 0.65;
+}
+.home-hero__subtype-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.home-hero__subtype-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+.home-hero__subtype-chip-icon {
+  flex: 0 0 auto;
+  opacity: 0.8;
+}
+.home-hero__subtype-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .home-hero__shortcut-menu {
   position: relative;
   display: inline-flex;
@@ -271,10 +345,20 @@
   margin-top: 0;
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
+.home-hero__input-card:has(.inline-switcher__popover),
 .home-hero__input-card:has(.session-mode-toggle__popover),
 .home-hero__input-card:has(.home-hero__plugin-picker) {
   z-index: 1700;
   overflow: visible;
+}
+/* The mode toggle's description card (chat.css) anchors upward and is only
+   shown on the home hero — it is `display:none` inside the chat composer.
+   The home-hero toggle sits well down the composer, so the card grows up
+   toward the page header; at its default 360px it crowds (and on smaller
+   windows clips) the top chrome. Cap it shorter here so it always clears the
+   header, and keep the inner scroll for the overflow. */
+.home-hero__input-card .session-mode-toggle__popover-card {
+  max-height: min(300px, calc(100vh - 120px));
 }
 .home-hero__input-card--compact-authoring {
   max-width: 640px;
@@ -325,12 +409,6 @@
 }
 .home-hero__active-chip--file {
   background: color-mix(in srgb, var(--bg-panel) 92%, var(--accent-tint));
-}
-.home-hero__active-chip--example {
-  max-width: 100%;
-  background: color-mix(in srgb, var(--accent-tint) 48%, var(--bg-panel));
-  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
-  color: color-mix(in srgb, var(--accent) 80%, var(--text));
 }
 .home-hero__active-file-group {
   display: contents;
@@ -768,6 +846,54 @@
   min-width: 0;
   flex: 1 1 auto;
   flex-wrap: nowrap;
+  overflow: visible;
+}
+.home-hero__foot-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.home-hero__execution-switcher {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.home-hero__execution-switcher .inline-switcher {
+  min-width: 0;
+  max-width: 48px;
+}
+.home-hero__execution-switcher .inline-switcher__chip {
+  height: 30px;
+  max-width: 48px;
+  padding: 0 7px;
+  gap: 4px;
+  border-radius: var(--radius-sm);
+}
+.home-hero__foot-right .session-mode-toggle {
+  height: 30px;
+}
+.home-hero__foot-right .session-mode-toggle__trigger {
+  height: 30px;
+  max-width: 120px;
+  padding: 0 8px;
+  gap: 6px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+.home-hero__foot-right .session-mode-toggle__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-hero__execution-switcher .inline-switcher__popover {
+  right: auto;
+  left: 0;
+  z-index: 1503;
+}
+.home-hero__execution-switcher .inline-switcher__agent-grid {
+  grid-template-columns: 1fr;
 }
 .home-hero__tool {
   appearance: none;
@@ -807,21 +933,149 @@
   font-weight: 650;
   line-height: 1;
 }
+/* "+" menu: collapses attach + connectors/plugins/mcp into one trigger with an
+   upward popup and right-side flyout submenus. */
+.home-hero__plus-menu {
+  position: relative;
+  display: inline-flex;
+}
+.home-hero__plus-popup {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 90;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 5px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 12px;
+  background: var(--bg-panel);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 10px 28px -10px rgba(0, 0, 0, 0.18);
+}
+.home-hero__plus-item {
+  appearance: none;
+  width: 100%;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.home-hero__plus-item:hover,
+.home-hero__plus-item:focus-visible {
+  outline: none;
+  background: var(--bg-subtle);
+}
+.home-hero__plus-item-icon {
+  flex: 0 0 auto;
+  opacity: 0.8;
+}
+.home-hero__plus-chevron {
+  margin-left: auto;
+  opacity: 0.55;
+}
+.home-hero__plus-submenu-row {
+  position: relative;
+}
+.home-hero__plus-flyout {
+  position: absolute;
+  left: 100%;
+  top: -5px;
+  margin-left: 4px;
+  z-index: 91;
+  min-width: 220px;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 5px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 12px;
+  background: var(--bg-panel);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 10px 28px -10px rgba(0, 0, 0, 0.18);
+}
+/* Invisible bridge so the cursor can cross the gap into the flyout without
+   triggering the row's mouseleave. */
+.home-hero__plus-flyout::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -8px;
+  width: 8px;
+}
+.home-hero__plus-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  padding: 0 8px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+.home-hero__plus-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.home-hero__plus-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.home-hero__plus-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+.home-hero__plus-empty {
+  padding: 8px 9px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
 .home-hero__working-dir-wrap {
   position: relative;
   display: inline-flex;
   align-items: center;
-  min-width: 0;
+  flex-shrink: 0;
 }
 .home-hero__working-dir {
   appearance: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   height: 32px;
-  max-width: 220px;
-  min-width: 0;
-  padding: 0 12px;
+  max-width: 180px;
+  padding: 0 8px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg-panel);
@@ -943,10 +1197,11 @@
   height: 32px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   max-width: 220px;
   min-width: 0;
-  padding: 0 12px;
+  flex-shrink: 1;
+  padding: 0 8px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg-panel);
@@ -988,7 +1243,7 @@
   outline: none;
 }
 .home-hero__footer-option input {
-  width: 150px;
+  width: 100px;
 }
 .home-hero__footer-option--select {
   padding-right: 11px;
@@ -1752,14 +2007,14 @@
 .home-hero__plugin-preset {
   appearance: none;
   position: relative;
-  flex: 0 0 218px;
+  flex: 0 0 248px;
   min-width: 0;
   display: grid;
-  grid-template-rows: 132px minmax(0, 1fr);
-  gap: 6px;
-  padding: 6px;
+  grid-template-rows: 150px minmax(0, auto);
+  gap: 8px;
+  padding: 0;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 12px;
   background: var(--bg-panel);
   color: var(--text);
   font: inherit;
@@ -1767,6 +2022,7 @@
   cursor: pointer;
   box-shadow: var(--shadow-xs);
   scroll-snap-align: start;
+  overflow: hidden;
   transition:
     border-color 140ms ease,
     background-color 140ms ease,
@@ -1796,12 +2052,27 @@
 }
 
 .home-hero__plugin-preset-preview {
+  position: relative;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-radius: 7px;
   background: var(--bg-subtle);
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.home-hero__plugin-preset-check {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg-panel);
+  box-shadow: var(--shadow-sm);
 }
 
 .home-hero__plugin-preset-preview .plugins-home__preview,
@@ -1814,26 +2085,18 @@
 }
 
 .home-hero__plugin-preset-preview .plugins-home__html {
-  padding: 5px;
+  padding: 0;
 }
 
+/* Replit-style preview: drop the faux browser chrome (dots + example.html)
+   so the card is a clean full-bleed thumbnail + name. Scoped to the Home
+   preset cards; the Community grid keeps its chrome. */
 .home-hero__plugin-preset-preview .plugins-home__html-chrome {
-  height: 15px;
-  padding: 0 5px;
-}
-
-.home-hero__plugin-preset-preview .plugins-home__html-url {
-  font-size: 7.5px;
+  display: none;
 }
 
 .home-hero__plugin-preset-preview .plugins-home__html-iframe {
-  transform: scale(0.135);
-}
-
-.home-hero__plugin-preset-body {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
+  transform: scale(0.172);
 }
 
 .home-hero__plugin-preset-title {
@@ -1841,35 +2104,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11.5px;
-  font-weight: 700;
+  padding: 0 12px 12px;
+  font-size: 12.5px;
+  font-weight: 650;
   line-height: 1.2;
-}
-
-.home-hero__plugin-preset-prompt {
-  display: -webkit-box;
-  min-width: 0;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  color: var(--text-muted);
-  font-size: 10.5px;
-  line-height: 1.25;
-}
-
-.home-hero__plugin-preset > svg {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  color: var(--text-faint);
-  transition: color 140ms ease, transform 140ms ease;
-}
-
-.home-hero__plugin-preset:not(:disabled):hover > svg,
-.home-hero__plugin-preset:not(:disabled):focus-visible > svg,
-.home-hero__plugin-preset.is-active > svg {
-  color: var(--accent);
-  transform: translate(1px, -1px);
 }
 
 /* ------------------------------------------------------------
@@ -1990,11 +2228,11 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .home-hero__plugin-preset {
-    flex-basis: 204px;
-    grid-template-rows: 122px minmax(0, 1fr);
+    flex-basis: 224px;
+    grid-template-rows: 136px minmax(0, auto);
   }
   .home-hero__plugin-preset-preview .plugins-home__html-iframe {
-    transform: scale(0.126);
+    transform: scale(0.146);
   }
   /* Plan §B follow-up: chip rail must never require horizontal
      scrolling. The base rule already wraps; on narrow viewports
@@ -2017,6 +2255,14 @@
     min-width: 0;
     max-width: 100%;
   }
+  .home-hero__execution-switcher {
+    flex-basis: auto;
+  }
+  .home-hero__execution-switcher .inline-switcher,
+  .home-hero__execution-switcher .inline-switcher__chip {
+    width: auto;
+    max-width: 48px;
+  }
 }
 
 @media (max-width: 560px) {
@@ -2028,10 +2274,10 @@
     grid-template-columns: 1fr;
   }
   .home-hero__plugin-preset {
-    flex-basis: 188px;
-    grid-template-rows: 112px minmax(0, 1fr);
+    flex-basis: 208px;
+    grid-template-rows: 126px minmax(0, auto);
   }
   .home-hero__plugin-preset-preview .plugins-home__html-iframe {
-    transform: scale(0.114);
+    transform: scale(0.134);
   }
 }

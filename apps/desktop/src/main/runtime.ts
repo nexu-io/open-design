@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
 import { createHmac, randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { appendFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { release } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -20,6 +19,7 @@ import type { OpenDesignHostActionResult, OpenDesignHostCaptureResult, OpenDesig
 
 import { openValidatedDirectory } from "./open-path.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
+import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
 
@@ -220,6 +220,23 @@ export function signDesktopImportToken(
 
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
+// Minimum time the white splash window stays on screen before we reveal the main
+// window. It is sized to outlast the ~1.7s clip so the brand animation always
+// plays through. The splash is shown immediately and in parallel with the
+// daemon/web boot (see the packaged entry), so this time overlaps startup rather
+// than adding to it; the <video> holds on its final frame (it does not loop)
+// while the runtime finishes coming up. See `createSplashWindow`.
+const MIN_SPLASH_MS = 2000;
+// While the splash is up, the real web app loads in a hidden main window. We
+// reveal it only once the web bundle reports it has actually mounted (it sets
+// `data-od-app-mounted="1"` on first paint of the real UI), so the user never
+// sees the web's own "Loading Open Design…" shell flash between the splash and
+// the app. Poll cadence + a hard ceiling so a missing mount signal can never
+// strand the user on the splash forever.
+const WEB_MOUNT_POLL_MS = 80;
+const WEB_MOUNT_REVEAL_TIMEOUT_MS = 15000;
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const MAX_CONSOLE_ENTRIES = 200;
 const DESKTOP_PET_WINDOW_WIDTH = 360;
 const DESKTOP_PET_WINDOW_HEIGHT = 300;
@@ -349,6 +366,23 @@ export type DesktopRuntimeOptions = {
    */
   rendererLogPath?: string | null;
   requestQuit?: () => void;
+  /**
+   * Optional pre-created splash window. The packaged entry creates the splash
+   * BEFORE awaiting the daemon/web sidecars so the brand animation is on screen
+   * in parallel with startup (no black no-window gap). When omitted (tools-dev,
+   * tests) the runtime creates its own splash — dev boots fast enough that the
+   * window-then-splash ordering is imperceptible. The runtime owns closing it
+   * once the main window is revealed.
+   */
+  splashWindow?: BrowserWindow | null;
+  /**
+   * Wall-clock instant the pre-created `splashWindow` first appeared (from
+   * {@link SplashWindowHandle.startedAt}). The minimum-hold timer is measured
+   * from here, so when packaged creates the splash before the sidecars boot the
+   * hold overlaps the boot instead of being added after it. Ignored when
+   * `splashWindow` is omitted (the runtime stamps its own splash at creation).
+   */
+  splashStartedAt?: number;
   updater?: DesktopUpdater;
 };
 
@@ -577,6 +611,62 @@ export async function pickAndReplaceWorkingDir(
   return { ok: true, response: body };
 }
 
+/**
+ * Pure helper for the `dialog:pick-working-dir` IPC handler (the Home,
+ * pre-create flow). Unlike `pickAndImportFolder` / `pickAndReplaceWorkingDir`,
+ * there is no project yet, so we cannot POST to the daemon to discover a
+ * `503 DESKTOP_AUTH_PENDING` and self-heal. The token we mint here is spent
+ * LATER, by the renderer, on `POST /api/projects/:id/working-dir` once the
+ * project exists.
+ *
+ * If the daemon missed its startup auth-registration window, that deferred
+ * POST is guaranteed to be rejected with `DESKTOP_AUTH_PENDING` — and the
+ * renderer's create flow surfaces that as a confusing late failure. To keep
+ * the Home picker on par with the import/replace flows' self-healing, we
+ * proactively run the desktop-auth handshake (`registerDesktopAuth`) BEFORE
+ * minting and returning the token, so the daemon already knows the secret by
+ * the time the renderer spends the token.
+ *
+ * Extracted from `createDesktopRuntime` so vitest can pin the
+ * DESKTOP_AUTH_PENDING re-registration path without booting Electron.
+ */
+export type MintHomeWorkingDirTokenDeps = {
+  baseDir: string;
+  desktopAuthSecret: Buffer;
+  /** Lazy desktop-auth handshake. Mirrors the import/replace flows. */
+  registerDesktopAuth?: () => Promise<boolean>;
+  /** Injected for tests; defaults to the production HMAC mint. */
+  mintToken?: (secret: Buffer, baseDir: string) => string;
+};
+
+export type MintHomeWorkingDirTokenResult =
+  | { baseDir: string; ok: true; token: string }
+  | { ok: false; reason: string };
+
+export async function mintHomeWorkingDirToken(
+  deps: MintHomeWorkingDirTokenDeps,
+): Promise<MintHomeWorkingDirTokenResult> {
+  const mint = deps.mintToken ?? mintImportToken;
+  const baseDir = deps.baseDir.trim();
+  if (baseDir.length === 0) {
+    return { ok: false, reason: "picker returned an empty path" };
+  }
+  // Ensure the daemon has the desktop-auth secret registered before we hand
+  // the renderer a token bound to it. A failed handshake here means the
+  // deferred working-dir POST would fail anyway, so report it now while the
+  // user is still in the picker rather than as a silent late create failure.
+  if (deps.registerDesktopAuth != null) {
+    const registered = await deps.registerDesktopAuth();
+    if (!registered) {
+      return {
+        ok: false,
+        reason: "desktop auth handshake with the daemon failed; please retry",
+      };
+    }
+  }
+  return { baseDir, ok: true, token: mint(deps.desktopAuthSecret, baseDir) };
+}
+
 const MAC_WINDOW_CHROME =
   process.platform === "darwin"
     ? ({
@@ -587,13 +677,13 @@ const MAC_WINDOW_CHROME =
 
 const MAC_WINDOW_CHROME_CSS = `
   .app-chrome-header {
-    --app-chrome-traffic-space: 78px !important;
-    --app-chrome-traffic-margin: 8px !important;
+    --app-chrome-traffic-space: 96px !important;
+    --app-chrome-traffic-margin: 12px !important;
     -webkit-app-region: drag;
   }
   .app-chrome-traffic-space {
-    flex: 0 0 78px !important;
-    width: 78px !important;
+    flex: 0 0 96px !important;
+    width: 96px !important;
   }
   .app-chrome-header button,
   .app-chrome-header a,
@@ -701,48 +791,105 @@ const MAC_WINDOW_CHROME_CSS = `
   }
 `;
 
+// White-background startup splash shown while the web runtime boots. It plays
+// the brand intro clip once (no loop) and then freezes on its final settled
+// "Open design" frame, which doubles as the hold state when the app takes longer
+// than `MIN_SPLASH_MS` to come up. The clip is embedded as a base64 data URL so
+// it renders identically in dev and in packaged builds (see `splash-video.ts`).
 function createPendingHtml(): string {
-  const logoDataUrl = getDesktopIconDataUrl();
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
 <html>
   <head>
+    <meta charset="utf-8" />
     <title>Open Design</title>
     <style>
+      html,
+      body {
+        background: #ffffff;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
       body {
         align-items: center;
-        background: #05070d;
-        color: #f7f7fb;
         display: flex;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        height: 100vh;
         justify-content: center;
-        margin: 0;
       }
-      main {
-        align-items: center;
-        display: flex;
-        flex-direction: column;
-        text-align: center;
+      video {
+        background: #ffffff;
+        height: auto;
+        max-height: 100%;
+        max-width: 100%;
+        width: auto;
       }
-      img {
-        border-radius: 34%;
-        display: block;
-        height: 72px;
-        object-fit: cover;
-        width: 72px;
-      }
-      h1 { margin: 18px 0 0; }
-      p { color: #aeb7d5; margin: 12px 0 0; }
     </style>
   </head>
   <body>
-    <main>
-      ${logoDataUrl ? `<img src="${logoDataUrl}" alt="" />` : ""}
-      <h1>Open Design</h1>
-      <p>Waiting for the web runtime URL…</p>
-    </main>
+    <video
+      id="splash"
+      autoplay
+      muted
+      playsinline
+      disablepictureinpicture
+      src="${SPLASH_VIDEO_DATA_URL}"
+    ></video>
+    <script>
+      (function () {
+        var video = document.getElementById("splash");
+        if (!video) return;
+        var play = function () {
+          var attempt = video.play();
+          if (attempt && typeof attempt.catch === "function") attempt.catch(function () {});
+        };
+        video.addEventListener("loadeddata", play);
+        play();
+      })();
+    </script>
   </body>
 </html>`)}`;
+}
+
+export type SplashWindowHandle = {
+  /**
+   * Wall-clock instant the splash window was created. Carried alongside the
+   * window so the minimum-hold calculation measures how long the splash has
+   * ACTUALLY been on screen — in packaged builds the window is created before
+   * the sidecars boot, so the hold overlaps the boot instead of being added on
+   * top of it. (Originally this clock started inside `createDesktopRuntime`,
+   * after the sidecars had already finished — re-adding the full delay.)
+   */
+  startedAt: number;
+  window: BrowserWindow;
+};
+
+/**
+ * Create and immediately show the white brand-splash window. The packaged entry
+ * calls this BEFORE awaiting the daemon/web sidecars so the animation masks the
+ * whole cold boot (no black no-window gap); the desktop runtime then adopts it
+ * via `DesktopRuntimeOptions.splashWindow` + `splashStartedAt` and closes it
+ * once the real app has mounted in the (initially hidden) main window. Frameless
+ * + matching size so the reveal swap reads as a single window, never a flash.
+ */
+export function createSplashWindow(): SplashWindowHandle {
+  // Stamp creation time at the instant the window appears (see SplashWindowHandle).
+  const startedAt = Date.now();
+  const splash = new BrowserWindow({
+    autoHideMenuBar: true,
+    backgroundColor: "#ffffff",
+    frame: false,
+    height: 900,
+    resizable: false,
+    show: true,
+    title: "Open Design",
+    width: 1280,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  void splash.loadURL(createPendingHtml());
+  return { startedAt, window: splash };
 }
 
 function resolveDesktopIconPath(): string {
@@ -754,14 +901,6 @@ function applyDockIcon(): void {
   const icon = nativeImage.createFromPath(resolveDesktopIconPath());
   if (icon.isEmpty()) return;
   app.dock.setIcon(icon);
-}
-
-function getDesktopIconDataUrl(): string | null {
-  try {
-    return `data:image/png;base64,${readFileSync(resolveDesktopIconPath()).toString("base64")}`;
-  } catch {
-    return null;
-  }
 }
 
 function normalizeScreenshotPath(filePath: string): string {
@@ -1161,6 +1300,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.removeHandler("dialog:pick-folder");
   ipcMain.removeHandler("dialog:pick-and-import");
   ipcMain.removeHandler("dialog:pick-and-replace-working-dir");
+  ipcMain.removeHandler("dialog:pick-working-dir");
   ipcMain.removeHandler("shell:open-external");
   ipcMain.removeHandler("shell:open-path");
   ipcMain.removeHandler("browser:clear-data");
@@ -1215,7 +1355,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (!apiBaseUrl) {
         return { ok: false, reason: "daemon API URL not available" };
       }
-      const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+      const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
       if (result.canceled || result.filePaths.length === 0) {
         return { ok: false, canceled: true };
       }
@@ -1258,7 +1398,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (!apiBaseUrl) {
         return { ok: false, reason: "daemon API URL not available" };
       }
-      const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+      const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
       if (result.canceled || result.filePaths.length === 0) {
         return { ok: false, canceled: true };
       }
@@ -1275,6 +1415,26 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       });
     },
   );
+  // Home-flow counterpart: the project does not exist yet, so we only show
+  // the native picker and mint a token bound to the chosen folder. The
+  // renderer threads { baseDir, token } back through project creation and
+  // spends the token on POST /api/projects/:id/working-dir once the project
+  // exists. Main remains the single source of filesystem paths crossing into
+  // the daemon (same trust boundary as dialog:pick-and-replace-working-dir).
+  ipcMain.handle("dialog:pick-working-dir", async () => {
+    if (options.desktopAuthSecret == null) {
+      return { ok: false, reason: "desktop auth secret not registered" };
+    }
+    const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { ok: false, canceled: true };
+    }
+    return await mintHomeWorkingDirToken({
+      baseDir: result.filePaths[0],
+      desktopAuthSecret: options.desktopAuthSecret,
+      registerDesktopAuth: options.registerDesktopAuthWithDaemon,
+    });
+  });
   // shell.openPath opens an absolute filesystem path in the OS file
   // manager (Finder / Explorer / Files). It resolves to '' on success
   // and to a non-empty error string on failure (per Electron's
@@ -1339,12 +1499,17 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     // that would shrink the window past the usable breakpoint.
     minHeight: 600,
     minWidth: 900,
-    show: true,
+    // Starts hidden: the splash window is what the user sees while the real web
+    // app loads in here. We reveal this window only once the app has actually
+    // mounted (see `revealWhenReady` below), so there is never a flash of the
+    // web's own "Loading Open Design…" shell.
+    show: false,
     title: "Open Design",
     autoHideMenuBar: true,
     ...MAC_WINDOW_CHROME,
     webPreferences: {
       additionalArguments: osLocaleAdditionalArguments(options.osLocale),
+      backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
       preload: preloadPath,
@@ -1632,9 +1797,57 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     void persistRendererEntry(entry);
   });
 
-  await window.loadURL(createPendingHtml());
-  showWindowButtons(window);
-  ensureWindowVisible(window);
+  // The splash window carries the white brand animation. In packaged builds the
+  // entry hands us one it created BEFORE the sidecars booted (so it overlaps the
+  // whole cold start); otherwise we create our own. The main window above stays
+  // hidden behind it until the real app has mounted.
+  // When the caller (packaged) hands us a pre-created splash, honour the
+  // creation time it captured so the minimum hold is measured from when the
+  // animation actually appeared — before the sidecar boot — not from now (which
+  // in packaged is already post-boot). When we create our own splash (tools-dev)
+  // its handle carries a fresh, correct timestamp.
+  let splash: BrowserWindow | null = options.splashWindow ?? null;
+  let splashStartedAt = options.splashStartedAt ?? Date.now();
+  if (splash == null) {
+    const created = createSplashWindow();
+    splash = created.window;
+    splashStartedAt = created.startedAt;
+  }
+
+  let revealed = false;
+  let revealing = false;
+
+  const revealMainWindow = (): void => {
+    if (revealed || window.isDestroyed()) return;
+    revealed = true;
+    showWindowButtons(window);
+    window.show();
+    window.focus();
+    ensureWindowVisible(window);
+    if (splash != null && !splash.isDestroyed()) splash.close();
+  };
+
+  // Hold the splash until BOTH (a) the web bundle reports it has mounted — it
+  // sets `data-od-app-mounted="1"` on first paint of the real UI — so we never
+  // reveal the web's own dark "Loading Open Design…" shell, and (b) the splash
+  // has been up at least MIN_SPLASH_MS so the brand clip plays through. A hard
+  // ceiling guarantees the user is never stranded on the splash if the mount
+  // signal never arrives.
+  const revealWhenReady = async (): Promise<void> => {
+    if (revealing || revealed) return;
+    revealing = true;
+    const deadline = Date.now() + WEB_MOUNT_REVEAL_TIMEOUT_MS;
+    while (!stopped && !window.isDestroyed() && Date.now() < deadline) {
+      const mounted = await window.webContents
+        .executeJavaScript(`document.documentElement.getAttribute("data-od-app-mounted") === "1"`, true)
+        .catch(() => false);
+      if (mounted === true) break;
+      await delay(WEB_MOUNT_POLL_MS);
+    }
+    const remaining = MIN_SPLASH_MS - (Date.now() - splashStartedAt);
+    if (remaining > 0) await delay(remaining);
+    revealMainWindow();
+  };
 
   const schedule = (delayMs: number) => {
     if (stopped) return;
@@ -1650,19 +1863,25 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       const url = await options.discoverUrl();
       if (url != null && url !== currentUrl) {
         pendingUrl = url;
+        // Load the web app into the still-hidden main window as soon as it is
+        // discovered; it mounts behind the splash so the swap is instant.
         await window.loadURL(url);
         currentUrl = url;
         pendingUrl = null;
-        showWindowButtons(window);
         const nextPetUrl = desktopPetUrl(url);
         if (!petWindow.isDestroyed() && nextPetUrl !== currentPetUrl) {
           await petWindow.loadURL(nextPetUrl);
           currentPetUrl = nextPetUrl;
         }
+        if (!revealed) {
+          void revealWhenReady();
+        } else {
+          showWindowButtons(window);
+        }
       } else if (url == null) {
         pendingUrl = null;
       }
-      schedule(url == null ? PENDING_POLL_MS : RUNNING_POLL_MS);
+      schedule(currentUrl == null ? PENDING_POLL_MS : RUNNING_POLL_MS);
     } catch (error) {
       pendingUrl = null;
       console.error("desktop web discovery failed", error);
@@ -1698,6 +1917,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         ipcMain.removeHandler(channel);
       }
       ipcMain.removeHandler("browser:clear-data");
+      if (splash != null && !splash.isDestroyed()) splash.close();
       if (!petWindow.isDestroyed()) petWindow.close();
       if (!window.isDestroyed()) window.close();
     },
@@ -1725,10 +1945,22 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       return { path: outputPath };
     },
     show() {
-      if (!window.isDestroyed()) {
-        window.show();
-        window.focus();
+      if (window.isDestroyed()) return;
+      // Before the splash reveal gate has fired (revealWhenReady), the main
+      // window is still hidden and surfacing it here would show the half-loaded
+      // web shell and bypass the gate — reintroducing the startup flash this is
+      // meant to remove (e.g. a packaged second-instance focus arriving mid
+      // boot). Bring the splash forward instead; the main window is revealed on
+      // its own once the app has mounted.
+      if (!revealed) {
+        if (splash != null && !splash.isDestroyed()) {
+          splash.show();
+          splash.focus();
+        }
+        return;
       }
+      window.show();
+      window.focus();
     },
     status() {
       return {

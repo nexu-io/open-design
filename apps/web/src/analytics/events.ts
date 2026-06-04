@@ -48,6 +48,7 @@ import type {
   IntegrationsSkillsTabClickProps,
   IntegrationsUseEverywhereTabClickProps,
   ChatPanelClickProps,
+  NextStepActionClickProps,
   RunFailedToastClickProps,
   AmrEntryClickProps,
   RunFailedToastSurfaceViewProps,
@@ -435,6 +436,13 @@ export function trackIntegrationsUseEverywhereTabClick(
 export function trackChatPanelClick(
   track: Track,
   props: ChatPanelClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackNextStepActionClick(
+  track: Track,
+  props: NextStepActionClickProps,
 ): void {
   send(track, 'ui_click', props);
 }

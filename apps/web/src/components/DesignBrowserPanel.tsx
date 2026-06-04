@@ -106,6 +106,41 @@ export interface BrowserUseCategory {
   actions: BrowserUseAction[];
 }
 
+const BROWSER_USE_INPUT_KEYS: Record<string, keyof Dict> = {
+  none: 'browserUse.input.none',
+  'kind: images|svgs|media|fonts, limit=200': 'browserUse.input.assetKind',
+  'optional selector': 'browserUse.input.optionalSelector',
+  'requirement, selector? optional': 'browserUse.input.requirementSelector',
+  'selector? optional': 'browserUse.input.selectorOptional',
+  'scale=1': 'browserUse.input.scaleOne',
+  'selector, scale=2': 'browserUse.input.selectorScaleTwo',
+  'columns=12, maxWidth=1200, gap=24': 'browserUse.input.gridOverlay',
+  "selector='body'": 'browserUse.input.bodySelector',
+  'url / domain / search terms': 'browserUse.input.navigate',
+  selector: 'browserUse.input.selector',
+  'selector, text': 'browserUse.input.selectorText',
+  'pixels / top / bottom / page': 'browserUse.input.scroll',
+  'command, timeoutMs=120000': 'browserUse.input.terminalRun',
+  command: 'browserUse.input.command',
+  'maxChars=8000': 'browserUse.input.maxChars',
+};
+
+function browserUseActionOutputKey(action: BrowserUseAction): keyof Dict {
+  return `browserUse.action.${action.id}.output` as keyof Dict;
+}
+
+function browserUseActionInputKey(action: BrowserUseAction): keyof Dict {
+  return BROWSER_USE_INPUT_KEYS[action.input] ?? 'browserUse.input.custom';
+}
+
+function localizedBrowserUseInput(
+  t: (key: keyof Dict, vars?: Record<string, string | number>) => string,
+  action: BrowserUseAction,
+): string {
+  const key = browserUseActionInputKey(action);
+  return key === 'browserUse.input.custom' ? t(key, { input: action.input }) : t(key);
+}
+
 export interface BrowserUsePromptContext {
   browserFilePath?: string;
   projectId?: string;
@@ -546,6 +581,7 @@ export function filterBrowserUseCategories(
   groups: BrowserUseCategory[],
   query: string,
   localizeCategoryTitle?: (category: BrowserUseCategory) => string,
+  localizeAction?: (action: BrowserUseAction) => string[],
 ): BrowserUseCategory[] {
   const needle = query.trim().toLocaleLowerCase();
   if (!needle) return groups;
@@ -566,6 +602,7 @@ export function filterBrowserUseCategories(
             action.input,
             action.output,
             action.prompt,
+            ...(localizeAction?.(action) ?? []),
           ].some((value) => value.toLocaleLowerCase().includes(needle)),
         );
       return { ...group, actions };
@@ -2006,7 +2043,12 @@ function BrowserUseMenu({
   const t = useT();
   const [query, setQuery] = useState('');
   const categories = useMemo(
-    () => filterBrowserUseCategories(BROWSER_USE_CATEGORIES, query, (category) => t(category.titleKey)),
+    () => filterBrowserUseCategories(
+      BROWSER_USE_CATEGORIES,
+      query,
+      (category) => t(category.titleKey),
+      (action) => [t(browserUseActionOutputKey(action)), localizedBrowserUseInput(t, action)],
+    ),
     [query, t],
   );
   const visibleTotal = useMemo(
@@ -2049,9 +2091,9 @@ function BrowserUseMenu({
                 <Icon name="sparkles" size={13} />
                 <span className="db-browser-use-action-copy">
                   <span>{action.label}</span>
-                  <small>{action.output}</small>
+                  <small>{t(browserUseActionOutputKey(action))}</small>
                 </span>
-                <span className="db-browser-use-action-input">{action.input}</span>
+                <span className="db-browser-use-action-input">{localizedBrowserUseInput(t, action)}</span>
               </button>
             ))}
           </section>

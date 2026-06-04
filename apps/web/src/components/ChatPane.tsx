@@ -4,13 +4,16 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type DragEvent as ReactDragEvent,
   type MutableRefObject,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useAnalytics } from '../analytics/provider';
 import { trackChatPanelClick, trackRunFailedToastSurfaceView } from '../analytics/events';
 import { attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
@@ -39,9 +42,11 @@ import {
   type ChatComposerHandle,
   type ChatSendMeta,
 } from './ChatComposer';
+import { listDesignArtifactCandidates } from './design-files/designArtifacts';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { Icon, type IconName } from './Icon';
 import { repoConnectCopy } from './design-system-github-evidence';
+import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import type { SettingsSection } from './SettingsDialog';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -93,6 +98,9 @@ const DEFAULT_STARTER_KEYS: Array<{
     promptKey: 'chat.example3Prompt',
   },
 ];
+
+const IMPORTED_ARTIFACTS_INITIAL_VISIBLE_COUNT = 5;
+const IMPORTED_ARTIFACTS_REVEAL_COUNT = 5;
 
 const IMAGE_STARTERS: StarterPrompt[] = [
   {
@@ -223,6 +231,186 @@ function pickStarters(
   }));
 }
 
+function sortArtifactsByModified(files: ProjectFile[]): ProjectFile[] {
+  return [...files].sort(
+    (a, b) => b.mtime - a.mtime || a.name.localeCompare(b.name),
+  );
+}
+
+function ImportedFolderArtifacts({
+  projectId,
+  files,
+  onOpenFile,
+  t,
+}: {
+  projectId: string | null;
+  files: ProjectFile[];
+  onOpenFile?: (name: string) => void;
+  t: TranslateFn;
+}) {
+  const [visibleCount, setVisibleCount] = useState(IMPORTED_ARTIFACTS_INITIAL_VISIBLE_COUNT);
+
+  useEffect(() => {
+    setVisibleCount(IMPORTED_ARTIFACTS_INITIAL_VISIBLE_COUNT);
+  }, [files]);
+
+  if (files.length === 0) {
+    return (
+      <div className="chat-design-artifacts-empty" data-testid="chat-design-artifacts-empty">
+        {t('designFiles.empty')}
+      </div>
+    );
+  }
+
+  const visibleFiles = files.slice(0, visibleCount);
+  const hiddenCount = Math.max(0, files.length - visibleFiles.length);
+  const revealCount = Math.min(IMPORTED_ARTIFACTS_REVEAL_COUNT, hiddenCount);
+  const revealLabel = t('chat.designArtifactsShowMore', { count: revealCount });
+
+  return (
+    <div className="chat-design-artifacts" data-testid="chat-design-artifacts">
+      {visibleFiles.map((file, index) => {
+        const openable = Boolean(onOpenFile);
+        const openLabel = `${t('designFiles.previewOpen')} ${file.name}`;
+        const openFile = () => {
+          onOpenFile?.(file.name);
+        };
+        return (
+          <div
+            key={file.name}
+            className="chat-design-artifact"
+            data-kind={file.kind}
+            data-file-name={file.name}
+            data-testid={`chat-design-artifact-${index}`}
+            role={openable ? 'button' : 'listitem'}
+            tabIndex={openable ? 0 : undefined}
+            title={openLabel}
+            aria-label={openLabel}
+            onDoubleClick={openable ? openFile : undefined}
+            onKeyDown={
+              openable
+                ? (event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    openFile();
+                  }
+                : undefined
+            }
+          >
+            <div className="chat-design-artifact-preview" aria-hidden>
+              <ChatArtifactPreview projectId={projectId} file={file} />
+            </div>
+            <div className="chat-design-artifact-meta">
+              <span className="chat-design-artifact-name" title={file.name}>
+                {file.name}
+              </span>
+              <span className="chat-design-artifact-kind">
+                {chatArtifactKindLabel(file.kind, t)}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+      {hiddenCount > 0 ? (
+        <button
+          type="button"
+          className="chat-design-artifact chat-design-artifact-more"
+          data-testid="chat-design-artifacts-more"
+          aria-label={revealLabel}
+          title={revealLabel}
+          onClick={() => {
+            setVisibleCount((current) =>
+              Math.min(files.length, current + IMPORTED_ARTIFACTS_REVEAL_COUNT),
+            );
+          }}
+        >
+          <span className="chat-design-artifact-more-icon" aria-hidden>
+            +
+          </span>
+          <span className="chat-design-artifact-more-count">
+            {revealLabel}
+          </span>
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function ChatArtifactPreview({
+  projectId,
+  file,
+}: {
+  projectId: string | null;
+  file: ProjectFile;
+}) {
+  if (!projectId) {
+    return <ChatArtifactFallback kind={file.kind} />;
+  }
+
+  const url = `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}`;
+  if (isRenderableSketchJson(file)) {
+    return <SketchPreview projectId={projectId} file={file} />;
+  }
+  if (file.kind === 'image' || file.kind === 'sketch') {
+    return <img src={url} alt="" loading="lazy" />;
+  }
+  if (file.kind === 'html') {
+    return (
+      <iframe
+        title={file.name}
+        src={url}
+        sandbox="allow-scripts allow-downloads"
+        loading="lazy"
+      />
+    );
+  }
+  if (file.kind === 'video') {
+    return <video src={url} muted playsInline preload="metadata" />;
+  }
+  return <ChatArtifactFallback kind={file.kind} />;
+}
+
+function ChatArtifactFallback({ kind }: { kind: ProjectFile['kind'] }) {
+  return (
+    <span className="chat-design-artifact-fallback">
+      <Icon name={chatArtifactIcon(kind)} size={28} />
+      <span>{chatArtifactShortKind(kind)}</span>
+    </span>
+  );
+}
+
+function chatArtifactIcon(kind: ProjectFile['kind']): IconName {
+  if (kind === 'html' || kind === 'code') return 'file-code';
+  if (kind === 'image' || kind === 'sketch') return 'image';
+  if (kind === 'video' || kind === 'audio') return 'play';
+  if (kind === 'presentation') return 'present';
+  return 'file';
+}
+
+function chatArtifactShortKind(kind: ProjectFile['kind']): string {
+  if (kind === 'html') return 'HTML';
+  if (kind === 'image') return 'IMG';
+  if (kind === 'sketch') return 'SKETCH';
+  if (kind === 'video') return 'VIDEO';
+  if (kind === 'pdf') return 'PDF';
+  if (kind === 'presentation') return 'PPT';
+  if (kind === 'document') return 'DOC';
+  return 'FILE';
+}
+
+function chatArtifactKindLabel(kind: ProjectFile['kind'], t: TranslateFn): string {
+  if (kind === 'html') return t('designFiles.kindHtml');
+  if (kind === 'image') return t('designFiles.kindImage');
+  if (kind === 'sketch') return t('designFiles.kindSketch');
+  if (kind === 'video') return 'Video';
+  if (kind === 'audio') return 'Audio';
+  if (kind === 'pdf') return t('designFiles.kindPdf');
+  if (kind === 'document') return t('designFiles.kindDocument');
+  if (kind === 'presentation') return t('designFiles.kindPresentation');
+  if (kind === 'spreadsheet') return t('designFiles.kindSpreadsheet');
+  return t('designFiles.kindBinary');
+}
+
 interface Props {
   messages: ChatMessage[];
   streaming: boolean;
@@ -237,6 +425,7 @@ interface Props {
   // without project context.
   projectKindForTracking?: TrackingProjectKind | null;
   projectFiles: ProjectFile[];
+  activeProjectFileName?: string | null;
   hasActiveDesignSystem?: boolean;
   activeDesignSystem?: DesignSystemSummary | null;
   sendDisabled?: boolean;
@@ -281,7 +470,7 @@ interface Props {
   // Live-only streaming tool-input partials keyed by tool-use id. Threaded to
   // AssistantMessage so an in-flight Write/Edit can render its code in real
   // time before the full `tool_use` arrives. Never persisted.
-  liveToolInput?: Record<string, { name: string; text: string }>;
+  liveToolInput?: Record<string, { name: string; text: string; seq?: number }>;
   initialDraft?: string;
   // Question-form submissions become a normal user message; the parent
   // routes that text through onSend (no attachments).
@@ -290,6 +479,9 @@ interface Props {
   onOpenQuestions?: () => void;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
+  // "Next step" affordance handlers forwarded to the last assistant message.
+  onArtifactShare?: (fileName: string) => void;
+  onArtifactChip?: (fileName: string, prompt: string) => void;
   onForkFromMessage?: (assistantMessage: ChatMessage) => void;
   forkingMessageId?: string | null;
   // Header "+" button — kicks off ProjectView's create-conversation flow.
@@ -300,11 +492,21 @@ interface Props {
   // leaving the pane.
   conversations: Conversation[];
   activeConversationId: string | null;
+  // The conversation whose history the live `messages` array currently
+  // reflects. Null while a switch is mid-flight (or after a load failure),
+  // which is exactly when `messages.length` must NOT be trusted as the active
+  // conversation's count — see `conversationMessageCount`. Callers that do not
+  // track this (mounts whose loader resets/retags `messages` asynchronously)
+  // leave it undefined and fall back to the persisted `conversation.messageCount`
+  // for a stable list count.
+  messagesConversationId?: string | null;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (id: string) => void;
   // Composer settings/CLI button forwards to here. The dialog lives in App
   // (it owns the AppConfig lifecycle) so we just pass the open trigger.
   onOpenSettings?: (section?: SettingsSection) => void;
+  showByokRecoveryAction?: boolean;
+  onSwitchToLocalCli?: () => void;
   onOpenAmrSettings?: () => void;
   onSwitchToAmrAndRetry?: (failedAssistant: ChatMessage) => void;
   // PR #3157: Antigravity's `agy -p` can't complete OAuth on its own,
@@ -355,6 +557,12 @@ interface Props {
   byokApiProtocol?: AppConfig['apiProtocol'];
   byokImageModel?: string;
   onChangeByokImageModel?: (model: string) => void;
+  byokVideoModel?: string;
+  onChangeByokVideoModel?: (model: string) => void;
+  byokSpeechModel?: string;
+  onChangeByokSpeechModel?: (model: string) => void;
+  byokSpeechVoice?: string;
+  onChangeByokSpeechVoice?: (voice: string) => void;
   composerFooterAccessory?: ReactNode;
   // Forwarded straight to the chat composer's mid-chat design-system
   // switcher. ProjectView owns the project record so the parent is the
@@ -414,6 +622,7 @@ export function ChatPane({
   onSessionModeChange,
   projectKindForTracking = null,
   projectFiles,
+  activeProjectFileName = null,
   hasActiveDesignSystem = false,
   activeDesignSystem = null,
   projectFileNames,
@@ -443,15 +652,20 @@ export function ChatPane({
   onOpenQuestions,
   onContinueRemainingTasks,
   onAssistantFeedback,
+  onArtifactShare,
+  onArtifactChip,
   onForkFromMessage,
   forkingMessageId = null,
   onNewConversation,
   newConversationDisabled = false,
   conversations,
   activeConversationId,
+  messagesConversationId = null,
   onSelectConversation,
   onDeleteConversation,
   onOpenSettings,
+  showByokRecoveryAction = false,
+  onSwitchToLocalCli,
   onOpenAmrSettings,
   onSwitchToAmrAndRetry,
   onLaunchAntigravityOauth,
@@ -476,6 +690,12 @@ export function ChatPane({
   byokApiProtocol,
   byokImageModel,
   onChangeByokImageModel,
+  byokVideoModel,
+  onChangeByokVideoModel,
+  byokSpeechModel,
+  onChangeByokSpeechModel,
+  byokSpeechVoice,
+  onChangeByokSpeechVoice,
   composerFooterAccessory,
   currentDesignSystemId,
   onActiveDesignSystemChange,
@@ -491,6 +711,8 @@ export function ChatPane({
   const chatLogScrollIdleTimerRef = useRef<number | null>(null);
   const historyWrapRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
+  const composerSlotRef = useRef<HTMLDivElement | null>(null);
+  const composerLayerRef = useRef<HTMLDivElement | null>(null);
   const pinnedTodoRef = useRef<HTMLDivElement | null>(null);
   const queuedSendStripRef = useRef<HTMLDivElement | null>(null);
   const didInitialScrollRef = useRef(false);
@@ -515,8 +737,9 @@ export function ChatPane({
   const anchorPendingRef = useRef(false);
   const anchorActiveRef = useRef(false);
   const tailSpacerRef = useRef<HTMLDivElement | null>(null);
+  const prevStreamingRef = useRef(streaming);
   const prevLastUserIdRef = useRef<string | undefined>(undefined);
-  // AssistantMessage's four interaction callbacks are re-created per render and
+  // AssistantMessage's interaction callbacks are re-created per render and
   // excluded from its memo comparison (so streaming doesn't re-render every
   // message). Route them through this ref so a memoized message still calls the
   // LATEST handler. See areAssistantMessagePropsEqual in AssistantMessage.tsx.
@@ -524,12 +747,16 @@ export function ChatPane({
     onSubmitForm,
     onContinueRemainingTasks,
     onAssistantFeedback,
+    onArtifactShare,
+    onArtifactChip,
     onForkFromMessage,
   });
   assistantCallbacksRef.current = {
     onSubmitForm,
     onContinueRemainingTasks,
     onAssistantFeedback,
+    onArtifactShare,
+    onArtifactChip,
     onForkFromMessage,
   };
   const [tab, setTab] = useState<Tab>('chat');
@@ -539,6 +766,13 @@ export function ChatPane({
   const [scrolledFromBottom, setScrolledFromBottom] = useState(false);
   const [chatLogScrollable, setChatLogScrollable] = useState(false);
   const [chatLogScrolling, setChatLogScrolling] = useState(false);
+  const [composerPortalTarget, setComposerPortalTarget] = useState<HTMLElement | null>(null);
+  const [composerPortalRect, setComposerPortalRect] = useState<{
+    left: number;
+    width: number;
+    bottom: number;
+  } | null>(null);
+  const [composerSlotHeight, setComposerSlotHeight] = useState(0);
   // The user can dismiss the pinned task list once everything is complete.
   // We key the dismissal on the snapshot (serialized TodoWrite input) so
   // the next time the agent emits a different snapshot the card returns,
@@ -622,6 +856,9 @@ export function ChatPane({
           runId: retryAssistant.runId ?? null,
         }
       : null;
+  const showByokRecoveryCta = showByokRecoveryAction && Boolean(onSwitchToLocalCli);
+  const showErrorActions =
+    showByokRecoveryCta || Boolean(retryAssistant && onRetry && runFailureUi);
   useEffect(() => {
     if (!displayError || !failedRunErrorEvent?.code || !retryAssistant) return;
     // The hosted-AMR nudge owns this same surface_view when it renders below
@@ -661,6 +898,16 @@ export function ChatPane({
     projectKindForTracking,
     retryAssistant,
   ]);
+  const importedFolderArtifacts = useMemo(
+    () =>
+      projectMetadata?.importedFrom === 'folder'
+        ? sortArtifactsByModified(
+            listDesignArtifactCandidates(projectFiles, projectMetadata.entryFile),
+          )
+        : [],
+    [projectFiles, projectMetadata?.entryFile, projectMetadata?.importedFrom],
+  );
+  const showImportedFolderArtifacts = projectMetadata?.importedFrom === 'folder';
   const composerDraftStorageKey = projectId && activeConversationId
     ? `od:chat-composer:draft:${projectId}:${activeConversationId}`
     : undefined;
@@ -689,9 +936,14 @@ export function ChatPane({
   useEffect(() => {
     didInitialScrollRef.current = false;
     // A new conversation should land at the bottom (its own initial
-    // scroll), not inherit the previous conversation's saved position.
+    // scroll), not inherit the previous conversation's saved position —
+    // including any anchor-to-top reserve still held by the tail spacer, which
+    // would otherwise strand the freshly opened conversation below a dead gap.
     savedChatScrollRef.current = null;
     scrolledToFormRef.current = new Set();
+    anchorActiveRef.current = false;
+    anchorPendingRef.current = false;
+    resetTailSpacer();
   }, [activeConversationId]);
 
   // ChatComposer's internal `seededRef` latches after the first
@@ -773,6 +1025,26 @@ export function ChatPane({
     // then re-runs when the user returns to Chat and the element is
     // available, scrolling the new conversation to its initial bottom.
   }, [activeConversationId, messages.length, tab]);
+
+  // When a turn finishes streaming, release the anchor-to-top reserve. The
+  // tail spacer only exists to give a streaming reply room to grow while the
+  // user message stays pinned at the top; once the reply is final it must not
+  // linger, or a short turn (typical of a fresh fork) is left with a large
+  // dead gap below it. Collapsing the spacer lets the bottom-anchored layout
+  // settle the finished transcript against the composer.
+  useEffect(() => {
+    const was = prevStreamingRef.current;
+    prevStreamingRef.current = streaming;
+    // The tail spacer only ever holds the anchor-to-top reserve for an actively
+    // streaming reply, so once the turn ends it must collapse unconditionally —
+    // even if a mid-turn scroll already cleared `anchorActiveRef` (which leaves
+    // the spacer sized). Collapsing it lets the bottom-anchored layout settle a
+    // finished short turn against the composer instead of below a dead gap.
+    if (was && !streaming) {
+      anchorActiveRef.current = false;
+      resetTailSpacer();
+    }
+  }, [streaming]);
 
   useEffect(() => {
     const el = logRef.current;
@@ -1171,6 +1443,170 @@ export function ChatPane({
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    setComposerPortalTarget(document.body);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (tab !== 'chat') {
+      setComposerPortalRect(null);
+      return;
+    }
+    const slot = composerSlotRef.current;
+    if (!slot || typeof window === 'undefined') return;
+
+    let frame: number | null = null;
+    const updateRect = () => {
+      frame = null;
+      const rect = slot.getBoundingClientRect();
+      setComposerPortalRect((prev) => {
+        const next = {
+          left: Math.round(rect.left),
+          width: Math.round(rect.width),
+          bottom: Math.max(0, Math.round(window.innerHeight - rect.bottom)),
+        };
+        if (
+          prev
+          && prev.left === next.left
+          && prev.width === next.width
+          && prev.bottom === next.bottom
+        ) {
+          return prev;
+        }
+        return next;
+      });
+    };
+    const scheduleUpdate = () => {
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(updateRect);
+    };
+
+    updateRect();
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(scheduleUpdate)
+        : null;
+    resizeObserver?.observe(slot);
+    const pane = slot.closest('.pane');
+    if (pane) resizeObserver?.observe(pane);
+    window.addEventListener('resize', scheduleUpdate);
+    window.visualViewport?.addEventListener('resize', scheduleUpdate);
+
+    return () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', scheduleUpdate);
+      window.visualViewport?.removeEventListener('resize', scheduleUpdate);
+    };
+  }, [tab]);
+
+  useLayoutEffect(() => {
+    if (tab !== 'chat' || !composerPortalTarget || !composerPortalRect) return;
+    const layer = composerLayerRef.current;
+    if (!layer || typeof window === 'undefined') return;
+
+    let frame: number | null = null;
+    const updateHeight = () => {
+      frame = null;
+      const nextHeight = Math.ceil(layer.getBoundingClientRect().height);
+      setComposerSlotHeight((prev) => (prev === nextHeight ? prev : nextHeight));
+    };
+    const scheduleUpdate = () => {
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(updateHeight);
+    };
+
+    updateHeight();
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(scheduleUpdate)
+        : null;
+    resizeObserver?.observe(layer);
+
+    return () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      resizeObserver?.disconnect();
+    };
+  }, [composerPortalRect, composerPortalTarget, tab]);
+
+  const composerNode = (
+    <ChatComposer
+      ref={composerRef}
+      designSystemPicker={designSystemPicker}
+      projectId={projectId}
+      projectFiles={projectFiles}
+      activeProjectFileName={activeProjectFileName}
+      sessionMode={sessionMode}
+      onSessionModeChange={onSessionModeChange}
+      skills={skills}
+      streaming={streaming}
+      sendDisabled={sendDisabled}
+      initialDraft={initialDraft}
+      draftStorageKey={composerDraftStorageKey}
+      onEnsureProject={onEnsureProject}
+      commentAttachments={commentsToAttachments(attachedComments)}
+      onRemoveCommentAttachment={onDetachComment}
+      onSend={(prompt, attachments, commentAttachments, meta) => {
+        pinnedToBottomRef.current = true;
+        scrolledToFormRef.current = new Set();
+        if (editingQueuedSendId && onUpdateQueuedSend) {
+          const original = queuedItems.find((item) => item.id === editingQueuedSendId);
+          const update: QueuedSendUpdate = {
+            prompt,
+            attachments,
+            commentAttachments,
+          };
+          const nextMeta = meta ?? original?.meta;
+          if (nextMeta !== undefined) update.meta = nextMeta;
+          onUpdateQueuedSend(editingQueuedSendId, update);
+          setEditingQueuedSendId(null);
+          return;
+        }
+        // Arm "anchor to top": the messages effect promotes this once
+        // the new user turn renders, pinning it to the top of the view.
+        anchorPendingRef.current = true;
+        onSend(prompt, attachments, commentAttachments, meta);
+      }}
+      onStop={onStop}
+      onOpenSettings={onOpenSettings}
+      onOpenMcpSettings={onOpenMcpSettings}
+      petConfig={petConfig}
+      onAdoptPet={onAdoptPet}
+      onTogglePet={onTogglePet}
+      onOpenPetSettings={onOpenPetSettings}
+      researchAvailable={researchAvailable}
+      projectMetadata={projectMetadata}
+      onProjectMetadataChange={onProjectMetadataChange}
+      activeWorkspaceContext={activeWorkspaceContext}
+      workspaceContexts={workspaceContexts}
+      byokApiProtocol={byokApiProtocol}
+      byokImageModel={byokImageModel}
+      onChangeByokImageModel={onChangeByokImageModel}
+      byokVideoModel={byokVideoModel}
+      onChangeByokVideoModel={onChangeByokVideoModel}
+      byokSpeechModel={byokSpeechModel}
+      onChangeByokSpeechModel={onChangeByokSpeechModel}
+      byokSpeechVoice={byokSpeechVoice}
+      onChangeByokSpeechVoice={onChangeByokSpeechVoice}
+      currentSkillId={currentSkillId}
+      onProjectSkillChange={onProjectSkillChange}
+      pinnedPluginId={activePluginSnapshot?.pluginId ?? null}
+      footerAccessory={composerFooterAccessory}
+      currentDesignSystemId={currentDesignSystemId}
+      onActiveDesignSystemChange={onActiveDesignSystemChange}
+      onShowToast={onShowToast}
+    />
+  );
+  const shouldPortalComposer =
+    tab === 'chat'
+    && composerPortalTarget !== null
+    && composerPortalRect !== null
+    && composerPortalRect.width > 0;
+  const composerSlotStyle: CSSProperties | undefined = shouldPortalComposer
+    ? { minHeight: composerSlotHeight > 0 ? composerSlotHeight : undefined }
+    : undefined;
+
   return (
     <div className="pane">
       <div className="chat-project-header">
@@ -1288,7 +1724,7 @@ export function ChatPane({
                       key={c.id}
                       conversation={c}
                       active={c.id === activeConversationId}
-                      messageCount={conversationMessageCount(c, activeConversationId, messages.length)}
+                      messageCount={conversationMessageCount(c, activeConversationId, messagesConversationId, messages.length)}
                       onSelect={() => {
                         onSelectConversation(c.id);
                         setShowConvList(false);
@@ -1334,69 +1770,80 @@ export function ChatPane({
               {loading ? <ChatConversationLoading t={t} /> : null}
               {messages.length === 0 && !loading ? (
                 <div className="chat-empty-wrap">
-                  <div className="chat-empty">
-                    <span className="chat-empty-title">
-                      {t('chat.startTitle')}
-                    </span>
-                  </div>
-                  <div className="chat-examples" role="list">
-                    {pickStarters(projectMetadata, t).map((ex, i) => (
-                      <button
-                        key={`${ex.title}-${i}`}
-                        type="button"
-                        role="listitem"
-                        className="chat-example"
-                        style={{ animationDelay: `${i * 70}ms` }}
-                        onClick={() => {
-                          trackChatPanelClick(analytics.track, {
-                            page_name: 'chat_panel',
-                            area: 'chat_panel',
-                            element: 'template_card',
-                          });
-                          composerRef.current?.setDraft(ex.prompt);
-                        }}
-                        title={t('chat.fillInputTitle')}
-                      >
-                        <span className="chat-example-icon" aria-hidden>
-                          {ex.icon}
+                  {showImportedFolderArtifacts ? (
+                    <ImportedFolderArtifacts
+                      projectId={projectId}
+                      files={importedFolderArtifacts}
+                      onOpenFile={onRequestOpenFile}
+                      t={t}
+                    />
+                  ) : (
+                    <>
+                      <div className="chat-empty">
+                        <span className="chat-empty-title">
+                          {t('chat.startTitle')}
                         </span>
-                        <span className="chat-example-body">
-                          <span className="chat-example-head">
-                            <span className="chat-example-title">{ex.title}</span>
-                            <span className="chat-example-tag">{ex.tag}</span>
+                      </div>
+                      <div className="chat-examples" role="list">
+                        {pickStarters(projectMetadata, t).map((ex, i) => (
+                          <button
+                            key={`${ex.title}-${i}`}
+                            type="button"
+                            role="listitem"
+                            className="chat-example"
+                            style={{ animationDelay: `${i * 70}ms` }}
+                            onClick={() => {
+                              trackChatPanelClick(analytics.track, {
+                                page_name: 'chat_panel',
+                                area: 'chat_panel',
+                                element: 'template_card',
+                              });
+                              composerRef.current?.setDraft(ex.prompt);
+                            }}
+                            title={t('chat.fillInputTitle')}
+                          >
+                            <span className="chat-example-icon" aria-hidden>
+                              {ex.icon}
+                            </span>
+                            <span className="chat-example-body">
+                              <span className="chat-example-head">
+                                <span className="chat-example-title">{ex.title}</span>
+                                <span className="chat-example-tag">{ex.tag}</span>
+                              </span>
+                              <span className="chat-example-prompt">{ex.prompt}</span>
+                            </span>
+                            <span className="chat-example-cta" aria-hidden>
+                              ↵
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      {connectRepoNeeded ? (
+                        <div className="chat-connect-repo" role="note">
+                          <span className="chat-connect-repo-icon" aria-hidden>
+                            <Icon name="github" size={18} />
                           </span>
-                          <span className="chat-example-prompt">{ex.prompt}</span>
-                        </span>
-                        <span className="chat-example-cta" aria-hidden>
-                          ↵
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                  {connectRepoNeeded ? (
-                    <div className="chat-connect-repo" role="note">
-                      <span className="chat-connect-repo-icon" aria-hidden>
-                        <Icon name="github" size={18} />
-                      </span>
-                      <span className="chat-connect-repo-body">
-                        <span className="chat-connect-repo-title">
-                          {repoConnectCopy(githubConnected).cardTitle}
-                        </span>
-                        <span className="chat-connect-repo-text">
-                          {repoConnectCopy(githubConnected).cardBody}
-                        </span>
-                      </span>
-                      <button
-                        type="button"
-                        className="primary-ghost"
-                        disabled={githubConnected === undefined}
-                        onClick={() => onConnectRepo?.()}
-                      >
-                        <Icon name="github" size={13} />
-                        {repoConnectCopy(githubConnected).buttonLabel}
-                      </button>
-                    </div>
-                  ) : null}
+                          <span className="chat-connect-repo-body">
+                            <span className="chat-connect-repo-title">
+                              {repoConnectCopy(githubConnected).cardTitle}
+                            </span>
+                            <span className="chat-connect-repo-text">
+                              {repoConnectCopy(githubConnected).cardBody}
+                            </span>
+                          </span>
+                          <button
+                            type="button"
+                            className="primary-ghost"
+                            disabled={githubConnected === undefined}
+                            onClick={() => onConnectRepo?.()}
+                          >
+                            <Icon name="github" size={13} />
+                            {repoConnectCopy(githubConnected).buttonLabel}
+                          </button>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
                 </div>
               ) : null}
               <ChatRows
@@ -1425,6 +1872,8 @@ export function ChatPane({
                 nextUserContentByAssistantId={nextUserContentByAssistantId}
                 assistantCallbacksRef={assistantCallbacksRef}
                 onContinueRemainingTasks={onContinueRemainingTasks}
+                onArtifactShare={onArtifactShare}
+                onArtifactChip={onArtifactChip}
                 onForkFromMessage={onForkFromMessage}
                 onAssistantFeedback={onAssistantFeedback}
                 forkingMessageId={forkingMessageId}
@@ -1439,70 +1888,83 @@ export function ChatPane({
               {displayError ? (
                 <div className="msg error">
                   <span className="chat-error-text">{displayError}</span>
-                  {retryAssistant && onRetry && runFailureUi ? (
+                  {showErrorActions ? (
                     <div className="chat-error-actions">
-                      {runFailureUi.primaryAction === 'authorize' ? (
+                      {showByokRecoveryCta ? (
                         <button
                           type="button"
                           className="chat-error-action"
-                          onClick={() => {
-                            recordAmrEntry(analytics.track, 'chat_error_authorize_retry');
-                            if (onSwitchToAmrAndRetry) {
-                              onSwitchToAmrAndRetry(retryAssistant);
-                            } else {
-                              onOpenAmrSettings?.();
-                            }
-                          }}
+                          onClick={onSwitchToLocalCli}
                         >
-                          {t('chat.amrError.authorizeCta')}
-                        </button>
-                      ) : runFailureUi.primaryAction === 'launch-terminal-auth' ? (
-                        <button
-                          type="button"
-                          className="chat-error-action"
-                          onClick={() => {
-                            onLaunchAntigravityOauth?.();
-                          }}
-                        >
-                          {t('chat.antigravityError.launchTerminalCta')}
-                        </button>
-                      ) : runFailureUi.primaryAction === 'launch-terminal-switch-model' ? (
-                        <button
-                          type="button"
-                          className="chat-error-action"
-                          onClick={() => {
-                            onLaunchAntigravityOauth?.();
-                          }}
-                        >
-                          {t('chat.antigravityError.launchSwitchModelCta')}
-                        </button>
-                      ) : runFailureUi.primaryAction === 'recharge' ? (
-                        <button
-                          type="button"
-                          className="chat-error-action"
-                          onClick={() => {
-                            const attribution = recordAmrEntry(
-                              analytics.track,
-                              'chat_error_recharge',
-                            );
-                            window.open(
-                              attributedAmrUrl(AMR_RECHARGE_URL, attribution),
-                              '_blank',
-                              'noopener,noreferrer',
-                            );
-                          }}
-                        >
-                          {t('chat.amrError.rechargeCta')}
+                          {t('avatar.useLocal')}
                         </button>
                       ) : null}
-                      {runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry ? (
-                        <button
-                          type="button"
-                          className="ghost chat-error-retry"
-                          onClick={() => onRetry(retryAssistant)}
-                        >
-                          {t('promptTemplates.retry')}
-                        </button>
+                      {retryAssistant && onRetry && runFailureUi ? (
+                        <>
+                          {runFailureUi.primaryAction === 'authorize' ? (
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              onClick={() => {
+                                recordAmrEntry(analytics.track, 'chat_error_authorize_retry');
+                                if (onSwitchToAmrAndRetry) {
+                                  onSwitchToAmrAndRetry(retryAssistant);
+                                } else {
+                                  onOpenAmrSettings?.();
+                                }
+                              }}
+                            >
+                              {t('chat.amrError.authorizeCta')}
+                            </button>
+                          ) : runFailureUi.primaryAction === 'launch-terminal-auth' ? (
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              onClick={() => {
+                                onLaunchAntigravityOauth?.();
+                              }}
+                            >
+                              {t('chat.antigravityError.launchTerminalCta')}
+                            </button>
+                          ) : runFailureUi.primaryAction === 'launch-terminal-switch-model' ? (
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              onClick={() => {
+                                onLaunchAntigravityOauth?.();
+                              }}
+                            >
+                              {t('chat.antigravityError.launchSwitchModelCta')}
+                            </button>
+                          ) : runFailureUi.primaryAction === 'recharge' ? (
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              onClick={() => {
+                                const attribution = recordAmrEntry(
+                                  analytics.track,
+                                  'chat_error_recharge',
+                                );
+                                window.open(
+                                  attributedAmrUrl(AMR_RECHARGE_URL, attribution),
+                                  '_blank',
+                                  'noopener,noreferrer',
+                                );
+                              }}
+                            >
+                              {t('chat.amrError.rechargeCta')}
+                            </button>
+                          ) : null}
+                          {runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry ? (
+                            <button
+                              type="button"
+                              className="ghost chat-error-retry"
+                              onClick={() => onRetry(retryAssistant)}
+                            >
+                              {t('promptTemplates.retry')}
+                            </button>
+                          ) : null}
+                        </>
                       ) : null}
                     </div>
                   ) : null}
@@ -1569,65 +2031,30 @@ export function ChatPane({
             onReorder={onReorderQueuedSends}
             onSendNow={onSendQueuedNow}
           />
-          <ChatComposer
-            ref={composerRef}
-            designSystemPicker={designSystemPicker}
-            projectId={projectId}
-            projectFiles={projectFiles}
-            sessionMode={sessionMode}
-            onSessionModeChange={onSessionModeChange}
-            skills={skills}
-            streaming={streaming}
-            sendDisabled={sendDisabled}
-            initialDraft={initialDraft}
-            draftStorageKey={composerDraftStorageKey}
-            onEnsureProject={onEnsureProject}
-            commentAttachments={commentsToAttachments(attachedComments)}
-            onRemoveCommentAttachment={onDetachComment}
-            onSend={(prompt, attachments, commentAttachments, meta) => {
-              pinnedToBottomRef.current = true;
-              scrolledToFormRef.current = new Set();
-              if (editingQueuedSendId && onUpdateQueuedSend) {
-                const original = queuedItems.find((item) => item.id === editingQueuedSendId);
-                const update: QueuedSendUpdate = {
-                  prompt,
-                  attachments,
-                  commentAttachments,
-                };
-                const nextMeta = meta ?? original?.meta;
-                if (nextMeta !== undefined) update.meta = nextMeta;
-                onUpdateQueuedSend(editingQueuedSendId, update);
-                setEditingQueuedSendId(null);
-                return;
-              }
-              // Arm "anchor to top": the messages effect promotes this once
-              // the new user turn renders, pinning it to the top of the view.
-              anchorPendingRef.current = true;
-              onSend(prompt, attachments, commentAttachments, meta);
-            }}
-            onStop={onStop}
-            onOpenSettings={onOpenSettings}
-            onOpenMcpSettings={onOpenMcpSettings}
-            petConfig={petConfig}
-            onAdoptPet={onAdoptPet}
-            onTogglePet={onTogglePet}
-            onOpenPetSettings={onOpenPetSettings}
-            researchAvailable={researchAvailable}
-            projectMetadata={projectMetadata}
-            onProjectMetadataChange={onProjectMetadataChange}
-            activeWorkspaceContext={activeWorkspaceContext}
-            workspaceContexts={workspaceContexts}
-            byokApiProtocol={byokApiProtocol}
-            byokImageModel={byokImageModel}
-            onChangeByokImageModel={onChangeByokImageModel}
-            currentSkillId={currentSkillId}
-            onProjectSkillChange={onProjectSkillChange}
-            pinnedPluginId={activePluginSnapshot?.pluginId ?? null}
-            footerAccessory={composerFooterAccessory}
-            currentDesignSystemId={currentDesignSystemId}
-            onActiveDesignSystemChange={onActiveDesignSystemChange}
-            onShowToast={onShowToast}
-          />
+          <div
+            className="chat-composer-slot"
+            ref={composerSlotRef}
+            style={composerSlotStyle}
+            aria-hidden={shouldPortalComposer ? true : undefined}
+          >
+            {shouldPortalComposer ? null : composerNode}
+          </div>
+          {shouldPortalComposer && composerPortalTarget && composerPortalRect
+            ? createPortal(
+                <div
+                  className="chat-composer-fixed-layer"
+                  ref={composerLayerRef}
+                  style={{
+                    left: composerPortalRect.left,
+                    bottom: composerPortalRect.bottom,
+                    width: composerPortalRect.width,
+                  }}
+                >
+                  {composerNode}
+                </div>,
+                composerPortalTarget,
+              )
+            : null}
         </>
       ) : null}
     </div>
@@ -1642,6 +2069,8 @@ interface AssistantCallbacks {
   onAssistantFeedback:
     | ((message: ChatMessage, change: ChatMessageFeedbackChange) => void)
     | undefined;
+  onArtifactShare: ((fileName: string) => void) | undefined;
+  onArtifactChip: ((fileName: string, prompt: string) => void) | undefined;
   onForkFromMessage: ((message: ChatMessage) => void) | undefined;
 }
 
@@ -1701,6 +2130,8 @@ function ChatRows({
   nextUserContentByAssistantId,
   assistantCallbacksRef,
   onContinueRemainingTasks,
+  onArtifactShare,
+  onArtifactChip,
   onForkFromMessage,
   onAssistantFeedback,
   forkingMessageId,
@@ -1711,7 +2142,7 @@ function ChatRows({
 }: {
   messages: ChatMessage[];
   streaming: boolean;
-  liveToolInput?: Record<string, { name: string; text: string }>;
+  liveToolInput?: Record<string, { name: string; text: string; seq?: number }>;
   projectId: string | null;
   projectKindForTracking: TrackingProjectKind | null;
   activeConversationId: string | null;
@@ -1734,6 +2165,8 @@ function ChatRows({
   nextUserContentByAssistantId: Map<string, string>;
   assistantCallbacksRef: MutableRefObject<AssistantCallbacks>;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
+  onArtifactShare?: (fileName: string) => void;
+  onArtifactChip?: (fileName: string, prompt: string) => void;
   onForkFromMessage?: (message: ChatMessage) => void;
   onAssistantFeedback?: (message: ChatMessage, change: ChatMessageFeedbackChange) => void;
   forkingMessageId?: string | null;
@@ -1791,7 +2224,10 @@ function ChatRows({
       <AssistantMessage
         message={m}
         streaming={messageStreaming}
-        liveToolInput={liveToolInput}
+        // Only the streaming row consumes live tool input. Non-streaming rows
+        // get a stable `undefined`, so adding `liveToolInput` to the memo
+        // comparator re-renders just this row per `tool_input_delta`, not all N.
+        liveToolInput={messageStreaming ? liveToolInput : undefined}
         projectId={projectId}
         projectKind={projectKindForTracking}
         conversationId={activeConversationId}
@@ -1825,6 +2261,16 @@ function ChatRows({
         onFeedback={
           onAssistantFeedback
             ? (rating) => assistantCallbacksRef.current.onAssistantFeedback?.(m, rating)
+            : undefined
+        }
+        onArtifactShare={
+          onArtifactShare
+            ? (fileName) => assistantCallbacksRef.current.onArtifactShare?.(fileName)
+            : undefined
+        }
+        onArtifactChip={
+          onArtifactChip
+            ? (fileName, prompt) => assistantCallbacksRef.current.onArtifactChip?.(fileName, prompt)
             : undefined
         }
       />
@@ -2556,9 +3002,22 @@ function filterConversations(
 function conversationMessageCount(
   conversation: Conversation,
   activeConversationId: string | null,
+  messagesConversationId: string | null,
   activeMessageCount: number,
 ): number | null {
-  if (conversation.id === activeConversationId) return activeMessageCount;
+  // The live `messages` array is authoritative for the active conversation —
+  // it stays fresh as a run streams new turns in — but ONLY once it has
+  // actually loaded for that conversation. While a switch is mid-flight (or a
+  // load failed) `messages` is reset to [] and `messagesConversationId` no
+  // longer matches the active id; trusting `messages.length` there renders a
+  // phantom "0 msg". Fall back to the persisted server count until the live
+  // array catches up.
+  if (
+    conversation.id === activeConversationId &&
+    messagesConversationId === activeConversationId
+  ) {
+    return activeMessageCount;
+  }
   return typeof conversation.messageCount === 'number' ? conversation.messageCount : null;
 }
 

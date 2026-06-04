@@ -66,7 +66,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['canvas design', 'visual art', 'poster design', 'create poster', 'illustration', '海报', '插画'],
     mode: 'image',
     category: 'image-generation',
-    upstream: 'https://github.com/anthropics/skills/tree/main/canvas-design',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/canvas-design',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -76,7 +76,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['algorithmic art', 'generative art', 'p5js', 'procedural art', 'seeded randomness', '生成艺术'],
     mode: 'image',
     category: 'image-generation',
-    upstream: 'https://github.com/anthropics/skills/tree/main/algorithmic-art',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/algorithmic-art',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -126,7 +126,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['slack gif', 'animated gif', 'reaction gif', 'tiny gif'],
     mode: 'image',
     category: 'image-generation',
-    upstream: 'https://github.com/anthropics/skills/tree/main/slack-gif-creator',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/slack-gif-creator',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -432,7 +432,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['pptx', 'powerpoint', 'slide deck', 'create slides', 'edit pptx'],
     mode: 'deck',
     category: 'slides',
-    upstream: 'https://github.com/anthropics/skills/tree/main/pptx',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/pptx',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -476,7 +476,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['docx', 'word document', 'tracked changes', 'design brief doc', 'copy doc'],
     mode: 'prototype',
     category: 'documents',
-    upstream: 'https://github.com/anthropics/skills/tree/main/docx',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/docx',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -486,7 +486,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['pdf', 'create pdf', 'pdf form', 'branded pdf', 'one pager'],
     mode: 'prototype',
     category: 'documents',
-    upstream: 'https://github.com/anthropics/skills/tree/main/pdf',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/pdf',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -530,7 +530,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['brand guidelines', 'brand colors', 'brand typography', 'visual identity'],
     mode: 'design-system',
     category: 'design-systems',
-    upstream: 'https://github.com/anthropics/skills/tree/main/brand-guidelines',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/brand-guidelines',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -540,7 +540,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['theme factory', 'apply theme', 'design theme', 'theme generator', 'preset theme'],
     mode: 'design-system',
     category: 'design-systems',
-    upstream: 'https://github.com/anthropics/skills/tree/main/theme-factory',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/theme-factory',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -550,7 +550,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['frontend design', 'ui design', 'ux design', 'web design', 'production ui'],
     mode: 'design-system',
     category: 'design-systems',
-    upstream: 'https://github.com/anthropics/skills/tree/main/frontend-design',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/frontend-design',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {
@@ -1040,7 +1040,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['web artifacts', 'tailwind artifact', 'react artifact', 'anthropic artifact'],
     mode: 'prototype',
     category: 'web-artifacts',
-    upstream: 'https://github.com/anthropics/skills/tree/main/web-artifacts-builder',
+    upstream: 'https://github.com/anthropics/skills/tree/main/skills/web-artifacts-builder',
     attribution: 'Curated from Anthropic\'s official skills repository.',
   },
   {

@@ -99,6 +99,7 @@ export function AmrAccountControl({
   className,
   compact = false,
   email = '',
+  errorMessage,
   profile,
   showProfileBadge = false,
   showSignInAction = true,
@@ -121,6 +122,7 @@ export function AmrAccountControl({
   const isSigningIn = status === 'signing-in';
   const isCanceled = status === 'canceled';
   const hasError = status === 'error';
+  const loginErrorText = errorMessage || t('settings.amrLoginErrorCompact');
   const statusText = isSignedIn
     ? hideSignedInStatus
       ? ''
@@ -197,7 +199,7 @@ export function AmrAccountControl({
       ) : null}
       {hasError ? (
         <span className="amr-account-control__error" role="alert">
-          {t('settings.amrLoginErrorCompact')}
+          {loginErrorText}
         </span>
       ) : null}
     </div>
@@ -481,6 +483,7 @@ export function AmrLoginPill({
         status={accountStatus}
         compact
         email={userEmail}
+        errorMessage={errorMessage}
         profile={status?.profile}
         showProfileBadge
         hideSignedOutStatus={hideSignedOutStatus}

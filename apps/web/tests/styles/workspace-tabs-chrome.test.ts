@@ -37,18 +37,19 @@ describe('workspace tabs chrome styles', () => {
 
     expect(ruleValue(chrome, 'padding')).toBe('0 8px 0 6px');
     expect(ruleValue(traffic, 'margin-right')).toBe('var(--app-chrome-traffic-margin)');
-    expect(ruleValue(projectChrome, 'padding')).toBe('0 10px 0 6px');
-    expect(ruleValue(projectStrip, 'align-items')).toBe('flex-end');
+    expect(ruleValue(projectChrome, 'padding')).toBe('0 8px 0 0');
+    expect(ruleValue(projectStrip, 'align-items')).toBe('center');
   });
 
   it('keeps the project composer input inset and focus ring polished', () => {
     const composerShell = cssDeclarations(routinesCss, '.app .composer-shell');
     const focusedComposerShell = cssDeclarations(routinesCss, '.app .composer-shell:focus-within');
 
-    expect(ruleValue(composerShell, 'padding')).toBe('8px');
+    expect(ruleValue(composerShell, 'padding')).toBe('7px');
     expect(ruleValue(composerShell, 'border-color')).toBe('color-mix(in srgb, var(--border) 84%, var(--border-strong))');
     expect(ruleValue(composerShell, 'box-shadow')).toBe('var(--shadow-sm)');
-    expect(ruleValue(focusedComposerShell, 'box-shadow')).toBe('var(--shadow-sm), 0 0 0 3px var(--accent-soft)');
+    expect(ruleValue(focusedComposerShell, 'border-color')).toBe('color-mix(in srgb, var(--accent) 34%, var(--border-strong))');
+    expect(ruleValue(focusedComposerShell, 'box-shadow')).toContain('0 0 0 1px');
   });
 
   it('uses hairline dividers for the tab chrome and entry rail', () => {
@@ -73,7 +74,7 @@ describe('workspace tabs chrome styles', () => {
     expect(ruleValue(railDivider, 'transform')).toBe('scaleX(0.5)');
   });
 
-  it('connects the active workspace tab to the top chrome surface', () => {
+  it('keeps workspace tabs compact and centered in the top chrome', () => {
     const projectTab = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab');
     const activeProjectTab = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab.is-active');
     const tabSeparator = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab + .workspace-tab::before');
@@ -86,14 +87,13 @@ describe('workspace tabs chrome styles', () => {
     const projectStrip = cssDeclarations(routinesCss, '.workspace-shell .workspace-tabs-strip');
     const sharedStrip = cssDeclarations(shellCss, '.workspace-tabs-strip');
 
-    expect(ruleValue(projectTab, 'height')).toBe('32px');
-    expect(ruleValue(projectTab, 'align-self')).toBe('flex-end');
-    expect(ruleValue(projectTab, 'border-radius')).toBe('10px 10px 0 0');
-    expect(ruleValue(projectTab, 'border-bottom')).toBe('0');
-    expect(ruleValue(activeProjectTab, 'background')).toBe('var(--bg-panel)');
+    expect(ruleValue(projectTab, 'height')).toBe('26px');
+    expect(ruleValue(projectTab, 'align-self')).toBe('center');
+    expect(ruleValue(projectTab, 'border-radius')).toBe('7px');
+    expect(ruleValue(projectTab, 'flex')).toBe('0 0 156px');
+    expect(ruleValue(activeProjectTab, 'background')).toBe('color-mix(in srgb, var(--bg-panel) 94%, var(--bg-subtle))');
     expect(ruleValue(activeProjectTab, 'border-color')).toBe('var(--workspace-active-tab-border)');
-    expect(ruleValue(activeProjectTab, 'border-bottom-color')).toBe('transparent');
-    expect(ruleValue(activeProjectTab, 'box-shadow')).toContain('0 1px 0 var(--bg-panel)');
+    expect(ruleValue(activeProjectTab, 'box-shadow')).toContain('0 1px 2px');
     expect(ruleValue(activeProjectTab, 'box-shadow')).toContain('inset');
     expect(projectChrome).not.toContain('overflow:');
     expect(projectStrip).not.toContain('overflow:');
@@ -110,7 +110,7 @@ describe('workspace tabs chrome styles', () => {
   it('uses a rounded highlight for inactive workspace tab hover', () => {
     const hoverTab = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab:not(.is-active):hover');
 
-    expect(ruleValue(hoverTab, 'border-radius')).toBe('10px');
+    expect(ruleValue(hoverTab, 'border-radius')).toBe('7px');
     expect(ruleValue(hoverTab, 'background')).toContain('calc(100% - 2px)');
     expect(ruleValue(hoverTab, 'border-color')).toBe('transparent');
     expect(ruleValue(hoverTab, 'box-shadow')).toContain('inset 0 0 0 1px');

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { ensureRailOpen } from '@/playwright/rail';
 import type { Page, Route } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
@@ -145,6 +146,7 @@ async function openMediaSettingsFromCurrentPage(page: Page) {
 }
 
 async function openNewProjectImageModelPicker(page: Page) {
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-new-project').click();
   await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await page.getByTestId('new-project-tab-media').click();

@@ -22,7 +22,7 @@
   <a href="QUICKSTART.md"><img alt="quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
 </p>
 
-<p align="center"><b>English</b> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a></p>
+<p align="center"><b>English</b> · <a href="docs/i18n/README.es.md">Español</a> · <a href="docs/i18n/README.pt-BR.md">Português</a> · <a href="docs/i18n/README.de.md">Deutsch</a> · <a href="docs/i18n/README.fr.md">Français</a> · <a href="docs/i18n/README.zh-CN.md">简体中文</a> · <a href="docs/i18n/README.zh-TW.md">繁體中文</a> · <a href="docs/i18n/README.ko.md">한국어</a> · <a href="docs/i18n/README.ja-JP.md">日本語</a> · <a href="docs/i18n/README.ar.md">العربية</a> · <a href="docs/i18n/README.ru.md">Русский</a> · <a href="docs/i18n/README.uk.md">Українська</a> · <a href="docs/i18n/README.tr.md">Türkçe</a></p>
 
 ---
 
@@ -323,6 +323,8 @@ docker compose up -d
 # open http://localhost:7456
 ```
 
+> **macOS users:** If the web UI shows `Authorization: Bearer <OD_API_TOKEN> required`, Docker Desktop bridge networking is the cause. See [Docker Desktop on macOS](deploy/README.md#docker-desktop-on-macos) for the fix.
+
 ### 🧑‍💻 Run from source
 
 ```bash
@@ -543,8 +545,7 @@ Plugin registry endpoint: `GET /api/plugins`. Directory overview → [`plugins/R
    └──────────────────────────────────────────────────────────────────┘
 ```
 
-| Layer | Stack |
-|---|---|
+| Layer | Stack ||---|---|
 | Frontend | Next.js 16 App Router + React 18 + TypeScript |
 | Daemon | Node 24 · Express · SSE streaming · `better-sqlite3` |
 | Storage | Files at `.od/projects/<id>/` + SQLite at `.od/app.sqlite` + `media-config.json` (gitignored, auto-created). `OD_DATA_DIR` relocates everything. |
@@ -631,7 +632,7 @@ pnpm --filter @open-design/<package> test
 gh pr create --fill
 ```
 
-Full agent-friendly contribution flow, code style, and PR bar → [`CONTRIBUTING.md`](CONTRIBUTING.md) ([Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)).
+Full agent-friendly contribution flow, code style, and PR bar → [`CONTRIBUTING.md`](CONTRIBUTING.md) ([Deutsch](docs/i18n/CONTRIBUTING.de.md) · [Français](docs/i18n/CONTRIBUTING.fr.md) · [简体中文](docs/i18n/CONTRIBUTING.zh-CN.md) · [日本語](docs/i18n/CONTRIBUTING.ja-JP.md) · [Português](docs/i18n/CONTRIBUTING.pt-BR.md)).
 
 ### 🏅 Open Design Fellow program
 
@@ -659,10 +660,17 @@ They carry a lot of the load — daily maintenance, review, and community suppor
       </a><br/>
       <sub>Maintainer</sub>
     </td>
+    <td align="center" valign="top" width="200">
+      <a href="https://github.com/YOMXXX">
+        <img src="https://github.com/YOMXXX.png" width="96" alt="@YOMXXX" /><br/>
+        <sub><b>@YOMXXX</b></sub>
+      </a><br/>
+      <sub>Maintainer</sub>
+    </td>
   </tr>
 </table>
 
-Maintainer rules, promotion criteria, and the exit protocol → [`MAINTAINERS.md`](MAINTAINERS.md) (also [Deutsch](MAINTAINERS.de.md) · [Français](MAINTAINERS.fr.md) · [简体中文](MAINTAINERS.zh-CN.md) · [日本語](MAINTAINERS.ja-JP.md) · [Português](MAINTAINERS.pt-BR.md)).
+Maintainer rules, promotion criteria, and the exit protocol → [`MAINTAINERS.md`](MAINTAINERS.md) (also [Deutsch](docs/i18n/MAINTAINERS.de.md) · [Français](docs/i18n/MAINTAINERS.fr.md) · [简体中文](docs/i18n/MAINTAINERS.zh-CN.md) · [日本語](docs/i18n/MAINTAINERS.ja-JP.md) · [Português](docs/i18n/MAINTAINERS.pt-BR.md)).
 
 ## Contributors
 

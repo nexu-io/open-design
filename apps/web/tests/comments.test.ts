@@ -12,11 +12,30 @@ import {
   mergePreviewCommentAttachments,
   messageContentWithCommentAttachments,
   overlayBoundsFromSnapshot,
+  queuedSlideNavTarget,
   removeAttachedComment,
   targetFromSnapshot,
 } from '../src/comments';
 import type { PreviewCommentSnapshot } from '../src/comments';
-import type { ChatMessage, PreviewComment } from '../src/types';
+import type { ChatCommentAttachment, ChatMessage, PreviewComment } from '../src/types';
+
+function commentAttachment(
+  overrides: Partial<ChatCommentAttachment> = {},
+): ChatCommentAttachment {
+  return {
+    id: 'att-1',
+    order: 1,
+    filePath: 'deck.html',
+    elementId: 'el-1',
+    selector: '[data-od-id="el-1"]',
+    label: 'span.capsule.accent',
+    comment: 'make it white',
+    currentText: 'DTC launches',
+    pagePosition: { x: 0, y: 0, width: 10, height: 10 },
+    htmlHint: '<span></span>',
+    ...overrides,
+  };
+}
 
 describe('preview comment attachment helpers', () => {
   it('builds compact target context from an iframe snapshot', () => {
@@ -453,3 +472,45 @@ function comment(patch: Partial<PreviewComment>): PreviewComment {
     ...patch,
   };
 }
+
+describe('queuedSlideNavTarget', () => {
+  it('returns the slide a queued send should flip the deck to', () => {
+    const target = queuedSlideNavTarget([
+      commentAttachment({ filePath: 'deck.html', slideIndex: 1 }),
+    ]);
+    expect(target).toEqual({ filePath: 'deck.html', slideIndex: 1 });
+  });
+
+  it('uses the first attachment that names a deck file and a slide', () => {
+    const target = queuedSlideNavTarget([
+      commentAttachment({ id: 'a', filePath: 'deck.html', slideIndex: undefined }),
+      commentAttachment({ id: 'b', filePath: 'deck.html', slideIndex: 3 }),
+      commentAttachment({ id: 'c', filePath: 'deck.html', slideIndex: 5 }),
+    ]);
+    expect(target).toEqual({ filePath: 'deck.html', slideIndex: 3 });
+  });
+
+  it('floors fractional slide indices and accepts slide zero', () => {
+    expect(
+      queuedSlideNavTarget([commentAttachment({ slideIndex: 0 })]),
+    ).toEqual({ filePath: 'deck.html', slideIndex: 0 });
+    expect(
+      queuedSlideNavTarget([commentAttachment({ slideIndex: 2.9 })]),
+    ).toEqual({ filePath: 'deck.html', slideIndex: 2 });
+  });
+
+  it('returns null when nothing is slide-scoped', () => {
+    expect(queuedSlideNavTarget(undefined)).toBeNull();
+    expect(queuedSlideNavTarget(null)).toBeNull();
+    expect(queuedSlideNavTarget([])).toBeNull();
+    expect(
+      queuedSlideNavTarget([commentAttachment({ slideIndex: undefined })]),
+    ).toBeNull();
+    expect(
+      queuedSlideNavTarget([commentAttachment({ filePath: '', slideIndex: 2 })]),
+    ).toBeNull();
+    expect(
+      queuedSlideNavTarget([commentAttachment({ slideIndex: -1 })]),
+    ).toBeNull();
+  });
+});

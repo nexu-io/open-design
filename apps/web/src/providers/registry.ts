@@ -8,6 +8,8 @@ import type {
   ConnectorStatusResponse,
   ImportGitHubDesignSystemRequest,
   ImportGitHubDesignSystemResponse,
+  ImportShadcnDesignSystemRequest,
+  ImportShadcnDesignSystemResponse,
   OpenDesignGithubLatestReleaseResponse,
   ImportLocalDesignSystemRequest,
   ImportLocalDesignSystemResponse,
@@ -101,6 +103,104 @@ export async function fetchAgents(options?: { throwOnError?: boolean }): Promise
     if (options?.throwOnError) throw err;
     return [];
   }
+}
+
+// Incremental agent detection over Server-Sent Events: `onAgent` fires once
+// per agent the moment its probe settles (completion order, not registry
+// order), so a caller can paint cards as they resolve instead of waiting for
+// the slowest CLI. Resolves with every agent collected once the stream's
+// terminal `done` event arrives. This is additive: callers that don't need
+// incremental delivery keep using `fetchAgents()` (whose batch probe is now
+// parallelized per-agent and so is itself faster). Pass an AbortSignal to
+// cancel the underlying request.
+export async function fetchAgentsStream(args: {
+  onAgent: (agent: AgentInfo) => void;
+  signal?: AbortSignal;
+}): Promise<AgentInfo[]> {
+  const { onAgent, signal } = args;
+  const resp = await fetch('/api/agents?stream=1', {
+    cache: 'no-store',
+    headers: { Accept: 'text/event-stream' },
+    ...(signal ? { signal } : {}),
+  });
+  if (!resp.ok || !resp.body) {
+    throw new Error(`agents stream ${resp.status}`);
+  }
+  const collected: AgentInfo[] = [];
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let done = false;
+  const errorMessageFromData = (data: string): string => {
+    if (!data.trim()) return 'agents stream error';
+    try {
+      const parsed = JSON.parse(data) as { error?: unknown; message?: unknown };
+      const message = parsed.error ?? parsed.message;
+      if (typeof message === 'string' && message.trim()) return message;
+    } catch {
+      // Fall through to the raw data string below.
+    }
+    return data;
+  };
+
+  const handleEvent = (rawEvent: string) => {
+    // Each SSE record is `event: <name>\ndata: <json>`; we act on `agent`
+    // (one AgentInfo), `error` (terminal failure), and `done` (terminal
+    // success). Unknown events are ignored so the protocol can grow without
+    // breaking older clients.
+    let eventName = 'message';
+    const dataLines: string[] = [];
+    for (const line of rawEvent.split('\n')) {
+      if (line.startsWith('event:')) eventName = line.slice(6).trim();
+      else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+    }
+    const data = dataLines.join('\n');
+    if (eventName === 'done') {
+      done = true;
+      return;
+    }
+    if (eventName === 'error') {
+      throw new Error(errorMessageFromData(data));
+    }
+    if (eventName === 'agent' && data) {
+      try {
+        const agent = JSON.parse(data) as AgentInfo;
+        collected.push(agent);
+        onAgent(agent);
+      } catch {
+        // Ignore a malformed record rather than aborting the whole stream.
+      }
+    }
+  };
+
+  try {
+    while (!done) {
+      const { value, done: streamDone } = await reader.read();
+      if (streamDone) break;
+      buffer += decoder.decode(value, { stream: true });
+      let sep: number;
+      // SSE records are separated by a blank line ("\n\n").
+      while ((sep = buffer.indexOf('\n\n')) !== -1) {
+        const rawEvent = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        if (rawEvent.trim().length > 0) handleEvent(rawEvent);
+        if (done) break;
+      }
+    }
+    if (!done && buffer.trim().length > 0) {
+      handleEvent(buffer);
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      // Reader may already be closed; nothing to do.
+    }
+  }
+  if (!done) {
+    throw new Error('agents stream ended before done');
+  }
+  return collected;
 }
 
 export async function fetchSkills(): Promise<SkillSummary[]> {
@@ -621,6 +721,26 @@ export async function importGitHubDesignSystem(
     });
     if (!resp.ok) return { error: await readImportError(resp) };
     return (await resp.json()) as ImportGitHubDesignSystemResponse;
+  } catch (err) {
+    return {
+      error: {
+        message: err instanceof Error ? err.message : 'Import request failed.',
+      },
+    };
+  }
+}
+
+export async function importShadcnDesignSystem(
+  input: ImportShadcnDesignSystemRequest,
+): Promise<ImportShadcnDesignSystemResponse | { error: SkillImportError }> {
+  try {
+    const resp = await fetch('/api/design-systems/import/shadcn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) return { error: await readImportError(resp) };
+    return (await resp.json()) as ImportShadcnDesignSystemResponse;
   } catch (err) {
     return {
       error: {

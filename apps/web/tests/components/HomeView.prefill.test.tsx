@@ -518,8 +518,12 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
+    // The per-plugin context badge row was removed; staged plugin context now
+    // only renders as an inline @mention pill (or, when the prompt is empty as
+    // here, surfaces via the active context row's resolved-count label). Assert
+    // the plugin was staged through that count rather than the dropped badge.
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-context-plugin-example-web-prototype')).toBeTruthy();
+      expect(screen.getByLabelText(/1 context items resolved/i)).toBeTruthy();
     });
     await screen.findByTestId('home-hero-input');
     expect(homeHeroPromptValue()).toBe('');
@@ -679,17 +683,10 @@ describe('HomeView prompt handoff', () => {
     expect(screen.queryByTestId('home-hero-prompt-slot-artifactKind')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-designSystem')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-template')).toBeNull();
-    // New equivalent of the inline slots: the non-footer plugin inputs
-    // (artifactKind / audience / template) now surface in the structured
-    // PluginInputsForm below the editor, while fidelity / designSystem stay in
-    // the footer options. The old "form suppressed" assertion no longer holds
-    // because there are no inline slots to deduplicate against.
-    const inputsForm = screen.getByTestId('plugin-inputs-form');
-    expect(inputsForm.querySelector('[data-field-name="artifactKind"]')).toBeTruthy();
-    expect(inputsForm.querySelector('[data-field-name="audience"]')).toBeTruthy();
-    expect(inputsForm.querySelector('[data-field-name="template"]')).toBeTruthy();
-    expect(inputsForm.querySelector('[data-field-name="fidelity"]')).toBeNull();
-    expect(inputsForm.querySelector('[data-field-name="designSystem"]')).toBeNull();
+    // The inline plugin inputs form was removed from the Home composer, so the
+    // non-footer inputs (artifactKind / audience / template) no longer render;
+    // fidelity / designSystem still surface as footer options above.
+    expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
 
     await setPromptAndSettle('Build a pricing-page prototype.');
     fireEvent.click(screen.getByTestId('home-hero-submit'));
@@ -777,16 +774,11 @@ describe('HomeView prompt handoff', () => {
     expect(screen.queryByTestId('home-hero-prompt-slot-artifactKind')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-designSystem')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-template')).toBeNull();
-    // The preset card seeds the prompt as plain text but keeps the chip's
-    // structured inputs: the non-footer fields now live in PluginInputsForm
-    // (the migrated equivalent of the removed inline slots), while
-    // fidelity / designSystem stay in the footer options above.
-    const inputsForm = screen.getByTestId('plugin-inputs-form');
-    expect(inputsForm.querySelector('[data-field-name="artifactKind"]')).toBeTruthy();
-    expect(inputsForm.querySelector('[data-field-name="audience"]')).toBeTruthy();
-    expect(inputsForm.querySelector('[data-field-name="template"]')).toBeTruthy();
-    expect(inputsForm.querySelector('[data-field-name="fidelity"]')).toBeNull();
-    expect(inputsForm.querySelector('[data-field-name="designSystem"]')).toBeNull();
+    // The inline plugin inputs form was removed from the Home composer; the
+    // preset card still seeds the prompt and keeps the chip's structured inputs
+    // in state (submitted below), but no inputs form renders. fidelity /
+    // designSystem stay in the footer options above.
+    expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
 
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
@@ -1197,7 +1189,9 @@ describe('HomeView prompt handoff', () => {
       expect(homeHeroPromptText()).toBe(expectedPrompt);
     });
     expect(screen.queryByRole('dialog', { name: /replace current prompt/i })).toBeNull();
-    expect(screen.getByTestId('home-hero-context-plugin-example-web-prototype')).toBeTruthy();
+    // Plugin context stays staged across the appended-prompt handoff; the
+    // dropped per-plugin badge is replaced by the active context row's count.
+    expect(screen.getByLabelText(/1 context items resolved/i)).toBeTruthy();
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
   });
 

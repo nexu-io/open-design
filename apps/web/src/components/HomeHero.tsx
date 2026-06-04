@@ -30,9 +30,7 @@ import type {
   McpServerConfig,
 } from '@open-design/contracts';
 import type { SkillSummary } from '../types';
-import { isImeComposing } from '../utils/imeComposing';
 import { Icon, type IconName } from './Icon';
-import { PluginInputsForm } from './PluginInputsForm';
 import { useAnalytics } from '../analytics/provider';
 import { trackHomeChatComposerClick } from '../analytics/events';
 import {
@@ -40,6 +38,12 @@ import {
   type ChipGroup,
   type HomeHeroChip,
 } from './home-hero/chips';
+import {
+  filterPluginsBySubChip,
+  isSubChipParent,
+  subChipsForChip,
+  type HomeHeroSubChip,
+} from './home-hero/sub-chips';
 import {
   inlineMentionToken,
   type InlineMentionEntity,
@@ -97,17 +101,25 @@ interface Props {
   selectedPluginContexts?: InstalledPluginRecord[];
   selectedMcpContexts?: McpServerConfig[];
   selectedConnectorContexts?: ConnectorDetail[];
+  // Context-only selections (staged through the plain `Use` action, no inline
+  // @mention pill). These have no in-prompt representation, so the active row
+  // renders a removable chip for each — otherwise a kept-in-payload context
+  // would be invisible and unremovable (silent context drift).
+  contextOnlyPlugins?: InstalledPluginRecord[];
+  contextOnlyMcpServers?: McpServerConfig[];
+  contextOnlyConnectors?: ConnectorDetail[];
   onRemovePluginContext?: (pluginId: string) => void;
   onRemoveMcpContext?: (serverId: string) => void;
   onRemoveConnectorContext?: (connectorId: string) => void;
+  onAddPlugin?: () => void;
+  onAddConnector?: () => void;
+  onAddMcp?: () => void;
   onOpenPluginDetails?: (record: InstalledPluginRecord) => void;
   pluginInputFields?: InputFieldSpec[];
   pluginInputValues?: Record<string, unknown>;
   pluginInputTemplate?: string | null;
   onPluginInputValuesChange?: (values: Record<string, unknown>) => void;
-  onPluginInputValidityChange?: (valid: boolean) => void;
   inlineEditableInputNames?: string[];
-  showPluginInputsForm?: boolean;
   footerInputNames?: string[];
   designSystemOptions?: HomeHeroDesignSystemOption[];
   stagedFiles?: File[];
@@ -132,7 +144,11 @@ interface Props {
   contextItemCount: number;
   error: string | null;
   showActivePluginChip?: boolean;
+  workingDir?: string | null;
+  onPickWorkingDir?: () => void;
+  onClearWorkingDir?: () => void;
   onExamplePromptStatusChange?: (info: ExamplePromptInfo | null) => void;
+  executionSwitcher?: ReactNode;
 }
 
 interface HomeHeroDesignSystemOption {
@@ -199,19 +215,19 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onClearActiveChip = onClearActivePlugin,
     onClearActiveSkill = () => undefined,
     selectedPluginContexts = EMPTY_PLUGIN_CONTEXTS,
-    selectedMcpContexts = EMPTY_MCP_CONTEXTS,
-    selectedConnectorContexts = EMPTY_CONNECTOR_CONTEXTS,
+    contextOnlyPlugins = EMPTY_PLUGIN_CONTEXTS,
+    contextOnlyMcpServers = EMPTY_MCP_OPTIONS,
+    contextOnlyConnectors = EMPTY_CONNECTOR_OPTIONS,
     onRemovePluginContext = () => undefined,
     onRemoveMcpContext = () => undefined,
     onRemoveConnectorContext = () => undefined,
+    onAddPlugin = () => undefined,
+    onAddConnector = () => undefined,
+    onAddMcp = () => undefined,
     onOpenPluginDetails = () => undefined,
     pluginInputFields = EMPTY_INPUT_FIELDS,
     pluginInputValues = EMPTY_PLUGIN_INPUT_VALUES,
-    pluginInputTemplate = null,
     onPluginInputValuesChange = () => undefined,
-    onPluginInputValidityChange = () => undefined,
-    inlineEditableInputNames = EMPTY_INPUT_NAMES,
-    showPluginInputsForm = true,
     footerInputNames = EMPTY_INPUT_NAMES,
     designSystemOptions = EMPTY_DESIGN_SYSTEM_OPTIONS,
     stagedFiles = EMPTY_STAGED_FILES,
@@ -236,7 +252,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     contextItemCount,
     error,
     showActivePluginChip = true,
+    workingDir = null,
+    onPickWorkingDir,
+    onClearWorkingDir,
     onExamplePromptStatusChange,
+    executionSwitcher,
   },
   ref,
 ) {
@@ -247,6 +267,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   const [hoveredPlugin, setHoveredPlugin] = useState<InstalledPluginRecord | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // Selected second-level sub-category slug (Prototype / Slide deck rail).
+  // Local-only: it filters the example-prompt cards below the rail. It never
+  // binds a plugin or stamps an active badge.
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const [plusSubmenu, setPlusSubmenu] = useState<'connectors' | 'plugins' | 'mcp' | null>(null);
+  const [plusQuery, setPlusQuery] = useState('');
   const [selectedPromptExample, setSelectedPromptExample] = useState<SelectedPromptExample | null>(null);
   const [previewHomeFileKey, setPreviewHomeFileKey] = useState<string | null>(null);
   const [stagedFilePreviewUrls, setStagedFilePreviewUrls] = useState<Map<string, string>>(() => new Map());
@@ -257,6 +284,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   const editorRef = useRef<LexicalComposerInputHandle | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const shortcutsMenuRef = useRef<HTMLDivElement>(null);
+  const plusMenuRef = useRef<HTMLDivElement>(null);
   const canSubmit = (prompt.trim().length > 0 || stagedFiles.length > 0) && !submitDisabled;
   const previewHomeFile = useMemo(() => {
     if (!previewHomeFileKey) return null;
@@ -429,6 +457,17 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     () => new Map(pluginInputFields.map((field) => [field.name, field])),
     [pluginInputFields],
   );
+  // "+" menu flyout lists: filtered against the menu's own search box (plusQuery),
+  // independent of the @-mention picker's mentionQuery.
+  const plusNeedle = plusQuery.trim().toLocaleLowerCase();
+  const plusPluginOptions = useMemo(
+    () => (plusNeedle ? pluginOptions.filter((p) => pluginMatchesQuery(p, plusNeedle)) : pluginOptions),
+    [pluginOptions, plusNeedle],
+  );
+  const plusMcpOptions = useMemo(
+    () => (plusNeedle ? mcpOptions.filter((s) => mcpServerMatchesQuery(s, plusNeedle)) : mcpOptions),
+    [mcpOptions, plusNeedle],
+  );
   const footerInputNameSet = useMemo(
     () => new Set(footerInputNames),
     [footerInputNames],
@@ -438,16 +477,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       .map((name) => fieldByName.get(name))
       .filter((field): field is InputFieldSpec => Boolean(field)),
     [fieldByName, footerInputNames],
-  );
-  // Inline `{{slot}}` editing in the prompt body is gone with the Lexical
-  // migration; every non-footer input now renders in the structured
-  // inputs form below the editor (matching the project composer), so the
-  // only fields we exclude are the ones promoted into the footer.
-  const remainingInputFields = useMemo(
-    () => pluginInputFields.filter(
-      (field) => !footerInputNameSet.has(field.name),
-    ),
-    [footerInputNameSet, pluginInputFields],
   );
   const activeCreateChip = useMemo(
     () => activeChipId
@@ -462,6 +491,21 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         : [],
     [activeChipId, locale, pluginOptions],
   );
+  // Derive sub-category pills from the SAME list that feeds the preset cards
+  // (`activeExamplePlugins`), not the full install set. This guarantees every
+  // pill maps to at least one visible card, so selecting it always filters to
+  // a non-empty slice — no "looks unfiltered" fallback needed.
+  const activeSubChips = useMemo(
+    () => subChipsForChip(activeChipId, activeExamplePlugins),
+    [activeChipId, activeExamplePlugins],
+  );
+  // When a sub-category pill is active, narrow the example-prompt cards to that
+  // scene. Because the pills are derived from this very list, the slice is
+  // always non-empty for a real selection.
+  const filteredExamplePlugins = useMemo(() => {
+    if (!selectedSubcategory || !isSubChipParent(activeChipId)) return activeExamplePlugins;
+    return filterPluginsBySubChip(activeExamplePlugins, activeChipId, selectedSubcategory);
+  }, [activeExamplePlugins, activeChipId, selectedSubcategory]);
   const activePromptExamples = useMemo(
     () => activeChipId && activeExamplePlugins.length === 0
       ? homeHeroChipPromptExamples(activeChipId, locale)
@@ -487,6 +531,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
 
   useEffect(() => {
     setSelectedPromptExample(null);
+    setSelectedSubcategory(null);
   }, [activeChipId]);
 
   useEffect(() => {
@@ -506,6 +551,36 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       document.removeEventListener('keydown', closeOnEscape);
     };
   }, [shortcutsOpen]);
+
+  useEffect(() => {
+    if (!plusMenuOpen) {
+      setPlusSubmenu(null);
+      setPlusQuery('');
+      return;
+    }
+    const closeOnPointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && plusMenuRef.current?.contains(target)) return;
+      setPlusMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPlusMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnPointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnPointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [plusMenuOpen]);
+
+  // The plugin and MCP flyouts share one `plusQuery`, but the query is scoped to
+  // whichever submenu is open. Reset it whenever the active submenu changes so a
+  // stale plugin search (e.g. "deck") never filters the MCP list — which would
+  // otherwise show "No MCP servers" even when servers exist.
+  useEffect(() => {
+    setPlusQuery('');
+  }, [plusSubmenu]);
 
   useEffect(() => {
     const urls = new Map<string, string>();
@@ -656,10 +731,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     return false;
   }
 
-  function updatePluginInput(name: string, value: unknown) {
-    onPluginInputValuesChange({ ...pluginInputValues, [name]: value });
-  }
-
   function handleFiles(files: File[]) {
     if (files.length === 0) return;
     onAddFiles(files);
@@ -669,15 +740,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     const nextPrompt = stripHomeMentionToken(prompt, file.name);
     if (nextPrompt !== prompt) onPromptChange(nextPrompt);
     onRemoveFile(index);
-  }
-
-  function clearSelectedPromptExample() {
-    if (selectedPromptExample) {
-      onPromptChange('');
-      editorRef.current?.clear();
-      onExamplePromptStatusChange?.(null);
-    }
-    setSelectedPromptExample(null);
   }
 
   function usePromptExample(example: string) {
@@ -721,14 +783,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     if (activePluginRecord) onOpenPluginDetails(activePluginRecord);
   }
 
+  // plugin/MCP/connector contexts now render as inline @mention pills in the
+  // composer, so they no longer drive this top row — only staged files (which
+  // have no inline representation) and the active plugin/skill/example chips do.
   const showActiveContextRow =
     contextItemCount > 0 ||
     (showActivePluginChip && activePluginTitle) ||
     activeSkillTitle ||
-    selectedPromptExample ||
-    selectedPluginContexts.length > 0 ||
-    selectedMcpContexts.length > 0 ||
-    selectedConnectorContexts.length > 0 ||
     stagedFiles.length > 0;
 
   let optionRenderIndex = 0;
@@ -834,82 +895,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 })}
               </span>
             ) : null}
-            {selectedPluginContexts.map((plugin) => (
-              <span
-                key={plugin.id}
-                className="home-hero__active-chip home-hero__active-chip--context"
-                data-testid={`home-hero-context-plugin-${plugin.id}`}
-              >
-                <button
-                  type="button"
-                  className="home-hero__active-chip-body"
-                  onClick={() => onOpenPluginDetails(plugin)}
-                  title={t('homeHero.pluginTitle', { title: plugin.title })}
-                >
-                  <span className="home-hero__active-icon" aria-hidden>
-                    <Icon name="sliders" size={12} />
-                  </span>
-                  <span className="home-hero__active-label">{plugin.title}</span>
-                </button>
-                <button
-                  type="button"
-                  className="home-hero__active-clear od-tooltip"
-                  onClick={() => onRemovePluginContext(plugin.id)}
-                  aria-label={t('homeHero.removePluginAria', { title: plugin.title })}
-                  title={t('homeHero.removePlugin')}
-                  data-tooltip={t('homeHero.removePlugin')}
-                >
-                  <Icon name="close" size={9} />
-                </button>
-              </span>
-            ))}
-            {selectedMcpContexts.map((server) => {
-              const label = server.label || server.id;
-              return (
-                <span
-                  key={server.id}
-                  className="home-hero__active-chip home-hero__active-chip--context"
-                  data-testid={`home-hero-context-mcp-${server.id}`}
-                >
-                  <span className="home-hero__active-icon" aria-hidden>
-                    <Icon name="link" size={12} />
-                  </span>
-                  <span className="home-hero__active-label">{label}</span>
-                  <button
-                    type="button"
-                    className="home-hero__active-clear od-tooltip"
-                    onClick={() => onRemoveMcpContext(server.id)}
-                    aria-label={t('chat.removeAria', { name: label })}
-                    title={t('common.delete')}
-                    data-tooltip={t('common.delete')}
-                  >
-                    <Icon name="close" size={9} />
-                  </button>
-                </span>
-              );
-            })}
-            {selectedConnectorContexts.map((connector) => (
-              <span
-                key={connector.id}
-                className="home-hero__active-chip home-hero__active-chip--context"
-                data-testid={`home-hero-context-connector-${connector.id}`}
-              >
-                <span className="home-hero__active-icon" aria-hidden>
-                  <Icon name="link" size={12} />
-                </span>
-                <span className="home-hero__active-label">{connector.name}</span>
-                <button
-                  type="button"
-                  className="home-hero__active-clear od-tooltip"
-                  onClick={() => onRemoveConnectorContext(connector.id)}
-                  aria-label={t('chat.removeAria', { name: connector.name })}
-                  title={t('common.delete')}
-                  data-tooltip={t('common.delete')}
-                >
-                  <Icon name="close" size={9} />
-                </button>
-              </span>
-            ))}
             {showActivePluginChip && activePluginTitle ? (
               <span className="home-hero__active-chip" data-testid="home-hero-active-plugin">
                 <button
@@ -967,27 +952,78 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 </button>
               </span>
             ) : null}
-            {selectedPromptExample ? (
+            {contextOnlyPlugins.map((plugin) => (
               <span
-                className="home-hero__active-chip home-hero__active-chip--example"
-                data-testid="home-hero-active-example"
+                key={`ctx-plugin-${plugin.id}`}
+                className="home-hero__active-chip home-hero__active-chip--context"
+                data-testid={`home-hero-context-plugin-${plugin.id}`}
               >
                 <span className="home-hero__active-icon" aria-hidden>
-                  <Icon name="pencil" size={12} />
+                  <Icon name="sliders" size={12} />
                 </span>
-                <span className="home-hero__active-label">{t('homeHero.promptExamples')}: {selectedPromptExample.label}</span>
+                <span className="home-hero__active-label">{plugin.title}</span>
                 <button
                   type="button"
                   className="home-hero__active-clear od-tooltip"
-                  onClick={clearSelectedPromptExample}
-                  aria-label={t('common.close')}
+                  onClick={() => onRemovePluginContext(plugin.id)}
+                  aria-label={t('chat.removeAria', { name: plugin.title })}
                   title={t('common.close')}
                   data-tooltip={t('common.close')}
+                  data-testid={`home-hero-context-clear-${plugin.id}`}
                 >
                   <Icon name="close" size={9} />
                 </button>
               </span>
-            ) : null}
+            ))}
+            {contextOnlyMcpServers.map((server) => {
+              const label = server.label || server.id;
+              return (
+                <span
+                  key={`ctx-mcp-${server.id}`}
+                  className="home-hero__active-chip home-hero__active-chip--context"
+                  data-testid={`home-hero-context-mcp-${server.id}`}
+                >
+                  <span className="home-hero__active-icon" aria-hidden>
+                    <Icon name="sliders" size={12} />
+                  </span>
+                  <span className="home-hero__active-label">{label}</span>
+                  <button
+                    type="button"
+                    className="home-hero__active-clear od-tooltip"
+                    onClick={() => onRemoveMcpContext(server.id)}
+                    aria-label={t('chat.removeAria', { name: label })}
+                    title={t('common.close')}
+                    data-tooltip={t('common.close')}
+                    data-testid={`home-hero-context-clear-${server.id}`}
+                  >
+                    <Icon name="close" size={9} />
+                  </button>
+                </span>
+              );
+            })}
+            {contextOnlyConnectors.map((connector) => (
+              <span
+                key={`ctx-connector-${connector.id}`}
+                className="home-hero__active-chip home-hero__active-chip--context"
+                data-testid={`home-hero-context-connector-${connector.id}`}
+              >
+                <span className="home-hero__active-icon" aria-hidden>
+                  <Icon name="link" size={12} />
+                </span>
+                <span className="home-hero__active-label">{connector.name}</span>
+                <button
+                  type="button"
+                  className="home-hero__active-clear od-tooltip"
+                  onClick={() => onRemoveConnectorContext(connector.id)}
+                  aria-label={t('chat.removeAria', { name: connector.name })}
+                  title={t('common.close')}
+                  data-tooltip={t('common.close')}
+                  data-testid={`home-hero-context-clear-${connector.id}`}
+                >
+                  <Icon name="close" size={9} />
+                </button>
+              </span>
+            ))}
           </div>
         ) : null}
         <div className="home-hero__prompt-surface">
@@ -1028,14 +1064,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               }}
             />
           </div>
-          {showPluginInputsForm && remainingInputFields.length > 0 ? (
-            <PluginInputsForm
-              fields={remainingInputFields}
-              values={pluginInputValues}
-              onChange={onPluginInputValuesChange}
-              onValidityChange={onPluginInputValidityChange}
-            />
-          ) : null}
         </div>
         <CaretFloatingLayer caret={caretRect} open={pickerOpen}>
           <div
@@ -1160,54 +1188,219 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             }}
           />
           <div className="home-hero__foot-left">
-            <button
-              type="button"
-              className={`home-hero__tool home-hero__context-trigger od-tooltip${pickerOpen ? ' is-active' : ''}`}
-              data-testid="home-hero-context-trigger"
-              onClick={() => {
-                trackHomeChatComposerClick(analytics.track, {
-                  page_name: 'home',
-                  area: 'chat_composer',
-                  element: 'action_chip',
-                });
-                editorRef.current?.focus();
-                if (pickerOpen) return;
-                editorRef.current?.replaceActiveTrigger('@');
-              }}
-              title={t('homeHero.contextSurfaces')}
-              data-tooltip={t('homeHero.contextSurfaces')}
-              aria-label={t('homeHero.contextSurfaces')}
-              aria-haspopup="listbox"
-              aria-expanded={pickerOpen}
-              aria-controls="home-hero-context-picker"
-            >
-              <span className="home-hero__tool-at" aria-hidden>
-                @
-              </span>
-            </button>
-            <button
-              type="button"
-              className="home-hero__tool home-hero__attach od-tooltip"
-              data-testid="home-hero-attach"
-              onClick={() => {
-                trackHomeChatComposerClick(analytics.track, {
-                  page_name: 'home',
-                  area: 'chat_composer',
-                  element: 'attachment',
-                });
-                fileInputRef.current?.click();
-              }}
-              title={t('chat.attachAria')}
-              data-tooltip={t('chat.attachAria')}
-              aria-label={t('chat.attachAria')}
-            >
-              <Icon name="attach" size={15} />
-            </button>
-            <SessionModeToggle
-              mode={sessionMode}
-              onChange={onSessionModeChange}
-              disabled={Boolean(submitDisabled)}
-            />
+            <div className="home-hero__plus-menu" ref={plusMenuRef}>
+              <button
+                type="button"
+                className={`home-hero__tool home-hero__plus-trigger od-tooltip${plusMenuOpen ? ' is-active' : ''}`}
+                data-testid="home-hero-plus-trigger"
+                onClick={() => {
+                  trackHomeChatComposerClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'chat_composer',
+                    element: 'action_chip',
+                  });
+                  setPlusMenuOpen((open) => !open);
+                }}
+                title={t('homeHero.addMenu')}
+                data-tooltip={t('homeHero.addMenu')}
+                aria-label={t('homeHero.addMenu')}
+                aria-haspopup="menu"
+                aria-expanded={plusMenuOpen}
+              >
+                <Icon name="plus" size={16} />
+              </button>
+              {plusMenuOpen ? (
+                <div className="home-hero__plus-popup" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="home-hero__plus-item"
+                    data-testid="home-hero-plus-attach"
+                    onClick={() => {
+                      setPlusMenuOpen(false);
+                      trackHomeChatComposerClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'chat_composer',
+                        element: 'attachment',
+                      });
+                      fileInputRef.current?.click();
+                    }}
+                  >
+                    <Icon name="attach" size={15} className="home-hero__plus-item-icon" />
+                    <span>{t('chat.attachAria')}</span>
+                  </button>
+                  <PlusSubmenuRow
+                    label={t('connectors.title')}
+                    icon="link"
+                    open={plusSubmenu === 'connectors'}
+                    onOpen={() => setPlusSubmenu('connectors')}
+                    onClose={() => setPlusSubmenu(null)}
+                  >
+                    <div className="home-hero__plus-list">
+                      {connectorOptions.length === 0 ? (
+                        <div className="home-hero__plus-empty">{t('homeHero.noConnectors')}</div>
+                      ) : (
+                        connectorOptions.map((connector) => (
+                          <button
+                            key={connector.id}
+                            type="button"
+                            role="menuitem"
+                            className="home-hero__plus-item"
+                            onClick={() => {
+                              setPlusMenuOpen(false);
+                              pickConnector(connector);
+                            }}
+                          >
+                            <Icon name="link" size={15} className="home-hero__plus-item-icon" />
+                            <span>{connector.name}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    <div className="home-hero__plus-divider" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="home-hero__plus-item"
+                      onClick={() => {
+                        setPlusMenuOpen(false);
+                        onAddConnector();
+                      }}
+                    >
+                      <Icon name="plus" size={15} className="home-hero__plus-item-icon" />
+                      <span>{t('homeHero.addConnectors')}</span>
+                    </button>
+                  </PlusSubmenuRow>
+                  <PlusSubmenuRow
+                    label={t('entry.navPlugins')}
+                    icon="sparkles"
+                    open={plusSubmenu === 'plugins'}
+                    onOpen={() => setPlusSubmenu('plugins')}
+                    onClose={() => setPlusSubmenu(null)}
+                  >
+                    <div className="home-hero__plus-search">
+                      <Icon name="search" size={13} />
+                      <input
+                        value={plusQuery}
+                        onChange={(event) => setPlusQuery(event.target.value)}
+                        placeholder={t('entry.navPlugins')}
+                        aria-label={t('entry.navPlugins')}
+                      />
+                    </div>
+                    <div className="home-hero__plus-list">
+                      {plusPluginOptions.length === 0 ? (
+                        <div className="home-hero__plus-empty">{t('homeHero.noPlugins')}</div>
+                      ) : (
+                        plusPluginOptions.map((plugin) => (
+                          <button
+                            key={plugin.id}
+                            type="button"
+                            role="menuitem"
+                            className="home-hero__plus-item"
+                            onClick={() => {
+                              setPlusMenuOpen(false);
+                              pickPlugin(plugin);
+                            }}
+                          >
+                            <Icon name="sparkles" size={15} className="home-hero__plus-item-icon" />
+                            <span>{plugin.title}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    <div className="home-hero__plus-divider" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="home-hero__plus-item"
+                      onClick={() => {
+                        setPlusMenuOpen(false);
+                        onAddPlugin();
+                      }}
+                    >
+                      <Icon name="plus" size={15} className="home-hero__plus-item-icon" />
+                      <span>{t('homeHero.addPlugin')}</span>
+                    </button>
+                  </PlusSubmenuRow>
+                  <PlusSubmenuRow
+                    label="MCP"
+                    icon="link"
+                    open={plusSubmenu === 'mcp'}
+                    onOpen={() => setPlusSubmenu('mcp')}
+                    onClose={() => setPlusSubmenu(null)}
+                  >
+                    <div className="home-hero__plus-search">
+                      <Icon name="search" size={13} />
+                      <input
+                        value={plusQuery}
+                        onChange={(event) => setPlusQuery(event.target.value)}
+                        placeholder="MCP"
+                        aria-label="MCP"
+                      />
+                    </div>
+                    <div className="home-hero__plus-list">
+                      {plusMcpOptions.length === 0 ? (
+                        <div className="home-hero__plus-empty">{t('homeHero.noMcp')}</div>
+                      ) : (
+                        plusMcpOptions.map((server) => (
+                          <button
+                            key={server.id}
+                            type="button"
+                            role="menuitem"
+                            className="home-hero__plus-item"
+                            onClick={() => {
+                              setPlusMenuOpen(false);
+                              pickMcp(server);
+                            }}
+                          >
+                            <Icon name="link" size={15} className="home-hero__plus-item-icon" />
+                            <span>{server.label || server.id}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    <div className="home-hero__plus-divider" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="home-hero__plus-item"
+                      onClick={() => {
+                        setPlusMenuOpen(false);
+                        onAddMcp();
+                      }}
+                    >
+                      <Icon name="plus" size={15} className="home-hero__plus-item-icon" />
+                      <span>{t('homeHero.addMcp')}</span>
+                    </button>
+                  </PlusSubmenuRow>
+                </div>
+              ) : null}
+            </div>
+            {onPickWorkingDir ? (
+              <div className="home-hero__working-dir-wrap">
+                <button
+                  type="button"
+                  className={`home-hero__working-dir${workingDir ? ' picked' : ''}`}
+                  onClick={onPickWorkingDir}
+                  title={workingDir ?? t('workingDirPicker.select')}
+                >
+                  <Icon name="folder" size={13} />
+                  <span>
+                    {workingDir ? workingDir.split(/[/\\]/).filter(Boolean).pop() : t('workingDirPicker.select')}
+                  </span>
+                </button>
+                {workingDir ? (
+                  <button
+                    type="button"
+                    className="home-hero__working-dir-clear"
+                    onClick={() => onClearWorkingDir?.()}
+                    aria-label={t('workingDirPicker.clearAria')}
+                  >
+                    <Icon name="close" size={10} />
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             {activeCreateChip ? (
               <ActiveTypeChip chip={activeCreateChip} onClear={onClearActiveChip} />
             ) : null}
@@ -1231,19 +1424,31 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               </div>
             ) : null}
           </div>
-          <button
-            type="button"
-            className="home-hero__submit od-tooltip"
-            data-testid="home-hero-submit"
-            onClick={onSubmit}
-            disabled={!canSubmit}
-            title={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
-            data-tooltip={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
-            aria-label={t('homeHero.run')}
-          >
-            <Icon name="send" size={13} />
-            <span>{t('chat.send')}</span>
-          </button>
+          <div className="home-hero__foot-right">
+            <SessionModeToggle
+              mode={sessionMode}
+              onChange={onSessionModeChange}
+              disabled={Boolean(submitDisabled)}
+            />
+            {executionSwitcher ? (
+              <div className="home-hero__execution-switcher">
+                {executionSwitcher}
+              </div>
+            ) : null}
+            <button
+              type="button"
+              className="home-hero__submit od-tooltip"
+              data-testid="home-hero-submit"
+              onClick={onSubmit}
+              disabled={!canSubmit}
+              title={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
+              data-tooltip={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
+              aria-label={t('homeHero.run')}
+            >
+              <Icon name="send" size={13} />
+              <span>{t('chat.send')}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1273,10 +1478,22 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         </RailGroup>
       )}
 
-      {activeExamplePlugins.length > 0 && activeChipId ? (
+      {activeSubChips.length > 0 && isSubChipParent(activeChipId) ? (
+        <SubTypeRow
+          subChips={activeSubChips}
+          selectedSlug={selectedSubcategory}
+          pluginsLoading={pluginsLoading}
+          onPickSubChip={(sub) =>
+            setSelectedSubcategory((current) => (current === sub.slug ? null : sub.slug))
+          }
+          onSelectAll={() => setSelectedSubcategory(null)}
+        />
+      ) : null}
+
+      {filteredExamplePlugins.length > 0 && activeChipId ? (
         <PluginPromptPresets
           chipId={activeChipId}
-          plugins={activeExamplePlugins}
+          plugins={filteredExamplePlugins}
           activePluginId={activePluginRecord?.id ?? null}
           pendingPluginId={pendingPluginId}
           locale={locale}
@@ -1421,16 +1638,15 @@ function PluginPromptPresetCard({
           pluginTitle={record.title}
           preview={preview}
         />
+        {active ? (
+          <span className="home-hero__plugin-preset-check" aria-hidden>
+            <Icon name="check" size={12} />
+          </span>
+        ) : null}
       </span>
-      <span className="home-hero__plugin-preset-body">
-        <span className="home-hero__plugin-preset-title">
-          {record.title}
-        </span>
-        <span className="home-hero__plugin-preset-prompt">
-          {promptPreview}
-        </span>
+      <span className="home-hero__plugin-preset-title">
+        {record.title}
       </span>
-      <Icon name={active ? 'check' : 'external-link'} size={13} aria-hidden />
     </button>
   );
 }
@@ -2277,6 +2493,107 @@ function RailGroup({
         );
       })}
       {children}
+    </div>
+  );
+}
+
+function SubTypeRow({
+  subChips,
+  selectedSlug,
+  pluginsLoading,
+  onPickSubChip,
+  onSelectAll,
+}: {
+  subChips: HomeHeroSubChip[];
+  selectedSlug: string | null;
+  pluginsLoading: boolean;
+  onPickSubChip: (sub: HomeHeroSubChip) => void;
+  onSelectAll: () => void;
+}) {
+  const t = useT();
+  const allActive = selectedSlug === null;
+  return (
+    <div
+      className="home-hero__subtype-row"
+      data-testid="home-hero-subtype-row"
+      role="tablist"
+      aria-label={t('homeHero.subTypeAria')}
+    >
+      <button
+        type="button"
+        className={`home-hero__subtype-chip${allActive ? ' is-active' : ''}`}
+        data-sub-chip-id="all"
+        data-testid="home-hero-subtype-all"
+        onClick={onSelectAll}
+        disabled={pluginsLoading}
+        role="tab"
+        aria-selected={allActive}
+      >
+        <span className="home-hero__subtype-chip-label">{t('common.all')}</span>
+      </button>
+      {subChips.map((sub) => {
+        const isActive = sub.slug === selectedSlug;
+        const cls = ['home-hero__subtype-chip'];
+        if (isActive) cls.push('is-active');
+        return (
+          <button
+            key={sub.slug}
+            type="button"
+            className={cls.join(' ')}
+            data-sub-chip-id={sub.slug}
+            data-testid={`home-hero-subtype-${sub.slug}`}
+            onClick={() => onPickSubChip(sub)}
+            disabled={pluginsLoading}
+            role="tab"
+            aria-selected={isActive}
+          >
+            <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
+            <span className="home-hero__subtype-chip-label">{sub.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PlusSubmenuRow({
+  label,
+  icon,
+  open,
+  onOpen,
+  onClose,
+  children,
+}: {
+  label: string;
+  icon: IconName;
+  open: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="home-hero__plus-submenu-row"
+      onMouseEnter={onOpen}
+      onMouseLeave={onClose}
+    >
+      <button
+        type="button"
+        role="menuitem"
+        className="home-hero__plus-item home-hero__plus-parent"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => (open ? onClose() : onOpen())}
+      >
+        <Icon name={icon} size={15} className="home-hero__plus-item-icon" />
+        <span>{label}</span>
+        <Icon name="chevron-right" size={13} className="home-hero__plus-chevron" />
+      </button>
+      {open ? (
+        <div className="home-hero__plus-flyout" role="menu">
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -86,6 +86,16 @@ function migrate(db: SqliteDb): void {
     CREATE INDEX IF NOT EXISTS idx_conv_project
       ON conversations(project_id, updated_at DESC);
 
+    CREATE TABLE IF NOT EXISTS agent_sessions (
+      conversation_id TEXT NOT NULL,
+      agent_id        TEXT NOT NULL,
+      session_id      TEXT NOT NULL,
+      stable_prompt_hash TEXT,
+      updated_at      INTEGER NOT NULL,
+      PRIMARY KEY (conversation_id, agent_id),
+      FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
       conversation_id TEXT NOT NULL,
@@ -324,6 +334,10 @@ function migrate(db: SqliteDb): void {
   }
   if (routineCols.length > 0 && !routineCols.some((c: DbRow) => c.name === 'context_json')) {
     db.exec(`ALTER TABLE routines ADD COLUMN context_json TEXT`);
+  }
+  const agentSessionCols = db.prepare(`PRAGMA table_info(agent_sessions)`).all() as DbRow[];
+  if (agentSessionCols.length > 0 && !agentSessionCols.some((c: DbRow) => c.name === 'stable_prompt_hash')) {
+    db.exec(`ALTER TABLE agent_sessions ADD COLUMN stable_prompt_hash TEXT`);
   }
   const tabsStateCols = db.prepare(`PRAGMA table_info(tabs_state)`).all() as DbRow[];
   if (tabsStateCols.length > 0 && !tabsStateCols.some((c: DbRow) => c.name === 'state_json')) {
@@ -1062,6 +1076,88 @@ export function updateConversation(db: SqliteDb, id: string, patch: DbRow) {
 
 export function deleteConversation(db: SqliteDb, id: string) {
   db.prepare(`DELETE FROM conversations WHERE id = ?`).run(id);
+}
+
+// ---------- agent sessions ----------
+
+export function getAgentSession(
+  db: SqliteDb,
+  conversationId: string,
+  agentId: string,
+): string | null {
+  const row = db
+    .prepare(
+      `SELECT session_id FROM agent_sessions
+        WHERE conversation_id = ? AND agent_id = ?`,
+    )
+    .get(conversationId, agentId) as DbRow | undefined;
+  return row && typeof row.session_id === 'string' ? row.session_id : null;
+}
+
+export function upsertAgentSession(
+  db: SqliteDb,
+  input: {
+    conversationId: string;
+    agentId: string;
+    sessionId: string;
+    stablePromptHash?: string | null;
+  },
+): void {
+  db.prepare(
+    `INSERT INTO agent_sessions (conversation_id, agent_id, session_id, stable_prompt_hash, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(conversation_id, agent_id)
+       DO UPDATE SET session_id = excluded.session_id,
+                     stable_prompt_hash = excluded.stable_prompt_hash,
+                     updated_at = excluded.updated_at`,
+  ).run(
+    input.conversationId,
+    input.agentId,
+    input.sessionId,
+    input.stablePromptHash ?? null,
+    Date.now(),
+  );
+}
+
+export function getAgentSessionRecord(
+  db: SqliteDb,
+  conversationId: string,
+  agentId: string,
+): { sessionId: string; stablePromptHash: string | null } | null {
+  const row = db
+    .prepare(
+      `SELECT session_id, stable_prompt_hash FROM agent_sessions
+        WHERE conversation_id = ? AND agent_id = ?`,
+    )
+    .get(conversationId, agentId) as DbRow | undefined;
+  if (!row || typeof row.session_id !== 'string') return null;
+  return {
+    sessionId: row.session_id,
+    stablePromptHash:
+      typeof row.stable_prompt_hash === 'string' ? row.stable_prompt_hash : null,
+  };
+}
+
+export function updateAgentSessionStableHash(
+  db: SqliteDb,
+  conversationId: string,
+  agentId: string,
+  stablePromptHash: string,
+): void {
+  db.prepare(
+    `UPDATE agent_sessions SET stable_prompt_hash = ?, updated_at = ?
+      WHERE conversation_id = ? AND agent_id = ?`,
+  ).run(stablePromptHash, Date.now(), conversationId, agentId);
+}
+
+export function clearAgentSession(
+  db: SqliteDb,
+  conversationId: string,
+  agentId: string,
+): void {
+  db.prepare(
+    `DELETE FROM agent_sessions WHERE conversation_id = ? AND agent_id = ?`,
+  ).run(conversationId, agentId);
 }
 
 // ---------- messages ----------

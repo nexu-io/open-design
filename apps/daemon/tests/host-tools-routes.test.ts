@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveHostToolLaunchPlan } from '../src/host-tools-routes.js';
+import { resolveHostToolLaunchPlan } from '../src/routes/host-tools.js';
 
 describe('host tools open-in launch plans', () => {
   it('uses the absolute macOS open command to reveal project folders in Finder', async () => {

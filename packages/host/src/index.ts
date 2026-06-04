@@ -63,6 +63,24 @@ export type OpenDesignHostProjectReplaceWorkingDirResult =
     }
   | OpenDesignHostFailure;
 
+export type OpenDesignHostPickWorkingDirSuccess = {
+  baseDir: string;
+  ok: true;
+  // Single-use HMAC token (minted by the host main process for `baseDir`)
+  // that the renderer threads into POST /api/projects/:id/working-dir once
+  // the project exists. Lets the Home flow pick a folder before the project
+  // is created without exposing the daemon's desktop-auth gate.
+  token: string;
+};
+
+export type OpenDesignHostPickWorkingDirResult =
+  | OpenDesignHostPickWorkingDirSuccess
+  | {
+      canceled: true;
+      ok: false;
+    }
+  | OpenDesignHostFailure;
+
 export type OpenDesignHostPdfPrintOptions = {
   deck?: boolean;
 };
@@ -229,6 +247,9 @@ export type OpenDesignHostBridge = {
   project: {
     pickAndImport(init?: OpenDesignHostProjectImportInit): Promise<OpenDesignHostProjectImportResult>;
     pickAndReplaceWorkingDir(projectId: string): Promise<OpenDesignHostProjectReplaceWorkingDirResult>;
+    // Optional so older host builds still satisfy the bridge shape; callers
+    // must feature-detect before invoking.
+    pickWorkingDir?(): Promise<OpenDesignHostPickWorkingDirResult>;
   };
   shell: {
     openExternal(url: string): Promise<OpenDesignHostActionResult>;
@@ -381,6 +402,27 @@ export function normalizeOpenDesignHostProjectReplaceWorkingDirResult(
   return { baseDir, entryFile, ok: true };
 }
 
+export function normalizeOpenDesignHostPickWorkingDirResult(
+  input: unknown,
+): OpenDesignHostPickWorkingDirResult {
+  if (!isRecord(input)) {
+    return failure("desktop working-dir pick returned an invalid response", input);
+  }
+  if (input.ok !== true) {
+    if (input.canceled === true) return { canceled: true, ok: false };
+    const reason = typeof input.reason === "string" && input.reason.length > 0
+      ? input.reason
+      : "unknown failure";
+    return failure(reason, input.details);
+  }
+  const baseDir = typeof input.baseDir === "string" ? input.baseDir : null;
+  const token = typeof input.token === "string" ? input.token : null;
+  if (baseDir == null || token == null) {
+    return failure("desktop working-dir pick did not include baseDir and token", input);
+  }
+  return { baseDir, ok: true, token };
+}
+
 function candidateFromScope(scope: OpenDesignHostGlobalScope): unknown {
   if (OPEN_DESIGN_HOST_GLOBAL in scope) return scope[OPEN_DESIGN_HOST_GLOBAL];
   const windowValue = scope.window;
@@ -474,6 +516,25 @@ export async function pickAndReplaceHostProjectWorkingDir(
   if (host == null) return unavailable("Open Design host is not available");
   try {
     return await host.project.pickAndReplaceWorkingDir(projectId);
+  } catch (error) {
+    return unavailable(error instanceof Error ? error.message : String(error));
+  }
+}
+
+// Picks a folder via the host's native dialog and returns the chosen path
+// plus a single-use token, WITHOUT touching any project. The Home flow uses
+// this to let the user choose a working directory before the project exists;
+// the token is later spent on POST /api/projects/:id/working-dir.
+export async function pickHostWorkingDir(
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostPickWorkingDirResult> {
+  const host = getOpenDesignHost(scope);
+  if (host == null) return unavailable("Open Design host is not available");
+  if (typeof host.project.pickWorkingDir !== "function") {
+    return unavailable("host build does not support pickWorkingDir");
+  }
+  try {
+    return await host.project.pickWorkingDir();
   } catch (error) {
     return unavailable(error instanceof Error ? error.message : String(error));
   }

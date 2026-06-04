@@ -21,16 +21,18 @@ Pick a standard code:
 
 ### Step 2: Translate the README
 
+Translations live in `docs/i18n/`; only the English `README.md` stays in the repo root (GitHub renders the root README as the project home page).
+
 ```bash
 # Copy and translate
-cp README.md README.it.md
-# Edit README.it.md in your editor
+cp README.md docs/i18n/README.it.md
+# Edit docs/i18n/README.it.md in your editor
 ```
 
 **What to translate:**
 - ✅ All text, headings, descriptions
 - ✅ Alt text: `alt="Open Design banner"`
-- ✅ Link text: `[Quickstart](QUICKSTART.md)` → `[Guida rapida](QUICKSTART.it.md)` (if that file exists; otherwise keep `QUICKSTART.md` target)
+- ✅ Link text: `[Quickstart](../../QUICKSTART.md)` → `[Guida rapida](QUICKSTART.it.md)` (paths are relative to `docs/i18n/`: link a translated core doc as a sibling filename, or fall back to the English target at `../../QUICKSTART.md`)
 
 **What NOT to translate:**
 - ❌ Code snippets, commands, file paths
@@ -41,16 +43,21 @@ cp README.md README.it.md
 ### Step 3: Update ALL Language Switchers (Critical!)
 
 **This is the most commonly forgotten step.** You must update the language switcher in:
-1. Your new `README.it.md` (bold your language)
-2. **Every existing `README.*.md` file** (add your language as a link)
+1. Your new `docs/i18n/README.it.md` (bold your language)
+2. **Every existing README** — the English `README.md` in the repo root *and* every `docs/i18n/README.*.md` (add your language as a link)
 
-Find the line that looks like this (around line 30):
+The switcher uses two link conventions depending on which file it lives in:
 
-```html
-<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · ... · <b>Italiano</b></p>
-```
+- **English root `README.md`** — bold `English`; link translations with the `docs/i18n/` prefix:
+  ```html
+  <p align="center"><b>English</b> · <a href="docs/i18n/README.es.md">Español</a> · ... · <a href="docs/i18n/README.it.md">Italiano</a></p>
+  ```
+- **Translated `docs/i18n/README.xx.md`** — bold your own language; link English with `../../README.md` and the other translations as sibling filenames:
+  ```html
+  <p align="center"><a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · ... · <b>Italiano</b></p>
+  ```
 
-**Files to update:** `README.md`, `README.ar.md`, `README.de.md`, `README.es.md`, `README.fr.md`, `README.ja-JP.md`, `README.ko.md`, `README.pt-BR.md`, `README.ru.md`, `README.tr.md`, `README.uk.md`, `README.zh-CN.md`, `README.zh-TW.md`
+**Files to update:** `README.md` (root), `docs/i18n/README.ar.md`, `docs/i18n/README.de.md`, `docs/i18n/README.es.md`, `docs/i18n/README.fr.md`, `docs/i18n/README.ja-JP.md`, `docs/i18n/README.ko.md`, `docs/i18n/README.pt-BR.md`, `docs/i18n/README.ru.md`, `docs/i18n/README.tr.md`, `docs/i18n/README.uk.md`, `docs/i18n/README.zh-CN.md`, `docs/i18n/README.zh-TW.md`
 
 ### Step 4: Add UI Dictionary (Optional but Recommended)
 
@@ -87,7 +94,7 @@ pnpm typecheck
 # Run i18n checks
 pnpm i18n:check
 
-# Visual check: open your README.it.md in GitHub preview
+# Visual check: open your docs/i18n/README.it.md in GitHub preview
 # Verify all links work, images load, language switcher displays correctly
 ```
 
@@ -118,7 +125,7 @@ Open Design currently supports **19 languages** across different surfaces:
 | Bahasa Indonesia     | `id`    | —      | ✅      | —         | active |
 | Italiano             | `it`    | —      | ✅      | —         | active |
 | 日本語 (Japanese)    | `ja`    | ✅     | ✅      | ✅        | active |
-| 한국어 (Korean)      | `ko`    | ✅     | ✅      | —         | active |
+| 한국어 (Korean)      | `ko`    | ✅     | ✅      | ✅        | active |
 | Polski (Polish)      | `pl`    | —      | ✅      | —         | active |
 | Português (Brasil)   | `pt-BR` | ✅     | ✅      | ✅        | active |
 | Русский (Russian)    | `ru`    | ✅     | ✅      | —         | active |
@@ -129,20 +136,20 @@ Open Design currently supports **19 languages** across different surfaces:
 | 繁體中文             | `zh-TW` | ✅     | ✅      | —         | active |
 
 **Translation surfaces:**
-- **README**: Root documentation (`README.{lang}.md`)
+- **README**: Project README, translated into `docs/i18n/README.{lang}.md` (English source stays at root `README.md`)
 - **UI Dict**: Web interface strings (`apps/web/src/i18n/locales/{lang}.ts`)
-- **Core Docs**: `QUICKSTART.{lang}.md`, `CONTRIBUTING.{lang}.md`
+- **Core Docs**: `docs/i18n/QUICKSTART.{lang}.md`, `docs/i18n/CONTRIBUTING.{lang}.md` (English sources stay at root `QUICKSTART.md`, `CONTRIBUTING.md`)
 
 > **Note:** You can contribute any subset of these surfaces. Start with README (highest impact), then add UI dictionary and core docs when you have time.
 
 ### File Locations
 
 - **UI dictionaries**: [`apps/web/src/i18n/locales/`](apps/web/src/i18n/locales/)
-- **Root READMEs**: Beside [`README.md`](README.md) in project root
-- **Core docs**: Beside [`QUICKSTART.md`](QUICKSTART.md) and [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- **English sources**: [`README.md`](README.md), [`QUICKSTART.md`](QUICKSTART.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`MAINTAINERS.md`](MAINTAINERS.md) stay in the project root
+- **Translated docs**: [`docs/i18n/`](docs/i18n/) holds every `README.{lang}.md`, `QUICKSTART.{lang}.md`, `CONTRIBUTING.{lang}.md`, and `MAINTAINERS.{lang}.md`
 - **Display metadata**: `apps/web/src/i18n/content*.ts` (optional, for gallery/examples)
 
-The `LOCALES` array in [`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts) is the authoritative list for UI dictionaries. Root README language switchers cover every locale that has a root README; this set can differ from `LOCALES`.
+The `LOCALES` array in [`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts) is the authoritative list for UI dictionaries. README language switchers cover every locale that has a README translation in `docs/i18n/`; this set can differ from `LOCALES`.
 
 ---
 
@@ -224,28 +231,34 @@ The `LOCALES` array in [`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts
    };
    ```
 
-5. **Translate the root README:**
-   - Copy `README.md` to `README.<code>.md`
+5. **Translate the README:**
+   - Copy `README.md` to `docs/i18n/README.<code>.md` (translations live under `docs/i18n/`; the English `README.md` is the only one in the repo root)
    - Repository precedent may use a documentation-region code that differs from the UI dict code when that is the familiar docs filename, such as `README.ja-JP.md` with UI locale `ja`, or `README.es.md` with UI locale `es-ES`
    - Translate all prose, headings, alt text, and link text
    - Keep code snippets, URLs, and brand names in English
-   - Update internal links: `[Quickstart](QUICKSTART.md)` → `[Guida rapida](QUICKSTART.it.md)` (if that file exists)
+   - Fix relative paths for the new location: links to repo-root resources (`apps/`, `docs/`, `LICENSE`, the English `README.md`, etc.) need a `../../` prefix; links to a sibling translated core doc stay as a bare filename. Example: `[Quickstart](../../QUICKSTART.md)` → `[Guida rapida](QUICKSTART.it.md)` if that translation exists, else `[Guida rapida](../../QUICKSTART.md)`
 
-6. **Update the language switcher in EVERY root README** (line ~30 of each `README*.md`):
+6. **Update the language switcher in EVERY README** — the root `README.md` and every `docs/i18n/README.*.md` (line ~25 of each):
    - Match the order used in the English README
    - Include the same set everywhere
    - Bold the current language: `<b>Italiano</b>`
-   - Link to other languages: `<a href="README.it.md">Italiano</a>`
+   - The link form differs by file location (see below)
 
-   **Standard order:**
+   **English root `README.md`** — bold `English`, link translations with the `docs/i18n/` prefix:
    ```html
-   <p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a> · <a href="README.it.md">Italiano</a></p>
+   <p align="center"><b>English</b> · <a href="docs/i18n/README.es.md">Español</a> · <a href="docs/i18n/README.pt-BR.md">Português</a> · <a href="docs/i18n/README.de.md">Deutsch</a> · <a href="docs/i18n/README.fr.md">Français</a> · <a href="docs/i18n/README.zh-CN.md">简体中文</a> · <a href="docs/i18n/README.zh-TW.md">繁體中文</a> · <a href="docs/i18n/README.ko.md">한국어</a> · <a href="docs/i18n/README.ja-JP.md">日本語</a> · <a href="docs/i18n/README.ar.md">العربية</a> · <a href="docs/i18n/README.ru.md">Русский</a> · <a href="docs/i18n/README.uk.md">Українська</a> · <a href="docs/i18n/README.tr.md">Türkçe</a> · <a href="docs/i18n/README.it.md">Italiano</a></p>
+   ```
+
+   **Translated `docs/i18n/README.<code>.md`** — link English with `../../README.md`, the other translations as sibling filenames, bold your own:
+   ```html
+   <p align="center"><a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a> · <b>Italiano</b></p>
    ```
 
 7. **(Optional) Translate core docs:**
-   - Copy `QUICKSTART.md` → `QUICKSTART.<code>.md`
-   - Copy `CONTRIBUTING.md` → `CONTRIBUTING.<code>.md`
-   - Follow existing examples: `QUICKSTART.fr.md`, `CONTRIBUTING.pt-BR.md`, `CONTRIBUTING.ja-JP.md`
+   - Copy `QUICKSTART.md` → `docs/i18n/QUICKSTART.<code>.md`
+   - Copy `CONTRIBUTING.md` → `docs/i18n/CONTRIBUTING.<code>.md`
+   - Follow existing examples: `docs/i18n/QUICKSTART.fr.md`, `docs/i18n/CONTRIBUTING.pt-BR.md`, `docs/i18n/CONTRIBUTING.ja-JP.md`
+   - Apply the same `../../`-for-root-resources rule; links between translated docs in `docs/i18n/` stay as bare sibling filenames
    - Update links from the translated README to the translated core docs
 
 8. **(Optional) Translate display metadata** in `apps/web/src/i18n/content*.ts`:
@@ -266,7 +279,7 @@ The `LOCALES` array in [`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts
 - ✅ Alt text in images: `alt="Open Design banner"` → `alt="Banner di Open Design"`
 - ✅ Badge labels where appropriate: `discord-join` → `discord-unisciti`
 - ✅ Code comments in examples (if instructional)
-- ✅ Link text: `[Quickstart](QUICKSTART.md)` → `[Guida rapida](QUICKSTART.it.md)` (if that file exists; otherwise keep `QUICKSTART.md` target)
+- ✅ Link text: `[Quickstart](../../QUICKSTART.md)` → `[Guida rapida](QUICKSTART.it.md)` (sibling translation in `docs/i18n/` if it exists; otherwise keep the English target `../../QUICKSTART.md`)
 
 **What NOT to translate:**
 - ❌ Code snippets (commands, file paths, variable names)
@@ -530,20 +543,20 @@ Open your translated README in GitHub's preview or a local Markdown viewer:
 Check all internal links point to existing files:
 
 ```bash
-# Example: verify Italian links
-grep -o 'README\.[a-z-]*\.md' README.it.md | sort -u
-grep -o 'QUICKSTART\.[a-z-]*\.md' README.it.md | sort -u
-grep -o 'CONTRIBUTING\.[a-z-]*\.md' README.it.md | sort -u
+# Example: verify Italian links (translations live in docs/i18n/)
+grep -o 'README\.[a-z-]*\.md' docs/i18n/README.it.md | sort -u
+grep -o 'QUICKSTART\.[a-z-]*\.md' docs/i18n/README.it.md | sort -u
+grep -o 'CONTRIBUTING\.[a-z-]*\.md' docs/i18n/README.it.md | sort -u
 ```
 
-All linked files should exist in the repository. If a translated file doesn't exist yet, link to the English version.
+All linked files should exist in the repository. Sibling translations resolve relative to `docs/i18n/`; English sources resolve via the `../../` prefix. If a translated file doesn't exist yet, link to the English version at `../../`.
 
 ### 3. Language Switcher Audit
 
 Verify the language switcher in your new file:
-- ✅ Lists all supported languages (13+)
+- ✅ Lists all supported languages
 - ✅ Current language is bolded: `<b>Italiano</b>`
-- ✅ All other languages are links: `<a href="README.it.md">Italiano</a>`
+- ✅ All other languages are links (sibling `<a href="README.es.md">` from a `docs/i18n/` file; `docs/i18n/`-prefixed from the root `README.md`)
 - ✅ Links use correct file names (e.g., `README.ja-JP.md` not `README.ja.md`)
 - ✅ Order matches the standard order
 
@@ -593,27 +606,27 @@ feat(i18n): add [Language] translation
 Adds [Language] translation for Open Design documentation.
 
 ## Translation Scope
-- [x] README.[lang].md
-- [ ] QUICKSTART.[lang].md (optional)
-- [ ] CONTRIBUTING.[lang].md (optional)
+- [x] docs/i18n/README.[lang].md
+- [ ] docs/i18n/QUICKSTART.[lang].md (optional)
+- [ ] docs/i18n/CONTRIBUTING.[lang].md (optional)
 - [x] UI dictionary (`apps/web/src/i18n/locales/[lang].ts`)
 - [x] Language switcher updated in all existing READMEs
 
 ## Files Modified
 Updated language switcher in:
-- [x] README.md
-- [x] README.ar.md
-- [x] README.de.md
-- [x] README.es.md
-- [x] README.fr.md
-- [x] README.ja-JP.md
-- [x] README.ko.md
-- [x] README.pt-BR.md
-- [x] README.ru.md
-- [x] README.tr.md
-- [x] README.uk.md
-- [x] README.zh-CN.md
-- [x] README.zh-TW.md
+- [x] README.md (root)
+- [x] docs/i18n/README.ar.md
+- [x] docs/i18n/README.de.md
+- [x] docs/i18n/README.es.md
+- [x] docs/i18n/README.fr.md
+- [x] docs/i18n/README.ja-JP.md
+- [x] docs/i18n/README.ko.md
+- [x] docs/i18n/README.pt-BR.md
+- [x] docs/i18n/README.ru.md
+- [x] docs/i18n/README.tr.md
+- [x] docs/i18n/README.uk.md
+- [x] docs/i18n/README.zh-CN.md
+- [x] docs/i18n/README.zh-TW.md
 
 ## Translation Notes
 [Any regional choices, terminology decisions, or context for reviewers]
@@ -663,8 +676,8 @@ Translations are **not automatically updated** when the English source changes. 
 When a PR changes English copy, check which surface changed and update the matching translated surfaces deliberately:
 
 - **UI chrome:** Update `apps/web/src/i18n/locales/en.ts` first, then add translated values to active locale dictionaries when the PR owns that refresh. Partial dictionaries may inherit from English with `...en`.
-- **Root README:** Keep root README language switchers in sync across all root `README*.md` files. Check badge counts, Quickstart links, supported agent lists, and release/download links against `README.md` during a refresh.
-- **Core docs:** Keep translated `QUICKSTART.*.md` and `CONTRIBUTING.*.md` aligned with their English source when the locale owns those docs.
+- **README:** Keep language switchers in sync across the root `README.md` and every `docs/i18n/README.*.md`. Check badge counts, Quickstart links, supported agent lists, and release/download links against the English `README.md` during a refresh.
+- **Core docs:** Keep translated `docs/i18n/QUICKSTART.*.md` and `docs/i18n/CONTRIBUTING.*.md` aligned with their English source (`QUICKSTART.md`, `CONTRIBUTING.md` in root) when the locale owns those docs.
 - **Display metadata:** Update `apps/web/src/i18n/content*.ts` alongside `content.ts` when that locale maintains display metadata.
 
 ### Automated Checks
@@ -730,9 +743,9 @@ It's okay to translate only README initially. Add QUICKSTART and CONTRIBUTING la
 **Mark partial translations in your PR:**
 ```markdown
 ## Translation Status
-- [x] README.it.md (complete)
-- [ ] QUICKSTART.it.md (planned)
-- [ ] CONTRIBUTING.it.md (planned)
+- [x] docs/i18n/README.it.md (complete)
+- [ ] docs/i18n/QUICKSTART.it.md (planned)
+- [ ] docs/i18n/CONTRIBUTING.it.md (planned)
 ```
 
 ---

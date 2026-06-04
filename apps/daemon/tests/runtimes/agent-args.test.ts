@@ -27,10 +27,11 @@ test('cursor-agent args deliver prompts via stdin without passing a literal dash
   ]);
 });
 
-test('opencode args deliver prompts via stdin without passing a literal dash prompt', () => {
+test('opencode args keep the documented run/json argv and ignore unsupported reasoning options', () => {
   const prompt = 'design a dashboard';
   const baseArgs = opencode.buildArgs(prompt, [], [], {});
   assert.equal(opencode.promptViaStdin, true);
+  assert.equal(opencode.reasoningOptions, undefined);
   assert.equal(baseArgs.includes('-'), false);
   assert.equal(baseArgs.includes(prompt), false);
   assert.deepEqual(baseArgs, [
@@ -52,6 +53,18 @@ test('opencode args deliver prompts via stdin without passing a literal dash pro
     '-m',
     'anthropic/claude-sonnet-4-5',
   ]);
+  const withReasoning = opencode.buildArgs(
+    prompt,
+    [],
+    [],
+    {
+      model: 'anthropic/claude-sonnet-4-5',
+      reasoning: 'high',
+    },
+  );
+  assert.equal(withReasoning.some((arg) => arg.includes('reason')), false);
+  assert.equal(withReasoning.includes('--thinking'), false);
+  assert.deepEqual(withReasoning, withModel);
   assert.equal(withModel.includes('--dangerously-skip-permissions'), false);
   assert.equal(withModel.includes('--model'), false);
 });

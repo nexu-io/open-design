@@ -790,6 +790,46 @@ describe('loadConfig', () => {
     expect(config.configMigrationVersion).toBe(1);
   });
 
+  it('backfills the fixed-origin base URL for AIHubMix when persisted empty', () => {
+    // AIHubMix hides the Base URL field, so older configs persisted an empty
+    // baseUrl. An empty base URL blocks the live model-list fetch, so loadConfig
+    // must resolve it to the canonical origin.
+    const persisted: Partial<AppConfig> = {
+      mode: 'api',
+      apiProtocol: 'aihubmix',
+      apiKey: 'sk-test',
+      baseUrl: '',
+      model: 'claude-opus-4-8',
+      configMigrationVersion: 1,
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(persisted));
+
+    const config = loadConfig();
+
+    expect(config.apiProtocol).toBe('aihubmix');
+    expect(config.baseUrl).toBe('https://aihubmix.com/v1');
+  });
+
+  it('leaves a non-gateway protocol base URL untouched', () => {
+    const persisted: Partial<AppConfig> = {
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.example.com/v1',
+      model: 'gpt-4o',
+      configMigrationVersion: 1,
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(persisted));
+
+    expect(loadConfig().baseUrl).toBe('https://api.example.com/v1');
+  });
+
   it('migrates legacy Anthropic API configs to an explicit apiProtocol', () => {
     const legacyConfig: Partial<AppConfig> = {
       mode: 'api',

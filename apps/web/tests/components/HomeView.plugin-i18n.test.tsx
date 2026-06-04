@@ -100,7 +100,13 @@ describe('HomeView plugin i18n', () => {
 
     fireEvent.click(await waitFor(() => screen.getByTestId('plugins-home-use-localized-plugin')));
 
-    expect(screen.getByTestId('home-hero-context-plugin-localized-plugin')).toBeTruthy();
+    // The per-plugin context badge row was removed; staged context with an empty
+    // prompt now surfaces via the active context row's localized resolved-count
+    // label (zh-CN: "已解析 1 个上下文项"). Assert that count rather than the
+    // dropped badge.
+    await waitFor(() => {
+      expect(screen.getByLabelText(/已解析 1 个上下文项/)).toBeTruthy();
+    });
     // "Use" adds the plugin as context only — it must NOT hydrate the query into
     // the prompt editor, so the Lexical editor stays empty. An empty Lexical
     // contenteditable serializes to whitespace, so assert via the composer's
