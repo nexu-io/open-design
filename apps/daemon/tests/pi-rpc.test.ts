@@ -1113,7 +1113,6 @@ test('attachPiRpcSession sends new_session before prompt when parentSession is p
   const events: TestSentEvent[] = [];
   const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
   const child = createMockChild();
-  child.stdout.end();
   const session = attachPiRpcSession({
     child: child as unknown as ChildProcess,
     prompt: 'test',
@@ -1130,17 +1129,52 @@ test('attachPiRpcSession sends new_session before prompt when parentSession is p
     buffered = child.stdin.read();
   }
   const lines = chunks.join('').trim().split('\n').filter(Boolean);
-  // First line should be new_session with parentSession.
+  // First line should be new_session with parentSession, and prompt should
+  // wait until pi confirms it loaded the parent session.
+  assert.equal(lines.length, 1, 'should wait for new_session response before prompt');
   const first = parseJsonRecord(lines[0] ?? '');
   assert.equal(first.type, 'new_session', 'first cmd should be new_session');
   assert.equal(first.parentSession, '/path/to/prior-session.jsonl', 'parentSession should match');
-  // Second line should be prompt.
-  const second = parseJsonRecord(lines[1] ?? '');
+  feedStdoutLines(child, [{ type: 'response', id: first.id, success: true }]);
+  const promptChunk = child.stdin.read();
+  const promptLines = promptChunk ? promptChunk.toString().trim().split('\n').filter(Boolean) : [];
+  assert.equal(promptLines.length, 1, 'should send prompt after new_session succeeds');
+  const second = parseJsonRecord(promptLines[0] ?? '');
   assert.equal(second.type, 'prompt', 'second cmd should be prompt');
   // new_session should have a smaller id than prompt.
   assert.ok((first.id as number) < (second.id as number), 'new_session id should be less than prompt id');
   // getLastSessionPath should return null initially (no real session dir).
   assert.equal(session.getLastSessionPath(), null, 'no session path before agent_end');
+});
+
+test('attachPiRpcSession fails and does not send prompt when parentSession is rejected', () => {
+  const events: TestSentEvent[] = [];
+  const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
+  const child = createMockChild();
+  attachPiRpcSession({
+    child: child as unknown as ChildProcess,
+    prompt: 'trimmed latest turn',
+    send,
+    parentSession: '/path/to/missing-session.jsonl',
+  });
+  const firstChunk = child.stdin.read();
+  const firstLines = firstChunk ? firstChunk.toString().trim().split('\n').filter(Boolean) : [];
+  assert.equal(firstLines.length, 1, 'should only send new_session initially');
+  const first = parseJsonRecord(firstLines[0] ?? '');
+  assert.equal(first.type, 'new_session');
+
+  feedStdoutLines(child, [{ type: 'response', id: first.id, success: false, error: 'missing session' }]);
+
+  const promptChunk = child.stdin.read();
+  assert.equal(promptChunk, null, 'must not send trimmed prompt after parent session failure');
+  assert.deepEqual(
+    events.find((event) => event.channel === 'error'),
+    {
+      channel: 'error',
+      message: 'parent session rejected: missing session',
+      code: 'PI_PARENT_SESSION_FAILED',
+    },
+  );
 });
 
 test('attachPiRpcSession does NOT send new_session when parentSession is omitted', () => {

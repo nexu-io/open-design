@@ -12860,9 +12860,16 @@ export async function startServer({
           } else if (channel === 'error') {
             if (agentStreamError) return;
             agentStreamError = String(payload?.message || 'Pi session error');
+            const piErrorCode = typeof payload?.code === 'string' ? payload.code : null;
+            if (piErrorCode) {
+              run.errorCode = piErrorCode;
+            }
+            if (piErrorCode === 'PI_PARENT_SESSION_FAILED' && run.conversationId) {
+              clearAgentSession(db, run.conversationId, def.id);
+            }
             clearInactivityWatchdog();
             send('error', createSseErrorPayload(
-              'AGENT_EXECUTION_FAILED',
+              piErrorCode ?? 'AGENT_EXECUTION_FAILED',
               agentStreamError,
               { retryable: false },
             ));

@@ -441,14 +441,17 @@ export function attachPiRpcSession({
     return id;
   }
 
-  // Track the prompt request id so we know when the prompt response arrives.
+  // Track RPC ids so resume and prompt failures are attributed to the right
+  // request. A resumed turn must not send the trimmed prompt until pi confirms
+  // it loaded the parent session.
+  let parentSessionRpcId: number | null = null;
   let promptRpcId: number | null = null;
 
-  const fail = (message: string): void => {
+  const fail = (message: string, code?: string): void => {
     if (finished) return;
     finished = true;
     fatal = true;
-    send('error', { message });
+    send('error', { message, ...(code ? { code } : {}) });
     if (!child.killed) child.kill('SIGTERM');
   };
 
@@ -473,10 +476,6 @@ export function attachPiRpcSession({
   // If a prior session file path is provided, send new_session with
   // parentSession so pi loads the prior conversation history into the
   // new session, enabling conversational continuity across edit rounds.
-  if (parentSession) {
-    sendCommand(stdin, 'new_session', { parentSession });
-  }
-
   // Build the images array for pi's prompt command. pi's RPC protocol
   // accepts `images` as an array of {type, data, mimeType} objects where
   // `data` is base64-encoded file contents. The daemon's safeImages guard
@@ -531,10 +530,24 @@ export function attachPiRpcSession({
     }
   }
 
-  promptRpcId = sendCommand(stdin, 'prompt', {
-    message: prompt,
-    ...(images.length > 0 ? { images } : {}),
-  });
+  const sendPromptCommand = (): void => {
+    promptRpcId = sendCommand(stdin, 'prompt', {
+      message: prompt,
+      ...(images.length > 0 ? { images } : {}),
+    });
+  };
+
+  // If a prior session file path is provided, send new_session with
+  // parentSession so pi loads the prior conversation history into the
+  // new session, enabling conversational continuity across edit rounds.
+  // Do not send the prompt until pi acknowledges this RPC: resumed prompts
+  // intentionally contain only the latest user turn, so continuing after a
+  // failed parent load would silently drop prior conversation context.
+  if (parentSession) {
+    parentSessionRpcId = sendCommand(stdin, 'new_session', { parentSession });
+  } else {
+    sendPromptCommand();
+  }
 
   // ---- Inbound: parse stdout events ----
   const parser = createJsonLineStream((raw: unknown) => {
@@ -554,6 +567,17 @@ export function attachPiRpcSession({
     // RPC responses (prompt accepted, set_model ack, etc.) — not
     // agent events. Log the prompt acceptance, ignore the rest.
     if (raw.type === 'response') {
+      if (raw.id === parentSessionRpcId) {
+        if (raw.success === false) {
+          fail(
+            `parent session rejected: ${String(raw.error ?? 'unknown')}`,
+            'PI_PARENT_SESSION_FAILED',
+          );
+          return;
+        }
+        sendPromptCommand();
+        return;
+      }
       if (raw.id === promptRpcId && raw.success === false) {
         fail(`prompt rejected: ${String(raw.error ?? 'unknown')}`);
       }
