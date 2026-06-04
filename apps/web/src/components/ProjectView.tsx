@@ -5068,7 +5068,22 @@ export function ProjectView({
                 )
               }
               onSwitchToLocalCli={() => {
+                const recoveredAt = Date.now();
                 setError(null);
+                if (activeConversationId) {
+                  setMessages((curr) => {
+                    const recovery = applyLocalCliRecoveryToFailedAssistant(curr, recoveredAt);
+                    if (recovery.recovered) {
+                      void saveMessage(
+                        project.id,
+                        activeConversationId,
+                        recovery.recovered,
+                        { telemetryFinalized: true },
+                      );
+                    }
+                    return recovery.messages;
+                  });
+                }
                 onModeChange('daemon');
               }}
               onOpenAmrSettings={onOpenAmrSettings}
@@ -5495,6 +5510,33 @@ export function resolveRetryTarget(
     failedAssistant,
     userMsg,
     priorMessages: messages.slice(0, failedIndex - 1),
+  };
+}
+
+export function applyLocalCliRecoveryToFailedAssistant(
+  messages: ChatMessage[],
+  recoveredAt: number,
+): { messages: ChatMessage[]; recovered: ChatMessage | null } {
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== 'assistant' || last.runStatus !== 'failed') {
+    return { messages, recovered: null };
+  }
+
+  const events = last.events ?? [];
+  if (!events.some((event) => event.kind === 'status' && event.label === 'error')) {
+    return { messages, recovered: null };
+  }
+
+  const recovered = {
+    ...last,
+    runStatus: 'canceled' as const,
+    endedAt: last.endedAt ?? recoveredAt,
+    events: events.filter((event) => !(event.kind === 'status' && event.label === 'error')),
+  };
+
+  return {
+    messages: [...messages.slice(0, -1), recovered],
+    recovered,
   };
 }
 

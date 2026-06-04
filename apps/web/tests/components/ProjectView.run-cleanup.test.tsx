@@ -4,6 +4,7 @@ import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
+  applyLocalCliRecoveryToFailedAssistant,
   clearStreamingConversationMarker,
   finalizeActiveAssistantMessagesOnStop,
   findExistingArtifactProjectFile,
@@ -174,6 +175,9 @@ async function waitForReadyChatPaneProps() {
   });
   return chatPaneSpy.mock.calls.at(-1)?.[0] as {
     onSend?: (prompt: string, attachments: unknown[], comments: unknown[]) => Promise<void>;
+    onSwitchToLocalCli?: () => void;
+    showByokRecoveryAction?: boolean;
+    activeConversationId?: string | null;
     initialDraft?: string;
   };
 }
@@ -252,6 +256,56 @@ describe('retry target resolution', () => {
     expect(resolveRetryTarget([userMessage, failedAssistant, { ...userMessage, id: 'user-2' }], failedAssistant.id))
       .toBeNull();
     expect(resolveRetryTarget([failedAssistant], failedAssistant.id)).toBeNull();
+  });
+});
+
+describe('Local CLI BYOK recovery', () => {
+  it('removes the persisted error event from the latest failed assistant', () => {
+    const userMessage: ChatMessage = {
+      id: 'user-1',
+      role: 'user',
+      content: 'Create a login page',
+      createdAt: 1,
+    };
+    const failedAssistant: ChatMessage = {
+      id: 'assistant-1',
+      role: 'assistant',
+      content: '',
+      createdAt: 2,
+      runStatus: 'failed',
+      events: [
+        { kind: 'status', label: 'thinking', detail: 'Working' },
+        { kind: 'status', label: 'error', detail: 'Missing API key — open Settings and paste one in.' },
+      ],
+    };
+
+    const result = applyLocalCliRecoveryToFailedAssistant([userMessage, failedAssistant], 10);
+
+    expect(result.recovered).toEqual({
+      ...failedAssistant,
+      runStatus: 'canceled',
+      endedAt: 10,
+      events: [{ kind: 'status', label: 'thinking', detail: 'Working' }],
+    });
+    expect(result.messages.at(-1)).toBe(result.recovered);
+  });
+
+  it('does not mutate non-failed or non-error assistant messages', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Done',
+        createdAt: 1,
+        runStatus: 'succeeded',
+        events: [{ kind: 'status', label: 'done', detail: 'Complete' }],
+      },
+    ];
+
+    expect(applyLocalCliRecoveryToFailedAssistant(messages, 10)).toEqual({
+      messages,
+      recovered: null,
+    });
   });
 });
 
@@ -410,6 +464,91 @@ describe('ProjectView daemon cleanup', () => {
       expect(failedCall).toBeTruthy();
     });
     expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
+  it('persists a cleared BYOK error when switching to Local CLI', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Please describe the generated plugin files.',
+        createdAt: 1,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '',
+        createdAt: 2,
+        runStatus: 'failed',
+        events: [
+          { kind: 'status', label: 'requesting', detail: 'gpt-4.1' },
+          { kind: 'status', label: 'error', detail: 'Missing API key — open Settings and paste one in.' },
+        ],
+      },
+    ] satisfies ChatMessage[]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+
+    const onModeChange = vi.fn();
+    render(
+      <ProjectView
+        project={{ id: 'project-1', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{
+          mode: 'api',
+          apiKey: '',
+          baseUrl: '',
+          model: '',
+          agentId: null,
+          notifications: undefined,
+          agentModels: {},
+        } as never}
+        agents={[]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={onModeChange}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      const latestProps = chatPaneSpy.mock.calls.at(-1)?.[0];
+      expect(latestProps?.activeConversationId).toBe('conv-1');
+      expect(latestProps?.showByokRecoveryAction).toBe(true);
+    });
+
+    const props = chatPaneSpy.mock.calls.at(-1)![0] as {
+      onSwitchToLocalCli: () => void;
+    };
+    props.onSwitchToLocalCli();
+
+    await waitFor(() => {
+      const saved = saveMessage.mock.calls.find((call) => call[2]?.id === 'assistant-1')?.[2] as
+        | ChatMessage
+        | undefined;
+      expect(saved).toBeTruthy();
+      expect(saved?.runStatus).toBe('canceled');
+      expect(saved?.events).toEqual([{ kind: 'status', label: 'requesting', detail: 'gpt-4.1' }]);
+    });
+    expect(saveMessage.mock.calls.find((call) => call[2]?.id === 'assistant-1')?.[3])
+      .toEqual({ telemetryFinalized: true });
+    expect(onModeChange).toHaveBeenCalledWith('daemon');
   });
 
   it('persists a delayed daemon run id after switching projects so returning can reattach', async () => {
