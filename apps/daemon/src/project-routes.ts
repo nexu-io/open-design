@@ -1535,24 +1535,17 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           ) {
             return injectUrlPreviewScrollBridge(file.buffer.toString('utf8'));
           }
-        });
-        stream.pipe(res);
-        return;
-      }
-
-      const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, project?.metadata);
-      // Issue #2143 — when this file is served as the URL-load preview's
-      // top-level document, splice in a tiny route-persist script so SPA
-      // navigation survives the iframe remount that mode toggles trigger.
-      // Skips inline assets (only top-level HTML carries history state) and
-      // anything that already opted in via the artifact-owned bridge.
-      if (file.mime.startsWith('text/html')) {
-        const html = file.buffer.toString('utf8');
-        const patched = injectPreviewBridgesIntoHtml(html);
-        res.type(file.mime).send(patched);
-        return;
-      }
-      res.type(file.mime).send(file.buffer);
+          // Issue #2143 — inject preview bridges (route-persist, selection)
+          // for all HTML files served through the preview iframe path so
+          // comment/inspect can stay on the URL-loaded iframe instead of
+          // flipping to srcDoc and tearing down state.
+          if (/^text\/html(?:;|$)/i.test(file.mime)) {
+            const html = file.buffer.toString('utf8');
+            return injectPreviewBridgesIntoHtml(html);
+          }
+          return file.buffer;
+        },
+      );
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
       sendApiError(
