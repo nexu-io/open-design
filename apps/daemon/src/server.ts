@@ -11423,7 +11423,33 @@ export async function startServer({
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
         : null;
     const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    // Tracks whether the agent emitted a clarifying `<question-form>` in its
+    // visible text this run. The `od-plugin-authoring` plugin's turn-1 flow
+    // is to emit a `<question-form>` collecting the plugin brief, then STOP
+    // and wait for the user to answer (see the `discovery-question-form` atom
+    // in `plugins/scaffold.ts`). That turn legitimately closes with
+    // `code === 0` and no `generated-plugin/` artifacts yet, so the
+    // missing-artifacts guard must not treat it as a failure. We watch the
+    // streamed text rather than the persisted message because the assistant
+    // message row may not be wired up at close time. A small rolling tail
+    // keeps the `<question-form` marker detectable even when it straddles two
+    // `text_delta` chunks.
+    let agentEmittedClarifyingQuestion = false;
+    let clarifyingQuestionTail = '';
     const send = (event, data) => {
+      if (
+        !agentEmittedClarifyingQuestion &&
+        event === 'agent' &&
+        data &&
+        data.type === 'text_delta' &&
+        typeof data.delta === 'string'
+      ) {
+        const combined = clarifyingQuestionTail + data.delta;
+        if (combined.toLowerCase().includes('<question-form')) {
+          agentEmittedClarifyingQuestion = true;
+        }
+        clarifyingQuestionTail = combined.slice(-64);
+      }
       persistRunEventToAssistantMessage(db, run, event, data);
       design.runs.emit(run, event, data);
     };
@@ -13056,7 +13082,8 @@ export async function startServer({
         code === 0 &&
         !run.cancelRequested &&
         isPluginAuthoringRun(db, run) &&
-        !(await hasGeneratedPluginArtifacts(cwd))
+        !(await hasGeneratedPluginArtifacts(cwd)) &&
+        !agentEmittedClarifyingQuestion
       ) {
         send('error', createSseErrorPayload(
           'AGENT_EXECUTION_FAILED',

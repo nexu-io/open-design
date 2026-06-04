@@ -276,6 +276,15 @@
   z-index: 1700;
   overflow: visible;
 }
+/* The mode toggle's description card (chat.css) anchors upward and is only
+   shown on the home hero — it is `display:none` inside the chat composer.
+   The home-hero toggle sits well down the composer, so the card grows up
+   toward the page header; at its default 360px it crowds (and on smaller
+   windows clips) the top chrome. Cap it shorter here so it always clears the
+   header, and keep the inner scroll for the overflow. */
+.home-hero__input-card .session-mode-toggle__popover-card {
+  max-height: min(300px, calc(100vh - 120px));
+}
 .home-hero__input-card--compact-authoring {
   max-width: 640px;
   padding-block: 12px 10px;
