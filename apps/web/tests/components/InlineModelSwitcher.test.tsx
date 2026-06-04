@@ -164,6 +164,20 @@ describe('InlineModelSwitcher AMR row', () => {
     expect(screen.queryByTestId('inline-model-switcher-amr-reminder')).toBeNull();
   });
 
+  it('keeps an accessible name on the chip when the icon-only treatment hides its text', () => {
+    // Regression: in the icon-only topbar treatment `.inline-switcher__chip-text`
+    // is `display: none`, so the visible label is removed from the accessibility
+    // tree. The button must still expose a real accessible name (CLI/model state)
+    // for screen-reader users, not just an icon plus a `data-tooltip` hint.
+    renderSwitcher({}, [amrAgent, codexAgent]);
+
+    const chip = screen.getByRole('button', {
+      name: /AMR/i,
+    });
+    expect(chip).toBe(screen.getByTestId('inline-model-switcher-chip'));
+    expect(chip.getAttribute('aria-label')).toMatch(/·/u);
+  });
+
   it('does not show the AMR reminder dot when AMR is already selected', () => {
     renderSwitcher({}, [amrAgent, codexAgent]);
 

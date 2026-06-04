@@ -3,6 +3,13 @@ import type { Dict } from '../types';
 
 export const ar: Dict = {
   ...en,
+  'homeHero.addMenu': 'إضافة سياق',
+  'homeHero.addPlugin': 'إضافة مكوّن إضافي',
+  'homeHero.addConnectors': 'إضافة موصّلات',
+  'homeHero.addMcp': 'إضافة خادم MCP',
+  'homeHero.noPlugins': 'لا توجد مكوّنات إضافية مثبّتة',
+  'homeHero.noMcp': 'لا توجد خوادم MCP',
+  'homeHero.noConnectors': 'لا توجد موصّلات متصلة',
   'chat.amrCard.switchTitle': 'فشل استدعاء النموذج — تم إيقاف هذه المهمة مؤقتًا',
   'chat.amrCard.switchBody': 'بدِّل إلى خدمة نماذج AMR الرسمية من Open Design — لا حاجة لإعداد مفتاح API. بعد تسجيل الدخول والتفويض والشحن، ستُعاد محاولة هذه المهمة تلقائيًا.',
   'chat.amrCard.chipOfficial': 'استضافة رسمية',
@@ -416,6 +423,8 @@ export const ar: Dict = {
   'entry.loadingWorkspace': 'جاري تحميل مساحة العمل...',
   'entry.useEverywhereTitle': 'استخدمه في كل مكان',
   'entry.useEverywhereAria': 'افتح دليل «استخدمه في كل مكان» (CLI، MCP، HTTP، Skills)',
+  'entry.navExpand': 'توسيع الشريط الجانبي',
+  'entry.navCollapse': 'طي الشريط الجانبي',
   'entry.navNewProject': 'مشروع جديد',
   'entry.navHome': 'الرئيسية',
   'entry.navProjects': 'المشاريع',

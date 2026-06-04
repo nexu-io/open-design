@@ -3,6 +3,13 @@ import type { Dict } from '../types';
 
 export const tr: Dict = {
   ...en,
+  'homeHero.addMenu': 'Bağlam ekle',
+  'homeHero.addPlugin': 'Eklenti ekle',
+  'homeHero.addConnectors': 'Bağlayıcı ekle',
+  'homeHero.addMcp': 'MCP sunucusu ekle',
+  'homeHero.noPlugins': 'Yüklü eklenti yok',
+  'homeHero.noMcp': 'MCP sunucusu yok',
+  'homeHero.noConnectors': 'Bağlı bağlayıcı yok',
   'chat.amrCard.switchTitle': 'Model çağrısı başarısız oldu — bu çalıştırma duraklatıldı',
   'chat.amrCard.switchBody': 'Open Design\'ın resmi AMR model hizmetine geçin — API anahtarı yapılandırması gerekmez. Oturum açma, yetkilendirme ve bakiye yükleme sonrası bu çalıştırma otomatik olarak yeniden denenir.',
   'chat.amrCard.chipOfficial': 'Resmi hizmet',
@@ -406,6 +413,8 @@ export const tr: Dict = {
   'entry.loadingWorkspace': 'Çalışma alanı yükleniyor…',
   'entry.useEverywhereTitle': 'Her yerde kullan',
   'entry.useEverywhereAria': '“Her yerde kullan” kılavuzunu aç (CLI, MCP, HTTP, Skills)',
+  'entry.navExpand': 'Kenar çubuğunu genişlet',
+  'entry.navCollapse': 'Kenar çubuğunu daralt',
   'entry.navNewProject': 'Yeni proje',
   'entry.navHome': 'Ana sayfa',
   'entry.navProjects': 'Projeler',

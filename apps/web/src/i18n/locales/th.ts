@@ -3,6 +3,13 @@ import type { Dict } from '../types';
 
 export const th: Dict = {
   ...en,
+  'homeHero.addMenu': 'เพิ่มบริบท',
+  'homeHero.addPlugin': 'เพิ่มปลั๊กอิน',
+  'homeHero.addConnectors': 'เพิ่มตัวเชื่อมต่อ',
+  'homeHero.addMcp': 'เพิ่มเซิร์ฟเวอร์ MCP',
+  'homeHero.noPlugins': 'ไม่มีปลั๊กอินที่ติดตั้ง',
+  'homeHero.noMcp': 'ไม่มีเซิร์ฟเวอร์ MCP',
+  'homeHero.noConnectors': 'ไม่มีตัวเชื่อมต่อที่เชื่อมต่ออยู่',
   'chat.amrCard.switchTitle': 'เรียกใช้โมเดลล้มเหลว — งานนี้ถูกหยุดชั่วคราว',
   'chat.amrCard.switchBody': 'สลับไปยังบริการโมเดล AMR อย่างเป็นทางการของ Open Design — ไม่ต้องตั้งค่า API Key หลังจากเข้าสู่ระบบ ให้สิทธิ์ และเติมเงินแล้ว งานนี้จะถูกลองใหม่โดยอัตโนมัติ',
   'chat.amrCard.chipOfficial': 'โฮสติ้งอย่างเป็นทางการ',

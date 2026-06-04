@@ -3,6 +3,13 @@ import type { Dict } from '../types';
 
 export const ko: Dict = {
   ...en,
+  'homeHero.addMenu': '컨텍스트 추가',
+  'homeHero.addPlugin': '플러그인 추가',
+  'homeHero.addConnectors': '커넥터 추가',
+  'homeHero.addMcp': 'MCP 서버 추가',
+  'homeHero.noPlugins': '설치된 플러그인 없음',
+  'homeHero.noMcp': 'MCP 서버 없음',
+  'homeHero.noConnectors': '연결된 커넥터 없음',
   'chat.amrCard.switchTitle': '모델 호출 실패 — 이 작업이 일시중지되었습니다',
   'chat.amrCard.switchBody': 'Open Design 공식 AMR 모델 서비스로 전환하세요 — API 키 설정이 필요 없습니다. 로그인・인증・충전이 완료되면 이 작업이 자동으로 재시도됩니다.',
   'chat.amrCard.chipOfficial': '공식 호스팅',
@@ -416,6 +423,8 @@ export const ko: Dict = {
   'entry.loadingWorkspace': '워크스페이스를 불러오는 중…',
   'entry.useEverywhereTitle': '어디서나 사용',
   'entry.useEverywhereAria': '‘어디서나 사용’ 가이드 열기 (CLI, MCP, HTTP, Skills)',
+  'entry.navExpand': '사이드바 펼치기',
+  'entry.navCollapse': '사이드바 접기',
   'entry.navNewProject': '새 프로젝트',
   'entry.navHome': '홈',
   'entry.navProjects': '프로젝트',

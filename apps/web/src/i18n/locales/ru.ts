@@ -3,6 +3,13 @@ import { en } from './en';
 
 export const ru: Dict = {
   ...en,
+  'homeHero.addMenu': 'Добавить контекст',
+  'homeHero.addPlugin': 'Добавить плагин',
+  'homeHero.addConnectors': 'Добавить коннекторы',
+  'homeHero.addMcp': 'Добавить сервер MCP',
+  'homeHero.noPlugins': 'Нет установленных плагинов',
+  'homeHero.noMcp': 'Нет серверов MCP',
+  'homeHero.noConnectors': 'Нет подключённых коннекторов',
   'chat.amrCard.switchTitle': 'Не удалось вызвать модель — это выполнение приостановлено',
   'chat.amrCard.switchBody': 'Переключитесь на официальный сервис моделей AMR от Open Design — без настройки API-ключа. После входа, авторизации и пополнения это выполнение будет автоматически повторено.',
   'chat.amrCard.chipOfficial': 'Официальный хостинг',
@@ -415,6 +422,8 @@ export const ru: Dict = {
   'entry.loadingWorkspace': 'Загрузка рабочего пространства…',
   'entry.useEverywhereTitle': 'Использовать везде',
   'entry.useEverywhereAria': 'Открыть руководство «Использовать везде» (CLI, MCP, HTTP, Skills)',
+  'entry.navExpand': 'Развернуть боковую панель',
+  'entry.navCollapse': 'Свернуть боковую панель',
   'entry.navNewProject': 'Новый проект',
   'entry.navHome': 'Главная',
   'entry.navProjects': 'Проекты',

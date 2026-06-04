@@ -3,6 +3,13 @@ import { en } from './en';
 
 export const id: Dict = {
   ...en,
+  'homeHero.addMenu': 'Tambah konteks',
+  'homeHero.addPlugin': 'Tambah plugin',
+  'homeHero.addConnectors': 'Tambah konektor',
+  'homeHero.addMcp': 'Tambah server MCP',
+  'homeHero.noPlugins': 'Tidak ada plugin terpasang',
+  'homeHero.noMcp': 'Tidak ada server MCP',
+  'homeHero.noConnectors': 'Tidak ada konektor terhubung',
   'chat.amrCard.switchTitle': 'Panggilan model gagal — proses ini dijeda',
   'chat.amrCard.switchBody': 'Beralih ke layanan model AMR resmi Open Design — tanpa perlu mengatur API Key. Setelah masuk, otorisasi, dan isi ulang, proses ini akan dicoba ulang otomatis.',
   'chat.amrCard.chipOfficial': 'Hosting resmi',
@@ -507,6 +514,8 @@ export const id: Dict = {
   'entry.loadingWorkspace': 'Memuat workspace...',
   'entry.useEverywhereTitle': 'Gunakan di mana saja',
   'entry.useEverywhereAria': 'Buka panduan “Gunakan di mana saja” (CLI, MCP, HTTP, Skills)',
+  'entry.navExpand': 'Buka bilah sisi',
+  'entry.navCollapse': 'Tutup bilah sisi',
   'entry.navNewProject': 'Proyek baru',
   'entry.navHome': 'Beranda',
   'entry.navProjects': 'Proyek',

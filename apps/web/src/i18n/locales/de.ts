@@ -3,6 +3,13 @@ import { en } from './en';
 
 export const de: Dict = {
   ...en,
+  'homeHero.addMenu': 'Kontext hinzufügen',
+  'homeHero.addPlugin': 'Plugin hinzufügen',
+  'homeHero.addConnectors': 'Konnektoren hinzufügen',
+  'homeHero.addMcp': 'MCP-Server hinzufügen',
+  'homeHero.noPlugins': 'Keine installierten Plugins',
+  'homeHero.noMcp': 'Keine MCP-Server',
+  'homeHero.noConnectors': 'Keine verbundenen Konnektoren',
   'chat.amrCard.switchTitle': 'Modellaufruf fehlgeschlagen — dieser Lauf ist pausiert',
   'chat.amrCard.switchBody': 'Wechsle zum offiziellen AMR-Modelldienst von Open Design — kein API-Key-Setup nötig. Nach Anmeldung, Autorisierung und Aufladung wird dieser Lauf automatisch wiederholt.',
   'chat.amrCard.chipOfficial': 'Offizielles Hosting',
@@ -415,6 +422,8 @@ export const de: Dict = {
   'entry.loadingWorkspace': 'Workspace wird geladen…',
   'entry.useEverywhereTitle': 'Überall verwenden',
   'entry.useEverywhereAria': 'Anleitung „Überall verwenden“ öffnen (CLI, MCP, HTTP, Skills)',
+  'entry.navExpand': 'Seitenleiste einblenden',
+  'entry.navCollapse': 'Seitenleiste ausblenden',
   'entry.navNewProject': 'Neues Projekt',
   'entry.navHome': 'Start',
   'entry.navProjects': 'Projekte',

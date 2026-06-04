@@ -492,6 +492,14 @@ interface Props {
   // leaving the pane.
   conversations: Conversation[];
   activeConversationId: string | null;
+  // The conversation whose history the live `messages` array currently
+  // reflects. Null while a switch is mid-flight (or after a load failure),
+  // which is exactly when `messages.length` must NOT be trusted as the active
+  // conversation's count — see `conversationMessageCount`. Callers that do not
+  // track this (mounts whose loader resets/retags `messages` asynchronously)
+  // leave it undefined and fall back to the persisted `conversation.messageCount`
+  // for a stable list count.
+  messagesConversationId?: string | null;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (id: string) => void;
   // Composer settings/CLI button forwards to here. The dialog lives in App
@@ -652,6 +660,7 @@ export function ChatPane({
   newConversationDisabled = false,
   conversations,
   activeConversationId,
+  messagesConversationId = null,
   onSelectConversation,
   onDeleteConversation,
   onOpenSettings,
@@ -1689,7 +1698,7 @@ export function ChatPane({
                       key={c.id}
                       conversation={c}
                       active={c.id === activeConversationId}
-                      messageCount={conversationMessageCount(c, activeConversationId, messages.length)}
+                      messageCount={conversationMessageCount(c, activeConversationId, messagesConversationId, messages.length)}
                       onSelect={() => {
                         onSelectConversation(c.id);
                         setShowConvList(false);
@@ -2967,9 +2976,22 @@ function filterConversations(
 function conversationMessageCount(
   conversation: Conversation,
   activeConversationId: string | null,
+  messagesConversationId: string | null,
   activeMessageCount: number,
 ): number | null {
-  if (conversation.id === activeConversationId) return activeMessageCount;
+  // The live `messages` array is authoritative for the active conversation —
+  // it stays fresh as a run streams new turns in — but ONLY once it has
+  // actually loaded for that conversation. While a switch is mid-flight (or a
+  // load failed) `messages` is reset to [] and `messagesConversationId` no
+  // longer matches the active id; trusting `messages.length` there renders a
+  // phantom "0 msg". Fall back to the persisted server count until the live
+  // array catches up.
+  if (
+    conversation.id === activeConversationId &&
+    messagesConversationId === activeConversationId
+  ) {
+    return activeMessageCount;
+  }
   return typeof conversation.messageCount === 'number' ? conversation.messageCount : null;
 }
 

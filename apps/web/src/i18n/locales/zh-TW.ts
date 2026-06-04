@@ -3,6 +3,13 @@ import { en } from './en';
 
 export const zhTW: Dict = {
   ...en,
+  'homeHero.addMenu': '新增內容',
+  'homeHero.addPlugin': '新增外掛',
+  'homeHero.addConnectors': '新增連接器',
+  'homeHero.addMcp': '新增 MCP 伺服器',
+  'homeHero.noPlugins': '尚無已安裝的外掛',
+  'homeHero.noMcp': '尚無 MCP 伺服器',
+  'homeHero.noConnectors': '尚無已連接的連接器',
   'chat.amrCard.switchTitle': "模型呼叫失敗，目前任務已暫停",
   'chat.amrCard.switchBody': "可切換到 Open Design 官方 AMR 模型服務，無需設定 API Key。完成登入、授權與儲值後，將自動重試目前任務。",
   'chat.amrCard.chipOfficial': "官方代管",
@@ -503,6 +510,8 @@ export const zhTW: Dict = {
   'entry.loadingWorkspace': '正在載入工作區…',
   'entry.useEverywhereTitle': '隨處使用',
   'entry.useEverywhereAria': '開啟「隨處使用」指南（CLI、MCP、HTTP、Skills）',
+  'entry.navExpand': '展開側欄',
+  'entry.navCollapse': '收合側欄',
   'entry.navNewProject': '新建專案',
   'entry.navHome': '主頁',
   'entry.navProjects': '專案',

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { ensureRailOpen } from '@/playwright/rail';
 import type { Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
@@ -2033,6 +2034,7 @@ test.describe('Settings Memory and Automations flows', () => {
     });
 
     await gotoEntryHome(page);
+    await ensureRailOpen(page);
     await page.getByTestId('entry-nav-tasks').click();
     const view = page.getByTestId('tasks-view');
     await expect(view.getByRole('heading', { name: 'Automations', exact: true })).toBeVisible();
@@ -2103,6 +2105,7 @@ test.describe('Settings Memory and Automations flows', () => {
     });
 
     await gotoEntryHome(page);
+    await ensureRailOpen(page);
     await page.getByTestId('entry-nav-tasks').click();
     const view = page.getByTestId('tasks-view');
 
