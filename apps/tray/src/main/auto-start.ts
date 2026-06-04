@@ -15,8 +15,9 @@ import { dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 
-import { APP_KEYS, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
+import { APP_KEYS, SIDECAR_ENV, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -46,17 +47,23 @@ function resolveElectronBinary(): string {
  * Used to find the entry script path for auto-start commands.
  */
 function resolveWorkspaceRootForTray(): string {
-  // Derive from electron binary: <workspace>/node_modules/.pnpm/electron@X.X.X/node_modules/electron/dist/electron.exe
-  // Walk up 7 levels: dist -> electron -> node_modules -> .pnpm -> node_modules -> workspace
+  // Walk up from the electron binary until we find the workspace marker
+  // (`apps/` directory). This works for both the pnpm-hoisted layout
+  // (`<workspace>/node_modules/.pnpm/electron@x/node_modules/electron/dist/electron.exe`)
+  // and a future non-hoisted layout, without hardcoding a level count
+  // that pnpm changes every other release.
   const electronExe = resolveElectronBinary();
-  const candidate = join(electronExe, "..", "..", "..", "..", "..", "..", "..");
-  if (existsSync(join(candidate, "apps"))) return candidate;
-  // Fallback: walk up from __dirname (dev mode)
-  // __dirname is apps/tray/dist/main, so go up 4 levels
-  const { fileURLToPath } = require("node:url");
-  const { dirname } = require("node:path");
+  let cursor = dirname(electronExe);
+  for (let i = 0; i < 12; i++) {
+    if (existsSync(join(cursor, "apps"))) return cursor;
+    const parent = dirname(cursor);
+    if (parent === cursor) break;
+    cursor = parent;
+  }
+  // Fallback: walk up from this module's URL (dev mode, when electron is
+  // launched via tsx/pnpm and the binary resolver is the same source path).
   const selfPath = fileURLToPath(import.meta.url);
-  const parts = dirname(selfPath).split(/[/\\]/);
+  const parts = selfPath.split(/[/\\]/);
   const appsIdx = parts.indexOf("apps");
   if (appsIdx >= 1) return parts.slice(0, appsIdx).join("/");
   throw new Error("Could not resolve workspace root for tray auto-start");
@@ -96,14 +103,24 @@ function resolveAppId(): string {
 /**
  * Guard against cmd.exe command-injection in the electron executable path.
  *
- * `&`, `<`, `>`, `|` are all cmd.exe separators and must never appear in
- * a path that will be passed literally to `cmd /c start ...`.
- * The path must also be an absolute Windows path so that quoting is safe.
+ * The path is interpolated verbatim into a `cmd /c start "" /b "…" "…"`
+ * command, so anything cmd interprets must be rejected. The blocked
+ * metacharacters cover the full set of cmd separators, quote/expansion
+ * triggers, and any character that would break the outer double-quote:
+ *   - `&` `<` `>` `|` `^` — cmd separators
+ *   - `%` — variable/argument expansion (`%PATH%`, `%1`)
+ *   - `!` — delayed expansion (only inside `setlocal EnableDelayedExpansion`,
+ *     but cheap to ban unconditionally)
+ *   - `"` — would close the outer quote and let subsequent args be parsed
+ *     as a new token
+ *
+ * The path must also be an absolute Windows path (`C:\…`) so quoting is
+ * safe.
  *
  * @throws if the path is invalid or contains shell metacharacters.
  */
 function validateElectronPath(path: string): void {
-  if (!/^[A-Za-z]:[^<>|&]{1,512}$/.test(path)) {
+  if (!/^[A-Za-z]:[^<>|&^%!"]{1,512}$/.test(path)) {
     throw new Error(`unsafe or non-absolute electron path: ${path}`);
   }
 }
@@ -141,10 +158,13 @@ function buildRunCommand(namespace: string, ipc: string): string {
   // Stamp values are individually quoted so namespace/ipc that contain
   // spaces or other cmd metacharacters survive the round-trip through
   // `cmd /c start`. The double quotes around `""` after `start` are the
-  // explicit empty window title.
+  // explicit empty window title. Mode defaults to "dev" so dev tooling
+  // (tools-dev, tsx) gets a working auto-start without configuration;
+  // packaged launchers set `OD_SIDECAR_MODE=runtime` before invoking.
+  const mode = process.env[SIDECAR_ENV.MODE] ?? "dev";
   const stamp = [
     `--od-stamp-app=${APP_KEYS.TRAY}`,
-    `--od-stamp-mode=dev`,
+    `--od-stamp-mode=${mode}`,
     `--od-stamp-namespace="${namespace}"`,
     `--od-stamp-ipc="${ipc}"`,
     `--od-stamp-source=${SIDECAR_SOURCES.TOOLS_DEV}`,
