@@ -11423,7 +11423,7 @@ export async function startServer({
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
         : null;
     const agentOptions = { model: safeModel, reasoning: safeReasoning };
-    // Tracks whether the agent emitted a clarifying `<question-form>` in its
+    // Tracks whether the agent emitted a clarifying question form in its
     // visible text this run. The `od-plugin-authoring` plugin's turn-1 flow
     // is to emit a `<question-form>` collecting the plugin brief, then STOP
     // and wait for the user to answer (see the `discovery-question-form` atom
@@ -11432,8 +11432,17 @@ export async function startServer({
     // missing-artifacts guard must not treat it as a failure. We watch the
     // streamed text rather than the persisted message because the assistant
     // message row may not be wired up at close time. A small rolling tail
-    // keeps the `<question-form` marker detectable even when it straddles two
-    // `text_delta` chunks.
+    // keeps the marker detectable even when it straddles two `text_delta`
+    // chunks.
+    //
+    // `<question-form>` is canonical, but the web form parser also accepts
+    // `<ask-question>` as an alias (models drift to it) — see the open-tag
+    // contract in `apps/web/src/artifacts/question-form.ts`. The app boundary
+    // forbids importing that web module here, so we mirror its accepted tag
+    // set; keep the two in sync. Recognizing only the canonical tag would
+    // recreate this exact missing-artifacts failure for an alias form the UI
+    // still renders as a valid brief.
+    const CLARIFYING_QUESTION_TAGS = ['<question-form', '<ask-question'];
     let agentEmittedClarifyingQuestion = false;
     let clarifyingQuestionTail = '';
     const send = (event, data) => {
@@ -11444,8 +11453,8 @@ export async function startServer({
         data.type === 'text_delta' &&
         typeof data.delta === 'string'
       ) {
-        const combined = clarifyingQuestionTail + data.delta;
-        if (combined.toLowerCase().includes('<question-form')) {
+        const combined = (clarifyingQuestionTail + data.delta).toLowerCase();
+        if (CLARIFYING_QUESTION_TAGS.some((tag) => combined.includes(tag))) {
           agentEmittedClarifyingQuestion = true;
         }
         clarifyingQuestionTail = combined.slice(-64);
