@@ -764,7 +764,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     contextItemCount > 0 ||
     (showActivePluginChip && activePluginTitle) ||
     activeSkillTitle ||
-    selectedPromptExample ||
     stagedFiles.length > 0;
 
   let optionRenderIndex = 0;
