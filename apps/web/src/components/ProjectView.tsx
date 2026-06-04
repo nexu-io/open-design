@@ -2914,7 +2914,7 @@ export function ProjectView({
             )
           : apiProtocolModelLabel(config.apiProtocol, config.model);
       const preTurnFileNames = projectFiles.map((f) => f.name);
-      const assistantId = retryTarget?.failedAssistant.id ?? randomUUID();
+      const assistantId = randomUUID();
       const assistantMsg: ChatMessage = {
         id: assistantId,
         role: 'assistant',
@@ -2922,7 +2922,7 @@ export function ProjectView({
         agentId: assistantAgentId,
         agentName: assistantAgentName,
         events: [],
-        createdAt: retryTarget?.failedAssistant.createdAt ?? startedAt,
+        createdAt: startedAt,
         runStatus: config.mode === 'daemon' ? 'running' : undefined,
         startedAt,
         preTurnFileNames,
@@ -2957,7 +2957,10 @@ export function ProjectView({
       const nextHistory = retryTarget
         ? [...retryTarget.priorMessages, userMsg]
         : [...historyBase, userMsg];
-      setMessages([...nextHistory, assistantMsg]);
+      const nextVisibleMessages = retryTarget
+        ? [...nextHistory, ...retryTarget.preservedAttempts, assistantMsg]
+        : [...nextHistory, assistantMsg];
+      setMessages(nextVisibleMessages);
       markStreamingConversation(runConversationId);
       updateConversationLatestRun(config.mode === 'daemon' ? 'running' : 'queued');
       setArtifact(null);
@@ -5718,6 +5721,7 @@ export interface RetryTarget {
   failedAssistant: ChatMessage;
   userMsg: ChatMessage;
   priorMessages: ChatMessage[];
+  preservedAttempts: ChatMessage[];
 }
 
 export function resolveRetryTarget(
@@ -5732,14 +5736,24 @@ export function resolveRetryTarget(
   );
   if (failedIndex <= 0 || failedIndex !== messages.length - 1) return null;
 
-  const userMsg = messages[failedIndex - 1];
+  let userIndex = failedIndex - 1;
+  while (
+    userIndex >= 0 &&
+    messages[userIndex]?.role === 'assistant' &&
+    messages[userIndex]?.runStatus === 'failed'
+  ) {
+    userIndex -= 1;
+  }
+
+  const userMsg = messages[userIndex];
   const failedAssistant = messages[failedIndex];
   if (!userMsg || userMsg.role !== 'user' || !failedAssistant) return null;
 
   return {
     failedAssistant,
     userMsg,
-    priorMessages: messages.slice(0, failedIndex - 1),
+    priorMessages: messages.slice(0, userIndex),
+    preservedAttempts: messages.slice(userIndex + 1, failedIndex + 1),
   };
 }
 
