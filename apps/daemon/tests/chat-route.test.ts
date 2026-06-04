@@ -600,6 +600,70 @@ process.stdin.on('end', () => {
       },
     );
   });
+  it('does not fail plugin authoring when the clarifying form uses the <ask-question> alias', async () => {
+    // `<ask-question>` is the alias the web form parser accepts alongside
+    // the canonical `<question-form>` (apps/web/src/artifacts/question-form.ts).
+    // Models sometimes drift to it; the UI still renders a valid brief form,
+    // so the daemon's missing-artifacts guard must recognize the alias too —
+    // otherwise the same "ended before generating…" regression returns for a
+    // supported clarification shape.
+    const projectId = `proj-plugin-authoring-alias-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin authoring ask-question alias fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.status).toBe(200);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '先确认几个问题再开始搭建。\\n<ask-question id="discovery" title="Plugin brief">\\n<field name="purpose" type="text" label="What should it do?" />\\n</ask-question>' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            pluginId: 'od-plugin-authoring',
+            message: '帮我做个插件。',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('<ask-question');
+        expect(eventsBody).not.toContain('ended before generating the required generated-plugin artifacts');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
   it('closes the # Instructions block with an explicit "do not echo" guard so models do not parrot the prompt back', async () => {
     // claude-opus-4-7 (and a few other instruction-tuned models) start
     // their reply by echoing the # Instructions block verbatim, which
