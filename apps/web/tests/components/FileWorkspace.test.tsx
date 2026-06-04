@@ -380,6 +380,41 @@ describe('FileWorkspace upload input', () => {
     });
   });
 
+  it('starts Design Files navigation fresh when switching projects', () => {
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-a',
+      projectKind: 'prototype',
+      files: [
+        workspaceFile('assets/logo.png'),
+        workspaceFile('top.html'),
+      ],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+    };
+
+    const { container, rerender } = render(<FileWorkspace {...baseProps} />);
+
+    fireEvent.click(container.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
+
+    rerender(
+      <FileWorkspace
+        {...baseProps}
+        projectId="project-b"
+        files={[
+          workspaceFile('beta-assets/logo.png'),
+          workspaceFile('home.html'),
+        ]}
+      />,
+    );
+
+    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('project');
+    expect(screen.getByTestId('design-file-row-home.html')).toBeTruthy();
+  });
+
   it('clears a prior upload failure after a later successful upload', async () => {
     mockedUploadProjectFiles
       .mockRejectedValueOnce(new Error('storage offline'))
@@ -706,6 +741,143 @@ describe('FileWorkspace launcher tab creation', () => {
             id: '__browser__:2',
             insertAfter: 'terminal:term-1',
             label: 'Browser 2',
+          },
+        ],
+      });
+    });
+  });
+
+  it('appends a new browser after stale-anchor browser tabs', async () => {
+    const onTabsStateChange = vi.fn();
+    const staleBrowserTab = {
+      id: '__browser__:1',
+      insertAfter: 'deleted.html',
+      label: 'Browser',
+    };
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['cover.html'],
+          active: 'cover.html',
+          browserTabs: [staleBrowserTab],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(await screen.findByRole('button', { name: /New Browser/i }));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html'],
+        active: '__browser__:2',
+        browserTabs: [
+          staleBrowserTab,
+          {
+            id: '__browser__:2',
+            insertAfter: '__browser__:1',
+            label: 'Browser 2',
+          },
+        ],
+      });
+    });
+  });
+
+  it('reanchors stale browser tabs before appending a new terminal', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ terminal: { id: 'term-2' } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+    const onTabsStateChange = vi.fn();
+    const staleBrowserTab = {
+      id: '__browser__:1',
+      insertAfter: 'deleted.html',
+      label: 'Browser',
+    };
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['cover.html'],
+          active: 'cover.html',
+          browserTabs: [staleBrowserTab],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(await screen.findByRole('button', { name: /New Terminal/i }));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html', 'terminal:term-2'],
+        active: 'terminal:term-2',
+        browserTabs: [
+          {
+            ...staleBrowserTab,
+            insertAfter: 'cover.html',
+          },
+        ],
+      });
+    });
+  });
+
+  it('reanchors stale browser tabs before appending a file from the launcher', async () => {
+    const onTabsStateChange = vi.fn();
+    const staleBrowserTab = {
+      id: '__browser__:1',
+      insertAfter: 'deleted.html',
+      label: 'Browser',
+    };
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html'), workspaceFile('notes.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['cover.html'],
+          active: 'cover.html',
+          browserTabs: [staleBrowserTab],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(await screen.findByRole('button', { name: /notes\.html/i }));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html', 'notes.html'],
+        active: 'notes.html',
+        browserTabs: [
+          {
+            ...staleBrowserTab,
+            insertAfter: 'cover.html',
           },
         ],
       });

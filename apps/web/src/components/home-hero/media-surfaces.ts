@@ -8,6 +8,7 @@ import {
   DEFAULT_VIDEO_MODEL,
   IMAGE_MODELS,
   MEDIA_ASPECTS,
+  type MediaModel,
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
 } from '../../media/models';
@@ -48,8 +49,13 @@ export function buildHomeMediaComposer(
   promptTemplates: PromptTemplateSummary[],
   seedInputs: Record<string, unknown> = {},
   voiceOptions: Array<{ voiceId: string; name: string }> = [],
-  options: { elevenLabsVoiceWarning?: string | null; elevenLabsVoicesLoading?: boolean } = {},
+  options: {
+    elevenLabsVoiceWarning?: string | null;
+    elevenLabsVoicesLoading?: boolean;
+    imageModels?: MediaModel[];
+  } = {},
 ): HomeMediaComposerState {
+  const imageModels = options.imageModels ?? IMAGE_MODELS;
   const inputs = normalizeHomeMediaInputs(
     surface,
     {
@@ -58,8 +64,9 @@ export function buildHomeMediaComposer(
     },
     promptTemplates,
     voiceOptions,
+    imageModels,
   );
-  const fields = fieldsForSurface(surface, inputs, voiceOptions, options);
+  const fields = fieldsForSurface(surface, inputs, voiceOptions, options, imageModels);
   const editableFieldNames = fields.map((field) => field.name);
   const queryTemplate = queryTemplateForSurface(surface, inputs);
   return {
@@ -77,6 +84,7 @@ export function normalizeHomeMediaInputs(
   raw: Record<string, unknown>,
   promptTemplates: PromptTemplateSummary[] = [],
   voiceOptions: Array<{ voiceId: string; name: string }> = [],
+  imageModels: MediaModel[] = IMAGE_MODELS,
 ): Record<string, unknown> {
   if (surface === 'image') {
     const ratio = validOption(stringValue(raw.ratio) || stringValue(raw.aspect), MEDIA_ASPECTS, '16:9');
@@ -87,7 +95,7 @@ export function normalizeHomeMediaInputs(
       aspect: ratio,
       template: validTemplateId(surface, stringValue(raw.template), promptTemplates),
       designSystem: stringValue(raw.designSystem) || 'the active project design system',
-      model: validOption(stringValue(raw.model), IMAGE_MODELS.map((m) => m.id), DEFAULT_IMAGE_MODEL),
+      model: validOption(stringValue(raw.model), imageModels.map((m) => m.id), DEFAULT_IMAGE_MODEL),
       ratio,
       resolution: validOption(stringValue(raw.resolution), MEDIA_RESOLUTIONS, DEFAULT_MEDIA_RESOLUTION),
     };
@@ -229,11 +237,12 @@ function fieldsForSurface(
   inputs: Record<string, unknown>,
   voiceOptions: Array<{ voiceId: string; name: string }>,
   options: { elevenLabsVoiceWarning?: string | null; elevenLabsVoicesLoading?: boolean },
+  imageModels: MediaModel[] = IMAGE_MODELS,
 ): InputFieldSpec[] {
   if (surface === 'image') {
     return [
       stringField('designSystem', 'Design system', 'Design system'),
-      selectField('model', 'Model', IMAGE_MODELS.map((m) => m.id), modelLabels(IMAGE_MODELS)),
+      selectField('model', 'Model', imageModels.map((m) => m.id), modelLabels(imageModels)),
       selectField('ratio', 'Ratio', MEDIA_ASPECTS),
       selectField('resolution', 'Resolution', MEDIA_RESOLUTIONS, MEDIA_RESOLUTION_LABELS),
     ];
@@ -429,7 +438,7 @@ function validAudioDuration(kind: AudioKind, raw: unknown): number {
 
 function homeAudioModels(kind: AudioKind) {
   if (kind === 'music') return [];
-  const runnableProviders = new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine']);
+  const runnableProviders = new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']);
   return AUDIO_MODELS_BY_KIND[kind].filter((model) => runnableProviders.has(model.provider));
 }
 

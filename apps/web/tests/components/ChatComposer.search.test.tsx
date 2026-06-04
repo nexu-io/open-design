@@ -68,6 +68,58 @@ describe('ChatComposer /search command', () => {
     );
   });
 
+  it('appends uploaded attachments after already staged design-file context', async () => {
+    const onSend = vi.fn();
+    mockedUploadProjectFiles.mockResolvedValue({
+      uploaded: [{ path: 'uploads/pasted.png', name: 'pasted.png', kind: 'image', size: 8 }],
+      failed: [],
+    });
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[
+          {
+            path: 'designs/landing.html',
+            name: 'landing.html',
+            kind: 'html',
+            mime: 'text/html',
+            mtime: 1,
+            size: 128,
+          },
+        ]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={onSend}
+        onStop={vi.fn()}
+      />,
+    );
+
+    await typeAndSettle('@landing');
+    await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
+    fireEvent.click(screen.getByText('designs/landing.html'));
+
+    await waitFor(() => expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html'));
+
+    fireEvent.change(screen.getByTestId('chat-file-input'), {
+      target: { files: [new File(['pasted'], 'pasted.png', { type: 'image/png' })] },
+    });
+
+    await waitFor(() => expect(screen.getByTestId('staged-attachments').textContent).toContain('pasted.png'));
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend).toHaveBeenCalledWith(
+      '@designs/landing.html',
+      [
+        { path: 'designs/landing.html', name: 'landing.html', kind: 'file', order: 0 },
+        { path: 'uploads/pasted.png', name: 'pasted.png', kind: 'image', size: 8, order: 1 },
+      ],
+      [],
+      undefined,
+    );
+  });
+
   it('queues a typed follow-up when send is clicked during streaming', async () => {
     const onSend = vi.fn();
 

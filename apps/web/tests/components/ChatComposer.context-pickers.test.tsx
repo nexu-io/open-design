@@ -4,6 +4,16 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const trackChatPanelClickMock = vi.hoisted(() => vi.fn());
+
+vi.mock('../../src/analytics/events', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/analytics/events')>();
+  return {
+    ...actual,
+    trackChatPanelClick: trackChatPanelClickMock,
+  };
+});
+
 import { ChatComposer } from '../../src/components/ChatComposer';
 import { I18nProvider } from '../../src/i18n';
 import type { Locale } from '../../src/i18n/types';
@@ -160,6 +170,7 @@ async function flushMounts() {
 // every editor-text assertion (it walks the tree and emits real `\n`s).
 
 beforeEach(() => {
+  trackChatPanelClickMock.mockClear();
   plugins = [COMMUNITY_PLUGIN, USER_PLUGIN];
   skills = [SKILL];
   servers = [MCP_SERVER];
@@ -741,6 +752,23 @@ describe('ChatComposer context pickers', () => {
       target: { value: 'private' },
     });
     expect(screen.getByText('Private export workflow')).toBeTruthy();
+  });
+
+  it('tracks separate events for the resources menu and mention trigger', async () => {
+    renderComposer();
+    await flushMounts();
+
+    fireEvent.click(screen.getByLabelText('Open CLI and model settings'));
+    expect(trackChatPanelClickMock).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ element: 'resources_popover_trigger' }),
+    );
+
+    fireEvent.click(screen.getByLabelText('Mention surfaces'));
+    expect(trackChatPanelClickMock).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ element: 'mention_popover_trigger' }),
+    );
   });
 
   // The inline pet popover (the "Pets — wake, tuck, or pick one" button and

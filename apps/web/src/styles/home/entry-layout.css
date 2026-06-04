@@ -956,6 +956,9 @@
   color: var(--text-faint);
   flex: 0 0 auto;
 }
+.inline-switcher--compact .inline-switcher__chip-text {
+  display: none;
+}
 .inline-switcher__amr-reminder-dot {
   position: absolute;
   z-index: 1;

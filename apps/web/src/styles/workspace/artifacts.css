@@ -1425,7 +1425,23 @@
   cursor: default;
   opacity: 0.62;
 }
-.agent-card-amr-auth .amr-account-control__error,
+.agent-card-amr-auth .amr-account-control--error {
+  width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  row-gap: 6px;
+  padding: 6px 12px;
+}
+.agent-card-amr-auth .amr-account-control__error {
+  flex: 1 1 100%;
+  max-width: 100%;
+  color: var(--danger-text, #991b1b);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
 .agent-card-amr-auth .amr-login-pill-badge {
   display: none;
 }

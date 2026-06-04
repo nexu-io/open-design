@@ -132,6 +132,7 @@ interface Props {
   onPickWorkingDir?: () => void;
   onClearWorkingDir?: () => void;
   onExamplePromptStatusChange?: (info: ExamplePromptInfo | null) => void;
+  executionSwitcher?: ReactNode;
 }
 
 interface HomeHeroDesignSystemOption {
@@ -206,9 +207,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onOpenPluginDetails = () => undefined,
     pluginInputFields = EMPTY_INPUT_FIELDS,
     pluginInputValues = EMPTY_PLUGIN_INPUT_VALUES,
-    pluginInputTemplate = null,
     onPluginInputValuesChange = () => undefined,
-    inlineEditableInputNames = EMPTY_INPUT_NAMES,
     footerInputNames = EMPTY_INPUT_NAMES,
     designSystemOptions = EMPTY_DESIGN_SYSTEM_OPTIONS,
     stagedFiles = EMPTY_STAGED_FILES,
@@ -237,6 +236,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onPickWorkingDir,
     onClearWorkingDir,
     onExamplePromptStatusChange,
+    executionSwitcher,
   },
   ref,
 ) {
@@ -1201,6 +1201,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               onChange={onSessionModeChange}
               disabled={Boolean(submitDisabled)}
             />
+            {executionSwitcher ? (
+              <div className="home-hero__execution-switcher">
+                {executionSwitcher}
+              </div>
+            ) : null}
             <button
               type="button"
               className="home-hero__submit od-tooltip"

@@ -432,7 +432,22 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  line-height: 1.35;
+}
+.df-row-sub > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.df-row-sub-kind,
+.df-row-sub-time {
+  display: none;
 }
 .df-row-time {
   font-size: 11.5px;

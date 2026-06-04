@@ -8,9 +8,13 @@ export interface RunEventForAnalyticsObservability {
 export interface RunTelemetryTimestamps {
   startRequestedAt?: number;
   startChatRunStartedAt?: number;
+  promptBuildStartAt?: number;
+  promptBuildEndAt?: number;
   processSpawnStartedAt?: number;
   processSpawnedAt?: number;
+  modelCallStartAt?: number;
   firstTokenAt?: number;
+  finalizeStartAt?: number;
 }
 
 export interface RunUsageAnalytics {

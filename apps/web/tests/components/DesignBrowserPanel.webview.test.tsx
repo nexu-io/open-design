@@ -103,7 +103,7 @@ describe('DesignBrowserPanel <webview> navigation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '灵感' }));
     fireEvent.change(screen.getByRole('searchbox', { name: '搜索灵感' }), {
-      target: { value: 'font' },
+      target: { value: '字体' },
     });
     expect(screen.queryByRole('menuitem', { name: /validate_view/ })).toBeNull();
     fireEvent.click(screen.getByRole('menuitem', { name: /extract_fonts/ }));

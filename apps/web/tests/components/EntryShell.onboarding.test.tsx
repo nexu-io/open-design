@@ -393,6 +393,30 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(screen.getByText('Connect')).toBeTruthy();
   });
 
+  it('shows daemon startup errors when AMR sign-in fails immediately', async () => {
+    const startupError = 'profile "prod" api URL: is not configured';
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        return jsonResponse({ error: startupError }, 500);
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Sign in to continue/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toBe(startupError);
+    });
+    expect(screen.queryByText('AMR sign-in failed.')).toBeNull();
+    expect(screen.queryByText('Signing in…')).toBeNull();
+  });
+
   it('clears AMR login pending when the user switches to another runtime', async () => {
     const fetchMock = vi.fn(async (input, init) => {
       const url = String(input);

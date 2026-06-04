@@ -43,6 +43,15 @@ export type RuntimeContext = {
   // ~/.gemini/antigravity-cli/settings.json). Tests pass a temp path
   // so unit assertions against buildArgs do not touch the real home dir.
   antigravitySettingsPath?: string;
+  // Resume-capable adapters (resumesSessionViaCli) read these to decide
+  // whether to continue the CLI's own session. `resumeSessionId` is the
+  // stored id for this (conversation, agent) when a prior session exists;
+  // the adapter passes it to the CLI's resume flag and the daemon sends
+  // only the latest user turn. When it is null/absent the adapter starts
+  // a new session using `newSessionId` (a freshly minted UUID the daemon
+  // also persists) and the daemon seeds it with the full transcript.
+  resumeSessionId?: string | null;
+  newSessionId?: string;
 };
 
 // Marker on a RuntimeAgentDef declaring that the adapter's CLI maintains

@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { isLocalSameOrigin } from '../src/origin-validation.js';
 import { listDesignSystems } from '../src/design-systems.js';
-import { registerStaticResourceRoutes } from '../src/static-resource-routes.js';
+import { registerStaticResourceRoutes } from '../src/routes/static-resource.js';
 
 describe('static resource mutation routes', () => {
   let server: http.Server;

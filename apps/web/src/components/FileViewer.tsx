@@ -518,13 +518,13 @@ function PreviewViewportControls({
     <div className="viewer-viewport-switcher" ref={menuRef}>
       <button
         type="button"
-        className="viewer-action viewer-viewport-trigger od-tooltip"
+        className={`viewer-action viewer-viewport-trigger${open ? '' : ' od-tooltip'}`}
         aria-label={t('fileViewer.viewportAria')}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
         title={t(activePreset.titleKey)}
-        data-tooltip={t(activePreset.titleKey)}
+        data-tooltip={open ? undefined : t(activePreset.titleKey)}
         data-tooltip-placement="bottom"
         tabIndex={tabIndex}
         onClick={() => setOpen((value) => !value)}
@@ -2346,6 +2346,7 @@ export function CommentSidePanel({
   sending,
   queueOnSend = false,
   sendDisabled = false,
+  renderCreateForm = true,
   t,
   composer,
 }: {
@@ -2365,6 +2366,7 @@ export function CommentSidePanel({
   sending: boolean;
   queueOnSend?: boolean;
   sendDisabled?: boolean;
+  renderCreateForm?: boolean;
   t: TranslateFn;
   composer?: ReactNode;
 }) {
@@ -2624,7 +2626,7 @@ export function CommentSidePanel({
         </div>
       ) : null}
       {composer ? <div className="comment-side-composer">{composer}</div> : null}
-      {onCreateComment ? (
+      {renderCreateForm && onCreateComment ? (
         <form
           className="comment-side-new-comment composer"
           onSubmit={(event) => {
@@ -2718,6 +2720,24 @@ function reorderPreviewCommentIds(
   return ids;
 }
 
+export function appendSavedPreviewCommentOrder(
+  currentOrderIds: string[],
+  visibleComments: Array<Pick<PreviewComment, 'id'>>,
+  savedId: string,
+): string[] {
+  if (!savedId) return currentOrderIds;
+  const visibleIds = visibleComments.map((comment) => comment.id);
+  if (currentOrderIds.includes(savedId) || visibleIds.includes(savedId)) {
+    return currentOrderIds;
+  }
+  const visibleIdSet = new Set(visibleIds);
+  const kept = currentOrderIds.filter((id) => visibleIdSet.has(id));
+  const missingVisibleIds = visibleIds.filter((id) => !kept.includes(id));
+  const base = currentOrderIds.length > 0 ? [...kept, ...missingVisibleIds] : visibleIds;
+  const next = [...base, savedId];
+  return next.join('\0') === currentOrderIds.join('\0') ? currentOrderIds : next;
+}
+
 function CommentSideDock({
   comments,
   projectId,
@@ -2735,6 +2755,7 @@ function CommentSideDock({
   sending,
   queueOnSend = false,
   sendDisabled = false,
+  renderCreateForm = true,
   t,
   composer,
 }: {
@@ -2754,6 +2775,7 @@ function CommentSideDock({
   sending: boolean;
   queueOnSend?: boolean;
   sendDisabled?: boolean;
+  renderCreateForm?: boolean;
   t: TranslateFn;
   composer?: ReactNode;
 }) {
@@ -2779,6 +2801,7 @@ function CommentSideDock({
         sending={sending}
         queueOnSend={queueOnSend}
         sendDisabled={sendDisabled}
+        renderCreateForm={renderCreateForm}
         t={t}
         composer={composer}
       />
@@ -7023,6 +7046,7 @@ function HtmlViewer({
         boardImages,
       );
       if (saved) {
+        rememberSavedPreviewCommentOrder(saved.id);
         clearBoardComposer();
         setActiveCommentExistingAttachments(saved.attachments ?? []);
         setBoardMode(true);
@@ -7058,6 +7082,7 @@ function HtmlViewer({
     try {
       const saved = await onSavePreviewComment(target, cleanNote, false);
       if (saved) {
+        rememberSavedPreviewCommentOrder(saved.id);
         setCommentSavedToast(t('chat.comments.savedToast'));
         if (activeCommentTarget) clearBoardComposer();
       }
@@ -7314,6 +7339,11 @@ function HtmlViewer({
     const missing = creationSortedSideComments.filter((comment) => !orderedIds.has(comment.id));
     return [...ordered, ...missing];
   }, [creationSortedSideComments, commentOrderIds]);
+  function rememberSavedPreviewCommentOrder(savedId: string) {
+    setCommentOrderIds((current) =>
+      appendSavedPreviewCommentOrder(current, visibleSideComments, savedId),
+    );
+  }
   const activeSideCommentId = activePreviewCommentId;
   const activeCommentTargetVisible = commentTargetIntersectsPreview(
     activeCommentTarget,
@@ -7809,6 +7839,7 @@ function HtmlViewer({
       sending={sendingBoardBatch}
       queueOnSend={commentQueueOnSend}
       sendDisabled={commentSendDisabled}
+      renderCreateForm={!commentPortalHost}
       t={t}
       composer={null}
     />
