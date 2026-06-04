@@ -295,6 +295,15 @@ function joinDisplayPath(root: string, child: string): string {
   return cleanChild ? `${cleanRoot}/${cleanChild}` : cleanRoot;
 }
 
+function createDefaultDesignFilesNavState(): DesignFilesNavState {
+  return {
+    kindFilter: new Set(),
+    currentDir: '',
+    page: 0,
+    pageSize: 30,
+  };
+}
+
 interface DesignSystemProjectSectionReview {
   section: DesignSystemProjectSection;
   previewFile: ProjectFile | null;
@@ -457,26 +466,15 @@ export function FileWorkspace({
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
   const draggedTabNameRef = useRef<string | null>(null);
   const browserTabSequenceRef = useRef(0);
-  const designFilesNavRef = useRef<DesignFilesNavState>({
-    kindFilter: new Set(),
-    currentDir: '',
-    page: 0,
-    pageSize: 30,
-  });
+  const designFilesNavProjectIdRef = useRef(projectId);
+  const designFilesNavRef = useRef<DesignFilesNavState>(createDefaultDesignFilesNavState());
+  if (designFilesNavProjectIdRef.current !== projectId) {
+    designFilesNavProjectIdRef.current = projectId;
+    designFilesNavRef.current = createDefaultDesignFilesNavState();
+  }
   const onDesignFilesNavStateChange = useCallback((state: DesignFilesNavState) => {
     designFilesNavRef.current = state;
   }, []);
-
-  // Reset preserved nav state when the project changes so the panel starts
-  // fresh (the key={projectId} on the panel already remounts it).
-  useEffect(() => {
-    designFilesNavRef.current = {
-      kindFilter: new Set(),
-      currentDir: '',
-      page: 0,
-      pageSize: 30,
-    };
-  }, [projectId]);
 
   // Maps a terminal tab's original session id (the `terminal:<id>` suffix) to
   // the PTY session it is CURRENTLY bound to. Restart rebinds the surface to a

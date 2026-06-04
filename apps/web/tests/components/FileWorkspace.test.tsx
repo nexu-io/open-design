@@ -144,6 +144,10 @@ function workspaceFile(name: string): ProjectFile {
   };
 }
 
+function workspaceFiles(count: number, prefix: string): ProjectFile[] {
+  return Array.from({ length: count }, (_, index) => workspaceFile(`${prefix}-${index + 1}.html`));
+}
+
 function failedAssistantMessage(
   code: string,
   agentId: string,
@@ -378,6 +382,35 @@ describe('FileWorkspace upload input', () => {
         'Uploaded 1 file(s), but 1 failed (permission denied).',
       );
     });
+  });
+
+  it('starts Design Files navigation fresh when switching projects', () => {
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-a',
+      projectKind: 'prototype',
+      files: workspaceFiles(90, 'alpha'),
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+    };
+
+    const { container, rerender } = render(<FileWorkspace {...baseProps} />);
+    const pageButtons = Array.from(container.querySelectorAll<HTMLButtonElement>('.df-page-btn'));
+
+    fireEvent.click(pageButtons[1]!);
+    expect(container.querySelector('.df-page-info')?.textContent).toContain('31–60');
+
+    rerender(
+      <FileWorkspace
+        {...baseProps}
+        projectId="project-b"
+        files={workspaceFiles(90, 'beta')}
+      />,
+    );
+
+    expect(container.querySelector('.df-page-info')?.textContent).toContain('1–30');
   });
 
   it('clears a prior upload failure after a later successful upload', async () => {
