@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 
-import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
+import { DesignFilesPanel, type DesignFilesNavState } from '../../src/components/DesignFilesPanel';
 import type { ProjectFile, ProjectFileKind } from '../../src/types';
 
 // Stub localStorage so the component's view-state persistence writes to an
@@ -360,6 +360,57 @@ describe('DesignFilesPanel directory navigation', () => {
     expect(document.querySelector('.df-breadcrumb-current')?.textContent).not.toBe('assets');
     expect(screen.getByTestId('design-file-row-top.html')).toBeTruthy();
     expect(document.querySelectorAll('.df-dir-row').length).toBe(1);
+  });
+
+  it('includes subdirectory files in the flat root-level list', () => {
+    renderPanel([
+      file({ name: 'assets/logo.png', kind: 'image' }),
+      file({ name: 'top.html', kind: 'html' }),
+    ]);
+
+    expect(document.querySelectorAll('.df-dir-row').length).toBe(1);
+    expect(screen.getByTestId('design-file-row-assets/logo.png')).toBeTruthy();
+    expect(screen.getByTestId('design-file-row-top.html')).toBeTruthy();
+  });
+
+  it('preserves the current directory when remounted with navState from a previous render', () => {
+    let saved: DesignFilesNavState | undefined;
+
+    function makePanel(nav?: DesignFilesNavState) {
+      return (
+        <DesignFilesPanel
+          projectId="test-project"
+          files={[
+            file({ name: 'assets/logo.png', kind: 'image' }),
+            file({ name: 'top.html', kind: 'html' }),
+          ]}
+          liveArtifacts={[]}
+          navState={nav}
+          onNavStateChange={(state) => { saved = state; }}
+          onRefreshFiles={vi.fn()}
+          onOpenFile={vi.fn()}
+          onOpenLiveArtifact={vi.fn()}
+          onRenameFile={vi.fn()}
+          onDeleteFile={vi.fn()}
+          onDeleteFiles={vi.fn()}
+          onUpload={vi.fn()}
+          onUploadFiles={vi.fn()}
+          onPaste={vi.fn()}
+          onNewSketch={vi.fn()}
+        />
+      );
+    }
+
+    const { unmount } = render(makePanel());
+
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
+
+    unmount();
+    render(makePanel(saved));
+
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
+    expect(screen.getByTestId('design-file-row-assets/logo.png')).toBeTruthy();
   });
 
   it('navigates up one level via the parent breadcrumb', () => {

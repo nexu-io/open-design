@@ -10886,6 +10886,10 @@ export async function startServer({
       research,
       context,
     } = chatBody;
+    run.analyticsTelemetry = {
+      ...(run.analyticsTelemetry ?? {}),
+      promptBuildStartAt: Date.now(),
+    };
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
     if (typeof conversationId === 'string' && conversationId)
       run.conversationId = conversationId;
@@ -11397,6 +11401,10 @@ export async function startServer({
         },
       ],
     });
+    run.analyticsTelemetry = {
+      ...(run.analyticsTelemetry ?? {}),
+      promptBuildEndAt: Date.now(),
+    };
     // Per-agent model + reasoning the user picked in the model menu.
     // Trust the value when it matches the most recent /api/agents listing
     // (live or fallback). Otherwise allow it through if it passes a
@@ -11514,6 +11522,10 @@ export async function startServer({
       });
     };
     const finishWithRetryDecision = (status, code = null, signal = null) => {
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        finalizeStartAt: run.analyticsTelemetry?.finalizeStartAt ?? Date.now(),
+      };
       const result = runResultFromStatus(status);
       const errorCode = deriveRunErrorCode({
         status,
@@ -13300,6 +13312,10 @@ export async function startServer({
     });
     if (writePromptToChildStdin && child.stdin) {
       const promptInputFormat = def.promptInputFormat ?? 'text';
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        modelCallStartAt: Date.now(),
+      };
       if (promptInputFormat === 'stream-json') {
         // Wrap the prompt as an Anthropic user message and write it as one
         // JSONL line. Do NOT close stdin: claude-code keeps reading further

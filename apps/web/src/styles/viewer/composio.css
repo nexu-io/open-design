@@ -584,6 +584,11 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.system-reminder-block.injection .system-reminder-icon,
+.system-reminder-block.injection .system-reminder-label,
+.system-reminder-block.injection .system-reminder-chev {
+  color: var(--warning, #d97706);
+}
 
 /* Waiting-on-input pill (richer than the simple italic version above). */
 .op-waiting {

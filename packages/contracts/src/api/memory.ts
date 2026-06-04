@@ -92,7 +92,8 @@ export type MemoryExtractionProvider =
   | 'azure'
   | 'google'
   | 'ollama'
-  | 'senseaudio';
+  | 'senseaudio'
+  | 'aihubmix';
 
 /** Masked version of MemoryExtractionConfig returned by GET endpoints —
  *  the api key field is replaced with a 4-char tail so the settings UI

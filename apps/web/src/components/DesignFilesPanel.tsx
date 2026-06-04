@@ -20,6 +20,13 @@ import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
+export interface DesignFilesNavState {
+  kindFilter: Set<ProjectFileKind>;
+  currentDir: string;
+  page: number;
+  pageSize: number | 'all';
+}
+
 interface Props {
   projectId: string;
   // Basename of the project's working directory when the user has chosen a
@@ -53,6 +60,8 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
+  navState?: DesignFilesNavState;
+  onNavStateChange?: (state: DesignFilesNavState) => void;
 }
 
 interface ActionNotice {
@@ -164,6 +173,8 @@ export function DesignFilesPanel({
   onPluginFolderAgentAction,
   activePluginActionPaths = new Set(),
   hiddenPluginActionPaths = new Set(),
+  navState,
+  onNavStateChange,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -182,7 +193,7 @@ export function DesignFilesPanel({
   const [sharingFolder, setSharingFolder] = useState<string | null>(null);
   const [installNotice, setInstallNotice] = useState<ActionNotice | null>(null);
   const [renaming, setRenaming] = useState<{ name: string; draft: string; saving: boolean } | null>(null);
-  const [currentDir, setCurrentDir] = useState<string>('');
+  const [currentDir, setCurrentDir] = useState<string>(() => navState?.currentDir ?? '');
 
   // Keep the parent's create-target in sync with the folder being viewed, so
   // uploads / pastes / new sketches / dropped files land in the open folder
@@ -190,6 +201,15 @@ export function DesignFilesPanel({
   useEffect(() => {
     onCurrentDirChange?.(currentDir);
   }, [currentDir, onCurrentDirChange]);
+
+  useEffect(() => {
+    onNavStateChange?.({
+      kindFilter: navState?.kindFilter ?? new Set(),
+      currentDir,
+      page: 0,
+      pageSize: 30,
+    });
+  }, [currentDir, navState?.kindFilter, onNavStateChange]);
 
   // Derive immediate subdirectories and files at the current directory level
   // from the flat files list. Files with names like "a/b/c.html" contribute
@@ -206,6 +226,7 @@ export function DesignFilesPanel({
         localFiles.push(f);
       } else {
         dirs.add(remainder.slice(0, slashIdx));
+        if (currentDir === '') localFiles.push(f);
       }
     }
     return {

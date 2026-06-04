@@ -42,6 +42,11 @@ import {
   localizeSkillPrompt,
 } from '../i18n/content';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
+import { IMAGE_MODELS } from '../media/models';
+import {
+  mergeAihubmixImageModels,
+  useAIHubMixImageModels,
+} from '../media/aihubmix-image-models';
 import { fetchProjectFiles, openFolderDialog, projectFileUrl } from '../providers/registry';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type {
@@ -257,6 +262,13 @@ export function HomeView({
   const [designSystemLogoById, setDesignSystemLogoById] = useState<Record<string, string>>({});
   const [elevenLabsVoices, setElevenLabsVoices] = useState<AudioVoiceOption[]>([]);
   const [elevenLabsVoicesLoading, setElevenLabsVoicesLoading] = useState(false);
+  // Live AIHubMix image catalogue merged into the home media composer's model
+  // picker (replaces the static aihubmix seeds when the fetch resolves).
+  const aihubmixImageModels = useAIHubMixImageModels();
+  const composerImageModels = useMemo(
+    () => mergeAihubmixImageModels(IMAGE_MODELS, aihubmixImageModels),
+    [aihubmixImageModels],
+  );
   const [elevenLabsVoicesLoaded, setElevenLabsVoicesLoaded] = useState(false);
   const [elevenLabsVoicesError, setElevenLabsVoicesError] = useState<string | null>(null);
   const [detailsRecord, setDetailsRecord] = useState<InstalledPluginRecord | null>(null);
@@ -362,6 +374,7 @@ export function HomeView({
       {
         elevenLabsVoiceWarning,
         elevenLabsVoicesLoading,
+        imageModels: composerImageModels,
       },
     );
     const nextRendered = renderPluginBriefTemplate(composer.queryTemplate, composer.inputs);
@@ -393,7 +406,7 @@ export function HomeView({
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [promptTemplates, elevenLabsVoices, elevenLabsVoiceWarning, elevenLabsVoicesLoading]);
+  }, [promptTemplates, elevenLabsVoices, elevenLabsVoiceWarning, elevenLabsVoicesLoading, composerImageModels]);
 
   useEffect(() => {
     if (!pendingPromptFocusEndRef.current) return;
@@ -899,7 +912,7 @@ export function HomeView({
     if (!extracted) return;
     const nextInputs = { ...active.inputs, ...extracted };
     const normalizedInputs = active.mediaSurface
-      ? normalizeHomeMediaInputs(active.mediaSurface, nextInputs, promptTemplates, elevenLabsVoices)
+      ? normalizeHomeMediaInputs(active.mediaSurface, nextInputs, promptTemplates, elevenLabsVoices, composerImageModels)
       : nextInputs;
     const inputsValid = pluginInputsAreValid(active.inputFields, normalizedInputs);
     const inputsChanged = !inputsEqual(active.inputs, normalizedInputs);
@@ -966,12 +979,13 @@ export function HomeView({
   function updateActiveInputs(next: Record<string, unknown>) {
     if (!active) return;
     const normalized = active.mediaSurface
-      ? normalizeHomeMediaInputs(active.mediaSurface, next, promptTemplates, elevenLabsVoices)
+      ? normalizeHomeMediaInputs(active.mediaSurface, next, promptTemplates, elevenLabsVoices, composerImageModels)
       : next;
     const mediaComposer = active.mediaSurface
       ? buildHomeMediaComposer(active.mediaSurface, promptTemplates, normalized, elevenLabsVoices, {
           elevenLabsVoiceWarning,
           elevenLabsVoicesLoading,
+          imageModels: composerImageModels,
         })
       : null;
     const inputFields = mediaComposer?.fields ?? active.inputFields;
@@ -1181,6 +1195,7 @@ export function HomeView({
             {
               elevenLabsVoiceWarning,
               elevenLabsVoicesLoading,
+              imageModels: composerImageModels,
             },
           );
           requestActivePlugin(record, undefined, {

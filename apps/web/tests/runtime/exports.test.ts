@@ -504,6 +504,13 @@ describe('sandboxed preview Blob exports', () => {
     expect(htmlArg).toContain("img.addEventListener('load'");
     expect(htmlArg).toContain("img.addEventListener('error'");
     expect(htmlArg).toContain('img.complete');
+    expect(htmlArg).toContain('waitForCssBackgroundImages');
+    expect(htmlArg).toContain('window.getComputedStyle');
+    expect(htmlArg).toContain('style.backgroundImage');
+    expect(htmlArg).toContain('style.borderImageSource');
+    expect(htmlArg).toContain('style.listStyleImage');
+    expect(htmlArg).toContain('new Image()');
+    expect(htmlArg).toContain('requestAnimationFrame');
     // The original font- and load-waiting logic must still be present.
     expect(htmlArg).toContain('document.fonts');
     expect(htmlArg).toContain('OD_PRINT_READY');

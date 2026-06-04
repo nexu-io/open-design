@@ -281,7 +281,7 @@ interface Props {
   // Live-only streaming tool-input partials keyed by tool-use id. Threaded to
   // AssistantMessage so an in-flight Write/Edit can render its code in real
   // time before the full `tool_use` arrives. Never persisted.
-  liveToolInput?: Record<string, { name: string; text: string }>;
+  liveToolInput?: Record<string, { name: string; text: string; seq?: number }>;
   initialDraft?: string;
   // Question-form submissions become a normal user message; the parent
   // routes that text through onSend (no attachments).
@@ -360,6 +360,12 @@ interface Props {
   byokApiProtocol?: AppConfig['apiProtocol'];
   byokImageModel?: string;
   onChangeByokImageModel?: (model: string) => void;
+  byokVideoModel?: string;
+  onChangeByokVideoModel?: (model: string) => void;
+  byokSpeechModel?: string;
+  onChangeByokSpeechModel?: (model: string) => void;
+  byokSpeechVoice?: string;
+  onChangeByokSpeechVoice?: (voice: string) => void;
   composerFooterAccessory?: ReactNode;
   // Forwarded straight to the chat composer's mid-chat design-system
   // switcher. ProjectView owns the project record so the parent is the
@@ -485,6 +491,12 @@ export function ChatPane({
   byokApiProtocol,
   byokImageModel,
   onChangeByokImageModel,
+  byokVideoModel,
+  onChangeByokVideoModel,
+  byokSpeechModel,
+  onChangeByokSpeechModel,
+  byokSpeechVoice,
+  onChangeByokSpeechVoice,
   composerFooterAccessory,
   currentDesignSystemId,
   onActiveDesignSystemChange,
@@ -1651,6 +1663,12 @@ export function ChatPane({
             byokApiProtocol={byokApiProtocol}
             byokImageModel={byokImageModel}
             onChangeByokImageModel={onChangeByokImageModel}
+            byokVideoModel={byokVideoModel}
+            onChangeByokVideoModel={onChangeByokVideoModel}
+            byokSpeechModel={byokSpeechModel}
+            onChangeByokSpeechModel={onChangeByokSpeechModel}
+            byokSpeechVoice={byokSpeechVoice}
+            onChangeByokSpeechVoice={onChangeByokSpeechVoice}
             currentSkillId={currentSkillId}
             onProjectSkillChange={onProjectSkillChange}
             pinnedPluginId={activePluginSnapshot?.pluginId ?? null}
@@ -1746,7 +1764,7 @@ function ChatRows({
 }: {
   messages: ChatMessage[];
   streaming: boolean;
-  liveToolInput?: Record<string, { name: string; text: string }>;
+  liveToolInput?: Record<string, { name: string; text: string; seq?: number }>;
   projectId: string | null;
   projectKindForTracking: TrackingProjectKind | null;
   activeConversationId: string | null;
@@ -1828,7 +1846,10 @@ function ChatRows({
       <AssistantMessage
         message={m}
         streaming={messageStreaming}
-        liveToolInput={liveToolInput}
+        // Only the streaming row consumes live tool input. Non-streaming rows
+        // get a stable `undefined`, so adding `liveToolInput` to the memo
+        // comparator re-renders just this row per `tool_input_delta`, not all N.
+        liveToolInput={messageStreaming ? liveToolInput : undefined}
         projectId={projectId}
         projectKind={projectKindForTracking}
         conversationId={activeConversationId}

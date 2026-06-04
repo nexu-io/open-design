@@ -380,6 +380,41 @@ describe('FileWorkspace upload input', () => {
     });
   });
 
+  it('starts Design Files navigation fresh when switching projects', () => {
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-a',
+      projectKind: 'prototype',
+      files: [
+        workspaceFile('assets/logo.png'),
+        workspaceFile('top.html'),
+      ],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+    };
+
+    const { container, rerender } = render(<FileWorkspace {...baseProps} />);
+
+    fireEvent.click(container.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
+
+    rerender(
+      <FileWorkspace
+        {...baseProps}
+        projectId="project-b"
+        files={[
+          workspaceFile('beta-assets/logo.png'),
+          workspaceFile('home.html'),
+        ]}
+      />,
+    );
+
+    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('project');
+    expect(screen.getByTestId('design-file-row-home.html')).toBeTruthy();
+  });
+
   it('clears a prior upload failure after a later successful upload', async () => {
     mockedUploadProjectFiles
       .mockRejectedValueOnce(new Error('storage offline'))

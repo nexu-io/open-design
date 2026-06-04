@@ -49,6 +49,12 @@ import {
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
 } from '../media/models';
+import {
+  mergeAihubmixModels,
+  useAIHubMixImageModels,
+  useAIHubMixVideoModels,
+  useAIHubMixAudioModels,
+} from '../media/aihubmix-image-models';
 import { formatPickAndImportFailure } from '../utils/pickAndImportError';
 import { Icon } from './Icon';
 import { Skeleton } from './Loading';
@@ -504,7 +510,9 @@ export function NewProjectPanel({
   function handleImagePromptTemplate(pick: PromptTemplatePick | null) {
     setImagePromptTemplate(pick);
     const m = pick?.summary.model;
-    if (m && IMAGE_MODELS.some((x) => x.id === m)) setImageModel(m);
+    // Accept catalogued ids plus any live AIHubMix catalogue id (aihubmix-*),
+    // which renders dynamically and won't appear in the static IMAGE_MODELS.
+    if (m && (IMAGE_MODELS.some((x) => x.id === m) || m.startsWith('aihubmix-'))) setImageModel(m);
     const a = pick?.summary.aspect;
     if (a && (MEDIA_ASPECTS as readonly string[]).includes(a)) {
       setImageAspect(a as MediaAspect);
@@ -2350,13 +2358,16 @@ function MediaProjectOptions(props:
     }
 ) {
   const t = useT();
+  const aihubmixImageModels = useAIHubMixImageModels();
+  const aihubmixVideoModels = useAIHubMixVideoModels();
+  const aihubmixAudioModels = useAIHubMixAudioModels();
 
   if (props.surface === 'image') {
     return (
       <div className="newproj-media-options">
         <MediaModelCards
           label={t('newproj.modelLabel')}
-          models={supportedModels('image', IMAGE_MODELS)}
+          models={supportedModels('image', mergeAihubmixModels(IMAGE_MODELS, aihubmixImageModels))}
           mediaProviders={props.mediaProviders}
           value={props.imageModel}
           onChange={props.onImageModel}
@@ -2375,7 +2386,7 @@ function MediaProjectOptions(props:
       <div className="newproj-media-options">
         <MediaModelCards
           label={t('newproj.modelLabel')}
-          models={supportedModels('video', VIDEO_MODELS)}
+          models={supportedModels('video', mergeAihubmixModels(VIDEO_MODELS, aihubmixVideoModels))}
           mediaProviders={props.mediaProviders}
           value={props.videoModel}
           onChange={props.onVideoModel}
@@ -2397,7 +2408,12 @@ function MediaProjectOptions(props:
     );
   }
 
-  const models = supportedModels('audio', AUDIO_MODELS_BY_KIND[props.audioKind]);
+  // AIHubMix's live catalogue is speech (TTS) only; music/sfx stay static.
+  const audioBase =
+    props.audioKind === 'speech'
+      ? mergeAihubmixModels(AUDIO_MODELS_BY_KIND.speech, aihubmixAudioModels)
+      : AUDIO_MODELS_BY_KIND[props.audioKind];
+  const models = supportedModels('audio', audioBase);
   const audioDurations = props.audioKind === 'sfx'
     ? SFX_AUDIO_DURATIONS_SEC
     : AUDIO_DURATIONS_SEC;
@@ -2443,9 +2459,9 @@ function MediaProjectOptions(props:
 
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['openai', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image']),
-    video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter']),
-    audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine']),
+    image: new Set(['openai', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix']),
+    video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter', 'aihubmix']),
+    audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']),
   };
   return models.filter((model) => {
     const provider = findProvider(model.provider);

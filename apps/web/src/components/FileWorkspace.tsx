@@ -60,7 +60,7 @@ import {
 import type { ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
 import { createTerminal, killTerminal } from '../state/projects';
 import type { QuestionForm } from '../artifacts/question-form';
-import { DesignFilesPanel } from './DesignFilesPanel';
+import { DesignFilesPanel, type DesignFilesNavState } from './DesignFilesPanel';
 import { DesignBrowserPanel, labelFromUrl, type BrowserPageInfo } from './DesignBrowserPanel';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
@@ -304,6 +304,15 @@ function joinDisplayPath(root: string, child: string): string {
   return cleanChild ? `${cleanRoot}/${cleanChild}` : cleanRoot;
 }
 
+function createDefaultDesignFilesNavState(): DesignFilesNavState {
+  return {
+    kindFilter: new Set(),
+    currentDir: '',
+    page: 0,
+    pageSize: 30,
+  };
+}
+
 interface DesignSystemProjectSectionReview {
   section: DesignSystemProjectSection;
   previewFile: ProjectFile | null;
@@ -469,6 +478,15 @@ export function FileWorkspace({
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
   const draggedTabNameRef = useRef<string | null>(null);
   const browserTabSequenceRef = useRef(0);
+  const designFilesNavProjectIdRef = useRef(projectId);
+  const designFilesNavRef = useRef<DesignFilesNavState>(createDefaultDesignFilesNavState());
+  if (designFilesNavProjectIdRef.current !== projectId) {
+    designFilesNavProjectIdRef.current = projectId;
+    designFilesNavRef.current = createDefaultDesignFilesNavState();
+  }
+  const onDesignFilesNavStateChange = useCallback((state: DesignFilesNavState) => {
+    designFilesNavRef.current = state;
+  }, []);
 
   // Maps a terminal tab's original session id (the `terminal:<id>` suffix) to
   // the PTY session it is CURRENTLY bound to. Restart rebinds the surface to a
@@ -2055,6 +2073,8 @@ export function FileWorkspace({
             liveArtifacts={liveArtifactEntries}
             onRefreshFiles={onRefreshFiles}
             onCurrentDirChange={setUploadDir}
+            navState={designFilesNavRef.current}
+            onNavStateChange={onDesignFilesNavStateChange}
             onOpenFile={openFile}
             onOpenLiveArtifact={(tabId) => openFile(tabId)}
             onRenameFile={handleRename}

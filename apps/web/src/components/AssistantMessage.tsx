@@ -1,5 +1,5 @@
 import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ToolCard } from "./ToolCard";
+import { ToolCard, StreamingAskUserQuestionCard, isAskUserQuestionName } from "./ToolCard";
 import { FileOpsSummary } from "./FileOpsSummary";
 import {
   renderMarkdown,
@@ -290,7 +290,7 @@ interface Props {
   // mid-token JSON accumulated from `input_json_delta`). Used to render an
   // in-flight Write/Edit's code in real time before the full `tool_use`
   // arrives. Never persisted.
-  liveToolInput?: Record<string, { name: string; text: string }>;
+  liveToolInput?: Record<string, { name: string; text: string; seq?: number }>;
   projectId: string | null;
   // Analytics context for the assistant_feedback_* events. Defaults
   // applied at the call site keep AssistantMessage usable in tests
@@ -367,6 +367,11 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'forking',
   'suppressDirectionForms',
   'hasDesignSystemContext',
+  // Live streaming tool input changes identity on every `tool_input_delta`.
+  // ChatPane passes it only to the streaming row (undefined elsewhere), so
+  // comparing it re-renders just that row as the card grows — without it the
+  // memo swallows the deltas and the card only updates on the final tool_use.
+  'liveToolInput',
 ];
 
 function areAssistantMessagePropsEqual(prev: Props, next: Props): boolean {
@@ -429,24 +434,25 @@ function AssistantMessageImpl({
   // The chat-pane-level PinnedTodoBar renders the canonical TodoWrite card
   // above the composer, so we strip any TodoWrite tool-groups out of the
   // per-message flow to avoid the same task list rendering twice.
-  const persistedBlocks = stripTodoToolGroups(
-    stripEmptyThinkingBlocks(
-      suppressDuplicateQuestionForms(
-        suppressAskUserQuestionFallbackText(buildBlocks(events)),
-      ),
-    ),
+  const settledUseIds = useMemo(
+    () => new Set(events.filter((e) => e.kind === "tool_use").map((e) => e.id)),
+    [events],
   );
-  // Synthesize live code boxes for tool calls whose JSON input is still
-  // streaming (no full `tool_use` event yet). Gated to code-writing tools so
-  // a Bash/Grep/TodoWrite input stream doesn't spawn a code panel. These
-  // append after the persisted blocks since the in-flight tool is the latest
-  // activity. Disappear automatically once the full `tool_use` lands (the id
-  // leaves `liveToolInput`) or the run ends (the map is wiped upstream).
-  const liveBlocks = useMemo<Block[]>(() => {
+  // The earliest still-streaming AskUserQuestion (no full `tool_use` yet),
+  // tagged with the event position the tool call started at so we can place
+  // its live card there — text before it is preamble, text after is hedging.
+  const liveAuq = useMemo(() => {
+    if (!streaming || !liveToolInput) return null;
+    const entries = Object.entries(liveToolInput)
+      .filter(([id, e]) => !settledUseIds.has(id) && isAskUserQuestionName(e.name))
+      .map(([id, e]) => ({ id, raw: e.text, seq: e.seq ?? events.length }))
+      .sort((a, b) => a.seq - b.seq);
+    return entries[0] ?? null;
+  }, [streaming, liveToolInput, settledUseIds, events.length]);
+  // Live code boxes (Write/Edit streaming) append after everything else; they
+  // aren't part of the fallback-suppression ordering.
+  const liveCodeBlocks = useMemo<Block[]>(() => {
     if (!streaming || !liveToolInput) return [];
-    const settledUseIds = new Set(
-      events.filter((e) => e.kind === "tool_use").map((e) => e.id),
-    );
     const out: Block[] = [];
     for (const [id, entry] of Object.entries(liveToolInput)) {
       if (settledUseIds.has(id)) continue;
@@ -454,8 +460,30 @@ function AssistantMessageImpl({
       out.push({ kind: "live-tool", id, name: entry.name, raw: entry.text });
     }
     return out;
-  }, [streaming, liveToolInput, events]);
-  const blocks = liveBlocks.length ? [...persistedBlocks, ...liveBlocks] : persistedBlocks;
+  }, [streaming, liveToolInput, settledUseIds]);
+  // Compose the block list with the live AskUserQuestion at its real stream
+  // position (split the events around `seq`), then run the strip/suppress
+  // pipeline once. Because the live AUQ sits between preamble and any hedging,
+  // `suppressAskUserQuestionFallbackText` keeps the preamble and drops the
+  // hedging — matching the settled-case semantics.
+  const blocks = useMemo(() => {
+    const rawBlocks = liveAuq
+      ? (() => {
+          const n = Math.min(Math.max(liveAuq.seq, 0), events.length);
+          return [
+            ...buildBlocks(events.slice(0, n)),
+            { kind: "live-tool", id: liveAuq.id, name: "AskUserQuestion", raw: liveAuq.raw } as Block,
+            ...buildBlocks(events.slice(n)),
+            ...liveCodeBlocks,
+          ];
+        })()
+      : [...buildBlocks(events), ...liveCodeBlocks];
+    return stripTodoToolGroups(
+      stripEmptyThinkingBlocks(
+        suppressDuplicateQuestionForms(suppressAskUserQuestionFallbackText(rawBlocks)),
+      ),
+    );
+  }, [events, liveAuq, liveCodeBlocks]);
   const fileOps = useMemo(() => deriveFileOps(events), [events]);
   const produced = message.producedFiles ?? [];
   const displayedProduced = useMemo(
@@ -695,6 +723,9 @@ function AssistantMessageImpl({
             );
           }
           if (b.kind === "live-tool") {
+            if (isAskUserQuestionName(b.name)) {
+              return <StreamingAskUserQuestionCard key={b.id} raw={b.raw} />;
+            }
             return <LiveCodeBox key={b.id} name={b.name} raw={b.raw} />;
           }
           if (b.kind === "plugin-candidate") {
@@ -2008,7 +2039,7 @@ function ProseBlock({
     <div className="prose-block" data-stream-cursor={showStreamCursor && !live ? "true" : undefined}>
       {renderable.map((seg) => {
         if (seg.kind === "reminder") {
-          return <SystemReminderBlock key={seg.key} text={seg.text} />;
+          return <SystemReminderBlock key={seg.key} text={seg.text} variant="injection" />;
         }
         if (seg.kind === "text") {
           return (
@@ -2118,23 +2149,34 @@ function FormBlock({
   );
 }
 
-function SystemReminderBlock({ text }: { text: string }) {
+function SystemReminderBlock({
+  text,
+  variant = "trusted",
+}: {
+  text: string;
+  // "injection" — model-echoed <system-reminder> tag (prompt injection risk): amber warning chip.
+  // "trusted"   — reserved for harness-sourced reminders; no current call sites use this default.
+  variant?: "trusted" | "injection";
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const trimmed = text.trim();
   const preview = trimmed.split("\n")[0]?.slice(0, 120) ?? "";
+  const isInjection = variant === "injection";
   return (
-    <div className="system-reminder-block">
+    <div className={`system-reminder-block${isInjection ? " injection" : ""}`}>
       <button
         className="system-reminder-toggle"
         onClick={() => setOpen((o) => !o)}
         type="button"
       >
         <span className="system-reminder-icon" aria-hidden>
-          <Icon name="settings" size={12} />
+          <Icon name={isInjection ? "alert-triangle" : "settings"} size={12} />
         </span>
         <span className="system-reminder-label">
-          {t("assistant.systemReminder")}
+          {isInjection
+            ? t("assistant.possiblePromptInjection")
+            : t("assistant.systemReminder")}
         </span>
         <span className="system-reminder-preview">
           {open ? "" : preview}
@@ -2716,6 +2758,14 @@ function suppressAskUserQuestionFallbackText(blocks: Block[]): Block[] {
           it.use.name === "ask_user_question",
       );
       if (hasAuq) seenAskUserQuestion = true;
+      filtered.push(block);
+      continue;
+    }
+    // A still-streaming AskUserQuestion (live block, no persisted tool_use yet)
+    // counts the same as a settled one: hedging text after it is suppressed,
+    // preamble before it is kept.
+    if (block.kind === "live-tool" && isAskUserQuestionName(block.name)) {
+      seenAskUserQuestion = true;
       filtered.push(block);
       continue;
     }
