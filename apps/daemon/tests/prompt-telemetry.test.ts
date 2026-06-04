@@ -323,11 +323,15 @@ describe('prompt telemetry builder', () => {
     });
 
     const flat = buildPromptStackFlatMetadata(telemetry);
+    expect(Object.keys(flat).sort()).toEqual([
+      'promptStack_promptFingerprint',
+      'promptStack_redactedContentBudgetBytes',
+      'promptStack_redactedContentBytes',
+      'promptStack_redactionVersion',
+      'promptStack_sectionCount',
+      'promptStack_stackFingerprint',
+    ]);
     expect(flat.promptStack_promptFingerprint).toMatch(/^sha256:/);
-    expect(flat.promptStack_section_daemonSystemPrompt_present).toBe(true);
-    expect(flat.promptStack_section_runtimeToolPrompt_present).toBe(true);
-    expect(flat.promptStack_section_pluginStagePrompt_present).toBe(true);
-    expect(flat.promptStack_section_userRequest_present).toBeUndefined();
     expect(flat.promptStack_section_daemonSystemPrompt_rawBytes).toBeUndefined();
     expect(flat.promptStack_rawBytes).toBeUndefined();
   });

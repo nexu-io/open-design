@@ -114,6 +114,50 @@
 .op-ask-question-locked .op-ask-question-option.on .op-ask-question-option-desc {
   color: var(--text-muted);
 }
+
+/*
+ * Streaming state: the tool's input JSON is still arriving token-by-token
+ * (rendered from the live `tool_input_delta` accumulation, before the full
+ * tool_use lands). The card frame paints immediately; each question field and
+ * option mounts the moment its text settles in the partial parse and animates
+ * in once. The live card is replaced by the interactive (persisted) card when
+ * the tool_use completes, so the reveal never replays.
+ */
+@keyframes op-auq-reveal {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.op-ask-question-streaming .op-ask-question-field,
+.op-ask-question-streaming .op-ask-question-option {
+  animation: op-auq-reveal 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+/* Three pulsing dots standing in for the "still writing" status pill — no
+ * text, so it needs no translation. */
+.op-ask-question-typing {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: auto;
+  align-items: center;
+}
+.op-ask-question-typing i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: op-auq-typing 1s ease-in-out infinite;
+}
+.op-ask-question-typing i:nth-child(2) { animation-delay: 0.15s; }
+.op-ask-question-typing i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes op-auq-typing {
+  0%, 100% { opacity: 0.25; transform: translateY(0); }
+  50% { opacity: 0.9; transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .op-ask-question-streaming .op-ask-question-field,
+  .op-ask-question-streaming .op-ask-question-option { animation: none; }
+  .op-ask-question-typing i { animation: none; opacity: 0.6; }
+}
+
 .op-meta { color: var(--text-muted); font-size: 11.5px; }
 .op-desc { font-style: italic; }
 .op-path {

@@ -25,6 +25,8 @@
  * Splits a final assistant text payload into ordered segments — prose +
  * forms — so AssistantMessage can render the form inline.
  */
+import { parsePartialJson } from '../runtime/partial-json';
+
 export type QuestionType =
   | 'radio'
   | 'checkbox'
@@ -292,50 +294,128 @@ export function parsePartialQuestionForm(input: string): QuestionForm | null {
   const attrs = parseAttrs(m[2] ?? '');
   const closeIdx = findCloseTag(input, openEnd, closeTag);
   const rawBody = closeIdx === -1 ? input.slice(openEnd) : input.slice(openEnd, closeIdx);
-  // Strip a leading fenced ```json wrapper; the closing fence may not have
-  // streamed in yet, so only the opening fence is removed.
-  const body = rawBody.replace(/^\s*```(?:json)?\s*/i, '');
-  const id = attrs.id ?? extractJsonStringField(body, 'id') ?? 'discovery';
-  const title =
-    attrs.title ?? extractJsonStringField(body, 'title') ?? 'A few quick questions';
-  const description = extractJsonStringField(body, 'description');
-  const questions = extractCompleteQuestions(body);
+  // Strip the fenced ```json wrapper some models emit. The opening fence is
+  // removed always; the trailing fence is removed too once it streams in
+  // (possibly only a partial ``` so far) — otherwise the leftover backticks
+  // make the JSON unparseable in the gap between "fence closed" and
+  // "</question-form> arrived", dropping the live preview back to empty.
+  const body = stripTrailingFence(rawBody.replace(/^\s*```(?:json)?\s*/i, ''));
+  // Derive form-level metadata from the *parsed top-level object*, not a
+  // whole-body regex scan: a nested question/option `id`/`title`/`description`
+  // must not masquerade as the form's own. `id` keys the live Questions panel
+  // (see ProjectView), so a mid-stream identity change would remount it.
+  const parsed = parsePartialJson(body);
+  const top =
+    parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  const topId = typeof top.id === 'string' && top.id.trim().length > 0 ? top.id.trim() : undefined;
+  const topTitle = typeof top.title === 'string' && top.title.trim().length > 0 ? top.title : undefined;
+  const id = attrs.id ?? topId ?? 'discovery';
+  const title = attrs.title ?? topTitle ?? 'A few quick questions';
+  const description = typeof top.description === 'string' ? top.description : undefined;
+  // Carry submitLabel through the preview too — `tryParseForm` reads it for the
+  // final form and `QuestionForm` renders `form.submitLabel ?? default`, so
+  // omitting it here makes a custom CTA flicker in only once the close tag
+  // arrives.
+  const submitLabel = typeof top.submitLabel === 'string' ? top.submitLabel : undefined;
+  const questions = shapeStreamingQuestions(top.questions, countClosedQuestionObjects(body));
   return {
     id,
     title,
     questions,
     ...(description ? { description } : {}),
+    ...(submitLabel ? { submitLabel } : {}),
   };
 }
 
-// Pull complete `{...}` question objects out of a partial `"questions": [ … ]`
-// array, stopping at the first object whose closing brace hasn't streamed in.
-function extractCompleteQuestions(body: string): FormQuestion[] {
-  const keyMatch = /"questions"\s*:\s*\[/.exec(body);
-  if (!keyMatch) return [];
+// Strip a trailing ```` ``` ```` fence (possibly only partially streamed) from
+// a form body — but only when those backticks are the closing wrapper, not
+// content of a JSON string value still being typed. Stripping unconditionally
+// would eat real backticks from a label like `"Use ``` ..."` mid-stream.
+function stripTrailingFence(body: string): string {
+  const m = /\s*`{1,3}\s*$/.exec(body);
+  if (!m) return body;
+  const before = body.slice(0, m.index);
+  // If the text before the trailing backticks ends inside an open JSON string,
+  // the backticks belong to that value — leave them for the repair pass.
+  if (endsInsideJsonString(before)) return body;
+  return before;
+}
+
+function endsInsideJsonString(s: string): boolean {
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+    } else if (c === '"') {
+      inStr = true;
+    }
+  }
+  return inStr;
+}
+
+// Shape questions from a still-streaming, already-parsed `questions` array.
+// Unlike a complete-objects-only pass, the repaired prefix (see
+// `parsePartialJson`) means a question shows the moment its `label` (prompt)
+// text exists and its options grow in one at a time — true token-by-token
+// streaming, matching the AskUserQuestion card. The trailing in-flight object
+// with no label yet is held back (no "q1" placeholder flicker); it appears
+// once its label lands.
+function shapeStreamingQuestions(rawQuestions: unknown, closedCount: number): FormQuestion[] {
+  if (!Array.isArray(rawQuestions)) return [];
   const out: FormQuestion[] = [];
+  rawQuestions.forEach((raw, index) => {
+    if (!raw || typeof raw !== 'object') return;
+    const q = raw as Record<string, unknown>;
+    const label = q.label;
+    if (typeof label !== 'string' || label.trim().length === 0) return;
+    // Surface a question only once its canonical id is determinable, so the
+    // preview id is identical to the id the final parse assigns — `id` keys
+    // both the rendered field and the user's answer in the still-editable
+    // panel, so a mismatch would orphan an in-progress answer (mid-stream when
+    // a late id replaces the fallback, and again at the preview→final swap).
+    //   - object's braces have streamed (closed) → its id is final, whether a
+    //     real `id` or `mapRawQuestion`'s `q${index+1}` fallback → show it.
+    //   - in-flight (last, not yet closed) object WITH an `id` → id is stable
+    //     even as more fields stream → show it (options keep growing).
+    //   - in-flight object with no id yet → it may still gain one; hold back.
+    const isClosed = index < closedCount;
+    const hasId = typeof q.id === 'string' && q.id.trim().length > 0;
+    if (!isClosed && !hasId) return;
+    const mapped = mapRawQuestion(raw, index);
+    if (mapped) out.push(mapped);
+  });
+  return out;
+}
+
+// Count how many question objects in a partial `"questions": [ … ]` body have
+// their closing brace already streamed (string-aware). A closed object's id is
+// final (real `id` or the `q${index+1}` fallback), so it's safe to surface;
+// only the trailing still-open object might still gain an `id`.
+function countClosedQuestionObjects(body: string): number {
+  const keyMatch = /"questions"\s*:\s*\[/.exec(body);
+  if (!keyMatch) return 0;
   let i = keyMatch.index + keyMatch[0].length;
-  let index = 0;
+  let count = 0;
   while (i < body.length) {
     while (i < body.length && /[\s,]/.test(body[i] as string)) i++;
     if (i >= body.length || body[i] === ']') break;
     if (body[i] !== '{') break;
-    const objStr = extractBalancedObject(body, i);
-    if (!objStr) break;
-    try {
-      const mapped = mapRawQuestion(JSON.parse(objStr), index);
-      if (mapped) out.push(mapped);
-    } catch {
-      break;
-    }
-    i += objStr.length;
-    index++;
+    const obj = extractBalancedObject(body, i);
+    if (!obj) break; // trailing object hasn't closed yet
+    count++;
+    i += obj.length;
   }
-  return out;
+  return count;
 }
 
-// Return the substring for the balanced `{...}` object starting at `start`,
-// or null if it never closes (string-aware so braces inside strings don't count).
+// Return the substring for the balanced `{...}` object starting at `start`, or
+// null if it never closes (string-aware so braces inside strings don't count).
 function extractBalancedObject(s: string, start: number): string | null {
   let depth = 0;
   let inStr = false;
@@ -356,19 +436,6 @@ function extractBalancedObject(s: string, start: number): string | null {
     }
   }
   return null;
-}
-
-// Best-effort extraction of a top-level "field": "value" string from a partial
-// JSON body — used for title/id/description before the full body parses.
-function extractJsonStringField(body: string, field: string): string | undefined {
-  const re = new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`);
-  const m = re.exec(body);
-  if (!m) return undefined;
-  try {
-    return JSON.parse(`"${m[1]}"`) as string;
-  } catch {
-    return m[1];
-  }
 }
 
 function normalizeType(raw: unknown): QuestionType {

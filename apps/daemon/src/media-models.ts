@@ -67,6 +67,18 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     defaultBaseUrl: 'https://api.senseaudio.cn',
     docsUrl: 'https://docs.senseaudio.cn',
   },
+  {
+    id: 'aihubmix',
+    label: 'AIHubMix',
+    hint: 'OpenAI-compatible aggregator · image + speech',
+    integrated: true,
+    credentialsRequired: true,
+    settingsVisible: true,
+    defaultBaseUrl: 'https://aihubmix.com/v1',
+    docsUrl: 'https://docs.aihubmix.com',
+    supportsCustomModel: true,
+    customModelPlaceholder: 'gpt-image-2 or dall-e-3',
+  },
   { id: 'tavily', label: 'Tavily Search', hint: 'Agent-callable web research', integrated: true, defaultBaseUrl: 'https://api.tavily.com' },
   { id: 'stub', label: 'Stub (placeholder)', hint: 'Deterministic local placeholder bytes', integrated: true },
 ];
@@ -85,6 +97,12 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'senseaudio-image-2.0-260319', label: 'senseaudio-image-2.0', hint: 'SenseAudio · multi-aspect, latest', provider: 'senseaudio', caps: ['t2i', 'i2i'] },
   { id: 'senseaudio-image-1.0-260319', label: 'senseaudio-image-1.0', hint: 'SenseAudio · standard', provider: 'senseaudio', caps: ['t2i', 'i2i'] },
   { id: 'doubao-seedream-5-0-260128', label: 'seedream-5.0', hint: 'SenseAudio · ByteDance Seedream 5.0 hi-res', provider: 'senseaudio', caps: ['t2i', 'i2i'] },
+
+  // AIHubMix routes these to OpenAI's images/generations endpoint. Ids are
+  // prefixed to stay unique against the openai-provider entries above; the
+  // `aihubmix-` prefix is stripped to the real wire name in media.ts.
+  { id: 'aihubmix-gpt-image-1', label: 'gpt-image-1 (AIHubMix)', hint: 'AIHubMix · OpenAI gpt-image-1', provider: 'aihubmix', caps: ['t2i', 'i2i'] },
+  { id: 'aihubmix-dall-e-3', label: 'dall-e-3 (AIHubMix)', hint: 'AIHubMix · OpenAI DALL·E 3', provider: 'aihubmix', caps: ['t2i'] },
 
   { id: 'grok-imagine-image', label: 'grok-imagine-image', hint: 'xAI · 2K text-to-image', provider: 'grok', caps: ['t2i'] },
 
@@ -184,6 +202,7 @@ export const AUDIO_MODELS_BY_KIND: Record<AudioKind, MediaModel[]> = {
     { id: 'senseaudio-tts', label: 'senseaudio-tts', hint: 'SenseAudio', provider: 'senseaudio', caps: ['tts', 'voice-clone'] },
     { id: 'doubao-tts', label: 'doubao-tts', hint: 'Volcengine', provider: 'volcengine', caps: ['tts'] },
     { id: 'gpt-4o-mini-tts', label: 'gpt-4o-mini-tts', hint: 'OpenAI', provider: 'openai', caps: ['tts'] },
+    { id: 'aihubmix-tts-1', label: 'tts-1 (AIHubMix)', hint: 'AIHubMix · OpenAI tts-1', provider: 'aihubmix', caps: ['tts'] },
     // xAI TTS — multilingual; uses the same SuperGrok OAuth as image / video.
     { id: 'grok-tts', label: 'grok-tts', hint: 'xAI · multilingual · uses Grok subscription', provider: 'grok', caps: ['tts'] },
   ],

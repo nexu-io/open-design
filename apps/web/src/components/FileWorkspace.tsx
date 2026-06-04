@@ -60,7 +60,7 @@ import {
 import type { ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
 import { createTerminal, killTerminal } from '../state/projects';
 import type { QuestionForm } from '../artifacts/question-form';
-import { DesignFilesPanel } from './DesignFilesPanel';
+import { DesignFilesPanel, type DesignFilesNavState } from './DesignFilesPanel';
 import { DesignBrowserPanel, labelFromUrl, type BrowserPageInfo } from './DesignBrowserPanel';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
@@ -93,6 +93,12 @@ import type { ChatMessage } from '../types';
 interface Props {
   projectId: string;
   projectKind: TrackingProjectKind;
+  // Basename of the project's chosen working directory (e.g. "openclaw").
+  // Threaded to DesignFilesPanel as the breadcrumb root label. Undefined for
+  // default-storage projects.
+  rootDirName?: string;
+  // True while a working-dir replace is reindexing; shows a loading state.
+  reloading?: boolean;
   /** Absolute on-disk project directory (from GET /api/projects/:id). Used by
    * the Design Files panel's "copy absolute path" action. */
   resolvedDir?: string | null;
@@ -106,6 +112,9 @@ interface Props {
   commentQueueOnSend?: boolean;
   commentSendDisabled?: boolean;
   openRequest?: { name: string; nonce: number } | null;
+  // Open the named file AND surface its Share/Export menu. Drives the chat-side
+  // "Share" next-step action without a dedicated share backend.
+  shareRequest?: { name: string; nonce: number } | null;
   liveArtifactEvents?: LiveArtifactEventItem[];
   designSystemActivityEvents?: AgentEvent[];
   // Persisted set of open tabs + active tab. Owned by ProjectView so the
@@ -295,6 +304,15 @@ function joinDisplayPath(root: string, child: string): string {
   return cleanChild ? `${cleanRoot}/${cleanChild}` : cleanRoot;
 }
 
+function createDefaultDesignFilesNavState(): DesignFilesNavState {
+  return {
+    kindFilter: new Set(),
+    currentDir: '',
+    page: 0,
+    pageSize: 30,
+  };
+}
+
 interface DesignSystemProjectSectionReview {
   section: DesignSystemProjectSection;
   previewFile: ProjectFile | null;
@@ -323,6 +341,8 @@ const DESIGN_SYSTEM_IMAGE_OR_FONT_EXTENSIONS = /\.(svg|png|jpe?g|gif|webp|avif|i
 export function FileWorkspace({
   projectId,
   projectKind,
+  rootDirName,
+  reloading,
   resolvedDir,
   files,
   liveArtifacts,
@@ -334,6 +354,7 @@ export function FileWorkspace({
   commentQueueOnSend = false,
   commentSendDisabled = false,
   openRequest,
+  shareRequest,
   liveArtifactEvents = [],
   designSystemActivityEvents = [],
   tabsState,
@@ -457,6 +478,15 @@ export function FileWorkspace({
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
   const draggedTabNameRef = useRef<string | null>(null);
   const browserTabSequenceRef = useRef(0);
+  const designFilesNavProjectIdRef = useRef(projectId);
+  const designFilesNavRef = useRef<DesignFilesNavState>(createDefaultDesignFilesNavState());
+  if (designFilesNavProjectIdRef.current !== projectId) {
+    designFilesNavProjectIdRef.current = projectId;
+    designFilesNavRef.current = createDefaultDesignFilesNavState();
+  }
+  const onDesignFilesNavStateChange = useCallback((state: DesignFilesNavState) => {
+    designFilesNavRef.current = state;
+  }, []);
 
   // Maps a terminal tab's original session id (the `terminal:<id>` suffix) to
   // the PTY session it is CURRENTLY bound to. Restart rebinds the surface to a
@@ -698,6 +728,20 @@ export function FileWorkspace({
     setActiveTab(name);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequest]);
+
+  // Share request: ensure the target file is open + active so the FileViewer
+  // below receives the matching `shareRequest` and opens its Share menu.
+  useEffect(() => {
+    if (!shareRequest) return;
+    const name = shareRequest.name;
+    if (!name) return;
+    commitTabsState(workspaceTabsState(
+      persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
+      name,
+    ));
+    setActiveTab(name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shareRequest]);
 
   // Focus the Questions tab when the parent bumps the nonce (banner click in
   // chat, or a freshly generated form). The tab is transient — not added to
@@ -2023,12 +2067,14 @@ export function FileWorkspace({
           <DesignFilesPanel
             key={projectId}
             projectId={projectId}
-            resolvedDir={resolvedDir ?? undefined}
+            rootDirName={rootDirName}
+            reloading={reloading}
             files={visibleFiles}
-            folders={projectFolders}
             liveArtifacts={liveArtifactEntries}
             onRefreshFiles={onRefreshFiles}
             onCurrentDirChange={setUploadDir}
+            navState={designFilesNavRef.current}
+            onNavStateChange={onDesignFilesNavStateChange}
             onOpenFile={openFile}
             onOpenLiveArtifact={(tabId) => openFile(tabId)}
             onRenameFile={handleRename}
@@ -2057,21 +2103,6 @@ export function FileWorkspace({
               fileInputRef.current?.click();
             }}
             onUploadFiles={(picked) => void uploadFiles(picked)}
-            onCreateFolder={async (name) => {
-              const folder = await createProjectFolder(projectId, name);
-              if (folder) {
-                await refreshProjectFolders();
-              }
-              return folder;
-            }}
-            onDeleteFolder={async (folderPath) => {
-              const ok = await deleteProjectFolder(projectId, folderPath);
-              if (ok) {
-                await onRefreshFiles();
-                await refreshProjectFolders();
-              }
-              return ok;
-            }}
             onPaste={() => {
               trackFileManagerClick(analytics.track, {
                 page_name: 'file_manager',
@@ -2166,6 +2197,11 @@ export function FileWorkspace({
             onOpenFileReplacing={openFileReplacing}
             commentPortalId={commentPortalId}
             onCommentModeChange={onCommentModeChange}
+            shareRequest={
+              shareRequest && shareRequest.name === activeFile.name
+                ? { nonce: shareRequest.nonce }
+                : null
+            }
           />
         ) : (
           <div className="viewer-empty">

@@ -1,5 +1,5 @@
 import { execAgentFile } from './invocation.js';
-import type { RuntimeEnv } from './types.js';
+import type { RuntimeAgentDef, RuntimeEnv } from './types.js';
 
 export type AgentAuthProbeResult = {
   status: 'ok' | 'missing' | 'unknown';
@@ -252,24 +252,71 @@ function withProbeTails(
   return result;
 }
 
+// Default generic sign-in hint for adapters that declare an `authProbe`
+// but ship no tailored guidance (cursor / deepseek / antigravity / reasonix
+// each have their own via `classifyAgentAuthFailure`). Kept agent-agnostic
+// so a newly-onboarded CLI gets an actionable banner the moment it opts into
+// auth probing, without bespoke copy.
+function genericAuthGuidance(agentName: string): string {
+  return `${agentName} appears to be installed but is not authenticated. Sign in with the CLI in a terminal, then rescan. If Open Design was launched outside an interactive shell, your shell rc files (e.g. ~/.zshrc) may not be loaded into its environment.`;
+}
+
+// Agents that ship a bespoke auth-failure classifier + tailored sign-in hint
+// via `classifyAgentAuthFailure`. For these, a null result is authoritative
+// ("authenticated"); we must NOT second-guess it with the broad generic
+// regex (e.g. cursor-agent's healthy `status` output mentions "login" in
+// ways the generic matcher would misread). The generic classifier is only a
+// fallback for adapters with no tailored classifier of their own.
+const TAILORED_AUTH_AGENTS = new Set([
+  'cursor-agent',
+  'deepseek',
+  'antigravity',
+  'reasonix',
+]);
+
+// Classify an auth-probe's combined output into a missing-auth result, or
+// null when the output does not look like an auth failure. Agents with a
+// tailored classifier use only that (null === authenticated); every other
+// adapter that opts into probing falls back to the generic, agent-agnostic
+// HTTP/text classifier so it still gets a usable signal without bespoke
+// regexes.
+function classifyProbedAuthFailure(
+  def: Pick<RuntimeAgentDef, 'id' | 'name'>,
+  text: string,
+): AgentAuthProbeResult | null {
+  if (TAILORED_AUTH_AGENTS.has(def.id)) {
+    return classifyAgentAuthFailure(def.id, text);
+  }
+  if (classifyAgentServiceFailure(text) === 'AGENT_AUTH_REQUIRED') {
+    return { status: 'missing', message: genericAuthGuidance(def.name || def.id) };
+  }
+  return null;
+}
+
+// Run an adapter's declared authentication probe (a cheap, side-effect-free
+// status/whoami command) and classify the result. Returns null when the
+// adapter declares no `authProbe` — those agents are never actively probed;
+// their auth status is inferred only from a real chat failure's error text.
 export async function probeAgentAuthStatus(
-  agentId: string,
+  def: Pick<RuntimeAgentDef, 'id' | 'name' | 'authProbe'>,
   resolvedBin: string,
   env: RuntimeEnv,
 ): Promise<AgentAuthProbeResult | null> {
-  if (agentId !== 'cursor-agent') return null;
+  const probe = def.authProbe;
+  if (!probe) return null;
   try {
-    const { stdout, stderr } = await execAgentFile(resolvedBin, ['status'], {
+    const { stdout, stderr } = await execAgentFile(resolvedBin, probe.args, {
       env,
-      timeout: 5000,
+      timeout: probe.timeoutMs ?? 5000,
       maxBuffer: 1024 * 1024,
     });
     const stdoutText = typeof stdout === 'string' ? stdout : '';
     const stderrText = typeof stderr === 'string' ? stderr : '';
     const output = `${stdoutText}\n${stderrText}`;
-    if (isCursorAuthFailureText(output)) {
+    const failure = classifyProbedAuthFailure(def, output);
+    if (failure) {
       return withProbeTails(
-        { status: 'missing', message: cursorAuthGuidance(), exitCode: 0, signal: null },
+        { ...failure, exitCode: 0, signal: null },
         stdoutText,
         stderrText,
       );
@@ -291,14 +338,10 @@ export async function probeAgentAuthStatus(
     // is meaningful as an exit code.
     const numericExit = typeof err.code === 'number' ? err.code : null;
     const childSignal = typeof err.signal === 'string' ? err.signal : null;
-    if (isCursorAuthFailureText(output)) {
+    const failure = classifyProbedAuthFailure(def, output);
+    if (failure) {
       return withProbeTails(
-        {
-          status: 'missing',
-          message: cursorAuthGuidance(),
-          exitCode: numericExit,
-          signal: childSignal,
-        },
+        { ...failure, exitCode: numericExit, signal: childSignal },
         stdoutText,
         stderrText,
       );
@@ -306,7 +349,7 @@ export async function probeAgentAuthStatus(
     return withProbeTails(
       {
         status: 'unknown',
-        message: 'Cursor Agent authentication status could not be verified with `cursor-agent status`.',
+        message: `${def.name || def.id} authentication status could not be verified with \`${def.id} ${probe.args.join(' ')}\`.`,
         exitCode: numericExit,
         signal: childSignal,
       },

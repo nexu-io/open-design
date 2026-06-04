@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page, Request } from '@playwright/test';
-import { applyStandardMocks, STORAGE_KEY } from '@/playwright/mock-factory';
+import { applyStandardMocks, fulfillAgentsRoute, STORAGE_KEY } from '@/playwright/mock-factory';
 const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 const STARTER_PLUGIN = makeStarterPlugin({
   id: 'localized-plugin',
@@ -279,53 +279,49 @@ test('[P0] entry execution pill opens the Local CLI and BYOK switcher from Home'
       }),
     );
   }, STORAGE_KEY);
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'claude',
-            name: 'Claude Code',
-            bin: 'claude',
-            available: true,
-            version: '1.0.0',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-          {
-            id: 'codex',
-            name: 'Codex CLI',
-            bin: 'codex',
-            available: true,
-            version: '0.80.0',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-          {
-            id: 'opencode',
-            name: 'OpenCode',
-            bin: 'opencode',
-            available: true,
-            version: '0.5.0',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-          {
-            id: 'hermes',
-            name: 'Hermes',
-            bin: 'hermes',
-            available: true,
-            version: '0.5.0',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-          {
-            id: 'cursor-agent',
-            name: 'Cursor Agent',
-            bin: 'cursor-agent',
-            available: true,
-            version: '0.5.0',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
+  await page.route('**/api/agents**', async (route) => {
+    await fulfillAgentsRoute(route, [
+      {
+        id: 'claude',
+        name: 'Claude Code',
+        bin: 'claude',
+        available: true,
+        version: '1.0.0',
+        models: [{ id: 'default', label: 'Default' }],
       },
-    });
+      {
+        id: 'codex',
+        name: 'Codex CLI',
+        bin: 'codex',
+        available: true,
+        version: '0.80.0',
+        models: [{ id: 'default', label: 'Default' }],
+      },
+      {
+        id: 'opencode',
+        name: 'OpenCode',
+        bin: 'opencode',
+        available: true,
+        version: '0.5.0',
+        models: [{ id: 'default', label: 'Default' }],
+      },
+      {
+        id: 'hermes',
+        name: 'Hermes',
+        bin: 'hermes',
+        available: true,
+        version: '0.5.0',
+        models: [{ id: 'default', label: 'Default' }],
+      },
+      {
+        id: 'cursor-agent',
+        name: 'Cursor Agent',
+        bin: 'cursor-agent',
+        available: true,
+        version: '0.5.0',
+        models: [{ id: 'default', label: 'Default' }],
+      },
+    ]);
   });
   await page.route('**/api/app-config', async (route) => {
     if (route.request().method() !== 'GET') {

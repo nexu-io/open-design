@@ -90,14 +90,14 @@ describe('DesignFilesPanel long filename truncation (#3260)', () => {
     expect(nameSpan?.getAttribute('title')).toBe(LONG_NAME);
   });
 
-  it('keeps the truncate-friendly DOM structure (.df-cell-name > .df-row-name-btn > .df-row-name-wrap > .df-row-name)', () => {
+  it('keeps the truncate-friendly DOM structure (.df-row-name-wrap > .df-row-name-btn > .df-row-name-wrap > .df-row-name)', () => {
     const { container } = renderPanel([file({ name: LONG_NAME })]);
-    // The CSS fix relies on this nesting: `td.df-cell-name` constrains
-    // its width, the wrap is min-width:0 / max-width:100%, and
-    // `.df-row-name` carries `text-overflow: ellipsis`. If the JSX
-    // shape ever changes the CSS regression risk returns silently —
-    // this asserts the chain stays intact.
-    const cell = container.querySelector('td.df-cell-name');
+    // The CSS fix relies on this nesting: the outer `.df-row-name-wrap`
+    // cell constrains its width, the inner wrap is min-width:0 /
+    // max-width:100%, and `.df-row-name` carries `text-overflow: ellipsis`.
+    // If the JSX shape ever changes the CSS regression risk returns
+    // silently — this asserts the chain stays intact.
+    const cell = container.querySelector('div.df-row-name-wrap');
     expect(cell).toBeTruthy();
     const btn = cell!.querySelector('button.df-row-name-btn');
     expect(btn).toBeTruthy();

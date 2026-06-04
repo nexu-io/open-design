@@ -22,6 +22,10 @@ import {
   type HeaderCopy,
   type LandingLocaleCode,
 } from '../i18n';
+import {
+  getSolutionPageCopy,
+  type SolutionPageKey,
+} from '../solution-pages-i18n';
 
 const REPO = 'https://github.com/nexu-io/open-design';
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
@@ -32,6 +36,42 @@ const ext = {
   target: '_blank',
   rel: 'noreferrer noopener',
 } as const;
+
+/*
+ * Nav structure mirrors the agreed Header spec 1:1 (see od-landing nav doc).
+ * Sub-item display names are kept verbatim from that spec and are not
+ * localized — product names and SEO use-case phrases stay in their canonical
+ * English form regardless of UI locale. `href` values are placeholders today
+ * (Solution use-case / Roles pages are a later milestone) and point at an
+ * existing surface so nothing 404s; they get repointed as each page ships.
+ */
+
+// Solution → Use cases. Placeholder hrefs until the dedicated pages ship.
+// Solution → Use cases. `key` maps to the solution page's copy block so the
+// dropdown label is the page's localized breadcrumb (single source of truth,
+// 18 locales) rather than a hard-coded English string.
+const SOLUTION_USE_CASES: ReadonlyArray<{
+  key: SolutionPageKey;
+  href: string;
+}> = [
+  { key: 'prototype', href: '/solutions/prototype/' },
+  { key: 'dashboard', href: '/solutions/dashboard/' },
+  { key: 'slides', href: '/solutions/slides/' },
+  { key: 'image', href: '/solutions/image/' },
+  { key: 'video', href: '/solutions/video/' },
+  { key: 'designSystem', href: '/solutions/design-system/' },
+];
+
+// Solution → Roles. Hidden until the Role pages ship (next PR). Kept here so
+// re-enabling the group in the Solution dropdown is a one-line change.
+// const SOLUTION_ROLES: ReadonlyArray<{ name: string; href: string }> = [
+//   { name: 'Solo Builder', href: '/for/solo-builder/' },
+//   { name: 'Designer', href: '/for/designer/' },
+//   { name: 'Engineering', href: '/for/engineering/' },
+//   { name: 'Product Managers', href: '/for/product-managers/' },
+//   { name: 'Marketing', href: '/for/marketing/' },
+// ];
+
 
 export interface HeaderProps {
   /** Nav highlight target. `'home'` is the default for `/`. */
@@ -50,6 +90,9 @@ export interface HeaderProps {
     | 'systems'
     | 'templates'
     | 'craft'
+    | 'solution'
+    | 'agent'
+    | 'resources'
     | 'blog'
     | 'tutorials'
     | 'community';
@@ -193,18 +236,71 @@ export function Header({
                     </span>
                   </a>
                 </li>
+                {/* AMR is no longer listed here — per the Header spec it now
+                  heads the Agent dropdown (the design Agent above the coding
+                  agents). Listing it in both places would be redundant. */}
+              </ul>
+            </li>
+            {/*
+              Solution — two labeled groups per the Header spec: Use cases
+              (Prototype / Dashboard / Slides / Image / Video / Design System)
+              and Roles (Solo Builder / Designer / Engineering / Product
+              Managers / Marketing). Sub-item hrefs are placeholders until each
+              dedicated page ships; sub-item names are verbatim from the spec
+              and not localized. Same CSS-only dropdown mechanic as Product.
+            */}
+            <li className='has-dropdown'>
+              <a
+                href={href('/compare/')}
+                className={active === 'solution' ? 'is-active' : undefined}
+                aria-haspopup='true'
+                aria-expanded='false'
+              >
+                {headerCopy.nav.solution}
+                <span className='dropdown-caret' aria-hidden='true'>▾</span>
+              </a>
+              <ul className='nav-dropdown nav-dropdown-solution' role='menu'>
+                <li role='none' className='nav-dropdown-group'>
+                  <span className='nav-dropdown-group-label'>{headerCopy.nav.useCases}</span>
+                </li>
+                {SOLUTION_USE_CASES.map((item) => (
+                  <li role='none' key={`uc-${item.key}`}>
+                    <a role='menuitem' href={href(item.href)}>
+                      <span className='dropdown-name'>{getSolutionPageCopy(locale, item.key).breadcrumb}</span>
+                    </a>
+                  </li>
+                ))}
+                {/*
+                  Roles group (Solo Builder / Designer / Engineering / Product
+                  Managers / Marketing) is hidden for now — those pages have no
+                  content yet. Re-add the SOLUTION_ROLES block here, plus the
+                  nav.roles group label, when the Role pages ship (next PR).
+                */}
+              </ul>
+            </li>
+            {/*
+              Agent — for now this dropdown lists only AMR (the design Agent).
+              The 17 first-party coding-agent adapters and their per-agent
+              /agents/ hub anchors are intentionally held back for a later
+              pass; the trigger already links to the /agents/ hub.
+            */}
+            <li className='has-dropdown'>
+              <a
+                href={href('/agents/')}
+                className={active === 'agent' ? 'is-active' : undefined}
+                aria-haspopup='true'
+                aria-expanded='false'
+              >
+                {headerCopy.nav.agent}
+                <span className='dropdown-caret' aria-hidden='true'>▾</span>
+              </a>
+              <ul className='nav-dropdown' role='menu'>
                 <li role='none'>
                   <a role='menuitem' href={AMR_URL}>
                     <span className='dropdown-name'>{productMenuCopy.amrName}</span>
-                    <span className='dropdown-blurb'>
-                      {productMenuCopy.amrBlurb}
-                    </span>
+                    <span className='dropdown-blurb'>{productMenuCopy.amrBlurb}</span>
                   </a>
                 </li>
-                {/* Tutorials is a top-level nav item (see Library section
-                  below). Don't list it here too — duplicating it once at
-                  Product/Tutorials and again at top-level confuses users
-                  about whether the two link to the same page. */}
               </ul>
             </li>
             {/*
@@ -233,6 +329,8 @@ export function Header({
                 {headerCopy.nav.plugins}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </a>
+              {/* Labels come from the localized nav copy (Templates / Skills /
+                Systems) so the dropdown is translated in every locale. */}
               <ul className='nav-dropdown' role='menu'>
                 <li role='none'>
                   <a
@@ -263,32 +361,102 @@ export function Header({
                 </li>
               </ul>
             </li>
-            <li>
-              <a href={href('/tutorials/')} className={linkClass('tutorials')}>
-                {headerCopy.nav.tutorials}
+            {/*
+              Resources — Blog, Tutorials, Download. Blog/Tutorials were
+              standalone top-level items before; folding them here frees slots
+              for the new Solution/Agent dropdowns. (Weekly Newsletter was
+              dropped — no product yet; re-add when the subscribe page ships.)
+            */}
+            <li className='has-dropdown'>
+              <a
+                href={href('/blog/')}
+                className={
+                  active === 'resources' ||
+                  active === 'blog' ||
+                  active === 'tutorials'
+                    ? 'is-active'
+                    : undefined
+                }
+                aria-haspopup='true'
+                aria-expanded='false'
+              >
+                {headerCopy.nav.resources}
+                <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </a>
-            </li>
-            <li>
-              <a href={href('/blog/')} className={linkClass('blog')}>
-                {headerCopy.nav.blog}
-              </a>
+              <ul className='nav-dropdown' role='menu'>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/blog/')}
+                    className={linkClass('blog')}
+                  >
+                    <span className='dropdown-name'>{headerCopy.nav.blog}</span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/tutorials/')}
+                    className={linkClass('tutorials')}
+                  >
+                    <span className='dropdown-name'>{headerCopy.nav.tutorials}</span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a role='menuitem' href={href('/download/')}>
+                    <span className='dropdown-name'>{headerCopy.download}</span>
+                  </a>
+                </li>
+              </ul>
             </li>
             {/*
-              Community is a static contributors / ambassadors page served
-              from `apps/landing-page/public/community/index.html` — Astro
-              copies `public/` verbatim, so this hits Cloudflare Pages as a
-              first-party route at `/community/`.
-
-              The href is the literal `/community/` rather than
-              `href('/community/')` because the page is a single non-
-              locale-aware destination — locale-prefixed variants like
-              `/zh/community/` would fall through to a 404 since the
-              `[locale]/[...path].astro` catch-all does not generate it.
+              Community — dropdown per the Header spec: Contributors,
+              Ambassadors, Moderators, Discord, Discussions. The first three
+              are anchors on the static `/community/` page (served verbatim
+              from `public/community/index.html`); Discord and Discussions are
+              external. Hrefs are the literal `/community/...` — the page is a
+              single non-locale-aware destination, so `/zh/community/` would
+              404 against the `[locale]/[...path].astro` catch-all.
             */}
-            <li>
-              <a href='/community/' className={linkClass('community')}>
+            <li className='has-dropdown'>
+              <a
+                href='/community/'
+                className={
+                  active === 'community' ? 'is-active' : undefined
+                }
+                aria-haspopup='true'
+                aria-expanded='false'
+              >
                 {headerCopy.nav.community}
+                <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </a>
+              <ul className='nav-dropdown' role='menu'>
+                <li role='none'>
+                  <a role='menuitem' href='/community/#contributors'>
+                    <span className='dropdown-name'>{headerCopy.nav.contributors}</span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a role='menuitem' href='/community/#ambassadors'>
+                    <span className='dropdown-name'>{headerCopy.nav.ambassadors}</span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a role='menuitem' href='/community/#moderators'>
+                    <span className='dropdown-name'>{headerCopy.nav.moderators}</span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a role='menuitem' href={DISCORD} {...ext}>
+                    <span className='dropdown-name'>Discord</span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a role='menuitem' href={`${REPO}/discussions`} {...ext}>
+                    <span className='dropdown-name'>Discussions</span>
+                  </a>
+                </li>
+              </ul>
             </li>
             {/*
               Contact intentionally NOT exposed in the top nav: it's a

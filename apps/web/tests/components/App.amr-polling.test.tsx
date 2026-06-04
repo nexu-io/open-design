@@ -8,7 +8,7 @@ import type { AppConfig } from '../../src/types';
 import { loadConfig, mergeDaemonConfig, fetchDaemonConfig } from '../../src/state/config';
 import {
   daemonIsLive,
-  fetchAgents,
+  fetchAgentsStream,
   fetchAppVersionInfo,
   fetchDesignSystems,
   fetchPromptTemplates,
@@ -98,7 +98,7 @@ vi.mock('../../src/providers/registry', async () => {
   return {
     ...actual,
     daemonIsLive: vi.fn(),
-    fetchAgents: vi.fn(),
+    fetchAgentsStream: vi.fn(),
     fetchAppVersionInfo: vi.fn(),
     fetchDesignSystems: vi.fn(),
     fetchPromptTemplates: vi.fn(),
@@ -133,14 +133,23 @@ vi.mock('../../src/state/config', async () => {
   );
   return {
     ...actual,
+    fetchComposioConfigFromDaemon: vi.fn().mockResolvedValue(null),
     loadConfig: vi.fn(),
     mergeDaemonConfig: vi.fn(),
+    saveConfig: vi.fn(),
     fetchDaemonConfig: vi.fn().mockResolvedValue({}),
+    fetchMediaProvidersFromDaemon: vi.fn().mockResolvedValue({
+      status: 'ok',
+      providers: null,
+    }),
+    syncComposioConfigToDaemon: vi.fn().mockResolvedValue(true),
+    syncConfigToDaemon: vi.fn().mockResolvedValue(undefined),
+    syncMediaProvidersToDaemon: vi.fn().mockResolvedValue(undefined),
   };
 });
 
 const mockedDaemonIsLive = vi.mocked(daemonIsLive);
-const mockedFetchAgents = vi.mocked(fetchAgents);
+const mockedFetchAgentsStream = vi.mocked(fetchAgentsStream);
 const mockedFetchAppVersionInfo = vi.mocked(fetchAppVersionInfo);
 const mockedFetchDesignSystems = vi.mocked(fetchDesignSystems);
 const mockedFetchPromptTemplates = vi.mocked(fetchPromptTemplates);
@@ -174,7 +183,7 @@ const baseConfig: AppConfig = {
 describe('App AMR polling', () => {
   beforeEach(() => {
     mockedDaemonIsLive.mockResolvedValue(true);
-    mockedFetchAgents.mockResolvedValue([
+    mockedFetchAgentsStream.mockResolvedValue([
       {
         id: 'amr',
         name: 'AMR',
@@ -246,7 +255,7 @@ describe('App AMR polling', () => {
       version: string;
       models: Array<{ id: string; label: string }>;
     }>) => void;
-    mockedFetchAgents.mockReturnValue(
+    mockedFetchAgentsStream.mockReturnValue(
       new Promise((resolve) => {
         resolveAgents = resolve;
       }),
@@ -356,7 +365,7 @@ describe('App AMR polling', () => {
       refreshing: false,
       models: [{ id: 'old-remote', label: 'old-remote' }],
     });
-    mockedFetchAgents
+    mockedFetchAgentsStream
       .mockResolvedValueOnce([
         {
           id: 'amr',

@@ -577,6 +577,62 @@ export async function pickAndReplaceWorkingDir(
   return { ok: true, response: body };
 }
 
+/**
+ * Pure helper for the `dialog:pick-working-dir` IPC handler (the Home,
+ * pre-create flow). Unlike `pickAndImportFolder` / `pickAndReplaceWorkingDir`,
+ * there is no project yet, so we cannot POST to the daemon to discover a
+ * `503 DESKTOP_AUTH_PENDING` and self-heal. The token we mint here is spent
+ * LATER, by the renderer, on `POST /api/projects/:id/working-dir` once the
+ * project exists.
+ *
+ * If the daemon missed its startup auth-registration window, that deferred
+ * POST is guaranteed to be rejected with `DESKTOP_AUTH_PENDING` — and the
+ * renderer's create flow surfaces that as a confusing late failure. To keep
+ * the Home picker on par with the import/replace flows' self-healing, we
+ * proactively run the desktop-auth handshake (`registerDesktopAuth`) BEFORE
+ * minting and returning the token, so the daemon already knows the secret by
+ * the time the renderer spends the token.
+ *
+ * Extracted from `createDesktopRuntime` so vitest can pin the
+ * DESKTOP_AUTH_PENDING re-registration path without booting Electron.
+ */
+export type MintHomeWorkingDirTokenDeps = {
+  baseDir: string;
+  desktopAuthSecret: Buffer;
+  /** Lazy desktop-auth handshake. Mirrors the import/replace flows. */
+  registerDesktopAuth?: () => Promise<boolean>;
+  /** Injected for tests; defaults to the production HMAC mint. */
+  mintToken?: (secret: Buffer, baseDir: string) => string;
+};
+
+export type MintHomeWorkingDirTokenResult =
+  | { baseDir: string; ok: true; token: string }
+  | { ok: false; reason: string };
+
+export async function mintHomeWorkingDirToken(
+  deps: MintHomeWorkingDirTokenDeps,
+): Promise<MintHomeWorkingDirTokenResult> {
+  const mint = deps.mintToken ?? mintImportToken;
+  const baseDir = deps.baseDir.trim();
+  if (baseDir.length === 0) {
+    return { ok: false, reason: "picker returned an empty path" };
+  }
+  // Ensure the daemon has the desktop-auth secret registered before we hand
+  // the renderer a token bound to it. A failed handshake here means the
+  // deferred working-dir POST would fail anyway, so report it now while the
+  // user is still in the picker rather than as a silent late create failure.
+  if (deps.registerDesktopAuth != null) {
+    const registered = await deps.registerDesktopAuth();
+    if (!registered) {
+      return {
+        ok: false,
+        reason: "desktop auth handshake with the daemon failed; please retry",
+      };
+    }
+  }
+  return { baseDir, ok: true, token: mint(deps.desktopAuthSecret, baseDir) };
+}
+
 const MAC_WINDOW_CHROME =
   process.platform === "darwin"
     ? ({
@@ -1161,6 +1217,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.removeHandler("dialog:pick-folder");
   ipcMain.removeHandler("dialog:pick-and-import");
   ipcMain.removeHandler("dialog:pick-and-replace-working-dir");
+  ipcMain.removeHandler("dialog:pick-working-dir");
   ipcMain.removeHandler("shell:open-external");
   ipcMain.removeHandler("shell:open-path");
   ipcMain.removeHandler("browser:clear-data");
@@ -1215,7 +1272,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (!apiBaseUrl) {
         return { ok: false, reason: "daemon API URL not available" };
       }
-      const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+      const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
       if (result.canceled || result.filePaths.length === 0) {
         return { ok: false, canceled: true };
       }
@@ -1258,7 +1315,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (!apiBaseUrl) {
         return { ok: false, reason: "daemon API URL not available" };
       }
-      const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+      const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
       if (result.canceled || result.filePaths.length === 0) {
         return { ok: false, canceled: true };
       }
@@ -1275,6 +1332,26 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       });
     },
   );
+  // Home-flow counterpart: the project does not exist yet, so we only show
+  // the native picker and mint a token bound to the chosen folder. The
+  // renderer threads { baseDir, token } back through project creation and
+  // spends the token on POST /api/projects/:id/working-dir once the project
+  // exists. Main remains the single source of filesystem paths crossing into
+  // the daemon (same trust boundary as dialog:pick-and-replace-working-dir).
+  ipcMain.handle("dialog:pick-working-dir", async () => {
+    if (options.desktopAuthSecret == null) {
+      return { ok: false, reason: "desktop auth secret not registered" };
+    }
+    const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { ok: false, canceled: true };
+    }
+    return await mintHomeWorkingDirToken({
+      baseDir: result.filePaths[0],
+      desktopAuthSecret: options.desktopAuthSecret,
+      registerDesktopAuth: options.registerDesktopAuthWithDaemon,
+    });
+  });
   // shell.openPath opens an absolute filesystem path in the OS file
   // manager (Finder / Explorer / Files). It resolves to '' on success
   // and to a non-empty error string on failure (per Electron's

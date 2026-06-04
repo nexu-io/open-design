@@ -132,6 +132,9 @@ interface Props {
   contextItemCount: number;
   error: string | null;
   showActivePluginChip?: boolean;
+  workingDir?: string | null;
+  onPickWorkingDir?: () => void;
+  onClearWorkingDir?: () => void;
   onExamplePromptStatusChange?: (info: ExamplePromptInfo | null) => void;
 }
 
@@ -236,6 +239,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     contextItemCount,
     error,
     showActivePluginChip = true,
+    workingDir = null,
+    onPickWorkingDir,
+    onClearWorkingDir,
     onExamplePromptStatusChange,
   },
   ref,
@@ -1203,6 +1209,31 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             >
               <Icon name="attach" size={15} />
             </button>
+            {onPickWorkingDir ? (
+              <div className="home-hero__working-dir-wrap">
+                <button
+                  type="button"
+                  className={`home-hero__working-dir${workingDir ? ' picked' : ''}`}
+                  onClick={onPickWorkingDir}
+                  title={workingDir ?? t('workingDirPicker.select')}
+                >
+                  <Icon name="folder" size={13} />
+                  <span>
+                    {workingDir ? workingDir.split(/[/\\]/).filter(Boolean).pop() : t('workingDirPicker.select')}
+                  </span>
+                </button>
+                {workingDir ? (
+                  <button
+                    type="button"
+                    className="home-hero__working-dir-clear"
+                    onClick={() => onClearWorkingDir?.()}
+                    aria-label={t('workingDirPicker.clearAria')}
+                  >
+                    <Icon name="close" size={10} />
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             <SessionModeToggle
               mode={sessionMode}
               onChange={onSessionModeChange}

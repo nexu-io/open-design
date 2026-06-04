@@ -1087,6 +1087,14 @@
   background: var(--bg);
   isolation: isolate;
 }
+/* While the draw toolbar is open in a tablet/mobile device frame, reserve room at the
+   bottom of the preview's scroll area so the device frame (and the page's scrollbar)
+   can clear the pinned toolbar — which is portaled to the non-scrolling .viewer-body —
+   instead of being hidden behind it. Padding keeps the checkered backdrop full-bleed,
+   so the toolbar reads as a floating pill rather than a docked footer bar (#3455). */
+.preview-viewport:not(.preview-viewport-desktop).preview-draw-active {
+  padding-bottom: 84px;
+}
 .comment-overlay-layer {
   position: absolute;
   inset: 0;

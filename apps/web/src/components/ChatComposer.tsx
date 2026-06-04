@@ -23,7 +23,6 @@ import {
   trackFileUploadResult,
 } from '../analytics/events';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
-import { IMAGE_MODELS } from "../media/models";
 import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchConnectors } from "../providers/registry";
 import { patchProject } from "../state/projects";
 import { fetchMcpServers } from "../state/mcp";
@@ -58,7 +57,6 @@ import {
 } from './composer/LexicalComposerInput';
 import { CaretFloatingLayer } from './composer/CaretFloatingLayer';
 import { ANNOTATION_EVENT, type AnnotationEventDetail } from "./PreviewDrawOverlay";
-import { SearchableModelSelect } from './modelOptions';
 import { DesignSystemSwitchPicker } from "./DesignSystemSwitchPicker";
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -244,14 +242,20 @@ interface Props {
   onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
   activeWorkspaceContext?: WorkspaceContextItem | null;
   workspaceContexts?: WorkspaceContextItem[];
-  // SenseAudio BYOK image-model picker shown above the textarea. Hidden
-  // when the active chat protocol is anything other than 'senseaudio',
-  // so the composer stays clean for every other BYOK tab. The state
-  // owner is ProjectView (per-session, reset on refresh); ChatComposer
-  // is a fully controlled select.
+  // BYOK image-model picker shown above the textarea for protocols that
+  // inject the daemon-side generate_image tool (SenseAudio, AIHubMix).
+  // Hidden for every other BYOK tab so the composer stays clean. The
+  // state owner is ProjectView (per-session, reset on refresh);
+  // ChatComposer is a fully controlled select.
   byokApiProtocol?: AppConfig['apiProtocol'];
   byokImageModel?: string;
   onChangeByokImageModel?: (model: string) => void;
+  byokVideoModel?: string;
+  onChangeByokVideoModel?: (model: string) => void;
+  byokSpeechModel?: string;
+  onChangeByokSpeechModel?: (model: string) => void;
+  byokSpeechVoice?: string;
+  onChangeByokSpeechVoice?: (voice: string) => void;
   currentSkillId?: string | null;
   onProjectSkillChange?: (skillId: string | null) => void;
   // Set when the project was created with a plugin already pinned
@@ -355,6 +359,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       byokApiProtocol,
       byokImageModel,
       onChangeByokImageModel,
+      byokVideoModel,
+      onChangeByokVideoModel,
+      byokSpeechModel,
+      onChangeByokSpeechModel,
+      byokSpeechVoice,
+      onChangeByokSpeechVoice,
       currentSkillId = null,
       onProjectSkillChange,
       pinnedPluginId = null,
@@ -1983,46 +1993,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               t={t}
             />
           ) : null}
-          {byokApiProtocol === 'senseaudio' && onChangeByokImageModel ? (
-            <div
-              className="composer-byok-image-model"
-              data-testid="composer-byok-image-model"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '4px 8px',
-                fontSize: 12,
-                color: 'var(--text-muted, #888)',
-              }}
-            >
-              <Icon name="image" size={13} />
-              <label
-                htmlFor="composer-byok-image-model-select"
-                style={{ flexShrink: 0 }}
-              >
-                {t('settings.byokImageModel')}
-              </label>
-              <SearchableModelSelect
-                id="composer-byok-image-model-select"
-                className="inline-switcher__select composer-byok-image-model__select"
-                value={byokImageModel ?? ''}
-                onChange={(value) => onChangeByokImageModel(value)}
-                models={IMAGE_MODELS.filter((m) => m.provider === 'senseaudio').map((m) => ({ id: m.id, label: m.label }))}
-                additionalOptions={[
-                  {
-                    value: '',
-                    label: (IMAGE_MODELS.find((m) => m.provider === 'senseaudio')?.label
-                      ?? 'senseaudio-image-2.0') + ' (default)',
-                  },
-                ]}
-                searchPlaceholder={t('newproj.modelSearch')}
-                searchInputTestId="composer-byok-image-model-search"
-                popoverTestId="composer-byok-image-model-popover"
-                style={{ fontSize: 12 }}
-              />
-            </div>
-          ) : null}
+          {/* The inline BYOK media-model pickers (image / video / speech +
+              voice) were removed pending a unified model-selection surface.
+              The selected models still flow into the run from the project's
+              creation-time pick (see ProjectView byok*ModelOverride → submit);
+              this only drops the per-composer override UI. The byok* props and
+              handlers are intentionally retained as the plumbing the unified
+              picker will reuse. */}
           <div
             className="composer-input-wrap"
             onFocus={() => setComposerEngaged(true)}

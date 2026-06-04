@@ -27,6 +27,7 @@ const translations: Record<string, string> = {
   'chat.queuedEdit': 'Edit',
   'chat.queuedMore': 'more queued',
   'chat.queuedFollowUpFallback': 'Queued follow-up',
+  'avatar.useLocal': 'Use Local CLI',
 };
 
 vi.mock('../../src/i18n', () => ({
@@ -105,6 +106,12 @@ class MockResizeObserver {
 
   trigger(target: Element) {
     this.callback([{ target } as ResizeObserverEntry], this as unknown as ResizeObserver);
+  }
+
+  static triggerObserved(target: Element) {
+    for (const instance of MockResizeObserver.instances) {
+      if (instance.observed.has(target)) instance.trigger(target);
+    }
   }
 }
 
@@ -227,6 +234,57 @@ describe('ChatPane streaming state', () => {
     const bubble = screen.getByText('Generate a simple sign-in page');
     expect(bubble.classList.contains('user-bubble')).toBe(true);
     expect(bubble.closest('.msg.user')).not.toBeNull();
+  });
+
+  it('offers a Local CLI recovery action on BYOK error states', () => {
+    const onSwitchToLocalCli = vi.fn();
+    const messages: ChatMessage[] = [
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Create a login page',
+        createdAt: 1,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '',
+        createdAt: 2,
+        runStatus: 'failed',
+        events: [
+          {
+            kind: 'status',
+            label: 'error',
+            detail: 'Missing API key — open Settings and paste one in.',
+          },
+        ],
+      },
+    ];
+
+    render(
+      <ChatPane
+        messages={messages}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        showByokRecoveryAction
+        onSwitchToLocalCli={onSwitchToLocalCli}
+        projectMetadata={projectMetadata}
+      />,
+    );
+
+    const action = screen.getByRole('button', { name: 'Use Local CLI' });
+    fireEvent.click(action);
+
+    expect(onSwitchToLocalCli).toHaveBeenCalledTimes(1);
   });
 
   it('shows the sent mode and applied plugin context on user turns', () => {
@@ -725,7 +783,7 @@ Expected output:
       },
     });
 
-    MockResizeObserver.instances[0]?.trigger(strip);
+    MockResizeObserver.triggerObserved(strip);
 
     expect(log!.scrollTop).toBe(600);
   });

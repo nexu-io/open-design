@@ -19,6 +19,7 @@ const {
   importGitHubDesignSystemMock,
   fetchProviderModelsMock,
   fetchLatestGithubReleaseInfoMock,
+  openExternalUrlMock,
   analyticsTrackMock,
 } = vi.hoisted(() => ({
   playSoundMock: vi.fn(),
@@ -35,6 +36,7 @@ const {
   importGitHubDesignSystemMock: vi.fn(),
   fetchProviderModelsMock: vi.fn(),
   fetchLatestGithubReleaseInfoMock: vi.fn(),
+  openExternalUrlMock: vi.fn(),
   analyticsTrackMock: vi.fn(),
 }));
 
@@ -66,6 +68,7 @@ vi.mock('../../src/providers/registry', async () => {
     importLocalDesignSystem: importLocalDesignSystemMock,
     importGitHubDesignSystem: importGitHubDesignSystemMock,
     fetchLatestGithubReleaseInfo: fetchLatestGithubReleaseInfoMock,
+    openExternalUrl: openExternalUrlMock,
     codexPetSpritesheetUrl: (pet: { spritesheetUrl: string }) => pet.spritesheetUrl,
   };
 });
@@ -90,6 +93,7 @@ import { SettingsDialog } from '../../src/components/SettingsDialog';
 import type { AgentRefreshOptions, SettingsSection } from '../../src/components/SettingsDialog';
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
+import { MAX_MAX_TOKENS, MIN_MAX_TOKENS } from '../../src/state/maxTokens';
 import type { AgentInfo, AppConfig, AppVersionInfo } from '../../src/types';
 
 const baseConfig: AppConfig = {
@@ -320,6 +324,7 @@ beforeEach(() => {
   importLocalDesignSystemMock.mockReset();
   importGitHubDesignSystemMock.mockReset();
   fetchProviderModelsMock.mockReset();
+  openExternalUrlMock.mockReset();
   analyticsTrackMock.mockReset();
   notificationPermissionMock.mockReturnValue('default');
   requestNotificationPermissionMock.mockResolvedValue('granted');
@@ -348,6 +353,7 @@ beforeEach(() => {
   }));
   fetchLatestGithubReleaseInfoMock.mockReset();
   fetchLatestGithubReleaseInfoMock.mockResolvedValue(null);
+  openExternalUrlMock.mockResolvedValue(true);
   importLocalDesignSystemMock.mockResolvedValue({
     designSystem: {
       id: 'imported-system',
@@ -453,6 +459,53 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     renderSettingsDialog({ mode: 'daemon' });
 
     expect(screen.queryByTestId('settings-byok-no-file-tools-notice')).toBeNull();
+  });
+
+  it('only persists Max tokens overrides within the supported BYOK range', async () => {
+    const { onPersist } = renderSettingsDialog({ apiKey: 'sk-test' });
+
+    const maxTokensInput = screen.getByRole('spinbutton', { name: /Max tokens/ }) as HTMLInputElement;
+    expect(maxTokensInput.min).toBe(String(MIN_MAX_TOKENS));
+    expect(maxTokensInput.max).toBe(String(MAX_MAX_TOKENS));
+    expect(maxTokensInput.step).toBe('1');
+
+    fireEvent.change(maxTokensInput, { target: { value: String(MIN_MAX_TOKENS - 1) } });
+
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBeUndefined();
+    });
+    expect(
+      onPersist.mock.calls.some(([config]) => (config as AppConfig).maxTokens === MIN_MAX_TOKENS - 1),
+    ).toBe(false);
+    expect(maxTokensInput.value).toBe(String(MIN_MAX_TOKENS - 1));
+
+    fireEvent.blur(maxTokensInput);
+    expect(maxTokensInput.value).toBe('');
+
+    fireEvent.change(maxTokensInput, { target: { value: '64000' } });
+
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBe(64000);
+    });
+
+    fireEvent.change(maxTokensInput, { target: { value: String(MAX_MAX_TOKENS + 1) } });
+
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBeUndefined();
+    });
+    expect(
+      onPersist.mock.calls.some(([config]) => (config as AppConfig).maxTokens === MAX_MAX_TOKENS + 1),
+    ).toBe(false);
+
+    fireEvent.change(maxTokensInput, { target: { value: '' } });
+
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBeUndefined();
+    });
   });
 
   it('lets Anthropic and Google users customize the default base URL', () => {
@@ -1984,6 +2037,53 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Scan failed. Check the daemon and try again.')).toBeTruthy();
+    });
+  });
+
+  it('renders diagnostics and fix actions on installed agents with auth failures', async () => {
+    const docsUrl = 'https://docs.example.com/codex-auth';
+    const authMissingAgent: AgentInfo = {
+      ...availableAgents[0]!,
+      authStatus: 'missing',
+      authMessage: 'Codex CLI is installed but not authenticated.',
+      docsUrl,
+      diagnostics: [
+        {
+          reason: 'auth-missing',
+          severity: 'error',
+          message: 'Codex CLI is installed but not authenticated.',
+          fixActions: [{ kind: 'openDocs' }, { kind: 'rescan' }],
+        },
+      ],
+    };
+    const onRefreshAgents = vi.fn(async () => [authMissingAgent]);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { agents: [authMissingAgent], onRefreshAgents },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    const codexCard = screen.getByRole('button', { name: /Codex CLI/i })
+      .closest('.agent-card') as HTMLElement;
+
+    expect(
+      within(codexCard).getByText('Codex CLI is installed but not authenticated.'),
+    ).toBeTruthy();
+
+    fireEvent.click(within(codexCard).getByRole('button', {
+      name: en['settings.agentInstall.docs'],
+    }));
+    expect(openExternalUrlMock).toHaveBeenCalledWith(docsUrl);
+
+    fireEvent.click(within(codexCard).getByRole('button', {
+      name: en['settings.rescan'],
+    }));
+    await waitFor(() => {
+      expect(onRefreshAgents).toHaveBeenCalledWith({
+        throwOnError: true,
+        agentCliEnv: {},
+      });
     });
   });
 

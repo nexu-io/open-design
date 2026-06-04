@@ -380,6 +380,41 @@ describe('FileWorkspace upload input', () => {
     });
   });
 
+  it('starts Design Files navigation fresh when switching projects', () => {
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-a',
+      projectKind: 'prototype',
+      files: [
+        workspaceFile('assets/logo.png'),
+        workspaceFile('top.html'),
+      ],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+    };
+
+    const { container, rerender } = render(<FileWorkspace {...baseProps} />);
+
+    fireEvent.click(container.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
+
+    rerender(
+      <FileWorkspace
+        {...baseProps}
+        projectId="project-b"
+        files={[
+          workspaceFile('beta-assets/logo.png'),
+          workspaceFile('home.html'),
+        ]}
+      />,
+    );
+
+    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('project');
+    expect(screen.getByTestId('design-file-row-home.html')).toBeTruthy();
+  });
+
   it('clears a prior upload failure after a later successful upload', async () => {
     mockedUploadProjectFiles
       .mockRejectedValueOnce(new Error('storage offline'))
@@ -844,6 +879,40 @@ describe('FileWorkspace launcher tab creation', () => {
       expect(onTabsStateChange).toHaveBeenCalledWith({
         tabs: ['cover.html'],
         active: '__browser__:1',
+        browserTabs,
+      });
+    });
+  });
+
+  it('opens a share request without dropping existing browser tabs', async () => {
+    const onTabsStateChange = vi.fn();
+    const browserTabs = [
+      {
+        id: '__browser__:1',
+        label: 'Browser 1',
+        title: 'Dribbble',
+        url: 'https://dribbble.com/',
+      },
+    ];
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html'), workspaceFile('landing.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['cover.html'], active: '__browser__:1', browserTabs }}
+        shareRequest={{ name: 'landing.html', nonce: 1 }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html', 'landing.html'],
+        active: 'landing.html',
         browserTabs,
       });
     });

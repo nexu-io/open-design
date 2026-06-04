@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type PointerEvent, type ReactNode, type WheelEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type PointerEvent, type ReactNode, type WheelEvent } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 
 import { Icon } from './Icon';
@@ -61,6 +61,11 @@ interface Props {
 const STROKE_COLOR = '#ff3b30';
 const STROKE_WIDTH = 4;
 const TARGET_COLOR = '#1677ff';
+
+// Render `node` into `host` via a portal when one is provided, otherwise inline.
+function maybePortal(node: ReactNode, host: HTMLElement | null) {
+  return host ? createPortal(node, host) : node;
+}
 
 export function PreviewDrawOverlay({
   children,
@@ -676,6 +681,23 @@ export function PreviewDrawOverlay({
     }
   }
 
+  // In a scaled, clipped device frame (tablet/mobile viewports) the draw toolbar would
+  // be cut off by the frame, and an absolutely-positioned toolbar inside the preview
+  // scroll area scrolls away with the content. Portal it to the non-scrolling preview
+  // body (.viewer-body) so it stays fully visible and pinned; CSS then docks it in a
+  // reserved strip below the device frame. Falls back to inline when there is no
+  // .viewer-body ancestor. Resolve the host in a layout effect (pre-paint) so the very
+  // first `active` paint is already portaled — with a post-paint effect the clipped
+  // inline toolbar would flash for one frame before the host is found.
+  const [toolbarHost, setToolbarHost] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    if (!active) {
+      setToolbarHost(null);
+      return;
+    }
+    setToolbarHost((wrapRef.current?.closest('.viewer-body') as HTMLElement | null) ?? null);
+  }, [active]);
+
   const overlayPointer = active ? 'auto' : 'none';
   const showCanvas = active || hasInk || hasBox;
   const canSubmit = hasInk || hasBox || Boolean(captureTarget) || captureViewport || Boolean(note.trim()) || extraFiles.length > 0;
@@ -716,7 +738,7 @@ export function PreviewDrawOverlay({
           }}
         />
       ) : null}
-      {active ? (
+      {active ? maybePortal(
         <>
           <style>{tooltipStyle}</style>
           {captureWarning ? (
@@ -1055,7 +1077,8 @@ export function PreviewDrawOverlay({
             </div>,
             document.body,
           ) : null}
-        </>
+        </>,
+        toolbarHost,
       ) : null}
     </div>
   );

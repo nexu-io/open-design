@@ -31,6 +31,14 @@ export type DesignSystemProjectSource =
       branch?: string;
       commit?: string;
       importedAt?: string;
+    }
+  | {
+      type: 'shadcn';
+      reference: string;
+      registryUrl?: string;
+      item?: string;
+      homepage?: string;
+      importedAt?: string;
     };
 
 type ProjectScan = {

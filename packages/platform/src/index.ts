@@ -941,7 +941,25 @@ export function wellKnownUserToolchainBins(
     // issue #442.
     join(home, ".npm-global", "bin"),
     join(home, ".npm-packages", "bin"),
+    // Other common user-level toolchains that install CLI shims outside the
+    // Node ecosystem but still ship agent CLIs (or their dependencies):
+    // Deno's install root, Go's default GOBIN, and pyenv's shim dir. All are
+    // best-effort — a missing dir contributes nothing.
+    join(home, ".deno", "bin"),
+    join(home, "go", "bin"),
+    join(home, ".pyenv", "shims"),
   );
+
+  // Windows-only user install roots that GUI launches miss. Scoop drops
+  // shims under ~/scoop/shims, and npm's global prefix on Windows defaults
+  // to %APPDATA%\npm rather than a `bin` subdir.
+  if (process.platform === "win32") {
+    dirs.push(join(home, "scoop", "shims"));
+    const appData = typeof env.APPDATA === "string" ? env.APPDATA.trim() : "";
+    if (appData.length > 0) {
+      dirs.push(join(appData, "npm"));
+    }
+  }
 
   // Mise shims: makes every tool installed with `mise install` visible to
   // GUI-launched daemons even when the process inherits a stripped PATH.

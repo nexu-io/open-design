@@ -2119,3 +2119,242 @@ dialog.tpl-share-popover .detail-share-dialog-text {
   font-size: 12.5px;
   line-height: 1.55;
 }
+
+/* ===========================================================================
+ * Solution use-case / role pages (`/solutions/<slug>/`, `/for/<slug>/`).
+ *
+ * These pages opt OUT of the 920px `.info-page` measure and use a wider,
+ * Figma-marketing-style layout: a two-column hero band, alternating
+ * image+text feature rows, a feature grid, the capability table, and a
+ * template gallery — all responsive. Scoped to `.info-page.solution-page`
+ * so the other info-pages (compare, agents, alternatives, …) keep the
+ * narrow 920px measure untouched.
+ * ======================================================================== */
+
+/* Unlock the narrow measure; sections drive their own rhythm (tighter than
+ * the 64px the shared .info-section uses, so blocks don't feel stranded). */
+.info-page.solution-page {
+  max-width: 1180px;
+}
+.info-page.solution-page .info-section {
+  margin-top: 0;
+  padding: 44px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.info-page.solution-page .info-section:first-of-type {
+  border-top: 0;
+}
+/* Keep prose readable even though the page is wide: cap paragraph width. */
+.solution-page .info-section > p {
+  max-width: 70ch;
+}
+
+/* ---- Hero band: text left, illustration right ---- */
+.solution-hero-band {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  gap: 56px;
+  align-items: center;
+  margin: 12px 0 8px;
+}
+.solution-hero-band .catalog-head {
+  margin: 0;
+}
+.solution-hero-band .solution-hero {
+  margin: 0;
+}
+.solution-hero-band .solution-hero img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 420px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper-warm);
+}
+.solution-hero-cta {
+  margin-top: 24px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ---- Alternating image+text feature rows ---- */
+.solution-feature-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: center;
+  padding: 36px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.solution-feature-row:first-child {
+  border-top: 0;
+  padding-top: 8px;
+}
+.solution-feature-row.reverse .solution-feature-media {
+  order: 2;
+}
+.solution-feature-media img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 360px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper-warm);
+}
+.solution-feature-text h3 {
+  margin: 0 0 10px;
+}
+.solution-feature-text p {
+  margin: 0;
+  max-width: 56ch;
+}
+
+/* ---- Stepped how-to list (compact, no per-step image) ---- */
+.solution-steps {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.solution-step {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  padding: 16px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.solution-step:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.solution-step-index {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--coral);
+  padding-top: 3px;
+  min-width: 28px;
+}
+.solution-step-text h3 {
+  margin: 0 0 4px;
+}
+.solution-step-text p {
+  margin: 0;
+  max-width: 64ch;
+}
+
+/* ---- Feature grid: 3-up cards, each with a real thumbnail ---- */
+.solution-feature-grid {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+.solution-feature-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-warm);
+}
+.solution-feature-card h3 {
+  margin: 12px 0 4px;
+  font-size: 16px;
+}
+.solution-feature-card p {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+/* ---- Template gallery: real example thumbnails, links to /plugins ---- */
+.solution-gallery {
+  list-style: none;
+  margin: 18px 0 16px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.solution-gallery-item a {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+.solution-gallery-item img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-warm);
+  transition: border-color 160ms, transform 160ms;
+}
+.solution-gallery-item a:hover img {
+  border-color: var(--coral);
+  transform: translateY(-2px);
+}
+.solution-gallery-caption {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 880px) {
+  .solution-hero-band,
+  .solution-feature-row {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .solution-feature-row.reverse .solution-feature-media {
+    order: 0;
+  }
+  .solution-feature-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .solution-gallery {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 560px) {
+  .solution-feature-grid,
+  .solution-gallery {
+    grid-template-columns: 1fr;
+  }
+  .solution-step {
+    gap: 12px;
+  }
+}
+
+/* Solution-page feature grid: smaller TemplateCards than the catalogue's
+ * default, so a row shows more (4-up on the ~1180px solution measure). */
+.solution-page .solution-tpl-grid {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-top: 20px;
+}
+@media (max-width: 880px) {
+  .solution-page .solution-tpl-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 520px) {
+  .solution-page .solution-tpl-grid {
+    grid-template-columns: 1fr;
+  }
+}
