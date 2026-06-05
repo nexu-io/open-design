@@ -871,11 +871,8 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
             >
               <button
                 type="button"
-                className="workspace-tab__main od-tooltip"
+                className="workspace-tab__main"
                 onClick={() => openTab(tab)}
-                title={display.title}
-                data-tooltip={display.title}
-                data-tooltip-placement="bottom"
                 onFocus={(event) => scheduleHoverPreview(tab.id, event.currentTarget.parentElement ?? event.currentTarget)}
                 onBlur={dismissHoverPreview}
               >
