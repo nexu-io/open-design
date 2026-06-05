@@ -44,9 +44,11 @@ describe('git command guard', () => {
     expect(gitCommandBlockedReason(['push', 'origin', '+HEAD:main'])).toContain('push');
     expect(gitCommandBlockedReason(['push', '--force-with-lease=origin/main'])).toContain('push');
     expect(gitCommandBlockedReason(['checkout', 'main'])).toBeNull();
+    expect(gitCommandBlockedReason(['checkout', 'feature/foo'])).toBeNull();
     expect(gitCommandBlockedReason(['checkout', '-b', 'feature', 'main'])).toBeNull();
     expect(gitCommandBlockedReason(['checkout', '--force', 'main'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', '.'])).toContain('checkout');
+    expect(gitCommandBlockedReason(['checkout', './src/file.ts'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', 'HEAD', 'src/file.ts'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', '--', 'src/file.ts'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', 'HEAD', '--', 'src/file.ts'])).toContain('checkout');
@@ -79,6 +81,13 @@ describe('git command guard', () => {
     });
     expect(safeCheckout.status).toBe(0);
     expect(safeCheckout.stdout).toContain('real git: checkout main');
+
+    const safeCheckoutSlashBranch = spawnSync('git', ['checkout', 'feature/foo'], {
+      env: install.env as NodeJS.ProcessEnv,
+      encoding: 'utf8',
+    });
+    expect(safeCheckoutSlashBranch.status).toBe(0);
+    expect(safeCheckoutSlashBranch.stdout).toContain('real git: checkout feature/foo');
 
     const safeCheckoutBranch = spawnSync('git', ['checkout', '-b', 'feature', 'main'], {
       env: install.env as NodeJS.ProcessEnv,
@@ -142,6 +151,13 @@ describe('git command guard', () => {
     });
     expect(destructiveCheckoutDot.status).toBe(126);
     expect(destructiveCheckoutDot.stderr).toContain('git command guard blocked');
+
+    const destructiveCheckoutRelativePath = spawnSync('git', ['checkout', './src/file.ts'], {
+      env: install.env as NodeJS.ProcessEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveCheckoutRelativePath.status).toBe(126);
+    expect(destructiveCheckoutRelativePath.stderr).toContain('git command guard blocked');
 
     const destructiveCheckoutHeadPath = spawnSync('git', ['checkout', 'HEAD', 'src/file.ts'], {
       env: install.env as NodeJS.ProcessEnv,
