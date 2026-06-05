@@ -1,16 +1,16 @@
 // Plan §3.K1 / spec §15.7 — bound-API-token guard.
 //
 // Two halves:
-//   1. The daemon starts on OD_BIND_HOST=0.0.0.0 without OD_API_TOKEN but
-//      enters degraded mode (localhost-only access via createAuthMiddleware).
+//   1. The daemon refuses to start with OD_BIND_HOST=0.0.0.0 when no
+//      OD_API_TOKEN is set.
 //   2. When OD_API_TOKEN is set, every /api/* request from a non-loopback
 //      peer must carry `Authorization: Bearer <OD_API_TOKEN>`. The
 //      health/readiness/version probes stay open for monitoring.
 //
 // Tests force the bearer-required code path by stamping the env vars
 // before startServer. The daemon listens on 127.0.0.1 throughout (so
-// the "degraded 0.0.0.0 without token" path is exercised by a separate
-// case that constructs the start call directly).
+// the "refuse 0.0.0.0 without token" path is exercised by a separate
+// negative case that constructs the start call directly).
 
 import type http from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -35,18 +35,10 @@ afterEach(async () => {
 });
 
 describe('bound-API-token guard', () => {
-  it('starts on 0.0.0.0 without token but only allows localhost access', async () => {
+  it('refuses to start with OD_BIND_HOST=0.0.0.0 when OD_API_TOKEN is unset', async () => {
     delete process.env.OD_API_TOKEN;
-    const started = (await startServer({ port: 0, host: '0.0.0.0', returnServer: true })) as {
-      url: string;
-      server: http.Server;
-      shutdown?: () => Promise<void> | void;
-    };
-    server = started.server;
-    shutdown = started.shutdown;
-    baseUrl = started.url;
-    // Daemon starts in degraded mode — only localhost access allowed.
-    expect(baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:/);
+    await expect(startServer({ port: 0, host: '0.0.0.0', returnServer: true }))
+      .rejects.toThrow(/OD_API_TOKEN/);
   });
 
   it('starts on a public host when OD_API_TOKEN is set', async () => {

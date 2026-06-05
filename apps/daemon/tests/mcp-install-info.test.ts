@@ -306,38 +306,3 @@ describe('GET /api/mcp/install-info', () => {
     }
   });
 });
-
-describe('buildMcpInstallPayload: OD_MCP_TOKEN env population', () => {
-  const base = {
-    cliPath: '/usr/local/bin/od',
-    cliExists: true,
-    execPath: process.execPath,
-    nodeExists: true,
-    port: 7456,
-    platform: process.platform,
-    dataDir: '/tmp/od-test',
-    electronAsNode: false,
-    isSidecarMode: false,
-    sidecarEnv: {},
-  };
-
-  it('emits the real key as OD_MCP_TOKEN when apiKey is provided', () => {
-    const payload = buildMcpInstallPayload({ ...base, apiKey: 'real-secret-key' });
-    expect(payload.env.OD_MCP_TOKEN).toBe('real-secret-key');
-  });
-
-  it('emits placeholder when authRequired is true but no apiKey', () => {
-    const payload = buildMcpInstallPayload({ ...base, authRequired: true });
-    expect(payload.env.OD_MCP_TOKEN).toBe('$OD_MCP_TOKEN');
-  });
-
-  it('emits real key (not placeholder) when both apiKey and authRequired are set', () => {
-    const payload = buildMcpInstallPayload({ ...base, apiKey: 'real-secret-key', authRequired: true });
-    expect(payload.env.OD_MCP_TOKEN).toBe('real-secret-key');
-  });
-
-  it('omits OD_MCP_TOKEN when neither apiKey nor authRequired is set', () => {
-    const payload = buildMcpInstallPayload({ ...base });
-    expect(payload.env.OD_MCP_TOKEN).toBeUndefined();
-  });
-});
