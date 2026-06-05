@@ -1285,6 +1285,81 @@ describe('HomeView prompt handoff', () => {
     })));
   });
 
+  it('extracts a placeholder edit even after the use-with-query draft prefix is also edited', async () => {
+    // Regression: the appended query template must not bake in the mutable
+    // draft prefix. With an existing draft, use-with-query appends the query;
+    // the user then edits BOTH the prefix and a hydrated placeholder. The
+    // placeholder edit must still reach pluginInputs (extraction matches the
+    // query as a suffix after any prefix), so the snapshot agrees with the
+    // visible prompt instead of refreshing from stale defaults.
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')) {
+        return new Response(JSON.stringify(WEB_PROTOTYPE_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    const { rerender } = render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
+    await setPromptAndSettle('Keep my current brief');
+
+    rerender(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        promptHandoff={createPluginUseHandoff(4, 'example-web-prototype', {
+          action: 'use-with-query',
+        })}
+      />,
+    );
+
+    const query =
+      'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.';
+    const appended = `Keep my current brief\n\n${query}`;
+    await waitFor(() => expect(homeHeroPromptText()).toBe(appended));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-web-prototype/apply',
+      expect.anything(),
+    ));
+
+    // Edit BOTH the draft prefix and the hydrated audience placeholder.
+    const edited = appended
+      .replace('Keep my current brief', 'Rewritten brief for the board')
+      .replace('product evaluators', 'enterprise architects');
+    await setPromptAndSettle(edited);
+    await waitFor(() => {
+      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-web-prototype',
+      pluginInputs: expect.objectContaining({ audience: 'enterprise architects' }),
+    })));
+  });
+
   it('binds od-plugin-authoring before submitting the rail create-plugin prompt', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {

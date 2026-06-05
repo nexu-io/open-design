@@ -100,6 +100,11 @@ interface ActivePlugin {
   inputFields: InputFieldSpec[];
   inputsValid: boolean;
   queryTemplate: string | null;
+  // True when `queryTemplate` covers only a suffix of the prompt (the plugin
+  // query appended after a user-owned draft), so input extraction must allow
+  // an arbitrary mutable prefix instead of anchoring at the start. Set by the
+  // use-with-query route.
+  queryTemplateAllowsPrefix?: boolean;
   lastRenderedPrompt: string | null;
   // Stage B of plugin-driven-flow-plan: when the user applied this
   // plugin through the Home chip rail, the chip carries the project
@@ -649,6 +654,11 @@ export function HomeView({
       // Slide deck binds the plugin context, leaving the user's draft
       // alone.
       suppressPromptUpdate?: boolean;
+      // When true, `queryTemplate` only covers the trailing plugin-query
+      // segment (use-with-query appends it after a mutable user draft), so
+      // input extraction must allow an arbitrary prefix instead of anchoring
+      // the whole prompt.
+      queryTemplateAllowsPrefix?: boolean;
       // Type chips are a mode switch, not a commitment to run. Keeping
       // their apply deferred makes Prototype <-> Deck <-> Media changes
       // feel instant; submit() still resolves the snapshot before sending.
@@ -695,6 +705,7 @@ export function HomeView({
       inputFields,
       inputsValid,
       queryTemplate,
+      queryTemplateAllowsPrefix: options?.queryTemplateAllowsPrefix === true,
       // When prompt updates are suppressed we leave lastRenderedPrompt
       // null so the inline pattern-extraction in handlePromptChange
       // doesn't claim ownership of the user's typed text.
@@ -870,22 +881,23 @@ export function HomeView({
         : !currentDraft
           ? trimmedQuery
           : `${prompt.trimEnd()}\n\n${trimmedQuery}`;
-      // Pass an explicit query template aligned with the combined prompt so
+      // Pass the raw (placeholder-bearing) plugin query as the template so
       // usePlugin does NOT null out `active.queryTemplate` (which happens by
-      // default whenever nextPrompt is set). Without this, editing a `{{...}}`
-      // value in the hydrated text would no longer be extracted back into
-      // active.inputs and the snapshot would refresh from stale inputs. The
-      // template mirrors the combined shape: the untouched draft prefix plus
-      // the raw (placeholder-bearing) plugin query.
+      // default whenever nextPrompt is set). Without a template, editing a
+      // `{{...}}` value in the hydrated text would no longer be extracted back
+      // into active.inputs and the snapshot would refresh from stale inputs.
+      //
+      // The template is the plugin query ONLY — it must not bake in the
+      // user's draft prefix, which is mutable: `queryTemplateAllowsPrefix`
+      // tells the extractor to match the query as a suffix after any prefix,
+      // so editing the draft prefix never breaks placeholder extraction.
       const rawQueryTemplate =
         resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale) || null;
-      const combinedTemplate =
-        rawQueryTemplate && trimmedQuery
-          ? (currentDraft ? `${prompt.trimEnd()}\n\n${rawQueryTemplate}` : rawQueryTemplate)
-          : null;
+      const hasAppendedQuery = Boolean(rawQueryTemplate && trimmedQuery);
       await usePlugin(record, combined, {
         ...(inputs ? { inputs } : {}),
-        queryTemplate: combinedTemplate,
+        queryTemplate: hasAppendedQuery ? rawQueryTemplate : null,
+        queryTemplateAllowsPrefix: hasAppendedQuery && currentDraft.length > 0,
       });
       return;
     }
@@ -990,6 +1002,7 @@ export function HomeView({
       active.queryTemplate,
       nextPrompt,
       active.inputFields,
+      { allowPrefix: active.queryTemplateAllowsPrefix === true },
     );
     if (!extracted) return;
     const nextInputs = { ...active.inputs, ...extracted };
@@ -2108,11 +2121,17 @@ function extractPluginInputsFromPrompt(
   template: string,
   prompt: string,
   fields: InputFieldSpec[],
+  options?: { allowPrefix?: boolean },
 ): Record<string, unknown> | null {
   TEMPLATE_INPUT_PATTERN.lastIndex = 0;
   const fieldByName = new Map(fields.map((field) => [field.name, field]));
   const keys: string[] = [];
-  let pattern = '^';
+  // `allowPrefix` matches the template as a suffix of the prompt with any
+  // leading text allowed. Used by use-with-query, where the plugin query is
+  // appended after a user-owned draft prefix: the prefix is mutable and must
+  // not be baked into the anchored template, otherwise editing it would break
+  // placeholder extraction and leave pluginInputs stale.
+  let pattern = options?.allowPrefix ? '[\\s\\S]*?' : '^';
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = TEMPLATE_INPUT_PATTERN.exec(template)) !== null) {
