@@ -39,6 +39,9 @@ describe('git command guard', () => {
     expect(gitCommandBlockedReason(['clean', '-fdx'])).toContain('clean');
     expect(gitCommandBlockedReason(['clean', '-df'])).toContain('clean');
     expect(gitCommandBlockedReason(['-c', 'clean.requireForce=false', 'clean', '-d'])).toContain('clean');
+    expect(gitCommandBlockedReason(['clean', '-nd'])).toBeNull();
+    expect(gitCommandBlockedReason(['clean', '-n', '-d'])).toBeNull();
+    expect(gitCommandBlockedReason(['clean', '--dry-run', '-fdx'])).toBeNull();
     expect(gitCommandBlockedReason(['stash', 'drop'])).toContain('stash');
     expect(gitCommandBlockedReason(['push', 'origin', 'HEAD:main'])).toBeNull();
     expect(gitCommandBlockedReason(['push', 'origin', '+HEAD:main'])).toContain('push');
@@ -95,6 +98,20 @@ describe('git command guard', () => {
     });
     expect(safeCheckoutBranch.status).toBe(0);
     expect(safeCheckoutBranch.stdout).toContain('real git: checkout -b feature main');
+
+    const safeCleanDryRun = spawnSync('git', ['clean', '-nd'], {
+      env: install.env as NodeJS.ProcessEnv,
+      encoding: 'utf8',
+    });
+    expect(safeCleanDryRun.status).toBe(0);
+    expect(safeCleanDryRun.stdout).toContain('real git: clean -nd');
+
+    const safeCleanLongDryRun = spawnSync('git', ['clean', '--dry-run', '-fdx'], {
+      env: install.env as NodeJS.ProcessEnv,
+      encoding: 'utf8',
+    });
+    expect(safeCleanLongDryRun.status).toBe(0);
+    expect(safeCleanLongDryRun.stdout).toContain('real git: clean --dry-run -fdx');
 
     const destructive = spawnSync('git', ['reset', '--hard'], {
       env: install.env as NodeJS.ProcessEnv,

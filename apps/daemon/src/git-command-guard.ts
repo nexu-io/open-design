@@ -37,9 +37,7 @@ export function gitCommandBlockedReason(args: readonly string[]): string | null 
         ? 'git reset --hard discards workspace changes'
         : null;
     case 'clean':
-      return args.some(isDestructiveCleanArg)
-        ? 'git clean with force/delete flags removes untracked files'
-        : null;
+      return gitCleanBlockedReason(args, command.index);
     case 'stash':
       return STASH_DESTRUCTIVE_SUBCOMMANDS.has(String(args[command.index + 1] ?? '').trim().toLowerCase())
         ? 'git stash drop/clear discards saved work'
@@ -57,6 +55,14 @@ export function gitCommandBlockedReason(args: readonly string[]): string | null 
     default:
       return null;
   }
+}
+
+function gitCleanBlockedReason(args: readonly string[], commandIndex: number): string | null {
+  const cleanArgs = args.slice(commandIndex + 1);
+  if (cleanArgs.some(isDryRunCleanArg)) return null;
+  return cleanArgs.some(isDestructiveCleanArg)
+    ? 'git clean with force/delete flags removes untracked files'
+    : null;
 }
 
 export function installGitCommandGuard(env: NodeJS.ProcessEnv = process.env): GitCommandGuardInstall {
@@ -126,6 +132,11 @@ function findPathEnvKey(env: NodeJS.ProcessEnv): string | null {
 function isDestructiveCleanArg(arg: string): boolean {
   if (arg === '--force' || arg === '-f' || arg === '-d' || arg === '-x' || arg === '-X') return true;
   return arg.startsWith('-') && !arg.startsWith('--') && /[dfxX]/.test(arg.slice(1));
+}
+
+function isDryRunCleanArg(arg: string): boolean {
+  if (arg === '--dry-run' || arg === '-n') return true;
+  return arg.startsWith('-') && !arg.startsWith('--') && arg.slice(1).includes('n');
 }
 
 function isForcePushArg(arg: string): boolean {
@@ -224,13 +235,27 @@ case "$cmd" in
     for arg in "$@"; do [ "$arg" = "--hard" ] && blocked="git reset --hard discards workspace changes"; done
     ;;
   clean)
+    seen=""
+    dry_run=""
     for arg in "$@"; do
+      [ "$seen" = "1" ] || { [ "$arg" = "clean" ] && seen="1"; continue; }
       case "$arg" in
-        --force|-f|-d|-x|-X) blocked="git clean with force/delete flags removes untracked files" ;;
+        --dry-run|-n) dry_run="1" ;;
         --*) ;;
-        -*) case "\${arg#-}" in *d*|*f*|*x*|*X*) blocked="git clean with force/delete flags removes untracked files" ;; esac ;;
+        -*) case "\${arg#-}" in *n*) dry_run="1" ;; esac ;;
       esac
     done
+    if [ "$dry_run" != "1" ]; then
+      seen=""
+      for arg in "$@"; do
+        [ "$seen" = "1" ] || { [ "$arg" = "clean" ] && seen="1"; continue; }
+        case "$arg" in
+          --force|-f|-d|-x|-X) blocked="git clean with force/delete flags removes untracked files" ;;
+          --*) ;;
+          -*) case "\${arg#-}" in *d*|*f*|*x*|*X*) blocked="git clean with force/delete flags removes untracked files" ;; esac ;;
+        esac
+      done
+    fi
     ;;
   stash)
     sub=""
@@ -296,7 +321,7 @@ if errorlevel 1 (
   echo Open Design git command guard requires node on PATH. 1>&2
   exit /b 126
 )
-node -e "const args=process.argv.slice(1); const valueOptions=new Set(['-C','-c','--exec-path','--git-dir','--namespace','--object-directory','--super-prefix','--work-tree']); const checkoutValueOptions=new Set(['-b','-B','--orphan','--pathspec-from-file']); let cmd='',cmdIndex=-1; for(let i=0;i<args.length;i++){const a=args[i]||''; if(valueOptions.has(a)){i++; continue} if(a.startsWith('-')) continue; cmd=a; cmdIndex=i; break} const c=cmd.toLowerCase(); const isClean=a=>a==='--force'||a==='-f'||a==='-d'||a==='-x'||a==='-X'||(a.startsWith('-')&&!a.startsWith('--')&&/[dfxX]/.test(a.slice(1))); const isPush=a=>a==='-f'||a==='--force'||a.startsWith('--force-with-lease')||a.startsWith('+'); const isCheckoutPath=a=>a==='.'||a==='..'||a.startsWith('./')||a.startsWith('../'); const isCheckout=()=>{let operands=0,skip=false; for(let i=cmdIndex+1;i<args.length;i++){const a=args[i]||''; if(skip){skip=false; continue} if(a==='-f'||a==='--force') return true; if(a==='--'&&i+1<args.length) return true; if(checkoutValueOptions.has(a)){skip=true; continue} if(a.startsWith('-')) continue; operands++; if(operands>1||isCheckoutPath(a)) return true} return false}; const commandArgs=args.slice(cmdIndex+1); const blocked=(c==='reset'&&args.includes('--hard'))||(c==='clean'&&args.some(isClean))||(c==='stash'&&['drop','clear'].includes((args[cmdIndex+1]||'').toLowerCase()))||(c==='push'&&commandArgs.some(isPush))||(c==='checkout'&&isCheckout())||c==='restore'; if(blocked){console.error('Open Design git command guard blocked destructive git command'); process.exit(126)}" %*
+node -e "const args=process.argv.slice(1); const valueOptions=new Set(['-C','-c','--exec-path','--git-dir','--namespace','--object-directory','--super-prefix','--work-tree']); const checkoutValueOptions=new Set(['-b','-B','--orphan','--pathspec-from-file']); let cmd='',cmdIndex=-1; for(let i=0;i<args.length;i++){const a=args[i]||''; if(valueOptions.has(a)){i++; continue} if(a.startsWith('-')) continue; cmd=a; cmdIndex=i; break} const c=cmd.toLowerCase(); const isClean=a=>a==='--force'||a==='-f'||a==='-d'||a==='-x'||a==='-X'||(a.startsWith('-')&&!a.startsWith('--')&&/[dfxX]/.test(a.slice(1))); const isCleanDryRun=a=>a==='--dry-run'||a==='-n'||(a.startsWith('-')&&!a.startsWith('--')&&a.slice(1).includes('n')); const isPush=a=>a==='-f'||a==='--force'||a.startsWith('--force-with-lease')||a.startsWith('+'); const isCheckoutPath=a=>a==='.'||a==='..'||a.startsWith('./')||a.startsWith('../'); const isCheckout=()=>{let operands=0,skip=false; for(let i=cmdIndex+1;i<args.length;i++){const a=args[i]||''; if(skip){skip=false; continue} if(a==='-f'||a==='--force') return true; if(a==='--'&&i+1<args.length) return true; if(checkoutValueOptions.has(a)){skip=true; continue} if(a.startsWith('-')) continue; operands++; if(operands>1||isCheckoutPath(a)) return true} return false}; const commandArgs=args.slice(cmdIndex+1); const cleanArgs=args.slice(cmdIndex+1); const blocked=(c==='reset'&&args.includes('--hard'))||(c==='clean'&&!cleanArgs.some(isCleanDryRun)&&cleanArgs.some(isClean))||(c==='stash'&&['drop','clear'].includes((args[cmdIndex+1]||'').toLowerCase()))||(c==='push'&&commandArgs.some(isPush))||(c==='checkout'&&isCheckout())||c==='restore'; if(blocked){console.error('Open Design git command guard blocked destructive git command'); process.exit(126)}" %*
 if errorlevel 1 exit /b %errorlevel%
 "%OD_REAL_GIT_BIN%" %*
 `;
