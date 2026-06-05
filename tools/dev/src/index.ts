@@ -516,7 +516,11 @@ async function latestMtimeMs(filePath: string): Promise<number> {
   return latest;
 }
 
-async function ensureDaemonCliBuild(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
+async function daemonCliBuildFreshness(config: ToolDevConfig): Promise<{
+  distMtime: number;
+  sourceMtime: number;
+  stale: boolean;
+}> {
   const daemonRoot = path.join(config.workspaceRoot, "apps/daemon");
   const distCliPath = path.join(daemonRoot, "dist/cli.js");
   const distMtime = await latestMtimeMs(distCliPath);
@@ -525,9 +529,18 @@ async function ensureDaemonCliBuild(config: ToolDevConfig, logHandle: FileHandle
     await latestMtimeMs(path.join(daemonRoot, "package.json")),
     await latestMtimeMs(path.join(daemonRoot, "tsconfig.json")),
   );
-  if (distMtime > 0 && distMtime >= sourceMtime) return;
+  return {
+    distMtime,
+    sourceMtime,
+    stale: distMtime <= 0 || distMtime < sourceMtime,
+  };
+}
 
-  const reason = distMtime > 0 ? "source is newer than apps/daemon/dist/cli.js" : "apps/daemon/dist/cli.js is missing";
+async function ensureDaemonCliBuild(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
+  const freshness = await daemonCliBuildFreshness(config);
+  if (!freshness.stale) return;
+
+  const reason = freshness.distMtime > 0 ? "source is newer than apps/daemon/dist/cli.js" : "apps/daemon/dist/cli.js is missing";
   await logHandle.write(`\n[tools-dev] building @open-design/daemon because ${reason} at ${new Date().toISOString()}\n`);
   const invocation = createPackageManagerInvocation(["--filter", "@open-design/daemon", "build"], process.env);
   await runLoggedCommand({
@@ -637,8 +650,10 @@ async function startDaemon(
   }
   const daemonTrustedWebOriginPort = existing?.trustedWebOriginPort ?? null;
   if (existing?.url != null && statusMatchesForcedPort(existing.url, daemonPort)) {
-    if (shouldRefreshWebOrigin && daemonTrustedWebOriginPort !== webPort) {
-      if (existingWeb?.url != null) {
+    const daemonBuildFreshness = await daemonCliBuildFreshness(config);
+    if (daemonBuildFreshness.stale || (shouldRefreshWebOrigin && daemonTrustedWebOriginPort !== webPort)) {
+      const webToStop = existingWeb ?? await inspectWebRuntime(runtimeLookup(config));
+      if (webToStop?.url != null) {
         await stopApp(config, APP_KEYS.WEB);
       }
       await stopApp(config, APP_KEYS.DAEMON);

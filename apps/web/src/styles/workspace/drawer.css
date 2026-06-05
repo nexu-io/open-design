@@ -1465,6 +1465,9 @@
      (see .ws-tab-text override below), so the badges stay fully legible. */
   max-width: 260px;
 }
+.ws-tab.surface-preview-tab {
+  max-width: 320px;
+}
 .ws-tab:hover { background: var(--bg-subtle); color: var(--text); }
 .ws-tab.draggable { cursor: grab; }
 .ws-tab.dragging {
@@ -1726,6 +1729,22 @@
 }
 .ws-browser-panel.active {
   display: flex;
+}
+
+.surface-preview-workspace {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  background: #fff;
+  overflow: hidden;
+}
+
+.surface-preview-workspace iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
 }
 
 .designs-empty-state {

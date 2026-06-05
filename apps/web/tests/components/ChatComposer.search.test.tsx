@@ -711,6 +711,48 @@ describe('ChatComposer /search command', () => {
       undefined,
     );
   });
+
+  it('sends the active project-location file as edit context', async () => {
+    const onSend = vi.fn();
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[
+          {
+            name: 'design-snapshots/scheduling-book.html',
+            path: 'design-snapshots/scheduling-book.html',
+            type: 'file',
+            kind: 'html',
+            mime: 'text/html',
+            size: 128,
+            mtime: 1,
+          },
+        ]}
+        activeProjectFileName="design-snapshots/scheduling-book.html"
+        streaming={false}
+        projectMetadata={{ kind: 'prototype', importedFrom: 'project-location' }}
+        onEnsureProject={async () => 'project-1'}
+        onSend={onSend}
+        onStop={vi.fn()}
+      />,
+    );
+
+    await typeAndSettle('Change the calendar background to red');
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend).toHaveBeenCalledWith(
+      'Change the calendar background to red',
+      [{
+        path: 'design-snapshots/scheduling-book.html',
+        name: 'scheduling-book.html',
+        kind: 'file',
+      }],
+      [],
+      undefined,
+    );
+  });
 });
 
 function deferred<T>() {

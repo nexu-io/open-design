@@ -161,7 +161,11 @@ import { Icon } from './Icon';
 import { ProjectDesignSystemPicker } from './ProjectDesignSystemPicker';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
-import { ChatPane } from './ChatPane';
+import {
+  ChatPane,
+  type ImportedSurfaceEditableSnapshotRequest,
+  type ImportedSurfaceFileScopeRequest,
+} from './ChatPane';
 import type { QuestionFormOpenRequest } from './AssistantMessage';
 import { WorkingDirPill } from './WorkingDirPill';
 import type { ChatSendMeta } from './ChatComposer';
@@ -176,6 +180,7 @@ import {
 } from './auto-open-file';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
+import type { DesignFilesScope } from './DesignFilesPanel';
 import { FileWorkspace } from './FileWorkspace';
 import {
   type PluginFolderAgentAction,
@@ -1004,6 +1009,7 @@ export function ProjectView({
   const [slideNavRequest, setSlideNavRequest] = useState<
     { name: string; slideIndex: number; nonce: number } | null
   >(null);
+  const [designFilesScope, setDesignFilesScope] = useState<DesignFilesScope | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const cancelRef = useRef<AbortController | null>(null);
   const streamingConversationIdRef = useRef<string | null>(null);
@@ -1228,6 +1234,8 @@ export function ProjectView({
         })
     : [];
   const newConversationDisabled = creatingConversation;
+  const importedFolderChatFallback = project.metadata?.importedFrom === 'folder';
+  const canRenderChatPane = Boolean(activeConversationId || conversationLoadError || importedFolderChatFallback);
   const activeCompletionNotificationRunsRef = useRef<Set<string>>(new Set());
   const completedNotificationRunsRef = useRef<Set<string>>(new Set());
 
@@ -1663,6 +1671,34 @@ export function ProjectView({
     if (!name) return;
     setOpenRequest({ name, nonce: Date.now() });
   }, []);
+
+  const requestInspectSurfaceFiles = useCallback((request: ImportedSurfaceFileScopeRequest) => {
+    if (request.fileNames.length === 0) return;
+    setDesignFilesScope({
+      id: `surface:${request.surfaceId}`,
+      label: request.label,
+      fileNames: request.fileNames,
+      preferredFileName: request.preferredFileName ?? null,
+    });
+  }, []);
+
+  useEffect(() => {
+    setDesignFilesScope(null);
+  }, [project.id]);
+
+  const requestOpenEditableSurface = useCallback(async (request: ImportedSurfaceEditableSnapshotRequest) => {
+    if (!request.fileName) return;
+    if (request.html != null) {
+      const file = await writeProjectTextFile(project.id, request.fileName, request.html);
+      if (!file) {
+        setError(`Couldn't save editable design snapshot "${request.fileName}".`);
+        return;
+      }
+      setFilesRefresh((n) => n + 1);
+      await refreshProjectFiles();
+    }
+    requestOpenFile(request.fileName);
+  }, [project.id, refreshProjectFiles, requestOpenFile]);
 
   const persistArtifact = useCallback(
     async (art: Artifact, projectFilesSnapshot?: ProjectFile[]) => {
@@ -5378,7 +5414,7 @@ export function ProjectView({
               className="comment-left-host"
               aria-label="Comments"
             />
-          ) : activeConversationId || conversationLoadError ? (
+          ) : canRenderChatPane ? (
             <ChatPane
               // The conversation id is part of the key so switching conversations
               // resets internal scroll/draft state inside ChatPane and ChatComposer.
@@ -5387,7 +5423,7 @@ export function ProjectView({
               streaming={currentConversationStreaming}
               liveToolInput={liveToolInput}
               loading={currentConversationLoading}
-              sendDisabled={currentConversationSendDisabled}
+              sendDisabled={currentConversationSendDisabled || !activeConversationId}
               queuedItems={currentConversationQueuedItems}
               error={conversationLoadError ?? error ?? audioVoiceOptionsError}
               projectId={project.id}
@@ -5416,6 +5452,8 @@ export function ProjectView({
               onRequestOpenFile={requestOpenFile}
               onRequestPluginDetails={handleOpenContextPluginDetails}
               onRequestDesignSystemDetails={setContextDesignSystemDetails}
+              onOpenEditableSurface={requestOpenEditableSurface}
+              onInspectSurfaceFiles={requestInspectSurfaceFiles}
               onRequestPluginFolderAgentAction={handlePluginFolderAgentAction}
               activePluginActionPaths={activePluginActionPaths}
               hiddenPluginActionPaths={hiddenAssistantPluginActionPaths}
@@ -5626,6 +5664,8 @@ export function ProjectView({
           onRequestBrowserUsePrompt={handleBrowserUsePrompt}
           onPluginFolderAgentAction={handlePluginFolderAgentAction}
           activePluginActionPaths={activePluginActionPaths}
+          designFilesScope={designFilesScope}
+          onClearDesignFilesScope={() => setDesignFilesScope(null)}
           preferredPreviewFile={project.metadata?.entryFile ?? null}
           autoPreviewDesignArtifacts={project.metadata?.importedFrom === 'folder'}
           focusMode={workspaceFocused}

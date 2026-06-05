@@ -81,6 +81,10 @@ import {
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { shouldConsumeSlideNav } from '../runtime/slide-nav';
+import {
+  editableSnapshotViewportWidth,
+  normalizeEditableSnapshotPreviewHtml,
+} from '../runtime/editable-snapshot';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
 import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
 import {
@@ -681,11 +685,54 @@ function previewScaleShellStyle(
   };
 }
 
+export function editableSnapshotPreviewScale(
+  viewport: PreviewViewportId,
+  previewScale: number,
+  canvasSize: PreviewCanvasSize | undefined,
+  snapshotViewportWidth: number | null,
+): number {
+  if (viewport !== 'desktop' || !snapshotViewportWidth || !canvasSize?.width) {
+    return effectivePreviewScale(viewport, previewScale, canvasSize);
+  }
+  const userScale = Number.isFinite(previewScale) && previewScale > 0 ? previewScale : 1;
+  return userScale * Math.min(canvasSize.width / snapshotViewportWidth, 1);
+}
+
+function editableSnapshotPreviewShellStyle(
+  viewport: PreviewViewportId,
+  previewScale: number,
+  canvasSize: PreviewCanvasSize | undefined,
+  snapshotViewportWidth: number | null,
+): (CSSProperties & Record<string, string | number>) | null {
+  if (viewport !== 'desktop' || !snapshotViewportWidth) return null;
+  const effectiveScale = editableSnapshotPreviewScale(
+    viewport,
+    previewScale,
+    canvasSize,
+    snapshotViewportWidth,
+  );
+  return {
+    width: `${snapshotViewportWidth}px`,
+    height: `${100 / effectiveScale}%`,
+    transform: `scale(${effectiveScale})`,
+    transformOrigin: '0 0',
+  };
+}
+
 function manualEditPreviewShellStyle(
   viewport: PreviewViewportId,
   previewScale: number,
   frozenWidth: number | null,
+  canvasSize?: PreviewCanvasSize,
+  snapshotViewportWidth?: number | null,
 ): CSSProperties & Record<string, string | number> {
+  const snapshotStyle = editableSnapshotPreviewShellStyle(
+    viewport,
+    previewScale,
+    canvasSize,
+    snapshotViewportWidth ?? null,
+  );
+  if (snapshotStyle) return snapshotStyle;
   if (viewport === 'desktop' && frozenWidth) {
     return {
       width: `${frozenWidth / previewScale}px`,
@@ -4958,6 +5005,28 @@ function HtmlViewer({
     sidePanelCollapsed: commentSidePanelCollapsed,
     viewport: previewViewport,
   });
+  const livePreviewSource = inlinedSource ?? source;
+  // Freeze the iframe input on the snapshot taken at Edit-mode entry. Any
+  // source rewrite during edit (1.5s debounced set-style patches) stays
+  // invisible to the iframe — live updates flow through od-edit-preview-style
+  // postMessage instead, so the canvas never has to reload.
+  useEffect(() => {
+    if (manualEditMode && manualEditFrozenSource === null && livePreviewSource != null) {
+      setManualEditFrozenSource(livePreviewSource);
+    }
+  }, [manualEditMode, manualEditFrozenSource, livePreviewSource]);
+  const previewSource = (manualEditMode && manualEditFrozenSource !== null)
+    ? manualEditFrozenSource
+    : livePreviewSource;
+  const editableSnapshotPreviewSource = useMemo(
+    () => normalizeEditableSnapshotPreviewHtml(previewSource),
+    [previewSource],
+  );
+  const editableSnapshotPreviewViewportWidth = useMemo(
+    () => editableSnapshotViewportWidth(editableSnapshotPreviewSource),
+    [editableSnapshotPreviewSource],
+  );
+  const manualEditPageStylesEnabled = typeof source === 'string' && isManualEditFullHtmlDocument(source);
 
   function deploymentMapForCurrentFile(items: WebDeploymentInfo[]) {
     const next: Partial<Record<WebDeployProviderId, WebDeploymentInfo>> = {};
@@ -5082,12 +5151,19 @@ function HtmlViewer({
     () => htmlPreviewSlideState.get(previewStateKey) ?? null,
   );
   const boardPreviewScaleOptions = localCommentSideDockActive ? { canvasPadding: 0 } : undefined;
-  const overlayPreviewScale = effectivePreviewScale(
-    previewViewport,
-    previewScale,
-    boardPreviewCanvasSize,
-    boardPreviewScaleOptions,
-  );
+  const overlayPreviewScale = editableSnapshotPreviewViewportWidth
+    ? editableSnapshotPreviewScale(
+      previewViewport,
+      previewScale,
+      boardPreviewCanvasSize,
+      editableSnapshotPreviewViewportWidth,
+    )
+    : effectivePreviewScale(
+      previewViewport,
+      previewScale,
+      boardPreviewCanvasSize,
+      boardPreviewScaleOptions,
+    );
   const overlayPreviewTransform: PreviewOverlayTransform = {
     scale: overlayPreviewScale,
     offsetX: 0,
@@ -5170,20 +5246,6 @@ function HtmlViewer({
     return /class\s*=\s*['"][^'"]*\bslide\b/i.test(source);
   }, [source]);
   const effectiveDeck = isDeck || looksLikeDeck;
-  const livePreviewSource = inlinedSource ?? source;
-  // Freeze the iframe input on the snapshot taken at Edit-mode entry. Any
-  // source rewrite during edit (1.5s debounced set-style patches) stays
-  // invisible to the iframe — live updates flow through od-edit-preview-style
-  // postMessage instead, so the canvas never has to reload.
-  useEffect(() => {
-    if (manualEditMode && manualEditFrozenSource === null && livePreviewSource != null) {
-      setManualEditFrozenSource(livePreviewSource);
-    }
-  }, [manualEditMode, manualEditFrozenSource, livePreviewSource]);
-  const previewSource = (manualEditMode && manualEditFrozenSource !== null)
-    ? manualEditFrozenSource
-    : livePreviewSource;
-  const manualEditPageStylesEnabled = typeof source === 'string' && isManualEditFullHtmlDocument(source);
   const urlModeBridge = hasUrlModeBridge(source);
   const manualEditRequiresSrcDoc = manualEditSrcDocActive && !urlModeBridge;
   // When we URL-load the iframe directly, skip every in-host inlining /
@@ -5214,6 +5276,7 @@ function HtmlViewer({
     urlModeBridge,
     inspectMode,
     drawMode: drawOverlayOpen,
+    editableSnapshot: Boolean(editableSnapshotPreviewViewportWidth),
     forceInline: forceInline || needsSandboxShim,
     needsFocusGuard,
   }) && !manualEditRequiresSrcDoc;
@@ -5263,7 +5326,7 @@ function HtmlViewer({
   }, [source, effectiveDeck, projectId, file.name, reloadKey, useUrlLoadPreview]);
 
   const srcDoc = useMemo(
-    () => (previewSource ? buildSrcdoc(previewSource, {
+    () => (editableSnapshotPreviewSource ? buildSrcdoc(editableSnapshotPreviewSource, {
       deck: effectiveDeck,
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
@@ -5272,7 +5335,7 @@ function HtmlViewer({
       paletteBridge: false,
       previewFocusGuard: true,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditRequiresSrcDoc],
+    [editableSnapshotPreviewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditRequiresSrcDoc],
   );
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
@@ -8456,8 +8519,19 @@ function HtmlViewer({
                 <div
                   style={
                     manualEditMode
-                      ? manualEditPreviewShellStyle(previewViewport, previewScale, manualEditViewportWidth)
-                      : previewScaleShellStyle(previewViewport, previewScale)
+                      ? manualEditPreviewShellStyle(
+                        previewViewport,
+                        previewScale,
+                        manualEditViewportWidth,
+                        boardPreviewCanvasSize,
+                        editableSnapshotPreviewViewportWidth,
+                      )
+                      : editableSnapshotPreviewShellStyle(
+                        previewViewport,
+                        previewScale,
+                        boardPreviewCanvasSize,
+                        editableSnapshotPreviewViewportWidth,
+                      ) ?? previewScaleShellStyle(previewViewport, previewScale)
                   }
                 >
                   <PreviewDrawOverlay

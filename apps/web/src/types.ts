@@ -101,6 +101,10 @@ export type {
   PreviewAnnotationStyle,
   PreviewCommentSelectionKind,
   PreviewVisualMarkKind,
+  ProjectUiExternalDependency,
+  ProjectUiPreviewRuntimeResponse,
+  ProjectUiSurface,
+  ProjectUiSurfacesResponse,
 } from '@open-design/contracts';
 
 export type ExecMode = 'daemon' | 'api';

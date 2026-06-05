@@ -104,9 +104,10 @@ vi.mock('../../src/components/Loading', () => ({
 }));
 
 vi.mock('../../src/components/ChatPane', () => ({
-  ChatPane: ({ initialDraft }: { initialDraft?: string }) => (
+  ChatPane: ({ initialDraft, sendDisabled }: { initialDraft?: string; sendDisabled?: boolean }) => (
     <textarea
       data-testid="chat-composer-input"
+      data-send-disabled={sendDisabled ? 'true' : 'false'}
       readOnly
       value={initialDraft ?? ''}
     />
@@ -189,6 +190,22 @@ describe('ProjectView pending prompt seeding', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  it('shows imported folder previews while conversation hydration is still pending', async () => {
+    mockedListConversations.mockReturnValue(new Promise<Conversation[]>(() => undefined));
+    renderProjectView({
+      ...project('imported'),
+      metadata: {
+        kind: 'prototype',
+        importedFrom: 'folder',
+        entryFile: 'index.html',
+      },
+    });
+
+    const composer = await screen.findByTestId('chat-composer-input');
+    expect(composer.getAttribute('data-send-disabled')).toBe('true');
+    expect(screen.queryByTestId('loader')).toBeNull();
   });
 
   it('prefills chat once when the project has a pending prompt and requests persistence clear', async () => {

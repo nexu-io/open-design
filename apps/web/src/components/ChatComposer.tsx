@@ -329,6 +329,10 @@ export interface ChatSendMeta {
   skillIds?: string[];
 }
 
+function isExistingProjectImport(metadata: ProjectMetadata | undefined): boolean {
+  return metadata?.importedFrom === 'folder' || metadata?.importedFrom === 'project-location';
+}
+
 /**
  * The chat composer: textarea + paste/drop/attach buttons + @-mention
  * picker. Attachments are uploaded into the active project's folder so
@@ -391,7 +395,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const t = useT();
     const analytics = useAnalytics();
     const activeFileContext =
-      projectMetadata?.importedFrom === 'folder' && activeProjectFileName
+      isExistingProjectImport(projectMetadata) && activeProjectFileName
         ? activeProjectFileName
         : null;
     const activeFileDisplayName = activeFileContext ? lastPathSegment(activeFileContext) : null;

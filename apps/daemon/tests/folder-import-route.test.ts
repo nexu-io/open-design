@@ -6,6 +6,7 @@ import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
+import { stopAllProjectUiPreviewRuntimes } from '../src/project-ui-preview-runtime.js';
 
 describe('POST /api/import/folder', () => {
   let server: http.Server;
@@ -21,7 +22,8 @@ describe('POST /api/import/folder', () => {
     server = started.server;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await stopAllProjectUiPreviewRuntimes();
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -227,6 +229,310 @@ describe('POST /api/import/folder', () => {
     const resp = await importFolder({ baseDir: folder });
     const body = (await resp.json()) as { entryFile: string | null };
     expect(body.entryFile).toBe('index.html');
+  });
+
+  it('discovers static HTML UI surfaces with frontend dependencies', async () => {
+    const folder = makeFolder();
+    await mkdir(path.join(folder, 'assets'), { recursive: true });
+    await mkdir(path.join(folder, 'fonts'), { recursive: true });
+    await writeFile(
+      path.join(folder, 'index.html'),
+      '<!doctype html><link rel="stylesheet" href="./styles.css"><img src="./assets/hero.jpg"><script src="./app.js"></script>',
+    );
+    await writeFile(
+      path.join(folder, 'styles.css'),
+      "@import 'tailwindcss'; @font-face{font-family:Inter;src:url('./fonts/Inter.woff2')} body{background:url('./assets/bg.png')}",
+    );
+    await writeFile(path.join(folder, 'app.js'), "import { motion } from 'framer-motion';\nimport './more.css';\n");
+    await writeFile(path.join(folder, 'more.css'), '.hero{color:red}');
+    await writeFile(path.join(folder, 'assets/hero.jpg'), 'jpg');
+    await writeFile(path.join(folder, 'assets/bg.png'), 'png');
+    await writeFile(path.join(folder, 'fonts/Inter.woff2'), 'font');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const resp = await fetch(`${baseUrl}/api/projects/${project.id}/ui-surfaces`);
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      surfaces: Array<{
+        kind: string;
+        route: string | null;
+        entryFile: string;
+        previewFile: string | null;
+        previewRuntimeRoot: string | null;
+        previewPath: string | null;
+        previewStatus: string;
+        sourceFiles: string[];
+        styleFiles: string[];
+        scriptFiles: string[];
+        assetFiles: string[];
+        fontFiles: string[];
+        externalDependencies: Array<{ packageName: string; kind: string }>;
+      }>;
+    };
+    expect(body.surfaces).toHaveLength(1);
+    const surface = body.surfaces[0]!;
+    expect(surface.kind).toBe('static-html');
+    expect(surface.route).toBe('/');
+    expect(surface.entryFile).toBe('index.html');
+    expect(surface.previewFile).toBe('index.html');
+    expect(surface.previewRuntimeRoot).toBeNull();
+    expect(surface.previewPath).toBe('/');
+    expect(surface.previewStatus).toBe('live-preview');
+    expect(surface.sourceFiles).toContain('index.html');
+    expect(surface.styleFiles).toEqual(expect.arrayContaining(['styles.css', 'more.css']));
+    expect(surface.scriptFiles).toContain('app.js');
+    expect(surface.assetFiles).toEqual(expect.arrayContaining(['assets/hero.jpg', 'assets/bg.png']));
+    expect(surface.fontFiles).toContain('fonts/Inter.woff2');
+    expect(surface.externalDependencies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ packageName: 'framer-motion', kind: 'animation' }),
+        expect.objectContaining({ packageName: 'tailwindcss', kind: 'styling' }),
+      ]),
+    );
+  });
+
+  it('discovers Next route surfaces without expanding node_modules', async () => {
+    const folder = makeFolder();
+    await mkdir(path.join(folder, 'app/components'), { recursive: true });
+    await writeFile(
+      path.join(folder, 'package.json'),
+      JSON.stringify({
+        dependencies: {
+          next: '16.0.0',
+          react: '18.0.0',
+          '@radix-ui/react-dialog': '1.0.0',
+        },
+      }),
+    );
+    await writeFile(path.join(folder, 'app/layout.tsx'), 'export default function Layout({children}){return children}');
+    await writeFile(
+      path.join(folder, 'app/page.tsx'),
+      "import { Dialog } from '@radix-ui/react-dialog';\nimport { Hero } from './components/Hero';\nimport './page.css';\nexport default function Page(){return <Hero/>}",
+    );
+    await writeFile(path.join(folder, 'app/components/Hero.tsx'), 'export function Hero(){return <main>Hi</main>}');
+    await writeFile(path.join(folder, 'app/page.css'), 'main{display:grid}');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const resp = await fetch(`${baseUrl}/api/projects/${project.id}/ui-surfaces`);
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      surfaces: Array<{
+        kind: string;
+        route: string | null;
+        framework: string | null;
+        entryFile: string;
+        previewRuntimeRoot: string | null;
+        previewPath: string | null;
+        previewStatus: string;
+        sourceFiles: string[];
+        styleFiles: string[];
+        externalDependencies: Array<{ packageName: string; importPath?: string }>;
+      }>;
+    };
+    const surface = body.surfaces.find((item) => item.entryFile === 'app/page.tsx');
+    expect(surface).toBeTruthy();
+    expect(surface?.kind).toBe('next-route');
+    expect(surface?.route).toBe('/');
+    expect(surface?.framework).toBe('Next.js');
+    expect(surface?.previewRuntimeRoot).toBe('');
+    expect(surface?.previewPath).toBe('/');
+    expect(surface?.previewStatus).toBe('needs-setup');
+    expect(surface?.sourceFiles).toEqual(
+      expect.arrayContaining(['app/page.tsx', 'app/layout.tsx', 'app/components/Hero.tsx']),
+    );
+    expect(surface?.styleFiles).toContain('app/page.css');
+    expect(surface?.externalDependencies).toEqual(
+      expect.arrayContaining([expect.objectContaining({ packageName: '@radix-ui/react-dialog' })]),
+    );
+    expect(JSON.stringify(surface)).not.toContain('node_modules');
+  });
+
+  it('starts an imported app runtime for source-backed UI surfaces', async () => {
+    const folder = makeFolder();
+    await mkdir(path.join(folder, 'app/messages/[conversationId]'), { recursive: true });
+    await mkdir(path.join(folder, 'node_modules'), { recursive: true });
+    await writeFile(
+      path.join(folder, 'package.json'),
+      JSON.stringify({
+        packageManager: 'pnpm@10.33.2',
+        scripts: { dev: 'node server.mjs' },
+        dependencies: {
+          next: '16.0.0',
+          react: '18.0.0',
+        },
+      }),
+    );
+    await writeFile(
+      path.join(folder, 'server.mjs'),
+      `
+import http from 'node:http';
+if (process.argv.includes('--')) {
+  console.error('pnpm forwarded a literal -- separator');
+  process.exit(1);
+}
+const port = Number(process.env.PORT || 0);
+const server = http.createServer((req, res) => {
+  if (req.url === '/styles.css') {
+    res.setHeader('content-type', 'text/css');
+    res.end("@font-face{font-family:Inter;src:url('/fonts/Inter.woff2')}body{font-family:Inter}");
+    return;
+  }
+  if (req.url === '/fonts/Inter.woff2') {
+    res.setHeader('content-type', 'font/woff2');
+    res.end('font');
+    return;
+  }
+  res.setHeader('content-type', 'text/html');
+  res.write('<!doctype html>');
+  res.end('<html><head><link rel="stylesheet" href="/styles.css"><script type="module">import RefreshRuntime from "/@react-refresh"; import "/@vite/client";</script></head><body><a href="/search">Search</a><h1>Preview ' + req.url + '</h1></body></html>');
+});
+server.listen(port, '127.0.0.1');
+process.on('SIGTERM', () => server.close(() => process.exit(0)));
+`,
+    );
+    await writeFile(path.join(folder, 'app/layout.tsx'), 'export default function Layout({children}){return children}');
+    await writeFile(
+      path.join(folder, 'app/messages/[conversationId]/page.tsx'),
+      'export default function Page(){return <main>Messages</main>}',
+    );
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const surfacesResp = await fetch(`${baseUrl}/api/projects/${project.id}/ui-surfaces`);
+    expect(surfacesResp.status).toBe(200);
+    const surfacesBody = (await surfacesResp.json()) as {
+      surfaces: Array<{
+        id: string;
+        entryFile: string;
+        route: string | null;
+        previewPath: string | null;
+        previewRuntimeRoot: string | null;
+        previewStatus: string;
+      }>;
+    };
+    const surface = surfacesBody.surfaces.find((item) =>
+      item.entryFile === 'app/messages/[conversationId]/page.tsx',
+    );
+    expect(surface).toEqual(expect.objectContaining({
+      route: '/messages/:conversationId',
+      previewPath: '/messages/preview',
+      previewRuntimeRoot: '',
+      previewStatus: 'source-mapped',
+    }));
+
+    const previewResp = await fetch(`${baseUrl}/api/projects/${project.id}/ui-preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entryFile: surface?.entryFile }),
+    });
+    expect(previewResp.status).toBe(200);
+    const previewBody = (await previewResp.json()) as {
+      status: string;
+      runtimeRoot: string | null;
+      baseUrl: string | null;
+      url: string | null;
+      upstreamBaseUrl?: string | null;
+      route: string | null;
+    };
+    expect(previewBody.status).toBe('ready');
+    expect(previewBody.runtimeRoot).toBe('');
+    expect(previewBody.route).toBe('/messages/preview');
+    expect(previewBody.baseUrl).toMatch(
+      new RegExp(`^/api/projects/${project.id}/ui-preview/proxy/[a-f0-9]{32}$`, 'u'),
+    );
+    expect(previewBody.url).toBe(`${previewBody.baseUrl}/messages/preview`);
+    expect(previewBody.upstreamBaseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
+
+    const rendered = await fetch(`${baseUrl}${previewBody.url!}`);
+    expect(rendered.status).toBe(200);
+    const renderedHtml = await rendered.text();
+    expect(renderedHtml).toContain('Preview /messages/preview');
+    expect(renderedHtml).toContain(`<link rel="stylesheet" href="${previewBody.baseUrl}/styles.css">`);
+    expect(renderedHtml).toContain(`from "${previewBody.baseUrl}/@react-refresh"`);
+    expect(renderedHtml).toContain(`import "${previewBody.baseUrl}/@vite/client"`);
+    expect(renderedHtml).toContain('<a href="/search">Search</a>');
+
+    const font = await fetch(`${baseUrl}${previewBody.baseUrl!}/fonts/Inter.woff2`, {
+      headers: { Origin: 'null' },
+    });
+    expect(font.status).toBe(200);
+    expect(font.headers.get('access-control-allow-origin')).toBe('*');
+  });
+
+  it('does not wait for a source-backed route render before returning the preview runtime', async () => {
+    const folder = makeFolder();
+    await mkdir(path.join(folder, 'app/messages/[conversationId]'), { recursive: true });
+    await mkdir(path.join(folder, 'node_modules'), { recursive: true });
+    await writeFile(
+      path.join(folder, 'package.json'),
+      JSON.stringify({
+        packageManager: 'pnpm@10.33.2',
+        scripts: { dev: 'node server.mjs' },
+        dependencies: {
+          next: '16.0.0',
+          react: '18.0.0',
+        },
+      }),
+    );
+    await writeFile(
+      path.join(folder, 'server.mjs'),
+      `
+import http from 'node:http';
+const port = Number(process.env.PORT || 0);
+const server = http.createServer((req, res) => {
+  if (req.url === '/messages/preview') return;
+  res.setHeader('content-type', 'text/html');
+  res.end('<!doctype html><h1>Runtime reachable</h1>');
+});
+server.listen(port, '127.0.0.1');
+process.on('SIGTERM', () => server.close(() => process.exit(0)));
+`,
+    );
+    await writeFile(path.join(folder, 'app/layout.tsx'), 'export default function Layout({children}){return children}');
+    await writeFile(
+      path.join(folder, 'app/messages/[conversationId]/page.tsx'),
+      'export default function Page(){return <main>Messages</main>}',
+    );
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const surfacesResp = await fetch(`${baseUrl}/api/projects/${project.id}/ui-surfaces`);
+    const surfacesBody = (await surfacesResp.json()) as {
+      surfaces: Array<{ entryFile: string; previewPath: string | null }>;
+    };
+    const surface = surfacesBody.surfaces.find((item) =>
+      item.entryFile === 'app/messages/[conversationId]/page.tsx',
+    );
+    expect(surface?.previewPath).toBe('/messages/preview');
+
+    const previewResp = await fetch(`${baseUrl}/api/projects/${project.id}/ui-preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entryFile: surface?.entryFile }),
+    });
+    expect(previewResp.status).toBe(200);
+    const previewBody = (await previewResp.json()) as {
+      status: string;
+      route: string | null;
+      baseUrl: string | null;
+      url: string | null;
+    };
+    expect(previewBody.status).toBe('ready');
+    expect(previewBody.route).toBe('/messages/preview');
+    expect(previewBody.baseUrl).toMatch(
+      new RegExp(`^/api/projects/${project.id}/ui-preview/proxy/[a-f0-9]{32}$`, 'u'),
+    );
+    expect(previewBody.url).toBe(`${previewBody.baseUrl}/messages/preview`);
   });
 
   it('returns null entryFile when the folder has no html file', async () => {

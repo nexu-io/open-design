@@ -48,6 +48,10 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, drawMode: true })).toBe(false);
   });
 
+  it('falls back to srcDoc for editable snapshots so viewport stamping can run', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, editableSnapshot: true })).toBe(false);
+  });
+
   it('falls back to srcDoc when the artifact ships the class based tweaks template', () => {
     // Without this, a plain `.tw-panel` artifact would URL load on first
     // open, skip the tweaks bridge entirely, and leave the toolbar toggle

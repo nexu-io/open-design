@@ -57,6 +57,9 @@ import type {
   PromptTemplateSummary,
   ProjectFile,
   ProjectFolder,
+  ProjectUiSurface,
+  ProjectUiPreviewRuntimeResponse,
+  ProjectUiSurfacesResponse,
   RenameProjectFileResponse,
   SkillDetail,
   SkillSummary,
@@ -1416,6 +1419,19 @@ export async function fetchProjectFolders(projectId: string): Promise<ProjectFol
   }
 }
 
+export async function fetchProjectUiSurfaces(projectId: string): Promise<ProjectUiSurface[]> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/ui-surfaces`, {
+      cache: 'no-store',
+    });
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as ProjectUiSurfacesResponse;
+    return json.surfaces ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export async function createProjectFolder(
   projectId: string,
   name: string,
@@ -1429,6 +1445,25 @@ export async function createProjectFolder(
     if (!resp.ok) return null;
     const json = (await resp.json()) as { folder?: ProjectFolder };
     return json.folder ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function startProjectUiPreview(
+  projectId: string,
+  input: { surfaceId?: string | null; entryFile?: string | null },
+  options?: { signal?: AbortSignal },
+): Promise<ProjectUiPreviewRuntimeResponse | null> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/ui-preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+      signal: options?.signal,
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as ProjectUiPreviewRuntimeResponse;
   } catch {
     return null;
   }

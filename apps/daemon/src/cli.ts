@@ -181,7 +181,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'pending-prompt', 'project', 'conversation', 'message', 'prompt',
   'prompt-file', 'path', 'dir', 'as',
   'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
-  'title', 'against', 'seed-from', 'fork-after', 'mode',
+  'title', 'against', 'seed-from', 'fork-after', 'mode', 'entry', 'surface',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
 // `od templates …` mirrors NewProjectPanel / ExamplesTab. Same surface,
@@ -4835,6 +4835,11 @@ async function runProject(args) {
                     [--design-system <id>] [--json]
   od project list                         List projects.
   od project info <id>                    Print one project.
+  od project surfaces <id> [--json]       List discovered UI screens/routes.
+  od project preview <id> --entry <file> [--json]
+                                          Start a live preview for a discovered
+                                          UI screen when its app dependencies
+                                          are already installed.
   od project delete <id>                  Delete a project.
   od project editors                      List locally-installed editors that
                                           can open a project (hand-off targets).
@@ -4888,6 +4893,58 @@ Common options:
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      return;
+    }
+    case 'surfaces': {
+      const id = rest.find((a) => !a.startsWith('-'));
+      if (!id) {
+        console.error('Usage: od project surfaces <id> [--json]');
+        process.exit(2);
+      }
+      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/ui-surfaces`);
+      if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      const surfaces = Array.isArray(data?.surfaces) ? data.surfaces : [];
+      if (surfaces.length === 0) {
+        console.log('[project] no UI surfaces detected');
+        return;
+      }
+      for (const surface of surfaces) {
+        const route = surface.route ?? '-';
+        const framework = surface.framework ?? surface.kind ?? '-';
+        const localFileCount =
+          (surface.sourceFiles?.length ?? 0) +
+          (surface.styleFiles?.length ?? 0) +
+          (surface.scriptFiles?.length ?? 0) +
+          (surface.assetFiles?.length ?? 0) +
+          (surface.fontFiles?.length ?? 0);
+        console.log(`${route}\t${surface.label ?? surface.entryFile}\tentry=${surface.entryFile}\tfiles=${localFileCount}\t${framework}\tpreview=${surface.previewStatus ?? '-'}`);
+      }
+      return;
+    }
+    case 'preview': {
+      const id = rest.find((a) => !a.startsWith('-'));
+      const entryFile = typeof flags.entry === 'string' ? flags.entry : null;
+      const surfaceId = typeof flags.surface === 'string' ? flags.surface : null;
+      if (!id || (!entryFile && !surfaceId)) {
+        console.error('Usage: od project preview <id> (--entry <file> | --surface <id>) [--json]');
+        process.exit(2);
+      }
+      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/ui-preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entryFile, surfaceId }),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[project] preview ${data.status}`);
+      if (data.url) console.log(data.url);
+      if (data.error) console.log(data.error);
+      if (Array.isArray(data.logTail) && data.logTail.length > 0) {
+        console.log(data.logTail.join('\n'));
+      }
       return;
     }
     case 'create': {

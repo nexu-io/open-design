@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 
 import { DesignFilesPanel, type DesignFilesNavState } from '../../src/components/DesignFilesPanel';
@@ -19,6 +19,10 @@ vi.stubGlobal('localStorage', {
   setItem: (key: string, value: string) => { lsStore.set(key, value); },
   removeItem: (key: string) => { lsStore.delete(key); },
   clear: () => { lsStore.clear(); },
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 function extForKind(kind: ProjectFileKind): string {
@@ -86,106 +90,328 @@ function renderPanel(
   return { ...result, onDeleteFiles, onOpenFile, onClearUploadError };
 }
 
+function getPageInfo(container: HTMLElement): string {
+  const el = container.querySelector('.df-page-info');
+  return el?.textContent?.trim() ?? '';
+}
+
+function getPageBtns(container: HTMLElement) {
+  return Array.from(container.querySelectorAll<HTMLButtonElement>('.df-page-btn'));
+}
+
+function getSelects(container: HTMLElement) {
+  return Array.from(container.querySelectorAll<HTMLSelectElement>('select'));
+}
+
 function sectionLabels(): string[] {
   return Array.from(document.querySelectorAll<HTMLElement>('.df-section-label')).map(
     (el) => el.textContent ?? '',
   );
 }
 
-describe('DesignFilesPanel sections', () => {
+describe('DesignFilesPanel grouping', () => {
+  beforeEach(() => {
+    lsStore.clear();
+  });
+
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
   });
 
-  it('does not show grouping, sort, filter, or pagination chrome', () => {
-    renderPanel(generateFiles(60));
+  it('does not show grouping controls when only live artifacts are available', () => {
+    render(
+      <DesignFilesPanel
+        projectId="project-1"
+        files={[]}
+        liveArtifacts={[
+          {
+            kind: 'live-artifact',
+            artifactId: 'artifact-1',
+            tabId: 'live:artifact-1',
+            projectId: 'project-1',
+            title: 'Live Preview',
+            slug: 'live-preview',
+            status: 'active',
+            refreshStatus: 'idle',
+            pinned: false,
+            preview: { type: 'html', entry: 'index.html' },
+            hasDocument: true,
+            updatedAt: '2026-05-09T12:00:00.000Z',
+          },
+        ]}
+        onRefreshFiles={vi.fn()}
+        onOpenFile={vi.fn()}
+        onOpenLiveArtifact={vi.fn()}
+        onRenameFile={vi.fn()}
+        onDeleteFile={vi.fn()}
+        onDeleteFiles={vi.fn()}
+        onUpload={vi.fn()}
+        onUploadFiles={vi.fn()}
+        onPaste={vi.fn()}
+        onNewSketch={vi.fn()}
+      />,
+    );
 
     expect(screen.queryByRole('group', { name: 'Group by' })).toBeNull();
-    expect(document.querySelector('.df-table')).toBeNull();
-    expect(document.querySelector('.df-th-sortable')).toBeNull();
-    expect(document.querySelector('.df-kind-filter')).toBeNull();
-    expect(document.querySelector('.df-pagination')).toBeNull();
-    expect(document.querySelector('.df-page-btn')).toBeNull();
+    expect(screen.getByTestId('design-file-row-live:artifact-1')).toBeTruthy();
   });
 
-  it('renders a single-line toolbar with file actions and no up/refresh buttons', () => {
-    renderPanel([file({ name: 'page.html', kind: 'html' })]);
-
-    expect(document.querySelector('.df-topbar')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Up' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Refresh' })).toBeNull();
-    expect(document.querySelector('.df-up-btn')).toBeNull();
-    expect(document.querySelector('.df-refresh-control')).toBeNull();
-    expect(screen.getByTestId('design-files-upload-trigger')).toBeTruthy();
-  });
-
-  it('groups files into semantic sections by category', () => {
+  it('groups files by kind when kind grouping is selected', () => {
     renderPanel([
       file({ name: 'page.html', kind: 'html', mime: 'text/html' }),
       file({ name: 'chart.png', kind: 'image', mime: 'image/png' }),
     ]);
 
-    const labels = sectionLabels();
-    expect(labels.some((text) => text.includes('Pages'))).toBe(true);
-    expect(labels.some((text) => text.includes('Images'))).toBe(true);
+    const sectionLabels = Array.from(
+      document.querySelectorAll<HTMLElement>('.df-section-label'),
+    ).map((el) => el.textContent ?? '');
+    expect(sectionLabels.some((text) => text.includes('HTML page'))).toBe(true);
+    expect(sectionLabels.some((text) => text.includes('Image'))).toBe(true);
     expect(screen.getByTestId('design-file-row-page.html')).toBeTruthy();
     expect(screen.getByTestId('design-file-row-chart.png')).toBeTruthy();
+    expect(screen.queryByText('Today')).toBeNull();
   });
 
-  it('splits stylesheets into their own section with a Stylesheet subtitle', () => {
+  it('keeps kind grouping selected by default', () => {
     renderPanel([
-      file({ name: 'styles.css', kind: 'code', mime: 'text/css' }),
-      file({ name: 'app.ts', kind: 'code', mime: 'text/typescript' }),
+      file({ name: 'page.html', kind: 'html', mime: 'text/html' }),
+      file({ name: 'chart.png', kind: 'image', mime: 'image/png' }),
     ]);
 
-    const labels = sectionLabels();
-    expect(labels.some((text) => text.includes('Stylesheets'))).toBe(true);
-    expect(labels.some((text) => text.includes('Scripts'))).toBe(true);
-
-    const cssRow = screen.getByTestId('design-file-row-styles.css');
-    expect(cssRow.querySelector('.df-row-sub')?.textContent).toBe('Stylesheet');
-    const tsRow = screen.getByTestId('design-file-row-app.ts');
-    expect(tsRow.querySelector('.df-row-sub')?.textContent).toBe('Script');
+    const groupControls = screen.getByRole('group', { name: 'Group by' });
+    const kindGroupButton = within(groupControls).getByRole('button', { name: 'Kind' });
+    expect(kindGroupButton.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('Name')).toBeTruthy();
+    expect(document.querySelector('.df-th-kind')?.textContent).toContain('Kind');
+    expect(screen.queryByText('Today')).toBeNull();
   });
 
-  it('shows the type as the row subtitle instead of file size', () => {
-    renderPanel([file({ name: 'chart.png', kind: 'image', size: 4096 })]);
+  it('scopes the file browser to imported surface files and clears back to all files', () => {
+    const onClearFileScope = vi.fn();
+    renderPanel(
+      [
+        file({ name: 'apps/web/src/page.tsx', kind: 'code', mime: 'text/typescript' }),
+        file({ name: 'apps/web/src/styles.css', kind: 'code', mime: 'text/css' }),
+        file({ name: 'public/hero.png', kind: 'image', mime: 'image/png' }),
+        file({ name: 'README.md', kind: 'text', mime: 'text/markdown' }),
+      ],
+      {
+        fileScope: {
+          id: 'surface:book',
+          label: 'Book screen',
+          fileNames: [
+            'apps/web/src/page.tsx',
+            'apps/web/src/styles.css',
+            'public/hero.png',
+          ],
+          preferredFileName: 'apps/web/src/page.tsx',
+        },
+        onClearFileScope,
+      },
+    );
 
-    const row = screen.getByTestId('design-file-row-chart.png');
-    expect(row.querySelector('.df-row-sub')?.textContent).toBe('Image');
-    expect(row.textContent).not.toContain('KB');
+    expect(screen.getByText('Book screen')).toBeTruthy();
+    expect(screen.getByTestId('design-file-row-apps/web/src/page.tsx')).toBeTruthy();
+    expect(screen.getByTestId('design-file-row-apps/web/src/styles.css')).toBeTruthy();
+    expect(screen.getByTestId('design-file-row-public/hero.png')).toBeTruthy();
+    expect(screen.queryByTestId('design-file-row-README.md')).toBeNull();
+    expect(document.querySelectorAll('.df-dir-row').length).toBe(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(onClearFileScope).toHaveBeenCalledTimes(1);
   });
 
-  it('renders a static useful-info footer', () => {
-    renderPanel([file({ name: 'page.html', kind: 'html' })]);
+  it('opens the rendered runtime URL for imported app HTML previews', async () => {
+    const onOpenRenderedPreview = vi.fn();
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/ui-surfaces')) {
+        return json({
+          surfaces: [
+            {
+              id: 'src-main-tsx',
+              label: 'Home screen',
+              route: '/',
+              kind: 'react-app',
+              confidence: 'medium',
+              framework: 'Vite',
+              entryFile: 'src/main.tsx',
+              previewFile: 'index.html',
+              previewRuntimeRoot: '',
+              previewPath: '/',
+              previewStatus: 'source-mapped',
+              sourceFiles: ['index.html', 'src/main.tsx', 'src/App.tsx'],
+              styleFiles: ['src/index.css'],
+              scriptFiles: [],
+              assetFiles: [],
+              fontFiles: [],
+              externalDependencies: [
+                { packageName: 'react', importPath: 'react', kind: 'runtime' },
+              ],
+              reasons: ['React app entry and HTML shell detected'],
+              mtime: 20,
+            },
+          ],
+          generatedAt: '2026-06-02T00:00:00.000Z',
+        });
+      }
+      if (url.includes('/ui-preview')) {
+        expect(init).toEqual(expect.objectContaining({ method: 'POST' }));
+        return json({
+          status: 'ready',
+          runtimeRoot: '',
+          baseUrl: 'http://127.0.0.1:43210',
+          url: 'http://127.0.0.1:43210/',
+          route: '/',
+        });
+      }
+      return new Response('<div>raw preview</div>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      });
+    });
+    const { onOpenFile } = renderPanel(
+      [
+        file({ name: 'index.html', kind: 'html', mime: 'text/html', mtime: 20 }),
+        file({ name: 'src/main.tsx', kind: 'code', mime: 'text/typescript', mtime: 19 }),
+      ],
+      { onOpenRenderedPreview },
+    );
 
-    expect(document.querySelector('.df-useful-info-label')?.textContent).toBe('Useful info');
-    expect(document.querySelector('.df-useful-info-tip')?.textContent).toContain('Double-click');
+    fireEvent.click(within(screen.getByTestId('design-file-row-index.html')).getByRole('button', { name: /index\.html/i }));
+    const preview = await screen.findByTestId('design-file-preview');
+    fireEvent.click(within(preview).getByRole('button', { name: 'Open' }));
+
+    await waitFor(() => {
+      expect(onOpenRenderedPreview).toHaveBeenCalledWith({
+        tabId: 'rendered-preview:index.html',
+        title: 'index.html',
+        url: 'http://127.0.0.1:43210/',
+        sourceFile: 'index.html',
+      });
+    });
+    expect(onOpenFile).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/test-project/ui-preview',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('can group files by modified date and collapse a date group', () => {
+    const now = new Date(2026, 4, 9, 12).getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    renderPanel([
+      file({ name: 'today.html', mtime: new Date(2026, 4, 9, 11).getTime() }),
+      file({ name: 'yesterday.html', mtime: new Date(2026, 4, 8, 12).getTime() }),
+    ]);
+
+    expect(screen.queryByText('Today')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
+
+    expect(screen.getByText('Today')).toBeTruthy();
+    expect(screen.getByText('Yesterday')).toBeTruthy();
+    expect(screen.getByTestId('design-file-row-today.html')).toBeTruthy();
+    expect(screen.getByTestId('design-file-row-yesterday.html')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Collapse Today/i }));
+
+    expect(screen.queryByTestId('design-file-row-today.html')).toBeNull();
+    expect(screen.getByTestId('design-file-row-yesterday.html')).toBeTruthy();
+  });
+
+  it('keeps files from seven calendar days ago in the previous 7 days group', () => {
+    const now = new Date(2026, 4, 9, 12).getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    renderPanel([file({ name: 'week-old.html', mtime: new Date(2026, 4, 2, 12).getTime() })]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
+
+    expect(screen.getByText('Previous 7 days')).toBeTruthy();
+    expect(screen.queryByText('Previous 30 days')).toBeNull();
+    expect(screen.getByTestId('design-file-row-week-old.html')).toBeTruthy();
+  });
+
+  it('keeps files at the seven calendar day boundary in the previous 7 days group', () => {
+    const now = new Date(2026, 4, 9, 12).getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    renderPanel([
+      file({ name: 'week-boundary.html', mtime: new Date(2026, 4, 2, 0, 0, 0, 0).getTime() }),
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
+
+    expect(screen.getByText('Previous 7 days')).toBeTruthy();
+    expect(screen.queryByText('Previous 30 days')).toBeNull();
+    expect(screen.getByTestId('design-file-row-week-boundary.html')).toBeTruthy();
+  });
+
+  it('keeps files from thirty calendar days ago in the previous 30 days group', () => {
+    const now = new Date(2026, 4, 9, 12).getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    renderPanel([
+      file({ name: 'month-old.html', mtime: new Date(2026, 3, 9, 12).getTime() }),
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modified' }));
+
+    expect(screen.getByText('Previous 30 days')).toBeTruthy();
+    expect(screen.queryByText('Older')).toBeNull();
+    expect(screen.getByTestId('design-file-row-month-old.html')).toBeTruthy();
   });
 });
 
 describe('DesignFilesPanel large list', () => {
   afterEach(() => cleanup());
 
-  it('renders all rows at once (no pagination)', () => {
+  it('paginates large file lists and can jump pages', () => {
     const { container } = renderPanel(generateFiles(500));
-    expect(container.querySelectorAll('.df-file-row').length).toBe(500);
+
+    expect(container.querySelectorAll('.df-file-row').length).toBe(30);
+    expect(getPageInfo(container)).toContain('1');
+    expect(getPageInfo(container)).toContain('30');
+    expect(getPageInfo(container)).toContain('500');
+
+    const [prev, next] = getPageBtns(container);
+    expect(prev!.disabled).toBe(true);
+    expect(next!.disabled).toBe(false);
+
+    fireEvent.click(next!);
+
+    expect(getPageInfo(container)).toContain('31');
+    expect(getPageInfo(container)).toContain('60');
+    expect(prev!.disabled).toBe(false);
   });
 
-  it('renders 500 files within a reasonable time', () => {
-    const files = generateFiles(500);
-    const start = performance.now();
-    renderPanel(files);
-    const elapsed = performance.now() - start;
-    expect(elapsed).toBeLessThan(2000);
+  it('supports changing page size including All', () => {
+    const { container } = renderPanel(generateFiles(80));
+    const pageSizeSelect = screen.getByTestId('df-page-size-select');
+
+    fireEvent.change(pageSizeSelect, { target: { value: '60' } });
+    expect(container.querySelectorAll('.df-file-row').length).toBe(60);
+    expect(getPageInfo(container)).toContain('1');
+    expect(getPageInfo(container)).toContain('60');
+
+    fireEvent.change(pageSizeSelect, { target: { value: 'all' } });
+    expect(container.querySelectorAll('.df-file-row').length).toBe(80);
+    expect(getPageBtns(container).length).toBe(0);
+    expect(getSelects(container).some((select) => select.value === 'all')).toBe(true);
   });
 });
 
 describe('DesignFilesPanel selection', () => {
   afterEach(() => cleanup());
 
-  it('shows the batch bar and passes every selected file to batch delete', () => {
+  it('shows selected-file actions and passes every selected file to batch delete', () => {
     const files = generateFiles(3);
     const { container, onDeleteFiles } = renderPanel(files);
     const rows = Array.from(container.querySelectorAll('.df-file-row'));
@@ -195,7 +421,7 @@ describe('DesignFilesPanel selection', () => {
     fireEvent.click(rows[0]!.querySelector('.df-row-check')!);
     fireEvent.click(rows[1]!.querySelector('.df-row-check')!);
 
-    expect(container.querySelector('[data-testid="design-files-batch-bar"]')).toBeTruthy();
+    expect(screen.getByText('Delete 2')).toBeTruthy();
 
     fireEvent.click(container.querySelector('[data-testid="design-files-batch-delete"]')!);
     expect(onDeleteFiles).toHaveBeenCalledTimes(1);
@@ -230,7 +456,7 @@ describe('DesignFilesPanel selection', () => {
     expect(onOpenFile).toHaveBeenCalledWith('file-1.html');
     onOpenFile.mockClear();
 
-    fireEvent.doubleClick(row.querySelector('.df-row-time')!);
+    fireEvent.doubleClick(row.querySelector('.df-cell-time')!);
     expect(onOpenFile).toHaveBeenCalledWith('file-1.html');
   });
 });
@@ -238,12 +464,12 @@ describe('DesignFilesPanel selection', () => {
 describe('DesignFilesPanel preview', () => {
   afterEach(() => cleanup());
 
-  it('shows the file extension in the preview stats', () => {
+  it('shows file size and modified time in the preview stats', () => {
     const { container } = renderPanel([file({ name: 'chart.png', kind: 'image', size: 4096 })]);
     fireEvent.click(container.querySelector('.df-file-row .df-row-icon')!);
 
     const stats = container.querySelector('.df-preview-stats')?.textContent ?? '';
-    expect(stats).toContain('PNG');
+    expect(stats).toContain('4.0 KB');
   });
 
   it('renders sketch files with the static sketch preview instead of a broken image', async () => {
@@ -301,13 +527,15 @@ describe('DesignFilesPanel directory navigation', () => {
     expect(dirRows[0]!.textContent).toContain('2');
   });
 
-  it('pins folders into a Folders section', () => {
+  it('pins folders ahead of files at root', () => {
     renderPanel([
       file({ name: 'assets/logo.png', kind: 'image' }),
       file({ name: 'top.html', kind: 'html' }),
     ]);
 
-    expect(sectionLabels().some((text) => text.includes('Folders'))).toBe(true);
+    const firstBodyRow = document.querySelector('.df-table tbody tr');
+    expect(firstBodyRow?.classList.contains('df-dir-row')).toBe(true);
+    expect(firstBodyRow?.textContent).toContain('assets');
   });
 
   it('clicking a folder row navigates into it and shows only basenames and nested dirs', () => {
@@ -527,3 +755,10 @@ describe('DesignFilesPanel persisted (empty) folders', () => {
     expect(nestedDirs).toContain('icons');
   });
 });
+
+function json(value: unknown, status = 200): Response {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}

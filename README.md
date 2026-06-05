@@ -42,6 +42,19 @@ It's also the **Figma alternative for the agent era** — instead of pushing pix
 
 A quick look at what Open Design is and what it does. Start from **Home**, orchestrate repeat workflows with **Automation**, distill a brand contract in **Design System**, and extend with **Plugins** and **integrations**; inside any project's **Studio**, the same design system streams out prototypes, live artifacts, HyperFrames, decks, and images.
 
+### Existing project import
+
+Use **Open existing project** when you want OD to inspect a real app folder instead of starting from a blank design artifact. The imported folder stays in place on disk; OD stores the trusted folder path on the project and reads/writes files there.
+
+For imported frontend projects, OD discovers user-facing UI surfaces first: static HTML screens, Next.js routes, and React/Vite app entries. Static HTML screens render directly. Source-backed routes start a managed local preview from the imported app's own `dev` script when dependencies are already installed; otherwise the card stays source-mapped and tells you what setup is missing. Each surface records the local frontend files that make it render: route/component source, CSS/CSS modules, script/effect files, referenced images, local fonts, and package-level summaries for third-party UI libraries such as Radix, Tailwind, Framer Motion, lucide, charting libraries, or font packages. Third-party package source under `node_modules` is not copied into chat context; OD records the package/import/version summary and attaches only project-owned frontend files when you choose **Edit this screen**.
+
+Headless callers can read the same map with:
+
+```bash
+od project surfaces <projectId> --json
+od project preview <projectId> --entry app/page.tsx --json
+```
+
 ### Core pages
 
 <table>

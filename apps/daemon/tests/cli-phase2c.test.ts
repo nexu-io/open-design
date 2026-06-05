@@ -188,6 +188,35 @@ describe('Phase 2C CLI wrappers', () => {
     expect(conversationBody.conversation.title).toBe('Follow-up');
   });
 
+  it('prints discovered UI surfaces through the project CLI', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html><h1>Home</h1>');
+
+    const imported = await runCli(['project', 'import', folder, '--json']);
+    const importBody = JSON.parse(imported.stdout) as {
+      project: { id: string };
+    };
+
+    const surfaces = await runCli(['project', 'surfaces', importBody.project.id, '--json']);
+    const surfacesBody = JSON.parse(surfaces.stdout) as {
+      surfaces: Array<{ kind: string; route: string | null; entryFile: string }>;
+    };
+
+    expect(surfacesBody.surfaces).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'static-html', route: '/', entryFile: 'index.html' }),
+      ]),
+    );
+
+    const table = await runCli(['project', 'surfaces', importBody.project.id]);
+    expect(table.stdout).toContain('/\tHome screen\tentry=index.html');
+
+    const preview = await runCli(['project', 'preview', importBody.project.id, '--entry', 'index.html', '--json']);
+    const previewBody = JSON.parse(preview.stdout) as { status: string; error?: string };
+    expect(previewBody.status).toBe('unsupported');
+    expect(previewBody.error).toMatch(/does not declare an app runtime/i);
+  });
+
   it('imports through CLI project import commands when desktop import auth gate is active', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');

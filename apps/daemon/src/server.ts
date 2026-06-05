@@ -1220,6 +1220,164 @@ export function formatDesignFilesWorkspaceHint(
   return lines.join('\n');
 }
 
+const DEFAULT_PROMPT_FILE_LIST_MAX_ENTRIES = 120;
+const DEFAULT_PROMPT_FILE_LIST_MAX_CHARS = 18_000;
+const MAX_PRIORITY_PROMPT_FILES = 24;
+const EDITABLE_DESIGN_SNAPSHOT_RE = /(?:^|\/)design-snapshots\/[^/]+\.html$/iu;
+
+function normalizedPromptFileName(value) {
+  const raw =
+    typeof value === 'string'
+      ? value
+      : typeof value?.name === 'string'
+        ? value.name
+        : typeof value?.path === 'string'
+          ? value.path
+          : '';
+  return raw
+    .replace(/\\/g, '/')
+    .replace(/[\r\n]+/g, ' ')
+    .trim();
+}
+
+function uniquePromptFileNames(files) {
+  const seen = new Set();
+  const out = [];
+  for (const file of Array.isArray(files) ? files : []) {
+    const name = normalizedPromptFileName(file);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
+function topPromptFileCounts(names, mapper, limit = 8) {
+  const counts = new Map();
+  for (const name of names) {
+    const key = mapper(name);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([key, count]) => `${key} (${count})`)
+    .join(', ');
+}
+
+function topPromptFolder(name) {
+  const first = name.split('/').filter(Boolean)[0];
+  return first ? `${first}/` : '(root)';
+}
+
+function promptFileExtension(name) {
+  const ext = path.extname(name).toLowerCase();
+  return ext || '(no extension)';
+}
+
+function pushPromptFileLine(lines, name, budget) {
+  const line = `- ${name}`;
+  if (
+    lines.length >= budget.maxEntries ||
+    budget.usedChars + line.length + 1 > budget.maxChars
+  ) {
+    return false;
+  }
+  lines.push(line);
+  budget.usedChars += line.length + 1;
+  return true;
+}
+
+export function renderProjectFilesListBlock(
+  existingProjectFiles,
+  opts = {},
+) {
+  const names = uniquePromptFileNames(existingProjectFiles);
+  if (names.length === 0) {
+    return '\nThis folder is empty. Choose a clear, descriptive filename for whatever you create.';
+  }
+
+  const maxEntries = Math.max(
+    1,
+    Number.isFinite(opts.maxEntries)
+      ? Math.floor(opts.maxEntries)
+      : DEFAULT_PROMPT_FILE_LIST_MAX_ENTRIES,
+  );
+  const maxChars = Math.max(
+    256,
+    Number.isFinite(opts.maxChars)
+      ? Math.floor(opts.maxChars)
+      : DEFAULT_PROMPT_FILE_LIST_MAX_CHARS,
+  );
+  const priorityNames = uniquePromptFileNames(opts.priorityNames)
+    .filter((name) => names.includes(name))
+    .slice(0, MAX_PRIORITY_PROMPT_FILES);
+
+  const fullLines = names.map((name) => `- ${name}`);
+  const fullList = fullLines.join('\n');
+  const shouldListAll =
+    names.length <= maxEntries && fullList.length <= maxChars;
+  if (shouldListAll) {
+    return `\nFiles already in this folder (do NOT overwrite unless the user asks; pick a fresh, descriptive name for new artifacts):\n${fullList}`;
+  }
+
+  const sampleLines = [];
+  const budget = { maxEntries, maxChars, usedChars: 0 };
+  const sampled = new Set();
+  for (const name of priorityNames) {
+    if (pushPromptFileLine(sampleLines, name, budget)) sampled.add(name);
+  }
+  for (const name of names) {
+    if (sampled.has(name)) continue;
+    if (!pushPromptFileLine(sampleLines, name, budget)) break;
+    sampled.add(name);
+  }
+
+  const omitted = Math.max(0, names.length - sampled.size);
+  const folderSummary = topPromptFileCounts(names, topPromptFolder);
+  const typeSummary = topPromptFileCounts(names, promptFileExtension);
+  const lines = [
+    '\nFiles already in this folder (do NOT overwrite unless the user asks; pick a fresh, descriptive name for new artifacts):',
+    `Project has ${names.length} files. Open Design is showing a compact sample so the agent prompt stays under runtime limits; use file tools to inspect more before editing.`,
+  ];
+  if (priorityNames.length > 0) {
+    lines.push(
+      `Attached/current files kept visible: ${priorityNames.map((name) => `\`${name}\``).join(', ')}`,
+    );
+  }
+  if (folderSummary) lines.push(`Top folders: ${folderSummary}`);
+  if (typeSummary) lines.push(`Common file types: ${typeSummary}`);
+  lines.push(
+    `Representative files (newest first, capped at ${sampleLines.length}):`,
+    ...sampleLines,
+  );
+  if (omitted > 0) lines.push(`... ${omitted} more files omitted from this prompt.`);
+  return lines.join('\n');
+}
+
+export function renderEditableSnapshotTargetHint(attachments) {
+  const snapshotNames = uniquePromptFileNames(attachments)
+    .filter((name) => EDITABLE_DESIGN_SNAPSHOT_RE.test(name));
+  if (snapshotNames.length === 0) return '';
+  const primarySnapshot = snapshotNames[0];
+  const otherSnapshots = snapshotNames.slice(1);
+  const lines = [
+    '',
+    '',
+    '<editable-design-snapshot-target>',
+    `Primary editable design snapshot: \`${primarySnapshot}\`.`,
+    'For visual, text, color, layout, or style requests while this snapshot is attached, edit this HTML file directly because it is the file currently rendered in Preview.',
+    'You may inspect framework/source files for reference, but do not apply the requested design change to TSX, JSX, Vue, Svelte, CSS, or other original app source unless the user explicitly asks to change the real app runtime.',
+    'The open preview updates from the snapshot HTML, so the requested visible change must be written to that snapshot file.',
+    'User-facing updates must describe the design/rendered preview change only. Do not mention inline styles, computed styles, generated HTML, srcDoc, snapshot internals, or other implementation details unless the user explicitly asks how the snapshot works.',
+  ];
+  if (otherSnapshots.length > 0) {
+    lines.push(`Other attached editable snapshots: ${otherSnapshots.map((name) => `\`${name}\``).join(', ')}`);
+  }
+  lines.push('</editable-design-snapshot-target>');
+  return lines.join('\n');
+}
+
 export function resolveSafePromptImagePaths(imagePaths, opts = {}) {
   if (!Array.isArray(imagePaths) || imagePaths.length === 0) {
     return { safeImages: [], oversizedImages: [], failedImages: [] };
@@ -4782,7 +4940,7 @@ export async function startServer({
   // Routes that serve content to sandboxed iframes (Origin: null) for
   // read-only purposes.  All other /api routes reject Origin: null.
   const _NULL_ORIGIN_SAFE_GET_RE =
-    /^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$/;
+    /^\/projects\/[^/]+\/(?:(?:raw|preview)\/|ui-preview\/proxy\/)|^\/codex-pets\/[^/]+\/spritesheet$/;
 
   // Reject cross-origin requests to API endpoints.
   // Health/version remain open for monitoring probes.
@@ -11155,8 +11313,11 @@ export async function startServer({
       const v = validateLinkedDirs(projectRecord.metadata.linkedDirs);
       return v.dirs ?? [];
     })();
+    const filesListBlock = renderProjectFilesListBlock(existingProjectFiles, {
+      priorityNames: safeAttachments,
+    });
     const cwdHint = cwd
-      ? formatDesignFilesWorkspaceHint(cwd, existingProjectFiles, existingProjectFolders)
+      ? `${formatDesignFilesWorkspaceHint(cwd, existingProjectFiles, existingProjectFolders)}${filesListBlock}`
       : '';
     const linkedDirsHint = linkedDirs.length > 0
       ? `\n\nLinked code folders (read-only reference code the user wants you to see):\n${
@@ -11196,6 +11357,8 @@ export async function startServer({
     };
     const runtimeToolPrompt = createAgentRuntimeToolPrompt(daemonUrl, toolTokenGrant);
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
+    const editableSnapshotTargetHint =
+      renderEditableSnapshotTargetHint(safeAttachments);
 
     // Resolve external MCP config + stored OAuth tokens up-front so the
     // system prompt can warn the model away from Claude Code's synthetic
@@ -11463,9 +11626,9 @@ export async function startServer({
     );
     const composed = [
       instructionPrompt
-        ? `# Instructions (read first)\n\n${formOverride}${instructionPrompt}${cwdHint}${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
+        ? `# Instructions (read first)\n\n${formOverride}${instructionPrompt}${cwdHint}${editableSnapshotTargetHint}${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
         : cwdHint
-          ? `# Instructions\n\n${formOverride}${cwdHint}${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
+          ? `# Instructions\n\n${formOverride}${cwdHint}${editableSnapshotTargetHint}${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
           : linkedDirsHint
             ? `# Instructions\n\n${formOverride}${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
             : formOverride

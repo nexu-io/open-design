@@ -79,7 +79,9 @@ describe('run failure telemetry smoke', () => {
     process.env.LANGFUSE_BASE_URL = ingestion.url;
     delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
     delete process.env.POSTHOG_KEY;
-    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '400';
+    // Full-suite CPU pressure can delay the fake CLI past sub-second budgets;
+    // keep the timeout short while leaving enough room for stderr to land.
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '2000';
 
     started = await startServer({ port: 0, returnServer: true }) as StartedServer;
     await putConfig(started.url, {

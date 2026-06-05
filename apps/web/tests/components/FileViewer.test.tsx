@@ -32,6 +32,7 @@ import {
   applyInspectOverridesToSource,
   commentPreviewCanvasSize,
   effectivePreviewScale,
+  editableSnapshotPreviewScale,
   parseInspectOverridesFromSource,
   previewOverlayTransform,
   serializeInspectOverrides,
@@ -246,6 +247,13 @@ describe('FileViewer preview scale', () => {
 
   it('uses the requested zoom for desktop preview overlays', () => {
     expect(effectivePreviewScale('desktop', 1.5, { width: 320, height: 480 })).toBe(1.5);
+  });
+
+  it('does not auto-upscale desktop editable snapshots past their captured canvas width', () => {
+    expect(editableSnapshotPreviewScale('desktop', 1, { width: 960, height: 700 }, 1280)).toBeCloseTo(0.75);
+    expect(editableSnapshotPreviewScale('desktop', 1, { width: 1600, height: 700 }, 1280)).toBeCloseTo(1);
+    expect(editableSnapshotPreviewScale('desktop', 0.5, { width: 1600, height: 700 }, 1280)).toBeCloseTo(0.5);
+    expect(editableSnapshotPreviewScale('desktop', 1.5, { width: 320, height: 480 }, null)).toBe(1.5);
   });
 
   it('clamps mobile and tablet overlay scale to the iframe auto-fit scale', () => {

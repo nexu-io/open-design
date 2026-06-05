@@ -1,12 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button } from '@open-design/components';
 import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
-import { projectFileUrl, projectRawUrl } from '../providers/registry';
+import {
+  fetchProjectUiSurfaces,
+  projectFileUrl,
+  projectRawUrl,
+  startProjectUiPreview,
+} from '../providers/registry';
 import { buildSrcdoc } from '../runtime/srcdoc';
-import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind, ProjectFolder } from '../types';
+import type {
+  LiveArtifactWorkspaceEntry,
+  ProjectFile,
+  ProjectFileKind,
+  ProjectFolder,
+  ProjectUiPreviewRuntimeResponse,
+  ProjectUiSurface,
+} from '../types';
 import {
   createFileSystemReadError,
   FILE_SYSTEM_READ_ERROR_MESSAGE,
@@ -47,6 +58,7 @@ interface Props {
   onRefreshFiles: () => Promise<void> | void;
   onOpenFile: (name: string) => void;
   onOpenLiveArtifact: (tabId: LiveArtifactWorkspaceEntry['tabId']) => void;
+  onOpenRenderedPreview?: (preview: RenderedWorkspacePreview) => void;
   onRenameFile: (from: string, to: string) => Promise<ProjectFile | null> | ProjectFile | null;
   onDeleteFile: (name: string) => void;
   onDeleteFiles: (names: string[]) => Promise<void> | void;
@@ -60,6 +72,8 @@ interface Props {
   onCurrentDirChange?: (dir: string) => void;
   uploadError?: string | null;
   onClearUploadError?: () => void;
+  fileScope?: DesignFilesScope | null;
+  onClearFileScope?: () => void;
   preferredPreviewFile?: string | null;
   autoPreviewDesignArtifacts?: boolean;
   onPluginFolderAgentAction?: (
@@ -72,43 +86,109 @@ interface Props {
   onNavStateChange?: (state: DesignFilesNavState) => void;
 }
 
+interface RenderedWorkspacePreview {
+  tabId: string;
+  title: string;
+  url: string;
+  sourceFile?: string | null;
+}
+
 interface ActionNotice {
   message: string;
   url?: string;
 }
 
-// Display-only refinement of ProjectFileKind. The contract `kind` lumps all
-// source under `code`; the Design Files surface splits CSS/SCSS/etc. into a
-// dedicated "Stylesheets" section to mirror Claude Design. Everything else
-// maps 1:1 to its kind.
-type FileCategory = ProjectFileKind | 'stylesheet';
+type RenderedPreviewState =
+  | { status: 'loading' }
+  | { status: 'ready'; url: string }
+  | { status: 'unavailable' };
 
-// Section render order. Empty categories are skipped; the FOLDERS section is
-// pinned above all of these from the directory list.
-const SECTION_ORDER: FileCategory[] = [
-  'html',
-  'stylesheet',
-  'code',
-  'document',
-  'text',
-  'image',
-  'sketch',
-  'pdf',
-  'presentation',
-  'spreadsheet',
-  'video',
-  'audio',
-  'binary',
-];
+type DesignFilesGroupMode = 'kind' | 'modified';
+type ModifiedSection = 'today' | 'yesterday' | 'previous7Days' | 'previous30Days' | 'older';
+type SortKey = 'name' | 'kind' | 'mtime';
+type SortDir = 'asc' | 'desc';
 
-const STYLESHEET_EXTENSIONS = new Set(['css', 'scss', 'sass', 'less']);
-
-function fileCategory(file: ProjectFile): FileCategory {
-  const dot = file.name.lastIndexOf('.');
-  const ext = dot >= 0 ? file.name.slice(dot + 1).toLowerCase() : '';
-  if (STYLESHEET_EXTENSIONS.has(ext)) return 'stylesheet';
-  return file.kind;
+export interface DesignFilesScope {
+  id: string;
+  label: string;
+  fileNames: string[];
+  preferredFileName?: string | null;
 }
+
+// Storage key for per-project view state. Bump the version suffix (v1 → v2) when
+// removing or renaming a persisted field — just adding an optional field is safe
+// without a version bump. No cleanup of old keys on project deletion; the keys
+// are small preference blobs and orphan gracefully.
+const VIEW_STATE_KEY_PREFIX = 'od:design-files:view-state:v1:';
+
+const DEFAULT_SORT_KEY: SortKey = 'mtime';
+const DEFAULT_SORT_DIR: SortDir = 'desc';
+const DEFAULT_PAGE_SIZE: number | 'all' = 30;
+const PAGE_SIZE_OPTIONS = [15, 30, 45, 60, 'all'] as const;
+
+interface PersistedViewState {
+  sortKey?: SortKey;
+  sortDir?: SortDir;
+  pageSize?: number | 'all';
+  kindFilter?: string[];
+}
+
+function readViewState(projectId: string): PersistedViewState {
+  try {
+    if (typeof window === 'undefined') return {};
+    const raw = localStorage.getItem(VIEW_STATE_KEY_PREFIX + projectId);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed as PersistedViewState;
+  } catch {
+    return {};
+  }
+}
+
+function writeViewState(projectId: string, state: PersistedViewState): void {
+  try {
+    localStorage.setItem(VIEW_STATE_KEY_PREFIX + projectId, JSON.stringify(state));
+  } catch {
+    // localStorage unavailable (private mode, quota exceeded) — silently skip
+  }
+}
+
+function isSortKey(v: unknown): v is SortKey {
+  return v === 'name' || v === 'kind' || v === 'mtime';
+}
+
+function isSortDir(v: unknown): v is SortDir {
+  return v === 'asc' || v === 'desc';
+}
+
+function isPageSize(v: unknown): v is number | 'all' {
+  return (PAGE_SIZE_OPTIONS as ReadonlyArray<unknown>).includes(v);
+}
+
+const VALID_KIND_SET: ReadonlySet<string> = new Set<ProjectFileKind>([
+  'html', 'image', 'video', 'audio', 'sketch', 'text',
+  'code', 'pdf', 'document', 'presentation', 'spreadsheet', 'binary',
+]);
+
+function isProjectFileKind(v: unknown): v is ProjectFileKind {
+  return typeof v === 'string' && VALID_KIND_SET.has(v);
+}
+
+const MODIFIED_SECTION_ORDER: ModifiedSection[] = [
+  'today',
+  'yesterday',
+  'previous7Days',
+  'previous30Days',
+  'older',
+];
+const MODIFIED_SECTION_LABEL_KEY: Record<ModifiedSection, keyof Dict> = {
+  today: 'designFiles.modifiedToday',
+  yesterday: 'designFiles.modifiedYesterday',
+  previous7Days: 'designFiles.modifiedPrevious7Days',
+  previous30Days: 'designFiles.modifiedPrevious30Days',
+  older: 'designFiles.modifiedOlder',
+};
 
 type FileSystemEntryWithReader = FileSystemEntry & {
   createReader?: () => FileSystemDirectoryReader;
@@ -167,8 +247,10 @@ export function DesignFilesPanel({
   files,
   folders,
   liveArtifacts,
+  onRefreshFiles,
   onOpenFile,
   onOpenLiveArtifact,
+  onOpenRenderedPreview,
   onRenameFile,
   onDeleteFile,
   onDeleteFiles,
@@ -178,6 +260,8 @@ export function DesignFilesPanel({
   onNewSketch,
   uploadError = null,
   onClearUploadError,
+  fileScope = null,
+  onClearFileScope,
   preferredPreviewFile = null,
   autoPreviewDesignArtifacts = false,
   onCurrentDirChange,
@@ -189,6 +273,7 @@ export function DesignFilesPanel({
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
+  const [refreshing, setRefreshing] = useState(false);
   const [draggingFiles, setDraggingFiles] = useState(false);
   const [dropReadError, setDropReadError] = useState<string | null>(null);
   const dragDepthRef = useRef(0);
@@ -205,7 +290,41 @@ export function DesignFilesPanel({
   const [sharingFolder, setSharingFolder] = useState<string | null>(null);
   const [installNotice, setInstallNotice] = useState<ActionNotice | null>(null);
   const [renaming, setRenaming] = useState<{ name: string; draft: string; saving: boolean } | null>(null);
+  const savedViewState = useRef(readViewState(projectId));
+  const viewStateHasMounted = useRef(false);
+  const [sortKey, setSortKey] = useState<SortKey>(
+    () => isSortKey(savedViewState.current.sortKey) ? savedViewState.current.sortKey : DEFAULT_SORT_KEY,
+  );
+  const [sortDir, setSortDir] = useState<SortDir>(
+    () => isSortDir(savedViewState.current.sortDir) ? savedViewState.current.sortDir : DEFAULT_SORT_DIR,
+  );
+  const [groupMode, setGroupMode] = useState<DesignFilesGroupMode>('kind');
+  const [collapsedModifiedSections, setCollapsedModifiedSections] = useState<Set<ModifiedSection>>(new Set());
+  const [dayBoundary, setDayBoundary] = useState(() => Date.now());
+  const [kindFilter, setKindFilter] = useState<Set<ProjectFileKind>>(() => {
+    const kf = navState?.kindFilter
+      ? Array.from(navState.kindFilter)
+      : savedViewState.current.kindFilter;
+    if (!Array.isArray(kf) || kf.length === 0) return new Set();
+    // Validate each stored value against the current ProjectFileKind union so
+    // stale values from a prior schema (e.g. a renamed kind) are dropped silently.
+    return new Set(kf.filter(isProjectFileKind));
+  });
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const filterMenuRef = useRef<HTMLDivElement | null>(null);
   const [currentDir, setCurrentDir] = useState<string>(() => navState?.currentDir ?? '');
+  const uiSurfacesPromiseRef = useRef<Promise<ProjectUiSurface[]> | null>(null);
+  const requestedRenderedPreviewRef = useRef<Set<string>>(new Set());
+  const [renderedPreviewStates, setRenderedPreviewStates] = useState<Record<string, RenderedPreviewState>>({});
+  const fileScopeKey = fileScope ? `${fileScope.id}:${fileScope.fileNames.join('\u0000')}` : null;
+  const scopedFileNames = useMemo(
+    () => new Set(fileScope?.fileNames ?? []),
+    [fileScope],
+  );
+  const visibleDesignFiles = useMemo(
+    () => (fileScope ? files.filter((file) => scopedFileNames.has(file.name)) : files),
+    [fileScope, files, scopedFileNames],
+  );
 
   // Keep the parent's create-target in sync with the folder being viewed, so
   // uploads / pastes / new sketches / dropped files land in the open folder
@@ -214,23 +333,20 @@ export function DesignFilesPanel({
     onCurrentDirChange?.(currentDir);
   }, [currentDir, onCurrentDirChange]);
 
-  useEffect(() => {
-    onNavStateChange?.({
-      kindFilter: navState?.kindFilter ?? new Set(),
-      currentDir,
-      page: 0,
-      pageSize: 30,
-    });
-  }, [currentDir, navState?.kindFilter, onNavStateChange]);
-
   // Derive immediate subdirectories and files at the current directory level
   // from the flat files list. Files with names like "a/b/c.html" contribute
   // "a" as a directory when currentDir is '' and "b" when currentDir is "a".
   const { dirsAtCurrentDir, filesAtCurrentDir } = useMemo(() => {
+    if (fileScope) {
+      return {
+        dirsAtCurrentDir: [],
+        filesAtCurrentDir: visibleDesignFiles,
+      };
+    }
     const prefix = currentDir === '' ? '' : `${currentDir}/`;
     const dirs = new Set<string>();
     const localFiles: ProjectFile[] = [];
-    for (const f of files) {
+    for (const f of visibleDesignFiles) {
       if (!f.name.startsWith(prefix)) continue;
       const remainder = f.name.slice(prefix.length);
       const slashIdx = remainder.indexOf('/');
@@ -254,29 +370,172 @@ export function DesignFilesPanel({
       dirsAtCurrentDir: [...dirs].sort((a, b) => a.localeCompare(b)),
       filesAtCurrentDir: localFiles,
     };
-  }, [files, folders, currentDir]);
+  }, [fileScope, visibleDesignFiles, folders, currentDir]);
 
-  // Group files at the current level into semantic sections, ordered by
-  // SECTION_ORDER. Files within a section sort most-recently-modified first.
-  const sections = useMemo(() => {
-    const grouped = new Map<FileCategory, ProjectFile[]>();
-    for (const f of filesAtCurrentDir) {
-      const category = fileCategory(f);
-      const bucket = grouped.get(category) ?? [];
-      bucket.push(f);
-      grouped.set(category, bucket);
-    }
-    for (const bucket of grouped.values()) {
-      bucket.sort((a, b) => b.mtime - a.mtime);
-    }
-    return SECTION_ORDER.filter((category) => grouped.has(category)).map(
-      (category) => [category, grouped.get(category)!] as const,
-    );
+  const kindCounts = useMemo(() => {
+    const counts = new Map<ProjectFileKind, number>();
+    for (const f of filesAtCurrentDir) counts.set(f.kind, (counts.get(f.kind) ?? 0) + 1);
+    return counts;
   }, [filesAtCurrentDir]);
 
-  // Reset selection and renaming state when the user navigates into or out of
+  const availableKinds = useMemo(
+    () =>
+      Array.from(kindCounts.keys()).sort(
+        (a, b) => kindSortPriority(a) - kindSortPriority(b),
+      ),
+    [kindCounts],
+  );
+
+  // Drop any selected-filter kinds that no longer appear in the file list
+  // (e.g. after a delete leaves the kind empty). Keeps the filter UI honest
+  // and prevents a stale filter from silently hiding everything.
+  // Guard: skip when no kinds are available yet — availableKinds is empty only
+  // when files haven't loaded. Running cleanup against an empty set would
+  // clear a kindFilter that was correctly restored from localStorage before
+  // the async file list arrived.
+  useEffect(() => {
+    if (fileScope) return;
+    if (availableKinds.length === 0) return;
+    setKindFilter((prev) => {
+      if (prev.size === 0) return prev;
+      const present = new Set(availableKinds);
+      const next = new Set<ProjectFileKind>();
+      let changed = false;
+      for (const k of prev) {
+        if (present.has(k)) next.add(k);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [availableKinds, fileScope]);
+
+  const filteredFiles = useMemo(() => {
+    if (fileScope || kindFilter.size === 0) return filesAtCurrentDir;
+    return filesAtCurrentDir.filter((f) => kindFilter.has(f.kind));
+  }, [fileScope, filesAtCurrentDir, kindFilter]);
+
+  const sortedFiles = useMemo(() => {
+    return [...filteredFiles].sort((a, b) => {
+      let cmp: number;
+      if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
+      else if (sortKey === 'kind') cmp = kindSortPriority(a.kind) - kindSortPriority(b.kind);
+      else cmp = a.mtime - b.mtime;
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [filteredFiles, sortKey, sortDir]);
+
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState<number | 'all'>(
+    () => isPageSize(savedViewState.current.pageSize) ? savedViewState.current.pageSize : DEFAULT_PAGE_SIZE,
+  );
+
+  const effectivePageSize = pageSize === 'all' ? Math.max(1, sortedFiles.length) : pageSize;
+
+  useEffect(() => {
+    onNavStateChange?.({
+      kindFilter,
+      currentDir,
+      page,
+      pageSize,
+    });
+  }, [currentDir, kindFilter, onNavStateChange, page, pageSize]);
+
+  useEffect(() => {
+    if (!fileScope) return;
+    const preferred =
+      fileScope.preferredFileName && scopedFileNames.has(fileScope.preferredFileName)
+        ? fileScope.preferredFileName
+        : visibleDesignFiles[0]?.name ?? null;
+    setCurrentDir('');
+    setFilterMenuOpen(false);
+    setSelected(new Set());
+    setRenaming(null);
+    setPage(0);
+    setPreview(preferred);
+  }, [fileScope, fileScopeKey, scopedFileNames, visibleDesignFiles]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedFiles.length / effectivePageSize));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageFiles = useMemo(
+    () =>
+      sortedFiles.slice(
+        safePage * effectivePageSize,
+        (safePage + 1) * effectivePageSize,
+      ),
+    [effectivePageSize, safePage, sortedFiles],
+  );
+  const modifiedGroups = useMemo(() => {
+    const groups: Record<ModifiedSection, ProjectFile[]> = {
+      today: [],
+      yesterday: [],
+      previous7Days: [],
+      previous30Days: [],
+      older: [],
+    };
+    const thresholds = modifiedSectionThresholds(dayBoundary);
+    for (const f of pageFiles) {
+      groups[modifiedSectionFor(f.mtime, thresholds)].push(f);
+    }
+    return groups;
+  }, [dayBoundary, pageFiles]);
+  const visibleModifiedSections = MODIFIED_SECTION_ORDER.filter(
+    (section) => modifiedGroups[section].length > 0,
+  );
+  const rangeStart = safePage * effectivePageSize + 1;
+  const rangeEnd = Math.min((safePage + 1) * effectivePageSize, sortedFiles.length);
+  const allPageSelected = pageFiles.length > 0 && pageFiles.every((f) => selected.has(f.name));
+  const somePageSelected = !allPageSelected && pageFiles.some((f) => selected.has(f.name));
+  const hasMultiplePages = totalPages > 1;
+  const showListControls = sortedFiles.length > 15 || selected.size > 0;
+
+  useEffect(() => {
+    setPage(0);
+  }, [pageSize]);
+
+  useEffect(() => {
+    if (!viewStateHasMounted.current) {
+      viewStateHasMounted.current = true;
+      return;
+    }
+    if (fileScope) return;
+    writeViewState(projectId, {
+      sortKey,
+      sortDir,
+      pageSize,
+      kindFilter: Array.from(kindFilter),
+    });
+  }, [fileScope, projectId, sortKey, sortDir, pageSize, kindFilter]);
+
+  // Reset to the first page when the filter changes — the previous page
+  // index may no longer exist (or may now sit past the new totalPages).
+  useEffect(() => {
+    setPage(0);
+  }, [kindFilter]);
+
+  // Drop any selected files that fall outside the active filter. Without
+  // this, bulk delete / download would silently operate on rows the user
+  // can no longer see — particularly dangerous for destructive deletes.
+  // We keep the empty-filter branch a no-op so clearing the filter
+  // doesn't disturb existing selections.
+  useEffect(() => {
+    if (kindFilter.size === 0) return;
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const visible = new Set(filteredFiles.map((f) => f.name));
+      const next = new Set<string>();
+      let changed = false;
+      for (const name of prev) {
+        if (visible.has(name)) next.add(name);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [filteredFiles, kindFilter]);
+
+  // Reset page, selection, and renaming state when the user navigates into or out of
   // a directory.
   useEffect(() => {
+    setPage(0);
     setSelected(new Set());
     setRenaming(null);
   }, [currentDir]);
@@ -303,7 +562,10 @@ export function DesignFilesPanel({
     setCurrentDir('');
   }, [files, folders, currentDir]);
 
-  const pluginFolders = useMemo(() => getPluginFolderCandidates(files), [files]);
+  const pluginFolders = useMemo(
+    () => fileScope ? [] : getPluginFolderCandidates(files),
+    [fileScope, files],
+  );
 
   // Prune selections that no longer exist in the current file list
   // (e.g. after a refresh or delete within the same project).
@@ -312,7 +574,7 @@ export function DesignFilesPanel({
   useEffect(() => {
     setSelected((prev) => {
       if (prev.size === 0) return prev;
-      const names = new Set(files.map((f) => f.name));
+      const names = new Set(visibleDesignFiles.map((f) => f.name));
       const next = new Set(prev);
       let changed = false;
       for (const n of next) {
@@ -323,11 +585,11 @@ export function DesignFilesPanel({
       }
       return changed ? next : prev;
     });
-  }, [files]);
+  }, [visibleDesignFiles]);
 
   const previewFile = useMemo(
-    () => files.find((f) => f.name === preview) ?? null,
-    [preview, files],
+    () => visibleDesignFiles.find((f) => f.name === preview) ?? null,
+    [preview, visibleDesignFiles],
   );
 
   const initialPreviewFile = useMemo(
@@ -347,9 +609,42 @@ export function DesignFilesPanel({
 
   useEffect(() => {
     if (!preview) return;
-    if (files.some((f) => f.name === preview)) return;
+    if (visibleDesignFiles.some((f) => f.name === preview)) return;
     setPreview(null);
-  }, [files, preview]);
+  }, [visibleDesignFiles, preview]);
+
+  useEffect(() => {
+    uiSurfacesPromiseRef.current = null;
+    requestedRenderedPreviewRef.current = new Set();
+    setRenderedPreviewStates({});
+  }, [files]);
+
+  useEffect(() => {
+    if (!previewFile || previewFile.kind !== 'html') return;
+    if (requestedRenderedPreviewRef.current.has(previewFile.name)) return;
+    requestedRenderedPreviewRef.current.add(previewFile.name);
+    setRenderedPreviewStates((current) => ({
+      ...current,
+      [previewFile.name]: { status: 'loading' },
+    }));
+    let cancelled = false;
+    void renderedPreviewUrlForFile({
+      projectId,
+      file: previewFile,
+      loadUiSurfaces,
+    }).then((url) => {
+      if (cancelled) return;
+      setRenderedPreviewStates((current) => ({
+        ...current,
+        [previewFile.name]: url
+          ? { status: 'ready', url }
+          : { status: 'unavailable' },
+      }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [previewFile, projectId]);
 
   useEffect(() => {
     if (!menuPos) return;
@@ -365,6 +660,64 @@ export function DesignFilesPanel({
     };
   }, [menuPos]);
 
+  useEffect(() => {
+    if (!filterMenuOpen) return;
+    const onMouseDown = (event: MouseEvent) => {
+      const root = filterMenuRef.current;
+      if (root && event.target instanceof Node && !root.contains(event.target)) {
+        setFilterMenuOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFilterMenuOpen(false);
+    };
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [filterMenuOpen]);
+
+  useEffect(() => {
+    const now = Date.now();
+    const startOfTomorrow = new Date(now);
+    startOfTomorrow.setHours(24, 0, 0, 0);
+    const timer = window.setTimeout(
+      () => setDayBoundary(Date.now()),
+      Math.max(1, startOfTomorrow.getTime() - now),
+    );
+    return () => window.clearTimeout(timer);
+  }, [dayBoundary]);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await onRefreshFiles();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  function toggleSort(key: SortKey) {
+    return () => {
+      if (sortKey === key) {
+        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      } else {
+        setSortKey(key);
+        setSortDir('asc');
+      }
+    };
+  }
+
+  function toggleKindFilter(kind: ProjectFileKind): void {
+    setKindFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(kind)) next.delete(kind);
+      else next.add(kind);
+      return next;
+    });
+  }
 
   function toggleSelect(name: string) {
     setSelected((prev) => {
@@ -376,6 +729,22 @@ export function DesignFilesPanel({
       }
       return next;
     });
+  }
+
+  function toggleSelectPage() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) {
+        for (const f of pageFiles) next.delete(f.name);
+      } else {
+        for (const f of pageFiles) next.add(f.name);
+      }
+      return next;
+    });
+  }
+
+  function selectAllFiles() {
+    setSelected(new Set(sortedFiles.map((f) => f.name)));
   }
 
   function clearSelection() {
@@ -460,48 +829,106 @@ export function DesignFilesPanel({
     }
   }
 
-  function renderFileRow(f: ProjectFile, category: FileCategory) {
+  function loadUiSurfaces(): Promise<ProjectUiSurface[]> {
+    uiSurfacesPromiseRef.current ??= fetchProjectUiSurfaces(projectId);
+    return uiSurfacesPromiseRef.current;
+  }
+
+  async function handleOpenPreviewFile(file: ProjectFile) {
+    const renderedState = renderedPreviewStates[file.name];
+    if (renderedState?.status === 'ready') {
+      openRenderedPreviewInWorkspace(file, renderedState.url);
+      return;
+    }
+    const renderedUrl = await renderedPreviewUrlForFile({
+      projectId,
+      file,
+      loadUiSurfaces,
+    });
+    if (renderedUrl) {
+      openRenderedPreviewInWorkspace(file, renderedUrl);
+      return;
+    }
+    onOpenFile(file.name);
+  }
+
+  function openRenderedPreviewInWorkspace(file: ProjectFile, url: string) {
+    if (!onOpenRenderedPreview) {
+      onOpenFile(file.name);
+      return;
+    }
+    onOpenRenderedPreview({
+      tabId: `rendered-preview:${file.name}`,
+      title: file.name,
+      url,
+      sourceFile: file.name,
+    });
+  }
+
+  function toggleModifiedSection(section: ModifiedSection) {
+    setCollapsedModifiedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(section)) {
+        next.delete(section);
+      } else {
+        next.add(section);
+      }
+      return next;
+    });
+  }
+
+  function renderFileRow(f: ProjectFile) {
     const active = preview === f.name;
     const isSelected = selected.has(f.name);
     const isHovered = hover === f.name;
     const renameState = renaming?.name === f.name ? renaming : null;
     return (
-      <div
+      <tr
         key={f.name}
         data-testid={`design-file-row-${f.name}`}
-        className={`df-row df-file-row ${active ? 'active' : ''} ${isSelected ? 'selected' : ''}`}
+        className={`df-file-row ${active ? 'active' : ''} ${isSelected ? 'selected' : ''}`}
         onMouseEnter={() => setHover(f.name)}
         onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
       >
-        <span
-          className="df-row-check"
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleSelect(f.name);
-          }}
-          role="checkbox"
-          aria-checked={isSelected}
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
+        <td className="df-cell-check">
+          <span
+            className="df-row-check"
+            onClick={(e) => {
               e.stopPropagation();
               toggleSelect(f.name);
-            }
-          }}
-        >
-          {isSelected ? '☑' : '☐'}
-        </span>
-        <span
-          className="df-row-icon df-row-openable"
-          data-kind={category}
-          aria-hidden
+            }}
+            role="checkbox"
+            aria-checked={isSelected}
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleSelect(f.name);
+              }
+            }}
+          >
+            {isSelected ? '\u2611' : '\u2610'}
+          </span>
+        </td>
+        <td
+          className="df-cell-icon df-cell-openable"
           onClick={() => setPreview(f.name)}
           onDoubleClick={() => onOpenFile(f.name)}
         >
-          {categoryGlyph(category)}
-        </span>
-        <div className="df-row-name-wrap">
+          <span className="df-row-icon" data-kind={f.kind} aria-hidden>
+            {kindGlyph(f.kind)}
+          </span>
+        </td>
+        <td
+          className="df-cell-name df-cell-openable"
+          onClick={() => {
+            if (!renameState) setPreview(f.name);
+          }}
+          onDoubleClick={() => {
+            if (!renameState) onOpenFile(f.name);
+          }}
+        >
           {renameState ? (
             <input
               autoFocus
@@ -532,7 +959,6 @@ export function DesignFilesPanel({
               type="button"
               className="df-row-name-btn"
               onClick={() => setPreview(f.name)}
-              onDoubleClick={() => onOpenFile(f.name)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
@@ -555,65 +981,132 @@ export function DesignFilesPanel({
                 >
                   {currentDir === '' ? f.name : f.name.slice(currentDir.length + 1)}
                 </span>
-                <span className="df-row-sub">{categoryLabel(category, t)}</span>
+                <span className="df-row-sub">{humanBytes(f.size)}</span>
               </span>
             </button>
           )}
-        </div>
-        <span
-          className="df-row-time df-row-openable"
+        </td>
+        <td
+          className="df-cell-kind df-cell-openable"
+          onClick={() => setPreview(f.name)}
+          onDoubleClick={() => onOpenFile(f.name)}
+        >
+          <span className="df-kind-label">{kindLabel(f.kind, t)}</span>
+        </td>
+        <td
+          className="df-cell-time df-cell-openable"
           onClick={() => setPreview(f.name)}
           onDoubleClick={() => onOpenFile(f.name)}
         >
           {relativeTime(f.mtime, t)}
-        </span>
-        <span
-          data-testid={`design-file-menu-${f.name}`}
-          className="df-row-menu"
-          style={isHovered || active ? { opacity: 1 } : undefined}
-          role="button"
-          tabIndex={0}
-          aria-label={t('designFiles.rowMenu')}
-          onClick={(e) => {
-            e.stopPropagation();
-            openMenuFor(f.name, e.target as HTMLElement);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
+        </td>
+        <td className="df-cell-menu">
+          <span
+            data-testid={`design-file-menu-${f.name}`}
+            className="df-row-menu"
+            style={isHovered || active ? { opacity: 1 } : undefined}
+            role="button"
+            tabIndex={0}
+            aria-label={t('designFiles.rowMenu')}
+            onClick={(e) => {
               e.stopPropagation();
-              openMenuFor(f.name, e.currentTarget as HTMLElement);
-            }
-          }}
-        >
-          ⋯
-        </span>
-      </div>
+              openMenuFor(f.name, e.target as HTMLElement);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                openMenuFor(f.name, e.currentTarget as HTMLElement);
+              }
+            }}
+          >
+            ...
+          </span>
+        </td>
+      </tr>
     );
   }
 
   function renderDirRow(dirName: string) {
     const fullPath = currentDir === '' ? dirName : `${currentDir}/${dirName}`;
     const prefix = `${fullPath}/`;
-    const count = files.filter((f) => f.name.startsWith(prefix)).length;
+    const count = visibleDesignFiles.filter((f) => f.name.startsWith(prefix)).length;
     return (
-      <div key={`dir:${fullPath}`} className="df-row df-dir-row" onClick={() => setCurrentDir(fullPath)}>
-        <span className="df-row-check" aria-hidden />
-        <span className="df-row-icon" data-kind="folder" aria-hidden>
-          <Icon name="folder" size={14} />
-        </span>
-        <div className="df-row-name-wrap">
+      <tr key={`dir:${fullPath}`} className="df-file-row df-dir-row">
+        <td className="df-cell-check" />
+        <td className="df-cell-icon df-cell-openable" onClick={() => setCurrentDir(fullPath)}>
+          <span className="df-row-icon" data-kind="folder" aria-hidden>
+            <Icon name="folder" size={14} />
+          </span>
+        </td>
+        <td className="df-cell-name df-cell-openable" onClick={() => setCurrentDir(fullPath)}>
           <button type="button" className="df-row-name-btn" onClick={() => setCurrentDir(fullPath)}>
             <span className="df-row-name-wrap">
               <span className="df-row-name" title={dirName}>{dirName}</span>
               <span className="df-row-sub">{t('designFiles.folderCount', { n: count })}</span>
             </span>
           </button>
-        </div>
-        <span className="df-row-time" />
-        <span className="df-row-menu df-row-menu-placeholder" aria-hidden />
-      </div>
+        </td>
+        <td className="df-cell-kind df-cell-openable" onClick={() => setCurrentDir(fullPath)}>
+          <span className="df-kind-label">{t('designFiles.kindFolder')}</span>
+        </td>
+        <td className="df-cell-time df-cell-openable" onClick={() => setCurrentDir(fullPath)} />
+        <td className="df-cell-menu" />
+      </tr>
     );
+  }
+
+  function renderModifiedSections() {
+    const dirRows = dirsAtCurrentDir.map((d) => renderDirRow(d));
+    const sectionRows = visibleModifiedSections.flatMap((section) => {
+      const sectionFiles = modifiedGroups[section];
+      const collapsed = collapsedModifiedSections.has(section);
+      const label = t(MODIFIED_SECTION_LABEL_KEY[section]);
+      return [
+        <tr className="df-section-row" key={`${section}-label`}>
+          <td colSpan={6}>
+            <button
+              type="button"
+              className="df-section-toggle"
+              aria-expanded={!collapsed}
+              aria-label={`${collapsed ? t('designFiles.expandGroup') : t('designFiles.collapseGroup')} ${label}`}
+              onClick={() => toggleModifiedSection(section)}
+            >
+              <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={13} />
+              <span>{label}</span>
+              <span className="df-section-count">{sectionFiles.length}</span>
+            </button>
+          </td>
+        </tr>,
+        ...(collapsed ? [] : sectionFiles.map(renderFileRow)),
+      ];
+    });
+    return [...dirRows, ...sectionRows];
+  }
+
+  function renderKindSections() {
+    const dirRows = dirsAtCurrentDir.map((d) => renderDirRow(d));
+    const grouped = new Map<ProjectFileKind, ProjectFile[]>();
+    for (const file of pageFiles) {
+      const next = grouped.get(file.kind) ?? [];
+      next.push(file);
+      grouped.set(file.kind, next);
+    }
+
+    const kindRows = [...grouped.entries()]
+      .sort(([a], [b]) => kindSortPriority(a) - kindSortPriority(b))
+      .flatMap(([kind, kindFiles]) => [
+        <tr className="df-section-row" key={`${kind}-label`}>
+          <td colSpan={6}>
+            <div className="df-section-label">
+              <span>{kindLabel(kind, t)}</span>
+              <span className="df-section-count">{kindFiles.length}</span>
+            </div>
+          </td>
+        </tr>,
+        ...kindFiles.map(renderFileRow),
+      ]);
+    return [...dirRows, ...kindRows];
   }
 
   async function handleBatchDownload() {
@@ -695,65 +1188,189 @@ export function DesignFilesPanel({
     }
   }
 
-  const fileActions = (
-    <div className="df-actions">
-      <button type="button" onClick={onNewSketch} title={t('designFiles.newSketch')}>
-        <Icon name="pencil" size={13} />
-        <span>{t('designFiles.newSketch')}</span>
-      </button>
-      <button type="button" onClick={onPaste} title={t('designFiles.paste.title')}>
-        <Icon name="copy" size={13} />
-        <span>{t('designFiles.paste.label')}</span>
-      </button>
-      <button
-        type="button"
-        data-testid="design-files-upload-trigger"
-        onClick={onUpload}
-        title={t('designFiles.upload.title')}
-      >
-        <Icon name="upload" size={13} />
-        <span>{t('designFiles.upload.label')}</span>
-      </button>
-    </div>
+  const refreshControl = (
+    <button
+      type="button"
+      className="icon-only df-refresh-control"
+      onClick={() => void handleRefresh()}
+      disabled={refreshing}
+      title={t('designFiles.refresh')}
+      aria-label={t('designFiles.refresh')}
+    >
+      <Icon name={refreshing ? 'spinner' : 'reload'} size={14} />
+    </button>
   );
 
-  const breadcrumbs = (
-    <nav className="df-breadcrumbs" aria-label={t('designFiles.crumbs')}>
-      {currentDir === '' ? (
-        <span className="df-breadcrumb-current">
-          {rootDirName ?? t('designFiles.crumbs')}
-        </span>
-      ) : (
+  const fileActions =
+    selected.size > 0 ? (
+      <div className="df-actions">
         <button
           type="button"
-          className="df-breadcrumb-btn"
-          onClick={() => setCurrentDir('')}
+          onClick={() => {
+            trackFileManagerClick(analytics.track, {
+              page_name: 'file_manager',
+              area: 'file_manager',
+              element: 'download_as_zip',
+            });
+            void handleBatchDownload();
+          }}
+          title={t('designFiles.downloadSelected', { n: selected.size })}
         >
-          {rootDirName ?? t('designFiles.crumbs')}
+          <Icon name="download" size={13} />
+          <span>{t('designFiles.downloadSelected', { n: selected.size })}</span>
         </button>
-      )}
-      {currentDir.split('/').filter(Boolean).map((segment, idx, parts) => {
-        const path = parts.slice(0, idx + 1).join('/');
-        const isLast = idx === parts.length - 1;
-        return (
-          <span key={path} className="df-breadcrumb-segment">
-            <span className="df-breadcrumb-sep" aria-hidden>/</span>
-            {isLast ? (
-              <span className="df-breadcrumb-current">{segment}</span>
-            ) : (
-              <button
-                type="button"
-                className="df-breadcrumb-btn"
-                onClick={() => setCurrentDir(path)}
-              >
-                {segment}
-              </button>
-            )}
+        <button
+          type="button"
+          className="danger"
+          data-testid="design-files-batch-delete"
+          disabled={deleting}
+          onClick={() => void handleBatchDelete()}
+          title={t('designFiles.deleteSelected', { n: selected.size })}
+        >
+          <span>{t('designFiles.deleteSelected', { n: selected.size })}</span>
+        </button>
+      </div>
+    ) : (
+      <div className="df-actions">
+        <button type="button" onClick={onNewSketch} title={t('designFiles.newSketch')}>
+          <Icon name="pencil" size={13} />
+          <span>{t('designFiles.newSketch')}</span>
+        </button>
+        <button type="button" onClick={onPaste} title={t('designFiles.paste.title')}>
+          <Icon name="copy" size={13} />
+          <span>{t('designFiles.paste.label')}</span>
+        </button>
+        <button
+          type="button"
+          data-testid="design-files-upload-trigger"
+          onClick={onUpload}
+          title={t('designFiles.upload.title')}
+        >
+          <Icon name="upload" size={13} />
+          <span>{t('designFiles.upload.label')}</span>
+        </button>
+      </div>
+    );
+
+  const groupToggle =
+    visibleDesignFiles.length > 0 ? (
+      <div
+        className="df-group-toggle"
+        role="group"
+        aria-label={t('designFiles.groupBy')}
+      >
+        <span>{t('designFiles.groupBy')}</span>
+        <button
+          type="button"
+          className={groupMode === 'kind' ? 'active' : ''}
+          aria-pressed={groupMode === 'kind'}
+          onClick={() => setGroupMode('kind')}
+        >
+          {t('designFiles.groupByKind')}
+        </button>
+        <button
+          type="button"
+          className={groupMode === 'modified' ? 'active' : ''}
+          aria-pressed={groupMode === 'modified'}
+          onClick={() => setGroupMode('modified')}
+        >
+          {t('designFiles.groupByModified')}
+        </button>
+      </div>
+    ) : (
+      <span className="df-controls-spacer" aria-hidden="true" />
+    );
+
+  const kindFilterControl =
+    !fileScope && visibleDesignFiles.length > 0 && availableKinds.length > 1 ? (
+      <div className="df-kind-filter" ref={filterMenuRef}>
+        <button
+          type="button"
+          className={`df-kind-filter-trigger${kindFilter.size > 0 ? ' active' : ''}`}
+          aria-haspopup="dialog"
+          aria-expanded={filterMenuOpen}
+          aria-label={t('designFiles.filterBy')}
+          onClick={() => setFilterMenuOpen((open) => !open)}
+        >
+          <Icon name="sliders" size={13} />
+          <span className="df-kind-filter-trigger-label">
+            {kindFilter.size === 0
+              ? t('designFiles.filterBy')
+              : kindFilter.size === 1
+                ? kindLabel(Array.from(kindFilter)[0]!, t)
+                : t('designFiles.filterCount', { n: kindFilter.size })}
           </span>
-        );
-      })}
-    </nav>
-  );
+          {kindFilter.size > 0 ? (
+            <span className="df-kind-filter-count" aria-hidden>
+              {kindFilter.size}
+            </span>
+          ) : null}
+        </button>
+        {filterMenuOpen ? (
+          <div
+            className="df-kind-filter-popover"
+            role="dialog"
+            aria-label={t('designFiles.filterBy')}
+          >
+            <div className="df-kind-filter-header">
+              <span>{t('designFiles.filterBy')}</span>
+              {kindFilter.size > 0 ? (
+                <button
+                  type="button"
+                  className="df-kind-filter-clear"
+                  onClick={() => setKindFilter(new Set())}
+                >
+                  {t('designFiles.filterClear')}
+                </button>
+              ) : null}
+            </div>
+            <ul className="df-kind-filter-list">
+              {availableKinds.map((kind) => {
+                const checked = kindFilter.has(kind);
+                const count = kindCounts.get(kind) ?? 0;
+                return (
+                  <li key={kind}>
+                    <label className="df-kind-filter-item">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleKindFilter(kind)}
+                      />
+                      <span className="df-kind-filter-glyph" aria-hidden>
+                        {kindGlyph(kind)}
+                      </span>
+                      <span className="df-kind-filter-label">
+                        {kindLabel(kind, t)}
+                      </span>
+                      <span className="df-kind-filter-itemcount">
+                        {count}
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+    ) : null;
+
+  const fileScopeControl = fileScope ? (
+    <div className="df-file-scope" role="status" aria-live="polite">
+      <span className="df-file-scope-label">
+        Showing files for <strong>{fileScope.label}</strong>
+      </span>
+      {onClearFileScope ? (
+        <button
+          type="button"
+          className="df-file-scope-clear"
+          onClick={onClearFileScope}
+        >
+          Clear
+        </button>
+      ) : null}
+    </div>
+  ) : null;
 
   const visibleUploadError = uploadError ?? dropReadError;
   const hasSelection = selected.size > 0;
@@ -769,10 +1386,6 @@ export function DesignFilesPanel({
         </div>
       ) : null}
       <div className="df-main">
-        <div className="df-topbar">
-          <div className="df-topbar-left">{breadcrumbs}</div>
-          <div className="df-topbar-right">{fileActions}</div>
-        </div>
         <div className="df-body">
           {visibleUploadError && !preview ? (
             <div className="df-upload-banner" data-testid="upload-error-banner">
@@ -791,43 +1404,48 @@ export function DesignFilesPanel({
               ) : null}
             </div>
           ) : null}
-          {hasSelection ? (
-            <div className="df-batch-bar" data-testid="design-files-batch-bar">
-              <span className="df-batch-count">
-                {t('designFiles.downloadSelected', { n: selected.size })}
-              </span>
-              <div className="df-batch-actions">
-                <button
-                  type="button"
-                  onClick={() => {
-                    trackFileManagerClick(analytics.track, {
-                      page_name: 'file_manager',
-                      area: 'file_manager',
-                      element: 'download_as_zip',
-                    });
-                    void handleBatchDownload();
-                  }}
-                  title={t('designFiles.downloadSelected', { n: selected.size })}
-                >
-                  <Icon name="download" size={13} />
-                  <span>{t('designFiles.download')}</span>
-                </button>
-                <button
-                  type="button"
-                  className="danger"
-                  data-testid="design-files-batch-delete"
-                  disabled={deleting}
-                  onClick={() => void handleBatchDelete()}
-                  title={t('designFiles.deleteSelected', { n: selected.size })}
-                >
-                  <span>{t('designFiles.delete')}</span>
-                </button>
-                <button type="button" className="df-batch-clear" onClick={clearSelection}>
-                  {t('designFiles.clearSelection')}
-                </button>
-              </div>
-            </div>
-          ) : null}
+          <div className="df-controls-row">
+            {refreshControl}
+            {groupToggle}
+            {kindFilterControl}
+            {fileScopeControl}
+            {fileActions}
+          </div>
+          <nav className="df-breadcrumbs" aria-label={t('designFiles.crumbs')}>
+            {currentDir === '' ? (
+              <span className="df-breadcrumb-current">{rootDirName ?? t('designFiles.crumbs')}</span>
+            ) : (
+              <>
+              <button
+                type="button"
+                className="df-breadcrumb-btn"
+                onClick={() => setCurrentDir('')}
+              >
+                {rootDirName ?? t('designFiles.crumbs')}
+              </button>
+              {currentDir.split('/').map((segment, idx, parts) => {
+                const path = parts.slice(0, idx + 1).join('/');
+                const isLast = idx === parts.length - 1;
+                return (
+                  <span key={path} className="df-breadcrumb-segment">
+                    <span className="df-breadcrumb-sep" aria-hidden>/</span>
+                    {isLast ? (
+                      <span className="df-breadcrumb-current">{segment}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="df-breadcrumb-btn"
+                        onClick={() => setCurrentDir(path)}
+                      >
+                        {segment}
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+              </>
+            )}
+          </nav>
           {files.length === 0 && liveArtifacts.length === 0 && (folders?.length ?? 0) === 0 ? (
             <div className="df-empty" data-testid="design-files-empty">
               <div className="df-empty-pill">
@@ -959,30 +1577,148 @@ export function DesignFilesPanel({
                   )})}
                 </div>
               ) : null}
-              {dirsAtCurrentDir.length > 0 ? (
-                <div className="df-section" key="folders">
-                  <div className="df-section-label">
-                    {t('designFiles.sectionFolders')}
-                    <span className="df-section-count">{dirsAtCurrentDir.length}</span>
-                  </div>
-                  {dirsAtCurrentDir.map((d) => renderDirRow(d))}
-                </div>
+              {(sortedFiles.length > 0 || dirsAtCurrentDir.length > 0) ? (
+                <>
+                  {showListControls ? (
+                    <div className="df-pagination df-pagination-start">
+                      <label>
+                        {t('designFiles.perPage')}:
+                        <select
+                          data-testid="df-page-size-select"
+                          value={pageSize === 'all' ? 'all' : pageSize}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setPageSize(val === 'all' ? 'all' : Number(val));
+                          }}
+                        >
+                          <option value={15}>15</option>
+                          <option value={30}>30</option>
+                          <option value={45}>45</option>
+                          <option value={60}>60</option>
+                          <option value="all">{t('designFiles.all')}</option>
+                        </select>
+                      </label>
+                      {!hasMultiplePages ? (
+                        <span className="df-page-info">
+                          {t('designFiles.pageInfo', { start: rangeStart, end: rangeEnd, total: sortedFiles.length })}
+                        </span>
+                      ) : null}
+                      <div className="df-select-bar">
+                        {selected.size < sortedFiles.length ? (
+                          <button type="button" className="df-select-all" onClick={selectAllFiles}>
+                            {t('designFiles.selectAll', { n: sortedFiles.length })}
+                          </button>
+                        ) : null}
+                        {selected.size > 0 ? (
+                          <button type="button" className="df-select-all" onClick={clearSelection}>
+                            {t('designFiles.clearSelection')}
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                  <table className="df-table">
+                    <thead>
+                      <tr>
+                        <th className="df-th-check">
+                          <span
+                            className="df-row-check"
+                            onClick={toggleSelectPage}
+                            role="checkbox"
+                            aria-checked={allPageSelected}
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                toggleSelectPage();
+                              }
+                            }}
+                            ref={(el) => {
+                              if (el) {
+                                el.ariaChecked = allPageSelected ? 'true' : somePageSelected ? 'mixed' : 'false';
+                              }
+                            }}
+                          >
+                            {allPageSelected ? '\u2611' : somePageSelected ? '\u25A3' : '\u2610'}
+                          </span>
+                        </th>
+                        <th className="df-th-icon" />
+                        <th
+                          className="df-th-name df-th-sortable"
+                          aria-sort={sortKey === 'name' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                        >
+                          <button type="button" className="df-th-btn" onClick={toggleSort('name')}>
+                            {t('designFiles.colName')}
+                            {sortKey === 'name' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' ^' : ' v'}</span> : null}
+                          </button>
+                        </th>
+                        <th
+                          className="df-th-kind df-th-sortable"
+                          aria-sort={sortKey === 'kind' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                        >
+                          <button type="button" className="df-th-btn" onClick={toggleSort('kind')}>
+                            {t('designFiles.colKind')}
+                            {sortKey === 'kind' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' ^' : ' v'}</span> : null}
+                          </button>
+                        </th>
+                        <th
+                          className="df-th-time df-th-sortable"
+                          aria-sort={sortKey === 'mtime' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                        >
+                          <button type="button" className="df-th-btn" onClick={toggleSort('mtime')}>
+                            {t('designFiles.colModified')}
+                            {sortKey === 'mtime' ? <span className="df-sort-arrow">{sortDir === 'asc' ? ' ^' : ' v'}</span> : null}
+                          </button>
+                        </th>
+                        <th className="df-th-menu" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupMode === 'modified'
+                        ? renderModifiedSections()
+                        : renderKindSections()}
+                    </tbody>
+                  </table>
+                  {hasMultiplePages ? (
+                    <div className="df-pagination df-pagination-center">
+                      <button
+                        type="button"
+                        className="df-page-btn"
+                        disabled={safePage <= 0}
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
+                      >
+                        {t('designFiles.prev')}
+                      </button>
+                      <label>
+                        {t('designFiles.jumpToPage')}:
+                        <select
+                          value={safePage}
+                          onChange={(e) => setPage(Number(e.target.value))}
+                        >
+                          {Array.from({ length: totalPages }, (_, i) => (
+                            <option key={i} value={i}>
+                              {i + 1}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        className="df-page-btn"
+                        disabled={safePage >= totalPages - 1}
+                        onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                      >
+                        {t('designFiles.next')}
+                      </button>
+                      <span className="df-page-info">
+                        {t('designFiles.pageInfo', { start: rangeStart, end: rangeEnd, total: sortedFiles.length })}
+                      </span>
+                    </div>
+                  ) : null}
+                </>
               ) : null}
-              {sections.map(([category, sectionFiles]) => (
-                <div className="df-section" key={`cat:${category}`}>
-                  <div className="df-section-label">
-                    {sectionLabel(category, t)}
-                    <span className="df-section-count">{sectionFiles.length}</span>
-                  </div>
-                  {sectionFiles.map((f) => renderFileRow(f, category))}
-                </div>
-              ))}
             </>
           )}
-          <div className="df-useful-info">
-            <span className="df-useful-info-label">{t('designFiles.usefulInfoLabel')}</span>
-            <span className="df-useful-info-tip">{t('designFiles.usefulInfoTip')}</span>
-          </div>
           <div
             className={`df-drop ${draggingFiles ? 'dragging' : ''}`}
             onDragEnter={(ev) => {
@@ -1021,7 +1757,8 @@ export function DesignFilesPanel({
           key={previewFile.name}
           projectId={projectId}
           file={previewFile}
-          onOpen={() => onOpenFile(previewFile.name)}
+          renderedPreviewState={renderedPreviewStates[previewFile.name] ?? null}
+          onOpen={() => void handleOpenPreviewFile(previewFile)}
           onClose={() => setPreview(null)}
         />
       ) : null}
@@ -1088,14 +1825,56 @@ export function DesignFilesPanel({
   );
 }
 
+async function renderedPreviewUrlForFile({
+  projectId,
+  file,
+  loadUiSurfaces,
+}: {
+  projectId: string;
+  file: ProjectFile;
+  loadUiSurfaces: () => Promise<ProjectUiSurface[]>;
+}): Promise<string | null> {
+  const surfaces = await loadUiSurfaces();
+  const surface = surfaces.find((candidate) => candidate.previewFile === file.name);
+  if (!surface || surface.kind === 'static-html') return null;
+  if (surface.previewUrl) return surface.previewUrl;
+  if (surface.previewRuntimeRoot === null || surface.previewRuntimeRoot === undefined || !surface.previewPath) {
+    return null;
+  }
+  const response = await startProjectUiPreview(projectId, {
+    surfaceId: surface.id,
+    entryFile: surface.entryFile,
+  });
+  return previewRuntimeUrlForSurface(surface, response);
+}
+
+function previewRuntimeUrlForSurface(
+  surface: ProjectUiSurface,
+  response: ProjectUiPreviewRuntimeResponse | null,
+): string | null {
+  if (response?.status !== 'ready') return null;
+  if (response.url && (response.route === surface.previewPath || response.route === surface.route)) {
+    return response.url;
+  }
+  if (!response.baseUrl) return null;
+  return joinPreviewRuntimeUrl(response.baseUrl, surface.previewPath ?? surface.route ?? '/');
+}
+
+function joinPreviewRuntimeUrl(baseUrl: string, route: string | null): string {
+  const pathName = route?.startsWith('/') ? route : `/${route ?? ''}`;
+  return `${baseUrl.replace(/\/+$/u, '')}${pathName.replace(/\/+/g, '/')}`;
+}
+
 function DfPreview({
   projectId,
   file,
+  renderedPreviewState,
   onOpen,
   onClose,
 }: {
   projectId: string;
   file: ProjectFile;
+  renderedPreviewState?: RenderedPreviewState | null;
   onOpen: () => void;
   onClose: () => void;
 }) {
@@ -1121,7 +1900,17 @@ function DfPreview({
         ) : file.kind === 'image' || file.kind === 'sketch' ? (
           <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />
         ) : file.kind === 'html' ? (
-          <HtmlPreviewThumbnail projectId={projectId} file={file} />
+          renderedPreviewState?.status === 'ready' ? (
+            <iframe
+              title={file.name}
+              src={renderedPreviewState.url}
+              sandbox="allow-scripts allow-forms allow-popups allow-same-origin"
+            />
+          ) : renderedPreviewState?.status === 'unavailable' ? (
+            <HtmlPreviewThumbnail projectId={projectId} file={file} />
+          ) : (
+            <RenderedPreviewPlaceholder />
+          )
         ) : file.kind === 'video' ? (
           <video
             src={`${url}?v=${Math.round(file.mtime)}`}
@@ -1143,7 +1932,7 @@ function DfPreview({
               fontSize: 38,
             }}
           >
-            {categoryGlyph(fileCategory(file))}
+            {kindGlyph(file.kind)}
           </div>
         )}
         {thumbCanOpen ? (
@@ -1162,12 +1951,11 @@ function DfPreview({
           <span>{t('designFiles.previewOpen')}</span>
         </button>
         <div className="df-preview-name">{file.name}</div>
-        <div className="df-preview-kind">{categoryLabel(fileCategory(file), t)}</div>
+        <div className="df-preview-kind">{kindLabel(file.kind, t)}</div>
         <div className="df-preview-stats">
-          {t('designFiles.modifiedExt', {
+          {t('designFiles.modified', {
             time: relativeTime(file.mtime, t),
             size: humanBytes(file.size),
-            ext: fileExtensionLabel(file.name),
           })}
         </div>
         <a className="df-preview-download" href={url} download={file.name}>
@@ -1176,6 +1964,15 @@ function DfPreview({
         </a>
       </div>
     </aside>
+  );
+}
+
+function RenderedPreviewPlaceholder() {
+  return (
+    <div className="df-rendered-preview-placeholder">
+      <Icon name="file-code" size={26} />
+      <span>Starting preview</span>
+    </div>
   );
 }
 
@@ -1219,45 +2016,52 @@ function baseDirForFile(name: string): string {
   return index >= 0 ? name.slice(0, index + 1) : '';
 }
 
-function fileExtensionLabel(name: string): string {
-  const dot = name.lastIndexOf('.');
-  if (dot < 0 || dot === name.length - 1) return '';
-  return name.slice(dot + 1).toUpperCase();
+function kindSortPriority(kind: ProjectFileKind): number {
+  if (kind === 'html') return 0;
+  if (kind === 'text') return 1;
+  if (kind === 'code') return 2;
+  if (kind === 'sketch') return 3;
+  if (kind === 'image') return 4;
+  if (kind === 'document') return 5;
+  if (kind === 'pdf') return 6;
+  if (kind === 'presentation') return 7;
+  if (kind === 'spreadsheet') return 8;
+  if (kind === 'video') return 9;
+  if (kind === 'audio') return 10;
+  return 11;
 }
 
-// Plural section header for a category. Reuses existing plural labels where a
-// dedicated one exists; otherwise falls back to the singular type label so
-// each category gets a distinct, readable header.
-function sectionLabel(category: FileCategory, t: TranslateFn): string {
-  switch (category) {
-    case 'html':
-      return t('designFiles.sectionPages');
-    case 'stylesheet':
-      return t('designFiles.sectionStylesheets');
-    case 'code':
-      return t('designFiles.sectionScripts');
-    case 'document':
-      return t('designFiles.sectionDocuments');
-    case 'image':
-      return t('designFiles.sectionImages');
-    case 'sketch':
-      return t('designFiles.sectionSketches');
-    case 'binary':
-      return t('designFiles.sectionOther');
-    default:
-      return categoryLabel(category, t);
-  }
+interface ModifiedSectionThresholds {
+  todayStart: number;
+  yesterdayStart: number;
+  previous7DaysStart: number;
+  previous30DaysStart: number;
 }
 
-// Singular row subtitle for a category.
-function categoryLabel(category: FileCategory, t: TranslateFn): string {
-  if (category === 'stylesheet') return t('designFiles.kindStylesheet');
-  return kindLabel(category, t);
+function modifiedSectionThresholds(now: number): ModifiedSectionThresholds {
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  return {
+    todayStart: startOfToday.getTime(),
+    yesterdayStart: dateDaysBefore(startOfToday, 1).getTime(),
+    previous7DaysStart: dateDaysBefore(startOfToday, 7).getTime(),
+    previous30DaysStart: dateDaysBefore(startOfToday, 30).getTime(),
+  };
 }
 
-function categoryGlyph(category: FileCategory): string {
-  if (category === 'stylesheet') return '#';
-  return kindGlyph(category);
+function modifiedSectionFor(ts: number, thresholds: ModifiedSectionThresholds): ModifiedSection {
+  const { todayStart, yesterdayStart, previous7DaysStart, previous30DaysStart } = thresholds;
+  if (ts >= todayStart) return 'today';
+  if (ts >= yesterdayStart) return 'yesterday';
+  if (ts >= previous7DaysStart) return 'previous7Days';
+  if (ts >= previous30DaysStart) return 'previous30Days';
+  return 'older';
+}
+
+function dateDaysBefore(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() - days);
+  return result;
 }
 
 async function filesFromDataTransfer(dataTransfer: DataTransfer): Promise<File[]> {

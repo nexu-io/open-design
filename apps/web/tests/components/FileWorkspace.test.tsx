@@ -335,6 +335,44 @@ describe('FileWorkspace upload input', () => {
     expect(markup).not.toContain('accept=');
   });
 
+  it('opens a requested surface preview inside a transient workspace tab', async () => {
+    const onTabsStateChange = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('index.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={onTabsStateChange}
+        surfacePreviewOpenRequest={{
+          tabId: 'surface-preview:home',
+          title: 'Home screen',
+          url: 'http://127.0.0.1:43210/',
+          sourceFile: 'index.html',
+          nonce: 1,
+        }}
+      />,
+    );
+
+    const preview = await screen.findByTestId('surface-preview-workspace');
+    const iframe = preview.querySelector<HTMLIFrameElement>('iframe');
+    expect(iframe?.getAttribute('src')).toBe('http://127.0.0.1:43210/');
+    expect(iframe?.getAttribute('title')).toBe('Home screen');
+    expect(screen.getByRole('tab', { name: /Home screen/i })).toBeTruthy();
+    expect(onTabsStateChange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('tab', { name: /Home screen/i }).querySelector('.ws-tab-close')!);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('surface-preview-workspace')).toBeNull();
+    });
+    expect(screen.getByTestId('design-files-tab').getAttribute('aria-selected')).toBe('true');
+  });
+
   it('hides upload failure details during in-panel preview and restores them after closing preview', async () => {
     mockedUploadProjectFiles.mockRejectedValueOnce(new Error('storage offline'));
 
