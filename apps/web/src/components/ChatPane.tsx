@@ -34,7 +34,7 @@ import { TodoCard } from './ToolCard';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, Project, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong, shortTime } from '../utils/chatTime';
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
-import { AssistantMessage } from './AssistantMessage';
+import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
 import { AmrGuidance } from './AmrGuidance';
 import { AMR_RECHARGE_URL, resolveRunFailureUi } from '../runtime/amr-guidance';
 import {
@@ -476,7 +476,7 @@ interface Props {
   // routes that text through onSend (no attachments).
   onSubmitForm?: (text: string) => void;
   // Focus the right-hand Questions tab from the chat banner.
-  onOpenQuestions?: () => void;
+  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
   // "Next step" affordance handlers forwarded to the last assistant message.
@@ -595,6 +595,17 @@ const CHAT_VIRTUAL_INITIAL_TAIL_ROWS = 16;
 const CONVERSATION_ROW_HEIGHT_PX = 34;
 const CONVERSATION_VIRTUALIZE_THRESHOLD = 36;
 const CONVERSATION_OVERSCAN_ROWS = 8;
+
+interface RunErrorDiagnosticInput {
+  message: string;
+  rawMessage?: string | null;
+  errorCode?: string;
+  traceId?: string;
+  projectId?: string | null;
+  conversationId?: string | null;
+  assistantMessageId?: string;
+  agentId?: string;
+}
 
 interface QueuedSendItem {
   id: string;
@@ -841,6 +852,39 @@ export function ChatPane({
   // / audio errors) then the persisted run error so a reload still shows it.
   const rawError = error ?? failedRunErrorEvent?.detail ?? null;
   const displayError = runFailureUi?.messageKey ? t(runFailureUi.messageKey) : rawError;
+  const errorDiagnosticText = displayError
+    ? buildRunErrorDiagnosticText({
+        message: displayError,
+        rawMessage: rawError,
+        errorCode: failedRunErrorEvent?.code,
+        traceId: retryAssistant?.runId,
+        projectId,
+        conversationId: activeConversationId,
+        assistantMessageId: retryAssistant?.id,
+        agentId: retryAssistant?.agentId,
+      })
+    : null;
+  const [copiedErrorDiagnostic, setCopiedErrorDiagnostic] = useState(false);
+  const errorDiagnosticCopyTimerRef = useRef<number | null>(null);
+  const copyErrorDiagnostic = useCallback(async () => {
+    if (!errorDiagnosticText) return;
+    const ok = await copyToClipboard(errorDiagnosticText);
+    if (!ok) return;
+    if (errorDiagnosticCopyTimerRef.current != null) {
+      window.clearTimeout(errorDiagnosticCopyTimerRef.current);
+    }
+    setCopiedErrorDiagnostic(true);
+    errorDiagnosticCopyTimerRef.current = window.setTimeout(() => {
+      errorDiagnosticCopyTimerRef.current = null;
+      setCopiedErrorDiagnostic(false);
+    }, 1600);
+  }, [errorDiagnosticText]);
+  useEffect(() => () => {
+    if (errorDiagnosticCopyTimerRef.current != null) {
+      window.clearTimeout(errorDiagnosticCopyTimerRef.current);
+      errorDiagnosticCopyTimerRef.current = null;
+    }
+  }, []);
   // The failed run whose error this top-level card represents. AssistantMessage
   // suppresses only THIS message's per-message error pill (to avoid the
   // duplicate); other failed turns — older history, or once a follow-up makes
@@ -924,9 +968,9 @@ export function ChatPane({
     () => messages.find((m) => m.role === 'user')?.id,
     [messages],
   );
-  // Map each assistant message id to the user message that follows it
-  // (if any) so QuestionFormView can render its locked "answered" state
-  // with the user's picks.
+  // Map each assistant message id to the user message that follows it (if any)
+  // so the chat-side Questions banner can reopen that exact answered form in
+  // the right-hand panel later.
   const nextUserContentByAssistantId = useMemo(() => {
     const map = new Map<string, string>();
     for (let i = 0; i < messages.length - 1; i++) {
@@ -941,6 +985,10 @@ export function ChatPane({
 
   useEffect(() => {
     didInitialScrollRef.current = false;
+    anchorPendingRef.current = false;
+    anchorActiveRef.current = false;
+    prevLastUserIdRef.current = undefined;
+    resetTailSpacer();
     // A new conversation should land at the bottom (its own initial
     // scroll), not inherit the previous conversation's saved position —
     // including any anchor-to-top reserve still held by the tail spacer, which
@@ -1074,6 +1122,7 @@ export function ChatPane({
     prevLastUserIdRef.current = lastUser?.id;
     if (anchorPendingRef.current && lastUser && lastUser.id !== prevUserId) {
       anchorPendingRef.current = false;
+      resetTailSpacer();
       anchorActiveRef.current = true;
       pinnedToBottomRef.current = false;
       setScrolledFromBottom(true);
@@ -1571,6 +1620,10 @@ export function ChatPane({
         }
         // Arm "anchor to top": the messages effect promotes this once
         // the new user turn renders, pinning it to the top of the view.
+        // Clear any stale reserve from the previous turn first so a resend
+        // doesn't strand the new turn below a leftover gap (release #3653).
+        anchorActiveRef.current = false;
+        resetTailSpacer();
         anchorPendingRef.current = true;
         onSend(prompt, attachments, commentAttachments, meta);
       }}
@@ -1896,7 +1949,7 @@ export function ChatPane({
               {displayError ? (
                 <div className="msg error">
                   <span className="chat-error-text">{displayError}</span>
-                  {showErrorActions ? (
+                  {errorDiagnosticText || showErrorActions || (retryAssistant && onRetry && runFailureUi) ? (
                     <div className="chat-error-actions">
                       {showByokRecoveryCta ? (
                         <button
@@ -1905,6 +1958,17 @@ export function ChatPane({
                           onClick={onSwitchToLocalCli}
                         >
                           {t('avatar.useLocal')}
+                        </button>
+                      ) : null}
+                      {errorDiagnosticText ? (
+                        <button
+                          type="button"
+                          className="ghost chat-error-copy"
+                          onClick={() => void copyErrorDiagnostic()}
+                          aria-label={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
+                          title={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
+                        >
+                          <Icon name={copiedErrorDiagnostic ? 'check' : 'copy'} size={13} />
                         </button>
                       ) : null}
                       {retryAssistant && onRetry && runFailureUi ? (
@@ -2180,7 +2244,7 @@ function ChatRows({
   forkingMessageId?: string | null;
   t: TranslateFn;
   onAssistantFormSubmitStart: () => void;
-  onOpenQuestions?: () => void;
+  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   scrollContainerRef: MutableRefObject<HTMLDivElement | null>;
 }) {
   const items = useMemo(() => buildChatRenderItems(messages), [messages]);
@@ -2991,6 +3055,29 @@ export function isAssistantMessageStreaming(
   if (message.endedAt !== undefined) return false;
   if (isTerminalRunStatus(message.runStatus)) return false;
   return true;
+}
+
+export function buildRunErrorDiagnosticText(input: RunErrorDiagnosticInput): string {
+  const lines = [
+    'Open Design run error diagnostics',
+    `trace_id: ${input.traceId ?? 'n/a'}`,
+    `run_id: ${input.traceId ?? 'n/a'}`,
+    `error_code: ${input.errorCode ?? 'n/a'}`,
+    `project_id: ${input.projectId ?? 'n/a'}`,
+    `conversation_id: ${input.conversationId ?? 'n/a'}`,
+    `assistant_message_id: ${input.assistantMessageId ?? 'n/a'}`,
+    `agent_id: ${input.agentId ?? 'n/a'}`,
+    '',
+    'error:',
+    input.message.trim(),
+  ];
+
+  const raw = input.rawMessage?.trim();
+  if (raw && raw !== input.message.trim()) {
+    lines.push('', 'raw_error:', raw);
+  }
+
+  return lines.join('\n');
 }
 
 function filterConversations(

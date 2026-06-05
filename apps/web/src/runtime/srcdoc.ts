@@ -1821,10 +1821,17 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     return 0;
   }
   function dispatchKey(key){
-    // Bubbles so any listener on window picks it up too. We dispatch on
-    // document only — dispatching on window/body in addition would cause
-    // bubbling to fire the same document-level listener twice.
+    // Try window first: many deck frameworks listen on both window and
+    // document in capture phase for iframe focus resilience. Dispatching a
+    // bubbling event at document hits the document listener and then the
+    // window listener, turning one host "next" request into two slide moves.
     var init = { key: key, code: key, bubbles: true, cancelable: true, composed: true };
+    var before = activeIndex(slides());
+    try {
+      window.dispatchEvent(new KeyboardEvent('keydown', init));
+      window.dispatchEvent(new KeyboardEvent('keyup', init));
+    } catch (_) {}
+    if (activeIndex(slides()) !== before) return;
     try {
       document.dispatchEvent(new KeyboardEvent('keydown', init));
       document.dispatchEvent(new KeyboardEvent('keyup', init));

@@ -1565,6 +1565,7 @@ export const en: Dict = {
   'chat.you': 'You',
   'chat.openFile': 'Open {name}',
   'chat.copyPrompt': 'Copy prompt',
+  'chat.copyErrorDiagnostic': 'Copy error diagnostics',
   'chat.copyDone': 'Copied!',
   'chat.inspect.noEditableTargets': 'No editable text or style targets found.',
   'chat.inspect.noCommentTargets': 'No commentable text or visual targets found.',

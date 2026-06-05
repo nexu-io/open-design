@@ -919,6 +919,7 @@ export const uk: Dict = {
   'chat.you': 'Ви',
   'chat.openFile': 'Відкрити {name}',
   'chat.copyPrompt': 'Копіювати запит',
+  'chat.copyErrorDiagnostic': 'Скопіювати діагностику помилки',
   'chat.copyDone': 'Скопійовано!',
   'chat.composerPlaceholder': "Опишіть, що хочете згенерувати…",
   'chat.activeFileEditingLabel': "Редагування",

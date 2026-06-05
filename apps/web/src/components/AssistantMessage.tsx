@@ -33,8 +33,8 @@ import {
   stripTrailingOpenQuestionForm,
   type QuestionForm,
 } from "../artifacts/question-form";
+import { parseSubmittedAnswers } from "./QuestionForm";
 import { splitStreamingArtifact, stripArtifact } from "../artifacts/strip";
-import { QuestionFormView, parseSubmittedAnswers } from "./QuestionForm";
 import {
   getPluginFolderCandidates,
   type PluginFolderCandidate,
@@ -72,6 +72,12 @@ type TranslateFn = (
   key: keyof Dict,
   vars?: Record<string, string | number>
 ) => string;
+
+export type QuestionFormOpenRequest = {
+  form: QuestionForm;
+  messageId: string;
+  submittedAnswers?: Record<string, string | string[]>;
+};
 
 const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";
 
@@ -306,17 +312,15 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
-  // True only for the most recent assistant message — gate question-form
-  // interactivity on this so older forms render as a locked "answered"
-  // capsule instead of being re-submittable.
+  // True only for the most recent assistant message.
   isLast?: boolean;
   // Assistant message id whose run-failure error is rendered as ChatPane's
   // top-level error card; that message's per-message error pill is suppressed
   // to avoid duplication. Other messages keep their error pill.
   errorCardOwnerId?: string | null;
-  // The user message that immediately follows this assistant turn (if
-  // any). Used to detect that a form was already answered so we can
-  // render its locked state with the user's picks visible.
+  // The user message that immediately follows this assistant turn, if any.
+  // Kept for ChatPane compatibility; chat-side question forms now always
+  // render as a compact Questions banner.
   nextUserContent?: string;
   // Submit handler the form fires when the user picks answers — opaque
   // to AssistantMessage; ProjectView wires it into onSend.
@@ -324,7 +328,7 @@ interface Props {
   // Open the right-hand Questions tab. The active discovery form renders
   // there (Claude-Design style) instead of inline; this assistant message
   // shows a banner that focuses the tab on click.
-  onOpenQuestions?: () => void;
+  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onContinueRemainingTasks?: (todos: TodoItem[]) => void;
   onForkFromMessage?: () => void;
   forking?: boolean;
@@ -622,11 +626,6 @@ function AssistantMessageImpl({
       setOutputStartedAt(undefined);
     }
   }, [streaming, hasContent]);
-  // Track which forms the user submitted in this session so we lock them
-  // immediately on click (without waiting for the parent to re-render).
-  const [locallySubmitted, setLocallySubmitted] = useState<Set<string>>(
-    () => new Set()
-  );
   const [dismissedCandidateIds, setDismissedCandidateIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -678,21 +677,15 @@ function AssistantMessageImpl({
               <ProseBlock
                 key={i}
                 text={b.text}
+                assistantMessageId={message.id}
                 isLastAssistant={!!isLast}
                 streaming={streaming}
                 showStreamCursor={streaming && i === lastTextBlockIndex}
                 nextUserContent={nextUserContent}
-                locallySubmitted={locallySubmitted}
                 suppressDirectionForms={suppressDirectionForms}
-                onSubmitForm={(formId, text) => {
-                  setLocallySubmitted((prev) => {
-                    const next = new Set(prev);
-                    next.add(formId);
-                    return next;
-                  });
-                  onSubmitForm?.(text);
-                }}
                 onOpenQuestions={onOpenQuestions}
+                projectId={projectId}
+                projectFileNames={projectFileNames}
                 onRequestOpenFile={onRequestOpenFile}
               />
             );
@@ -1950,25 +1943,27 @@ function hasPluginFinalActionHint(content: string): boolean {
 
 function ProseBlock({
   text,
+  assistantMessageId,
   isLastAssistant,
   streaming,
   showStreamCursor,
   nextUserContent,
-  locallySubmitted,
   suppressDirectionForms,
-  onSubmitForm,
   onOpenQuestions,
+  projectId,
+  projectFileNames,
   onRequestOpenFile,
 }: {
   text: string;
+  assistantMessageId: string;
   isLastAssistant: boolean;
   streaming: boolean;
   showStreamCursor?: boolean;
   nextUserContent?: string;
-  locallySubmitted: Set<string>;
   suppressDirectionForms: boolean;
-  onSubmitForm: (formId: string, text: string) => void;
-  onOpenQuestions?: () => void;
+  projectId?: string | null;
+  projectFileNames?: Set<string>;
+  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onRequestOpenFile?: (name: string) => void;
 }) {
   const t = useT();
@@ -2001,12 +1996,12 @@ function ProseBlock({
   const onLinkClick = useMemo<MarkdownLinkClickHandler | undefined>(() => {
     if (!onRequestOpenFile) return undefined;
     return (href, event) => {
-      const path = asInProjectFilePath(href);
+      const path = asInProjectFilePath(href, projectFileNames, projectId);
       if (!path) return;
       event.preventDefault();
       onRequestOpenFile(path);
     };
-  }, [onRequestOpenFile]);
+  }, [onRequestOpenFile, projectFileNames, projectId]);
   // Each text segment is further split on `<system-reminder>` blocks so
   // those render as their own collapsible chip instead of raw markup.
   const renderable = segments.flatMap(
@@ -2061,10 +2056,8 @@ function ProseBlock({
           <FormBlock
             key={seg.key}
             form={seg.form}
-            isLastAssistant={isLastAssistant}
+            assistantMessageId={assistantMessageId}
             nextUserContent={nextUserContent}
-            locallySubmitted={locallySubmitted}
-            onSubmitForm={onSubmitForm}
             onOpenQuestions={onOpenQuestions}
           />
         );
@@ -2081,8 +2074,9 @@ function ProseBlock({
   );
 }
 
-// Chat-side banner that points to the right-hand Questions tab where the
-// active discovery form lives. Clicking it focuses that tab.
+// Chat-side banner that points to the right-hand Questions tab where discovery
+// forms live. The chat column always stays compact: no inline form preview,
+// answered or not.
 function QuestionsBanner({ onOpen }: { onOpen?: () => void }) {
   const t = useT();
   return (
@@ -2111,40 +2105,27 @@ function isDirectionForm(form: QuestionForm): boolean {
 
 function FormBlock({
   form,
-  isLastAssistant,
+  assistantMessageId,
   nextUserContent,
-  locallySubmitted,
-  onSubmitForm,
   onOpenQuestions,
 }: {
   form: QuestionForm;
-  isLastAssistant: boolean;
+  assistantMessageId: string;
   nextUserContent?: string;
-  locallySubmitted: Set<string>;
-  onSubmitForm: (formId: string, text: string) => void;
-  onOpenQuestions?: () => void;
+  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
 }) {
-  // Reconstruct prior answers from a follow-up user message so older
-  // forms in the scrollback render in their answered state.
-  const submittedFromHistory = useMemo(() => {
-    if (!nextUserContent) return null;
-    return parseSubmittedAnswers(form, nextUserContent);
-  }, [form, nextUserContent]);
-  const wasSubmittedLocally = locallySubmitted.has(form.id);
-  // The live, still-unanswered form lives in the right-hand Questions tab —
-  // even mid-stream. In chat we only show a banner that focuses it, so the
-  // left side never renders the form itself. Answered / historical forms stay
-  // inline so the scrollback reads naturally.
-  const showBanner = isLastAssistant && !submittedFromHistory && !wasSubmittedLocally;
-  if (showBanner) {
-    return <QuestionsBanner onOpen={onOpenQuestions} />;
-  }
   return (
-    <QuestionFormView
-      form={form}
-      interactive={false}
-      submittedAnswers={submittedFromHistory ?? undefined}
-      onSubmit={(text) => onSubmitForm(form.id, text)}
+    <QuestionsBanner
+      onOpen={() => {
+        const submittedFromHistory = nextUserContent
+          ? parseSubmittedAnswers(form, nextUserContent)
+          : null;
+        onOpenQuestions?.({
+          form,
+          messageId: assistantMessageId,
+          submittedAnswers: submittedFromHistory ?? undefined,
+        });
+      }}
     />
   );
 }

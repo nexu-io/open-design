@@ -897,6 +897,7 @@ export const hu: Dict = {
   'chat.you': 'Te',
   'chat.openFile': '{name} megnyitása',
   'chat.copyPrompt': 'Prompt másolása',
+  'chat.copyErrorDiagnostic': 'Hibadiagnosztika másolása',
   'chat.copyDone': 'Másolva!',
   'chat.composerPlaceholder': "Írd le, mit szeretnél létrehozni…",
   'chat.activeFileEditingLabel': "Szerkesztés",

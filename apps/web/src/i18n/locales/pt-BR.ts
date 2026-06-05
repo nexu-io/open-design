@@ -918,6 +918,7 @@ export const ptBR: Dict = {
   'chat.you': 'Você',
   'chat.openFile': 'Abrir {name}',
   'chat.copyPrompt': 'Copiar prompt',
+  'chat.copyErrorDiagnostic': 'Copiar diagnóstico do erro',
   'chat.copyDone': 'Copiado!',
   'chat.composerPlaceholder': "Descreva o que você quer gerar…",
   'chat.activeFileEditingLabel': "Editando",

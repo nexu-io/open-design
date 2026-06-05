@@ -897,6 +897,7 @@ export const ko: Dict = {
   'chat.you': '나',
   'chat.openFile': '{name} 열기',
   'chat.copyPrompt': '프롬프트 복사',
+  'chat.copyErrorDiagnostic': '오류 진단 복사',
   'chat.copyDone': '복사됨!',
   'chat.composerPlaceholder': "생성하고 싶은 내용을 설명하세요…",
   'chat.activeFileEditingLabel': "편집 중",

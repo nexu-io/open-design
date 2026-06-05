@@ -863,6 +863,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       setStagedMcpServers([]);
       setStagedConnectors([]);
       setStagedWorkspaceContexts([]);
+      pluginsSectionRef.current?.clear();
+      setActiveAppliedPlugin(null);
       setUploadError(null);
       setMention(null);
       setMentionTab('all');

@@ -1148,6 +1148,7 @@ export const zhTW: Dict = {
   'chat.you': '你',
   'chat.openFile': '開啟 {name}',
   'chat.copyPrompt': '複製提示詞',
+  'chat.copyErrorDiagnostic': '複製錯誤診斷資訊',
   'chat.copyDone': '已複製！',
   'chat.inspect.noEditableTargets': '未找到可編輯的文字或樣式目標。',
   'chat.inspect.noCommentTargets': '未找到可評論的文字或視覺目標。',

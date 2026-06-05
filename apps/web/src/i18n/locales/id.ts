@@ -1009,6 +1009,7 @@ export const id: Dict = {
   'chat.you': 'Kamu',
   'chat.openFile': 'Buka {name}',
   'chat.copyPrompt': 'Salin prompt',
+  'chat.copyErrorDiagnostic': 'Salin diagnostik error',
   'chat.copyDone': 'Disalin!',
   'chat.composerPlaceholder': "Jelaskan apa yang ingin kamu hasilkan…",
   'chat.activeFileEditingLabel': "Mengedit",

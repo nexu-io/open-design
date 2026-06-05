@@ -758,6 +758,14 @@
   align-items: center;
   gap: 8px;
 }
+.chat-error-copy {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .chat-error-retry {
   flex: 0 0 auto;
   padding: 4px 10px;

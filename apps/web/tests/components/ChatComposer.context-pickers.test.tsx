@@ -528,6 +528,9 @@ describe('ChatComposer context pickers', () => {
       }),
       context: { pluginIds: [USER_PLUGIN.id] },
     });
+    await waitFor(() => {
+      expect(screen.queryByTestId('context-chip-strip')).toBeNull();
+    });
   });
 
   it('removes the inline design file token when its staged chip is removed', async () => {

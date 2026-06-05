@@ -784,6 +784,7 @@ export const ja: Dict = {
   'chat.you': 'あなた',
   'chat.openFile': '{name} を開く',
   'chat.copyPrompt': 'プロンプトをコピー',
+  'chat.copyErrorDiagnostic': 'エラー診断をコピー',
   'chat.copyDone': 'コピーしました！',
   'chat.composerPlaceholder': "生成したい内容を説明してください…",
   'chat.activeFileEditingLabel': "編集中",

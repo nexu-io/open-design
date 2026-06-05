@@ -785,6 +785,7 @@ export const de: Dict = {
   'chat.you': 'Sie',
   'chat.openFile': '{name} öffnen',
   'chat.copyPrompt': 'Prompt kopieren',
+  'chat.copyErrorDiagnostic': 'Fehlerdiagnose kopieren',
   'chat.copyDone': 'Kopiert!',
   'chat.composerPlaceholder': "Beschreiben Sie, was Sie generieren möchten…",
   'chat.activeFileEditingLabel': "Bearbeiten",
