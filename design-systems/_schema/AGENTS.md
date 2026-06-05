@@ -1,8 +1,10 @@
 # `_schema/` — design-system contracts
 
 This directory codifies the structural contracts for design systems.
-`tokens.schema.ts` is the token contract that every tokenized brand under
-`design-systems/<brand>/` must satisfy. `manifest.schema.ts` is the
+`tokens.schema.ts` re-exports the token contract that every tokenized brand under
+`design-systems/<brand>/` must satisfy. The canonical runtime copy lives in
+`packages/contracts/src/design-systems/token-schema.ts` so daemon importers and
+repo guards consume one schema. `manifest.schema.ts` is the
 project contract for folders that opt into the Design System Project
 shape by adding `manifest.json`; legacy `DESIGN.md`-only folders remain
 valid until they are migrated.
@@ -10,13 +12,13 @@ valid until they are migrated.
 ```
 _schema/
 ├── manifest.schema.ts ← project manifest schema (TS, machine-enforced when present)
-├── tokens.schema.ts   ← canonical token schema (TS, machine-enforced)
+├── tokens.schema.ts   ← token schema re-export (TS, machine-enforced)
 ├── defaults.css       ← A2 fallback values (CSS, human reference)
 └── AGENTS.md          ← this file
 ```
 
 The TypeScript schemas are the source of truth. `defaults.css` is a
-human-readable mirror of the A2 `fallback` fields in `tokens.schema.ts`
+human-readable mirror of the A2 `fallback` fields in the token schema
 and exists so that reviewers can scan real CSS without parsing a TS
 array — drift between the two is enforced by the `design-system: A2
 defaults parity` guard. Manifest shape is enforced by
@@ -38,7 +40,8 @@ Design System Project folders use fixed v1 file names:
   `components.html` and `tokens.css`.
 - `fonts/` — optional webfont files.
 - `source/` — optional importer evidence (`scanned-files.json`,
-  `evidence.md`, `tokens.source.json`, and `snippets/INDEX.json`).
+  `evidence.md`, `tokens.source.json`, `token-contract.report.json`,
+  and `snippets/INDEX.json`).
 
 The manifest guard validates only folders that ship `manifest.json`; it
 does not require the bundled catalog to migrate all at once. Rich import
@@ -175,7 +178,7 @@ Resist adding tokens that are:
 
 ## Editing this directory
 
-When you change `tokens.schema.ts`:
+When you change the token schema:
 
 - Run `pnpm guard` and confirm both `default` and `kami` still pass
   every design-system sub-check.

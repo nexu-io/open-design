@@ -821,6 +821,13 @@ export interface Dict {
   'homeHero.placeholder': string;
   'homeHero.placeholderActive': string;
   'homeHero.skills': string;
+  'homeHero.addMenu': string;
+  'homeHero.addPlugin': string;
+  'homeHero.addConnectors': string;
+  'homeHero.addMcp': string;
+  'homeHero.noPlugins': string;
+  'homeHero.noMcp': string;
+  'homeHero.noConnectors': string;
   'homeHero.applying': string;
   'homeHero.pluginTitle': string;
   'homeHero.pluginPrefix': string;
@@ -855,6 +862,7 @@ export interface Dict {
   'homeHero.footer.noMatches': string;
   'homeHero.moreShortcuts': string;
   'homeHero.railAria': string;
+  'homeHero.subTypeAria': string;
   'homeHero.confirmReplaceTitle': string;
   'homeHero.confirmReplaceBody': string;
   'homeHero.confirmReplace': string;
@@ -1889,6 +1897,7 @@ export interface Dict {
   'chat.you': string;
   'chat.openFile': string;
   'chat.copyPrompt': string;
+  'chat.copyErrorDiagnostic': string;
   'chat.copyDone': string;
   'chat.composerPlaceholder': string;
   'chat.activeFileEditingLabel': string;
@@ -1914,6 +1923,7 @@ export interface Dict {
   'chat.cliSettingsTitle': string;
   'chat.cliSettingsAria': string;
   'chat.attachTitle': string;
+  'chat.addContextTitle': string;
   'chat.attachAria': string;
   'chat.importTitle': string;
   'chat.importLabel': string;
@@ -2709,6 +2719,8 @@ export interface Dict {
   'assistant.copyMarkdown': string;
   'assistant.forkConversation': string;
   'assistant.forkingConversation': string;
+  'assistant.shareToOpenDesign': string;
+  'assistant.shareToOpenDesignBusy': string;
   'assistant.feedbackPrompt': string;
   'assistant.feedbackPositive': string;
   'assistant.feedbackNegative': string;

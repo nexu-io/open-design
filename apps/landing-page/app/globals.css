@@ -472,6 +472,13 @@ body::before {
   font-weight: 500;
   transition: color 0.18s ease;
   position: relative;
+  /*
+   * inline-flex + center so the dropdown caret sits on the text's optical
+   * midline. As a baseline-aligned inline child the small ▾ glyph dropped to
+   * the lower-right and read like a stray comma after each label.
+   */
+  display: inline-flex;
+  align-items: center;
 }
 .nav-links a:hover { color: var(--coral); }
 .nav-links a .num {
@@ -492,15 +499,20 @@ body::before {
   position: relative;
 }
 .nav-links .dropdown-caret {
-  display: inline-block;
-  margin-left: 4px;
-  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 5px;
+  font-size: 11px;
+  line-height: 1;
+  /* nudge up a hair: the triangle glyph's ink sits low in its em box */
+  transform: translateY(-1px);
   color: var(--ink-faint);
-  transition: transform 0.18s ease;
+  transition: transform 0.18s ease, color 0.18s ease;
 }
 .nav-links li.has-dropdown:hover .dropdown-caret,
 .nav-links li.has-dropdown:focus-within .dropdown-caret {
-  transform: translateY(1px);
+  /* keep the -1px optical baseline; nudge down 1px more as the open affordance */
+  transform: translateY(0);
   color: var(--coral);
 }
 .nav-dropdown {

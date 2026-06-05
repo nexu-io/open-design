@@ -102,6 +102,7 @@ export type DesignSystemProjectSourceFiles = {
   readonly scanned?: string;
   readonly evidence?: string;
   readonly tokens?: string;
+  readonly report?: string;
   readonly snippets?: string;
 };
 
@@ -169,7 +170,7 @@ const ALLOWED_CRAFT_KEYS = new Set(["applies", "suggested", "exemptions"]);
 const ALLOWED_FONT_KEYS = new Set(["family", "file", "weight", "style"]);
 const ALLOWED_PREVIEW_KEYS = new Set(["dir", "pages"]);
 const ALLOWED_PREVIEW_PAGE_KEYS = new Set(["path", "role", "title"]);
-const ALLOWED_SOURCE_FILES_KEYS = new Set(["scanned", "evidence", "tokens", "snippets"]);
+const ALLOWED_SOURCE_FILES_KEYS = new Set(["scanned", "evidence", "tokens", "report", "snippets"]);
 
 export function parseDesignSystemProjectManifest(
   raw: string,

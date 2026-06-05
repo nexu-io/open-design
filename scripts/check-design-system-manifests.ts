@@ -194,6 +194,7 @@ async function validateDeclaredJsonFiles(
   const jsonPaths = [
     sourceFiles?.scanned,
     sourceFiles?.tokens,
+    sourceFiles?.report,
     sourceFiles?.snippets,
   ].filter((fileName): fileName is string => fileName !== undefined);
 

@@ -97,6 +97,30 @@ export function spawnEnvForAgent(
   return reapplySandboxRuntimeEnv(env, sandboxRuntime);
 }
 
+export function openDesignAmrTraceEnv(input: {
+  agentId: string;
+  runId: string;
+  conversationId?: string | null;
+  runAttempt: number;
+}): NodeJS.ProcessEnv {
+  if (input.agentId !== 'amr') return {};
+
+  const runId = input.runId.trim();
+  if (!runId) {
+    throw new Error('OPEN_DESIGN_RUN_ID requires a non-empty run id for AMR runs');
+  }
+  if (!Number.isFinite(input.runAttempt) || input.runAttempt < 0) {
+    throw new Error('OPEN_DESIGN_RUN_ATTEMPT requires a non-negative finite attempt index');
+  }
+
+  const conversationId = input.conversationId?.trim();
+  return {
+    OPEN_DESIGN_RUN_ID: runId,
+    OPEN_DESIGN_RUN_ATTEMPT: String(Math.floor(input.runAttempt)),
+    ...(conversationId ? { OPEN_DESIGN_SESSION_ID: conversationId } : {}),
+  };
+}
+
 function isOpenClaudeExecutable(resolvedBin: string | null | undefined): boolean {
   if (typeof resolvedBin !== 'string' || !resolvedBin.trim()) return false;
   const base = path

@@ -141,6 +141,7 @@ test("design-system project manifest schema accepts import-project optional inde
       scanned: "source/scanned-files.json",
       evidence: "source/evidence.md",
       tokens: "source/tokens.source.json",
+      report: "source/token-contract.report.json",
       snippets: "source/snippets/INDEX.json",
     },
   });
@@ -151,6 +152,7 @@ test("design-system project manifest schema accepts import-project optional inde
     assert.equal(result.manifest.componentsManifest, "components.manifest.json");
     assert.equal(result.manifest.importMode, "hybrid");
     assert.equal(result.manifest.preview?.pages.length, 2);
+    assert.equal(result.manifest.sourceFiles?.report, "source/token-contract.report.json");
   }
 });
 
@@ -234,6 +236,7 @@ test("design-system project manifest schema rejects unsafe import-project paths"
     },
     sourceFiles: {
       scanned: "source/../scanned-files.json",
+      report: "../token-contract.report.json",
     },
   });
 
@@ -245,5 +248,6 @@ test("design-system project manifest schema rejects unsafe import-project paths"
     assert.match(errors, /\$\.fonts\[0\]\.file/);
     assert.match(errors, /\$\.preview\.pages\[0\]\.path/);
     assert.match(errors, /\$\.sourceFiles\.scanned/);
+    assert.match(errors, /\$\.sourceFiles\.report/);
   }
 });

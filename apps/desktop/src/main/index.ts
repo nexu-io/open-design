@@ -48,6 +48,7 @@ import {
 // navigation (see `setWindowOpenHandler` in `runtime.ts`), so
 // pinning them is worth the small extra surface.
 export {
+  createSplashWindow,
   isAllowedChildWindowUrl,
   isAllowedEmbeddedBrowserUrl,
   isHttpUrl,
@@ -116,6 +117,16 @@ export type DesktopMainOptions = {
   discoverDaemonUrl?: () => Promise<string | null>;
   preloadPath?: string;
   onDesktopReady?: (controls: { show(): void }) => void;
+  /**
+   * Optional pre-created splash window. The packaged entry creates it before
+   * awaiting the daemon/web sidecars so the brand animation overlaps the cold
+   * boot; forwarded straight to the runtime, which owns closing it once the
+   * main window is revealed. Omitted by tools-dev (the runtime makes its own).
+   */
+  splashWindow?: BrowserWindow | null;
+  /** Creation time of `splashWindow` (from `createSplashWindow().startedAt`), so
+   * the runtime measures the minimum splash hold from when it actually appeared. */
+  splashStartedAt?: number;
   update?: {
     currentVersion?: string | null;
     downloadRoot?: string | null;
@@ -447,6 +458,8 @@ export async function runDesktopMain(
     registerDesktopAuthWithDaemon: () => registerDesktopAuthWithDaemon(runtime, desktopAuthSecret),
     rendererLogPath,
     requestQuit: shutdownAndExit,
+    splashWindow: options.splashWindow,
+    splashStartedAt: options.splashStartedAt,
     updater,
   });
   options.onDesktopReady?.({ show: () => desktop?.show() });

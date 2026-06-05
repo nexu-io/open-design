@@ -518,8 +518,12 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
+    // The per-plugin context badge row was removed; staged plugin context now
+    // only renders as an inline @mention pill (or, when the prompt is empty as
+    // here, surfaces via the active context row's resolved-count label). Assert
+    // the plugin was staged through that count rather than the dropped badge.
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-context-plugin-example-web-prototype')).toBeTruthy();
+      expect(screen.getByLabelText(/1 context items resolved/i)).toBeTruthy();
     });
     await screen.findByTestId('home-hero-input');
     expect(homeHeroPromptValue()).toBe('');
@@ -669,7 +673,9 @@ describe('HomeView prompt handoff', () => {
     expect(
       screen.getByTestId('home-hero-footer-option-designSystem').textContent,
     ).toContain('Refly Design System');
-    expect(screen.getByTestId('home-hero-footer-option-fidelity')).toBeTruthy();
+    // Fidelity is no longer a prototype footer control — the agent asks for it
+    // in discovery instead. Only the design-system picker stays in the footer.
+    expect(screen.queryByTestId('home-hero-footer-option-fidelity')).toBeNull();
     expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy();
     expect(homeHeroPromptValue()).toBe('');
     expect(screen.getByTestId('home-hero-plugin-presets')).toBeTruthy();
@@ -679,17 +685,10 @@ describe('HomeView prompt handoff', () => {
     expect(screen.queryByTestId('home-hero-prompt-slot-artifactKind')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-designSystem')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-template')).toBeNull();
-    // New equivalent of the inline slots: the non-footer plugin inputs
-    // (artifactKind / audience / template) now surface in the structured
-    // PluginInputsForm below the editor, while fidelity / designSystem stay in
-    // the footer options. The old "form suppressed" assertion no longer holds
-    // because there are no inline slots to deduplicate against.
-    const inputsForm = screen.getByTestId('plugin-inputs-form');
-    expect(inputsForm.querySelector('[data-field-name="artifactKind"]')).toBeTruthy();
-    expect(inputsForm.querySelector('[data-field-name="audience"]')).toBeTruthy();
-    expect(inputsForm.querySelector('[data-field-name="template"]')).toBeTruthy();
-    expect(inputsForm.querySelector('[data-field-name="fidelity"]')).toBeNull();
-    expect(inputsForm.querySelector('[data-field-name="designSystem"]')).toBeNull();
+    // The inline plugin inputs form was removed from the Home composer, so the
+    // non-footer inputs (artifactKind / audience / template) no longer render;
+    // fidelity / designSystem still surface as footer options above.
+    expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
 
     await setPromptAndSettle('Build a pricing-page prototype.');
     fireEvent.click(screen.getByTestId('home-hero-submit'));
@@ -701,15 +700,16 @@ describe('HomeView prompt handoff', () => {
     const applyCall = fetchMock.mock.calls.find(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
     ));
-    expect(JSON.parse(String((applyCall?.[1] as RequestInit).body))).toMatchObject({
-      inputs: {
-        artifactKind: 'web prototype',
-        fidelity: 'high-fidelity',
-        audience: 'product evaluators',
-        designSystem: 'Refly Design System',
-        template: 'the bundled web prototype seed',
-      },
+    const protoApplyInputs = JSON.parse(String((applyCall?.[1] as RequestInit).body)).inputs;
+    expect(protoApplyInputs).toMatchObject({
+      artifactKind: 'web prototype',
+      audience: 'product evaluators',
+      designSystem: 'Refly Design System',
+      template: 'the bundled web prototype seed',
     });
+    // Fidelity is deferred to first-turn discovery, so its plugin default must
+    // NOT be forwarded with the run.
+    expect(protoApplyInputs).not.toHaveProperty('fidelity');
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       pluginId: 'example-web-prototype',
       projectKind: 'prototype',
@@ -717,7 +717,6 @@ describe('HomeView prompt handoff', () => {
       designSystemId: 'ds-refly',
       projectMetadata: expect.objectContaining({
         kind: 'prototype',
-        fidelity: 'high-fidelity',
       }),
     })));
     expect(screen.queryByRole('alert')).toBeNull();
@@ -771,22 +770,18 @@ describe('HomeView prompt handoff', () => {
     expect(
       screen.getByTestId('home-hero-footer-option-designSystem').textContent,
     ).toContain('Refly Design System');
-    expect(screen.getByTestId('home-hero-footer-option-fidelity').textContent).toContain('High fidelity');
+    // Fidelity is no longer a prototype footer control (asked in discovery).
+    expect(screen.queryByTestId('home-hero-footer-option-fidelity')).toBeNull();
     // Inline `{{slot}}` prompt widgets were removed in the Lexical migration.
     expect(screen.queryByTestId('home-hero-prompt-slot-fidelity')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-artifactKind')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-designSystem')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-template')).toBeNull();
-    // The preset card seeds the prompt as plain text but keeps the chip's
-    // structured inputs: the non-footer fields now live in PluginInputsForm
-    // (the migrated equivalent of the removed inline slots), while
-    // fidelity / designSystem stay in the footer options above.
-    const inputsForm = screen.getByTestId('plugin-inputs-form');
-    expect(inputsForm.querySelector('[data-field-name="artifactKind"]')).toBeTruthy();
-    expect(inputsForm.querySelector('[data-field-name="audience"]')).toBeTruthy();
-    expect(inputsForm.querySelector('[data-field-name="template"]')).toBeTruthy();
-    expect(inputsForm.querySelector('[data-field-name="fidelity"]')).toBeNull();
-    expect(inputsForm.querySelector('[data-field-name="designSystem"]')).toBeNull();
+    // The inline plugin inputs form was removed from the Home composer; the
+    // preset card still seeds the prompt and keeps the chip's structured inputs
+    // in state (submitted below), but no inputs form renders. fidelity /
+    // designSystem stay in the footer options above.
+    expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
 
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
@@ -806,7 +801,6 @@ describe('HomeView prompt handoff', () => {
     expect(JSON.parse(String((applyCall?.[1] as RequestInit).body))).toMatchObject({
       inputs: {
         artifactKind: 'web prototype',
-        fidelity: 'high-fidelity',
         audience: 'product evaluators',
         designSystem: 'Refly Design System',
         template: 'the bundled web prototype seed',
@@ -819,7 +813,6 @@ describe('HomeView prompt handoff', () => {
       designSystemId: 'ds-refly',
       projectMetadata: expect.objectContaining({
         kind: 'prototype',
-        fidelity: 'high-fidelity',
       }),
     })));
   });
@@ -962,7 +955,10 @@ describe('HomeView prompt handoff', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('exposes deck page ranges beside speaker notes and submits the selected range', async () => {
+  it('binds the deck chip and keeps only the design-system picker in the footer', async () => {
+    // Slide count + speaker-notes footer controls were removed from the deck
+    // composer; the agent asks for them in the first-turn discovery flow. The
+    // deck footer now mirrors the prototype footer — design system only.
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [SIMPLE_DECK_PLUGIN] }), {
@@ -997,41 +993,20 @@ describe('HomeView prompt handoff', () => {
     fireEvent.click(await screen.findByTestId('home-hero-rail-deck'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-footer-option-speakerNotes')).toBeTruthy();
+      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Slide deck');
     });
-    expect(screen.getByTestId('home-hero-footer-option-slideCount').textContent).toContain('10-15 pages');
-
-    fireEvent.click(screen.getByTestId('home-hero-footer-option-slideCount'));
-    fireEvent.click(await screen.findByRole('option', { name: '15-20 pages' }));
-    expect(screen.getByTestId('home-hero-footer-option-slideCount').textContent).toContain('15-20 pages');
+    expect(screen.queryByTestId('home-hero-footer-option-speakerNotes')).toBeNull();
+    expect(screen.queryByTestId('home-hero-footer-option-slideCount')).toBeNull();
+    expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy();
 
     await setPromptAndSettle('Create an investor deck for a local-first design tool.');
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/plugins/example-simple-deck/apply',
-      expect.anything(),
-    ));
-    const applyCall = fetchMock.mock.calls.find(([url]) => (
-      typeof url === 'string' && url.includes('/api/plugins/example-simple-deck/apply')
-    ));
-    expect(JSON.parse(String((applyCall?.[1] as RequestInit).body))).toMatchObject({
-      inputs: {
-        slideCount: '15-20 pages',
-        speakerNotes: 'include speaker notes',
-        designSystem: 'Refly Design System',
-      },
-    });
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       pluginId: 'example-simple-deck',
-      pluginInputs: expect.objectContaining({
-        slideCount: '15-20 pages',
-      }),
       projectKind: 'deck',
       projectMetadata: expect.objectContaining({
         kind: 'deck',
-        slideCount: '15-20 pages',
-        speakerNotes: true,
       }),
     })));
   });
@@ -1197,7 +1172,9 @@ describe('HomeView prompt handoff', () => {
       expect(homeHeroPromptText()).toBe(expectedPrompt);
     });
     expect(screen.queryByRole('dialog', { name: /replace current prompt/i })).toBeNull();
-    expect(screen.getByTestId('home-hero-context-plugin-example-web-prototype')).toBeTruthy();
+    // Plugin context stays staged across the appended-prompt handoff; the
+    // dropped per-plugin badge is replaced by the active context row's count.
+    expect(screen.getByLabelText(/1 context items resolved/i)).toBeTruthy();
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
   });
 

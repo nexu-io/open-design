@@ -1508,7 +1508,7 @@ function AppInner() {
   }, []);
 
   const handleBack = useCallback(() => {
-    navigate({ kind: 'home', view: 'home' });
+    navigate({ kind: 'home', view: 'projects' });
   }, []);
 
   const handleClearPendingPrompt = useCallback(() => {
@@ -1681,6 +1681,17 @@ function AppInner() {
 
   const openMcpSettings = useCallback(() => {
     setIntegrationInitialTab('mcp');
+    navigate({ kind: 'home', view: 'integrations' });
+  }, []);
+
+  // The composer "+" menu's "add plugin" / "add connector" rows route to the
+  // home plugin-registry / connector-integration surfaces.
+  const openPluginRegistry = useCallback(() => {
+    navigate({ kind: 'home', view: 'plugins' });
+  }, []);
+
+  const openConnectorIntegrations = useCallback(() => {
+    setIntegrationInitialTab('connectors');
     navigate({ kind: 'home', view: 'integrations' });
   }, []);
 
@@ -1878,6 +1889,8 @@ function AppInner() {
         onOpenSettings={openSettings}
         onOpenAmrSettings={openAmrSettings}
         onOpenMcpSettings={openMcpSettings}
+        onBrowsePlugins={openPluginRegistry}
+        onOpenConnectors={openConnectorIntegrations}
         onAdoptPetInline={handleAdoptPet}
         onTogglePet={handleTogglePet}
         onOpenPetSettings={openPetSettings}

@@ -63,7 +63,8 @@ export type WinPaths = {
   exePath: string;
   installDir: string;
   installedExePath: string;
-  installerPayloadPath: string;
+  installerBasePayloadPath: string;
+  installerOverlayPayloadPath: string;
   installerScriptPath: string;
   publicDesktopShortcutPath: string;
   latestYmlPath: string;
@@ -101,6 +102,7 @@ export type WinPackResult = {
   resourceRoot: string;
   runtimeNamespaceRoot: string;
   cacheReport: CacheReport;
+  segments: WinPackTiming[];
   sizeReport: WinSizeReport;
   timings: WinPackTiming[];
   to: ToolPackConfig["to"];
@@ -109,6 +111,7 @@ export type WinPackResult = {
 };
 
 export type WinPackTiming = {
+  details?: Record<string, unknown>;
   durationMs: number;
   phase: string;
 };
@@ -178,6 +181,7 @@ export type WinInstallResult = {
   desktopShortcutExists: boolean;
   desktopShortcutPath: string;
   installDir: string;
+  lifecycleTimings: WinLifecycleTiming[];
   installerPath: string;
   installPayload: WinInstallPayloadReport;
   markerPath: string;
@@ -200,6 +204,11 @@ export type WinInstallPayloadReport = {
   }>;
 };
 
+export type WinLifecycleTiming = {
+  durationMs: number;
+  step: string;
+};
+
 export type WinStartResult = {
   executablePath: string;
   logPath: string;
@@ -218,6 +227,7 @@ export type WinStopResult = {
 };
 
 export type WinUninstallResult = {
+  lifecycleTimings: WinLifecycleTiming[];
   markerPath: string;
   namespace: string;
   nsisLogPath: string;

@@ -189,10 +189,11 @@ describe('ChatComposer design toolbox', () => {
     renderComposer({ onSend });
     await flushMounts();
 
-    const trigger = screen.getByLabelText('Open design toolbox');
-    fireEvent.click(trigger);
+    // The design toolbox is now a submenu of the composer "+" menu.
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Design toolbox/i }));
 
-    await waitFor(() => expect(screen.getByText('Design toolbox')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Remove AI feel')).toBeTruthy());
     fireEvent.click(screen.getByText('Remove AI feel'));
 
     await waitFor(() => {
@@ -225,7 +226,8 @@ describe('ChatComposer design toolbox', () => {
     });
     await flushMounts();
 
-    fireEvent.click(screen.getByLabelText('Open design toolbox'));
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Design toolbox/i }));
 
     const search = screen.getByLabelText('Search design toolbox resources');
     fireEvent.change(search, { target: { value: 'research' } });

@@ -28,13 +28,15 @@ function ruleValue(block: string, property: string): string {
 describe('HomeHero compact composer controls', () => {
   it('keeps the session mode and execution buttons compact in the hero', () => {
     const modeTrigger = cssDeclarations(
-      '.home-hero__foot-left .session-mode-toggle__trigger',
+      '.home-hero__foot-right .session-mode-toggle__trigger',
     );
     const switcherChip = cssDeclarations(
       '.home-hero__execution-switcher .inline-switcher__chip',
     );
 
-    expect(ruleValue(modeTrigger, 'height')).toBe('30px');
+    // The footer buttons were unified to a single 32px pill height; the
+    // session-mode trigger matches the other footer controls.
+    expect(ruleValue(modeTrigger, 'height')).toBe('32px');
     expect(ruleValue(modeTrigger, 'max-width')).toBe('120px');
     expect(ruleValue(switcherChip, 'height')).toBe('30px');
     expect(ruleValue(switcherChip, 'max-width')).toBe('48px');

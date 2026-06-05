@@ -7,6 +7,7 @@ import {
   type Spread,
 } from 'lexical';
 import type { InlineMentionEntity, InlineMentionKind } from '../../utils/inlineMentions';
+import { connectorBrandColor, resolveBrandTheme } from '../../utils/connectorBrandColor';
 
 // The atomic @mention node. It extends TextNode so the node's *text* remains
 // the literal `@token` and serialization back to the wire format is free:
@@ -97,7 +98,11 @@ export class MentionNode extends TextNode {
     dom.setAttribute('data-mention', '');
     dom.setAttribute('data-mention-id', this.__mentionId);
     dom.setAttribute('data-mention-kind', this.__mentionKind);
+    // Stamp the label so the live-theme observer can recompute a connector's
+    // brand hue from the mounted DOM alone, without a handle back to the node.
+    dom.setAttribute('data-mention-label', this.__label);
     if (this.__title) dom.setAttribute('title', this.__title);
+    this.applyBrandHue(dom);
     return dom;
   }
 
@@ -110,12 +115,34 @@ export class MentionNode extends TextNode {
     if (prev.__mentionKind !== this.__mentionKind) {
       dom.className = `composer-inline-mention composer-inline-mention--${this.__mentionKind}`;
       dom.setAttribute('data-mention-kind', this.__mentionKind);
+      this.applyBrandHue(dom);
+    } else if (prev.__label !== this.__label || prev.__mentionId !== this.__mentionId) {
+      this.applyBrandHue(dom);
+    }
+    if (prev.__label !== this.__label) {
+      dom.setAttribute('data-mention-label', this.__label);
     }
     if (prev.__title !== this.__title) {
       if (this.__title) dom.setAttribute('title', this.__title);
       else dom.removeAttribute('title');
     }
     return updated;
+  }
+
+  // Connector pills get a per-connector brand color instead of the shared
+  // green `--m-hue`, so e.g. Notion reads black and Figma purple. The hue is
+  // resolved against the live theme so near-black brands stay readable in dark
+  // mode (see connectorBrandColor). Other kinds keep their CSS-driven hue (we
+  // clear any stale inline value). The hue depends on the live theme, so any
+  // mounted connector pill is re-stamped by the theme observer below when the
+  // document theme (or OS `prefers-color-scheme`) flips.
+  private applyBrandHue(dom: HTMLElement): void {
+    if (this.__mentionKind === 'connector') {
+      applyConnectorBrandHue(dom, this.__mentionId, this.__label);
+      ensureConnectorThemeObserver();
+    } else {
+      dom.style.removeProperty('--m-hue');
+    }
   }
 
   // Nothing may merge into or split a mention — keeps the token indivisible.
@@ -165,4 +192,50 @@ export function $createMentionNode(p: MentionPayload): MentionNode {
 
 export function $isMentionNode(n: LexicalNode | null | undefined): n is MentionNode {
   return n instanceof MentionNode;
+}
+
+// Compute and stamp a connector pill's brand `--m-hue` against the live theme.
+// Shared by MentionNode.createDOM/updateDOM (initial render) and the theme
+// observer below (live re-stamp), so both paths resolve the hue identically.
+function applyConnectorBrandHue(dom: HTMLElement, id: string, label: string): void {
+  const hue = connectorBrandColor({ id, name: label }, resolveBrandTheme());
+  dom.style.setProperty('--m-hue', hue);
+}
+
+// `applyBrandHue` only runs when Lexical creates or mutates the node, so a
+// connector pill mounted in light mode keeps its near-black light hue after a
+// live theme switch — unreadable dark-on-dark text in dark mode. Watch the
+// document `data-theme` attribute and the OS `prefers-color-scheme` (matching
+// ConnectorLogo.useResolvedTheme) and re-stamp every mounted connector pill so
+// existing pills stay readable when the theme flips. Idempotent and lazy: the
+// observer is installed once, on first connector render, and reads everything
+// it needs from the DOM (`data-mention-id` / `data-mention-label`).
+let themeObserverInstalled = false;
+
+function restampMountedConnectorPills(): void {
+  if (typeof document === 'undefined') return;
+  const pills = document.querySelectorAll<HTMLElement>(
+    '.composer-inline-mention--connector[data-mention-id]',
+  );
+  pills.forEach((pill) => {
+    applyConnectorBrandHue(
+      pill,
+      pill.getAttribute('data-mention-id') ?? '',
+      pill.getAttribute('data-mention-label') ?? '',
+    );
+  });
+}
+
+function ensureConnectorThemeObserver(): void {
+  if (themeObserverInstalled || typeof document === 'undefined') return;
+  themeObserverInstalled = true;
+  const observer = new MutationObserver(restampMountedConnectorPills);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme'],
+  });
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    media.addEventListener?.('change', restampMountedConnectorPills);
+  }
 }

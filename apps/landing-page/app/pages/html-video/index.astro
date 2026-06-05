@@ -1,0 +1,958 @@
+---
+/*
+ * /html-video/ — sister-project landing page for nexu-io/html-video.
+ *
+ * html-video is the "motion" counterpart of HTML Anything: an HTML→Video
+ * meta-layer. A local coding agent turns a prompt, an article link, or a
+ * GitHub repo into a multi-frame animated video, then renders a real MP4 on
+ * your machine (headless Chromium + ffmpeg). Pluggable engines (Hyperframes
+ * shipped; Remotion / Motion Canvas / Manim on the roadmap), 21 templates,
+ * optional AI soundtrack. Apache-2.0, local, no per-render fee.
+ *
+ * SEO surface: the page leads with the two primary head terms — "HTML to
+ * video" (the category) and "Hyperframes" (the default engine, a real query
+ * for heygen-com/hyperframes) — and seeds long-tail like "html to mp4" and
+ * "agent video" through the section copy. Same hardcoded-from-README content
+ * model as the HTML Anything page (a separate repo, not a content collection).
+ *
+ * Content is hardcoded EN + ZH; the other 16 locales derive a keyword-stacked
+ * fallback from shared i18n fragments (same pattern as HTML Anything).
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import LazyImg from '../../_components/lazy-img.astro';
+import { imageAsset, imageAssetSrcset } from '../../image-assets';
+import {
+  DEFAULT_LOCALE,
+  getHeaderProductMenuCopy,
+  getLandingUiCopy,
+  localeFromPath,
+  localizedHref,
+  type LandingLocaleCode,
+} from '../../i18n';
+
+const HV_REPO = 'nexu-io/html-video';
+const HV_URL = `https://github.com/${HV_REPO}`;
+const HV_REPO_API = `https://api.github.com/repos/${HV_REPO}`;
+
+/*
+ * SEO-targeted page titles per locale. Two head terms stacked with the brand:
+ * "HTML to Video" (category) + "Hyperframes" (engine) + "Open Source". The
+ * brand token "HTML Video" stays untranslated; the surrounding words follow
+ * each locale's natural order (Google tokenizes regardless).
+ */
+const SEO_TITLE: Record<LandingLocaleCode, string> = {
+  en:      'HTML to Video · Hyperframes · Open Source HTML Video',
+  zh:      'HTML 转视频 · Hyperframes · 开源 HTML Video',
+  'zh-tw': 'HTML 轉影片 · Hyperframes · 開源 HTML Video',
+  ja:      'HTML を動画に · Hyperframes · オープンソース HTML Video',
+  ko:      'HTML을 동영상으로 · Hyperframes · 오픈 소스 HTML Video',
+  de:      'HTML zu Video · Hyperframes · Open Source HTML Video',
+  fr:      'HTML en vidéo · Hyperframes · HTML Video Open Source',
+  ru:      'HTML в видео · Hyperframes · HTML Video с открытым исходным кодом',
+  es:      'HTML a vídeo · Hyperframes · HTML Video Open Source',
+  'pt-br': 'HTML para vídeo · Hyperframes · HTML Video Open Source',
+  it:      'HTML in video · Hyperframes · HTML Video Open Source',
+  vi:      'HTML sang video · Hyperframes · HTML Video mã nguồn mở',
+  pl:      'HTML na wideo · Hyperframes · HTML Video Open Source',
+  id:      'HTML ke video · Hyperframes · HTML Video Open Source',
+  nl:      'HTML naar video · Hyperframes · Open Source HTML Video',
+  ar:      'HTML إلى فيديو · Hyperframes · HTML Video مفتوح المصدر',
+  tr:      'HTML’den videoya · Hyperframes · Açık Kaynak HTML Video',
+  uk:      'HTML у відео · Hyperframes · HTML Video з відкритим кодом',
+};
+
+/*
+ * Imagery on the same Cloudflare R2 bucket (`static.open-design.ai`),
+ * routed through `cdn-cgi/image/` for format=auto + width variants — same
+ * pipeline as the HTML Anything page. Source PNGs live under
+ * `landing/assets/html-video/`; upload them with the upload.sh that ships
+ * alongside this work. Banner uses an explicit srcset (LCP element).
+ */
+const banner = imageAsset('html-video/banner.png', { width: 2400, quality: 82 });
+const bannerSrcset = imageAssetSrcset('html-video/banner.png', [768, 1280, 1920, 2400]);
+const shots = {
+  chart:   imageAsset('html-video/frame-data-chart-nyt.png',  { width: 1280, quality: 82 }),
+  glitch:  imageAsset('html-video/frame-glitch-title.png',    { width: 1280, quality: 82 }),
+  liquid:  imageAsset('html-video/frame-liquid-bg-hero.png',  { width: 1280, quality: 82 }),
+  cinema:  imageAsset('html-video/frame-light-leak-cinema.png',{ width: 1280, quality: 82 }),
+  cursor:  imageAsset('html-video/vfx-text-cursor.png',       { width: 1280, quality: 82 }),
+  outro:   imageAsset('html-video/frame-logo-outro.png',      { width: 1280, quality: 82 }),
+};
+
+// Numeric fallback for when the GitHub API is unreachable at build time;
+// the at-a-glance card shows this under a "GitHub stars" label, so it must
+// read as a count, not the word "GitHub".
+const FALLBACK_STARS = '775';
+const FALLBACK_LICENSE = 'Apache-2.0';
+
+type CopyPair = { headline: string; body: string };
+type EngineCopy = { name: string; status: string; body: string };
+type SurfaceCopy = { name: string; blurb: string };
+type RoadmapCopy = { tag: string; items: string[] };
+
+type HtmlVideoCopy = {
+  title: string;
+  description: string;
+  label: string;
+  heading: string;
+  lead: string;
+  githubCta: string;
+  quickstartCta: string;
+  heroAlt: string;
+  glanceAria: string;
+  glance: {
+    stars: string;
+    agents: string;
+    templates: string;
+    engines: string;
+    license: string;
+  };
+  whyTitle: string;
+  ideas: CopyPair[];
+  flowTitle: string;
+  flowLead: string;
+  flow: Array<CopyPair & { step: string }>;
+  showcaseTitle: string;
+  showcaseLead: string;
+  showcase: [
+    { alt: string; tag: string },
+    { alt: string; tag: string },
+    { alt: string; tag: string },
+    { alt: string; tag: string },
+    { alt: string; tag: string },
+    { alt: string; tag: string },
+  ];
+  enginesTitle: string;
+  enginesLead: string;
+  engines: EngineCopy[];
+  surfacesTitle: string;
+  surfacesLead: string;
+  surfaces: SurfaceCopy[];
+  agentsTitle: string;
+  agentsLead: string;
+  soundtrackTitle: string;
+  soundtrackLead: string;
+  quickstartTitle: string;
+  quickstartLead: string;
+  roadmapTitle: string;
+  roadmap: RoadmapCopy[];
+  tiebackTitle: string;
+  tiebackBody: string;
+  visitOpenDesign: string;
+  browseSkills: string;
+  githubLink: string;
+  schemaAlternateName: string;
+  schemaSourceQuestion: string;
+  schemaSourceAnswer: string;
+  schemaEngineQuestion: string;
+  schemaEngineAnswer: string;
+  schemaRelationQuestion: string;
+  schemaRelationAnswer: string;
+};
+
+const HTML_VIDEO_COPY_EN: HtmlVideoCopy = {
+  title: SEO_TITLE.en,
+  description:
+    'html-video turns HTML into video — on your laptop. An HTML to video meta-layer: bring your local coding agent (Open Design, Claude Code, Cursor, Codex, Hermes, or the Anthropic API), describe a video or paste an article link / GitHub repo, and the agent renders a multi-frame animated video to a real MP4 via Hyperframes (headless Chromium + ffmpeg). 21 templates, optional AI soundtrack. Open-source, Apache-2.0, no per-render fees.',
+  label: 'Sister project',
+  heading: 'HTML becomes video, on your laptop',
+  lead:
+    'The HTML to video meta-layer from the Open Design family. Describe a video — or paste an article link or a GitHub repo — and your local agent writes a multi-frame storyboard, fills each frame with animated HTML, and renders a real MP4 with the Hyperframes engine. Pluggable engines, a curated template gallery, optional AI soundtrack. No cloud render, no per-clip fee.',
+  githubCta: 'View on GitHub →',
+  quickstartCta: 'Quickstart',
+  heroAlt: 'html-video — HTML to video studio, animated template frames',
+  glanceAria: 'At a glance',
+  glance: {
+    stars: 'GitHub stars',
+    agents: 'Coding agents',
+    templates: 'Video templates',
+    engines: 'Render engine',
+    license: 'License',
+  },
+  whyTitle: 'Why this exists',
+  ideas: [
+    {
+      headline: 'HTML to video is a real category — but every engine is opinionated.',
+      body: 'Hyperframes, Remotion, Motion Canvas, Manim — each wants you to learn its authoring model. Most teams pick one and live with its limits. html-video is the meta-layer above all of them.',
+    },
+    {
+      headline: 'You talk to your agent; it picks the engine.',
+      body: 'The agent decides the storyboard and the engine decides how to draw it — neither leaks into the other. The engine is an implementation detail behind one render() adapter. Add a backend and every template gets it for free.',
+    },
+    {
+      headline: 'A link goes in, an MP4 comes out — locally.',
+      body: 'Headless Chromium records the animated HTML frame by frame and ffmpeg encodes it (libx264). The only network calls are the optional source fetch and the optional soundtrack. No cloud render, no per-render fee, no vendor lock-in.',
+    },
+  ],
+  flowTitle: 'How it works',
+  flowLead:
+    'One sentence (or one link) goes in; a real MP4 comes out. The pipeline is the same whether you start from a prompt, an article, or a repo.',
+  flow: [
+    { step: '01', headline: 'Source fetch', body: 'Paste a URL or a GitHub repo; the studio fetches it server-side and flattens it to Markdown. Server-rendered pages like WeChat 公众号 articles work out of the box.' },
+    { step: '02', headline: 'Agent loop', body: 'Your local agent reads the material plus the picked template’s style and emits a content-graph storyboard — one animated HTML block per frame.' },
+    { step: '03', headline: 'Content-graph', body: 'A multi-frame IR: nodes (entity / data / text) and edges (sequence / contrast), topo-sorted into frame order and timing.' },
+    { step: '04', headline: 'Per-frame HTML', body: 'Each node becomes a self-contained animated HTML frame on disk — the meta-layer where the storyboard and the engine stay decoupled.' },
+    { step: '05', headline: 'Hyperframes render', body: 'Headless Chromium loads each frame and records it, auto-extending to cover the frame’s own animation → one webm per frame.' },
+    { step: '06', headline: 'ffmpeg → your.mp4', body: 'Each webm is encoded to MP4 (libx264) and concatenated into one video; optional MiniMax music and narration are mixed in at export.' },
+  ],
+  showcaseTitle: 'Template gallery',
+  showcaseLead:
+    'Every template is a real, animated single-file HTML video — live renders, not mockups. Drop one in, let the agent fill it with your content, export to MP4. 21 in the studio gallery; six shown here.',
+  showcase: [
+    { alt: 'frame-data-chart-nyt — editorial animated line chart', tag: 'Data viz · NYT-style chart' },
+    { alt: 'frame-glitch-title — chromatic-aberration glitch title', tag: 'Title card · glitch' },
+    { alt: 'frame-liquid-bg-hero — aurora liquid-gradient hero', tag: 'Hero · liquid gradient' },
+    { alt: 'frame-light-leak-cinema — warm film-grain cinematic frame', tag: 'Cinematic · light leak' },
+    { alt: 'vfx-text-cursor — typewriter text with blinking cursor', tag: 'VFX · typewriter cursor' },
+    { alt: 'frame-logo-outro — clean animated logo end card', tag: 'Outro · logo end card' },
+  ],
+  enginesTitle: 'Pluggable rendering engines',
+  enginesLead:
+    'The engine is one render(input, ctx) contract behind a single adapter interface. Swap it and the storyboard and agent loop stay untouched. Hyperframes ships today; the rest are on the roadmap.',
+  engines: [
+    { name: 'Hyperframes', status: 'Shipped', body: 'HTML + CSS + GSAP, agent-skill driven. The default engine — renders a real MP4 via headless Chromium + ffmpeg.' },
+    { name: 'Remotion', status: 'Planned', body: 'React components. The adapter interface is designed for it; the adapter isn’t built yet.' },
+    { name: 'Motion Canvas / Revideo', status: 'Planned', body: 'TypeScript generators on canvas — best for code-first explainers.' },
+    { name: 'Manim', status: 'Researching', body: 'Math / 3D first. Niche, but a natural fit for the same adapter.' },
+  ],
+  surfacesTitle: 'What you can make',
+  surfacesLead:
+    'A curated, license-clean set of patterns — pick the one that matches the story you’re telling.',
+  surfaces: [
+    { name: 'Data-viz video', blurb: 'Editorial animated charts for “the number went up” stories.' },
+    { name: 'Product promo', blurb: 'Multi-scene reveals — hero, features, call to action.' },
+    { name: 'Social short', blurb: 'Vertical kinetic-type clips sized for the feed.' },
+    { name: 'Explainer', blurb: 'Decision-tree and concept walkthroughs from an article or repo.' },
+    { name: 'Title & outro', blurb: 'Glitch titles, logo end cards, clean sign-offs.' },
+    { name: 'Cinematic frame', blurb: 'Film-grain, light-leak mood for brand films.' },
+    { name: 'Kinetic type', blurb: 'Animated typography — drops, openers, “system online” energy.' },
+    { name: 'Repo walkthrough', blurb: 'Turn a GitHub project into a structured “what this is” video.' },
+  ],
+  agentsTitle: 'Six coding agents, auto-detected',
+  agentsLead:
+    'html-video uses whichever agent CLI is on your PATH, switchable from the studio’s top bar. It leads with Open Design (Vela) — one login, many models — then falls back to the first available backend. Nothing installed? Set an Anthropic key and it talks to the Messages API directly.',
+  soundtrackTitle: 'AI soundtrack',
+  soundtrackLead:
+    'Give the finished video a voice. Add a MiniMax key and describe a mood for background music, or type a script for narration; both are mixed into the exported MP4 via ffmpeg (music ducked under the voice). No key configured? The rest of the studio works unchanged.',
+  quickstartTitle: 'Quickstart',
+  quickstartLead:
+    'Three commands: pnpm install, pnpm -r build, then html-video studio — it opens at 127.0.0.1:3071. Pick a template or paste a link, chat with your agent, edit per-frame text, add a soundtrack, export MP4. Everything runs on your machine.',
+  roadmapTitle: 'Roadmap',
+  roadmap: [
+    { tag: 'Shipped', items: ['Pluggable-engine architecture', 'Hyperframes engine → real MP4', 'Article / repo → video', '21-template gallery', 'Multi-frame storyboards', 'AI soundtrack (MiniMax)', 'Studio + CLI'] },
+    { tag: 'In progress', items: ['Remotion adapter', 'Motion Canvas / Revideo adapter'] },
+    { tag: 'Researching', items: ['Manim adapter', 'More engines behind the same render() contract'] },
+  ],
+  tiebackTitle: 'From the Open Design family',
+  tiebackBody:
+    'The same meta-layer idea powers Open Design in the design space — an agent layer over many tools. html-video is the motion counterpart from the same team: HTML in, video out.',
+  visitOpenDesign: 'Visit Open Design →',
+  browseSkills: 'Browse Skills',
+  githubLink: 'html-video on GitHub',
+  schemaAlternateName: 'The HTML to video meta-layer',
+  schemaSourceQuestion: 'What can html-video turn into a video?',
+  schemaSourceAnswer:
+    'A prompt, a web article link (server-rendered pages like WeChat 公众号 work), or a GitHub repo. The studio fetches the source server-side and the agent builds a multi-frame video from the real content.',
+  schemaEngineQuestion: 'Which render engine does html-video use?',
+  schemaEngineAnswer:
+    'Hyperframes is the shipped default — HTML + CSS + GSAP recorded by headless Chromium and encoded to MP4 with ffmpeg. Remotion, Motion Canvas / Revideo, and Manim are on the roadmap behind the same adapter interface.',
+  schemaRelationQuestion: 'Is html-video related to Open Design?',
+  schemaRelationAnswer:
+    'Yes. html-video is a sister project from the same team behind Open Design — the motion counterpart to its design meta-layer.',
+};
+
+const HTML_VIDEO_COPY_ZH: HtmlVideoCopy = {
+  ...HTML_VIDEO_COPY_EN,
+  title: SEO_TITLE.zh,
+  description:
+    'html-video 把 HTML 变成视频——就在你的电脑上。一个 HTML 转视频的 meta-layer：用你本地的 coding agent（Open Design、Claude Code、Cursor、Codex、Hermes 或 Anthropic API），描述一个视频，或粘贴一篇文章链接 / GitHub 仓库，agent 就生成多帧动画视频，并通过 Hyperframes（无头 Chromium + ffmpeg）渲染成真实 MP4。21 个模板，可选 AI 配乐。开源，Apache-2.0，无按次渲染费。',
+  label: '姊妹项目',
+  heading: '把 HTML 变成视频，就在你的电脑上',
+  lead:
+    'Open Design 家族里的 HTML 转视频 meta-layer。描述一个视频——或粘贴一篇文章链接、一个 GitHub 仓库——你的本地 agent 就写出多帧 storyboard，给每一帧填上动画 HTML，再用 Hyperframes 引擎渲染成真实 MP4。可插拔引擎、策划过的模板库、可选 AI 配乐。不走云渲染，没有按片计费。',
+  githubCta: '在 GitHub 查看 →',
+  quickstartCta: '快速开始',
+  heroAlt: 'html-video — HTML 转视频工作台，动画模板帧',
+  glanceAria: '概览',
+  glance: {
+    stars: 'GitHub Star',
+    agents: 'Coding agent',
+    templates: '视频模板',
+    engines: '渲染引擎',
+    license: '许可证',
+  },
+  whyTitle: '为什么需要它',
+  ideas: [
+    { headline: 'HTML 转视频是个真实的品类——但每个引擎都有自己的脾气。', body: 'Hyperframes、Remotion、Motion Canvas、Manim，每个都要你学它那一套写法。多数团队只能选一个、忍受它的限制。html-video 是凌驾在它们之上的 meta-layer。' },
+    { headline: '你跟 agent 对话，由它选引擎。', body: 'agent 决定 storyboard，引擎决定怎么画——两者互不渗透。引擎只是一个 render() adapter 背后的实现细节。接入一个新后端，所有模板都自动受益。' },
+    { headline: '一个链接进去，一个 MP4 出来——全在本地。', body: '无头 Chromium 逐帧录制动画 HTML，ffmpeg 编码（libx264）。唯一的网络请求是可选的抓取源和可选的配乐。不走云渲染、没有按次计费、不锁定厂商。' },
+  ],
+  flowTitle: '工作流程',
+  flowLead: '一句话（或一个链接）进去，一个真实 MP4 出来。无论你从 prompt、文章还是仓库开始，流水线都一样。',
+  flow: [
+    { step: '01', headline: '抓取源', body: '粘贴一个 URL 或 GitHub 仓库；studio 在服务端抓取并压平成 Markdown。微信公众号这类服务端渲染页面开箱即用。' },
+    { step: '02', headline: 'Agent 循环', body: '你的本地 agent 读取素材和所选模板的风格，输出一个 content-graph storyboard——每帧一段动画 HTML。' },
+    { step: '03', headline: 'Content-graph', body: '多帧中间表示：节点（实体 / 数据 / 文本）+ 边（顺序 / 对比），拓扑排序成帧序和时序。' },
+    { step: '04', headline: '逐帧 HTML', body: '每个节点变成磁盘上一段自包含的动画 HTML 帧——这正是 storyboard 与引擎解耦的 meta-layer 所在。' },
+    { step: '05', headline: 'Hyperframes 渲染', body: '无头 Chromium 加载每一帧并录制，自动延长以覆盖该帧自身的动画 → 每帧一个 webm。' },
+    { step: '06', headline: 'ffmpeg → 你的.mp4', body: '每个 webm 编码成 MP4（libx264）再拼接成一段视频；导出时可选混入 MiniMax 音乐与旁白。' },
+  ],
+  showcaseTitle: '模板库',
+  showcaseLead: '每个模板都是真实、可动画的单文件 HTML 视频——是实时渲染，不是效果图。放一个进去，让 agent 填上你的内容，导出 MP4。studio 库里共 21 个，这里展示六个。',
+  showcase: [
+    { alt: 'frame-data-chart-nyt — 编辑式动画折线图', tag: '数据可视化 · NYT 风格图表' },
+    { alt: 'frame-glitch-title — 色差故障标题', tag: '标题卡 · 故障风' },
+    { alt: 'frame-liquid-bg-hero — 极光液态渐变主视觉', tag: '主视觉 · 液态渐变' },
+    { alt: 'frame-light-leak-cinema — 暖色胶片颗粒电影感帧', tag: '电影感 · 漏光' },
+    { alt: 'vfx-text-cursor — 带闪烁光标的打字机文字', tag: 'VFX · 打字机光标' },
+    { alt: 'frame-logo-outro — 简洁动画 logo 尾卡', tag: '片尾 · logo 尾卡' },
+  ],
+  enginesTitle: '可插拔渲染引擎',
+  enginesLead: '引擎是单一 adapter 接口背后的一个 render(input, ctx) 约定。换引擎，storyboard 和 agent 循环都不动。Hyperframes 今天已可用，其余在路线图上。',
+  engines: [
+    { name: 'Hyperframes', status: '已上线', body: 'HTML + CSS + GSAP，由 agent skill 驱动。默认引擎——通过无头 Chromium + ffmpeg 渲染真实 MP4。' },
+    { name: 'Remotion', status: '计划中', body: 'React 组件。adapter 接口已为它设计，但适配器尚未实现。' },
+    { name: 'Motion Canvas / Revideo', status: '计划中', body: 'canvas 上的 TypeScript 生成器——最适合 code-first 讲解视频。' },
+    { name: 'Manim', status: '调研中', body: '数学 / 3D 优先。小众，但天然契合同一套 adapter。' },
+  ],
+  surfacesTitle: '你能做出什么',
+  surfacesLead: '一组策划过、许可清晰的模式——按你要讲的故事选一个。',
+  surfaces: [
+    { name: '数据可视化视频', blurb: '为"数字涨了"类故事做的编辑式动画图表。' },
+    { name: '产品宣传片', blurb: '多场景揭示——主视觉、功能、行动号召。' },
+    { name: '社交短视频', blurb: '适配信息流的竖版动态文字短片。' },
+    { name: '讲解视频', blurb: '从文章或仓库生成的决策树与概念讲解。' },
+    { name: '片头 & 片尾', blurb: '故障标题、logo 尾卡、干净的收尾。' },
+    { name: '电影感帧', blurb: '胶片颗粒、漏光氛围，适合品牌片。' },
+    { name: '动态文字', blurb: '动画排版——drop、开场、"系统上线"的能量感。' },
+    { name: '仓库导览', blurb: '把一个 GitHub 项目变成结构化的"这是什么"视频。' },
+  ],
+  agentsTitle: '自动识别六种 coding agent',
+  agentsLead: 'html-video 使用你 PATH 上任意一个 agent CLI，可在 studio 顶栏切换。它优先用 Open Design (Vela)——一次登录、多种模型——再回退到第一个可用后端。什么都没装？配一个 Anthropic key，它直接对接 Messages API。',
+  soundtrackTitle: 'AI 配乐',
+  soundtrackLead: '给成片加上声音。配一个 MiniMax key，描述一段背景音乐的情绪，或输入一段旁白脚本；两者都会在导出时通过 ffmpeg 混入 MP4（音乐在人声下做 ducking）。没配 key？studio 其余部分照常工作。',
+  quickstartTitle: '快速开始',
+  quickstartLead: '三条命令：pnpm install、pnpm -r build，然后 html-video studio——会在 127.0.0.1:3071 打开。选一个模板或粘贴链接，跟 agent 对话，编辑每帧文字，加配乐，导出 MP4。全部在你的电脑本地运行。',
+  roadmapTitle: '路线图',
+  roadmap: [
+    { tag: '已上线', items: ['可插拔引擎架构', 'Hyperframes 引擎 → 真实 MP4', '文章 / 仓库 → 视频', '21 个模板库', '多帧 storyboard', 'AI 配乐（MiniMax）', 'Studio + CLI'] },
+    { tag: '进行中', items: ['Remotion 适配器', 'Motion Canvas / Revideo 适配器'] },
+    { tag: '调研中', items: ['Manim 适配器', '同一 render() 约定下接入更多引擎'] },
+  ],
+  tiebackTitle: '来自 Open Design 家族',
+  tiebackBody: '同样的 meta-layer 思路驱动着设计领域的 Open Design——一个凌驾在众多工具之上的 agent 层。html-video 是同团队在动态影像领域的对应物：HTML 进，视频出。',
+  visitOpenDesign: '访问 Open Design →',
+  browseSkills: '浏览 Skill',
+  githubLink: 'html-video on GitHub',
+  schemaAlternateName: 'HTML 转视频 meta-layer',
+  schemaSourceQuestion: 'html-video 能把什么变成视频？',
+  schemaSourceAnswer: '一个 prompt、一篇网页文章链接（微信公众号这类服务端渲染页面也可以），或一个 GitHub 仓库。studio 在服务端抓取源，agent 基于真实内容生成多帧视频。',
+  schemaEngineQuestion: 'html-video 用哪个渲染引擎？',
+  schemaEngineAnswer: 'Hyperframes 是已上线的默认引擎——HTML + CSS + GSAP 由无头 Chromium 录制、ffmpeg 编码成 MP4。Remotion、Motion Canvas / Revideo 和 Manim 在同一 adapter 接口下的路线图上。',
+  schemaRelationQuestion: 'html-video 和 Open Design 有关系吗？',
+  schemaRelationAnswer: '有。html-video 是 Open Design 团队的姊妹项目——其设计 meta-layer 在动态影像领域的对应物。',
+};
+
+/*
+ * Derived copy for the 16 non-authored locales: start from EN and overlay a
+ * keyword-stacked, machine-derivable shell built from shared i18n fragments.
+ * Same approach as derivedHtmlAnythingCopy — the head terms (HTML to video,
+ * Hyperframes) stay in the title/description so SEO holds even before a full
+ * human translation lands.
+ */
+function derivedHtmlVideoCopy(locale: LandingLocaleCode): HtmlVideoCopy {
+  if (locale === DEFAULT_LOCALE) return HTML_VIDEO_COPY_EN;
+  if (locale === 'zh') return HTML_VIDEO_COPY_ZH;
+
+  const ui = getLandingUiCopy(locale);
+  const product = getHeaderProductMenuCopy(locale);
+
+  return {
+    ...HTML_VIDEO_COPY_EN,
+    title: SEO_TITLE[locale] ?? SEO_TITLE.en,
+    label: product.product,
+    heading: product.htmlVideoBlurb,
+    description: `${product.htmlVideoBlurb} HTML → MP4 · Hyperframes · ffmpeg. ${HTML_VIDEO_COPY_EN.description}`,
+    lead: `${product.htmlVideoBlurb} ${ui.footer.agents} CLI · Hyperframes · MP4.`,
+  };
+}
+
+function formatCount(count: unknown): string | null {
+  if (typeof count !== 'number' || !Number.isFinite(count) || count <= 0) return null;
+  if (count < 1000) return String(count);
+  return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+}
+
+let starsLabel = FALLBACK_STARS;
+let licenseLabel = FALLBACK_LICENSE;
+
+try {
+  const response = await fetch(HV_REPO_API, {
+    headers: { Accept: 'application/vnd.github+json' },
+  });
+  if (response.ok) {
+    const repo = (await response.json()) as {
+      stargazers_count?: number;
+      license?: { spdx_id?: string };
+    };
+    starsLabel = formatCount(repo.stargazers_count) ?? starsLabel;
+    licenseLabel = repo.license?.spdx_id ?? licenseLabel;
+  }
+} catch {
+  // Network unavailable at build time — keep fallbacks.
+}
+
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const copy = derivedHtmlVideoCopy(locale);
+const title = copy.title;
+const description = copy.description;
+
+const agents = [
+  'Open Design (Vela)',
+  'Claude Code',
+  'Cursor Agent',
+  'Codex CLI',
+  'Hermes',
+  'Anthropic API',
+];
+
+const jsonLd: Array<Record<string, unknown>> = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'html-video',
+    alternateName: [
+      'html video',
+      'html-video',
+      'htmlvideo',
+      'HTML to video',
+      'HTML to MP4',
+      'Hyperframes',
+      'The HTML to video meta-layer',
+      'open source html to video',
+      'html video official',
+    ],
+    applicationCategory: 'MultimediaApplication',
+    operatingSystem: 'macOS, Linux, Windows',
+    description,
+    url: 'https://open-design.ai/html-video/',
+    sameAs: [HV_URL],
+    license: 'https://www.apache.org/licenses/LICENSE-2.0',
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    author: {
+      '@type': 'Organization',
+      name: 'Open Design',
+      url: 'https://open-design.ai/',
+    },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: 'https://open-design.ai/' },
+      { '@type': 'ListItem', position: 2, name: 'html-video', item: 'https://open-design.ai/html-video/' },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: [
+      { '@type': 'Question', name: copy.schemaSourceQuestion, acceptedAnswer: { '@type': 'Answer', text: copy.schemaSourceAnswer } },
+      { '@type': 'Question', name: copy.schemaEngineQuestion, acceptedAnswer: { '@type': 'Answer', text: copy.schemaEngineAnswer } },
+      { '@type': 'Question', name: copy.schemaRelationQuestion, acceptedAnswer: { '@type': 'Answer', text: copy.schemaRelationAnswer } },
+    ],
+  },
+];
+
+// Zip the six showcase tiles with their R2 shots so the template maps a
+// single array — avoids a parallel-index lookup that TS widens to
+// `string | undefined`.
+const showcaseShots = [shots.chart, shots.glitch, shots.liquid, shots.cinema, shots.cursor, shots.outro];
+const showcaseTiles = copy.showcase.map((tile, i) => ({
+  ...tile,
+  src: showcaseShots[i] ?? banner,
+}));
+---
+
+<Layout title={title} description={description} active="html-video" ogImage={banner} jsonLd={jsonLd}>
+  <header class="catalog-head">
+    <span class="label">{copy.label}</span>
+    <h1 class="display">
+      <em>html-video</em> — {copy.heading}<span class="dot">.</span>
+    </h1>
+    <p class="lead">
+      {copy.lead}
+    </p>
+    <p class="ha-cta">
+      <a class="ha-btn ha-btn-primary" href={HV_URL} rel="noopener">
+        {copy.githubCta}
+      </a>
+      <a class="ha-btn" href={`${HV_URL}#quick-start`} rel="noopener">
+        {copy.quickstartCta}
+      </a>
+    </p>
+  </header>
+
+  <figure class="ha-hero-figure">
+    <img
+      src={banner}
+      srcset={bannerSrcset}
+      sizes="(max-width: 900px) 100vw, 1280px"
+      alt={copy.heroAlt}
+      width="2400"
+      height="1260"
+      loading="eager"
+      fetchpriority="high"
+      decoding="async"
+    />
+  </figure>
+
+  <section class="ha-glance" aria-label={copy.glanceAria}>
+    <ul>
+      <li><span class="num">{starsLabel}</span><span class="lbl">{copy.glance.stars}</span></li>
+      <li><span class="num">6</span><span class="lbl">{copy.glance.agents}</span></li>
+      <li><span class="num">21</span><span class="lbl">{copy.glance.templates}</span></li>
+      <li><span class="num">Hyperframes</span><span class="lbl">{copy.glance.engines}</span></li>
+      <li><span class="num">{licenseLabel}</span><span class="lbl">{copy.glance.license}</span></li>
+    </ul>
+  </section>
+
+  <section class="ha-section" aria-labelledby="hv-why">
+    <h2 id="hv-why" class="ha-h2">{copy.whyTitle}</h2>
+    <div class="ha-ideas">
+      {copy.ideas.map((idea) => (
+        <article class="ha-idea">
+          <h3>{idea.headline}</h3>
+          <p>{idea.body}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="ha-section" aria-labelledby="hv-flow">
+    <h2 id="hv-flow" class="ha-h2">{copy.flowTitle}</h2>
+    <p class="ha-section-lead">{copy.flowLead}</p>
+    <ol class="ha-flow">
+      {copy.flow.map((step) => (
+        <li>
+          <span class="step-num">{step.step}</span>
+          <div class="step-body">
+            <h3>{step.headline}</h3>
+            <p>{step.body}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
+  </section>
+
+  <section class="ha-section" aria-labelledby="hv-showcase">
+    <h2 id="hv-showcase" class="ha-h2">{copy.showcaseTitle}</h2>
+    <p class="ha-section-lead">{copy.showcaseLead}</p>
+    <ul class="ha-showcase">
+      {showcaseTiles.map((tile) => (
+        <li>
+          <figure>
+            <LazyImg src={tile.src} alt={tile.alt} />
+            <figcaption>{tile.tag}</figcaption>
+          </figure>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="ha-section" aria-labelledby="hv-engines">
+    <h2 id="hv-engines" class="ha-h2">{copy.enginesTitle}</h2>
+    <p class="ha-section-lead">{copy.enginesLead}</p>
+    <div class="ha-ideas">
+      {copy.engines.map((engine) => (
+        <article class="ha-idea">
+          <h3>{engine.name} <span class="ha-tag">{engine.status}</span></h3>
+          <p>{engine.body}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="ha-section" aria-labelledby="hv-surfaces">
+    <h2 id="hv-surfaces" class="ha-h2">{copy.surfacesTitle}</h2>
+    <p class="ha-section-lead">{copy.surfacesLead}</p>
+    <ul class="ha-surfaces">
+      {copy.surfaces.map((surface) => (
+        <li>
+          <h3>{surface.name}</h3>
+          <p>{surface.blurb}</p>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="ha-section" aria-labelledby="hv-agents">
+    <h2 id="hv-agents" class="ha-h2">{copy.agentsTitle}</h2>
+    <p class="ha-section-lead">{copy.agentsLead}</p>
+    <ul class="ha-agents">
+      {agents.map((agent) => (
+        <li>{agent}</li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="ha-section ha-duo" aria-label={`${copy.soundtrackTitle} · ${copy.quickstartTitle}`}>
+    <div class="ha-note">
+      <h2 id="hv-soundtrack" class="ha-note-h">{copy.soundtrackTitle}</h2>
+      <p>{copy.soundtrackLead}</p>
+    </div>
+    <div class="ha-note">
+      <h2 id="hv-quickstart" class="ha-note-h">{copy.quickstartTitle}</h2>
+      <p>{copy.quickstartLead}</p>
+    </div>
+  </section>
+
+  <section class="ha-section" aria-labelledby="hv-roadmap">
+    <h2 id="hv-roadmap" class="ha-h2">{copy.roadmapTitle}</h2>
+    <div class="ha-roadmap">
+      {copy.roadmap.map((col) => (
+        <article class="ha-roadmap-col">
+          <h3>{col.tag}</h3>
+          <ul>
+            {col.items.map((item) => (
+              <li>{item}</li>
+            ))}
+          </ul>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="ha-tieback" aria-labelledby="hv-tieback">
+    <h2 id="hv-tieback" class="ha-h2">{copy.tiebackTitle}</h2>
+    <p>{copy.tiebackBody}</p>
+    <p class="ha-cta">
+      <a class="ha-btn ha-btn-primary" href={href('/')}>{copy.visitOpenDesign}</a>
+      <a class="ha-btn" href={href('/skills/')}>{copy.browseSkills}</a>
+      <a class="ha-btn" href={HV_URL} rel="noopener">{copy.githubLink}</a>
+    </p>
+  </section>
+</Layout>
+
+<style>
+  /* Page-local styles. Uses Open Design's global tokens from globals.css
+   * (--serif / --mono / --ink / --coral / --line …) so this page stays in the
+   * same visual system as the HTML Anything and Solutions pages. Spacing
+   * rhythm follows taste-skill: consistent section gaps, tight title→content,
+   * hairline dividers to group instead of large empty gaps. */
+
+  /* ---- CTA buttons ---- */
+  .ha-cta {
+    margin-top: 1.5rem;
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .ha-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--ink);
+    border-radius: 999px;
+    font-size: 0.9rem;
+    line-height: 1;
+    white-space: nowrap;
+    text-decoration: none;
+    color: var(--ink);
+    transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+  }
+  .ha-btn:hover { background: var(--ink); color: var(--paper); }
+  .ha-btn:active { transform: translateY(1px); }
+  .ha-btn-primary { background: var(--ink); color: var(--paper); }
+  .ha-btn-primary:hover { background: var(--coral); border-color: var(--coral); color: #fff; }
+
+  /* ---- Hero figure (kept restrained per taste-skill hero discipline) ---- */
+  .ha-hero-figure {
+    margin: 1.25rem 0 0 0;
+    padding: 0;
+  }
+  .ha-hero-figure img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+  }
+
+  /* ---- At-a-glance stat band ---- */
+  .ha-glance {
+    margin: 2.25rem 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 1.25rem 0;
+  }
+  .ha-glance ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1.25rem 1.75rem;
+  }
+  .ha-glance li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+  .ha-glance .num {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 1.9rem;
+    line-height: 1;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+  }
+  .ha-glance .lbl {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-mute);
+  }
+  /* ---- Section rhythm: single-edge top margin so adjacent sections sit at a
+     consistent 2.25rem, never a doubled gap ---- */
+  .ha-section { margin: 0; padding-top: 2.25rem; }
+  .ha-h2 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    line-height: 1.1;
+    letter-spacing: -0.018em;
+    color: var(--ink);
+    margin: 0 0 0.75rem 0;
+  }
+  .ha-section-lead {
+    max-width: 62ch;
+    font-size: 1rem;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    margin: 0 0 1.5rem 0;
+  }
+
+  /* ---- Ideas / engines: bordered cards on hairline grid ---- */
+  .ha-ideas {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+  }
+  .ha-idea {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 1.25rem 1.35rem;
+    background: var(--paper-warm);
+  }
+  .ha-idea h3 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 1.15rem;
+    line-height: 1.25;
+    color: var(--ink);
+    margin: 0 0 0.5rem 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+  }
+  .ha-idea p { margin: 0; font-size: 0.95rem; line-height: 1.55; color: var(--ink-soft); }
+  .ha-tag {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: var(--coral);
+    color: #fff;
+    white-space: nowrap;
+  }
+
+  /* ---- How-it-works numbered flow ---- */
+  .ha-flow {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0;
+  }
+  .ha-flow li {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.25rem 1.25rem;
+    padding: 1.1rem 0;
+    border-top: 1px solid var(--line);
+  }
+  .ha-flow li:last-child { border-bottom: 1px solid var(--line); }
+  .step-num {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    letter-spacing: 0.04em;
+    color: var(--coral);
+    padding-top: 0.2rem;
+  }
+  .step-body { display: grid; gap: 0.3rem; }
+  .ha-flow h3 {
+    font-family: var(--serif);
+    font-weight: 600;
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--ink);
+  }
+  .ha-flow p { margin: 0; font-size: 0.95rem; line-height: 1.55; color: var(--ink-soft); max-width: 70ch; }
+
+  /* ---- Template gallery ---- */
+  .ha-showcase {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+  }
+  .ha-showcase figure {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+  .ha-showcase img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--paper-warm);
+  }
+  .ha-showcase figcaption {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-mute);
+  }
+
+  /* ---- Surfaces (what you can make) ---- */
+  .ha-surfaces {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.85rem;
+  }
+  .ha-surfaces li {
+    border: 1px solid var(--line);
+    padding: 0.9rem 1rem;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .ha-surfaces h3 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--ink);
+    margin: 0;
+  }
+  .ha-surfaces p {
+    font-size: 0.85rem;
+    line-height: 1.45;
+    color: var(--ink-soft);
+    margin: 0;
+  }
+
+  /* ---- Agents pills ---- */
+  .ha-agents {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .ha-agents li {
+    border: 1px solid var(--line);
+    padding: 0.4rem 0.85rem;
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    background: var(--paper-warm);
+  }
+
+  /* ---- Lightweight two-up notes (soundtrack / quickstart) ---- */
+  .ha-duo {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+  }
+  .ha-note {
+    border-left: 2px solid var(--coral);
+    padding: 0.1rem 0 0.1rem 1.1rem;
+  }
+  .ha-note-h {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 1.2rem;
+    line-height: 1.2;
+    color: var(--ink);
+    margin: 0 0 0.5rem 0;
+  }
+  .ha-note p {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    max-width: 56ch;
+  }
+
+  /* ---- Roadmap columns ---- */
+  .ha-roadmap {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+  }
+  .ha-roadmap-col h3 {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--coral);
+    margin: 0 0 0.6rem 0;
+  }
+  .ha-roadmap-col ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0.35rem;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    color: var(--ink-soft);
+  }
+
+  /* ---- Open Design tieback ---- */
+  .ha-tieback {
+    margin: 3rem 0 1rem 0;
+    padding: 1.75rem 0 0 0;
+    border-top: 1px solid var(--line);
+  }
+  .ha-tieback p {
+    max-width: 62ch;
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    margin: 0 0 1rem 0;
+  }
+  .ha-tieback .ha-cta {
+    margin-top: 0;
+  }
+</style>

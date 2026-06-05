@@ -80,6 +80,7 @@ import {
 } from '../runtime/exports';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
+import { shouldConsumeSlideNav } from '../runtime/slide-nav';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
 import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
 import {
@@ -956,6 +957,9 @@ interface Props {
   // Bumped nonce asking this viewer to open its Share/Export menu (chat-side
   // "Share" next-step action). Only HTML artifacts expose a Share menu.
   shareRequest?: { nonce: number } | null;
+  // Bumped nonce asking a deck preview to flip to `slideIndex` (a queued chat
+  // send for this file just started processing).
+  slideNavRequest?: { slideIndex: number; nonce: number } | null;
 }
 
 export function FileViewer({
@@ -978,6 +982,7 @@ export function FileViewer({
   commentPortalId,
   onCommentModeChange,
   shareRequest,
+  slideNavRequest,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
     file,
@@ -1020,6 +1025,7 @@ export function FileViewer({
         commentPortalId={commentPortalId}
         onCommentModeChange={onCommentModeChange}
         shareRequest={shareRequest}
+        slideNavRequest={slideNavRequest}
       />
     );
   }
@@ -3517,6 +3523,7 @@ function CommentPreviewOverlays({
   hoveredTarget,
   hoveredPodMemberId,
   activeTarget,
+  activeExistingCommentId = null,
   boardTool,
   showActivePin = false,
   scale,
@@ -3531,6 +3538,7 @@ function CommentPreviewOverlays({
   hoveredTarget: PreviewCommentSnapshot | null;
   hoveredPodMemberId: string | null;
   activeTarget: PreviewCommentSnapshot | null;
+  activeExistingCommentId?: string | null;
   boardTool: BoardTool;
   showActivePin?: boolean;
   scale: number;
@@ -3544,15 +3552,15 @@ function CommentPreviewOverlays({
   const visibleComments = useMemo(
     () =>
       comments
-        .filter((comment) => commentVisibleOnDeckSlide(comment, activeSlideIndex))
-        .map((comment, index) => ({
+        .map((comment, globalIndex) => ({
           comment,
-          index,
+          markerNumber: globalIndex + 1,
           snapshot: liveSnapshotForComment(comment, liveTargets),
         }))
-        .filter((item): item is { comment: PreviewComment; index: number; snapshot: PreviewCommentSnapshot } =>
+        .filter((item): item is { comment: PreviewComment; markerNumber: number; snapshot: PreviewCommentSnapshot } =>
           Boolean(item.snapshot),
-        ),
+        )
+        .filter(({ comment }) => commentVisibleOnDeckSlide(comment, activeSlideIndex)),
     [comments, liveTargets, activeSlideIndex],
   );
   // `onOpenComment` is an inline arrow from the parent (new identity every
@@ -3568,7 +3576,7 @@ function CommentPreviewOverlays({
   // comments reuses the whole subtree and React skips reconciling it.
   const savedMarkers = useMemo(
     () =>
-      visibleComments.map(({ comment, index, snapshot }) => {
+      visibleComments.map(({ comment, markerNumber, snapshot }) => {
         const bounds = overlayBoundsFromSnapshot(snapshot, scale, overlayOffset);
         const label = commentTargetDisplayName(comment);
         return (
@@ -3592,22 +3600,22 @@ function CommentPreviewOverlays({
                 event.stopPropagation();
                 onOpenCommentRef.current(comment, snapshot);
               }}
-              title={`${index + 1}. ${label}: ${comment.note}`}
+              title={`${markerNumber}. ${label}: ${comment.note}`}
               aria-label={`Open comment for ${label}`}
             >
-              {index + 1}
+              {markerNumber}
             </button>
           </div>
         );
       }),
     [visibleComments, scale, overlayOffset],
   );
-  const activeSavedIndex = activeTarget
-    ? visibleComments.findIndex(({ snapshot }) => snapshot.elementId === activeTarget.elementId)
+  const activeSavedIndex = activeExistingCommentId
+    ? comments.findIndex((comment) => comment.id === activeExistingCommentId)
     : -1;
   const activePinNumber = activeSavedIndex >= 0
     ? activeSavedIndex + 1
-    : visibleComments.length + 1;
+    : comments.length + 1;
   const targetOverlay = activeTarget ?? hoveredTarget;
   return (
     <div className="comment-overlay-layer" aria-hidden={false}>
@@ -4414,6 +4422,7 @@ function HtmlViewer({
   commentPortalId,
   onCommentModeChange,
   shareRequest,
+  slideNavRequest,
 }: {
   projectId: string;
   projectKind: TrackingProjectKind;
@@ -4433,6 +4442,7 @@ function HtmlViewer({
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
   shareRequest?: { nonce: number } | null;
+  slideNavRequest?: { slideIndex: number; nonce: number } | null;
 }) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -5208,7 +5218,7 @@ function HtmlViewer({
     needsFocusGuard,
   }) && !manualEditRequiresSrcDoc;
   const basePreviewSrcUrl = useMemo(
-    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll&odPreviewBridge=selection`,
+    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`,
     [projectId, file.name, file.mtime, reloadKey],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
@@ -7145,6 +7155,29 @@ function HtmlViewer({
     setDeployMenuOpen(true);
   }, [shareRequest?.nonce, canShare, projectId, file.name]);
 
+  // A queued chat send for this deck just started: flip the preview to the
+  // slide its marked element lives on. We write the cached slide state first so
+  // a freshly-mounted iframe (the tab may have just been activated) restores to
+  // the target on load via syncCachedSlideStateToIframe(), then post directly
+  // to cover the already-loaded iframe. The consume-once guard lives in
+  // `shouldConsumeSlideNav` (keyed by file outside this component) so it holds
+  // across remounts — switching away from and back to the deck must not replay
+  // the stale request and yank the preview off wherever the user navigated.
+  useEffect(() => {
+    const nonce = slideNavRequest?.nonce;
+    if (nonce == null) return;
+    if (!effectiveDeck) return;
+    const requested = slideNavRequest?.slideIndex;
+    if (typeof requested !== 'number' || !Number.isFinite(requested) || requested < 0) return;
+    if (!shouldConsumeSlideNav(previewStateKey, nonce)) return;
+    const target = Math.floor(requested);
+    const cachedCount = htmlPreviewSlideState.get(previewStateKey)?.count;
+    const count = slideState?.count ?? cachedCount ?? target + 1;
+    setSlideStateCached(previewStateKey, { active: target, count });
+    setSlideState({ active: target, count });
+    syncCachedSlideStateToIframe();
+  }, [slideNavRequest?.nonce, slideNavRequest?.slideIndex, effectiveDeck, previewStateKey, slideState?.count]);
+
   const openDownloadMenu = () => {
     fireArtifactHeaderClick('share_dropdown');
     setExportReadyNudge(false);
@@ -7175,6 +7208,14 @@ function HtmlViewer({
       await waitForIframeLoadOrTimeout(activeIframe, 250);
       await waitForAnimationFrame();
       return requestPreviewSnapshotWithRetry(activeIframe);
+    }
+
+    const urlIframe = iframeRef.current ?? urlPreviewIframeRef.current;
+    if (urlIframe) {
+      await waitForIframeLoadOrTimeout(urlIframe, 250);
+      await waitForAnimationFrame();
+      const urlSnapshot = await requestPreviewSnapshotWithRetry(urlIframe);
+      if (urlSnapshot) return urlSnapshot;
     }
 
     const srcDocIframe = srcDocPreviewIframeRef.current;
@@ -8528,6 +8569,7 @@ function HtmlViewer({
                   hoveredTarget={hoveredCommentTarget}
                   hoveredPodMemberId={hoveredPodMemberId}
                   activeTarget={activeCommentTarget}
+                  activeExistingCommentId={activeComposerComment?.id ?? null}
                   boardTool={boardTool}
                   showActivePin={commentCreateMode}
                   scale={overlayPreviewScale}

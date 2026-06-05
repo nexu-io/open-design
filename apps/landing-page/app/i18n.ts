@@ -206,6 +206,8 @@ export interface HeaderProductMenuCopy {
   openDesignBlurb: string;
   htmlAnythingName: string;
   htmlAnythingBlurb: string;
+  htmlVideoName: string;
+  htmlVideoBlurb: string;
   amrName: string;
   amrKicker: string;
   amrBlurb: string;
@@ -234,6 +236,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'The agentic design surface: skills, systems, templates.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / data to ship-ready HTML, by your local agent.',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: 'A prompt, article, or repo to a real MP4 — by your local agent.',
     amrName: 'Open Design AMR',
     amrKicker: 'Design Agent',
     amrBlurb: 'Professional design Agent, zero-config use, built-in SOTA models & Harness',
@@ -247,6 +251,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agent 原生设计工作台：Skill、设计系统、模板。',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / 数据变成可交付 HTML，由本地 Agent 完成。',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: '一个 prompt、文章或仓库，变成真实 MP4——由你的本地 Agent 完成。',
     amrName: 'Open Design AMR',
     amrKicker: '设计 Agent',
     amrBlurb: '专业设计Agent、零配置使用、自带SOTA模型与Harness',
@@ -260,6 +266,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agent 原生設計工作台：Skill、設計系統、模板。',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / 資料變成可交付 HTML，由本地 Agent 完成。',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: '一個 prompt、文章或倉庫，變成真實 MP4——由你的本地 Agent 完成。',
     amrName: 'Open Design AMR',
     amrKicker: '設計 Agent',
     amrBlurb: '專業設計 Agent、零配置使用、內建 SOTA 模型與 Harness',
@@ -273,6 +281,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agent ネイティブのデザイン面: Skill、システム、テンプレート。',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / データをローカル Agent で納品可能な HTML へ。',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: 'プロンプト、記事、リポジトリを本物のMP4に — あなたのローカルエージェントで。',
     amrName: 'Open Design AMR',
     amrKicker: 'デザイン Agent',
     amrBlurb: 'プロ向けデザイン Agent、ゼロ設定で利用、SOTA モデルと Harness 内蔵',
@@ -286,6 +296,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agent 네이티브 디자인 작업면: Skill, 시스템, 템플릿.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / 데이터를 로컬 Agent로 배포 가능한 HTML로 변환.',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: '프롬프트, 글, 레포만 있으면 — 로컬 에이전트가 진짜 MP4로.',
     amrName: 'Open Design AMR',
     amrKicker: '디자인 Agent',
     amrBlurb: '전문 디자인 Agent, 무설정 사용, SOTA 모델과 Harness 내장',
@@ -299,6 +311,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agentische Designoberfläche: Skills, Systeme, Vorlagen.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / Daten werden durch deinen lokalen Agent zu fertigem HTML.',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: 'Eine Idee, ein Artikel oder ein Repo – per lokalem Agent zu einem echten MP4.',
     amrName: 'Open Design AMR',
     amrKicker: 'Design-Agent',
     amrBlurb: 'Professioneller Design-Agent, null Konfiguration, integrierte SOTA-Modelle & Harness',
@@ -312,6 +326,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Surface de design agentique : skills, systèmes, modèles.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / données vers du HTML prêt à livrer via votre agent local.',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: 'Une consigne, un article ou un repo vers une vraie vidéo MP4 — par votre agent local.',
     amrName: 'Open Design AMR',
     amrKicker: 'Agent design',
     amrBlurb: 'Agent de design professionnel, zéro configuration, modèles SOTA et Harness intégrés',
@@ -325,6 +341,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agent-native дизайн-среда: skills, системы, шаблоны.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / данные в готовый HTML через локального Agent.',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: 'Промпт, статья или репозиторий — в настоящий MP4 с помощью локального агента.',
     amrName: 'Open Design AMR',
     amrKicker: 'Дизайн-Agent',
     amrBlurb: 'Профессиональный дизайн-Agent, без настройки, со встроенными SOTA-моделями и Harness',
@@ -338,6 +356,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Superficie de diseño agentic: skills, sistemas, plantillas.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / datos a HTML listo para entregar con tu Agent local.',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: 'Una idea, artículo o repo a un MP4 real — con tu agente local.',
     amrName: 'Open Design AMR',
     amrKicker: 'Agent diseño',
     amrBlurb: 'Agent de diseño profesional, uso sin configuración, modelos SOTA y Harness integrados',
@@ -351,6 +371,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Superfície de design agentic: skills, sistemas, templates.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / dados viram HTML pronto com seu Agent local.',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: 'Uma ideia, artigo ou repo vira um MP4 de verdade — pelo seu agente local.',
     amrName: 'Open Design AMR',
     amrKicker: 'Agent design',
     amrBlurb: 'Agent de design profissional, uso sem configuração, modelos SOTA e Harness integrados',
@@ -364,6 +386,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Superficie di design agentic: skill, sistemi, template.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / dati in HTML pronto alla consegna con il tuo Agent locale.',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: 'Una richiesta, un articolo o un repo in un vero MP4 — dal tuo agente locale.',
     amrName: 'Open Design AMR',
     amrKicker: 'Agent design',
     amrBlurb: 'Agent di design professionale, uso senza configurazione, modelli SOTA e Harness integrati',
@@ -377,6 +401,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Bề mặt thiết kế agentic: skill, hệ thống, mẫu.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / dữ liệu thành HTML sẵn sàng giao bằng Agent cục bộ.',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: 'Một prompt, bài viết hay repo thành video MP4 thật — bằng agent của bạn.',
     amrName: 'Open Design AMR',
     amrKicker: 'Agent thiết kế',
     amrBlurb: 'Agent thiết kế chuyên nghiệp, dùng không cần cấu hình, tích hợp mô hình SOTA và Harness',
@@ -390,6 +416,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agentic powierzchnia projektowa: skills, systemy, szablony.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / dane do gotowego HTML przez lokalnego Agent.',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: 'Prompt, artykuł lub repo w prawdziwe MP4 — dzięki Twojemu lokalnemu agentowi.',
     amrName: 'Open Design AMR',
     amrKicker: 'Agent designu',
     amrBlurb: 'Profesjonalny Agent do projektowania, zero konfiguracji, wbudowane modele SOTA i Harness',
@@ -403,6 +431,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Ruang desain agentic: skill, sistem, template.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / data menjadi HTML siap kirim lewat Agent lokal.',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: 'Prompt, artikel, atau repo jadi MP4 sungguhan — lewat agent lokalmu.',
     amrName: 'Open Design AMR',
     amrKicker: 'Agent desain',
     amrBlurb: 'Agent desain profesional, tanpa konfigurasi, model SOTA dan Harness bawaan',
@@ -416,6 +446,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agentic designoppervlak: skills, systemen, templates.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / data naar opleverklare HTML via je lokale Agent.',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: 'Een prompt, artikel of repo naar een echte MP4 — door je lokale agent.',
     amrName: 'Open Design AMR',
     amrKicker: 'Design-Agent',
     amrBlurb: 'Professionele design-Agent, nul configuratie, ingebouwde SOTA-modellen en Harness',
@@ -429,6 +461,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'مساحة تصميم وكيلة: المهارات والأنظمة والقوالب.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / البيانات إلى HTML جاهز عبر Agent المحلي.',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: 'موجِّه أو مقال أو مستودع إلى فيديو MP4 حقيقي — بواسطة وكيلك المحلي.',
     amrName: 'Open Design AMR',
     amrKicker: 'Agent تصميم',
     amrBlurb: 'Agent تصميم احترافي، استخدام بلا إعداد، نماذج SOTA و Harness مدمجة',
@@ -442,6 +476,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agentic tasarım yüzeyi: skill, sistemler, şablonlar.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / veriler yerel Agent ile teslim edilebilir HTML olur.',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: 'Bir prompt, makale ya da repo\'dan gerçek bir MP4\'e — yerel ajanınla.',
     amrName: 'Open Design AMR',
     amrKicker: 'Tasarım Agent',
     amrBlurb: 'Profesyonel tasarım Agent, sıfır yapılandırma, yerleşik SOTA modelleri ve Harness',
@@ -455,6 +491,8 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agent-native дизайн-поверхня: skills, системи, шаблони.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / дані у готовий HTML через локального Agent.',
+    htmlVideoName: 'HTML Video',
+    htmlVideoBlurb: 'Підказка, стаття чи репозиторій — у справжнє MP4 від вашого локального агента.',
     amrName: 'Open Design AMR',
     amrKicker: 'Дизайн-Agent',
     amrBlurb: 'Професійний дизайн-Agent, без налаштувань, із вбудованими SOTA-моделями та Harness',
@@ -787,6 +825,7 @@ export interface LandingUiCopy {
     rss: string;
     sisterProjects: string;
     htmlAnything: string;
+    htmlVideo: string;
     nexuIo: string;
     bottomLeft: string;
     bottomRight: string;
@@ -3233,6 +3272,7 @@ const LANDING_UI_COPY: LandingUiCopy = {
     rss: 'RSS',
     sisterProjects: 'Sister projects',
     htmlAnything: 'HTML Anything',
+    htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / Volume 01 / Issue Nº 26',
     bottomRight: 'Berlin / Open / Earth · 52.5200° N · 13.4050° E',
@@ -3518,6 +3558,7 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       rss: 'RSS',
       sisterProjects: '姊妹项目',
       htmlAnything: 'HTML Anything',
+      htmlVideo: 'HTML Video',
       nexuIo: 'nexu.io',
       bottomLeft: '● Open Design · Apache-2.0 · 2026 / 第 01 卷 / 第 26 期',
       bottomRight: '柏林 / 开放 / 地球 · 52.5200° N · 13.4050° E',
@@ -3799,6 +3840,7 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       rss: 'RSS',
       sisterProjects: '姊妹專案',
       htmlAnything: 'HTML Anything',
+      htmlVideo: 'HTML Video',
       nexuIo: 'nexu.io',
       bottomLeft: '● Open Design · Apache-2.0 · 2026 / 第 01 卷 / 第 26 期',
       bottomRight: '柏林 / 開放 / 地球 · 52.5200° N · 13.4050° E',
@@ -4505,6 +4547,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     xTwitter: 'X / Twitter',
     sisterProjects: '姉妹プロジェクト',
     htmlAnything: 'HTML Anything',
+    htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
   },
   ko: {
@@ -4530,6 +4573,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     xTwitter: 'X / Twitter',
     sisterProjects: '자매 프로젝트',
     htmlAnything: 'HTML Anything',
+    htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
   },
   de: {
@@ -4555,6 +4599,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     xTwitter: 'X / Twitter',
     sisterProjects: 'Schwesterprojekte',
     htmlAnything: 'HTML Anything',
+    htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
   },
   fr: {
@@ -4580,6 +4625,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     xTwitter: 'X / Twitter',
     sisterProjects: 'Projets sœurs',
     htmlAnything: 'HTML Anything',
+    htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
   },
   ru: {
@@ -4605,6 +4651,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     xTwitter: 'X / Twitter',
     sisterProjects: 'Родственные проекты',
     htmlAnything: 'HTML Anything',
+    htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
   },
   es: {
@@ -4630,6 +4677,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     xTwitter: 'X / Twitter',
     sisterProjects: 'Proyectos relacionados',
     htmlAnything: 'HTML Anything',
+    htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
   },
   'pt-br': {
@@ -4655,6 +4703,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     xTwitter: 'X / Twitter',
     sisterProjects: 'Projetos irmãos',
     htmlAnything: 'HTML Anything',
+    htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
   },
   it: {
@@ -4680,6 +4729,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     xTwitter: 'X / Twitter',
     sisterProjects: 'Progetti correlati',
     htmlAnything: 'HTML Anything',
+    htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
   },
   vi: {
@@ -4705,6 +4755,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     xTwitter: 'X / Twitter',
     sisterProjects: 'Dự án liên quan',
     htmlAnything: 'HTML Anything',
+    htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
   },
   pl: {
@@ -4730,6 +4781,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     xTwitter: 'X / Twitter',
     sisterProjects: 'Projekty siostrzane',
     htmlAnything: 'HTML Anything',
+    htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
   },
   id: {
@@ -4755,6 +4807,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     xTwitter: 'X / Twitter',
     sisterProjects: 'Proyek terkait',
     htmlAnything: 'HTML Anything',
+    htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
   },
   nl: {
@@ -4780,6 +4833,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     xTwitter: 'X / Twitter',
     sisterProjects: 'Zusterprojecten',
     htmlAnything: 'HTML Anything',
+    htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
   },
   ar: {
@@ -4805,6 +4859,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     xTwitter: 'X / Twitter',
     sisterProjects: 'المشاريع الشقيقة',
     htmlAnything: 'HTML Anything',
+    htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
   },
   tr: {
@@ -4828,6 +4883,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     rss: 'RSS',
     sisterProjects: 'Kardeş projeler',
     htmlAnything: 'HTML Anything',
+    htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / Cilt 01 / Sayı Nº 26',
     bottomRight: 'Berlin / Açık / Dünya · 52.5200° N · 13.4050° E',
@@ -4853,6 +4909,7 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     rss: 'RSS',
     sisterProjects: "Пов'язані проєкти",
     htmlAnything: 'HTML Anything',
+    htmlVideo: 'HTML Video',
     nexuIo: 'nexu.io',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / Том 01 / Випуск № 26',
     bottomRight: 'Берлін / Відкрито / Земля · 52.5200° N · 13.4050° E',

@@ -1,7 +1,15 @@
 import { copyFile, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { extractComponentsManifest } from '@open-design/contracts';
+import { extractComponentsManifest } from '@open-design/contracts/design-systems/components-manifest';
+import {
+  buildDesignTokenContract,
+  buildReportWithSelfCheck,
+  validateDesignTokenOutputs,
+  type DesignTokenBinding,
+  type DesignTokenContractReport,
+} from './design-token-contract.js';
+import { extractCssCustomProperties } from './design-token-evidence.js';
 
 export type LocalDesignSystemImportResult = {
   id: string;
@@ -59,6 +67,7 @@ type CssVariable = {
   name: string;
   value: string;
   source: string;
+  line?: number;
 };
 
 type AssetCandidate = {
@@ -106,29 +115,6 @@ const COMPONENT_EXTENSIONS = new Set(['.tsx', '.jsx', '.vue', '.svelte']);
 const ASSET_EXTENSIONS = new Set(['.svg', '.png', '.jpg', '.jpeg', '.webp', '.ico']);
 const FONT_EXTENSIONS = new Set(['.woff', '.woff2', '.ttf', '.otf']);
 const COMPONENT_NAMES = ['Button', 'Input', 'Card', 'Nav', 'Navbar', 'Sidebar'];
-const TOKEN_FALLBACKS = {
-  bg: '#f8fafc',
-  surface: '#ffffff',
-  surfaceWarm: '#f3f4f6',
-  fg: '#111827',
-  fg2: '#374151',
-  muted: '#6b7280',
-  meta: '#9ca3af',
-  border: '#d1d5db',
-  borderSoft: '#e5e7eb',
-  accent: '#2563eb',
-  accentOn: '#ffffff',
-  accentHover: '#1d4ed8',
-  accentActive: '#1e40af',
-  success: '#16a34a',
-  warn: '#d97706',
-  danger: '#dc2626',
-  fontSans: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-  fontSerif: 'Georgia, "Times New Roman", serif',
-  fontMono: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
-  radius: '10px',
-};
-
 export async function importLocalDesignSystemProject(
   sourceRootInput: string,
   userDesignSystemsRoot: string,
@@ -147,11 +133,17 @@ export async function importLocalDesignSystemProject(
   await mkdir(outDir, { recursive: true });
   const importMode = normalizeImportMode(options.importMode);
   const craftApplies = normalizeCraftList(options.craftApplies);
+  const now = options.now ?? new Date();
 
   const files = ['USAGE.md', 'DESIGN.md', 'tokens.css', 'components.html', 'components.manifest.json', 'manifest.json'];
   const designMd = renderDesignMd(id, displayName, scan);
-  const tokensCss = renderTokensCss(scan);
-  const componentsHtml = renderComponentsHtml(displayName);
+  const tokenContract = buildDesignTokenContract({ sourceTokens: scan.cssVariables, generatedAt: now });
+  const tokensCss = tokenContract.tokensCss;
+  const componentsHtml = renderComponentsHtml(displayName, tokensCss);
+  const tokenContractReport = buildReportWithSelfCheck(
+    tokenContract.report,
+    validateDesignTokenOutputs({ tokensCss, fixtureHtml: componentsHtml }),
+  );
   const componentsManifest = extractComponentsManifest({
     brandId: id,
     fixtureHtml: componentsHtml,
@@ -167,12 +159,12 @@ export async function importLocalDesignSystemProject(
     `${JSON.stringify(componentsManifest, null, 2)}\n`,
     'utf8',
   );
-  files.push(...(await writePreviewFiles(outDir, displayName, scan)));
-  files.push(...(await writeSourceEvidenceFiles(outDir, scan)));
+  files.push(...(await writePreviewFiles(outDir, displayName, scan, tokenContract.bindings)));
+  files.push(...(await writeSourceEvidenceFiles(outDir, scan, tokenContractReport)));
   await writeFile(
     path.join(outDir, 'manifest.json'),
     `${JSON.stringify(
-      renderManifest(id, displayName, scan, options.now ?? new Date(), options.source, importMode, craftApplies),
+      renderManifest(id, displayName, scan, now, options.source, importMode, craftApplies),
       null,
       2,
     )}\n`,
@@ -293,15 +285,7 @@ async function walkProject(sourceRoot: string): Promise<Array<{ absPath: string;
 async function readCssVariables(absPath: string, relPath: string): Promise<CssVariable[]> {
   try {
     const raw = await readFile(absPath, 'utf8');
-    const vars: CssVariable[] = [];
-    for (const match of raw.matchAll(/(--[a-zA-Z0-9-_]+)\s*:\s*([^;{}]+);/g)) {
-      const name = match[1];
-      const value = match[2]?.trim();
-      if (name === undefined || value === undefined) continue;
-      if (value.length === 0 || value.length > 120) continue;
-      vars.push({ name, value, source: relPath });
-    }
-    return vars;
+    return extractCssCustomProperties(raw, relPath);
   } catch {
     return [];
   }
@@ -482,6 +466,7 @@ function renderManifest(
       scanned: 'source/scanned-files.json',
       evidence: 'source/evidence.md',
       tokens: 'source/tokens.source.json',
+      report: 'source/token-contract.report.json',
       snippets: 'source/snippets/INDEX.json',
     },
   };
@@ -581,6 +566,7 @@ function renderUsageMd(name: string, scan: ProjectScan): string {
     '- Preserve semantic roles from the source project before inventing new values.',
     '- Use `tokens.css` as the normalized OD token contract.',
     '- Check `source/tokens.source.json` when a source variable name matters.',
+    '- Check `source/token-contract.report.json` before trusting fallback-heavy imports.',
     '',
     '## Avoid',
     '',
@@ -591,69 +577,7 @@ function renderUsageMd(name: string, scan: ProjectScan): string {
   ].join('\n');
 }
 
-function renderTokensCss(scan: ProjectScan): string {
-  const picked = pickDesignTokens(scan.cssVariables);
-  const cssVarLines = scan.cssVariables
-    .slice(0, 40)
-    .map((token) => `  ${token.name}: ${token.value};`)
-    .join('\n');
-  return `:root {
-  --bg: ${picked.bg};
-  --surface: ${picked.surface};
-  --surface-warm: ${picked.surfaceWarm};
-  --fg: ${picked.fg};
-  --fg-2: ${picked.fg2};
-  --muted: ${picked.muted};
-  --meta: ${picked.meta};
-  --border: ${picked.border};
-  --border-soft: ${picked.borderSoft};
-  --accent: ${picked.accent};
-  --accent-on: ${picked.accentOn};
-  --accent-hover: ${picked.accentHover};
-  --accent-active: ${picked.accentActive};
-  --success: ${picked.success};
-  --warn: ${picked.warn};
-  --danger: ${picked.danger};
-
-  --font-sans: ${picked.fontSans};
-  --font-serif: ${picked.fontSerif};
-  --font-mono: ${picked.fontMono};
-  --text-xs: 0.75rem;
-  --text-sm: 0.875rem;
-  --text-md: 1rem;
-  --text-lg: 1.125rem;
-  --text-xl: 1.375rem;
-  --text-2xl: 1.75rem;
-  --text-3xl: 2.25rem;
-  --leading-tight: 1.15;
-  --leading-body: 1.55;
-  --tracking-tight: 0;
-
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.5rem;
-  --space-6: 2rem;
-  --space-8: 3rem;
-  --section-y: clamp(3rem, 7vw, 6rem);
-
-  --radius-sm: 6px;
-  --radius-md: ${picked.radius};
-  --radius-lg: 14px;
-  --elev-1: 0 1px 2px rgb(15 23 42 / 8%);
-  --elev-2: 0 18px 45px rgb(15 23 42 / 14%);
-  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
-  --motion-fast: 140ms ease;
-  --motion-med: 220ms ease;
-  --container: 1120px;
-  --grid-gap: var(--space-5);
-${cssVarLines ? `\n  /* Extracted source variables */\n${cssVarLines}` : ''}
-}
-`;
-}
-
-function renderComponentsHtml(name: string): string {
+function renderComponentsHtml(name: string, tokensCss: string): string {
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -662,13 +586,14 @@ function renderComponentsHtml(name: string): string {
     <title>${escapeHtml(name)} components</title>
     <link rel="stylesheet" href="./tokens.css" />
     <style>
-      body { margin: 0; font-family: var(--font-sans); color: var(--fg); background: var(--bg); }
+${indentCss(tokensCss, 6)}
+      body { margin: 0; font-family: var(--font-body); color: var(--fg); background: var(--bg); }
       main { max-width: 960px; margin: 0 auto; padding: var(--space-8) var(--space-5); }
       nav { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); border-bottom: 1px solid var(--border-soft); padding-bottom: var(--space-4); }
       .brand { font-weight: 700; font-size: var(--text-lg); }
-      .card { margin-top: var(--space-6); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--elev-1); padding: var(--space-6); }
+      .card { margin-top: var(--space-6); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--elev-raised); padding: var(--space-6); }
       .row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
-      button { border: 1px solid transparent; border-radius: var(--radius-md); padding: 0.7rem 1rem; font: inherit; cursor: pointer; transition: background var(--motion-fast), border-color var(--motion-fast); }
+      button { border: 1px solid transparent; border-radius: var(--radius-md); padding: 0.7rem 1rem; font: inherit; cursor: pointer; transition: background var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard); }
       .primary { background: var(--accent); color: var(--accent-on); }
       .secondary { background: var(--surface-warm); border-color: var(--border); color: var(--fg); }
       input { min-width: 240px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.7rem 0.85rem; font: inherit; color: var(--fg); background: var(--surface); }
@@ -697,11 +622,16 @@ function renderComponentsHtml(name: string): string {
 `;
 }
 
-async function writePreviewFiles(outDir: string, name: string, scan: ProjectScan): Promise<string[]> {
+async function writePreviewFiles(
+  outDir: string,
+  name: string,
+  scan: ProjectScan,
+  bindings: readonly DesignTokenBinding[],
+): Promise<string[]> {
   const previewDir = path.join(outDir, 'preview');
   await mkdir(previewDir, { recursive: true });
   const pages: Array<[string, string]> = [
-    ['colors.html', renderColorsPreview(name, scan)],
+    ['colors.html', renderColorsPreview(name, bindings)],
     ['typography.html', renderTypographyPreview(name)],
     ['spacing.html', renderSpacingPreview(name)],
     ['components-buttons.html', renderButtonsPreview(name)],
@@ -712,7 +642,11 @@ async function writePreviewFiles(outDir: string, name: string, scan: ProjectScan
   return pages.map(([fileName]) => `preview/${fileName}`);
 }
 
-async function writeSourceEvidenceFiles(outDir: string, scan: ProjectScan): Promise<string[]> {
+async function writeSourceEvidenceFiles(
+  outDir: string,
+  scan: ProjectScan,
+  tokenContractReport: DesignTokenContractReport,
+): Promise<string[]> {
   const sourceDir = path.join(outDir, 'source');
   const snippetsDir = path.join(sourceDir, 'snippets');
   await mkdir(snippetsDir, { recursive: true });
@@ -779,6 +713,11 @@ async function writeSourceEvidenceFiles(outDir: string, scan: ProjectScan): Prom
       'utf8',
     ),
     writeFile(
+      path.join(sourceDir, 'token-contract.report.json'),
+      `${JSON.stringify(tokenContractReport, null, 2)}\n`,
+      'utf8',
+    ),
+    writeFile(
       path.join(snippetsDir, 'INDEX.json'),
       `${JSON.stringify({ schemaVersion: 1, snippets: snippetEntries }, null, 2)}\n`,
       'utf8',
@@ -789,27 +728,31 @@ async function writeSourceEvidenceFiles(outDir: string, scan: ProjectScan): Prom
     'source/scanned-files.json',
     'source/evidence.md',
     'source/tokens.source.json',
+    'source/token-contract.report.json',
     'source/snippets/INDEX.json',
     ...writtenSnippetFiles,
   ];
 }
 
-function renderColorsPreview(name: string, scan: ProjectScan): string {
-  const colors = pickDesignTokens(scan.cssVariables);
+function renderColorsPreview(name: string, bindings: readonly DesignTokenBinding[]): string {
+  const values = new Map(bindings.map((binding) => [binding.name, binding.value]));
   return renderPreviewPage(
     `${name} colors`,
     'Color evidence',
     ([
-      ['Background', '--bg', colors.bg],
-      ['Surface', '--surface', colors.surface],
-      ['Foreground', '--fg', colors.fg],
-      ['Muted', '--muted', colors.muted],
-      ['Border', '--border', colors.border],
-      ['Accent', '--accent', colors.accent],
-      ['Success', '--success', colors.success],
-      ['Warning', '--warn', colors.warn],
-      ['Danger', '--danger', colors.danger],
-    ] satisfies Array<[string, string, string]>).map(([label, token, value]) => `<article class="swatch"><div style="background:${escapeHtml(value)}"></div><strong>${label}</strong><code>${token}: ${escapeHtml(value)}</code></article>`).join('\n'),
+      ['Background', '--bg'],
+      ['Surface', '--surface'],
+      ['Foreground', '--fg'],
+      ['Muted', '--muted'],
+      ['Border', '--border'],
+      ['Accent', '--accent'],
+      ['Success', '--success'],
+      ['Warning', '--warn'],
+      ['Danger', '--danger'],
+    ] satisfies Array<[string, string]>).map(([label, token]) => {
+      const value = values.get(token) ?? 'transparent';
+      return `<article class="swatch"><div style="background:${escapeHtml(value)}"></div><strong>${label}</strong><code>${token}: ${escapeHtml(value)}</code></article>`;
+    }).join('\n'),
   );
 }
 
@@ -863,7 +806,7 @@ function renderPreviewPage(title: string, heading: string, body: string): string
     <title>${escapeHtml(title)}</title>
     <link rel="stylesheet" href="../tokens.css" />
     <style>
-      body { margin: 0; font-family: var(--font-sans); color: var(--fg); background: var(--bg); }
+      body { margin: 0; font-family: var(--font-body); color: var(--fg); background: var(--bg); }
       main { max-width: 1040px; margin: 0 auto; padding: var(--space-8) var(--space-5); }
       h1 { font-size: var(--text-3xl); line-height: var(--leading-tight); }
       .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-4); }
@@ -917,27 +860,6 @@ function renderEvidenceMd(scan: ProjectScan): string {
       : '- No CSS custom properties detected; normalized tokens use fallback values.',
     '',
   ].join('\n');
-}
-
-function pickDesignTokens(tokens: CssVariable[]): typeof TOKEN_FALLBACKS {
-  const valueFor = (needles: string[], fallback: string, validator: (value: string) => boolean = Boolean) =>
-    tokenCandidates(tokens, needles).find((token) => validator(token.value))?.value ?? fallback;
-  return {
-    ...TOKEN_FALLBACKS,
-    bg: valueFor(['background', 'bg'], TOKEN_FALLBACKS.bg, isColorValue),
-    surface: valueFor(['surface', 'card', 'popover'], TOKEN_FALLBACKS.surface, isColorValue),
-    surfaceWarm: valueFor(['muted', 'subtle', 'secondary'], TOKEN_FALLBACKS.surfaceWarm, isColorValue),
-    fg: valueFor(['foreground', 'text', 'fg'], TOKEN_FALLBACKS.fg, isColorValue),
-    fg2: valueFor(['text-secondary', 'secondary-foreground'], TOKEN_FALLBACKS.fg2, isColorValue),
-    muted: valueFor(['muted', 'placeholder'], TOKEN_FALLBACKS.muted, isColorValue),
-    border: valueFor(['border'], TOKEN_FALLBACKS.border, isColorValue),
-    accent: valueFor(['accent', 'primary', 'brand'], TOKEN_FALLBACKS.accent, isColorValue),
-    success: valueFor(['success', 'positive'], TOKEN_FALLBACKS.success, isColorValue),
-    warn: valueFor(['warning', 'warn'], TOKEN_FALLBACKS.warn, isColorValue),
-    danger: valueFor(['danger', 'error', 'destructive'], TOKEN_FALLBACKS.danger, isColorValue),
-    radius: valueFor(['radius'], TOKEN_FALLBACKS.radius, (value) => /^\d/.test(value)),
-    fontSans: valueFor(['font-sans', 'font-family', 'font'], TOKEN_FALLBACKS.fontSans),
-  };
 }
 
 function tokenCandidates(tokens: CssVariable[], needles: string[]): CssVariable[] {
@@ -999,6 +921,11 @@ function slugify(value: string): string {
 
 function normalizeRel(value: string): string {
   return value.split(path.sep).join('/');
+}
+
+function indentCss(css: string, spaces: number): string {
+  const prefix = ' '.repeat(spaces);
+  return css.trimEnd().split('\n').map((line) => `${prefix}${line}`).join('\n');
 }
 
 function escapeHtml(value: string): string {

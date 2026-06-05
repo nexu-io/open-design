@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 
 import type { ToolPackConfig } from "../config.js";
 import { winResources } from "../resources.js";
-import type { WinBuiltAppManifest, WinPaths } from "./types.js";
+import type { WinBuiltAppManifest, WinPackTiming, WinPaths } from "./types.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -24,18 +24,70 @@ export async function buildWinPortableZip(
   _config: ToolPackConfig,
   paths: WinPaths,
   builtApp: WinBuiltAppManifest,
-): Promise<void> {
+): Promise<WinPackTiming[]> {
   if (process.platform !== "win32") throw new Error("Windows portable zip build must run on Windows");
+  const timings: WinPackTiming[] = [];
+  const runSegment = async <T>(phase: string, task: () => Promise<T>): Promise<T> => {
+    const startedAt = Date.now();
+    try {
+      return await task();
+    } finally {
+      timings.push({ durationMs: Date.now() - startedAt, phase });
+    }
+  };
+  const runExecSegment = async (
+    phase: string,
+    command: string,
+    args: string[],
+    options: { cwd: string; outputPath?: string },
+  ): Promise<void> => {
+    const startedAt = Date.now();
+    const details: Record<string, unknown> = {
+      args,
+      command,
+      cwd: options.cwd,
+    };
+    try {
+      const result = await execFileAsync(command, args, {
+        cwd: options.cwd,
+        windowsHide: true,
+      });
+      details.stdoutBytes = result.stdout.length;
+      details.stderrBytes = result.stderr.length;
+      details.stdoutTail = result.stdout.slice(-2000);
+      details.stderrTail = result.stderr.slice(-2000);
+      if (options.outputPath != null) {
+        details.outputBytes = (await stat(options.outputPath)).size;
+        details.outputPath = options.outputPath;
+      }
+      timings.push({ details, durationMs: Date.now() - startedAt, phase });
+    } catch (error) {
+      const failure = error as { code?: unknown; stderr?: unknown; stdout?: unknown };
+      details.code = failure.code;
+      details.stdoutTail = typeof failure.stdout === "string" ? failure.stdout.slice(-2000) : undefined;
+      details.stderrTail = typeof failure.stderr === "string" ? failure.stderr.slice(-2000) : undefined;
+      timings.push({ details, durationMs: Date.now() - startedAt, phase });
+      throw error;
+    }
+  };
 
-  await mkdir(dirname(paths.setupZipPath), { recursive: true });
-  await rm(paths.setupZipPath, { force: true });
-  await execFileAsync(
-    winResources.sevenZipExe,
-    ["a", "-tzip", "-mx=5", paths.setupZipPath, ".\\*"],
-    {
-      cwd: builtApp.unpackedRoot,
-      windowsHide: true,
-    },
-  );
-  await stat(paths.setupZipPath);
+  await runSegment("portable-zip:prepare", async () => {
+    await mkdir(dirname(paths.setupZipPath), { recursive: true });
+    await rm(paths.setupZipPath, { force: true });
+  });
+  await runSegment("portable-zip:7z", async () => {
+    await runExecSegment(
+      "portable-zip:7z:process",
+      winResources.sevenZipExe,
+      ["a", "-tzip", "-mx=5", paths.setupZipPath, ".\\*"],
+      {
+        cwd: builtApp.unpackedRoot,
+        outputPath: paths.setupZipPath,
+      },
+    );
+  });
+  await runSegment("portable-zip:stat", async () => {
+    await stat(paths.setupZipPath);
+  });
+  return timings;
 }

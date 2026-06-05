@@ -58,7 +58,8 @@ import type {
   PromptTemplateSummary,
   SkillSummary,
 } from '../types';
-import { inlineMentionToken } from '../utils/inlineMentions';
+import { inlineMentionToken, mentionTokenPresent } from '../utils/inlineMentions';
+import { missingRequiredInputs, pluginInputsAreValid } from '../utils/pluginRequiredInputs';
 import { HomeHero, type ExamplePromptInfo, type HomeHeroHandle } from './HomeHero';
 import { Icon } from './Icon';
 import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
@@ -123,16 +124,26 @@ interface ActivePlugin {
   suppressPromptSync: boolean;
 }
 
+// `inlineBacked` distinguishes a context inserted as an inline `@mention` pill
+// (added through the mention picker / plus menu, which writes a token into the
+// prompt) from a context-only selection made through the plain `Use` action
+// (which stages the context without touching the prompt). Inline-backed
+// contexts are dropped once their `@` token is deleted; context-only ones stay
+// selected until explicitly removed. Conflating the two drops plain `Use`
+// selections from the submit payload because they never carry a token.
 interface SelectedPluginContext {
   record: InstalledPluginRecord;
+  inlineBacked: boolean;
 }
 
 interface SelectedMcpContext {
   server: McpServerConfig;
+  inlineBacked: boolean;
 }
 
 interface SelectedConnectorContext {
   connector: ConnectorDetail;
+  inlineBacked: boolean;
 }
 
 interface PendingReplacement {
@@ -187,6 +198,8 @@ interface Props {
   onOpenProject: (id: string) => void;
   onViewAllProjects: () => void;
   onBrowseRegistry?: () => void;
+  onOpenIntegrations?: () => void;
+  onOpenMcp?: () => void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
   onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
   // Stage B: optional callbacks the rail's migration chips need.
@@ -215,6 +228,8 @@ export function HomeView({
   onOpenProject,
   onViewAllProjects,
   onBrowseRegistry,
+  onOpenIntegrations,
+  onOpenMcp,
   onImportFolder,
   onImportFolderResponse,
   onOpenNewProject,
@@ -473,21 +488,36 @@ export function HomeView({
         : 0,
     [active],
   );
-  const contextItemCount = useMemo(
-    () =>
+  // Inline-backed contexts are already represented in the composer as `@mention`
+  // pills, so they must NOT also drive the active context row — otherwise
+  // selecting only an inline-mentioned connector mounts an empty row (count
+  // label, no visible children) above the editor. Context-only `Use` selections
+  // have no inline representation, so they are the only ones the row should
+  // surface (and count).
+  const contextItemCount = useMemo(() => {
+    const contextOnlyPlugins = selectedPluginContexts.filter(
+      (item) => !item.inlineBacked,
+    ).length;
+    const contextOnlyMcp = selectedMcpContexts.filter(
+      (item) => !item.inlineBacked,
+    ).length;
+    const contextOnlyConnectors = selectedConnectorContexts.filter(
+      (item) => !item.inlineBacked,
+    ).length;
+    return (
       activeContextItemCount +
-      selectedPluginContexts.length +
-      selectedMcpContexts.length +
-      selectedConnectorContexts.length +
-      stagedFiles.length,
-    [
-      activeContextItemCount,
-      selectedConnectorContexts.length,
-      selectedMcpContexts.length,
-      selectedPluginContexts.length,
-      stagedFiles.length,
-    ],
-  );
+      contextOnlyPlugins +
+      contextOnlyMcp +
+      contextOnlyConnectors +
+      stagedFiles.length
+    );
+  }, [
+    activeContextItemCount,
+    selectedConnectorContexts,
+    selectedMcpContexts,
+    selectedPluginContexts,
+    stagedFiles.length,
+  ]);
 
   // The Home chip rail and the Community grid share a mental
   // model — "Prototype" up top is the same artifact intent as the
@@ -803,7 +833,7 @@ export function HomeView({
     let shouldFocusOnly = true;
     setSelectedPluginContexts((prev) => {
       if (prev.some((item) => item.record.id === record.id)) return prev;
-      return [...prev, { record }];
+      return [...prev, { record, inlineBacked: false }];
     });
     if (action === 'use-with-query') {
       const queryPrompt = renderPluginContextPrompt(record, inputs);
@@ -894,7 +924,7 @@ export function HomeView({
   function addPluginContext(record: InstalledPluginRecord, nextPrompt: string | null) {
     setSelectedPluginContexts((prev) => {
       if (prev.some((item) => item.record.id === record.id)) return prev;
-      return [...prev, { record }];
+      return [...prev, { record, inlineBacked: true }];
     });
     if (nextPrompt !== null) setPrompt(nextPrompt);
     setError(null);
@@ -1081,7 +1111,7 @@ export function HomeView({
     setSelectedMcpContexts((current) => (
       current.some((item) => item.server.id === _server.id)
         ? current
-        : [...current, { server: _server }]
+        : [...current, { server: _server, inlineBacked: true }]
     ));
     setPrompt(nextPrompt);
     setError(null);
@@ -1104,7 +1134,7 @@ export function HomeView({
     setSelectedConnectorContexts((current) => (
       current.some((item) => item.connector.id === connector.id)
         ? current
-        : [...current, { connector }]
+        : [...current, { connector, inlineBacked: true }]
     ));
     setPrompt(nextPrompt);
     setPromptEditedByUser(false);
@@ -1287,7 +1317,15 @@ export function HomeView({
     });
     let submittedActive = active;
     if (submittedActive && !submittedActive.inputsValid) {
-      setError('Fill the required plugin parameters before running.');
+      const missing = missingRequiredInputs(
+        submittedActive.inputFields,
+        submittedActive.inputs,
+      );
+      setError(
+        missing.length > 0
+          ? `Fill the required plugin ${missing.length === 1 ? 'parameter' : 'parameters'} before running: ${missing.join(', ')}.`
+          : 'Fill the required plugin parameters before running.',
+      );
       return;
     }
     const defaultInputs = { prompt: trimmed };
@@ -1297,10 +1335,12 @@ export function HomeView({
       trimmed,
     );
     const submittedPluginInputs = submittedActive
-      ? applyHomeDesignSystemSelectionToInputs(
-          submittedActive.inputs,
-          submittedDesignSystemSelection,
-          designSystemOptions,
+      ? stripArtifactFooterInputs(
+          applyHomeDesignSystemSelectionToInputs(
+            submittedActive.inputs,
+            submittedDesignSystemSelection,
+            designSystemOptions,
+          ),
         )
       : defaultInputs;
     const activeInputsChangedForSubmit = submittedActive
@@ -1315,28 +1355,41 @@ export function HomeView({
       submittedActive = { ...submittedActive, result, inputs: submittedPluginInputs };
       setActive(submittedActive);
     }
-    const contextPlugins = selectedPluginContexts.map((item) => ({
-      id: item.record.id,
-      title: item.record.title,
-      ...(item.record.manifest?.description
-        ? { description: item.record.manifest.description }
-        : {}),
-    }));
-    const contextMcpServers = selectedMcpContexts.map((item) => ({
-      id: item.server.id,
-      ...(item.server.label ? { label: item.server.label } : {}),
-      ...(item.server.transport ? { transport: item.server.transport } : {}),
-      ...(item.server.url ? { url: item.server.url } : {}),
-      ...(item.server.command ? { command: item.server.command } : {}),
-    }));
-    const contextConnectors = selectedConnectorContexts.map((item) => ({
-      id: item.connector.id,
-      name: item.connector.name,
-      provider: item.connector.provider,
-      category: item.connector.category,
-      status: item.connector.status,
-      ...(item.connector.accountLabel ? { accountLabel: item.connector.accountLabel } : {}),
-    }));
+    // Reconcile each selected context against the serialized prompt text before
+    // forwarding it. Inline-backed contexts (inserted as `@mention` pills) are
+    // only sent while their token survives in the prompt — the Lexical composer
+    // lets users delete a mention pill (backspace, edit), and when they do that
+    // plugin/MCP/connector should stop being sent. Context-only `Use`
+    // selections never carry a token, so they stay in the payload until the
+    // user explicitly clears them.
+    const contextPlugins = selectedPluginContexts
+      .filter((item) => !item.inlineBacked || mentionTokenPresent(trimmed, item.record.title))
+      .map((item) => ({
+        id: item.record.id,
+        title: item.record.title,
+        ...(item.record.manifest?.description
+          ? { description: item.record.manifest.description }
+          : {}),
+      }));
+    const contextMcpServers = selectedMcpContexts
+      .filter((item) => !item.inlineBacked || mentionTokenPresent(trimmed, item.server.label || item.server.id))
+      .map((item) => ({
+        id: item.server.id,
+        ...(item.server.label ? { label: item.server.label } : {}),
+        ...(item.server.transport ? { transport: item.server.transport } : {}),
+        ...(item.server.url ? { url: item.server.url } : {}),
+        ...(item.server.command ? { command: item.server.command } : {}),
+      }));
+    const contextConnectors = selectedConnectorContexts
+      .filter((item) => !item.inlineBacked || mentionTokenPresent(trimmed, item.connector.name))
+      .map((item) => ({
+        id: item.connector.id,
+        name: item.connector.name,
+        provider: item.connector.provider,
+        category: item.connector.category,
+        status: item.connector.status,
+        ...(item.connector.accountLabel ? { accountLabel: item.connector.accountLabel } : {}),
+      }));
     const submittedProjectKind =
       submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other';
     const submittedProjectMetadata = submittedActive?.mediaSurface
@@ -1402,22 +1455,25 @@ export function HomeView({
         selectedPluginContexts={selectedPluginContexts.map((item) => item.record)}
         selectedMcpContexts={selectedMcpContexts.map((item) => item.server)}
         selectedConnectorContexts={selectedConnectorContexts.map((item) => item.connector)}
+        contextOnlyPlugins={selectedPluginContexts.filter((item) => !item.inlineBacked).map((item) => item.record)}
+        contextOnlyMcpServers={selectedMcpContexts.filter((item) => !item.inlineBacked).map((item) => item.server)}
+        contextOnlyConnectors={selectedConnectorContexts.filter((item) => !item.inlineBacked).map((item) => item.connector)}
         onRemovePluginContext={removePluginContext}
         onRemoveMcpContext={removeMcpContext}
         onRemoveConnectorContext={removeConnectorContext}
+        onAddPlugin={onBrowseRegistry}
+        onAddConnector={onOpenIntegrations}
+        onAddMcp={onOpenMcp}
         onOpenPluginDetails={setDetailsRecord}
-        pluginInputFields={active?.inputFields ?? []}
+        pluginInputFields={(active?.inputFields ?? []).filter(
+          (field) => !ARTIFACT_FOOTER_FIELD_NAMES.has(field.name),
+        )}
         pluginInputValues={active?.inputs ?? {}}
         pluginInputTemplate={active?.queryTemplate ?? null}
         onPluginInputValuesChange={updateActiveInputs}
         inlineEditableInputNames={active?.editableInputNames ?? []}
         footerInputNames={footerInputNamesForChip(active?.chipId ?? null)}
         designSystemOptions={designSystemOptions}
-        onPluginInputValidityChange={(valid) => {
-          setActive((prev) => (
-            prev && prev.inputsValid !== valid ? { ...prev, inputsValid: valid } : prev
-          ));
-        }}
         stagedFiles={stagedFiles}
         onAddFiles={stageFiles}
         onRemoveFile={removeStagedFile}
@@ -1715,9 +1771,39 @@ function homeHeroChipLabelForId(chipId: string, t: ReturnType<typeof useI18n>['t
   }
 }
 
+// Prototype/deck-specific settings (fidelity, slide count, speaker notes) are
+// no longer promoted into the home composer footer — the agent asks for those
+// via the first-turn discovery flow, so the prototype/deck footer keeps only
+// the design-system picker. Media surfaces (image/video/audio/hyperframes)
+// still surface their generation controls (model / ratio / resolution /
+// duration / audio type) in the footer, since that footer IS their primary
+// configuration UI and has no discovery-form equivalent.
+const ARTIFACT_FOOTER_FIELD_NAMES = new Set([
+  'fidelity',
+  'slideCount',
+  'speakerNotes',
+]);
+
+// The prototype/deck footer no longer exposes these settings, so any plugin
+// default for them must NOT be seeded into the Home composer's inputs — that
+// would forward a prefilled value (e.g. `fidelity: high-fidelity`) to the run
+// instead of leaving it "unknown" for the first-turn discovery flow to ask.
+function stripArtifactFooterInputs(
+  inputs: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!Object.keys(inputs).some((key) => ARTIFACT_FOOTER_FIELD_NAMES.has(key))) {
+    return inputs;
+  }
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(inputs)) {
+    if (ARTIFACT_FOOTER_FIELD_NAMES.has(key)) continue;
+    next[key] = value;
+  }
+  return next;
+}
+
 function footerInputNamesForChip(chipId: string | null): string[] {
-  if (chipId === 'prototype') return ['designSystem', 'fidelity'];
-  if (chipId === 'deck') return ['designSystem', 'slideCount', 'speakerNotes'];
+  if (chipId === 'prototype' || chipId === 'deck') return ['designSystem'];
   if (chipId === 'image') return ['designSystem', 'model', 'ratio', 'size'];
   if (chipId === 'video') return ['designSystem', 'model', 'ratio', 'duration', 'resolution'];
   if (chipId === 'audio') return ['audioType', 'model', 'duration'];
@@ -1727,58 +1813,21 @@ function footerInputNamesForChip(chipId: string | null): string[] {
 
 function homeCreateProjectMetadata(
   projectKind: ProjectKind | null,
-  inputs: Record<string, unknown> | null,
+  _inputs: Record<string, unknown> | null,
   existing: ProjectMetadata | null,
 ): ProjectMetadata | null {
   const kind = projectKind ?? existing?.kind ?? null;
   if (!kind) return existing;
 
+  // Artifact-specific settings (fidelity, speaker notes, slide count, …) are no
+  // longer collected in the home composer; the agent asks for them via
+  // AskUserQuestion, so we only seed `kind` here and let those fields stay
+  // unset (the system prompt then marks them "unknown — ask").
   const next: ProjectMetadata = {
     ...(existing ?? {}),
     kind,
   };
-  const fidelity = normalizeHomeFidelity(inputs?.fidelity);
-  if (fidelity) next.fidelity = fidelity;
-  const speakerNotes = normalizeHomeSpeakerNotes(inputs?.speakerNotes);
-  if (speakerNotes !== null) next.speakerNotes = speakerNotes;
-  const slideCount = normalizeHomeSlideCount(inputs?.slideCount);
-  if (slideCount) next.slideCount = slideCount;
   return next;
-}
-
-function normalizeHomeFidelity(value: unknown): ProjectMetadata['fidelity'] | null {
-  if (value === 'wireframe' || value === 'high-fidelity') return value;
-  return null;
-}
-
-function normalizeHomeSpeakerNotes(value: unknown): boolean | null {
-  if (typeof value === 'boolean') return value;
-  if (typeof value !== 'string') return null;
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) return null;
-  if (
-    normalized === 'true' ||
-    normalized === 'yes' ||
-    normalized === 'include' ||
-    normalized.includes('include')
-  ) {
-    return true;
-  }
-  if (
-    normalized === 'false' ||
-    normalized === 'no' ||
-    normalized === 'none' ||
-    normalized.includes('no speaker')
-  ) {
-    return false;
-  }
-  return null;
-}
-
-function normalizeHomeSlideCount(value: unknown): string | null {
-  if (typeof value !== 'string' && typeof value !== 'number') return null;
-  const normalized = String(value).trim();
-  return normalized.length > 0 ? normalized : null;
 }
 
 function designSystemOptionsForHome(
@@ -1816,7 +1865,13 @@ function designSystemOptionsForHome(
     auto: true,
     summary: t('homeHero.footer.autoDesignSystemSummary'),
   };
-  const defaultOption = systemOptions.find((option) => option.isDefault);
+  // Only a user-owned ("Personal") design system should be pre-selected as the
+  // default. Official/enterprise presets must not auto-select — when the user
+  // has no personal default, the composer defaults to "Auto" (which matches a
+  // fitting system from the prompt) rather than locking onto a starter preset.
+  const defaultOption = systemOptions.find(
+    (option) => option.isDefault && option.group === 'Personal',
+  );
   if (!defaultOption) return [autoOption, ...systemOptions];
   return [
     defaultOption,
@@ -2007,17 +2062,6 @@ function hydratePluginInputs(
     }
   }
   return next;
-}
-
-function pluginInputsAreValid(
-  fields: InputFieldSpec[],
-  values: Record<string, unknown>,
-): boolean {
-  return fields.every((field) => {
-    if (!field.required) return true;
-    const value = values[field.name];
-    return value !== undefined && value !== null && value !== '';
-  });
 }
 
 const TEMPLATE_INPUT_PATTERN = /\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g;

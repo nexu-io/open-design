@@ -131,6 +131,7 @@ exit 1
         scanned: 'source/scanned-files.json',
         evidence: 'source/evidence.md',
         tokens: 'source/tokens.source.json',
+        report: 'source/token-contract.report.json',
         snippets: 'source/snippets/INDEX.json',
       },
     });
@@ -139,6 +140,7 @@ exit 1
     );
     expect(fs.existsSync(path.join(result.dir, 'USAGE.md'))).toBe(true);
     expect(fs.existsSync(path.join(result.dir, 'components.manifest.json'))).toBe(true);
+    expect(fs.existsSync(path.join(result.dir, 'source', 'token-contract.report.json'))).toBe(true);
     expect(fs.existsSync(path.join(result.dir, 'preview', 'app.html'))).toBe(true);
     expect(fs.existsSync(path.join(result.dir, 'source', 'snippets', 'card.tsx'))).toBe(true);
   });

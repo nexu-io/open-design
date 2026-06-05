@@ -1,0 +1,15 @@
+name: ci-hosted
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  placeholder:
+    name: Hosted CI placeholder
+    runs-on: ubuntu-latest
+    steps:
+      - name: Placeholder
+        run: echo "ci-hosted placeholder"

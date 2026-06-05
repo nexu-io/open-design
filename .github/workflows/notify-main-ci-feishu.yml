@@ -1,6 +1,16 @@
 name: Notify main CI failure
 
 on:
+  workflow_dispatch:
+    inputs:
+      send_test:
+        description: Send a test Feishu alert card.
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
   workflow_run:
     workflows:
       - ci
@@ -19,9 +29,16 @@ jobs:
     runs-on: ubuntu-latest
     if: >-
       ${{
-        github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_branch == 'main' &&
-        contains(fromJSON('["failure","timed_out","cancelled"]'), github.event.workflow_run.conclusion)
+        (
+          github.event_name == 'workflow_dispatch' &&
+          inputs.send_test == 'true'
+        ) ||
+        (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'main' &&
+          contains(fromJSON('["failure","timed_out","cancelled"]'), github.event.workflow_run.conclusion)
+        )
       }}
     steps:
       - name: Send main CI failure alert
@@ -36,47 +53,81 @@ jobs:
               return;
             }
 
-            const run = context.payload.workflow_run;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const isTest = context.eventName === 'workflow_dispatch';
+            const run = isTest
+              ? {
+                  id: context.runId,
+                  name: 'main-ci-alert-test',
+                  conclusion: 'failure',
+                  event: 'workflow_dispatch',
+                  head_branch: context.ref.replace(/^refs\/heads\//, ''),
+                  head_sha: context.sha,
+                  run_started_at: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                  display_title: 'Manual Feishu alert smoke test',
+                  html_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                  actor: context.actor ? { login: context.actor } : null,
+                  head_commit: {
+                    message: 'Manual Feishu alert smoke test',
+                    author: { name: context.actor || 'unknown' },
+                  },
+                }
+              : context.payload.workflow_run;
             const startedAt = new Date(run.run_started_at || run.created_at).getTime();
             const updatedAt = new Date(run.updated_at).getTime();
             const durationMinutes = Number.isFinite(startedAt) && Number.isFinite(updatedAt)
               ? Math.round((updatedAt - startedAt) / 60000)
               : null;
 
-            if (run.conclusion === 'cancelled' && durationMinutes !== null && durationMinutes < 35) {
+            const problemJobs = isTest
+              ? [{ name: 'Feishu notification smoke test', conclusion: 'failure' }]
+              : (await github.rest.actions.listJobsForWorkflowRun({
+                  owner,
+                  repo,
+                  run_id: run.id,
+                  per_page: 100,
+                })).data.jobs.filter((job) => ['failure', 'timed_out', 'cancelled'].includes(job.conclusion));
+            const failedOrTimedOutJobs = problemJobs
+              .filter((job) => ['failure', 'timed_out'].includes(job.conclusion));
+
+            if (
+              run.conclusion === 'cancelled' &&
+              durationMinutes !== null &&
+              durationMinutes < 35 &&
+              failedOrTimedOutJobs.length === 0
+            ) {
               core.info(`Skipping short cancelled run (${durationMinutes}m), likely superseded by a newer main push.`);
               return;
             }
 
-            const jobsResponse = await github.rest.actions.listJobsForWorkflowRun({
-              owner,
-              repo,
-              run_id: run.id,
-              per_page: 100,
-            });
-            const failedJobs = jobsResponse.data.jobs
-              .filter((job) => ['failure', 'timed_out', 'cancelled'].includes(job.conclusion))
+            const failedJobs = problemJobs
               .map((job) => `- ${job.name} (${job.conclusion})`)
               .join('\n') || '- Unknown';
 
-            const pullsResponse = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-              owner,
-              repo,
-              commit_sha: run.head_sha,
-            });
-            const pull = pullsResponse.data[0];
+            const pull = isTest
+              ? null
+              : (await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                  owner,
+                  repo,
+                  commit_sha: run.head_sha,
+                })).data[0];
             const prText = pull
               ? `#${pull.number} ${pull.title}\n${pull.html_url}`
-              : '未解析到关联 PR';
+              : (isTest ? '手动测试，无关联 PR' : '未解析到关联 PR');
 
             const shortSha = run.head_sha.slice(0, 7);
             const author = run.head_commit?.author?.name || run.actor?.login || 'unknown';
             const subject = run.head_commit?.message?.split('\n')[0] || run.display_title || 'unknown';
             const repoName = `${owner}/${repo}`;
-            const title = run.name === 'ui-extended-main'
-              ? 'Open Design Main UI regression failed'
+            const title = isTest
+              ? '[TEST] Open Design Main CI alert'
+              : run.name === 'ui-extended-main'
+              ? (run.conclusion === 'cancelled'
+                  ? 'Open Design Main UI regression stopped after failures'
+                  : 'Open Design Main UI regression failed')
               : 'Open Design Main CI failed';
 
             const body = {
@@ -99,7 +150,7 @@ jobs:
                       tag: 'lark_md',
                       content: [
                         `**Repository:** ${repoName}`,
-                        `**Branch:** main`,
+                        `**Branch:** ${isTest ? run.head_branch : 'main'}`,
                         `**Workflow:** ${run.name}`,
                         `**Conclusion:** ${run.conclusion}`,
                         `**Duration:** ${durationMinutes === null ? 'unknown' : `${durationMinutes}m`}`,
@@ -142,8 +193,19 @@ jobs:
               },
               body: JSON.stringify(body),
             });
-
-            if (!response.ok) {
-              const text = await response.text();
-              core.setFailed(`Feishu notification failed: ${response.status} ${text}`);
+            const responseText = await response.text();
+            let responseJson = null;
+            try {
+              responseJson = JSON.parse(responseText);
+            } catch {
+              responseJson = null;
             }
+            const feishuCode = responseJson?.StatusCode ?? responseJson?.code;
+            const hasFeishuError = feishuCode !== undefined && Number(feishuCode) !== 0;
+
+            if (!response.ok || hasFeishuError) {
+              core.setFailed(`Feishu notification failed: ${response.status} ${responseText}`);
+              return;
+            }
+
+            core.info(`Feishu notification accepted: ${response.status} ${responseText}`);

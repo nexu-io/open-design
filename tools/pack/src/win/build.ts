@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 import { ToolPackCache } from "../cache.js";
@@ -18,7 +18,11 @@ import {
   readPackagedVersion,
 } from "./manifest.js";
 import { resolveWinPaths } from "./paths.js";
-import { collectWinSizeReport } from "./report.js";
+import {
+  collectWinSizeReport,
+  shouldBuildWinNsisInstaller,
+  shouldBuildWinPortableZip,
+} from "./report.js";
 import { copyWinIcon, prepareResourceTree } from "./resources.js";
 import type { WinPackResult, WinPackTiming, WinPaths } from "./types.js";
 
@@ -50,6 +54,9 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
   const paths = resolveWinPaths(config);
   const cache = new ToolPackCache(config.roots.cacheRoot);
   const timings: WinPackTiming[] = [];
+  const segments: WinPackTiming[] = [];
+  const hasNsisTarget = shouldBuildWinNsisInstaller(config.to);
+  const hasZipTarget = shouldBuildWinPortableZip(config.to);
   const runPhase = async <T>(phase: string, task: () => Promise<T>): Promise<T> => {
     const startedAt = Date.now();
     try {
@@ -59,6 +66,17 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
     }
   };
 
+  await runPhase("target-artifact-cleanup", async () => {
+    if (!hasNsisTarget) {
+      await rm(paths.setupPath, { force: true });
+      await rm(paths.installerBasePayloadPath, { force: true });
+      await rm(paths.installerOverlayPayloadPath, { force: true });
+      await rm(paths.latestYmlPath, { force: true });
+    }
+    if (!hasZipTarget) {
+      await rm(paths.setupZipPath, { force: true });
+    }
+  });
   await runPhase("workspace-build", async () => {
     await ensureWinWorkspaceBuild(config, cache);
   });
@@ -72,12 +90,13 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
   const packagedAppKey = await createWinPackagedAppCacheKey(config, tarballs.key, tarballs.tarballs);
   let packagedAppRoot: string | null = null;
   await runPhase("electron-builder", async () => {
-    await runElectronBuilder(config, paths, cache, packagedAppKey, async () => {
+    const builderSegments = await runElectronBuilder(config, paths, cache, packagedAppKey, async () => {
       if (packagedAppRoot != null) return packagedAppRoot;
       const packagedApp = await prepareWinPackagedApp(config, paths, tarballs, cache);
       packagedAppRoot = packagedApp.appRoot;
       return packagedAppRoot;
     }, resourceTree);
+    segments.push(...builderSegments);
   });
   await runPhase("latest-yml", async () => {
     await writeLocalLatestYml(config, paths);
@@ -86,13 +105,14 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
   const sizeReport = await runPhase("size-report", async () => collectWinSizeReport(config, paths, builtApp));
   return {
     blockmapPath: (await pathExists(paths.blockmapPath)) ? paths.blockmapPath : null,
-    installerPath: (await pathExists(paths.setupPath)) ? paths.setupPath : null,
-    latestYmlPath: (await pathExists(paths.latestYmlPath)) ? paths.latestYmlPath : null,
+    installerPath: hasNsisTarget && await pathExists(paths.setupPath) ? paths.setupPath : null,
+    latestYmlPath: hasNsisTarget && await pathExists(paths.latestYmlPath) ? paths.latestYmlPath : null,
     outputRoot: config.roots.output.namespaceRoot,
-    portableZipPath: (await pathExists(paths.setupZipPath)) ? paths.setupZipPath : null,
+    portableZipPath: hasZipTarget && await pathExists(paths.setupZipPath) ? paths.setupZipPath : null,
     resourceRoot: builtApp == null ? paths.resourceRoot : join(builtApp.unpackedRoot, "resources", "open-design"),
     runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
     cacheReport: cache.report(),
+    segments,
     sizeReport,
     timings,
     to: config.to,

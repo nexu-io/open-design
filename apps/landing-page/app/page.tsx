@@ -15,6 +15,7 @@ import {
   DEFAULT_LOCALE,
   getCommonCopy,
   getHomePageCopy,
+  getLandingUiCopy,
   localizedHref,
   type LandingLocaleCode,
 } from './i18n';
@@ -206,6 +207,7 @@ export default function Page({
   const systems = fmt(counts.systems);
   const commonCopy = getCommonCopy(locale);
   const home = getHomePageCopy(locale);
+  const ui = getLandingUiCopy(locale);
   const pcopy = getPluginsCopy(locale);
   // Labs pills mirror the live `/plugins/templates/` category strip: an
   // "All" chip plus the top categories by count, labelled and counted
@@ -1223,6 +1225,20 @@ export default function Page({
                     <span data-github-version>{github.versionLabel}</span>
                   </span>
                 </a>
+              </div>
+              <div className='foot-col'>
+                <h5>{ui.footer.products}</h5>
+                <ul>
+                  <li>
+                    <a href={href('/')}>Open Design</a>
+                  </li>
+                  <li>
+                    <a href={href('/html-anything/')}>{ui.footer.htmlAnything}</a>
+                  </li>
+                  <li>
+                    <a href={href('/html-video/')}>{ui.footer.htmlVideo}</a>
+                  </li>
+                </ul>
               </div>
               <div className='foot-col'>
                 <h5>{home.footer.columns.studio}</h5>

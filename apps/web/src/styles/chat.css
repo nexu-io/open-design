@@ -220,6 +220,17 @@
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--text-muted) 18%, transparent) transparent;
 }
+/* Bottom-anchor the transcript so a short conversation (e.g. a fresh fork)
+   rests against the composer instead of stranding its messages at the top with
+   a large blank area below. The auto top margin absorbs the free space above
+   the first row when the content is shorter than the viewport; once the content
+   outgrows the viewport the auto margin resolves to 0 and the log scrolls
+   normally with the top fully reachable (unlike `justify-content: flex-end`,
+   which clips overflowing content above the scroll range). The empty/loading
+   states own their own vertical layout, so they're excluded. */
+.chat-log > :first-child:not(.chat-empty-wrap):not(.chat-loading-state) {
+  margin-top: auto;
+}
 .chat-log::-webkit-scrollbar {
   width: 8px;
 }
@@ -747,6 +758,14 @@
   align-items: center;
   gap: 8px;
 }
+.chat-error-copy {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .chat-error-retry {
   flex: 0 0 auto;
   padding: 4px 10px;
@@ -849,6 +868,10 @@
 }
 
 /* -------- Composer -------------------------------------------------- */
+.pane {
+  --chat-composer-inline-inset: 12px;
+}
+
 .composer {
   padding: 10px 16px;
   display: flex;
@@ -1426,13 +1449,13 @@
 .chat-queued-send-strip {
   display: flex;
   flex-direction: column;
-  align-self: center;
-  width: fit-content;
-  min-width: min(320px, calc(100% - 20px));
-  max-width: min(calc(100% - 20px), 520px);
+  align-self: auto;
+  width: calc(100% - (var(--chat-composer-inline-inset, 12px) * 2));
+  min-width: 0;
+  max-width: none;
   gap: 3px;
   box-sizing: border-box;
-  margin: 0 auto 2px;
+  margin: 0 var(--chat-composer-inline-inset, 12px) 2px;
   padding: 7px;
   overflow: visible;
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);

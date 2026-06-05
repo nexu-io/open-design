@@ -88,7 +88,7 @@ test('[P0] entry chrome exposes the primary home creation surface and settings e
   await expect(page.getByTestId('entry-nav-logo')).toBeVisible();
   await expect(page.locator('.entry-brand')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
-  await expect(page.getByTestId('home-hero-attach')).toBeVisible();
+  await expect(page.getByTestId('home-hero-plus-trigger')).toBeVisible();
   await expect(page.getByTestId('home-hero-submit')).toBeDisabled();
   const createTabs = page.getByTestId('home-hero-type-tabs');
   await expect(createTabs).toBeVisible();
@@ -802,7 +802,8 @@ test('[P1] home starters Use plugin from the details modal applies the plugin to
   await expect(dialog).toBeVisible();
   await page.getByTestId('plugin-details-use-detail-use-plugin').click();
   await expect(dialog).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-context-plugin-detail-use-plugin')).toBeVisible();
+  // Plugin context no longer renders a visible badge row; the plain "Use"
+  // action attaches the plugin as context without injecting prompt text.
   await expect(page.getByTestId('home-hero-input')).toHaveText('');
 });
 
@@ -862,7 +863,6 @@ test('[P1] home starters Use with query hydrates the prompt and keeps plugin con
   await expect(page.getByTestId('plugins-home-use-menu-localized-plugin')).toBeVisible();
   await page.getByTestId('plugins-home-use-menu-localized-plugin').click();
   await page.getByTestId('plugins-home-use-with-query-localized-plugin').click();
-  await expect(page.getByTestId('home-hero-context-plugin-localized-plugin')).toBeVisible();
   await expect(input).toHaveText('Make a design systems brief.');
 });
 
@@ -884,7 +884,6 @@ test('[P0] home starters Use with query carries the hydrated starter prompt into
   await expect(page.getByTestId('plugins-home-use-menu-localized-plugin')).toBeVisible();
   await page.getByTestId('plugins-home-use-menu-localized-plugin').click();
   await page.getByTestId('plugins-home-use-with-query-localized-plugin').click();
-  await expect(page.getByTestId('home-hero-context-plugin-localized-plugin')).toBeVisible();
   await expect(input).toHaveText('Make a design systems brief.');
 
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);

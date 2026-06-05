@@ -1361,11 +1361,10 @@
   overflow-x: auto;
   overflow-y: hidden;
   flex-wrap: nowrap;
-  /* Grow to fill, but always yield to the right-side actions cluster:
-     min-width:0 lets the bar shrink and scroll its tabs internally so the
-     Handoff/Share/Present/avatar buttons keep their reserved space and are
-     never pushed off-screen or overlapped. */
-  flex: 1 1 auto;
+  /* Size to the opened tabs so the nearby "+" reads as part of the tab strip.
+     When space gets tight, this item still shrinks and scrolls internally so
+     the right-side action cluster keeps its reserved space. */
+  flex: 0 1 auto;
   min-width: 0;
   height: 100%;
   /* thinner scrollbar to avoid overlap */
@@ -1610,9 +1609,7 @@
   z-index: 3;
   margin-left: 2px;
 }
-.ws-tabs-bar.is-overflowing .ws-add-tab {
-  position: sticky;
-  right: 0;
+.ws-tabs-bar.is-overflowing + .ws-add-tab {
   padding-left: 4px;
   background: var(--bg-panel);
   box-shadow: -8px 0 10px -9px color-mix(in srgb, var(--text) 30%, transparent);

@@ -34,7 +34,7 @@ import { TodoCard } from './ToolCard';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, Project, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong, shortTime } from '../utils/chatTime';
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
-import { AssistantMessage } from './AssistantMessage';
+import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
 import { AmrGuidance } from './AmrGuidance';
 import { AMR_RECHARGE_URL, resolveRunFailureUi } from '../runtime/amr-guidance';
 import {
@@ -466,6 +466,11 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
+  // "Share to Open Design" button on each completed assistant message —
+  // wired by ProjectView to handleSend with the bundled
+  // `od-share-to-community` scenario's trigger prompt.
+  onShareToOpenDesign?: () => void;
+  shareToOpenDesignBusy?: boolean;
   forceStreamingMessageIds?: Set<string>;
   // Live-only streaming tool-input partials keyed by tool-use id. Threaded to
   // AssistantMessage so an in-flight Write/Edit can render its code in real
@@ -476,7 +481,7 @@ interface Props {
   // routes that text through onSend (no attachments).
   onSubmitForm?: (text: string) => void;
   // Focus the right-hand Questions tab from the chat banner.
-  onOpenQuestions?: () => void;
+  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
   // "Next step" affordance handlers forwarded to the last assistant message.
@@ -492,6 +497,14 @@ interface Props {
   // leaving the pane.
   conversations: Conversation[];
   activeConversationId: string | null;
+  // The conversation whose history the live `messages` array currently
+  // reflects. Null while a switch is mid-flight (or after a load failure),
+  // which is exactly when `messages.length` must NOT be trusted as the active
+  // conversation's count — see `conversationMessageCount`. Callers that do not
+  // track this (mounts whose loader resets/retags `messages` asynchronously)
+  // leave it undefined and fall back to the persisted `conversation.messageCount`
+  // for a stable list count.
+  messagesConversationId?: string | null;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (id: string) => void;
   // Composer settings/CLI button forwards to here. The dialog lives in App
@@ -510,6 +523,10 @@ interface Props {
   // Same dialog, but landing on the External MCP tab. Forwarded to the
   // composer's `/mcp` slash and MCP picker button.
   onOpenMcpSettings?: () => void;
+  // The composer "+" menu's "add plugin" / "add connector" rows route to the
+  // home plugin-registry / connector-integration surfaces.
+  onBrowsePlugins?: () => void;
+  onOpenConnectors?: () => void;
   // True when this project is a GitHub-backed design system whose repository
   // evidence has not fully landed. Surfaces a "Connect your repo" CTA in the
   // empty chat state alongside the starter examples.
@@ -595,6 +612,17 @@ const CONVERSATION_ROW_HEIGHT_PX = 34;
 const CONVERSATION_VIRTUALIZE_THRESHOLD = 36;
 const CONVERSATION_OVERSCAN_ROWS = 8;
 
+interface RunErrorDiagnosticInput {
+  message: string;
+  rawMessage?: string | null;
+  errorCode?: string;
+  traceId?: string;
+  projectId?: string | null;
+  conversationId?: string | null;
+  assistantMessageId?: string;
+  agentId?: string;
+}
+
 interface QueuedSendItem {
   id: string;
   prompt: string;
@@ -648,6 +676,8 @@ export function ChatPane({
   onRequestPluginFolderAgentAction,
   activePluginActionPaths,
   hiddenPluginActionPaths,
+  onShareToOpenDesign,
+  shareToOpenDesignBusy,
   forceStreamingMessageIds,
   liveToolInput,
   initialDraft,
@@ -663,6 +693,7 @@ export function ChatPane({
   newConversationDisabled = false,
   conversations,
   activeConversationId,
+  messagesConversationId = null,
   onSelectConversation,
   onDeleteConversation,
   onOpenSettings,
@@ -672,6 +703,8 @@ export function ChatPane({
   onSwitchToAmrAndRetry,
   onLaunchAntigravityOauth,
   onOpenMcpSettings,
+  onBrowsePlugins,
+  onOpenConnectors,
   connectRepoNeeded,
   githubConnected,
   onConnectRepo,
@@ -748,6 +781,7 @@ export function ChatPane({
   const anchorPendingRef = useRef(false);
   const anchorActiveRef = useRef(false);
   const tailSpacerRef = useRef<HTMLDivElement | null>(null);
+  const prevStreamingRef = useRef(streaming);
   const prevLastUserIdRef = useRef<string | undefined>(undefined);
   // AssistantMessage's interaction callbacks are re-created per render and
   // excluded from its memo comparison (so streaming doesn't re-render every
@@ -760,6 +794,7 @@ export function ChatPane({
     onArtifactShare,
     onArtifactChip,
     onForkFromMessage,
+    onShareToOpenDesign,
   });
   assistantCallbacksRef.current = {
     onSubmitForm,
@@ -768,6 +803,7 @@ export function ChatPane({
     onArtifactShare,
     onArtifactChip,
     onForkFromMessage,
+    onShareToOpenDesign,
   };
   const [tab, setTab] = useState<Tab>('chat');
   const [showConvList, setShowConvList] = useState(false);
@@ -846,6 +882,39 @@ export function ChatPane({
   // / audio errors) then the persisted run error so a reload still shows it.
   const rawError = error ?? failedRunErrorEvent?.detail ?? null;
   const displayError = runFailureUi?.messageKey ? t(runFailureUi.messageKey) : rawError;
+  const errorDiagnosticText = displayError
+    ? buildRunErrorDiagnosticText({
+        message: displayError,
+        rawMessage: rawError,
+        errorCode: failedRunErrorEvent?.code,
+        traceId: retryAssistant?.runId,
+        projectId,
+        conversationId: activeConversationId,
+        assistantMessageId: retryAssistant?.id,
+        agentId: retryAssistant?.agentId,
+      })
+    : null;
+  const [copiedErrorDiagnostic, setCopiedErrorDiagnostic] = useState(false);
+  const errorDiagnosticCopyTimerRef = useRef<number | null>(null);
+  const copyErrorDiagnostic = useCallback(async () => {
+    if (!errorDiagnosticText) return;
+    const ok = await copyToClipboard(errorDiagnosticText);
+    if (!ok) return;
+    if (errorDiagnosticCopyTimerRef.current != null) {
+      window.clearTimeout(errorDiagnosticCopyTimerRef.current);
+    }
+    setCopiedErrorDiagnostic(true);
+    errorDiagnosticCopyTimerRef.current = window.setTimeout(() => {
+      errorDiagnosticCopyTimerRef.current = null;
+      setCopiedErrorDiagnostic(false);
+    }, 1600);
+  }, [errorDiagnosticText]);
+  useEffect(() => () => {
+    if (errorDiagnosticCopyTimerRef.current != null) {
+      window.clearTimeout(errorDiagnosticCopyTimerRef.current);
+      errorDiagnosticCopyTimerRef.current = null;
+    }
+  }, []);
   // The failed run whose error this top-level card represents. AssistantMessage
   // suppresses only THIS message's per-message error pill (to avoid the
   // duplicate); other failed turns — older history, or once a follow-up makes
@@ -929,9 +998,9 @@ export function ChatPane({
     () => messages.find((m) => m.role === 'user')?.id,
     [messages],
   );
-  // Map each assistant message id to the user message that follows it
-  // (if any) so QuestionFormView can render its locked "answered" state
-  // with the user's picks.
+  // Map each assistant message id to the user message that follows it (if any)
+  // so the chat-side Questions banner can reopen that exact answered form in
+  // the right-hand panel later.
   const nextUserContentByAssistantId = useMemo(() => {
     const map = new Map<string, string>();
     for (let i = 0; i < messages.length - 1; i++) {
@@ -946,10 +1015,19 @@ export function ChatPane({
 
   useEffect(() => {
     didInitialScrollRef.current = false;
+    anchorPendingRef.current = false;
+    anchorActiveRef.current = false;
+    prevLastUserIdRef.current = undefined;
+    resetTailSpacer();
     // A new conversation should land at the bottom (its own initial
-    // scroll), not inherit the previous conversation's saved position.
+    // scroll), not inherit the previous conversation's saved position —
+    // including any anchor-to-top reserve still held by the tail spacer, which
+    // would otherwise strand the freshly opened conversation below a dead gap.
     savedChatScrollRef.current = null;
     scrolledToFormRef.current = new Set();
+    anchorActiveRef.current = false;
+    anchorPendingRef.current = false;
+    resetTailSpacer();
   }, [activeConversationId]);
 
   // ChatComposer's internal `seededRef` latches after the first
@@ -1032,6 +1110,26 @@ export function ChatPane({
     // available, scrolling the new conversation to its initial bottom.
   }, [activeConversationId, messages.length, tab]);
 
+  // When a turn finishes streaming, release the anchor-to-top reserve. The
+  // tail spacer only exists to give a streaming reply room to grow while the
+  // user message stays pinned at the top; once the reply is final it must not
+  // linger, or a short turn (typical of a fresh fork) is left with a large
+  // dead gap below it. Collapsing the spacer lets the bottom-anchored layout
+  // settle the finished transcript against the composer.
+  useEffect(() => {
+    const was = prevStreamingRef.current;
+    prevStreamingRef.current = streaming;
+    // The tail spacer only ever holds the anchor-to-top reserve for an actively
+    // streaming reply, so once the turn ends it must collapse unconditionally —
+    // even if a mid-turn scroll already cleared `anchorActiveRef` (which leaves
+    // the spacer sized). Collapsing it lets the bottom-anchored layout settle a
+    // finished short turn against the composer instead of below a dead gap.
+    if (was && !streaming) {
+      anchorActiveRef.current = false;
+      resetTailSpacer();
+    }
+  }, [streaming]);
+
   useEffect(() => {
     const el = logRef.current;
     if (!el) return;
@@ -1054,6 +1152,7 @@ export function ChatPane({
     prevLastUserIdRef.current = lastUser?.id;
     if (anchorPendingRef.current && lastUser && lastUser.id !== prevUserId) {
       anchorPendingRef.current = false;
+      resetTailSpacer();
       anchorActiveRef.current = true;
       pinnedToBottomRef.current = false;
       setScrolledFromBottom(true);
@@ -1551,12 +1650,18 @@ export function ChatPane({
         }
         // Arm "anchor to top": the messages effect promotes this once
         // the new user turn renders, pinning it to the top of the view.
+        // Clear any stale reserve from the previous turn first so a resend
+        // doesn't strand the new turn below a leftover gap (release #3653).
+        anchorActiveRef.current = false;
+        resetTailSpacer();
         anchorPendingRef.current = true;
         onSend(prompt, attachments, commentAttachments, meta);
       }}
       onStop={onStop}
       onOpenSettings={onOpenSettings}
       onOpenMcpSettings={onOpenMcpSettings}
+      onBrowsePlugins={onBrowsePlugins}
+      onOpenConnectors={onOpenConnectors}
       petConfig={petConfig}
       onAdoptPet={onAdoptPet}
       onTogglePet={onTogglePet}
@@ -1719,7 +1824,7 @@ export function ChatPane({
                       key={c.id}
                       conversation={c}
                       active={c.id === activeConversationId}
-                      messageCount={conversationMessageCount(c, activeConversationId, messages.length)}
+                      messageCount={conversationMessageCount(c, activeConversationId, messagesConversationId, messages.length)}
                       onSelect={() => {
                         onSelectConversation(c.id);
                         setShowConvList(false);
@@ -1857,6 +1962,8 @@ export function ChatPane({
                 onRequestPluginFolderAgentAction={onRequestPluginFolderAgentAction}
                 activePluginActionPaths={activePluginActionPaths}
                 hiddenPluginActionPaths={hiddenPluginActionPaths}
+                onShareToOpenDesign={onShareToOpenDesign}
+                shareToOpenDesignBusy={shareToOpenDesignBusy}
                 forceStreamingMessageIds={forceStreamingMessageIds}
                 lastAssistantId={lastAssistantId}
                 firstUserMessageId={firstUserMessageId}
@@ -1883,7 +1990,7 @@ export function ChatPane({
               {displayError ? (
                 <div className="msg error">
                   <span className="chat-error-text">{displayError}</span>
-                  {showErrorActions ? (
+                  {errorDiagnosticText || showErrorActions || (retryAssistant && onRetry && runFailureUi) ? (
                     <div className="chat-error-actions">
                       {showByokRecoveryCta ? (
                         <button
@@ -1892,6 +1999,17 @@ export function ChatPane({
                           onClick={onSwitchToLocalCli}
                         >
                           {t('avatar.useLocal')}
+                        </button>
+                      ) : null}
+                      {errorDiagnosticText ? (
+                        <button
+                          type="button"
+                          className="ghost chat-error-copy"
+                          onClick={() => void copyErrorDiagnostic()}
+                          aria-label={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
+                          title={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
+                        >
+                          <Icon name={copiedErrorDiagnostic ? 'check' : 'copy'} size={13} />
                         </button>
                       ) : null}
                       {retryAssistant && onRetry && runFailureUi ? (
@@ -2067,6 +2185,7 @@ interface AssistantCallbacks {
   onArtifactShare: ((fileName: string) => void) | undefined;
   onArtifactChip: ((fileName: string, prompt: string) => void) | undefined;
   onForkFromMessage: ((message: ChatMessage) => void) | undefined;
+  onShareToOpenDesign: (() => void) | undefined;
 }
 
 type ChatRenderItem =
@@ -2115,6 +2234,8 @@ function ChatRows({
   onRequestPluginFolderAgentAction,
   activePluginActionPaths,
   hiddenPluginActionPaths,
+  onShareToOpenDesign,
+  shareToOpenDesignBusy,
   forceStreamingMessageIds,
   lastAssistantId,
   firstUserMessageId,
@@ -2150,6 +2271,8 @@ function ChatRows({
   onRequestPluginFolderAgentAction?: (relativePath: string, action: PluginFolderAgentAction) => void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
+  onShareToOpenDesign?: () => void;
+  shareToOpenDesignBusy?: boolean;
   forceStreamingMessageIds?: Set<string>;
   lastAssistantId: string | undefined;
   firstUserMessageId: string | undefined;
@@ -2167,7 +2290,7 @@ function ChatRows({
   forkingMessageId?: string | null;
   t: TranslateFn;
   onAssistantFormSubmitStart: () => void;
-  onOpenQuestions?: () => void;
+  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   scrollContainerRef: MutableRefObject<HTMLDivElement | null>;
 }) {
   const items = useMemo(() => buildChatRenderItems(messages), [messages]);
@@ -2232,6 +2355,12 @@ function ChatRows({
         onRequestPluginFolderAgentAction={onRequestPluginFolderAgentAction}
         activePluginActionPaths={activePluginActionPaths}
         hiddenPluginActionPaths={hiddenPluginActionPaths}
+        onShareToOpenDesign={
+          onShareToOpenDesign
+            ? () => assistantCallbacksRef.current.onShareToOpenDesign?.()
+            : undefined
+        }
+        shareToOpenDesignBusy={shareToOpenDesignBusy}
         isLast={m.id === lastAssistantId}
         errorCardOwnerId={errorCardOwnerId}
         nextUserContent={nextUserContentByAssistantId.get(m.id)}
@@ -2980,6 +3109,29 @@ export function isAssistantMessageStreaming(
   return true;
 }
 
+export function buildRunErrorDiagnosticText(input: RunErrorDiagnosticInput): string {
+  const lines = [
+    'Open Design run error diagnostics',
+    `trace_id: ${input.traceId ?? 'n/a'}`,
+    `run_id: ${input.traceId ?? 'n/a'}`,
+    `error_code: ${input.errorCode ?? 'n/a'}`,
+    `project_id: ${input.projectId ?? 'n/a'}`,
+    `conversation_id: ${input.conversationId ?? 'n/a'}`,
+    `assistant_message_id: ${input.assistantMessageId ?? 'n/a'}`,
+    `agent_id: ${input.agentId ?? 'n/a'}`,
+    '',
+    'error:',
+    input.message.trim(),
+  ];
+
+  const raw = input.rawMessage?.trim();
+  if (raw && raw !== input.message.trim()) {
+    lines.push('', 'raw_error:', raw);
+  }
+
+  return lines.join('\n');
+}
+
 function filterConversations(
   conversations: Conversation[],
   query: string,
@@ -2997,9 +3149,22 @@ function filterConversations(
 function conversationMessageCount(
   conversation: Conversation,
   activeConversationId: string | null,
+  messagesConversationId: string | null,
   activeMessageCount: number,
 ): number | null {
-  if (conversation.id === activeConversationId) return activeMessageCount;
+  // The live `messages` array is authoritative for the active conversation —
+  // it stays fresh as a run streams new turns in — but ONLY once it has
+  // actually loaded for that conversation. While a switch is mid-flight (or a
+  // load failed) `messages` is reset to [] and `messagesConversationId` no
+  // longer matches the active id; trusting `messages.length` there renders a
+  // phantom "0 msg". Fall back to the persisted server count until the live
+  // array catches up.
+  if (
+    conversation.id === activeConversationId &&
+    messagesConversationId === activeConversationId
+  ) {
+    return activeMessageCount;
+  }
   return typeof conversation.messageCount === 'number' ? conversation.messageCount : null;
 }
 

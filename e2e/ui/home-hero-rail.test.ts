@@ -522,7 +522,7 @@ test('[P1] after clearing one mode, selecting another example updates the compos
   await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
 });
 
-test('[P2] closing the selected example chip clears the example state while preserving the current mode chip', async ({ page }) => {
+test('[P1] selecting another example updates the composer input', async ({ page }) => {
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-input');
@@ -532,42 +532,11 @@ test('[P2] closing the selected example chip clears the example state while pres
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="image-template-notion-team-dashboard-live-artifact"]')
     .click();
-
-  const exampleChip = page.getByTestId('home-hero-active-example');
-  await expect(exampleChip).toBeVisible();
-  await expect(exampleChip).toContainText(/示例提示词|Example prompts/i);
   await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
-  await expect(page.getByTestId('home-hero-active-type-chip')).toContainText(/实时制品|Live artifact/i);
-
-  await exampleChip.getByRole('button', { name: /关闭|close/i }).click();
-
-  await expect(page.getByTestId('home-hero-active-example')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-active-type-chip')).toBeVisible();
-  await expect(page.getByTestId('home-hero-active-type-chip')).toContainText(/实时制品|Live artifact/i);
-  await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
-  await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
-});
-
-test('[P1] after closing one example chip, selecting another example updates the composer input', async ({ page }) => {
-  await gotoEntryHome(page);
-
-  const input = page.getByTestId('home-hero-input');
-
-  await page.getByTestId('home-hero-rail-live-artifact').click();
-  await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
-  await page
-    .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="image-template-notion-team-dashboard-live-artifact"]')
-    .click();
-
-  const exampleChip = page.getByTestId('home-hero-active-example');
-  await expect(exampleChip).toBeVisible();
-  await exampleChip.getByRole('button', { name: /关闭|close/i }).click();
-  await expect(page.getByTestId('home-hero-active-example')).toHaveCount(0);
 
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-live-artifact"]')
     .click();
-  await expect(page.getByTestId('home-hero-active-example')).toBeVisible();
   await expect(input).toHaveText('Create refreshable, auditable Open Design artifacts backed by connector or local data.');
 });
 

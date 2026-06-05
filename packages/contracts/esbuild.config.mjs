@@ -12,6 +12,8 @@ await build({
     "./src/api/handoff.ts",
     "./src/api/providerModels.ts",
     "./src/api/research.ts",
+    "./src/design-systems/components-manifest.ts",
+    "./src/design-systems/token-schema.ts",
     "./src/analytics/index.ts",
   ],
   format: "esm",
