@@ -426,6 +426,73 @@ describe('ProjectView daemon reattach restore', () => {
     expect(chatPaneMock.render.mock.calls.length).toBe(rendersAfterAttach);
   });
 
+  it('persists the latest reattach run-event cursor with non-text agent events', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-1',
+        runStatus: 'running',
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-1',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let onRunEventId: ((eventId: string) => void) | null = null;
+    let onAgentEvent: ((ev: unknown) => void) | null = null;
+    reattachDaemonRun.mockImplementation(
+      async (options: {
+        handlers: { onAgentEvent: (ev: unknown) => void };
+        onRunEventId?: (eventId: string) => void;
+      }) => {
+        onRunEventId = options.onRunEventId ?? null;
+        onAgentEvent = options.handlers.onAgentEvent;
+        return new Promise<void>(() => {});
+      },
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(onRunEventId).not.toBeNull();
+    expect(onAgentEvent).not.toBeNull();
+
+    await act(async () => {
+      onRunEventId?.('7');
+      onAgentEvent?.({ kind: 'status', label: 'workflow', detail: 'running' });
+    });
+
+    await waitFor(() => {
+      const saved = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find((m) =>
+          m?.id === 'msg-reattach' &&
+          m.lastRunEventId === '7' &&
+          m.events?.some((ev) => ev.kind === 'status' && ev.label === 'workflow')
+        );
+      expect(saved).toBeTruthy();
+    });
+  });
+
   it('reaches succeeded state via the SSE end event even when only the terminal event replays', async () => {
     const startedAt = Date.now();
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);

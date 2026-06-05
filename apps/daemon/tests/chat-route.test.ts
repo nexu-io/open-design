@@ -193,6 +193,58 @@ describe('/api/chat', () => {
     expect(body).toContain('AGENT_UNAVAILABLE');
   });
 
+  it('starts Claude runs without reading prior-turn context before initialization', async () => {
+    await withFakeAgent(
+      'claude',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('0.9.0-test');
+  process.exit(0);
+}
+if (args.includes('--help')) {
+  console.log('--input-format --output-format --verbose --include-partial-messages --add-dir --effort');
+  process.exit(0);
+}
+let emitted = false;
+process.stdin.resume();
+process.stdin.on('data', () => {
+  if (emitted) return;
+  emitted = true;
+  console.log(JSON.stringify({
+    type: 'assistant',
+    message: {
+      id: 'msg-claude-test',
+      content: [{ type: 'text', text: 'claude-run-ok' }],
+      stop_reason: 'end_turn'
+    }
+  }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'claude',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).not.toContain('ReferenceError');
+        expect(eventsBody).toContain('claude-run-ok');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
+
   it('marks json stream runs failed when an error frame exits with code 0', async () => {
     const conversationId = `conv-${randomUUID()}`;
 

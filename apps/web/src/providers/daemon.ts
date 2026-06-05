@@ -1237,6 +1237,13 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
       isError: Boolean(data.isError),
     };
   }
+  if (t === 'claude_stream_event') {
+    return {
+      kind: 'status',
+      label: 'workflow',
+      detail: summarizeClaudeWorkflowEvent(data),
+    };
+  }
   if (t === 'usage') {
     const usage = (data.usage ?? {}) as Record<string, number>;
     return {
@@ -1258,6 +1265,37 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
     return { kind: 'raw', line: data.line };
   }
   return null;
+}
+
+function summarizeClaudeWorkflowEvent(data: DaemonAgentPayload): string {
+  const payload = data as DaemonAgentPayload & {
+    event?: unknown;
+    eventType?: unknown;
+  };
+  const event = payload.event && typeof payload.event === 'object'
+    ? payload.event as Record<string, unknown>
+    : {};
+  const summary =
+    typeof event.summary === 'string'
+      ? event.summary
+      : typeof event.status === 'string'
+        ? event.status
+        : typeof event.name === 'string'
+          ? event.name
+          : typeof event.phase === 'string'
+            ? event.phase
+            : typeof payload.eventType === 'string'
+              ? payload.eventType
+              : 'workflow event';
+  const id =
+    typeof event.run_id === 'string'
+      ? event.run_id
+      : typeof event.workflow_id === 'string'
+        ? event.workflow_id
+        : typeof event.task_id === 'string'
+          ? event.task_id
+          : '';
+  return id ? `${summary} (${id})` : summary;
 }
 
 export async function saveArtifact(

@@ -1922,6 +1922,32 @@ describe('streamViaDaemon', () => {
     expect(statusLabels).not.toContain('waiting_for_first_output');
     expect(statusLabels).not.toContain('tool_call_update');
   });
+
+  it('translates Claude workflow stream events into live workflow status', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          'event: agent\ndata: {"type":"claude_stream_event","eventType":"workflow_status","event":{"status":"running","workflow_id":"wf-1"}}\n\n' +
+            'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        ),
+      ));
+
+    await streamViaDaemon({
+      agentId: 'claude',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onAgentEvent).toHaveBeenCalledWith({
+      kind: 'status',
+      label: 'workflow',
+      detail: 'running (wf-1)',
+    });
+  });
 });
 
 describe('streamMessageOpenAI', () => {
