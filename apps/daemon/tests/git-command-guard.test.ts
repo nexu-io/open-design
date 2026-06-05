@@ -75,6 +75,10 @@ describe('git command guard', () => {
     expect(gitCommandBlockedReason(['checkout', 'HEAD', 'src/file.ts'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', '--', 'src/file.ts'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', 'HEAD', '--', 'src/file.ts'])).toContain('checkout');
+    expect(gitCommandBlockedReason(['switch', 'main'])).toBeNull();
+    expect(gitCommandBlockedReason(['switch', '-f', 'other'])).toContain('switch');
+    expect(gitCommandBlockedReason(['switch', '--force', 'other'])).toContain('switch');
+    expect(gitCommandBlockedReason(['switch', '--discard-changes', 'other'])).toContain('switch');
     expect(gitCommandBlockedReason(['restore', '.'])).toContain('restore');
   });
 
@@ -147,6 +151,13 @@ describe('git command guard', () => {
     });
     expect(safeCheckoutBranch.status).toBe(0);
     expect(safeCheckoutBranch.stdout).toContain('real git: checkout -b feature main');
+
+    const safeSwitch = spawnSync('git', ['switch', 'main'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(safeSwitch.status).toBe(0);
+    expect(safeSwitch.stdout).toContain('real git: switch main');
 
     const safeCleanDryRun = spawnSync('git', ['clean', '-nd'], {
       env: guardEnv,
@@ -307,6 +318,27 @@ describe('git command guard', () => {
     });
     expect(destructiveCheckoutHeadPath.status).toBe(126);
     expect(destructiveCheckoutHeadPath.stderr).toContain('git command guard blocked');
+
+    const destructiveSwitchForce = spawnSync('git', ['switch', '-f', 'other'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveSwitchForce.status).toBe(126);
+    expect(destructiveSwitchForce.stderr).toContain('git command guard blocked');
+
+    const destructiveSwitchLongForce = spawnSync('git', ['switch', '--force', 'other'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveSwitchLongForce.status).toBe(126);
+    expect(destructiveSwitchLongForce.stderr).toContain('git command guard blocked');
+
+    const destructiveSwitchDiscardChanges = spawnSync('git', ['switch', '--discard-changes', 'other'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveSwitchDiscardChanges.status).toBe(126);
+    expect(destructiveSwitchDiscardChanges.stderr).toContain('git command guard blocked');
   });
 
   it('preserves a Path-only environment when installing the shim', () => {
