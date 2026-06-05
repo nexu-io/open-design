@@ -27,6 +27,10 @@ describe('git command guard', () => {
   it('classifies destructive git invocations', () => {
     expect(gitCommandBlockedReason(['status'])).toBeNull();
     expect(gitCommandBlockedReason(['-C', '/repo', 'status'])).toBeNull();
+    expect(gitCommandBlockedReason(['--exec-path', '/tmp/git-core', 'status'])).toBeNull();
+    expect(gitCommandBlockedReason(['--exec-path', '/tmp/git-core', 'reset', '--hard'])).toContain(
+      'reset --hard',
+    );
     expect(gitCommandBlockedReason(['--git-dir', '/tmp/repo/.git', 'status'])).toBeNull();
     expect(gitCommandBlockedReason(['--git-dir', '/tmp/repo/.git', 'reset', '--hard'])).toContain(
       'reset --hard',
@@ -72,6 +76,13 @@ describe('git command guard', () => {
     });
     expect(destructiveWithGlobalOption.status).toBe(126);
     expect(destructiveWithGlobalOption.stderr).toContain('git command guard blocked');
+
+    const destructiveWithExecPath = spawnSync('git', ['--exec-path', '/tmp/git-core', 'reset', '--hard'], {
+      env: install.env as NodeJS.ProcessEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveWithExecPath.status).toBe(126);
+    expect(destructiveWithExecPath.stderr).toContain('git command guard blocked');
   });
 
   it('preserves a Path-only environment when installing the shim', () => {

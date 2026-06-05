@@ -15,6 +15,7 @@ const STASH_DESTRUCTIVE_SUBCOMMANDS = new Set(['drop', 'clear']);
 const GIT_GLOBAL_OPTIONS_WITH_SEPARATE_VALUE = new Set([
   '-C',
   '-c',
+  '--exec-path',
   '--git-dir',
   '--namespace',
   '--object-directory',
@@ -152,7 +153,7 @@ cmd=""
 skip_next=""
 option_consumes_next() {
   case "$1" in
-    -C|-c|--git-dir|--namespace|--object-directory|--super-prefix|--work-tree) return 0 ;;
+    -C|-c|--exec-path|--git-dir|--namespace|--object-directory|--super-prefix|--work-tree) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -222,7 +223,7 @@ if errorlevel 1 (
   echo Open Design git command guard requires node on PATH. 1>&2
   exit /b 126
 )
-node -e "const args=process.argv.slice(1); const valueOptions=new Set(['-C','-c','--git-dir','--namespace','--object-directory','--super-prefix','--work-tree']); let cmd='',cmdIndex=-1; for(let i=0;i<args.length;i++){const a=args[i]||''; if(valueOptions.has(a)){i++; continue} if(a.startsWith('-')) continue; cmd=a; cmdIndex=i; break} const c=cmd.toLowerCase(); const blocked=(c==='reset'&&args.includes('--hard'))||(c==='clean'&&args.some(a=>a==='--force'||a==='-f'||a==='-x'||a==='-X'||/^-[A-Za-z]*[fxX][A-Za-z]*$/.test(a)))||(c==='stash'&&['drop','clear'].includes((args[cmdIndex+1]||'').toLowerCase()))||(c==='push'&&args.some(a=>a==='-f'||a==='--force'||a.startsWith('--force-with-lease')))||(c==='checkout'&&args.some(a=>a==='-f'||a==='--force'))||c==='restore'; if(blocked){console.error('Open Design git command guard blocked destructive git command'); process.exit(126)}" %*
+node -e "const args=process.argv.slice(1); const valueOptions=new Set(['-C','-c','--exec-path','--git-dir','--namespace','--object-directory','--super-prefix','--work-tree']); let cmd='',cmdIndex=-1; for(let i=0;i<args.length;i++){const a=args[i]||''; if(valueOptions.has(a)){i++; continue} if(a.startsWith('-')) continue; cmd=a; cmdIndex=i; break} const c=cmd.toLowerCase(); const blocked=(c==='reset'&&args.includes('--hard'))||(c==='clean'&&args.some(a=>a==='--force'||a==='-f'||a==='-x'||a==='-X'||/^-[A-Za-z]*[fxX][A-Za-z]*$/.test(a)))||(c==='stash'&&['drop','clear'].includes((args[cmdIndex+1]||'').toLowerCase()))||(c==='push'&&args.some(a=>a==='-f'||a==='--force'||a.startsWith('--force-with-lease')))||(c==='checkout'&&args.some(a=>a==='-f'||a==='--force'))||c==='restore'; if(blocked){console.error('Open Design git command guard blocked destructive git command'); process.exit(126)}" %*
 if errorlevel 1 exit /b %errorlevel%
 "%OD_REAL_GIT_BIN%" %*
 `;
