@@ -66,155 +66,171 @@ describe('git command guard', () => {
     expect(gitCommandBlockedReason(['restore', '.'])).toContain('restore');
   });
 
+  it('uses Git context options when disambiguating checkout operands', () => {
+    if (process.platform === 'win32') return;
+    const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-git-real-'));
+    const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-git-repo-'));
+    const otherDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-git-other-'));
+    const trackedRoot = fs.realpathSync(repoDir);
+    tempDirs.push(binDir, repoDir, otherDir);
+    const realGit = path.join(binDir, 'git');
+    fs.writeFileSync(realGit, fakeGitScript(), { mode: 0o755 });
+
+    expect(
+      gitCommandBlockedReason(['-C', repoDir, 'checkout', 'src/file.ts'], {
+        cwd: otherDir,
+        env: {
+          OD_FAKE_TRACKED_ROOT: trackedRoot,
+        },
+        realGit,
+      }),
+    ).toContain('checkout');
+  });
+
   it('installs a PATH shim that delegates safe commands and blocks destructive commands', () => {
     if (process.platform === 'win32') return;
     const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-git-real-'));
+    const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-git-repo-'));
+    const otherDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-git-other-'));
+    const trackedRoot = fs.realpathSync(repoDir);
     tempDirs.push(binDir);
+    tempDirs.push(repoDir, otherDir);
     const realGit = path.join(binDir, 'git');
-    fs.writeFileSync(
-      realGit,
-      `#!/bin/sh
-if [ "$1" = "rev-parse" ]; then
-  ref=""
-  for arg in "$@"; do ref="$arg"; done
-  case "$ref" in
-    main^{commit}|feature/foo^{commit}|HEAD^{commit}) exit 0 ;;
-    *) exit 1 ;;
-  esac
-fi
-if [ "$1" = "ls-files" ]; then
-  target=""
-  for arg in "$@"; do target="$arg"; done
-  case "$target" in
-    src/file.ts) exit 0 ;;
-    *) exit 1 ;;
-  esac
-fi
-printf "real git: %s\\n" "$*"
-`,
-      { mode: 0o755 },
-    );
+    fs.writeFileSync(realGit, fakeGitScript(), { mode: 0o755 });
 
     const install = installGitCommandGuard({
       OD_GIT_COMMAND_GUARD: '1',
       PATH: binDir,
     });
     tempDirs.push(install.guardDir!);
+    const guardEnv = {
+      ...(install.env as NodeJS.ProcessEnv),
+      OD_FAKE_TRACKED_ROOT: trackedRoot,
+    };
 
     const safe = spawnSync('git', ['status'], {
-      env: install.env as NodeJS.ProcessEnv,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(safe.status).toBe(0);
     expect(safe.stdout).toContain('real git: status');
 
     const safeCheckout = spawnSync('git', ['checkout', 'main'], {
-      env: install.env as NodeJS.ProcessEnv,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(safeCheckout.status).toBe(0);
     expect(safeCheckout.stdout).toContain('real git: checkout main');
 
     const safeCheckoutSlashBranch = spawnSync('git', ['checkout', 'feature/foo'], {
-      env: install.env as NodeJS.ProcessEnv,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(safeCheckoutSlashBranch.status).toBe(0);
     expect(safeCheckoutSlashBranch.stdout).toContain('real git: checkout feature/foo');
 
     const safeCheckoutBranch = spawnSync('git', ['checkout', '-b', 'feature', 'main'], {
-      env: install.env as NodeJS.ProcessEnv,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(safeCheckoutBranch.status).toBe(0);
     expect(safeCheckoutBranch.stdout).toContain('real git: checkout -b feature main');
 
     const safeCleanDryRun = spawnSync('git', ['clean', '-nd'], {
-      env: install.env as NodeJS.ProcessEnv,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(safeCleanDryRun.status).toBe(0);
     expect(safeCleanDryRun.stdout).toContain('real git: clean -nd');
 
     const safeCleanLongDryRun = spawnSync('git', ['clean', '--dry-run', '-fdx'], {
-      env: install.env as NodeJS.ProcessEnv,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(safeCleanLongDryRun.status).toBe(0);
     expect(safeCleanLongDryRun.stdout).toContain('real git: clean --dry-run -fdx');
 
     const destructive = spawnSync('git', ['reset', '--hard'], {
-      env: install.env as NodeJS.ProcessEnv,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(destructive.status).toBe(126);
     expect(destructive.stderr).toContain('git command guard blocked');
 
     const destructiveWithGlobalOption = spawnSync('git', ['--git-dir', '/tmp/repo/.git', 'reset', '--hard'], {
-      env: install.env as NodeJS.ProcessEnv,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(destructiveWithGlobalOption.status).toBe(126);
     expect(destructiveWithGlobalOption.stderr).toContain('git command guard blocked');
 
     const destructiveWithExecPath = spawnSync('git', ['--exec-path', '/tmp/git-core', 'reset', '--hard'], {
-      env: install.env as NodeJS.ProcessEnv,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(destructiveWithExecPath.status).toBe(126);
     expect(destructiveWithExecPath.stderr).toContain('git command guard blocked');
 
     const destructiveCleanGroup = spawnSync('git', ['clean', '-fdx'], {
-      env: install.env as NodeJS.ProcessEnv,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(destructiveCleanGroup.status).toBe(126);
     expect(destructiveCleanGroup.stderr).toContain('git command guard blocked');
 
     const destructiveCleanDirectory = spawnSync('git', ['-c', 'clean.requireForce=false', 'clean', '-d'], {
-      env: install.env as NodeJS.ProcessEnv,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(destructiveCleanDirectory.status).toBe(126);
     expect(destructiveCleanDirectory.stderr).toContain('git command guard blocked');
 
     const destructivePushRefspec = spawnSync('git', ['push', 'origin', '+HEAD:main'], {
-      env: install.env as NodeJS.ProcessEnv,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(destructivePushRefspec.status).toBe(126);
     expect(destructivePushRefspec.stderr).toContain('git command guard blocked');
 
     const destructiveCheckoutPath = spawnSync('git', ['checkout', '--', 'src/file.ts'], {
-      env: install.env as NodeJS.ProcessEnv,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(destructiveCheckoutPath.status).toBe(126);
     expect(destructiveCheckoutPath.stderr).toContain('git command guard blocked');
 
     const destructiveCheckoutDot = spawnSync('git', ['checkout', '.'], {
-      env: install.env as NodeJS.ProcessEnv,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(destructiveCheckoutDot.status).toBe(126);
     expect(destructiveCheckoutDot.stderr).toContain('git command guard blocked');
 
     const destructiveCheckoutRelativePath = spawnSync('git', ['checkout', './src/file.ts'], {
-      env: install.env as NodeJS.ProcessEnv,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(destructiveCheckoutRelativePath.status).toBe(126);
     expect(destructiveCheckoutRelativePath.stderr).toContain('git command guard blocked');
 
     const destructiveCheckoutTrackedPath = spawnSync('git', ['checkout', 'src/file.ts'], {
-      env: install.env as NodeJS.ProcessEnv,
+      cwd: repoDir,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(destructiveCheckoutTrackedPath.status).toBe(126);
     expect(destructiveCheckoutTrackedPath.stderr).toContain('git command guard blocked');
 
+    const destructiveCheckoutWithContext = spawnSync('git', ['-C', repoDir, 'checkout', 'src/file.ts'], {
+      cwd: otherDir,
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveCheckoutWithContext.status).toBe(126);
+    expect(destructiveCheckoutWithContext.stderr).toContain('git command guard blocked');
+
     const destructiveCheckoutHeadPath = spawnSync('git', ['checkout', 'HEAD', 'src/file.ts'], {
-      env: install.env as NodeJS.ProcessEnv,
+      env: guardEnv,
       encoding: 'utf8',
     });
     expect(destructiveCheckoutHeadPath.status).toBe(126);
@@ -238,3 +254,32 @@ printf "real git: %s\\n" "$*"
     expect(install.env.PATH).toBeUndefined();
   });
 });
+
+function fakeGitScript(): string {
+  return `#!/bin/sh
+if [ "$1" = "-C" ]; then
+  cd "$2" 2>/dev/null || exit 1
+  shift 2
+fi
+if [ "$1" = "rev-parse" ]; then
+  ref=""
+  for arg in "$@"; do ref="$arg"; done
+  case "$ref" in
+    main^{commit}|feature/foo^{commit}|HEAD^{commit}) exit 0 ;;
+    *) exit 1 ;;
+  esac
+fi
+if [ "$1" = "ls-files" ]; then
+  target=""
+  for arg in "$@"; do target="$arg"; done
+  case "$target" in
+    src/file.ts)
+      [ "$(pwd -P)" = "$OD_FAKE_TRACKED_ROOT" ] && exit 0
+      exit 1
+      ;;
+    *) exit 1 ;;
+  esac
+fi
+printf "real git: %s\\n" "$*"
+`;
+}
