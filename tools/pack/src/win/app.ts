@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { dirname, isAbsolute, join, relative, win32 } from "node:path";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 import { rebuild } from "@electron/rebuild";
@@ -279,8 +280,23 @@ function toPosixPath(value: string): string {
   return value.replaceAll("\\", "/");
 }
 
-function toRelativeImportSpecifier(fromDirectory: string, targetPath: string): string {
-  const specifier = toPosixPath(relative(fromDirectory, targetPath));
+function isWindowsPath(value: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(value) || value.startsWith("\\\\") || value.startsWith("//");
+}
+
+function toImportFileUrl(targetPath: string): string {
+  return isWindowsPath(targetPath)
+    ? pathToFileURL(targetPath, { windows: true }).href
+    : pathToFileURL(targetPath).href;
+}
+
+export function toWinPrebundleImportSpecifier(fromDirectory: string, targetPath: string): string {
+  const pathApi = isWindowsPath(fromDirectory) || isWindowsPath(targetPath)
+    ? { isAbsolute: win32.isAbsolute, relative: win32.relative }
+    : { isAbsolute, relative };
+  const relativePath = pathApi.relative(fromDirectory, targetPath);
+  if (pathApi.isAbsolute(relativePath)) return toImportFileUrl(targetPath);
+  const specifier = toPosixPath(relativePath);
   return specifier.startsWith(".") ? specifier : `./${specifier}`;
 }
 
@@ -344,7 +360,7 @@ async function buildPrebundledStandaloneRuntime(
   await writeFile(
     paths.daemonSidecarPrebundleEntrypointPath,
     `import ${JSON.stringify(
-      toRelativeImportSpecifier(
+      toWinPrebundleImportSpecifier(
         dirname(paths.daemonSidecarPrebundleEntrypointPath),
         join(config.workspaceRoot, "apps", "daemon", "dist", "sidecar", "index.js"),
       ),
@@ -359,7 +375,7 @@ async function buildPrebundledStandaloneRuntime(
       "process.env.OD_BIN ??= selfPath;",
       "process.env.OD_DAEMON_CLI_PATH ??= selfPath;",
       `await import(${JSON.stringify(
-        toRelativeImportSpecifier(
+        toWinPrebundleImportSpecifier(
           dirname(paths.daemonCliPrebundleEntrypointPath),
           join(config.workspaceRoot, "apps", "daemon", "dist", "cli.js"),
         ),

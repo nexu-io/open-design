@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ToolPackConfig } from "../src/config.js";
 import { INTERNAL_PACKAGES } from "../src/win/constants.js";
-import { createWorkspaceTarballsCacheKey } from "../src/win/app.js";
+import { createWorkspaceTarballsCacheKey, toWinPrebundleImportSpecifier } from "../src/win/app.js";
 
 const PACKAGE_DIRS = INTERNAL_PACKAGES.map((packageInfo) => packageInfo.directory);
 
@@ -70,5 +70,16 @@ describe("createWorkspaceTarballsCacheKey", () => {
     } finally {
       await rm(root, { force: true, recursive: true });
     }
+  });
+});
+
+describe("toWinPrebundleImportSpecifier", () => {
+  it("uses file URLs when the entrypoint cache and workspace are on different Windows drives", () => {
+    expect(
+      toWinPrebundleImportSpecifier(
+        "C:\\odtp-wf\\cache\\entries\\win.packaged-app\\entry\\prebundle-entrypoints",
+        "D:\\Project\\ai_project\\open-design\\apps\\daemon\\dist\\cli.js",
+      ),
+    ).toBe("file:///D:/Project/ai_project/open-design/apps/daemon/dist/cli.js");
   });
 });
