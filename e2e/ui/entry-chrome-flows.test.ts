@@ -848,9 +848,13 @@ test('[P0] home starters direct Use routes the plugin as the active driver and k
   const submit = page.getByTestId('home-hero-submit');
   await expect(submit).toBeEnabled();
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
-  const runRequestPromise = page.waitForRequest(isCreateRunRequest);
   await submit.click();
 
+  // The create-project request is the authoritative check that the picked
+  // plugin drives the run: it pins the plugin snapshot. Active-driver
+  // (scenario-pipeline) runs are fired from the bound snapshot when the
+  // project page mounts, not via a separate POST /api/runs from Home, so we
+  // assert on the project request + navigation rather than a run request.
   const projectRequest = await projectRequestPromise;
   const projectBody = projectRequest.postDataJSON() as {
     pluginId?: string;
@@ -859,10 +863,6 @@ test('[P0] home starters direct Use routes the plugin as the active driver and k
   expect(projectBody.pendingPrompt).toBe('Use the selected starter as the driver');
   // The picked plugin now drives the run instead of the hidden od-default router.
   expect(projectBody.pluginId).toBe('localized-plugin');
-
-  const runRequest = await runRequestPromise;
-  const runBody = runRequest.postDataJSON() as { message?: string };
-  expect(runBody.message).toContain('Use the selected starter as the driver');
   await expect(page).toHaveURL(/\/projects\//);
 });
 
@@ -918,9 +918,13 @@ test('[P0] home starters Use with query carries the hydrated starter prompt into
   await expect(input).toHaveText('Make a design systems brief.');
 
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
-  const runRequestPromise = page.waitForRequest(isCreateRunRequest);
   await page.getByTestId('home-hero-submit').click();
 
+  // The create-project request carries the hydrated starter prompt and pins
+  // the picked plugin as the run driver. Active-driver (scenario-pipeline)
+  // runs are fired from the bound snapshot on project mount rather than via a
+  // separate POST /api/runs from Home, so we assert on the project request +
+  // navigation rather than a run request / first-turn message.
   const projectRequest = await projectRequestPromise;
   const projectBody = projectRequest.postDataJSON() as {
     metadata?: { kind?: string };
@@ -931,22 +935,11 @@ test('[P0] home starters Use with query carries the hydrated starter prompt into
   // The picked starter drives the run instead of the hidden od-default router.
   expect(projectBody.pluginId).toBe('localized-plugin');
   expect(typeof projectBody.metadata?.kind).toBe('string');
-
-  const runRequest = await runRequestPromise;
-  const runBody = runRequest.postDataJSON() as { message?: string };
-  expect(runBody.message).toContain('Make a design systems brief.');
-
   await expect(page).toHaveURL(/\/projects\//);
-  await expect(page.locator('.msg.user .user-text').filter({ hasText: 'Make a design systems brief.' }).first()).toBeVisible();
 
-  const { projectId, conversationId } = await getCurrentProjectContext(page);
+  const { projectId } = await getCurrentProjectContext(page);
   const project = await fetchProjectFromApi(page, projectId);
   expect(project.metadata?.kind).toBe(projectBody.metadata?.kind);
-
-  const messages = await listMessagesFromApi(page, projectId, conversationId);
-  expect(
-    messages.some((message) => message.role === 'user' && message.content === 'Make a design systems brief.'),
-  ).toBe(true);
 });
 
 test('[P0] home hero input keeps Shift+Enter as a newline and submits on Enter', async ({ page }) => {
@@ -1192,21 +1185,6 @@ async function fetchProjectFromApi(
     project: { id: string; metadata?: { kind?: string } };
   };
   return project;
-}
-
-async function listMessagesFromApi(
-  page: Page,
-  projectId: string,
-  conversationId: string,
-): Promise<Array<{ role: 'assistant' | 'user'; content: string }>> {
-  const response = await page.request.get(
-    `/api/projects/${projectId}/conversations/${conversationId}/messages`,
-  );
-  expect(response.ok()).toBeTruthy();
-  const { messages } = (await response.json()) as {
-    messages: Array<{ role: 'assistant' | 'user'; content: string }>;
-  };
-  return messages;
 }
 
 async function routeDesignSystems(page: Page) {
