@@ -52,6 +52,8 @@ describe('git command guard', () => {
     expect(gitCommandBlockedReason(['clean', '--dry-run', '--interactive'])).toBeNull();
     expect(gitCommandBlockedReason(['stash', 'drop'])).toContain('stash');
     expect(gitCommandBlockedReason(['push', 'origin', 'HEAD:main'])).toBeNull();
+    expect(gitCommandBlockedReason(['push', '-u', 'origin', 'HEAD:main'])).toBeNull();
+    expect(gitCommandBlockedReason(['push', '-fu', 'origin', 'HEAD:main'])).toContain('push');
     expect(gitCommandBlockedReason(['push', 'origin', '+HEAD:main'])).toContain('push');
     expect(gitCommandBlockedReason(['push', '--force-with-lease=origin/main'])).toContain('push');
     expect(gitCommandBlockedReason(['checkout', 'main'])).toBeNull();
@@ -61,7 +63,9 @@ describe('git command guard', () => {
       'checkout',
     );
     expect(gitCommandBlockedReason(['checkout', '-b', 'feature', 'main'])).toBeNull();
+    expect(gitCommandBlockedReason(['checkout', '-q', 'main'])).toBeNull();
     expect(gitCommandBlockedReason(['checkout', '--force', 'main'])).toContain('checkout');
+    expect(gitCommandBlockedReason(['checkout', '-fq', 'other'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', '-p'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', '--patch'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', '--pathspec-from-file', 'paths.txt'])).toContain(
@@ -76,7 +80,9 @@ describe('git command guard', () => {
     expect(gitCommandBlockedReason(['checkout', '--', 'src/file.ts'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', 'HEAD', '--', 'src/file.ts'])).toContain('checkout');
     expect(gitCommandBlockedReason(['switch', 'main'])).toBeNull();
+    expect(gitCommandBlockedReason(['switch', '-c', 'temp', 'main'])).toBeNull();
     expect(gitCommandBlockedReason(['switch', '-f', 'other'])).toContain('switch');
+    expect(gitCommandBlockedReason(['switch', '-fC', 'temp', 'other'])).toContain('switch');
     expect(gitCommandBlockedReason(['switch', '--force', 'other'])).toContain('switch');
     expect(gitCommandBlockedReason(['switch', '--discard-changes', 'other'])).toContain('switch');
     expect(gitCommandBlockedReason(['restore', '.'])).toContain('restore');
@@ -152,12 +158,26 @@ describe('git command guard', () => {
     expect(safeCheckoutBranch.status).toBe(0);
     expect(safeCheckoutBranch.stdout).toContain('real git: checkout -b feature main');
 
+    const safeCheckoutQuiet = spawnSync('git', ['checkout', '-q', 'main'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(safeCheckoutQuiet.status).toBe(0);
+    expect(safeCheckoutQuiet.stdout).toContain('real git: checkout -q main');
+
     const safeSwitch = spawnSync('git', ['switch', 'main'], {
       env: guardEnv,
       encoding: 'utf8',
     });
     expect(safeSwitch.status).toBe(0);
     expect(safeSwitch.stdout).toContain('real git: switch main');
+
+    const safeSwitchCreate = spawnSync('git', ['switch', '-c', 'temp', 'main'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(safeSwitchCreate.status).toBe(0);
+    expect(safeSwitchCreate.stdout).toContain('real git: switch -c temp main');
 
     const safeCleanDryRun = spawnSync('git', ['clean', '-nd'], {
       env: guardEnv,
@@ -236,6 +256,20 @@ describe('git command guard', () => {
     expect(destructiveCleanLongInteractive.status).toBe(126);
     expect(destructiveCleanLongInteractive.stderr).toContain('git command guard blocked');
 
+    const safePushUpstream = spawnSync('git', ['push', '-u', 'origin', 'HEAD:main'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(safePushUpstream.status).toBe(0);
+    expect(safePushUpstream.stdout).toContain('real git: push -u origin HEAD:main');
+
+    const destructivePushBundledForce = spawnSync('git', ['push', '-fu', 'origin', 'HEAD:main'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(destructivePushBundledForce.status).toBe(126);
+    expect(destructivePushBundledForce.stderr).toContain('git command guard blocked');
+
     const destructivePushRefspec = spawnSync('git', ['push', 'origin', '+HEAD:main'], {
       env: guardEnv,
       encoding: 'utf8',
@@ -312,6 +346,13 @@ describe('git command guard', () => {
     expect(destructiveCheckoutLongPatch.status).toBe(126);
     expect(destructiveCheckoutLongPatch.stderr).toContain('git command guard blocked');
 
+    const destructiveCheckoutBundledForce = spawnSync('git', ['checkout', '-fq', 'other'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveCheckoutBundledForce.status).toBe(126);
+    expect(destructiveCheckoutBundledForce.stderr).toContain('git command guard blocked');
+
     const destructiveCheckoutHeadPath = spawnSync('git', ['checkout', 'HEAD', 'src/file.ts'], {
       env: guardEnv,
       encoding: 'utf8',
@@ -325,6 +366,13 @@ describe('git command guard', () => {
     });
     expect(destructiveSwitchForce.status).toBe(126);
     expect(destructiveSwitchForce.stderr).toContain('git command guard blocked');
+
+    const destructiveSwitchBundledForce = spawnSync('git', ['switch', '-fC', 'temp', 'other'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveSwitchBundledForce.status).toBe(126);
+    expect(destructiveSwitchBundledForce.stderr).toContain('git command guard blocked');
 
     const destructiveSwitchLongForce = spawnSync('git', ['switch', '--force', 'other'], {
       env: guardEnv,
