@@ -1,0 +1,34 @@
+/* ===========================================
+   Clicker App — Tabs Component
+   ===========================================
+   Barre d'onglets segmentée style iOS.
+   =========================================== */
+
+.tab-bar {
+  display: inline-flex;
+  gap: 4px;
+  background: rgba(0,0,0,0.04);
+  padding: 4px;
+  border-radius: 999px;
+  margin-bottom: 16px;
+}
+
+.tab-btn {
+  height: 36px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.tab-btn.active {
+  background: var(--surface);
+  color: var(--fg);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}

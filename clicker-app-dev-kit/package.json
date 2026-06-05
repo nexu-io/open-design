@@ -1,0 +1,41 @@
+{
+  "name": "clicker-app-dev-kit",
+  "version": "1.0.0",
+  "description": "Professional developer kit for the Clicker App — modular CSS tokens, reusable components, complete screens, and design system documentation.",
+  "main": "tokens/tokens.css",
+  "files": [
+    "tokens/",
+    "css/",
+    "screens/",
+    "components/",
+    "assets/",
+    "design-system/",
+    "preview/",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "keywords": [
+    "clicker",
+    "game",
+    "ios",
+    "mobile",
+    "css",
+    "design-system",
+    "tokens",
+    "components",
+    "ui-kit"
+  ],
+  "author": "Open Design Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/open-design/clicker-app-dev-kit"
+  },
+  "bugs": {
+    "url": "https://github.com/open-design/clicker-app-dev-kit/issues"
+  },
+  "homepage": "https://github.com/open-design/clicker-app-dev-kit#readme",
+  "engines": {
+    "node": ">=18"
+  }
+}

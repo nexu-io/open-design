@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clicker App — Design System</title>
+  <link rel="stylesheet" href="../tokens/tokens.css" />
+  <link rel="stylesheet" href="../css/reset.css" />
+  <link rel="stylesheet" href="../css/utilities.css" />
+  <link rel="stylesheet" href="../css/components/button.css" />
+  <link rel="stylesheet" href="../css/components/tile.css" />
+  <link rel="stylesheet" href="../css/components/nav.css" />
+  <link rel="stylesheet" href="../css/components/avatar.css" />
+  <link rel="stylesheet" href="../css/components/leaderboard.css" />
+  <link rel="stylesheet" href="../css/components/tabs.css" />
+  <link rel="stylesheet" href="../css/components/click-zone.css" />
+  <link rel="stylesheet" href="../css/components/stat-card.css" />
+  <style>
+    /* Layout design system */
+    body { overflow: auto; height: auto; min-height: 100%; }
+    .ds-wrapper { max-width: 960px; margin: 0 auto; padding: 48px 24px; }
+    .ds-section { margin-bottom: 64px; }
+    .ds-section h2 { font-family: var(--font-display); font-size: 24px; font-weight: 700; margin-bottom: 24px; letter-spacing: -0.02em; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+    .ds-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 12px; font-weight: 700; }
+    .ds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 16px; }
+    .ds-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px; text-align: center; }
+    .ds-swatch { width: 100%; height: 64px; border-radius: var(--radius-sm); margin-bottom: 10px; border: 1px solid rgba(0,0,0,0.06); }
+    .ds-name { font-family: var(--font-display); font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .ds-val { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+    .ds-demo { background: var(--bg); border-radius: var(--radius-md); padding: 24px; margin-bottom: 16px; position: relative; overflow: hidden; }
+    .ds-code { background: #1e1e1e; color: #d4d4d4; border-radius: var(--radius-sm); padding: 16px; font-family: var(--font-mono); font-size: 13px; line-height: 1.6; overflow-x: auto; white-space: pre; }
+    .ds-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 16px; }
+    .ds-screen-link { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; background: var(--fg); color: #fff; border-radius: 999px; font-family: var(--font-display); font-weight: 700; font-size: 14px; text-decoration: none; }
+    .ds-screen-link:hover { opacity: 0.9; }
+    .ds-header { text-align: center; margin-bottom: 48px; }
+    .ds-header h1 { font-family: var(--font-display); font-size: 40px; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 8px; }
+    .ds-header p { font-size: 16px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="ds-wrapper">
+    <header class="ds-header">
+      <h1>Clicker App Design System</h1>
+      <p>Tokens, composants et screens pour développeurs</p>
+    </header>
+
+    <!-- TOKENS -->
+    <section class="ds-section">
+      <h2>🎨 Tokens — Couleurs</h2>
+      <div class="ds-label">Fond & Surface</div>
+      <div class="ds-grid">
+        <div class="ds-item"><div class="ds-swatch" style="background:var(--bg)"></div><div class="ds-name">--bg</div><div class="ds-val">oklch(96% 0.018 65)</div></div>
+        <div class="ds-item"><div class="ds-swatch" style="background:var(--surface)"></div><div class="ds-name">--surface</div><div class="ds-val">oklch(100% 0 0)</div></div>
+        <div class="ds-item"><div class="ds-swatch" style="background:var(--fg)"></div><div class="ds-name">--fg</div><div class="ds-val">oklch(18% 0.02 250)</div></div>
+        <div class="ds-item"><div class="ds-swatch" style="background:var(--muted)"></div><div class="ds-name">--muted</div><div class="ds-val">oklch(52% 0.015 250)</div></div>
+        <div class="ds-item"><div class="ds-swatch" style="background:var(--border)"></div><div class="ds-name">--border</div><div class="ds-val">oklch(90% 0.01 70)</div></div>
+        <div class="ds-item"><div class="ds-swatch" style="background:var(--accent)"></div><div class="ds-name">--accent</div><div class="ds-val">oklch(55% 0.16 25)</div></div>
+      </div>
+
+      <div class="ds-label" style="margin-top:24px">Tuiles pastel</div>
+      <div class="ds-grid">
+        <div class="ds-item"><div class="ds-swatch" style="background:var(--tile-lavender)"></div><div class="ds-name">--tile-lavender</div><div class="ds-val">#d4d6f9</div></div>
+        <div class="ds-item"><div class="ds-swatch" style="background:var(--tile-yellow)"></div><div class="ds-name">--tile-yellow</div><div class="ds-val">#f2e8a0</div></div>
+        <div class="ds-item"><div class="ds-swatch" style="background:var(--tile-mint)"></div><div class="ds-name">--tile-mint</div><div class="ds-val">#c5e8e0</div></div>
+        <div class="ds-item"><div class="ds-swatch" style="background:var(--tile-blush)"></div><div class="ds-name">--tile-blush</div><div class="ds-val">#f2ddd0</div></div>
+        <div class="ds-item"><div class="ds-swatch" style="background:var(--tile-sky)"></div><div class="ds-name">--tile-sky</div><div class="ds-val">#cce0f5</div></div>
+        <div class="ds-item"><div class="ds-swatch" style="background:var(--tile-coral)"></div><div class="ds-name">--tile-coral</div><div class="ds-val">#f2c5b8</div></div>
+      </div>
+
+      <div class="ds-label" style="margin-top:24px">Cercles décoratifs</div>
+      <div class="ds-grid">
+        <div class="ds-item"><div class="ds-swatch" style="background:var(--circle-blue)"></div><div class="ds-name">--circle-blue</div><div class="ds-val">#a8c5f0</div></div>
+        <div class="ds-item"><div class="ds-swatch" style="background:var(--circle-olive)"></div><div class="ds-name">--circle-olive</div><div class="ds-val">#b8c9a0</div></div>
+        <div class="ds-item"><div class="ds-swatch" style="background:var(--circle-terracotta)"></div><div class="ds-name">--circle-terracotta</div><div class="ds-val">#e0a890</div></div>
+        <div class="ds-item"><div class="ds-swatch" style="background:var(--circle-yellow)"></div><div class="ds-name">--circle-yellow</div><div class="ds-val">#f2e0a0</div></div>
+      </div>
+    </section>
+
+    <!-- TYPOGRAPHY -->
+    <section class="ds-section">
+      <h2>🔤 Typographie</h2>
+      <div class="ds-demo">
+        <p class="title-xl" style="margin-bottom:16px">Title XL — DM Sans 32px Bold</p>
+        <p class="title-lg" style="margin-bottom:16px">Title LG — DM Sans 24px Bold</p>
+        <p class="title-md" style="margin-bottom:16px">Title MD — DM Sans 18px Bold</p>
+        <p class="body-text" style="margin-bottom:16px">Body Text — System 15px Regular. Lorem ipsum dolor sit amet.</p>
+        <p class="label">Label — System 13px Uppercase</p>
+      </div>
+      <div class="ds-code">.title-xl   { font-family: var(--font-display); font-size: 32px; font-weight: 700; }
+.title-lg   { font-family: var(--font-display); font-size: 24px; font-weight: 700; }
+.title-md   { font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+.body-text  { font-family: var(--font-body); font-size: 15px; }
+.label      { font-family: var(--font-body); font-size: 13px; text-transform: uppercase; }</div>
+    </section>
+
+    <!-- COMPONENTS -->
+    <section class="ds-section">
+      <h2>🧩 Composants</h2>
+
+      <div class="ds-label">Boutons</div>
+      <div class="ds-demo">
+        <div class="ds-row">
+          <button class="btn-primary">Primaire</button>
+          <button class="btn-secondary">Secondaire</button>
+        </div>
+      </div>
+      <div class="ds-code">&lt;button class="btn-primary"&gt;Primaire&lt;/button&gt;
+&lt;button class="btn-secondary"&gt;Secondaire&lt;/button&gt;</div>
+
+      <div class="ds-label" style="margin-top:32px">Tuiles</div>
+      <div class="ds-demo">
+        <div class="tile-grid">
+          <div class="tile tile-lavender"><span class="tile-title">Time Attack</span><span class="tile-desc">60 secondes</span><div class="tile-arrow"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div></div>
+          <div class="tile tile-yellow"><span class="tile-title">Moving Target</span><span class="tile-desc">Cible mobile</span><div class="tile-arrow"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div></div>
+          <div class="tile tile-mint"><span class="tile-title">Shrink Click</span><span class="tile-desc">Précision</span><div class="tile-arrow"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div></div>
+        </div>
+      </div>
+      <div class="ds-code">&lt;div class="tile tile-lavender"&gt;
+  &lt;span class="tile-title"&gt;Time Attack&lt;/span&gt;
+  &lt;span class="tile-desc"&gt;60 secondes&lt;/span&gt;
+  &lt;div class="tile-arrow"&gt;...&lt;/div&gt;
+&lt;/div&gt;</div>
+
+      <div class="ds-label" style="margin-top:32px">Avatars</div>
+      <div class="ds-demo">
+        <div class="ds-row">
+          <div class="avatar">AL</div>
+          <div class="avatar avatar-lg">AL</div>
+        </div>
+      </div>
+      <div class="ds-code">&lt;div class="avatar"&gt;AL&lt;/div&gt;
+&lt;div class="avatar avatar-lg"&gt;AL&lt;/div&gt;</div>
+
+      <div class="ds-label" style="margin-top:32px">Onglets</div>
+      <div class="ds-demo">
+        <div class="tab-bar">
+          <button class="tab-btn active">Global</button>
+          <button class="tab-btn">Amis</button>
+          <button class="tab-btn">Semaine</button>
+        </div>
+      </div>
+      <div class="ds-code">&lt;div class="tab-bar"&gt;
+  &lt;button class="tab-btn active"&gt;Global&lt;/button&gt;
+  &lt;button class="tab-btn"&gt;Amis&lt;/button&gt;
+  &lt;button class="tab-btn"&gt;Semaine&lt;/button&gt;
+&lt;/div&gt;</div>
+
+      <div class="ds-label" style="margin-top:32px">Carte de statistique</div>
+      <div class="ds-demo" style="max-width: 200px;">
+        <div class="stat-card">
+          <p class="num">3 240</p>
+          <p class="lab">Score max</p>
+        </div>
+      </div>
+      <div class="ds-code">&lt;div class="stat-card"&gt;
+  &lt;p class="num"&gt;3 240&lt;/p&gt;
+  &lt;p class="lab"&gt;Score max&lt;/p&gt;
+&lt;/div&gt;</div>
+
+      <div class="ds-label" style="margin-top:32px">Navigation</div>
+      <div class="ds-demo" style="padding-bottom: 80px;">
+        <nav class="bottom-nav" aria-label="Navigation" style="position: relative; bottom: auto; left: auto; transform: none;">
+          <a href="#" class="nav-btn active" aria-label="Accueil">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </a>
+          <a href="#" class="nav-btn" aria-label="Profil">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </a>
+          <a href="#" class="nav-main" aria-label="Jouer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 3l14 9-14 9V3z"/></svg>
+          </a>
+          <a href="#" class="nav-btn" aria-label="Classement">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.24C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.24C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+          </a>
+        </nav>
+      </div>
+    </section>
+
+    <!-- SCREENS -->
+    <section class="ds-section">
+      <h2>📱 Screens</h2>
+      <div class="ds-row">
+        <a class="ds-screen-link" href="../screens/home.html" target="_blank">🏠 Accueil</a>
+        <a class="ds-screen-link" href="../screens/play.html" target="_blank">🎮 Jouer</a>
+        <a class="ds-screen-link" href="../screens/leaderboard.html" target="_blank">🏆 Classement</a>
+        <a class="ds-screen-link" href="../screens/profil.html" target="_blank">👤 Profil</a>
+      </div>
+    </section>
+
+    <!-- FILE MAP -->
+    <section class="ds-section">
+      <h2>📁 Fichiers du kit</h2>
+      <div class="ds-code">tokens/tokens.css          → Variables CSS design tokens
+css/reset.css              → Reset de base
+css/utilities.css          → Classes utilitaires & animations
+css/components/button.css  → .btn-primary, .btn-secondary
+css/components/tile.css    → .tile + variantes pastel
+css/components/nav.css     → .bottom-nav, .nav-btn, .nav-main
+css/components/avatar.css  → .avatar, .avatar-lg
+css/components/leaderboard.css → .lb-row, .lb-rank, .lb-avatar
+css/components/tabs.css    → .tab-bar, .tab-btn
+css/components/click-zone.css  → .click-btn, .plus-one, .pause-btn
+css/components/stat-card.css   → .stat-card
+screens/*.html             → 4 screens complets & fonctionnels</div>
+    </section>
+  </div>
+</body>
+</html>

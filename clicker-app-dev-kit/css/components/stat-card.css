@@ -1,0 +1,30 @@
+/* ===========================================
+   Clicker App — Stat Card Component
+   ===========================================
+   Carte de statistique utilisée sur le profil
+   (grille 2×2 de stats).
+   =========================================== */
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid rgba(0,0,0,0.04);
+  border-radius: var(--radius-lg);
+  padding: 18px 16px;
+  text-align: center;
+}
+
+.stat-card .num {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--fg);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.stat-card .lab {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}

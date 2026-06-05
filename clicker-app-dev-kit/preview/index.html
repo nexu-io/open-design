@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clicker App — Preview</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
+    :root { --bg:#f6f3ef; --fg:#1a1a1a; --muted:#8a8580; --accent:#c96442; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    html,body { width:100%; min-height:100%; background:var(--bg); color:var(--fg); font-family:'DM Sans',system-ui,sans-serif; }
+    header { text-align:center; padding:48px 20px 32px; }
+    header h1 { font-size:36px; font-weight:700; letter-spacing:-0.02em; margin-bottom:8px; }
+    header p { font-size:16px; color:var(--muted); }
+    .frames { display:flex; gap:40px; justify-content:center; align-items:flex-start; padding:0 40px 80px; flex-wrap:wrap; }
+    .frame-col { display:flex; flex-direction:column; align-items:center; gap:16px; }
+    .frame-label { font-size:14px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.12em; }
+
+    /* iPhone shell simulation */
+    .phone-shell {
+      position: relative;
+      width: 390px;
+      height: 844px;
+      border-radius: 52px;
+      background: #0f0f0f;
+      padding: 12px;
+      box-shadow: 0 28px 80px rgba(0,0,0,0.18), inset 0 0 0 1px rgba(255,255,255,0.06);
+      overflow: hidden;
+      line-height: 0;
+    }
+    .phone-screen {
+      width: 100%;
+      height: 100%;
+      border-radius: 40px;
+      overflow: hidden;
+      background: #000;
+      position: relative;
+    }
+    .phone-screen iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+    }
+    /* Dynamic Island */
+    .phone-shell::before {
+      content: '';
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 96px;
+      height: 28px;
+      background: #000;
+      border-radius: 999px;
+      z-index: 10;
+    }
+    /* Home indicator */
+    .phone-shell::after {
+      content: '';
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 130px;
+      height: 5px;
+      background: rgba(255,255,255,0.35);
+      border-radius: 999px;
+      z-index: 10;
+    }
+    /* Side buttons (visual only) */
+    .phone-shell .btn-side {
+      position: absolute;
+      right: -2px;
+      width: 3px;
+      background: #2a2a2a;
+      border-radius: 2px;
+    }
+    .btn-side.power { top: 180px; height: 70px; }
+    .btn-side.vol-up { top: 120px; height: 32px; left: -2px; right: auto; }
+    .btn-side.vol-down { top: 160px; height: 32px; left: -2px; right: auto; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Clicker App</h1>
+    <p>Preview iOS · 4 screens · Tuiles pastel & ligne-art</p>
+  </header>
+
+  <div class="frames">
+    <div class="frame-col">
+      <span class="frame-label">Accueil</span>
+      <div class="phone-shell">
+        <div class="btn-side vol-up"></div>
+        <div class="btn-side vol-down"></div>
+        <div class="btn-side power"></div>
+        <div class="phone-screen">
+          <iframe src="../screens/home.html" loading="lazy"></iframe>
+        </div>
+      </div>
+    </div>
+    <div class="frame-col">
+      <span class="frame-label">Jouer</span>
+      <div class="phone-shell">
+        <div class="btn-side vol-up"></div>
+        <div class="btn-side vol-down"></div>
+        <div class="btn-side power"></div>
+        <div class="phone-screen">
+          <iframe src="../screens/play.html" loading="lazy"></iframe>
+        </div>
+      </div>
+    </div>
+    <div class="frame-col">
+      <span class="frame-label">Classement</span>
+      <div class="phone-shell">
+        <div class="btn-side vol-up"></div>
+        <div class="btn-side vol-down"></div>
+        <div class="btn-side power"></div>
+        <div class="phone-screen">
+          <iframe src="../screens/leaderboard.html" loading="lazy"></iframe>
+        </div>
+      </div>
+    </div>
+    <div class="frame-col">
+      <span class="frame-label">Profil</span>
+      <div class="phone-shell">
+        <div class="btn-side vol-up"></div>
+        <div class="btn-side vol-down"></div>
+        <div class="btn-side power"></div>
+        <div class="phone-screen">
+          <iframe src="../screens/profil.html" loading="lazy"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

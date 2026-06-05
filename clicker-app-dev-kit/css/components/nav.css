@@ -1,0 +1,73 @@
+/* ===========================================
+   Clicker App — Navigation Component
+   ===========================================
+   Barre de navigation flottante iOS-style avec
+   backdrop blur et bouton principal central.
+   =========================================== */
+
+.bottom-nav {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 8px 12px;
+  border-radius: 999px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+  z-index: 100;
+  border: 1px solid rgba(0,0,0,0.04);
+}
+
+/* ---------- Regular nav button ---------- */
+.nav-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--muted);
+  transition: color 0.2s, background 0.2s;
+}
+
+.nav-btn.active {
+  color: var(--fg);
+  background: rgba(0,0,0,0.04);
+}
+
+.nav-btn svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2;
+}
+
+/* ---------- Main action button (Play) ---------- */
+.nav-main {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--fg);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  transition: transform 0.15s ease;
+}
+
+.nav-main:active {
+  transform: scale(0.92);
+}
+
+.nav-main svg {
+  width: 24px;
+  height: 24px;
+}

@@ -1,0 +1,201 @@
+/* ===========================================
+   Clicker App — Design Tokens
+   ===========================================
+   Fichier autonome contenant uniquement les
+   variables CSS (custom properties). Ne
+   contient aucun style applicatif.
+   =========================================== */
+
+:root {
+  /**
+   * @token --bg
+   * @description Couleur de fond principal de l'application.
+   * @type color
+   */
+  --bg:        oklch(96% 0.018 65);
+
+  /**
+   * @token --surface
+   * @description Couleur de surface pour les cartes et éléments élevés.
+   * @type color
+   */
+  --surface:   oklch(100% 0 0);
+
+  /**
+   * @token --fg
+   * @description Couleur de texte principal (foreground).
+   * @type color
+   */
+  --fg:        oklch(18% 0.02 250);
+
+  /**
+   * @token --muted
+   * @description Couleur de texte secondaire / désactivé.
+   * @type color
+   */
+  --muted:     oklch(52% 0.015 250);
+
+  /**
+   * @token --border
+   * @description Couleur des bordures et séparateurs.
+   * @type color
+   */
+  --border:    oklch(90% 0.01 70);
+
+  /**
+   * @token --accent
+   * @description Couleur d'accentuation (combo, highlights).
+   * @type color
+   */
+  --accent:    oklch(55% 0.16 25);
+
+  /* ---------- Tuiles pastel ---------- */
+
+  /**
+   * @token --tile-lavender
+   * @description Lavande — tuile Time Attack.
+   * @type color
+   */
+  --tile-lavender:   #d4d6f9;
+
+  /**
+   * @token --tile-yellow
+   * @description Jaune pastel — tuile Moving Target & Daily Challenge.
+   * @type color
+   */
+  --tile-yellow:     #f2e8a0;
+
+  /**
+   * @token --tile-mint
+   * @description Menthe — tuile Shrink Click.
+   * @type color
+   */
+  --tile-mint:       #c5e8e0;
+
+  /**
+   * @token --tile-blush
+   * @description Blush — tuile Marathon.
+   * @type color
+   */
+  --tile-blush:      #f2ddd0;
+
+  /**
+   * @token --tile-sky
+   * @description Ciel — tuile Daily Challenge.
+   * @type color
+   */
+  --tile-sky:        #cce0f5;
+
+  /**
+   * @token --tile-coral
+   * @description Corail — tuile Duel.
+   * @type color
+   */
+  --tile-coral:      #f2c5b8;
+
+  /* ---------- Cercles décoratifs ---------- */
+
+  /**
+   * @token --circle-blue
+   * @description Bleu ciel pour les cercles décoratifs flous.
+   * @type color
+   */
+  --circle-blue:     #a8c5f0;
+
+  /**
+   * @token --circle-olive
+   * @description Olive pour les cercles décoratifs flous.
+   * @type color
+   */
+  --circle-olive:    #b8c9a0;
+
+  /**
+   * @token --circle-terracotta
+   * @description Terre cuite pour les cercles décoratifs flous.
+   * @type color
+   */
+  --circle-terracotta: #e0a890;
+
+  /**
+   * @token --circle-yellow
+   * @description Jaune pour les cercles décoratifs flous.
+   * @type color
+   */
+  --circle-yellow:   #f2e0a0;
+
+  /* ---------- Typographie ---------- */
+
+  /**
+   * @token --font-display
+   * @description Police pour les titres et textes display (DM Sans).
+   * @type font-family
+   */
+  --font-display: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+
+  /**
+   * @token --font-body
+   * @description Police pour le corps de texte (system stack iOS).
+   * @type font-family
+   */
+  --font-body:    -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+
+  /**
+   * @token --font-mono
+   * @description Police monospace pour les nombres et stats.
+   * @type font-family
+   */
+  --font-mono:    'SF Mono', ui-monospace, Menlo, monospace;
+
+  /* ---------- Rayons ---------- */
+
+  /**
+   * @token --radius-sm
+   * @description Rayon de bordure petit (16px).
+   * @type length
+   */
+  --radius-sm: 16px;
+
+  /**
+   * @token --radius-md
+   * @description Rayon de bordure moyen (24px).
+   * @type length
+   */
+  --radius-md: 24px;
+
+  /**
+   * @token --radius-lg
+   * @description Rayon de bordure large (32px).
+   * @type length
+   */
+  --radius-lg: 32px;
+
+  /**
+   * @token --radius-xl
+   * @description Rayon de bordure extra-large (40px).
+   * @type length
+   */
+  --radius-xl: 40px;
+
+  /* ---------- Rangs classement ---------- */
+
+  /**
+   * @token --rank-gold
+   * @description Couleur du rang or (1er).
+   * @type color
+   */
+  --rank-gold:   #b8860b;
+
+  /**
+   * @token --rank-silver
+   * @description Couleur du rang argent (2e).
+   * @type color
+   */
+  --rank-silver: #888888;
+
+  /**
+   * @token --rank-bronze
+   * @description Couleur du rang bronze (3e).
+   * @type color
+   */
+  --rank-bronze: #cd7f32;
+}

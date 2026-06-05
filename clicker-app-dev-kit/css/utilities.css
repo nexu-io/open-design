@@ -1,0 +1,112 @@
+/* ===========================================
+   Clicker App — Utilities
+   ===========================================
+   Classes utilitaires, layouts partagés et animations.
+   =========================================== */
+
+/* ---------- Screen container ---------- */
+.screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 24px 20px 100px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  z-index: 1;
+}
+
+/* Masquer la scrollbar native */
+.screen::-webkit-scrollbar { display: none; }
+.screen { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ---------- Typography utilities ---------- */
+
+.title-xl {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--fg);
+}
+
+.title-lg {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.title-md {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.body-text {
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.label {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+/* ---------- Stat numbers ---------- */
+.stat-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* ---------- Header row ---------- */
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+/* ---------- Decorative circles ---------- */
+.decor-circle {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.35;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ---------- Grid ---------- */
+.tile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  width: 100%;
+}
+
+/* ---------- Animations ---------- */
+
+@keyframes pulse-soft {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.04); }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2.5s ease-in-out infinite;
+}
+
+@keyframes float-up {
+  0%   { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-40px); opacity: 0; }
+}

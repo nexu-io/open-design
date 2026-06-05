@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Jouer — Clicker</title>
+  <!-- Tokens & modules CSS -->
+  <link rel="stylesheet" href="../tokens/tokens.css" />
+  <link rel="stylesheet" href="../css/reset.css" />
+  <link rel="stylesheet" href="../css/utilities.css" />
+  <link rel="stylesheet" href="../css/components/button.css" />
+  <link rel="stylesheet" href="../css/components/tile.css" />
+  <link rel="stylesheet" href="../css/components/nav.css" />
+  <link rel="stylesheet" href="../css/components/avatar.css" />
+  <link rel="stylesheet" href="../css/components/leaderboard.css" />
+  <link rel="stylesheet" href="../css/components/tabs.css" />
+  <link rel="stylesheet" href="../css/components/click-zone.css" />
+  <link rel="stylesheet" href="../css/components/stat-card.css" />
+  <style>
+    .play-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+    .mode-badge { display:inline-flex; align-items:center; gap:8px; height:32px; padding:0 14px; border-radius:999px; background:var(--tile-lavender); font-family:var(--font-display); font-size:13px; font-weight:700; color:var(--fg); }
+    .timer { font-family:var(--font-mono); font-size:28px; font-weight:700; color:var(--fg); letter-spacing:-0.02em; }
+    .score-wrap { text-align:center; margin-top:12px; margin-bottom:24px; }
+    .score-label { font-size:13px; text-transform:uppercase; letter-spacing:0.1em; color:var(--muted); margin-bottom:4px; }
+    .score-value { font-family:var(--font-mono); font-size:72px; font-weight:700; color:var(--fg); line-height:1; letter-spacing:-0.03em; }
+    .combo { text-align:center; font-family:var(--font-display); font-size:16px; font-weight:700; color:var(--accent); height:24px; }
+    .circle-1 { width:200px; height:200px; background:var(--circle-yellow); top:-80px; left:-60px; opacity:0.25; }
+    .circle-2 { width:160px; height:160px; background:var(--circle-terracotta); bottom:100px; right:-50px; opacity:0.2; }
+  </style>
+</head>
+<body>
+  <div class="decor-circle circle-1"></div>
+  <div class="decor-circle circle-2"></div>
+
+  <div class="screen" id="screen">
+    <div class="play-header">
+      <span class="mode-badge">
+        <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        Time Attack
+      </span>
+      <button class="pause-btn" aria-label="Pause" onclick="togglePause()">
+        <svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+      </button>
+    </div>
+
+    <div class="score-wrap">
+      <p class="score-label">Score</p>
+      <p class="score-value" id="score">0</p>
+    </div>
+
+    <p class="combo" id="combo"></p>
+
+    <div class="click-zone" id="clickZone">
+      <button class="click-btn animate-pulse-soft" id="clickBtn" onclick="doClick(event)">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-4H8v-2h3V7h2v4h3v2h-3v4h-2z"/></svg>
+      </button>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-item">
+        <p class="val" id="timer">60</p>
+        <p class="lab">Secondes</p>
+      </div>
+      <div class="stat-item">
+        <p class="val" id="cps">0</p>
+        <p class="lab">Clics / sec</p>
+      </div>
+      <div class="stat-item">
+        <p class="val" id="best">0</p>
+        <p class="lab">Record</p>
+      </div>
+    </div>
+  </div>
+
+  <nav class="bottom-nav" aria-label="Navigation">
+    <a href="home.html" class="nav-btn" aria-label="Accueil">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    </a>
+    <a href="profil.html" class="nav-btn" aria-label="Profil">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    </a>
+    <a href="play.html" class="nav-main active" aria-label="Jouer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 3l14 9-14 9V3z"/></svg>
+    </a>
+    <a href="leaderboard.html" class="nav-btn" aria-label="Classement">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.24C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.24C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+    </a>
+  </nav>
+
+  <script>
+    let score = 0, combo = 0, lastClick = 0, timerVal = 60, interval, paused = false;
+    const scoreEl = document.getElementById('score');
+    const comboEl = document.getElementById('combo');
+    const timerEl = document.getElementById('timer');
+    const cpsEl = document.getElementById('cps');
+    const bestEl = document.getElementById('best');
+    const clickBtn = document.getElementById('clickBtn');
+    bestEl.textContent = localStorage.getItem('clicker_best') || 0;
+
+    function start() {
+      interval = setInterval(() => {
+        if (paused) return;
+        timerVal--;
+        timerEl.textContent = timerVal;
+        const elapsed = 60 - timerVal;
+        cpsEl.textContent = elapsed > 0 ? (score / elapsed).toFixed(1) : '0.0';
+        if (timerVal <= 0) { clearInterval(interval); finish(); }
+      }, 1000);
+    }
+    function doClick(e) {
+      if (timerVal <= 0 || paused) return;
+      score++;
+      scoreEl.textContent = score;
+      const now = Date.now();
+      if (now - lastClick < 400) { combo++; } else { combo = 1; }
+      lastClick = now;
+      if (combo > 2) comboEl.textContent = 'Combo x' + combo;
+      else comboEl.textContent = '';
+      setTimeout(() => comboEl.textContent = '', 800);
+      // floating +1
+      const rect = clickBtn.getBoundingClientRect();
+      const x = (e ? e.clientX : rect.left + rect.width/2) - rect.left;
+      const y = (e ? e.clientY : rect.top + rect.height/2) - rect.top;
+      const p = document.createElement('span');
+      p.className = 'plus-one';
+      p.textContent = '+' + (combo > 2 ? combo : 1);
+      p.style.left = (x + Math.random()*40 - 20) + 'px';
+      p.style.top = (y - 20) + 'px';
+      clickBtn.appendChild(p);
+      setTimeout(() => p.remove(), 700);
+    }
+    function togglePause() {
+      paused = !paused;
+    }
+    function finish() {
+      const best = parseInt(localStorage.getItem('clicker_best') || '0');
+      if (score > best) localStorage.setItem('clicker_best', score);
+      alert('Temps écoulé ! Score: ' + score);
+    }
+    setTimeout(start, 500);
+  </script>
+</body>
+</html>

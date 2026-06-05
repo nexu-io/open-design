@@ -1,0 +1,99 @@
+/* ===========================================
+   Clicker App — Leaderboard Component
+   ===========================================
+   Styles pour les lignes de classement avec
+   variantes pour les rangs (or, argent, bronze)
+   et l'utilisateur courant.
+   =========================================== */
+
+.leader-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid rgba(0,0,0,0.04);
+}
+
+.lb-row.me {
+  background: var(--tile-yellow);
+  border-color: transparent;
+}
+
+.lb-rank {
+  width: 32px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.lb-rank.top {
+  color: var(--fg);
+}
+
+.lb-rank.gold {
+  color: var(--rank-gold);
+}
+
+.lb-rank.silver {
+  color: var(--rank-silver);
+}
+
+.lb-rank.bronze {
+  color: var(--rank-bronze);
+}
+
+.lb-name {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.lb-score {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.lb-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--fg);
+  flex-shrink: 0;
+}
+
+.lb-avatar.gold {
+  background: linear-gradient(135deg, #f2e8a0, #e8c860);
+}
+
+.lb-avatar.silver {
+  background: linear-gradient(135deg, #e8e8e8, #c8c8c8);
+}
+
+.lb-avatar.bronze {
+  background: linear-gradient(135deg, #e8c8a0, #c89870);
+}
+
+.lb-avatar.norm {
+  background: linear-gradient(135deg, var(--tile-lavender), var(--tile-mint));
+}
+
+.lb-avatar.me {
+  background: linear-gradient(135deg, var(--tile-coral), var(--tile-yellow));
+}

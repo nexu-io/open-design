@@ -1,0 +1,70 @@
+/* ===========================================
+   Clicker App — Tile Component
+   ===========================================
+   Tuiles de mode de jeu avec variantes de couleur
+   pastel et grille responsive 2 colonnes.
+   =========================================== */
+
+/* ---------- Base tile ---------- */
+.tile {
+  position: relative;
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  min-height: 140px;
+}
+
+.tile:active {
+  transform: scale(0.97);
+}
+
+/* Tile title */
+.tile .tile-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--fg);
+  line-height: 1.2;
+  z-index: 2;
+}
+
+/* Tile description */
+.tile .tile-desc {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.35;
+  z-index: 2;
+}
+
+/* Arrow icon (bottom-right) */
+.tile-arrow {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.06);
+  display: grid;
+  place-items: center;
+  z-index: 2;
+}
+
+.tile-arrow svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0.5;
+}
+
+/* ---------- Color variants ---------- */
+.tile-lavender { background: var(--tile-lavender); }
+.tile-yellow   { background: var(--tile-yellow); }
+.tile-mint     { background: var(--tile-mint); }
+.tile-blush    { background: var(--tile-blush); }
+.tile-sky      { background: var(--tile-sky); }
+.tile-coral    { background: var(--tile-coral); }

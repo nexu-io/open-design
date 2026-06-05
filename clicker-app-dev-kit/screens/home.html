@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Accueil — Clicker</title>
+  <!-- Tokens & modules CSS -->
+  <link rel="stylesheet" href="../tokens/tokens.css" />
+  <link rel="stylesheet" href="../css/reset.css" />
+  <link rel="stylesheet" href="../css/utilities.css" />
+  <link rel="stylesheet" href="../css/components/button.css" />
+  <link rel="stylesheet" href="../css/components/tile.css" />
+  <link rel="stylesheet" href="../css/components/nav.css" />
+  <link rel="stylesheet" href="../css/components/avatar.css" />
+  <link rel="stylesheet" href="../css/components/leaderboard.css" />
+  <link rel="stylesheet" href="../css/components/tabs.css" />
+  <link rel="stylesheet" href="../css/components/click-zone.css" />
+  <link rel="stylesheet" href="../css/components/stat-card.css" />
+  <style>
+    .home-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+    .greeting { font-family:var(--font-display); font-size:14px; color:var(--muted); }
+    .home-title { margin-bottom:20px; }
+    .section-label { margin-bottom:14px; }
+    .tile-icon { margin-bottom:auto; z-index:2; }
+    .tile-icon svg { width:48px; height:48px; stroke:var(--fg); stroke-width:2; fill:none; stroke-linecap:round; stroke-linejoin:round; opacity:0.9; }
+    .circle-1 { width:180px; height:180px; background:var(--circle-terracotta); top:-60px; right:-40px; opacity:0.25; }
+    .circle-2 { width:140px; height:140px; background:var(--circle-blue); bottom:120px; left:-50px; opacity:0.2; }
+    .circle-3 { width:100px; height:100px; background:var(--circle-yellow); top:200px; right:-30px; opacity:0.18; }
+  </style>
+</head>
+<body>
+  <div class="decor-circle circle-1"></div>
+  <div class="decor-circle circle-2"></div>
+  <div class="decor-circle circle-3"></div>
+
+  <div class="screen">
+    <div class="home-header">
+      <div>
+        <p class="greeting">Hello, Alex 👋</p>
+        <h1 class="title-xl home-title">Prêt à cliquer ?</h1>
+      </div>
+      <div class="avatar">AL</div>
+    </div>
+
+    <p class="label section-label">Choisis ton mode</p>
+
+    <div class="tile-grid">
+      <!-- Time Attack -->
+      <div class="tile tile-lavender" onclick="location.href='play.html'">
+        <div class="tile-icon">
+          <svg><use href="../assets/icons/icons.svg#icon-clock"/></svg>
+        </div>
+        <span class="tile-title">Time<br/>Attack</span>
+        <span class="tile-desc">60 secondes, clique max</span>
+        <div class="tile-arrow"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+      </div>
+
+      <!-- Moving Target -->
+      <div class="tile tile-yellow" onclick="location.href='play.html'">
+        <div class="tile-icon">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        </div>
+        <span class="tile-title">Moving<br/>Target</span>
+        <span class="tile-desc">La cible bouge à chaque clic</span>
+        <div class="tile-arrow"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+      </div>
+
+      <!-- Shrink Click -->
+      <div class="tile tile-mint" onclick="location.href='play.html'">
+        <div class="tile-icon">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></svg>
+        </div>
+        <span class="tile-title">Shrink<br/>Click</span>
+        <span class="tile-desc">Plus précis = plus de points</span>
+        <div class="tile-arrow"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+      </div>
+
+      <!-- Marathon -->
+      <div class="tile tile-blush" onclick="location.href='play.html'">
+        <div class="tile-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        </div>
+        <span class="tile-title">Marathon</span>
+        <span class="tile-desc">30 min d’endurance</span>
+        <div class="tile-arrow"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+      </div>
+
+      <!-- Daily Challenge -->
+      <div class="tile tile-sky" onclick="location.href='play.html'">
+        <div class="tile-icon">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        </div>
+        <span class="tile-title">Daily<br/>Challenge</span>
+        <span class="tile-desc">Un défi nouveau chaque jour</span>
+        <div class="tile-arrow"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+      </div>
+
+      <!-- Duel -->
+      <div class="tile tile-coral" onclick="location.href='play.html'">
+        <div class="tile-icon">
+          <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <span class="tile-title">Duel</span>
+        <span class="tile-desc">Défie un ami en direct</span>
+        <div class="tile-arrow"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+      </div>
+    </div>
+
+    <div style="height:80px; flex-shrink:0;"></div>
+  </div>
+
+  <nav class="bottom-nav" aria-label="Navigation">
+    <a href="home.html" class="nav-btn active" aria-label="Accueil">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    </a>
+    <a href="profil.html" class="nav-btn" aria-label="Profil">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    </a>
+    <a href="play.html" class="nav-main" aria-label="Jouer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 3l14 9-14 9V3z"/></svg>
+    </a>
+    <a href="leaderboard.html" class="nav-btn" aria-label="Classement">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.24C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.24C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+    </a>
+  </nav>
+</body>
+</html>

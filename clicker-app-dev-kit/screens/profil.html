@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Profil — Clicker</title>
+  <!-- Tokens & modules CSS -->
+  <link rel="stylesheet" href="../tokens/tokens.css" />
+  <link rel="stylesheet" href="../css/reset.css" />
+  <link rel="stylesheet" href="../css/utilities.css" />
+  <link rel="stylesheet" href="../css/components/button.css" />
+  <link rel="stylesheet" href="../css/components/tile.css" />
+  <link rel="stylesheet" href="../css/components/nav.css" />
+  <link rel="stylesheet" href="../css/components/avatar.css" />
+  <link rel="stylesheet" href="../css/components/leaderboard.css" />
+  <link rel="stylesheet" href="../css/components/tabs.css" />
+  <link rel="stylesheet" href="../css/components/click-zone.css" />
+  <link rel="stylesheet" href="../css/components/stat-card.css" />
+  <style>
+    .prof-header { display:flex; flex-direction:column; align-items:center; gap:12px; margin-bottom:28px; margin-top:8px; }
+    .prof-name { font-family:var(--font-display); font-size:22px; font-weight:700; }
+    .prof-handle { font-size:14px; color:var(--muted); }
+    .stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:28px; }
+    .history-title { font-family:var(--font-display); font-size:18px; font-weight:700; margin-bottom:14px; }
+    .history-list { display:flex; flex-direction:column; gap:10px; margin-bottom:28px; }
+    .hist-row {
+      display:flex; align-items:center; gap:12px;
+      background:var(--surface); border:1px solid rgba(0,0,0,0.04);
+      border-radius:var(--radius-md); padding:12px 14px;
+    }
+    .hist-icon {
+      width:40px; height:40px; border-radius:var(--radius-sm);
+      display:grid; place-items:center; flex-shrink:0;
+    }
+    .hist-icon svg { width:20px; height:20px; stroke:var(--fg); stroke-width:2; fill:none; }
+    .hist-info { flex:1; }
+    .hist-mode { font-family:var(--font-display); font-size:14px; font-weight:700; }
+    .hist-date { font-size:12px; color:var(--muted); }
+    .hist-score { font-family:var(--font-mono); font-size:16px; font-weight:700; }
+    .share-btn { width:100%; }
+    .circle-1 { width:180px; height:180px; background:var(--circle-yellow); top:-50px; left:-60px; opacity:0.25; }
+    .circle-2 { width:140px; height:140px; background:var(--circle-terracotta); bottom:180px; right:-50px; opacity:0.2; }
+  </style>
+</head>
+<body>
+  <div class="decor-circle circle-1"></div>
+  <div class="decor-circle circle-2"></div>
+
+  <div class="screen">
+    <div class="prof-header">
+      <div class="avatar avatar-lg">AL</div>
+      <div>
+        <p class="prof-name">Alex L.</p>
+        <p class="prof-handle">@alex_clicker</p>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <p class="num">3 240</p>
+        <p class="lab">Score max</p>
+      </div>
+      <div class="stat-card">
+        <p class="num">142</p>
+        <p class="lab">Parties</p>
+      </div>
+      <div class="stat-card">
+        <p class="num">4h 20m</p>
+        <p class="lab">Temps total</p>
+      </div>
+      <div class="stat-card">
+        <p class="num">94%</p>
+        <p class="lab">Précision</p>
+      </div>
+    </div>
+
+    <p class="history-title">Historique récent</p>
+    <div class="history-list">
+      <div class="hist-row">
+        <div class="hist-icon" style="background:var(--tile-lavender)">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        </div>
+        <div class="hist-info">
+          <p class="hist-mode">Time Attack</p>
+          <p class="hist-date">Aujourd’hui · 14:32</p>
+        </div>
+        <span class="hist-score">3 240</span>
+      </div>
+      <div class="hist-row">
+        <div class="hist-icon" style="background:var(--tile-mint)">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></svg>
+        </div>
+        <div class="hist-info">
+          <p class="hist-mode">Shrink Click</p>
+          <p class="hist-date">Hier · 20:15</p>
+        </div>
+        <span class="hist-score">1 890</span>
+      </div>
+      <div class="hist-row">
+        <div class="hist-icon" style="background:var(--tile-yellow)">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        </div>
+        <div class="hist-info">
+          <p class="hist-mode">Moving Target</p>
+          <p class="hist-date">Hier · 18:42</p>
+        </div>
+        <span class="hist-score">2 105</span>
+      </div>
+    </div>
+
+    <button class="btn-primary share-btn" onclick="shareScore()">
+      <svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+      Partager mon score
+    </button>
+
+    <div style="height:80px; flex-shrink:0;"></div>
+  </div>
+
+  <nav class="bottom-nav" aria-label="Navigation">
+    <a href="home.html" class="nav-btn" aria-label="Accueil">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    </a>
+    <a href="profil.html" class="nav-btn active" aria-label="Profil">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    </a>
+    <a href="play.html" class="nav-main" aria-label="Jouer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 3l14 9-14 9V3z"/></svg>
+    </a>
+    <a href="leaderboard.html" class="nav-btn" aria-label="Classement">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.24C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.24C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+    </a>
+  </nav>
+
+  <script>
+    function shareScore() {
+      const text = 'Je viens de faire 3 240 pts sur Clicker ! Peux-tu me battre ? 🎯';
+      if (navigator.share) {
+        navigator.share({ title: 'Mon score Clicker', text });
+      } else {
+        navigator.clipboard.writeText(text).then(() => alert('Lien copié !'));
+      }
+    }
+  </script>
+</body>
+</html>

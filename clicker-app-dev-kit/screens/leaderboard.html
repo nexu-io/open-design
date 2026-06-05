@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Classement — Clicker</title>
+  <!-- Tokens & modules CSS -->
+  <link rel="stylesheet" href="../tokens/tokens.css" />
+  <link rel="stylesheet" href="../css/reset.css" />
+  <link rel="stylesheet" href="../css/utilities.css" />
+  <link rel="stylesheet" href="../css/components/button.css" />
+  <link rel="stylesheet" href="../css/components/tile.css" />
+  <link rel="stylesheet" href="../css/components/nav.css" />
+  <link rel="stylesheet" href="../css/components/avatar.css" />
+  <link rel="stylesheet" href="../css/components/leaderboard.css" />
+  <link rel="stylesheet" href="../css/components/tabs.css" />
+  <link rel="stylesheet" href="../css/components/click-zone.css" />
+  <link rel="stylesheet" href="../css/components/stat-card.css" />
+  <style>
+    .lb-header { margin-bottom:8px; }
+    .tab-bar { margin-bottom:20px; }
+    .circle-1 { width:160px; height:160px; background:var(--circle-olive); top:-40px; right:-40px; opacity:0.25; }
+    .circle-2 { width:120px; height:120px; background:var(--circle-blue); bottom:140px; left:-40px; opacity:0.18; }
+  </style>
+</head>
+<body>
+  <div class="decor-circle circle-1"></div>
+  <div class="decor-circle circle-2"></div>
+
+  <div class="screen">
+    <h1 class="title-xl lb-header">Classement</h1>
+
+    <div class="tab-bar" id="tabs">
+      <button class="tab-btn active" onclick="setTab(this,'global')">Global</button>
+      <button class="tab-btn" onclick="setTab(this,'amis')">Amis</button>
+      <button class="tab-btn" onclick="setTab(this,'semaine')">Semaine</button>
+    </div>
+
+    <div class="leader-list" id="list">
+      <div class="lb-row">
+        <span class="lb-rank gold">1</span>
+        <div class="lb-avatar gold">MK</div>
+        <span class="lb-name">Mika K.</span>
+        <span class="lb-score">12 480</span>
+      </div>
+      <div class="lb-row">
+        <span class="lb-rank silver">2</span>
+        <div class="lb-avatar silver">JL</div>
+        <span class="lb-name">Julie L.</span>
+        <span class="lb-score">11 902</span>
+      </div>
+      <div class="lb-row">
+        <span class="lb-rank bronze">3</span>
+        <div class="lb-avatar bronze">TD</div>
+        <span class="lb-name">Tom D.</span>
+        <span class="lb-score">10 745</span>
+      </div>
+      <div class="lb-row">
+        <span class="lb-rank top">4</span>
+        <div class="lb-avatar norm">SR</div>
+        <span class="lb-name">Sam R.</span>
+        <span class="lb-score">9 832</span>
+      </div>
+      <div class="lb-row">
+        <span class="lb-rank top">5</span>
+        <div class="lb-avatar norm">AN</div>
+        <span class="lb-name">Anna N.</span>
+        <span class="lb-score">9 100</span>
+      </div>
+      <div class="lb-row me">
+        <span class="lb-rank top">42</span>
+        <div class="lb-avatar me">AL</div>
+        <span class="lb-name">Alex (toi)</span>
+        <span class="lb-score">3 240</span>
+      </div>
+    </div>
+
+    <div style="height:80px; flex-shrink:0;"></div>
+  </div>
+
+  <nav class="bottom-nav" aria-label="Navigation">
+    <a href="home.html" class="nav-btn" aria-label="Accueil">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    </a>
+    <a href="profil.html" class="nav-btn" aria-label="Profil">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    </a>
+    <a href="play.html" class="nav-main" aria-label="Jouer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 3l14 9-14 9V3z"/></svg>
+    </a>
+    <a href="leaderboard.html" class="nav-btn active" aria-label="Classement">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.24C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.24C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+    </a>
+  </nav>
+
+  <script>
+    const data = {
+      global: [
+        {r:1,n:'Mika K.',s:'12 480',t:'gold'},{r:2,n:'Julie L.',s:'11 902',t:'silver'},{r:3,n:'Tom D.',s:'10 745',t:'bronze'},
+        {r:4,n:'Sam R.',s:'9 832',t:'norm'},{r:5,n:'Anna N.',s:'9 100',t:'norm'},{r:42,n:'Alex (toi)',s:'3 240',t:'me'}
+      ],
+      amis: [
+        {r:1,n:'Julie L.',s:'11 902',t:'gold'},{r:2,n:'Sam R.',s:'9 832',t:'silver'},{r:3,n:'Alex (toi)',s:'3 240',t:'me'}
+      ],
+      semaine: [
+        {r:1,n:'Tom D.',s:'10 745',t:'gold'},{r:2,n:'Anna N.',s:'9 100',t:'silver'},{r:3,n:'Alex (toi)',s:'3 240',t:'me'},{r:4,n:'Julie L.',s:'2 800',t:'norm'}
+      ]
+    };
+    function setTab(btn, key) {
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      const list = document.getElementById('list');
+      list.innerHTML = '';
+      data[key].forEach(u=>{
+        const row = document.createElement('div');
+        row.className = 'lb-row' + (u.t==='me'?' me':'');
+        row.innerHTML = `<span class="lb-rank ${u.t}">${u.r}</span><div class="lb-avatar ${u.t}">${u.n.slice(0,2).toUpperCase()}</div><span class="lb-name">${u.n}</span><span class="lb-score">${u.s}</span>`;
+        list.appendChild(row);
+      });
+    }
+  </script>
+</body>
+</html>

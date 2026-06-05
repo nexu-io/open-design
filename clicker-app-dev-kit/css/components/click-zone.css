@@ -1,0 +1,110 @@
+/* ===========================================
+   Clicker App — Click Zone Component
+   ===========================================
+   Zone de jeu principale : bouton de clic circulaire,
+   animation +1 flottant, bouton pause et stats de jeu.
+   =========================================== */
+
+.click-zone {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* ---------- Main click button ---------- */
+.click-btn {
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  border: none;
+  background: radial-gradient(circle at 35% 35%, var(--tile-mint), var(--tile-sky));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.12);
+  transition: transform 0.08s ease;
+  position: relative;
+}
+
+.click-btn:active {
+  transform: scale(0.92);
+}
+
+.click-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid rgba(0,0,0,0.06);
+  pointer-events: none;
+}
+
+.click-btn svg {
+  width: 64px;
+  height: 64px;
+  stroke: var(--fg);
+  stroke-width: 1.8;
+  fill: none;
+  opacity: 0.85;
+}
+
+/* ---------- Floating +1 animation ---------- */
+.plus-one {
+  position: absolute;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+  pointer-events: none;
+  animation: float-up 0.7s ease-out forwards;
+}
+
+/* ---------- Pause button ---------- */
+.pause-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.pause-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke: var(--fg);
+  stroke-width: 2;
+  fill: none;
+}
+
+/* ---------- Stats row ---------- */
+.stats-row {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  margin-top: 20px;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-item .val {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.stat-item .lab {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}

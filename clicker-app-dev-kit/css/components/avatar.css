@@ -1,0 +1,25 @@
+/* ===========================================
+   Clicker App — Avatar Component
+   ===========================================
+   Avatars utilisateur avec dégradé pastel.
+   =========================================== */
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--tile-yellow), var(--tile-coral));
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--fg);
+  flex-shrink: 0;
+}
+
+.avatar-lg {
+  width: 72px;
+  height: 72px;
+  font-size: 24px;
+}

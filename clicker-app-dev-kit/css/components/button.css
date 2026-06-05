@@ -1,0 +1,51 @@
+/* ===========================================
+   Clicker App — Button Component
+   ===========================================
+   Boutons primaires et secondaires réutilisables.
+   =========================================== */
+
+/* ---------- Primary button ---------- */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 52px;
+  padding: 0 28px;
+  border-radius: 999px;
+  border: none;
+  background: var(--fg);
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.btn-primary:active {
+  transform: scale(0.96);
+}
+
+/* ---------- Secondary button ---------- */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 24px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.btn-secondary:active {
+  transform: scale(0.96);
+}
