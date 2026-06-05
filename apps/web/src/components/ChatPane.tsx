@@ -757,6 +757,7 @@ export function ChatPane({
     onArtifactShare,
     onArtifactChip,
     onForkFromMessage,
+    onShareToOpenDesign,
   });
   assistantCallbacksRef.current = {
     onSubmitForm,
@@ -765,6 +766,7 @@ export function ChatPane({
     onArtifactShare,
     onArtifactChip,
     onForkFromMessage,
+    onShareToOpenDesign,
   };
   const [tab, setTab] = useState<Tab>('chat');
   const [showConvList, setShowConvList] = useState(false);
@@ -2081,6 +2083,7 @@ interface AssistantCallbacks {
   onArtifactShare: ((fileName: string) => void) | undefined;
   onArtifactChip: ((fileName: string, prompt: string) => void) | undefined;
   onForkFromMessage: ((message: ChatMessage) => void) | undefined;
+  onShareToOpenDesign: (() => void) | undefined;
 }
 
 type ChatRenderItem =
@@ -2250,7 +2253,11 @@ function ChatRows({
         onRequestPluginFolderAgentAction={onRequestPluginFolderAgentAction}
         activePluginActionPaths={activePluginActionPaths}
         hiddenPluginActionPaths={hiddenPluginActionPaths}
-        onShareToOpenDesign={onShareToOpenDesign}
+        onShareToOpenDesign={
+          onShareToOpenDesign
+            ? () => assistantCallbacksRef.current.onShareToOpenDesign?.()
+            : undefined
+        }
         shareToOpenDesignBusy={shareToOpenDesignBusy}
         isLast={m.id === lastAssistantId}
         errorCardOwnerId={errorCardOwnerId}

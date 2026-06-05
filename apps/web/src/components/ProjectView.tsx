@@ -4062,12 +4062,17 @@ export function ProjectView({
   // drives the rest. Busy flag debounces the double-click while the send
   // request is in flight (handleSend is async).
   const [shareToOpenDesignBusy, setShareToOpenDesignBusy] = useState(false);
+  const shareToOpenDesignBusyRef = useRef(false);
   const handleShareToOpenDesign = useCallback(() => {
-    if (currentConversationActionDisabled || shareToOpenDesignBusy) return;
+    if (currentConversationActionDisabled || shareToOpenDesignBusyRef.current) return;
+    shareToOpenDesignBusyRef.current = true;
     setShareToOpenDesignBusy(true);
     void Promise.resolve(handleSend(SHARE_TO_COMMUNITY_PROMPT, [], []))
-      .finally(() => setShareToOpenDesignBusy(false));
-  }, [currentConversationActionDisabled, handleSend, shareToOpenDesignBusy]);
+      .finally(() => {
+        shareToOpenDesignBusyRef.current = false;
+        setShareToOpenDesignBusy(false);
+      });
+  }, [currentConversationActionDisabled, handleSend]);
 
   const sentDesignSystemReviewTaskKeysRef = useRef<Set<string>>(new Set());
   const persistDesignSystemReviewEntry = useCallback((

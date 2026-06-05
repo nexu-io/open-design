@@ -370,6 +370,7 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'errorCardOwnerId',
   'nextUserContent',
   'forking',
+  'shareToOpenDesignBusy',
   'suppressDirectionForms',
   'hasDesignSystemContext',
   // Live streaming tool input changes identity on every `tool_input_delta`.

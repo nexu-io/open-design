@@ -7,6 +7,7 @@
  */
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
@@ -116,6 +117,38 @@ describe('AssistantMessage feedback gate', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Fork from here' }));
 
     expect(onForkFromMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the Share to Open Design button before a duplicate click can reuse stale props', () => {
+    const onShare = vi.fn();
+
+    function Harness() {
+      const [busy, setBusy] = useState(false);
+      return (
+        <AssistantMessage
+          message={baseMessage()}
+          streaming={false}
+          projectId="proj-1"
+          isLast
+          onFeedback={vi.fn()}
+          onShareToOpenDesign={() => {
+            if (busy) return;
+            onShare();
+            setBusy(true);
+          }}
+          shareToOpenDesignBusy={busy}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    fireEvent.click(screen.getByTestId('assistant-share-to-od'));
+    expect(screen.getByTestId<HTMLButtonElement>('assistant-share-to-od').disabled).toBe(true);
+    fireEvent.click(screen.getByTestId('assistant-share-to-od'));
+
+    expect(onShare).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Sharing…' })).toBeTruthy();
   });
 
   it('does not show the fork action while the assistant is streaming', () => {
