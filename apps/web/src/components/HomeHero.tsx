@@ -657,6 +657,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     }
   }
 
+  function dismissMentionPicker() {
+    setMentionTrigger(null);
+    setMentionTab('all');
+    setHoveredPlugin(null);
+    setSelectedIndex(0);
+  }
+
   // Routes popover navigation keys from the Lexical editor over the visible
   // picker option union. Returns true when consumed so the editor can
   // preventDefault.
@@ -1122,7 +1129,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 <button
                   type="button"
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => onOpenPluginDetails(hoveredPlugin)}
+                  onClick={() => {
+                    dismissMentionPicker();
+                    onOpenPluginDetails(hoveredPlugin);
+                  }}
                 >
                   {t('homeHero.details')}
                 </button>
