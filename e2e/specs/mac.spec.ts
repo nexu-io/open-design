@@ -29,6 +29,8 @@ const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVe
 const toolsPackReleaseVersionArgs = releaseAppVersionArgs(releaseVersion);
 const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
 const screenshotPath = join(toolsPackDir, 'screenshots', `${namespace}.png`);
+const smokeProfile = process.env.OD_PACKAGED_E2E_MAC_SMOKE_PROFILE ?? 'core';
+const verifyCoreOnly = smokeProfile === 'core';
 
 const outputNamespaceRoot = join(toolsPackDir, 'out', 'mac', 'namespaces', namespace);
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'mac', 'namespaces', namespace);
@@ -188,6 +190,10 @@ macDescribe('packaged mac runtime smoke', () => {
     const report = await createPackagedSmokeReport('mac');
     const updateEnv = captureUpdateEnv();
     let updaterFixture: UpdaterFixtureProcess | null = null;
+    let logs: LogsResult | { skipped: true } = { skipped: true };
+    let popup: UpdaterPopupEvalValue | { skipped: true } = { skipped: true };
+    let updateInstall: NonNullable<MacInspectResult['update']> | { skipped: true } = { skipped: true };
+    let updateStatus: NonNullable<MacInspectResult['update']> | { skipped: true } = { skipped: true };
     let passed = false;
     try {
       const install = await runToolsPackJson<MacInstallResult>('install');
@@ -198,8 +204,6 @@ macDescribe('packaged mac runtime smoke', () => {
       expectPathInside(install.dmgPath, join(outputNamespaceRoot, 'dmg'));
       expectPathInside(install.installedAppPath, join(outputNamespaceRoot, 'install', 'Applications'));
 
-      updaterFixture = await startUpdaterFixtureProcess(updateScenario);
-      applyPackagedUpdateEnv(process.env, updateScenario, updaterFixture.info.metadataUrl);
       await seedPackagedOnboardingComplete();
 
       const start = await runToolsPackJson<MacStartResult>('start');
@@ -233,37 +237,46 @@ macDescribe('packaged mac runtime smoke', () => {
         expect(value.health.version).toEqual(expect.any(String));
       }
 
-      const updaterVersion = updaterFixture.info.version;
-      const readyUpdate = await waitForUpdaterStatus(
-        (status) =>
-          status.update?.state === 'downloaded' &&
-          status.update.availableVersion === updaterVersion &&
-          typeof status.update.downloadPath === 'string',
-        'ready updater prompt update downloaded',
-      );
-      expect(readyUpdate.update?.downloadPath).toEqual(expect.any(String));
+      if (!verifyCoreOnly) {
+        updaterFixture = await startUpdaterFixtureProcess(updateScenario);
+        applyPackagedUpdateEnv(process.env, updateScenario, updaterFixture.info.metadataUrl);
 
-      const popup = await openReadyUpdaterPrompt(updaterVersion);
-      expect(popup.visible).toBe(true);
-      expect(popup.title).toEqual(expect.any(String));
-      expect(popup.title?.trim().length).toBeGreaterThan(0);
-      expect(popup.installButtonVisible).toBe(true);
-      expect(popup.text ?? '').toContain(updaterFixture.info.version);
+        const updaterVersion = updaterFixture.info.version;
+        const readyUpdate = await waitForUpdaterStatus(
+          (status) =>
+            status.update?.state === 'downloaded' &&
+            status.update.availableVersion === updaterVersion &&
+            typeof status.update.downloadPath === 'string',
+          'ready updater prompt update downloaded',
+        );
+        expect(readyUpdate.update?.downloadPath).toEqual(expect.any(String));
 
-      const updateStatus = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'status']);
-      expect(updateStatus.update?.state).toBe('downloaded');
-      expect(updateStatus.update?.channel).toBe(updateScenario.channel);
-      expect(updateStatus.update?.currentVersion).toBe(updateScenario.expectedCurrentVersion);
-      expect(updateStatus.update?.availableVersion).toBe(updaterFixture.info.version);
-      expectPathInside(updateStatus.update?.downloadPath ?? '', join(runtimeNamespaceRoot, 'updates'));
+        popup = await openReadyUpdaterPrompt(updaterVersion);
+        expect(popup.visible).toBe(true);
+        expect(popup.title).toEqual(expect.any(String));
+        expect(popup.title?.trim().length).toBeGreaterThan(0);
+        expect(popup.installButtonVisible).toBe(true);
+        expect(popup.text ?? '').toContain(updaterFixture.info.version);
 
-      const clickInstall = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickUpdaterInstallExpression]);
-      const clickValue = assertUpdaterClickEvalValue(clickInstall.eval?.value);
-      expect(clickValue.clicked).toBe(true);
-      const updateInstall = await waitForUpdaterInstallerOpened();
-      expect(updateInstall.update?.state).toBe('downloaded');
-      expect(updateInstall.update?.installResult?.dryRun).toBe(true);
-      expectPathInside(updateInstall.update?.installResult?.path ?? '', join(runtimeNamespaceRoot, 'updates'));
+        const updateInspect = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'status']);
+        expect(updateInspect.update?.state).toBe('downloaded');
+        expect(updateInspect.update?.channel).toBe(updateScenario.channel);
+        expect(updateInspect.update?.currentVersion).toBe(updateScenario.expectedCurrentVersion);
+        expect(updateInspect.update?.availableVersion).toBe(updaterFixture.info.version);
+        expectPathInside(updateInspect.update?.downloadPath ?? '', join(runtimeNamespaceRoot, 'updates'));
+        if (updateInspect.update == null) throw new Error('mac update status is missing');
+        updateStatus = updateInspect.update;
+
+        const clickInstall = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickUpdaterInstallExpression]);
+        const clickValue = assertUpdaterClickEvalValue(clickInstall.eval?.value);
+        expect(clickValue.clicked).toBe(true);
+        const updateInstallInspect = await waitForUpdaterInstallerOpened();
+        expect(updateInstallInspect.update?.state).toBe('downloaded');
+        expect(updateInstallInspect.update?.installResult?.dryRun).toBe(true);
+        expectPathInside(updateInstallInspect.update?.installResult?.path ?? '', join(runtimeNamespaceRoot, 'updates'));
+        if (updateInstallInspect.update == null) throw new Error('mac update install status is missing');
+        updateInstall = updateInstallInspect.update;
+      }
 
       await mkdir(dirname(screenshotPath), { recursive: true });
       const screenshot = await runToolsPackJson<MacInspectResult>('inspect', ['--path', screenshotPath]);
@@ -271,8 +284,10 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(await fileSizeBytes(screenshotPath)).toBeGreaterThan(0);
       await report.saveScreenshot(screenshotPath);
 
-      const logs = await runToolsPackJson<LogsResult>('logs');
-      assertLogPathsAndContent(logs);
+      if (!verifyCoreOnly) {
+        logs = await runToolsPackJson<LogsResult>('logs');
+        assertLogPathsAndContent(logs);
+      }
 
       const stop = await runToolsPackJson<MacStopResult>('stop');
       started = false;
@@ -294,7 +309,7 @@ macDescribe('packaged mac runtime smoke', () => {
           installedAppPath: install.installedAppPath,
           mountPoint: install.mountPoint,
         },
-        logs: summarizeLogs(logs),
+        logs: 'skipped' in logs ? logs : summarizeLogs(logs),
         namespace,
         screenshot: report.screenshotRelpath,
         start: {
@@ -309,8 +324,8 @@ macDescribe('packaged mac runtime smoke', () => {
         uninstall,
         update: {
           popup,
-          status: updateStatus.update,
-          install: updateInstall.update,
+          status: updateStatus,
+          install: updateInstall,
         },
       });
       passed = true;

@@ -118,8 +118,9 @@
   pointer-events: auto;
 }
 .od-toast.placement-top {
-  top: 24px;
+  top: 64px;
   bottom: auto;
+  z-index: 1200;
 }
 .od-toast.tone-success {
   border: 1px solid color-mix(in srgb, var(--success, #2da44e) 42%, var(--border));
@@ -1468,6 +1469,10 @@
   line-height: 1.35;
 }
 
+.app .split-chat-slot > .pane {
+  --chat-composer-inline-inset: 10px;
+}
+
 .app .composer {
   padding: 9px 10px 11px;
   background: transparent;
@@ -1617,9 +1622,9 @@
 }
 .app .working-dir-pill-menu {
   position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
-  z-index: 40;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 220;
   min-width: 260px;
   max-width: 340px;
   padding: 6px;
@@ -1762,7 +1767,13 @@
   background: var(--bg-panel);
 }
 .app .df-panel:not(.no-preview) {
-  grid-template-columns: minmax(320px, 1fr) minmax(320px, 360px);
+  /* Keep a usable minimum for the file list (toolbar + names stay
+     clickable) but let the preview pane YIELD instead of forcing a rigid
+     320px track. A rigid min on both columns overflowed the panel on
+     narrow splits (list 460 + preview 320 = 780px), pushing the toolbar
+     buttons and the preview off-screen. With `minmax(0, …)` the preview
+     shrinks first so the panel never exceeds its container width. */
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 360px);
 }
 .app .df-main {
   border-right-color: var(--border);
@@ -2105,18 +2116,18 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  width: min(460px, calc(100vw - 24px));
-  max-height: min(72vh, 620px);
+  width: min(320px, calc(100vw - 24px));
+  max-height: min(76vh, 560px);
   overflow: auto;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 9px;
   box-shadow: var(--shadow-md, 0 12px 32px rgba(0, 0, 0, 0.12));
-  padding: 8px;
+  padding: 7px;
   z-index: 50;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
 }
 .app .handoff-menu-tabs {
   display: grid;
@@ -2251,11 +2262,12 @@
 }
 .app .handoff-target-rail {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 6px;
   padding: 1px;
 }
 .app .handoff-editor-rail {
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: none;
 }
 .app .handoff-cli-rail {
@@ -2287,15 +2299,15 @@
 }
 .app .handoff-target-card {
   position: relative;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
   justify-content: flex-start;
-  gap: 5px;
+  gap: 8px;
   width: auto;
   min-width: 0;
-  min-height: 74px;
-  padding: 8px;
+  min-height: 42px;
+  padding: 6px 8px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg-panel) 92%, var(--text) 4%);
 }
@@ -2308,14 +2320,21 @@
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
 }
-.app .handoff-target-card.active > svg {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  color: var(--accent);
-}
 .app .handoff-target-card .agent-icon {
   color: var(--text);
+}
+.app .handoff-target-arrow {
+  justify-self: end;
+  color: var(--text-muted);
+}
+.app .handoff-target-card:hover .handoff-target-arrow {
+  color: var(--text);
+}
+.app .handoff-target-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 .app .handoff-target-label {
   max-width: 100%;
@@ -2381,7 +2400,13 @@
   color: var(--text-muted);
   font: inherit;
   font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
+  transition:
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .app .handoff-framework-chip:hover {
   color: var(--text);
@@ -2389,9 +2414,18 @@
   background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 .app .handoff-framework-chip.active {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 78%, var(--border));
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-panel));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 1px 2px rgba(180, 90, 59, 0.14);
+  font-weight: 700;
+}
+.app .handoff-framework-chip.active:hover {
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 88%, var(--border));
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-panel));
 }
 .app .handoff-menu-divider {
   height: 1px;

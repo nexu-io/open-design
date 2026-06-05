@@ -69,8 +69,8 @@ jobs:
     uses: ./.github/workflows/release-beta.yml
     secrets: inherit
     with:
-      enable_mac: true
-      enable_win: true
+      enable_mac_arm64: true
+      enable_win_x64: true
       ref: ${{ needs.resolve.outputs.ref }}
 
   notify:
@@ -118,7 +118,7 @@ jobs:
           CHANGELOG_FILE: ${{ steps.changelog.outputs.file }}
           BUILD_STATE: ${{ needs.build.result }}
           MAC_ARM64_URL: ${{ needs.build.outputs.mac_arm64_url }}
-          WIN_URL: ${{ needs.build.outputs.win_url }}
+          WIN_URL: ${{ needs.build.outputs.win_x64_url }}
           STREAM_LABEL: "每日定时"
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

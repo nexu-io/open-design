@@ -178,6 +178,80 @@
   flex: 0 0 34px;
   padding: 7px;
 }
+
+/* Second-level sub-type rail — lighter/smaller than the primary type tabs
+   so it reads as a child row, mirroring Manus's website sub-category pills. */
+.home-hero__subtype-row {
+  width: 100%;
+  max-width: 720px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+  margin: 6px 0 0;
+  padding: 0 12px;
+}
+.home-hero__subtype-chip {
+  appearance: none;
+  position: relative;
+  justify-content: center;
+  min-width: 0;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 540;
+  line-height: 1.3;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
+}
+.home-hero__subtype-chip:hover:not(:disabled) {
+  color: var(--text-strong);
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg-subtle));
+  transform: translateY(-0.5px);
+}
+.home-hero__subtype-chip.is-active {
+  background: var(--accent-tint);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  color: var(--accent);
+}
+.home-hero__subtype-chip.is-active:hover:not(:disabled) {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.home-hero__subtype-chip.is-pending {
+  opacity: 0.65;
+}
+.home-hero__subtype-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.home-hero__subtype-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+.home-hero__subtype-chip-icon {
+  flex: 0 0 auto;
+  opacity: 0.8;
+}
+.home-hero__subtype-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .home-hero__shortcut-menu {
   position: relative;
   display: inline-flex;
@@ -335,12 +409,6 @@
 }
 .home-hero__active-chip--file {
   background: color-mix(in srgb, var(--bg-panel) 92%, var(--accent-tint));
-}
-.home-hero__active-chip--example {
-  max-width: 100%;
-  background: color-mix(in srgb, var(--accent-tint) 48%, var(--bg-panel));
-  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
-  color: color-mix(in srgb, var(--accent) 80%, var(--text));
 }
 .home-hero__active-file-group {
   display: contents;
@@ -780,6 +848,12 @@
   flex-wrap: nowrap;
   overflow: visible;
 }
+.home-hero__foot-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
 .home-hero__execution-switcher {
   display: inline-flex;
   min-width: 0;
@@ -796,18 +870,18 @@
   gap: 4px;
   border-radius: var(--radius-sm);
 }
-.home-hero__foot-left .session-mode-toggle {
-  height: 30px;
+.home-hero__foot-right .session-mode-toggle {
+  height: 32px;
 }
-.home-hero__foot-left .session-mode-toggle__trigger {
-  height: 30px;
+.home-hero__foot-right .session-mode-toggle__trigger {
+  height: 32px;
   max-width: 120px;
-  padding: 0 8px;
+  padding: 0 12px;
   gap: 6px;
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   font-size: 12px;
 }
-.home-hero__foot-left .session-mode-toggle__label {
+.home-hero__foot-right .session-mode-toggle__label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -908,6 +982,16 @@
 .home-hero__plus-item-icon {
   flex: 0 0 auto;
   opacity: 0.8;
+}
+/* Plugin / MCP names that exceed the menu width truncate to a single line
+   with an ellipsis instead of wrapping onto a second line. The icon and
+   trailing chevron keep their intrinsic size; the label takes the rest. */
+.home-hero__plus-item > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .home-hero__plus-chevron {
   margin-left: auto;
@@ -1755,7 +1839,7 @@
   min-width: 64px;
   height: 32px;
   padding: 0 16px;
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   border: 1px solid var(--accent);
   background: var(--accent);
   color: white;
@@ -1933,14 +2017,14 @@
 .home-hero__plugin-preset {
   appearance: none;
   position: relative;
-  flex: 0 0 218px;
+  flex: 0 0 248px;
   min-width: 0;
   display: grid;
-  grid-template-rows: 132px minmax(0, 1fr);
-  gap: 6px;
-  padding: 6px;
+  grid-template-rows: 150px minmax(0, auto);
+  gap: 8px;
+  padding: 0;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 12px;
   background: var(--bg-panel);
   color: var(--text);
   font: inherit;
@@ -1948,6 +2032,7 @@
   cursor: pointer;
   box-shadow: var(--shadow-xs);
   scroll-snap-align: start;
+  overflow: hidden;
   transition:
     border-color 140ms ease,
     background-color 140ms ease,
@@ -1977,12 +2062,27 @@
 }
 
 .home-hero__plugin-preset-preview {
+  position: relative;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-radius: 7px;
   background: var(--bg-subtle);
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.home-hero__plugin-preset-check {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg-panel);
+  box-shadow: var(--shadow-sm);
 }
 
 .home-hero__plugin-preset-preview .plugins-home__preview,
@@ -1995,26 +2095,18 @@
 }
 
 .home-hero__plugin-preset-preview .plugins-home__html {
-  padding: 5px;
+  padding: 0;
 }
 
+/* Replit-style preview: drop the faux browser chrome (dots + example.html)
+   so the card is a clean full-bleed thumbnail + name. Scoped to the Home
+   preset cards; the Community grid keeps its chrome. */
 .home-hero__plugin-preset-preview .plugins-home__html-chrome {
-  height: 15px;
-  padding: 0 5px;
-}
-
-.home-hero__plugin-preset-preview .plugins-home__html-url {
-  font-size: 7.5px;
+  display: none;
 }
 
 .home-hero__plugin-preset-preview .plugins-home__html-iframe {
-  transform: scale(0.135);
-}
-
-.home-hero__plugin-preset-body {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
+  transform: scale(0.172);
 }
 
 .home-hero__plugin-preset-title {
@@ -2022,35 +2114,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11.5px;
-  font-weight: 700;
+  padding: 0 12px 12px;
+  font-size: 12.5px;
+  font-weight: 650;
   line-height: 1.2;
-}
-
-.home-hero__plugin-preset-prompt {
-  display: -webkit-box;
-  min-width: 0;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  color: var(--text-muted);
-  font-size: 10.5px;
-  line-height: 1.25;
-}
-
-.home-hero__plugin-preset > svg {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  color: var(--text-faint);
-  transition: color 140ms ease, transform 140ms ease;
-}
-
-.home-hero__plugin-preset:not(:disabled):hover > svg,
-.home-hero__plugin-preset:not(:disabled):focus-visible > svg,
-.home-hero__plugin-preset.is-active > svg {
-  color: var(--accent);
-  transform: translate(1px, -1px);
 }
 
 /* ------------------------------------------------------------
@@ -2171,11 +2238,11 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .home-hero__plugin-preset {
-    flex-basis: 204px;
-    grid-template-rows: 122px minmax(0, 1fr);
+    flex-basis: 224px;
+    grid-template-rows: 136px minmax(0, auto);
   }
   .home-hero__plugin-preset-preview .plugins-home__html-iframe {
-    transform: scale(0.126);
+    transform: scale(0.146);
   }
   /* Plan §B follow-up: chip rail must never require horizontal
      scrolling. The base rule already wraps; on narrow viewports
@@ -2217,10 +2284,10 @@
     grid-template-columns: 1fr;
   }
   .home-hero__plugin-preset {
-    flex-basis: 188px;
-    grid-template-rows: 112px minmax(0, 1fr);
+    flex-basis: 208px;
+    grid-template-rows: 126px minmax(0, auto);
   }
   .home-hero__plugin-preset-preview .plugins-home__html-iframe {
-    transform: scale(0.114);
+    transform: scale(0.134);
   }
 }

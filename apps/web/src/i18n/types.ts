@@ -131,6 +131,9 @@ export interface Dict {
   'settings.onboardingStepConnect': string;
   'settings.onboardingStepDesignSystem': string;
   'settings.onboardingStepProfile': string;
+  'settings.onboardingStepNewsletter': string;
+  'settings.onboardingNewsletterTitle': string;
+  'settings.onboardingNewsletterBody': string;
   'settings.onboardingConnectTitle': string;
   'settings.onboardingConnectBody': string;
   'settings.onboardingRecommended': string;
@@ -779,6 +782,10 @@ export interface Dict {
   'updater.readyVersion': string;
   'updater.upToDate': string;
 
+  // Newsletter email field on the onboarding About-you step.
+  'newsletter.label': string;
+  'newsletter.placeholder': string;
+
   // Entry view / tabs
   'entry.tabDesigns': string;
   'entry.tabTemplates': string;
@@ -860,6 +867,7 @@ export interface Dict {
   'homeHero.footer.noMatches': string;
   'homeHero.moreShortcuts': string;
   'homeHero.railAria': string;
+  'homeHero.subTypeAria': string;
   'homeHero.confirmReplaceTitle': string;
   'homeHero.confirmReplaceBody': string;
   'homeHero.confirmReplace': string;
@@ -1894,6 +1902,7 @@ export interface Dict {
   'chat.you': string;
   'chat.openFile': string;
   'chat.copyPrompt': string;
+  'chat.copyErrorDiagnostic': string;
   'chat.copyDone': string;
   'chat.composerPlaceholder': string;
   'chat.activeFileEditingLabel': string;
@@ -1919,6 +1928,7 @@ export interface Dict {
   'chat.cliSettingsTitle': string;
   'chat.cliSettingsAria': string;
   'chat.attachTitle': string;
+  'chat.addContextTitle': string;
   'chat.attachAria': string;
   'chat.importTitle': string;
   'chat.importLabel': string;
@@ -2714,6 +2724,8 @@ export interface Dict {
   'assistant.copyMarkdown': string;
   'assistant.forkConversation': string;
   'assistant.forkingConversation': string;
+  'assistant.shareToOpenDesign': string;
+  'assistant.shareToOpenDesignBusy': string;
   'assistant.feedbackPrompt': string;
   'assistant.feedbackPositive': string;
   'assistant.feedbackNegative': string;

@@ -147,6 +147,14 @@ const X_URL = 'https://x.com/nexudotio';
 // and `/api/runs` fallbacks resolve to the same plugin id when no
 // `pluginId` is on the request body — plan §3.3 of
 // `specs/current/plugin-driven-flow-plan.md`.
+// Newsletter signup endpoint. Lives on the marketing site (Cloudflare Pages
+// Function backed by KV), so this is a cross-origin POST from the desktop
+// client. Overridable at build time via NEXT_PUBLIC_NEWSLETTER_URL — e.g. point
+// it at a local `wrangler pages dev` instance during development.
+const NEWSLETTER_SUBSCRIBE_URL =
+  process.env.NEXT_PUBLIC_NEWSLETTER_URL ?? 'https://open-design.ai/subscribe';
+const NEWSLETTER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const ONBOARDING_AMR_MODEL_OPTIONS: NonNullable<AgentInfo['models']> = [
   { id: 'claude-opus-4.8', label: 'Claude Opus 4.8' },
   { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
@@ -297,18 +305,12 @@ interface Props {
   onRenameProject: (id: string, name: string) => void;
   onChangeDefaultDesignSystem: (id: string) => void;
   onCreateDesignSystem?: () => void;
-  renderDesignSystemCreation?: (
-    onBack: () => void,
-    hooks?: {
-      onBeforeGenerate?: (snapshot: DesignSystemGenerateSnapshot) => void;
-      onGenerateSettled?: (
-        snapshot: DesignSystemGenerateSnapshot,
-        outcome:
-          | { result: 'success' }
-          | { result: 'failed'; errorCode: string },
-      ) => void;
-    },
-  ) => ReactNode;
+  // NOTE: first-run onboarding intentionally no longer hosts guided
+  // design-system creation. The previous step-3 design-system surface was
+  // replaced by the newsletter step, so EntryShell deliberately does not
+  // accept a `renderDesignSystemCreation` renderer. Guided creation stays
+  // reachable from the standalone `design-system-create` route and the
+  // Design Systems tab; do not re-thread an onboarding renderer here.
   onOpenDesignSystem?: (id: string) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
@@ -349,16 +351,12 @@ function navElementForView(
 }
 
 // Tab views stay mounted (so previews/thumbnails survive a tab switch) but the
-// inactive ones must leave the accessibility tree and tab order — otherwise
-// keyboard users tab into off-screen controls and screen readers announce
-// several pages at once. `content-visibility: hidden` only skips paint, so the
-// inactive wrapper also gets `inert` (drops it from focus + a11y) and
-// `aria-hidden`. React renders `inert={false}` as no attribute and
-// `inert={true}` as the real boolean attribute, so toggling on `!active` is
-// enough — the active view stays fully interactive.
+// inactive ones must leave layout, the accessibility tree, and tab order.
+// `content-visibility: hidden` still reserves the hidden pane's block size,
+// which pushes later sidebar destinations far below the sticky topbar.
 function inactiveViewProps(active: boolean) {
   return {
-    style: active ? undefined : ({ contentVisibility: 'hidden' } as const),
+    style: active ? undefined : ({ display: 'none' } as const),
     inert: !active,
     'aria-hidden': !active,
   };
@@ -404,7 +402,6 @@ export function EntryShell({
   onRenameProject,
   onChangeDefaultDesignSystem,
   onCreateDesignSystem,
-  renderDesignSystemCreation,
   onOpenDesignSystem,
   onDesignSystemsRefresh,
   onPersistComposioKey,
@@ -608,7 +605,6 @@ export function EntryShell({
             onApiModelChange={onApiModelChange}
             onConfigPersist={onConfigPersist}
             onRefreshAgents={onRefreshAgents}
-            renderDesignSystemCreation={renderDesignSystemCreation}
             onFinish={finishOnboarding}
           />
         </main>
@@ -622,7 +618,6 @@ export function EntryShell({
       agents={agents}
       providerModelsCache={activeProviderModelsCache}
       onProviderModelsCacheChange={activeSetProviderModelsCache}
-      compact={view === 'home'}
       daemonLive={daemonLive}
       onModeChange={onModeChange}
       onAgentChange={onAgentChange}
@@ -678,7 +673,7 @@ export function EntryShell({
                   </>
                 ) : null}
               </a>
-              {view === 'home' ? null : executionSwitcher}
+              {executionSwitcher}
               <button
                 type="button"
                 className="use-everywhere-chip"
@@ -732,7 +727,6 @@ export function EntryShell({
                 skillsLoading={skillsLoading}
                 connectors={connectors}
                 promptTemplates={promptTemplates}
-                executionSwitcher={view === 'home' ? executionSwitcher : null}
               />
             </div>
             <div data-testid="entry-view-projects" data-active={view === 'projects' ? 'true' : 'false'} {...inactiveViewProps(view === 'projects')}>
@@ -851,7 +845,6 @@ function OnboardingView({
   onApiModelChange,
   onConfigPersist,
   onRefreshAgents,
-  renderDesignSystemCreation,
   onFinish,
 }: {
   config: AppConfig;
@@ -869,25 +862,12 @@ function OnboardingView({
   onApiModelChange: (model: string) => void;
   onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
-  renderDesignSystemCreation?: (
-    onBack: () => void,
-    hooks?: {
-      onBeforeGenerate?: (snapshot: DesignSystemGenerateSnapshot) => void;
-      onGenerateSettled?: (
-        snapshot: DesignSystemGenerateSnapshot,
-        outcome:
-          | { result: 'success' }
-          | { result: 'failed'; errorCode: string },
-      ) => void;
-    },
-  ) => ReactNode;
   onFinish: () => void;
 }) {
   const t = useT();
   const analytics = useAnalytics();
   const [step, setStep] = useState(0);
   const [runtime, setRuntime] = useState<'amr' | 'local' | 'byok' | null>(null);
-  const [designSource, setDesignSource] = useState<'github' | 'upload' | 'prompt' | null>(null);
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [cliScanStatus, setCliScanStatus] = useState<'idle' | 'scanning' | 'done'>('idle');
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
@@ -921,6 +901,7 @@ function OnboardingView({
     orgSize: '',
     useCase: [] as string[],
     source: '',
+    email: '',
   });
   // Live mirror of `profile` so closures that fire faster than React
   // commits (rapid dropdown picks, the Finish-setup click after the
@@ -1070,9 +1051,9 @@ function OnboardingView({
       stepIndex = '2';
       stepName = 'about_you';
     } else {
-      area = 'design_system';
+      area = 'newsletter';
       stepIndex = '3';
-      stepName = 'design_system';
+      stepName = 'newsletter';
     }
     trackPageView(analytics.track, {
       page_name: 'onboarding',
@@ -1105,27 +1086,7 @@ function OnboardingView({
   } {
     if (stepIdx === 0) return { area: 'runtime', stepIndex: '1', stepName: 'connect' };
     if (stepIdx === 1) return { area: 'about_you', stepIndex: '2', stepName: 'about_you' };
-    return { area: 'design_system', stepIndex: '3', stepName: 'design_system' };
-  }
-  // Pure mapping from `DesignSystemGenerateSnapshot` to the v2
-  // `TrackingOnboardingSourceType` enum. Single-source batches collapse
-  // to that source's literal; mixed batches go to `'mixed'`; the empty
-  // batch falls back to `'text'` when the user typed a brand
-  // description (prompt-only path, which the v2 contract reserves the
-  // `'text'` literal for) and `'none'` otherwise. The pre-fix version
-  // shipped `'none'` for prompt-only too, losing the prompt-only vs
-  // truly-empty distinction the dashboard needs.
-  function deriveOnboardingSourceType(
-    snapshot: DesignSystemGenerateSnapshot,
-  ): import('@open-design/contracts/analytics').TrackingOnboardingSourceType {
-    if (snapshot.sourceCount === 0) {
-      return snapshot.hasBrandDescription ? 'text' : 'none';
-    }
-    if (snapshot.githubRepoCount === snapshot.sourceCount) return 'github_repo';
-    if (snapshot.localFolderCount === snapshot.sourceCount) return 'local_code';
-    if (snapshot.figFileCount === snapshot.sourceCount) return 'fig';
-    if (snapshot.assetFileCount === snapshot.sourceCount) return 'assets';
-    return 'mixed';
+    return { area: 'newsletter', stepIndex: '3', stepName: 'newsletter' };
   }
   function emitOnboardingClick(
     element: TrackingOnboardingClickElement,
@@ -1171,9 +1132,12 @@ function OnboardingView({
     lifecycleReportedRef.current = true;
     const info = stepInfo(step);
     const snapshot = extra.sourceSnapshot;
+    // Onboarding no longer hosts a design-system step, so a completion
+    // never carries a DS request unless a caller passes an explicit
+    // snapshot (none do today).
     const hasRequest = snapshot
       ? snapshot.sourceCount > 0 || snapshot.hasBrandDescription
-      : Boolean(designSource);
+      : false;
     const sourceCount = snapshot ? snapshot.sourceCount : 0;
     // Read from `profileRef` for the same reason `emitAboutYouSubmit`
     // does: a Finish-setup click may fire before React commits the
@@ -1216,6 +1180,7 @@ function OnboardingView({
   const steps = [
     t('settings.onboardingStepConnect'),
     t('settings.onboardingStepProfile'),
+    t('settings.onboardingStepNewsletter'),
   ];
   const isLastStep = step === steps.length - 1;
 
@@ -1251,50 +1216,6 @@ function OnboardingView({
     },
   ];
 
-  const designItems: Array<{
-    id: 'github' | 'upload' | 'prompt';
-    icon: 'github' | 'upload' | 'sparkles';
-    title: string;
-    body: string;
-    onSelect: () => void;
-  }> = [
-    {
-      id: 'github',
-      icon: 'github',
-      title: t('settings.onboardingGithubTitle'),
-      body: t('settings.onboardingGithubBody'),
-      onSelect: () => {
-        emitOnboardingClick('github_repo', 'add_source', {
-          source_type: 'github_repo',
-        });
-        setDesignSource('github');
-      },
-    },
-    {
-      id: 'upload',
-      icon: 'upload',
-      title: t('settings.onboardingUploadTitle'),
-      body: t('settings.onboardingUploadBody'),
-      onSelect: () => {
-        emitOnboardingClick('local_code', 'upload_source', {
-          source_type: 'local_code',
-        });
-        setDesignSource('upload');
-      },
-    },
-    {
-      id: 'prompt',
-      icon: 'sparkles',
-      title: t('settings.onboardingPromptTitle'),
-      body: t('settings.onboardingPromptBody'),
-      onSelect: () => {
-        emitOnboardingClick('fig_upload', 'upload_source', {
-          source_type: 'fig',
-        });
-        setDesignSource('prompt');
-      },
-    },
-  ];
   const roleOptions = [
     { value: 'pm', label: t('settings.onboardingRolePm') },
     { value: 'designer', label: t('settings.onboardingRoleDesigner') },
@@ -1436,6 +1357,7 @@ function OnboardingView({
       // `onboarding_complete_result` give the funnel two independent
       // paths for the same data.
       emitAboutYouSubmit();
+      submitNewsletterEmail(profileRef.current.email);
       emitOnboardingClick('continue', 'continue');
       // Last-step Continue without a DS generation = "completed
       // without design system". The Generate path inside the
@@ -1510,6 +1432,23 @@ function OnboardingView({
       organization_size: snapshot.orgSize || 'unknown',
       use_cases: snapshot.useCase.length > 0 ? snapshot.useCase : ['unknown'],
       discovery_source: snapshot.source || 'unknown',
+    });
+  }
+
+  // Optional newsletter signup captured on the About-you step. Fire-and-forget
+  // so a slow or failing request never blocks finishing onboarding; a blank or
+  // malformed email is simply skipped. Only a boolean opt-in is tracked — the
+  // address itself is never sent to analytics.
+  function submitNewsletterEmail(rawEmail: string): void {
+    const email = rawEmail.trim().toLowerCase();
+    if (!email || !NEWSLETTER_EMAIL_RE.test(email)) return;
+    emitOnboardingClick('newsletter_email', 'subscribe', { newsletter_opt_in: true });
+    void fetch(NEWSLETTER_SUBSCRIBE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, source: 'client' }),
+    }).catch(() => {
+      // Swallow — onboarding completion must not depend on the marketing site.
     });
   }
 
@@ -1919,130 +1858,53 @@ function OnboardingView({
             </div>
           ) : null}
 
-          {step === 2 && renderDesignSystemCreation ? (
-            <div className="onboarding-view__design-system-create">
-              <div className="onboarding-view__ds-intro">
-                <OnboardingPanelHeader
-                  title={t('settings.onboardingDesignTitle')}
-                  body={t('settings.onboardingDesignBody')}
-                />
-                <div className="onboarding-view__ds-points">
-                  <div>
-                    <strong>{t('settings.onboardingDesignIntroGenerateTitle')}</strong>
-                    <span>{t('settings.onboardingDesignIntroGenerateBody')}</span>
-                  </div>
-                  <div>
-                    <strong>{t('settings.onboardingDesignIntroReuseTitle')}</strong>
-                    <span>{t('settings.onboardingDesignIntroReuseBody')}</span>
-                  </div>
-                </div>
-                <button type="button" className="onboarding-view__ds-skip" onClick={handleSkipWithTracking}>
-                  {t('settings.onboardingSkip')}
-                </button>
-              </div>
-              {renderDesignSystemCreation(() => setStep(1), {
-                onBeforeGenerate: (snapshot) => {
-                  // INTENT signal — fires before async DS-draft create
-                  // / workspace-open work runs. Use it ONLY for the
-                  // `generate` click row so the dashboard captures
-                  // user intent even when generation later errors.
-                  // The lifecycle `onboarding_complete_result` row
-                  // moved to `onGenerateSettled` below so a draft
-                  // create failure no longer ships as
-                  // `completion_type=completed_with_design_system`.
-                  emitOnboardingClick('generate', 'generate', {
-                    source_type: deriveOnboardingSourceType(snapshot),
-                    source_count: snapshot.sourceCount,
-                    has_brand_description: snapshot.hasBrandDescription,
-                  });
-                },
-                onGenerateSettled: (snapshot, outcome) => {
-                  // OUTCOME signal — fires from `DesignSystemCreationFlow`
-                  // *after* the create/workspace branch settles.
-                  // Success → emit lifecycle complete row with
-                  //   `completion_type=completed_with_design_system`.
-                  //   Generation hand-off navigates away from this
-                  //   tab; the post-Generate `chat_panel` page_view
-                  //   in ProjectView fires the 4th-step
-                  //   `area=generation_progress` row and clears the
-                  //   session id. Don't clear here.
-                  // Failure → emit lifecycle complete with
-                  //   `result=failed`, the daemon's failure code, and
-                  //   `completed_without_design_system` so we don't
-                  //   overstate completed-with-DS funnel. Then re-arm
-                  //   the lifecycle guard (don't clear the session
-                  //   id) so the user's retry attempt — which
-                  //   DesignSystemCreationFlow leaves them in by
-                  //   bouncing back to its setup step — emits a
-                  //   second complete row under the SAME
-                  //   onboarding_session_id, and any eventual
-                  //   success can still navigate to ProjectView with
-                  //   the id intact for step 4. Tracked by mrcfps
-                  //   review on PR #2590 (2026-05-21 14:45).
-                  if (outcome.result === 'success') {
-                    emitOnboardingComplete(
-                      'completed',
-                      'completed_with_design_system',
-                      { sourceSnapshot: snapshot },
-                    );
-                    return;
-                  }
-                  emitOnboardingComplete(
-                    'failed',
-                    'completed_without_design_system',
-                    { sourceSnapshot: snapshot, errorCode: outcome.errorCode },
-                  );
-                  lifecycleReportedRef.current = false;
-                },
-              })}
-            </div>
-          ) : null}
-
-          {step === 2 && !renderDesignSystemCreation ? (
+          {step === 2 ? (
             <div className="onboarding-view__panel">
               <OnboardingPanelHeader
-                title={t('settings.onboardingDesignTitle')}
-                body={t('settings.onboardingDesignBody')}
+                title={t('settings.onboardingNewsletterTitle')}
+                body={t('settings.onboardingNewsletterBody')}
               />
-              <div className="onboarding-view__grid">
-                {designItems.map((item) => (
-                  <OnboardingChoiceCard
-                    key={item.id}
-                    icon={item.icon}
-                    title={item.title}
-                    body={item.body}
-                    selected={designSource === item.id}
-                    onClick={item.onSelect}
-                  />
-                ))}
-              </div>
+              <label className="onboarding-view__email-field">
+                <span className="onboarding-view__email-label">
+                  {t('newsletter.label')}
+                </span>
+                <input
+                  className="onboarding-view__email-input"
+                  type="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  placeholder={t('newsletter.placeholder')}
+                  value={profile.email}
+                  onChange={(event) =>
+                    setProfile((current) => ({ ...current, email: event.target.value }))
+                  }
+                />
+              </label>
             </div>
           ) : null}
 
-          {step === 2 && renderDesignSystemCreation ? null : (
-            <div className="onboarding-view__actions">
-              {step === 0 && amrLoginError ? (
-                <span className="onboarding-view__action-status is-error" role="alert">
-                  {amrLoginError}
-                </span>
-              ) : null}
-              <button
-                type="button"
-                className="onboarding-view__secondary"
-                onClick={handleBackWithTracking}
-              >
-                {step === 0 ? t('settings.onboardingSkip') : t('settings.onboardingBack')}
-              </button>
-              <button
-                type="button"
-                className="onboarding-view__primary"
-                onClick={handlePrimaryAction}
-                disabled={amrLoginPending}
-              >
-                <span>{primaryActionLabel}</span>
-              </button>
-            </div>
-          )}
+          <div className="onboarding-view__actions">
+            {step === 0 && amrLoginError ? (
+              <span className="onboarding-view__action-status is-error" role="alert">
+                {amrLoginError}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              className="onboarding-view__secondary"
+              onClick={handleBackWithTracking}
+            >
+              {step === 0 ? t('settings.onboardingSkip') : t('settings.onboardingBack')}
+            </button>
+            <button
+              type="button"
+              className="onboarding-view__primary"
+              onClick={handlePrimaryAction}
+              disabled={amrLoginPending}
+            >
+              <span>{primaryActionLabel}</span>
+            </button>
+          </div>
         </div>
       </div>
     </section>

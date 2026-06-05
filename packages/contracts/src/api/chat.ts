@@ -297,6 +297,9 @@ export interface ChatCommentAttachment {
   selectionKind?: ChatCommentSelectionKind;
   memberCount?: number;
   podMembers?: PreviewCommentMember[];
+  // Zero-based slide the marked element lives on, for deck artifacts. Carried
+  // so the host can flip the preview to that slide when the send starts.
+  slideIndex?: number;
   screenshotPath?: string;
   markKind?: PreviewVisualMarkKind;
   intent?: string;

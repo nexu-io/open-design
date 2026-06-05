@@ -212,6 +212,22 @@ function normalizeTabsState(state: WorkspaceTabsState): WorkspaceTabsState {
     });
   }
 
+  // Pin the Home tab to the leftmost position (Figma-style). It is the one
+  // permanent, non-closable tab; project / marketplace tabs always sit to its
+  // right in insertion order. If no Home tab survives normalization — e.g. a
+  // user who closed/replaced Home before this feature shipped reopens on a
+  // saved `[project, ...]` workspace — create one so the invariant "Home always
+  // exists and is leftmost" holds for migrated state too.
+  const homeIndex = sourceTabs.findIndex(
+    (tab) => tab.kind === 'entry' && tab.view === 'home',
+  );
+  if (homeIndex < 0) {
+    sourceTabs = [createEntryTab('home'), ...sourceTabs];
+  } else if (homeIndex > 0) {
+    const [homeTab] = sourceTabs.splice(homeIndex, 1);
+    sourceTabs = [homeTab!, ...sourceTabs];
+  }
+
   const usedIds = new Set<string>();
   let activeTabId = '';
   let activeClaimed = false;
@@ -704,6 +720,9 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
     const normalized = normalizeTabsState(state);
     const closingIndex = normalized.tabs.findIndex((tab) => tab.id === tabId);
     if (closingIndex < 0) return;
+    // The Home tab is permanent — never close it.
+    const closingTab = normalized.tabs[closingIndex]!;
+    if (closingTab.kind === 'entry' && closingTab.view === 'home') return;
     let nextRoute: Route | null = null;
     const nextTabs = normalized.tabs.filter((tab) => tab.id !== tabId);
     let nextState: WorkspaceTabsState;
@@ -728,7 +747,11 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
     setState((current) => {
       const normalized = normalizeTabsState(current);
       const tabs = reorderTabsById(normalized.tabs, sourceId, targetId, edge);
-      return tabs === normalized.tabs ? normalized : { ...normalized, tabs };
+      if (tabs === normalized.tabs) return normalized;
+      // Re-normalize so the Home tab is re-pinned to the leftmost slot even when
+      // a drop would otherwise have placed a tab before it. Home is the one
+      // permanent, non-closable tab and must always sit first.
+      return normalizeTabsState({ ...normalized, tabs });
     });
   }
 
@@ -736,13 +759,24 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
     const strip = stripRef.current;
     if (!strip) return null;
 
+    // The Home tab is pinned leftmost: never expose a drop target that would
+    // place another tab before it. Coerce any 'before Home' edge to 'after Home'
+    // so the live drag indicator and the persisted order both keep Home first.
+    const homeTabId = state.tabs.find(
+      (tab) => tab.kind === 'entry' && tab.view === 'home',
+    )?.id;
+    const resolveTarget = (target: TabDragTarget): TabDragTarget =>
+      target.tabId === homeTabId && target.edge === 'before'
+        ? { tabId: target.tabId, edge: 'after' }
+        : target;
+
     const eventTarget = event.target;
     if (eventTarget instanceof HTMLElement) {
       const tabElement = eventTarget.closest<HTMLElement>('[data-workspace-tab-id]');
       if (tabElement && strip.contains(tabElement)) {
         const tabId = tabElement.dataset.workspaceTabId;
         if (tabId && tabId !== sourceId) {
-          return { tabId, edge: tabDropEdgeFromElement(event, tabElement) };
+          return resolveTarget({ tabId, edge: tabDropEdgeFromElement(event, tabElement) });
         }
       }
     }
@@ -752,8 +786,8 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
       const tabId = tabElement.dataset.workspaceTabId;
       if (!tabId || tabId === sourceId) continue;
       const rect = tabElement.getBoundingClientRect();
-      if (event.clientX <= rect.left + rect.width / 2) return { tabId, edge: 'before' };
-      if (event.clientX <= rect.right) return { tabId, edge: 'after' };
+      if (event.clientX <= rect.left + rect.width / 2) return resolveTarget({ tabId, edge: 'before' });
+      if (event.clientX <= rect.right) return resolveTarget({ tabId, edge: 'after' });
       lastTarget = { tabId, edge: 'after' };
     }
     return lastTarget;
@@ -851,6 +885,9 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
         {state.tabs.map((tab) => {
           const display = displayTabById.get(tab.id) ?? displayTabFor(tab, projectById, t);
           const active = tab.id === state.activeTabId;
+          // The Home tab is permanent and pinned leftmost: it cannot be closed
+          // or dragged out of the first slot.
+          const isHome = tab.kind === 'entry' && tab.view === 'home';
           const dragOverClass =
             dragOverTarget?.tabId === tab.id && draggingTabId !== tab.id
               ? ` is-drag-over-${dragOverTarget.edge}`
@@ -858,12 +895,12 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
           return (
             <div
               key={tab.id}
-              className={`workspace-tab${active ? ' is-active' : ''}${draggingTabId === tab.id ? ' is-dragging' : ''}${dragOverClass}`}
+              className={`workspace-tab${active ? ' is-active' : ''}${isHome ? ' is-pinned' : ''}${draggingTabId === tab.id ? ' is-dragging' : ''}${dragOverClass}`}
               data-workspace-tab-id={tab.id}
               role="tab"
               aria-selected={active}
               aria-describedby={hoverPreview?.tabId === tab.id ? 'workspace-tab-preview' : undefined}
-              draggable={state.tabs.length > 1}
+              draggable={!isHome && state.tabs.length > 1}
               onDragStart={(event) => handleTabDragStart(tab.id, event)}
               onDragEnd={handleTabDragEnd}
               onMouseEnter={(event) => scheduleHoverPreview(tab.id, event.currentTarget)}
@@ -884,17 +921,19 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                 </span>
                 <span className="workspace-tab__label">{display.title}</span>
               </button>
-              <button
-                type="button"
-                className="workspace-tab__close od-tooltip"
-                aria-label={t('common.close')}
-                title={t('common.close')}
-                data-tooltip={t('common.close')}
-                data-tooltip-placement="bottom"
-                onClick={() => closeTab(tab.id)}
-              >
-                <Icon name="close" size={10} />
-              </button>
+              {isHome ? null : (
+                <button
+                  type="button"
+                  className="workspace-tab__close od-tooltip"
+                  aria-label={t('common.close')}
+                  title={t('common.close')}
+                  data-tooltip={t('common.close')}
+                  data-tooltip-placement="bottom"
+                  onClick={() => closeTab(tab.id)}
+                >
+                  <Icon name="close" size={10} />
+                </button>
+              )}
             </div>
           );
         })}
@@ -973,17 +1012,19 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                               <span className="workspace-tabs-list__meta">{display.meta}</span>
                             </span>
                           </button>
-                          <button
-                            type="button"
-                            className="workspace-tabs-list__close od-tooltip"
-                            onClick={() => closeTab(display.id)}
-                            title={t('common.close')}
-                            data-tooltip={t('common.close')}
-                            data-tooltip-placement="left"
-                            aria-label={t('common.close')}
-                          >
-                            <Icon name="close" size={11} />
-                          </button>
+                          {display.tab.kind === 'entry' && display.tab.view === 'home' ? null : (
+                            <button
+                              type="button"
+                              className="workspace-tabs-list__close od-tooltip"
+                              onClick={() => closeTab(display.id)}
+                              title={t('common.close')}
+                              data-tooltip={t('common.close')}
+                              data-tooltip-placement="left"
+                              aria-label={t('common.close')}
+                            >
+                              <Icon name="close" size={11} />
+                            </button>
+                          )}
                         </div>
                       );
                     })

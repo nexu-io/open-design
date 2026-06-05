@@ -758,6 +758,14 @@
   align-items: center;
   gap: 8px;
 }
+.chat-error-copy {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .chat-error-retry {
   flex: 0 0 auto;
   padding: 4px 10px;
@@ -860,6 +868,10 @@
 }
 
 /* -------- Composer -------------------------------------------------- */
+.pane {
+  --chat-composer-inline-inset: 12px;
+}
+
 .composer {
   padding: 10px 16px;
   display: flex;
@@ -1437,13 +1449,13 @@
 .chat-queued-send-strip {
   display: flex;
   flex-direction: column;
-  align-self: center;
-  width: fit-content;
-  min-width: min(320px, calc(100% - 20px));
-  max-width: min(calc(100% - 20px), 520px);
+  align-self: auto;
+  width: calc(100% - (var(--chat-composer-inline-inset, 12px) * 2));
+  min-width: 0;
+  max-width: none;
   gap: 3px;
   box-sizing: border-box;
-  margin: 0 auto 2px;
+  margin: 0 var(--chat-composer-inline-inset, 12px) 2px;
   padding: 7px;
   overflow: visible;
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);

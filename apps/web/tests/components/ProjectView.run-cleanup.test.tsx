@@ -243,6 +243,37 @@ describe('retry target resolution', () => {
       failedAssistant,
       userMsg: userMessage,
       priorMessages: [systemContext],
+      preservedAttempts: [failedAssistant],
+    });
+  });
+
+  it('keeps earlier failed retry attempts visible while reusing the original user turn', () => {
+    const firstFailure: ChatMessage = {
+      ...failedAssistant,
+      id: 'assistant-1',
+      content: 'First attempt produced partial output',
+      events: [{ kind: 'text', text: 'thinking before failure' }],
+      producedFiles: [
+        {
+          name: 'partial.html',
+          kind: 'html',
+          mime: 'text/html',
+          mtime: 1,
+          size: 100,
+        },
+      ],
+    };
+    const secondFailure: ChatMessage = {
+      ...failedAssistant,
+      id: 'assistant-2',
+      content: 'Retry failed too',
+    };
+
+    expect(resolveRetryTarget([userMessage, firstFailure, secondFailure], secondFailure.id)).toEqual({
+      failedAssistant: secondFailure,
+      userMsg: userMessage,
+      priorMessages: [],
+      preservedAttempts: [firstFailure, secondFailure],
     });
   });
 

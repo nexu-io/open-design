@@ -525,5 +525,105 @@ const pageHtml = renderToStaticMarkup(
         for (const el of elements) observer.observe(el);
       })();
     </script>
+    <script is:inline>
+      (() => {
+        const STORAGE_KEY = 'od-newsletter-dismissed';
+        const locale = (document.documentElement.getAttribute('lang') || 'en').toLowerCase();
+        const track = (area, result) => {
+          if (window.__odTrack)
+            window.__odTrack('newsletter_signup', { page_name: 'landing_home', area, result, locale });
+        };
+
+        const dismissed = () => {
+          try {
+            return window.localStorage.getItem(STORAGE_KEY) === '1';
+          } catch {
+            return false;
+          }
+        };
+        const setDismissed = () => {
+          try {
+            window.localStorage.setItem(STORAGE_KEY, '1');
+          } catch {
+            /* private mode — popup will just reappear next visit */
+          }
+        };
+
+        const wireForm = (form, area) => {
+          const input = form.querySelector('[data-newsletter-email]');
+          const msg = form.querySelector('[data-newsletter-msg]');
+          const submit = form.querySelector('.newsletter-submit');
+          const successText = form.getAttribute('data-success') || '';
+          const errorText = form.getAttribute('data-error') || '';
+          form.addEventListener('submit', (ev) => {
+            ev.preventDefault();
+            const email = (input && input.value ? input.value : '').trim();
+            if (!email) return;
+            if (submit) submit.disabled = true;
+            if (msg) msg.textContent = '';
+            fetch('/subscribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, source: form.getAttribute('data-source') || 'landing' }),
+            })
+              .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+              .then((data) => {
+                if (!data || data.ok !== true) throw new Error('rejected');
+                form.classList.add('is-success');
+                if (msg) msg.textContent = successText;
+                if (input) input.value = '';
+                setDismissed();
+                track(area, 'success');
+              })
+              .catch(() => {
+                if (msg) msg.textContent = errorText;
+                if (submit) submit.disabled = false;
+                track(area, 'error');
+              });
+          });
+        };
+
+        document.querySelectorAll('[data-newsletter-form]').forEach((form) => {
+          const popup = form.closest('[data-newsletter-popup]');
+          wireForm(form, popup ? 'popup' : 'section');
+        });
+
+        const popup = document.querySelector('[data-newsletter-popup]');
+        if (popup && !dismissed()) {
+          const close = () => {
+            popup.hidden = true;
+            setDismissed();
+          };
+          popup.querySelectorAll('[data-newsletter-dismiss]').forEach((btn) =>
+            btn.addEventListener('click', close),
+          );
+          document.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Escape' && !popup.hidden) close();
+          });
+          const reveal = () => {
+            if (dismissed()) return;
+            popup.hidden = false;
+            popup.classList.add('is-visible');
+            track('popup', 'view');
+          };
+          // Show after the visitor has scrolled past the hero, or a delay
+          // fallback — whichever comes first. Avoids interrupting the LCP.
+          let shown = false;
+          const showOnce = () => {
+            if (shown) return;
+            shown = true;
+            reveal();
+          };
+          const onScroll = () => {
+            if (window.scrollY > window.innerHeight * 0.5) {
+              window.removeEventListener('scroll', onScroll);
+              showOnce();
+            }
+          };
+          window.addEventListener('scroll', onScroll, { passive: true });
+          window.setTimeout(showOnce, 10000);
+        }
+      })();
+    </script>
   </body>
 </html>

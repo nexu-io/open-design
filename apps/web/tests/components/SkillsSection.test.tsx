@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SkillsSection } from '../../src/components/SkillsSection';
+import { I18nProvider } from '../../src/i18n';
 import type { AppConfig } from '../../src/types';
 import type { SkillSummary } from '@open-design/contracts';
 
@@ -42,6 +43,7 @@ function makeSkill(overrides: Partial<SkillSummary>): SkillSummary {
 function renderSkillsSection(
   skills: SkillSummary[],
   options?: {
+    locale?: 'en' | 'zh-CN';
     onSkillsRefresh?: () => void | Promise<void>;
     onSkillsChanged?: (id?: string) => void;
   },
@@ -112,13 +114,18 @@ function renderSkillsSection(
     return new Response(JSON.stringify({}), { status: 404 });
   }) as typeof fetch;
 
-  render(
+  const section = (
     <SkillsSection
       cfg={TEST_CONFIG}
       setCfg={setCfg}
       onSkillsRefresh={onSkillsRefresh}
       onSkillsChanged={onSkillsChanged}
-    />,
+    />
+  );
+  render(
+    options?.locale ? (
+      <I18nProvider initial={options.locale}>{section}</I18nProvider>
+    ) : section,
   );
   return {
     fetchMock: globalThis.fetch as ReturnType<typeof vi.fn>,
@@ -215,6 +222,46 @@ describe('SkillsSection', () => {
 
     expect(within(row).queryByTestId('skills-edit-builtin-warning')).toBeNull();
     expect(await within(row).findByTestId('skills-edit-form')).toBeTruthy();
+  });
+
+  it('matches localized built-in skill names and descriptions in search', async () => {
+    renderSkillsSection(
+      [
+        makeSkill({
+          id: 'localized-skill',
+          name: 'localized-skill',
+          displayName: {
+            en: 'Localized Skill',
+            'zh-CN': '本地化技能',
+          },
+          description: 'English description',
+          descriptionI18n: {
+            en: 'English description',
+            'zh-CN': '中文能力描述',
+          },
+          source: 'built-in',
+        }),
+        makeSkill({
+          id: 'other-skill',
+          name: 'other-skill',
+          displayName: {
+            en: 'Other Skill',
+            'zh-CN': '其他技能',
+          },
+          description: 'Other description',
+          source: 'built-in',
+        }),
+      ],
+      { locale: 'zh-CN' },
+    );
+
+    expect(await screen.findByText('本地化技能')).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText('搜索...'), {
+      target: { value: '中文能力' },
+    });
+
+    expect(screen.getByTestId('skill-row-localized-skill')).toBeTruthy();
+    expect(screen.queryByTestId('skill-row-other-skill')).toBeNull();
   });
 
   it('refreshes app-level skills after creating a skill', async () => {

@@ -916,7 +916,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  width: 116px;
+  width: 124px;
 }
 .viewer-viewport-trigger {
   width: 100%;
@@ -930,6 +930,16 @@
   font-size: 12.5px;
   line-height: 1.2;
   box-shadow: var(--shadow-xs);
+}
+.viewer-viewport-trigger > svg {
+  flex: 0 0 auto;
+}
+.viewer-viewport-trigger > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .viewer-viewport-trigger:hover:not(:disabled),
 .viewer-viewport-trigger[aria-expanded='true'] {

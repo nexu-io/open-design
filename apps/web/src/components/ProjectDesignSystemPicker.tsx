@@ -7,6 +7,7 @@
 // `/api/runs` — see providers/daemon.ts).
 //
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { DesignSystemSummary } from '@open-design/contracts';
 import { useI18n } from '../i18n';
@@ -179,6 +180,17 @@ export function ProjectDesignSystemPicker({
     });
   }, [query, designSystems, locale]);
 
+  const selectDesignSystem = (id: string | null) => {
+    onChange(id);
+    setOpen(false);
+  };
+
+  const selectDesignSystemOnKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, id: string | null) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    selectDesignSystem(id);
+  };
+
   return (
     <div
       ref={wrapRef}
@@ -249,10 +261,11 @@ export function ProjectDesignSystemPicker({
                     aria-selected={selectedId == null}
                     onMouseEnter={() => setHovered(null)}
                     onFocus={() => setHovered(null)}
-                    onClick={() => {
-                      onChange(null);
-                      setOpen(false);
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      selectDesignSystem(null);
                     }}
+                    onKeyDown={(event) => selectDesignSystemOnKeyDown(event, null)}
                   >
                     <div className="project-ds-picker-option-head">
                       <span className="project-ds-picker-option-title">{t('designSystemPicker.noneTitle')}</span>
@@ -277,10 +290,11 @@ export function ProjectDesignSystemPicker({
                         aria-selected={active}
                         onMouseEnter={() => setHovered(d)}
                         onFocus={() => setHovered(d)}
-                        onClick={() => {
-                          onChange(d.id);
-                          setOpen(false);
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          selectDesignSystem(d.id);
                         }}
+                        onKeyDown={(event) => selectDesignSystemOnKeyDown(event, d.id)}
                         data-testid={`project-ds-picker-option-${d.id}`}
                       >
                         <div className="project-ds-picker-option-head">

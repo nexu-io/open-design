@@ -154,13 +154,13 @@ describe('agent runtime tool environment', () => {
 describe('applyAgentLaunchEnv', () => {
   it('returns env unchanged when childPathPrepend is empty and no node dir is provided', () => {
     const base = { Path: ['/usr/local/bin', '/usr/bin'].join(path.delimiter), OTHER: 'val' };
-    const result = applyAgentLaunchEnv(base, { childPathPrepend: [] }, '');
+    const result = applyAgentLaunchEnv(base, { childPathPrepend: [] }, '', []);
     expect(result).toBe(base);
   });
 
   it('prepends childPathPrepend entries to PATH when key is uppercase', () => {
     const base = { PATH: '/usr/bin' };
-    const result = applyAgentLaunchEnv(base, { childPathPrepend: ['/opt/copilot'] }, '');
+    const result = applyAgentLaunchEnv(base, { childPathPrepend: ['/opt/copilot'] }, '', []);
     expect(result.PATH).toBe(`/opt/copilot${path.delimiter}/usr/bin`);
     expect(result.Path).toBeUndefined();
   });
@@ -173,7 +173,7 @@ describe('applyAgentLaunchEnv', () => {
     // Pure POSIX paths + path.delimiter keep the assertion correct on all platforms;
     // the real Windows C:\...;... shape is covered by winTest in launch.test.ts.
     const base = { Path: ['/opt/nodejs', '/usr/bin'].join(path.delimiter) };
-    const result = applyAgentLaunchEnv(base, { childPathPrepend: ['/opt/agent/bin'] }, '');
+    const result = applyAgentLaunchEnv(base, { childPathPrepend: ['/opt/agent/bin'] }, '', []);
 
     // The existing 'Path' key must be updated in place.
     expect(result.Path).toBe(
@@ -186,7 +186,7 @@ describe('applyAgentLaunchEnv', () => {
   it('deduplicates entries already present in Path', () => {
     const existing = ['/opt/bin', '/usr/bin'].join(path.delimiter);
     const base = { Path: existing };
-    const result = applyAgentLaunchEnv(base, { childPathPrepend: ['/opt/bin'] }, '');
+    const result = applyAgentLaunchEnv(base, { childPathPrepend: ['/opt/bin'] }, '', []);
     expect(result.Path).toBe(existing);
   });
 });

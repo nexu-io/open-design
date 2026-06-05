@@ -1106,3 +1106,166 @@ test('attachPiRpcSession: no agent events emitted after abort()', () => {
     'post-abort text must not appear in events',
   );
 });
+
+// ─── parentSession (conversational continuity) ─────────────────────────
+
+test('attachPiRpcSession sends new_session before prompt when parentSession is provided', () => {
+  const events: TestSentEvent[] = [];
+  const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
+  const child = createMockChild();
+  const session = attachPiRpcSession({
+    child: child as unknown as ChildProcess,
+    prompt: 'test',
+    send,
+    parentSession: '/path/to/prior-session.jsonl',
+  });
+  // Use only read() to read stdin (not on('data')). attachPiRpcSession writes
+  // synchronously to the PassThrough, so all data is buffered and available
+  // via read(). Mixing on('data') + read() in flowing mode duplicates lines.
+  const chunks: string[] = [];
+  let buffered = child.stdin.read();
+  while (buffered) {
+    chunks.push(buffered.toString());
+    buffered = child.stdin.read();
+  }
+  const lines = chunks.join('').trim().split('\n').filter(Boolean);
+  // First line should be new_session with parentSession, and prompt should
+  // wait until pi confirms it loaded the parent session.
+  assert.equal(lines.length, 1, 'should wait for new_session response before prompt');
+  const first = parseJsonRecord(lines[0] ?? '');
+  assert.equal(first.type, 'new_session', 'first cmd should be new_session');
+  assert.equal(first.parentSession, '/path/to/prior-session.jsonl', 'parentSession should match');
+  feedStdoutLines(child, [{ type: 'response', id: first.id, success: true }]);
+  const promptChunk = child.stdin.read();
+  const promptLines = promptChunk ? promptChunk.toString().trim().split('\n').filter(Boolean) : [];
+  assert.equal(promptLines.length, 1, 'should send prompt after new_session succeeds');
+  const second = parseJsonRecord(promptLines[0] ?? '');
+  assert.equal(second.type, 'prompt', 'second cmd should be prompt');
+  // new_session should have a smaller id than prompt.
+  assert.ok((first.id as number) < (second.id as number), 'new_session id should be less than prompt id');
+  // getLastSessionPath should return null initially (no real session dir).
+  assert.equal(session.getLastSessionPath(), null, 'no session path before agent_end');
+});
+
+test('attachPiRpcSession fails and does not send prompt when parentSession is rejected', () => {
+  const events: TestSentEvent[] = [];
+  const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
+  const child = createMockChild();
+  attachPiRpcSession({
+    child: child as unknown as ChildProcess,
+    prompt: 'trimmed latest turn',
+    send,
+    parentSession: '/path/to/missing-session.jsonl',
+  });
+  const firstChunk = child.stdin.read();
+  const firstLines = firstChunk ? firstChunk.toString().trim().split('\n').filter(Boolean) : [];
+  assert.equal(firstLines.length, 1, 'should only send new_session initially');
+  const first = parseJsonRecord(firstLines[0] ?? '');
+  assert.equal(first.type, 'new_session');
+
+  feedStdoutLines(child, [{ type: 'response', id: first.id, success: false, error: 'missing session' }]);
+
+  const promptChunk = child.stdin.read();
+  assert.equal(promptChunk, null, 'must not send trimmed prompt after parent session failure');
+  assert.deepEqual(
+    events.find((event) => event.channel === 'error'),
+    {
+      channel: 'error',
+      message: 'parent session rejected: missing session',
+      code: 'PI_PARENT_SESSION_FAILED',
+    },
+  );
+});
+
+test('attachPiRpcSession does NOT send new_session when parentSession is omitted', () => {
+  const events: TestSentEvent[] = [];
+  const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
+  const child = createMockChild();
+  child.stdout.end();
+  attachPiRpcSession({
+    child: child as unknown as ChildProcess,
+    prompt: 'test',
+    send,
+  });
+  // Use only read() to avoid streaming-mode duplication.
+  const chunks: string[] = [];
+  let buffered = child.stdin.read();
+  while (buffered) {
+    chunks.push(buffered.toString());
+    buffered = child.stdin.read();
+  }
+  const lines = chunks.join('').trim().split('\n').filter(Boolean);
+  const types = lines.map((l) => parseJsonRecord(l).type);
+  assert.ok(!types.includes('new_session'), 'should NOT send new_session');
+  assert.ok(types.includes('prompt'), 'should send prompt');
+});
+
+test('attachPiRpcSession getLastSessionPath returns only the session changed during this run', async () => {
+  const tmpDir = await import('node:os').then((m) => m.tmpdir());
+  const piDir = path.join(tmpDir, `.pi-test-${Date.now()}`);
+  // pi session capture scans <cwd>/.pi/sessions/, NOT <cwd>/sessions/.
+  const sessionsDir = path.join(piDir, '.pi', 'sessions');
+  const fsp = await import('node:fs/promises');
+  await fsp.mkdir(sessionsDir, { recursive: true });
+  // Existing unrelated sessions, even with a newer mtime, must not be
+  // captured as this run's parent.
+  const unrelatedSessionFile = path.join(sessionsDir, '2026-06-01T00-00-00_unrelated.jsonl');
+  await fsp.writeFile(unrelatedSessionFile, '{"msg":"unrelated"}\n');
+  const future = new Date(Date.now() + 60_000);
+  await fsp.utimes(unrelatedSessionFile, future, future);
+  try {
+    const send = (_channel: string, _payload: JsonRecord) => {};
+    const child = createMockChild();
+    const session = attachPiRpcSession({
+      child: child as unknown as ChildProcess,
+      prompt: 'test',
+      cwd: piDir,
+      send,
+    });
+    const sessionFile = path.join(sessionsDir, '2026-06-01T00-00-01_current.jsonl');
+    await fsp.writeFile(sessionFile, '{"msg":"current"}\n');
+    // Feed agent_end to trigger session path capture.
+    feedStdoutLines(child, [
+      { type: 'agent_start' },
+      { type: 'turn_start' },
+      {
+        type: 'message_update',
+        assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: 'Hello' },
+      },
+      { type: 'agent_end' },
+    ]);
+    closeStdout(child);
+    // Wait a tick for the async capture to complete.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const captured = session.getLastSessionPath();
+    assert.equal(captured, sessionFile, 'should capture only the session file changed after attach');
+  } finally {
+    await fsp.rm(piDir, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+test('attachPiRpcSession getLastSessionPath returns null when multiple session files changed', async () => {
+  const tmpDir = await import('node:os').then((m) => m.tmpdir());
+  const piDir = path.join(tmpDir, `.pi-test-${Date.now()}-ambiguous`);
+  const sessionsDir = path.join(piDir, '.pi', 'sessions');
+  const fsp = await import('node:fs/promises');
+  await fsp.mkdir(sessionsDir, { recursive: true });
+  try {
+    const send = (_channel: string, _payload: JsonRecord) => {};
+    const child = createMockChild();
+    const session = attachPiRpcSession({
+      child: child as unknown as ChildProcess,
+      prompt: 'test',
+      cwd: piDir,
+      send,
+    });
+    await fsp.writeFile(path.join(sessionsDir, 'current.jsonl'), '{"msg":"current"}\n');
+    await fsp.writeFile(path.join(sessionsDir, 'other.jsonl'), '{"msg":"other"}\n');
+    feedStdoutLines(child, [{ type: 'agent_end' }]);
+    closeStdout(child);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(session.getLastSessionPath(), null, 'ambiguous session changes should not be captured');
+  } finally {
+    await fsp.rm(piDir, { recursive: true, force: true }).catch(() => {});
+  }
+});

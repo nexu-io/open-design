@@ -33,6 +33,7 @@ import {
 } from '../providers/registry';
 import { deriveFileOps, type FileOpEntry } from '../runtime/file-ops';
 import { latestTodosFromEvents, type TodoItem } from '../runtime/todos';
+import { deliverableSlideNavForActiveFile, isSlideNavDeliverableNow } from '../runtime/slide-nav';
 import {
   type AgentEvent,
   type AgentInfo,
@@ -115,6 +116,10 @@ interface Props {
   // Open the named file AND surface its Share/Export menu. Drives the chat-side
   // "Share" next-step action without a dedicated share backend.
   shareRequest?: { name: string; nonce: number } | null;
+  // Flip a deck preview to a given slide when a queued chat send starts. Mirrors
+  // `shareRequest`: the named file is activated (if open) and the matching
+  // FileViewer consumes the nonce to navigate.
+  slideNavRequest?: { name: string; slideIndex: number; nonce: number } | null;
   liveArtifactEvents?: LiveArtifactEventItem[];
   designSystemActivityEvents?: AgentEvent[];
   // Persisted set of open tabs + active tab. Owned by ProjectView so the
@@ -361,6 +366,7 @@ export function FileWorkspace({
   commentSendDisabled = false,
   openRequest,
   shareRequest,
+  slideNavRequest,
   liveArtifactEvents = [],
   designSystemActivityEvents = [],
   tabsState,
@@ -422,12 +428,10 @@ export function FileWorkspace({
   focusQuestionsRequest = null,
 }: Props) {
   const t = useT();
-  // The Questions tab only exists while there's an unanswered form. Once the
-  // user replies, the answered copy moves back into chat and the tab must close
-  // — so gate on `questionFormSubmittedAnswers === undefined` rather than the
-  // mere presence of a form, otherwise a locked duplicate lingers in the panel.
-  const showQuestionsTab =
-    Boolean(questionForm || questionsGenerating) && questionFormSubmittedAnswers === undefined;
+  // The chat column only shows a compact Questions banner; the form itself
+  // lives here, including after submission when a banner click can reopen the
+  // answered preview.
+  const showQuestionsTab = Boolean(questionForm || questionFormPreview || questionsGenerating);
   const analytics = useAnalytics();
   // P1 page_view page_name=file_manager — once per project the user lands
   // inside the workspace. Re-fire when the projectId changes so a
@@ -772,6 +776,22 @@ export function FileWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shareRequest]);
 
+  // Slide-nav request: decide deliverability once, at fire time. Only if the
+  // named deck is already an open tab do we mark this nonce deliverable and
+  // bring it forward so the matching FileViewer is mounted and flips. We never
+  // open a closed file — auto-flipping is a follow-along, not a reason to yank
+  // the user into a tab they never opened. Recording the deliverable nonce in
+  // state (not a ref) also means a request for a closed deck stays undeliverable
+  // forever: opening that file later matches the name but not the nonce, so the
+  // stale request can't resurface and jump the preview.
+  const [slideNavDeliverableNonce, setSlideNavDeliverableNonce] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isSlideNavDeliverableNow(slideNavRequest, persistedTabs)) return;
+    setSlideNavDeliverableNonce(slideNavRequest!.nonce);
+    setActiveTab(slideNavRequest!.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slideNavRequest]);
+
   // Focus the Questions tab when the parent bumps the nonce (banner click in
   // chat, or a freshly generated form). The tab is transient — not added to
   // the persisted tab list.
@@ -781,8 +801,21 @@ export function FileWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusQuestionsRequest?.nonce]);
 
-  // If the Questions tab is active but the form is gone (answered, or a new
-  // assistant turn without a form), fall back to the default root tab.
+  // Submitting from the right-hand panel should close the preview once. The
+  // answered form remains available, so a later chat-banner click can reopen
+  // the same Questions tab without this effect immediately closing it again.
+  const previousQuestionFormSubmittedAnswersRef = useRef(questionFormSubmittedAnswers);
+  useEffect(() => {
+    const wasAnswered = previousQuestionFormSubmittedAnswersRef.current !== undefined;
+    const isAnswered = questionFormSubmittedAnswers !== undefined;
+    previousQuestionFormSubmittedAnswersRef.current = questionFormSubmittedAnswers;
+    if (activeTab === QUESTIONS_TAB && !wasAnswered && isAnswered) {
+      setActiveTab(defaultRootTab);
+    }
+  }, [activeTab, defaultRootTab, questionFormSubmittedAnswers]);
+
+  // If the Questions tab is active but the form is gone because a new assistant
+  // turn has no form, fall back to the default root tab.
   useEffect(() => {
     if (activeTab === QUESTIONS_TAB && !showQuestionsTab) {
       setActiveTab(defaultRootTab);
@@ -1690,9 +1723,24 @@ export function FileWorkspace({
 
   const isActiveSketch = activeFile?.kind === 'sketch' && isSketchName(activeFile.name);
   const activeSketch = activeFile && isActiveSketch ? sketches[activeFile.name] : null;
+  // The design-files tab is the default landing tab, so while a run is in
+  // flight and no previewable artifact exists yet the progress card must take
+  // over its empty "Creations will appear here" state rather than leave an idle
+  // empty list. (Pre-#3516 the preview branch rendered before the design-files
+  // branch with no tab guard; the composer rewrite added an `activeTab !==
+  // DESIGN_FILES_TAB` clause here that hid the progress card on the default
+  // tab.) But the override is scoped to the *empty* design-files tab: a
+  // populated project keeps its file browser while generating. The condition
+  // mirrors DesignFilesPanel's own empty-state gate exactly (no files, no live
+  // artifacts, no folders), so the card only wins where the panel would have
+  // shown its empty placeholder.
+  const designFilesTabIsEmpty =
+    visibleFiles.length === 0
+    && liveArtifactEntries.length === 0
+    && projectFolders.length === 0;
   const showGenerationPreview = Boolean(generationPreview)
-    && activeTab !== DESIGN_FILES_TAB
     && activeTab !== DESIGN_SYSTEM_TAB
+    && (activeTab !== DESIGN_FILES_TAB || designFilesTabIsEmpty)
     && !isBrowserTabId(activeTab)
     && !isSideChatTabId(activeTab)
     && !isTerminalTabId(activeTab)
@@ -1939,19 +1987,7 @@ export function FileWorkspace({
             );
           })}
         </div>
-        {/* Pinned to the right, OUTSIDE the horizontally-scrolling
-            `.ws-tabs-bar`, so the "+" launcher is never clipped by that
-            container's overflow and the middle file tabs scroll between the
-            sticky-left Design Files entry and this button. */}
-        <div className="ws-tabs-actions">
-          <div
-            id={APP_CHROME_FILE_ACTIONS_ID}
-            className="ws-tabs-file-actions"
-            data-app-chrome-file-actions="true"
-          />
-          {headerActions ? (
-            <div className="ws-tabs-project-actions">{headerActions}</div>
-          ) : null}
+        <div className="ws-add-tab">
           <button
             ref={launcherBtnRef}
             type="button"
@@ -1967,6 +2003,18 @@ export function FileWorkspace({
           >
             <Icon name="plus" size={15} />
           </button>
+        </div>
+        {/* Pinned to the right for project/file actions; the tab launcher sits
+            next to the file tabs so its spatial relationship stays clear. */}
+        <div className="ws-tabs-actions">
+          <div
+            id={APP_CHROME_FILE_ACTIONS_ID}
+            className="ws-tabs-file-actions"
+            data-app-chrome-file-actions="true"
+          />
+          {headerActions ? (
+            <div className="ws-tabs-project-actions">{headerActions}</div>
+          ) : null}
         </div>
       </div>
       {launcherOpen ? (
@@ -2239,6 +2287,11 @@ export function FileWorkspace({
                 ? { nonce: shareRequest.nonce }
                 : null
             }
+            slideNavRequest={deliverableSlideNavForActiveFile(
+              slideNavRequest,
+              activeFile.name,
+              slideNavDeliverableNonce,
+            )}
           />
         ) : (
           <div className="viewer-empty">

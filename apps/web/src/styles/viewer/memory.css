@@ -1027,7 +1027,11 @@
   color: var(--text);
 }
 .manual-edit-delete-btn:hover:not(:disabled) {
-  background: var(--bg-subtle);
+  background: transparent;
+  color: var(--red);
+}
+.manual-edit-delete-confirm-action {
+  color: var(--red);
 }
 .manual-edit-delete-btn:disabled,
 .manual-edit-footer-btn:disabled {

@@ -1,0 +1,85 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-share-to-community",
+  "title": "Share to community",
+  "title_i18n": {
+    "en": "Share to community",
+    "zh-CN": "分享到社区",
+    "zh-TW": "分享到社群",
+    "ja": "コミュニティへ共有",
+    "ko": "커뮤니티에 공유",
+    "de": "An die Community teilen",
+    "fr": "Partager à la communauté",
+    "ru": "Поделиться с сообществом",
+    "es": "Compartir con la comunidad",
+    "pt-BR": "Compartilhar com a comunidade",
+    "vi": "Chia sẻ với cộng đồng",
+    "id": "Bagikan ke komunitas",
+    "ar": "المشاركة مع المجتمع",
+    "tr": "Topluluğa paylaş",
+    "uk": "Поділитися зі спільнотою"
+  },
+  "version": "0.1.0",
+  "description": "Package the work the user just finished into an Open Design plugin and route them to the existing Add-to-My-plugins / Open-Design-PR buttons. Triggered by the 'Share to Open Design' button next to the post-completion Discord prompt.",
+  "description_i18n": {
+    "en": "Package the work the user just finished into an Open Design plugin and route them to the existing Add-to-My-plugins / Open-Design-PR buttons. Triggered by the 'Share to Open Design' button next to the post-completion Discord prompt.",
+    "zh-CN": "把用户刚做完的作品打包成 Open Design 插件,然后引导他们点已有的 Add to My plugins / Open Design PR 按钮。在生成完成后 Discord 提示旁边的 'Share to Open Design' 按钮触发。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-share-to-community",
+  "tags": [
+    "scenario",
+    "first-party",
+    "plugin-authoring",
+    "share",
+    "contribute"
+  ],
+  "compat": {
+    "agentSkills": [
+      { "path": "./SKILL.md" }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "plugin-sharing",
+    "mode": "scenario",
+    "context": {
+      "skills": [
+        { "path": "./SKILL.md" }
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "inspect-project",
+          "atoms": [
+            "file-read"
+          ]
+        },
+        {
+          "id": "package-plugin",
+          "atoms": [
+            "file-write"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:read",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Package the work I just finished in this project as an Open Design plugin so I can install it into My plugins and open a PR to the Open Design community catalog. Auto-derive the manifest from what's already in the project — don't ask me for fields the project files already answer.",
+        "zh-CN": "把我在这个 project 里刚做完的作品打包成一个 Open Design 插件,让我可以安装到 My plugins 并提交 PR 到 Open Design 社区。manifest 从项目里已有的内容自动推断,别问我已经能从文件里看出来的字段。"
+      }
+    }
+  }
+}

@@ -170,7 +170,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
   });
 
-  it('appends and activates a new Home tab when Home is closed and user navigates back to Home', async () => {
+  it('keeps a singleton Home tab when restoring a Home-less workspace and navigating back to Home', async () => {
     window.localStorage.setItem(
       'open-design:workspace-tabs:v1',
       JSON.stringify({
@@ -191,21 +191,68 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       <WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />,
     );
 
+    // Restoring a Home-less saved workspace immediately mints the permanent
+    // Home tab pinned leftmost — Project Alpha sits to its right.
     await waitFor(() => {
       const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
-      expect(labels).toHaveLength(1);
-      expect(labels[0]).toContain('Project Alpha');
+      expect(labels).toEqual([
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Alpha'),
+      ]);
     });
 
-    // Navigate to Home
+    // Navigating to Home must not duplicate it.
     rerender(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
 
     await waitFor(() => {
       const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
-      // It should append a new Home tab, resulting in 2 tabs total (Project Alpha and Home)
       expect(labels).toHaveLength(2);
       expect(labels.filter((label) => label.includes('Home'))).toHaveLength(1);
       expect(labels.filter((label) => label.includes('Project Alpha'))).toHaveLength(1);
+    });
+  });
+
+  it('creates a pinned Home tab when restoring saved tabs that have no Home entry', async () => {
+    // Users who closed/replaced Home before the permanent-Home feature shipped
+    // can have a saved `[project, ...]` workspace with no Home entry. Normalizing
+    // that state must mint a Home tab and pin it leftmost, not leave the workspace
+    // Home-less until the user manually navigates home.
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'project:project-alpha',
+        tabs: [
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 1,
+            lastActiveAt: 1,
+          },
+          {
+            id: 'project:project-beta',
+            kind: 'project',
+            projectId: 'project-beta',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+        ],
+      }),
+    );
+
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project, projectBeta]} />);
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toEqual([
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Alpha'),
+        expect.stringContaining('Project Beta'),
+      ]);
     });
   });
 
@@ -242,17 +289,16 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
   });
 
-  it('creates a replacement Home tab when the last tab is closed', async () => {
+  it('keeps the pinned Home tab permanent and non-closable', async () => {
     render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    // The Home tab is pinned leftmost and has no close affordance, so there is
+    // no way to remove the last remaining tab.
+    expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
 
-    await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
-      expect(labels).toHaveLength(1);
-      expect(labels[0]).toContain('Home');
-    });
-    expect(navigate).toHaveBeenCalledWith(homeRoute);
+    const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+    expect(labels).toHaveLength(1);
+    expect(labels[0]).toContain('Home');
   });
 
   it('maps the browser new-tab shortcut to the workspace new-tab action', async () => {
@@ -287,7 +333,13 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
 
     expect(allowedDefault).toBe(true);
-    expect(screen.getAllByRole('tab')).toHaveLength(1);
+    // Home is always pinned leftmost, so the project route renders Home + the
+    // project tab. The deferred shortcut must not add or change tabs.
+    const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+    expect(labels).toEqual([
+      expect.stringContaining('Home'),
+      expect.stringContaining('Project Alpha'),
+    ]);
     expect(navigate).not.toHaveBeenCalled();
   });
 
@@ -463,7 +515,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     expect(tooltip.style.left).toBe('32px');
   });
 
-  it('reorders tabs live from left to right while dragging without changing the active route', async () => {
+  it('keeps the Home tab pinned leftmost when a tab is dropped onto its left edge', async () => {
     const vibrate = vi.fn();
     Object.defineProperty(window.navigator, 'vibrate', {
       configurable: true,
@@ -515,30 +567,34 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       ]);
     });
 
-    const [homeTab, alphaTab] = screen.getAllByRole('tab');
-    mockTabRect(alphaTab! as HTMLElement, 100);
+    // Dragging a project tab onto Home's left edge must not place anything
+    // before Home. Home is the permanent, pinned-leftmost tab; the drop should
+    // resolve to "after Home" so Home stays first.
+    const [homeTab, , betaTab] = screen.getAllByRole('tab');
+    mockTabRect(homeTab! as HTMLElement, 0);
     const dataTransfer = createDataTransfer();
-    fireEvent.dragStart(homeTab!, { dataTransfer });
-    dispatchDragEvent(alphaTab! as HTMLElement, 'dragover', dataTransfer, 160);
+    fireEvent.dragStart(betaTab!, { dataTransfer });
+    // clientX 10 lands in the left half of Home's rect (left=0, width=100).
+    dispatchDragEvent(homeTab! as HTMLElement, 'dragover', dataTransfer, 10);
 
     await waitFor(() => {
       const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
       expect(labels).toEqual([
-        expect.stringContaining('Project Alpha'),
         expect.stringContaining('Home'),
         expect.stringContaining('Project Beta'),
+        expect.stringContaining('Project Alpha'),
       ]);
     });
 
-    dispatchDragEvent(alphaTab! as HTMLElement, 'drop', dataTransfer, 160);
-    fireEvent.dragEnd(homeTab!, { dataTransfer });
+    dispatchDragEvent(homeTab! as HTMLElement, 'drop', dataTransfer, 10);
+    fireEvent.dragEnd(betaTab!, { dataTransfer });
 
     await waitFor(() => {
       const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
       expect(labels).toEqual([
-        expect.stringContaining('Project Alpha'),
         expect.stringContaining('Home'),
         expect.stringContaining('Project Beta'),
+        expect.stringContaining('Project Alpha'),
       ]);
     });
 
@@ -551,9 +607,9 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     };
     expect(stored.activeTabId).toBe('project:project-alpha');
     expect(stored.tabs?.map((tab) => tab.id)).toEqual([
-      'project:project-alpha',
       'entry:home:seed',
       'project:project-beta',
+      'project:project-alpha',
     ]);
   });
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import { useT } from '../i18n';
-import type { AppConfig, DesignSystemSummary } from '../types';
+import type { AppConfig, DesignSystemGenerationJob, DesignSystemSummary } from '../types';
 import {
   fetchDesignSystems,
   importGitHubDesignSystem,
@@ -29,6 +29,7 @@ interface Props {
    * flow through here.
    */
   onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
+  onDesignSystemImportRebuildJob?: (designSystemId: string, job: DesignSystemGenerationJob) => void;
 }
 
 function toggleCraftSlug(current: string[], slug: string, enabled: boolean): string[] {
@@ -38,7 +39,12 @@ function toggleCraftSlug(current: string[], slug: string, enabled: boolean): str
   return Array.from(next);
 }
 
-export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Props) {
+export function DesignSystemsSection({
+  cfg,
+  setCfg,
+  onDesignSystemsChanged,
+  onDesignSystemImportRebuildJob,
+}: Props) {
   const t = useT();
   const cardRefs = useRef(new Map<string, HTMLDivElement>());
   const [designSystems, setDesignSystems] = useState<DesignSystemSummary[]>([]);
@@ -242,6 +248,9 @@ export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Pr
     setImportPath('');
     setImportedDesignSystem(result.designSystem);
     setImportMessage(result.designSystem.title);
+    if (result.tokenContractRebuild?.job) {
+      onDesignSystemImportRebuildJob?.(result.designSystem.id, result.tokenContractRebuild.job);
+    }
     onDesignSystemsChanged?.(result.designSystem.id);
   }
 

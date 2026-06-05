@@ -589,6 +589,133 @@ describe('streamViaDaemon', () => {
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
+  it('renders structured OpenCode session errors without JSON-RPC wrapper text', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: error',
+              `data: ${JSON.stringify({
+                message: 'json-rpc id 4: OpenCode session failed: Not Found',
+                error: {
+                  code: 'AGENT_EXECUTION_FAILED',
+                  message: 'json-rpc id 4: OpenCode session failed: Not Found',
+                  details: {
+                    kind: 'opencode_session_error',
+                    source: 'opencode',
+                    message: 'Not Found',
+                    statusCode: 404,
+                    retryable: false,
+                    url: 'https://example.invalid/v1/chat/completions',
+                    suggestion: 'Check the configured AMR Link URL or model route.',
+                  },
+                },
+              })}`,
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('404 Not Found'),
+        code: 'AGENT_EXECUTION_FAILED',
+      }),
+    );
+    const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
+    expect(message).toContain('AMR Link URL or model route');
+    expect(message).not.toContain('json-rpc id 4');
+    expect(message).not.toContain('https://example.invalid');
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('renders structured retry-exhausted provider errors from responseBodyPreview', async () => {
+    const handlers = createDaemonHandlers();
+    const responseBodyPreview = JSON.stringify({
+      error: {
+        message:
+          '[code=upstream_error] Provider returned error Retried the upstream request 5 times for retryable provider/network failures, but it still failed. Please try again later or switch to another model.',
+        type: 'upstream_error',
+        code: 'upstream_error',
+      },
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: error',
+              `data: ${JSON.stringify({
+                message: 'json-rpc id 4: OpenCode session failed: upstream provider error',
+                error: {
+                  code: 'AGENT_EXECUTION_FAILED',
+                  message: 'json-rpc id 4: OpenCode session failed: upstream provider error',
+                  details: {
+                    kind: 'opencode_session_error',
+                    source: 'opencode',
+                    sessionId: 'ses_xxx',
+                    errorName: 'APIError',
+                    message: 'Provider returned error',
+                    statusCode: 503,
+                    retryable: true,
+                    url: 'https://amr-link.open-design.ai/v1/chat/completions',
+                    suggestion: 'Retry later or switch to another model.',
+                    responseBodyPreview,
+                  },
+                },
+              })}`,
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'AGENT_EXECUTION_FAILED',
+        details: expect.objectContaining({
+          kind: 'opencode_session_error',
+          statusCode: 503,
+          retryable: true,
+        }),
+      }),
+    );
+    const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
+    expect(message).toContain('retried 5 times');
+    expect(message).toContain('still failed');
+    expect(message).toContain('retry later or switch to another model');
+    expect(message).not.toContain('opencode event stream');
+    expect(message).not.toContain('opencode session error');
+    expect(message).not.toContain('json-rpc id 4');
+    expect(message).not.toContain('https://amr-link.open-design.ai');
+  });
+
   it('treats an explicit succeeded status with a SIGTERM exit as a successful run', async () => {
     // ACP agents that don't shut down on stdin.end() (e.g. Devin for Terminal)
     // are SIGTERM'd by the daemon after a clean prompt completion. The end
@@ -762,6 +889,175 @@ describe('streamViaDaemon', () => {
     expect(onRunStatus).toHaveBeenCalledWith('failed');
     expect(handlers.onError).not.toHaveBeenCalled();
     expect(handlers.onDone).toHaveBeenCalledWith('');
+  });
+
+  it('cleans AMR/OpenCode bootstrap stderr from fallback errors', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: stderr',
+              'data: {"chunk":"AMR run id: arun_7edd8e97efd5a5ffe5737280224ca8bd\\n"}',
+              '',
+              'event: stderr',
+              'data: {"chunk":"Performing one time database migration, may take a few minutes...\\n"}',
+              '',
+              'event: stderr',
+              'data: {"chunk":"sqlite-migration:done\\nDatabase migration complete.\\n"}',
+              '',
+              'event: stderr',
+              'data: {"chunk":"Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\\n"}',
+              '',
+              'event: stderr',
+              'data: {"chunk":"opencode server listening on http://127.0.0.1:51954\\n"}',
+              '',
+              'event: end',
+              'data: {"code":1,"status":"failed"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(expect.any(Error));
+    const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
+    expect(message).toContain('AMR/OpenCode started, but the run did not complete');
+    expect(message).not.toContain('sqlite-migration');
+    expect(message).not.toContain('OPENCODE_SERVER_PASSWORD');
+    expect(message).not.toContain('opencode server listening');
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('keeps real AMR/OpenCode stderr errors after removing bootstrap lines', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: stderr',
+              'data: {"chunk":"sqlite-migration:done\\nopencode server listening on http://127.0.0.1:51954\\n"}',
+              '',
+              'event: stderr',
+              'data: {"chunk":"json-rpc id 4: opencode event stream: provider disconnected\\n"}',
+              '',
+              'event: end',
+              'data: {"code":1,"status":"failed"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
+    expect(message).toContain('provider disconnected');
+    expect(message).not.toContain('sqlite-migration');
+    expect(message).not.toContain('opencode server listening');
+  });
+
+  it('formats legacy raw OpenCode session errors in fallback stderr', async () => {
+    const handlers = createDaemonHandlers();
+    const legacyError = {
+      sessionID: 'ses_1',
+      error: {
+        name: 'APIError',
+        data: {
+          message: 'Provider returned error',
+          statusCode: 503,
+          isRetryable: true,
+          metadata: { url: 'https://example.invalid/v1/chat/completions' },
+        },
+      },
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: stderr',
+              `data: ${JSON.stringify({ chunk: `json-rpc id 4: opencode event stream: opencode session error: ${JSON.stringify(legacyError)}\n` })}`,
+              '',
+              'event: end',
+              'data: {"code":1,"status":"failed"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
+    expect(message).toContain('upstream model provider returned a temporary error');
+    expect(message).toContain('retry');
+    expect(message).not.toContain('json-rpc id 4');
+  });
+
+  it('falls back gracefully for malformed legacy OpenCode session error JSON', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: stderr',
+              'data: {"chunk":"opencode event stream: opencode session error: {bad json\\n"}',
+              '',
+              'event: end',
+              'data: {"code":1,"status":"failed"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
+    expect(message).toContain('opencode session error');
+    expect(message).toContain('{bad json');
   });
 
   it('still surfaces an error when the end event has a signal but no status field', async () => {
