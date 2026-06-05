@@ -1470,6 +1470,8 @@ export const uk: Dict = {
   'assistant.copyMarkdown': 'Скопіювати Markdown відповіді',
   'assistant.forkConversation': 'Створити форк звідси',
   'assistant.forkingConversation': 'Створення форка…',
+  'assistant.shareToOpenDesign': 'Поділитися з Open Design',
+  'assistant.shareToOpenDesignBusy': 'Ділимося…',
   'assistant.feedbackPrompt': 'Відгук',
   'assistant.feedbackPositive': 'Корисно',
   'assistant.feedbackNegative': 'Не корисно',

@@ -1317,6 +1317,8 @@ export const esES: Dict = {
   'assistant.copyMarkdown': 'Copiar Markdown de la respuesta',
   'assistant.forkConversation': 'Bifurcar desde aquí',
   'assistant.forkingConversation': 'Bifurcando…',
+  'assistant.shareToOpenDesign': 'Compartir con Open Design',
+  'assistant.shareToOpenDesignBusy': 'Compartiendo…',
   'assistant.feedbackPrompt': 'Comentarios',
   'assistant.feedbackPositive': 'Útil',
   'assistant.feedbackNegative': 'No útil',

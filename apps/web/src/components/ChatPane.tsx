@@ -466,6 +466,11 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
+  // "Share to Open Design" button on each completed assistant message —
+  // wired by ProjectView to handleSend with the bundled
+  // `od-share-to-community` scenario's trigger prompt.
+  onShareToOpenDesign?: () => void;
+  shareToOpenDesignBusy?: boolean;
   forceStreamingMessageIds?: Set<string>;
   // Live-only streaming tool-input partials keyed by tool-use id. Threaded to
   // AssistantMessage so an in-flight Write/Edit can render its code in real
@@ -645,6 +650,8 @@ export function ChatPane({
   onRequestPluginFolderAgentAction,
   activePluginActionPaths,
   hiddenPluginActionPaths,
+  onShareToOpenDesign,
+  shareToOpenDesignBusy,
   forceStreamingMessageIds,
   liveToolInput,
   initialDraft,
@@ -1862,6 +1869,8 @@ export function ChatPane({
                 onRequestPluginFolderAgentAction={onRequestPluginFolderAgentAction}
                 activePluginActionPaths={activePluginActionPaths}
                 hiddenPluginActionPaths={hiddenPluginActionPaths}
+                onShareToOpenDesign={onShareToOpenDesign}
+                shareToOpenDesignBusy={shareToOpenDesignBusy}
                 forceStreamingMessageIds={forceStreamingMessageIds}
                 lastAssistantId={lastAssistantId}
                 firstUserMessageId={firstUserMessageId}
@@ -2120,6 +2129,8 @@ function ChatRows({
   onRequestPluginFolderAgentAction,
   activePluginActionPaths,
   hiddenPluginActionPaths,
+  onShareToOpenDesign,
+  shareToOpenDesignBusy,
   forceStreamingMessageIds,
   lastAssistantId,
   firstUserMessageId,
@@ -2155,6 +2166,8 @@ function ChatRows({
   onRequestPluginFolderAgentAction?: (relativePath: string, action: PluginFolderAgentAction) => void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
+  onShareToOpenDesign?: () => void;
+  shareToOpenDesignBusy?: boolean;
   forceStreamingMessageIds?: Set<string>;
   lastAssistantId: string | undefined;
   firstUserMessageId: string | undefined;
@@ -2237,6 +2250,8 @@ function ChatRows({
         onRequestPluginFolderAgentAction={onRequestPluginFolderAgentAction}
         activePluginActionPaths={activePluginActionPaths}
         hiddenPluginActionPaths={hiddenPluginActionPaths}
+        onShareToOpenDesign={onShareToOpenDesign}
+        shareToOpenDesignBusy={shareToOpenDesignBusy}
         isLast={m.id === lastAssistantId}
         errorCardOwnerId={errorCardOwnerId}
         nextUserContent={nextUserContentByAssistantId.get(m.id)}

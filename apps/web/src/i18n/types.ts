@@ -2715,6 +2715,8 @@ export interface Dict {
   'assistant.copyMarkdown': string;
   'assistant.forkConversation': string;
   'assistant.forkingConversation': string;
+  'assistant.shareToOpenDesign': string;
+  'assistant.shareToOpenDesignBusy': string;
   'assistant.feedbackPrompt': string;
   'assistant.feedbackPositive': string;
   'assistant.feedbackNegative': string;

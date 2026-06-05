@@ -176,6 +176,7 @@ import { FileWorkspace } from './FileWorkspace';
 import {
   type PluginFolderAgentAction,
 } from './design-files/pluginFolderActions';
+import { SHARE_TO_COMMUNITY_PROMPT } from './share-to-community/shareToCommunityPrompt';
 import { CenteredLoader } from './Loading';
 import type { SettingsSection } from './SettingsDialog';
 import { Toast } from './Toast';
@@ -4055,6 +4056,19 @@ export function ProjectView({
     ],
   );
 
+  // "Share to Open Design" — kicks off the bundled `od-share-to-community`
+  // scenario in the active conversation. We just inject the trigger prompt
+  // through the standard chat-send path; the agent then loads SKILL.md and
+  // drives the rest. Busy flag debounces the double-click while the send
+  // request is in flight (handleSend is async).
+  const [shareToOpenDesignBusy, setShareToOpenDesignBusy] = useState(false);
+  const handleShareToOpenDesign = useCallback(() => {
+    if (currentConversationActionDisabled || shareToOpenDesignBusy) return;
+    setShareToOpenDesignBusy(true);
+    void Promise.resolve(handleSend(SHARE_TO_COMMUNITY_PROMPT, [], []))
+      .finally(() => setShareToOpenDesignBusy(false));
+  }, [currentConversationActionDisabled, handleSend, shareToOpenDesignBusy]);
+
   const sentDesignSystemReviewTaskKeysRef = useRef<Set<string>>(new Set());
   const persistDesignSystemReviewEntry = useCallback((
     sectionTitle: string,
@@ -5238,6 +5252,8 @@ export function ProjectView({
               onRequestPluginFolderAgentAction={handlePluginFolderAgentAction}
               activePluginActionPaths={activePluginActionPaths}
               hiddenPluginActionPaths={hiddenAssistantPluginActionPaths}
+              onShareToOpenDesign={handleShareToOpenDesign}
+              shareToOpenDesignBusy={shareToOpenDesignBusy}
               forceStreamingMessageIds={forceStreamingPluginMessageIds}
               initialDraft={chatInitialDraft}
               onSubmitForm={(text) => {

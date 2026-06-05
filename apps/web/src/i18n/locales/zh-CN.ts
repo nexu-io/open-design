@@ -2334,6 +2334,8 @@ export const zhCN: Dict = {
   'assistant.copyMarkdown': '复制回复 Markdown',
   'assistant.forkConversation': '从这里分叉',
   'assistant.forkingConversation': '正在分叉…',
+  'assistant.shareToOpenDesign': '分享到 Open Design',
+  'assistant.shareToOpenDesignBusy': '分享中…',
   'assistant.feedbackPrompt': '反馈',
   'assistant.feedbackPositive': '有帮助',
   'assistant.feedbackNegative': '没有帮助',

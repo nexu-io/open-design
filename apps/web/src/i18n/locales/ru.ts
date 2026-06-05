@@ -1469,6 +1469,8 @@ export const ru: Dict = {
   'assistant.copyMarkdown': 'Скопировать Markdown ответа',
   'assistant.forkConversation': 'Создать форк отсюда',
   'assistant.forkingConversation': 'Создание форка…',
+  'assistant.shareToOpenDesign': 'Поделиться в Open Design',
+  'assistant.shareToOpenDesignBusy': 'Делимся…',
   'assistant.feedbackPrompt': 'Отзыв',
   'assistant.feedbackPositive': 'Полезно',
   'assistant.feedbackNegative': 'Не полезно',

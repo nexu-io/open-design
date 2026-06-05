@@ -1428,6 +1428,8 @@ export const pl: Dict = {
   'assistant.copyMarkdown': 'Kopiuj Markdown odpowiedzi',
   'assistant.forkConversation': 'Fork od tego miejsca',
   'assistant.forkingConversation': 'Tworzenie forka…',
+  'assistant.shareToOpenDesign': 'Udostępnij Open Design',
+  'assistant.shareToOpenDesignBusy': 'Udostępnianie…',
   'assistant.feedbackPrompt': 'Opinia',
   'assistant.feedbackPositive': 'Pomocne',
   'assistant.feedbackNegative': 'Niepomocne',

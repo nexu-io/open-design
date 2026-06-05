@@ -1415,6 +1415,8 @@ export const tr: Dict = {
   'assistant.copyMarkdown': 'Yanıt Markdown\'unu kopyala',
   'assistant.forkConversation': 'Buradan fork et',
   'assistant.forkingConversation': 'Fork ediliyor…',
+  'assistant.shareToOpenDesign': "Open Design'a paylaş",
+  'assistant.shareToOpenDesignBusy': 'Paylaşılıyor…',
   'assistant.feedbackPrompt': 'Geri bildirim',
   'assistant.feedbackPositive': 'Yararlı',
   'assistant.feedbackNegative': 'Yararlı değil',
