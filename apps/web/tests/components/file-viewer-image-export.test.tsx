@@ -394,7 +394,10 @@ describe('FileViewer image export', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /download/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /export as pptx/i }));
-    window.setTimeout(() => emitSlideState(0), 0);
+    // The export now awaits the prepared iframe's slide-state before reading the
+    // count, so keep re-emitting it until that wait registers (a real deck
+    // bridge re-broadcasts od:slide-state on every render/navigation).
+    const seedSlideState = window.setInterval(() => emitSlideState(0), 15);
 
     await waitFor(() => {
       expect(requestPreviewSnapshotMock).toHaveBeenCalledTimes(3);
@@ -403,8 +406,66 @@ describe('FileViewer image export', () => {
         snapshots,
       );
     });
+    window.clearInterval(seedSlideState);
     expect(postMessageSpy).toHaveBeenCalledWith({ type: 'od:slide', action: 'go', index: 0 }, '*');
     expect(postMessageSpy).toHaveBeenCalledWith({ type: 'od:slide', action: 'go', index: 1 }, '*');
+    expect(postMessageSpy).toHaveBeenCalledWith({ type: 'od:slide', action: 'go', index: 2 }, '*');
+  });
+
+  it('prefers the prepared iframe slide count over a stale cached one-slide deck', async () => {
+    const snapshots = [
+      { dataUrl: 'data:image/png;base64,regen-1', w: 1600, h: 900 },
+      { dataUrl: 'data:image/png;base64,regen-2', w: 1600, h: 900 },
+      { dataUrl: 'data:image/png;base64,regen-3', w: 1600, h: 900 },
+    ];
+    requestPreviewSnapshotMock
+      .mockResolvedValueOnce(snapshots[0])
+      .mockResolvedValueOnce(snapshots[1])
+      .mockResolvedValueOnce(snapshots[2]);
+
+    const file = {
+      ...deckFile(),
+      name: 'deck-regenerated-multi-slide.html',
+      path: 'deck-regenerated-multi-slide.html',
+    };
+    const { srcDocFrame } = renderHtmlPreview(file, {
+      isDeck: true,
+      projectId: 'project-stale-cache-deck',
+    });
+
+    // Stale host state: the deck used to be a single slide, so the cached
+    // slide-state (keyed only by project/file path) still reports count: 1.
+    window.dispatchEvent(new MessageEvent('message', {
+      source: srcDocFrame.contentWindow,
+      data: { type: 'od:slide-state', active: 0, count: 1 },
+    }));
+
+    // The same file was regenerated as a three-slide deck; the prepared iframe
+    // now reports the real count even though the host cache is stale.
+    (srcDocFrame.contentWindow as Window & { __odDeckSlideState?: () => { active: number; count: number } })
+      .__odDeckSlideState = () => ({ active: 0, count: 3 });
+    const postMessageSpy = vi
+      .spyOn(srcDocFrame.contentWindow!, 'postMessage')
+      .mockImplementation((message: unknown) => {
+        const data = message as { type?: string; action?: string; index?: number };
+        if (data.type === 'od:slide' && data.action === 'go' && typeof data.index === 'number') {
+          window.setTimeout(() => window.dispatchEvent(new MessageEvent('message', {
+            source: srcDocFrame.contentWindow,
+            data: { type: 'od:slide-state', active: data.index, count: 3 },
+          })), 0);
+        }
+      });
+
+    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /export as pptx/i }));
+
+    await waitFor(() => {
+      expect(requestPreviewSnapshotMock).toHaveBeenCalledTimes(3);
+      expect(exportImagePptxFromSnapshotsMock).toHaveBeenCalledWith(
+        'deck-regenerated-multi-slide',
+        snapshots,
+      );
+    });
     expect(postMessageSpy).toHaveBeenCalledWith({ type: 'od:slide', action: 'go', index: 2 }, '*');
   });
 });

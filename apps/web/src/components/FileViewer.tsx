@@ -7382,9 +7382,18 @@ function HtmlViewer({
     const prepared = await prepareSnapshotExportFrame();
     const target = prepared?.iframe;
     if (!prepared || !target?.contentWindow) throw new Error('PPTX export preview is not available');
+    // Resolve the slide count from the prepared iframe before trusting host
+    // caches. `slideState` and `htmlPreviewSlideState` are keyed only by
+    // project/file path, so a deck regenerated from one slide into many can
+    // still carry a stale count and export an incomplete PPTX. Ask the iframe
+    // synchronously, then wait for its od:slide-state, and fall back to cached
+    // host state only when the iframe cannot report at all.
     const cached = htmlPreviewSlideState.get(previewStateKey);
     const resolvedSlideState =
-      slideState ?? cached ?? readDeckSlideState(target) ?? await waitForDeckSlideState(target, null);
+      readDeckSlideState(target)
+      ?? (await waitForDeckSlideState(target, null))
+      ?? slideState
+      ?? cached;
     const rawCount = resolvedSlideState?.count ?? 1;
     const count = Math.max(1, Math.floor(Number.isFinite(rawCount) ? rawCount : 1));
     const originalIndex = Math.max(0, Math.min(count - 1, resolvedSlideState?.active ?? 0));
