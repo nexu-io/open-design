@@ -88,12 +88,14 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
   await expect(reopenedSettings.getByRole('button', { name: /^Authorize$|^Sign in$/i })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(reopenedSettings).toHaveCount(0);
-  await putAppConfig(page, {
+  const reloginConfig = {
     ...config,
     agentCliEnv: {
       amr: { VELA_BIN: reloginVelaBin },
     },
-  });
+  };
+  await seedBrowserConfig(page, reloginConfig);
+  await putAppConfig(page, reloginConfig);
   await sendPrompt(page, 'AMR logout should require relogin');
 
   await expect(page.locator('.msg.error')).toContainText(/authorize|sign in again|login missing|expired|ACP session exited before completion/i, {

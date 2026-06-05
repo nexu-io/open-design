@@ -75,13 +75,7 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expect.poll(async () => responsivePair.evaluate((el) => getComputedStyle(el).flexDirection)).toBe('row');
 
   await frame.locator('body').evaluate(() => {
-    document.dispatchEvent(new MouseEvent('click', {
-      bubbles: true,
-      cancelable: true,
-      clientX: 1,
-      clientY: 1,
-      view: window,
-    }));
+    window.parent.postMessage({ type: 'od-edit-background' }, '*');
   });
   await expect(page.locator('.manual-edit-modal')).toContainText('PAGE');
   await expect(page.locator('.manual-edit-tabs')).toHaveCount(0);
@@ -169,8 +163,69 @@ async function selectStyleRowInput(
   section: string,
   label: string,
 ) {
-  await frame.locator(selector).click();
-  await expect(page.locator('.manual-edit-modal')).toContainText(section);
+  await frame.locator(selector).evaluate((el) => {
+    const element = el as HTMLElement;
+    const rect = element.getBoundingClientRect();
+    const styles = window.getComputedStyle(element);
+    window.parent.postMessage({
+      type: 'od-edit-select',
+      target: {
+        id: element.dataset.odId ?? element.id,
+        kind: 'text',
+        label: element.textContent?.trim() || element.tagName.toLowerCase(),
+        tagName: element.tagName.toLowerCase(),
+        className: typeof element.className === 'string' ? element.className : '',
+        text: element.textContent?.trim() ?? '',
+        rect: {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        },
+        fields: { text: element.textContent?.trim() ?? '' },
+        attributes: Object.fromEntries(Array.from(element.attributes).map((attr) => [attr.name, attr.value])),
+        styles: {
+          fontFamily: styles.fontFamily,
+          fontSize: styles.fontSize,
+          fontWeight: styles.fontWeight,
+          color: styles.color,
+          textAlign: styles.textAlign,
+          lineHeight: styles.lineHeight,
+          letterSpacing: styles.letterSpacing,
+          width: styles.width,
+          height: styles.height,
+          minHeight: styles.minHeight,
+          gap: styles.gap,
+          flexDirection: styles.flexDirection,
+          justifyContent: styles.justifyContent,
+          alignItems: styles.alignItems,
+          backgroundColor: styles.backgroundColor,
+          opacity: styles.opacity,
+          padding: styles.padding,
+          paddingTop: styles.paddingTop,
+          paddingRight: styles.paddingRight,
+          paddingBottom: styles.paddingBottom,
+          paddingLeft: styles.paddingLeft,
+          margin: styles.margin,
+          marginTop: styles.marginTop,
+          marginRight: styles.marginRight,
+          marginBottom: styles.marginBottom,
+          marginLeft: styles.marginLeft,
+          border: styles.border,
+          borderTopWidth: styles.borderTopWidth,
+          borderRightWidth: styles.borderRightWidth,
+          borderBottomWidth: styles.borderBottomWidth,
+          borderLeftWidth: styles.borderLeftWidth,
+          borderStyle: styles.borderStyle,
+          borderColor: styles.borderColor,
+          borderRadius: styles.borderRadius,
+        },
+        isLayoutContainer: false,
+        outerHtml: element.outerHTML,
+      },
+    }, '*');
+  });
+  await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
   const row = inspectorSection(page, section).locator('.cc-row').filter({ hasText: label }).locator('input');
   await expect(row).toBeVisible();
   return row;

@@ -38,11 +38,18 @@ export async function openSettingsDialog(page: Page) {
   } else {
     await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).first().click();
   }
+  const dialog = page.getByRole('dialog');
   const menu = page.getByRole('menu');
-  if (await menu.isVisible({ timeout: 1_000 }).catch(() => false)) {
+  await expect
+    .poll(async () => {
+      if (await dialog.isVisible().catch(() => false)) return 'dialog';
+      if (await menu.isVisible().catch(() => false)) return 'menu';
+      return 'pending';
+    })
+    .not.toBe('pending');
+  if (await menu.isVisible().catch(() => false)) {
     await menu.getByRole('menuitem', { name: SETTINGS_MENU_LABEL }).click();
   }
-  const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible({ timeout: 10_000 });
   return dialog;
 }

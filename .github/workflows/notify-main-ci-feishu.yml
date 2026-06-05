@@ -37,7 +37,7 @@ jobs:
           github.event_name == 'workflow_run' &&
           github.event.workflow_run.event == 'push' &&
           github.event.workflow_run.head_branch == 'main' &&
-          contains(fromJSON('["failure","timed_out","cancelled"]'), github.event.workflow_run.conclusion)
+          contains(fromJSON('["failure","timed_out"]'), github.event.workflow_run.conclusion)
         )
       }}
     steps:
@@ -76,6 +76,10 @@ jobs:
                   },
                 }
               : context.payload.workflow_run;
+            if (!isTest && run.conclusion === 'cancelled') {
+              core.info('Skipping cancelled workflow run.');
+              return;
+            }
             const startedAt = new Date(run.run_started_at || run.created_at).getTime();
             const updatedAt = new Date(run.updated_at).getTime();
             const durationMinutes = Number.isFinite(startedAt) && Number.isFinite(updatedAt)
@@ -89,17 +93,10 @@ jobs:
                   repo,
                   run_id: run.id,
                   per_page: 100,
-                })).data.jobs.filter((job) => ['failure', 'timed_out', 'cancelled'].includes(job.conclusion));
-            const failedOrTimedOutJobs = problemJobs
-              .filter((job) => ['failure', 'timed_out'].includes(job.conclusion));
+                })).data.jobs.filter((job) => ['failure', 'timed_out'].includes(job.conclusion));
 
-            if (
-              run.conclusion === 'cancelled' &&
-              durationMinutes !== null &&
-              durationMinutes < 35 &&
-              failedOrTimedOutJobs.length === 0
-            ) {
-              core.info(`Skipping short cancelled run (${durationMinutes}m), likely superseded by a newer main push.`);
+            if (!isTest && problemJobs.length === 0) {
+              core.info('Skipping run with no failed or timed-out jobs.');
               return;
             }
 
@@ -280,6 +277,111 @@ jobs:
               };
             }
 
+            function normalizeFingerprintPart(value) {
+              return String(value || '')
+                .replace(/\x1b\[[0-9;]*m/g, '')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+            }
+
+            function failureFingerprint({ runName, conclusion, problemJobs, triage }) {
+              const jobs = problemJobs
+                .map((job) => `${normalizeFingerprintPart(job.name)}:${job.conclusion}`)
+                .sort();
+              const signals = (triage.failedTests.length ? triage.failedTests : triage.reasons)
+                .map(normalizeFingerprintPart)
+                .sort();
+              return JSON.stringify({
+                workflow: normalizeFingerprintPart(runName),
+                conclusion: conclusion === 'timed_out' ? 'timed_out' : 'failure',
+                category: normalizeFingerprintPart(triage.category),
+                jobs,
+                signals,
+              });
+            }
+
+            async function shouldSkipDuplicateAlert({ currentRun, currentFingerprint }) {
+              if (isTest || !currentRun.workflow_id) return false;
+
+              const windowMs = 24 * 60 * 60 * 1000;
+              const currentCreatedAt = new Date(currentRun.created_at || currentRun.run_started_at || currentRun.updated_at).getTime();
+              const cutoff = Number.isFinite(currentCreatedAt)
+                ? currentCreatedAt - windowMs
+                : Date.now() - windowMs;
+
+              let recentRuns = [];
+              try {
+                recentRuns = (await github.rest.actions.listWorkflowRuns({
+                  owner,
+                  repo,
+                  workflow_id: currentRun.workflow_id,
+                  branch: 'main',
+                  event: 'push',
+                  status: 'completed',
+                  per_page: 20,
+                })).data.workflow_runs;
+              } catch (error) {
+                core.warning(`Failed to list recent workflow runs for duplicate check: ${error.message}`);
+                return false;
+              }
+
+              for (const candidate of recentRuns) {
+                if (candidate.id === currentRun.id) continue;
+                if (!['failure', 'timed_out'].includes(candidate.conclusion)) continue;
+                const candidateCreatedAt = new Date(candidate.created_at || candidate.run_started_at || candidate.updated_at).getTime();
+                if (Number.isFinite(candidateCreatedAt) && candidateCreatedAt < cutoff) continue;
+                if (Number.isFinite(currentCreatedAt) && Number.isFinite(candidateCreatedAt) && candidateCreatedAt > currentCreatedAt) continue;
+
+                let candidateJobs = [];
+                try {
+                  candidateJobs = (await github.rest.actions.listJobsForWorkflowRun({
+                    owner,
+                    repo,
+                    run_id: candidate.id,
+                    per_page: 100,
+                  })).data.jobs.filter((job) => ['failure', 'timed_out'].includes(job.conclusion));
+                } catch (error) {
+                  core.warning(`Failed to list jobs for duplicate check run ${candidate.id}: ${error.message}`);
+                  continue;
+                }
+                if (candidateJobs.length === 0) continue;
+
+                const candidateLogTexts = [];
+                for (const job of candidateJobs.slice(0, 6)) {
+                  try {
+                    const logResponse = await github.rest.actions.downloadJobLogsForWorkflowRun({
+                      owner,
+                      repo,
+                      job_id: job.id,
+                    });
+                    candidateLogTexts.push(textFromLogData(logResponse.data).slice(-80_000));
+                  } catch (error) {
+                    core.warning(`Failed to download logs for duplicate check job ${job.name}: ${error.message}`);
+                  }
+                }
+
+                const candidateTriage = classifyFailure({
+                  runName: candidate.name,
+                  conclusion: candidate.conclusion,
+                  problemJobs: candidateJobs,
+                  logs: candidateLogTexts,
+                });
+                const candidateFingerprint = failureFingerprint({
+                  runName: candidate.name,
+                  conclusion: candidate.conclusion,
+                  problemJobs: candidateJobs,
+                  triage: candidateTriage,
+                });
+                if (candidateFingerprint === currentFingerprint) {
+                  core.info(`Skipping duplicate CI alert; same failure fingerprint already appeared in run ${candidate.id}: ${candidate.html_url}`);
+                  return true;
+                }
+              }
+
+              return false;
+            }
+
             const logTexts = [];
             if (isTest) {
               logTexts.push([
@@ -308,6 +410,15 @@ jobs:
               problemJobs,
               logs: logTexts,
             });
+            const currentFingerprint = failureFingerprint({
+              runName: run.name,
+              conclusion: run.conclusion,
+              problemJobs,
+              triage,
+            });
+            if (await shouldSkipDuplicateAlert({ currentRun: run, currentFingerprint })) {
+              return;
+            }
             const topFailuresText = triage.failedTests.length
               ? triage.failedTests.map((failure) => `- ${failure}`).join('\n')
               : '- 未从日志解析到具体失败用例';

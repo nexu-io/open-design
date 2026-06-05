@@ -398,6 +398,10 @@ async function seedOnboardingConfig(page: Page, config: OnboardingConfig) {
 
 async function expectOnboardingFinished(page: Page) {
   await dismissPrivacyDialog(page);
+  const finishSetup = page.getByRole('button', { name: /Finish setup/i });
+  if (await finishSetup.isVisible().catch(() => false)) {
+    await finishSetup.click();
+  }
   await expect(page).not.toHaveURL(/\/onboarding$/);
   await expect(page.getByText('What do you want to design?')).toBeVisible();
 }

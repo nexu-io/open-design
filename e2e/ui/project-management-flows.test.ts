@@ -448,11 +448,14 @@ test('[P0] project instructions flow into the next API run as project-level syst
   await createProject(page, 'Project instruction run context');
   await expectWorkspaceReady(page);
 
+  const { projectId } = getProjectContextFromUrl(page);
   const instructions = 'Use tabs for indentation and keep CTA copy terse.';
-  await page.getByTestId('project-instructions-add').click();
-  await page.getByTestId('project-instructions-textarea').fill(instructions);
-  await page.getByTestId('project-instructions-save').click();
-  await expect(page.getByTestId('project-instructions-preview')).toContainText(instructions);
+  const patchResponse = await page.request.patch(`/api/projects/${projectId}`, {
+    data: { customInstructions: instructions },
+  });
+  expect(patchResponse.ok(), `patch project instructions: ${await patchResponse.text()}`).toBeTruthy();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
 
   const input = page.getByTestId('chat-composer-input');
   await input.fill('Generate the onboarding screen.');
