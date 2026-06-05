@@ -846,17 +846,36 @@ export function HomeView({
   // pipeline + SKILL.md/asset context are applied — rather than only
   // attaching it as background context. Without this, the submit path
   // falls back to the hidden od-default scenario and the plugin's design
-  // brief never reaches the agent. `use-with-query` additionally seeds the
-  // textarea with the rendered useCase.query; plain `use` leaves the draft
-  // untouched (suppressPromptUpdate) while still routing the plugin.
+  // brief never reaches the agent.
+  //
+  // Prompt handling preserves the legacy context-use semantics:
+  //   - `use-with-query` APPENDS the rendered plugin query to whatever the
+  //     user has already typed (never replaces it), then routes the plugin
+  //     with that combined prompt as the explicit seed.
+  //   - plain `use` leaves the current draft untouched (suppressPromptUpdate)
+  //     while still routing the plugin as the active driver.
   async function routePluginUse(
     record: InstalledPluginRecord,
     action: PluginUseAction = 'use',
     inputs?: Record<string, unknown>,
   ) {
+    if (action === 'use-with-query') {
+      const renderedQuery = previewPluginReplacement(record, undefined, inputs ? { inputs } : undefined);
+      const trimmedQuery = renderedQuery?.trim() ?? '';
+      const currentDraft = prompt.trim();
+      // Append, don't replace: keep the user's draft and add the plugin
+      // query below it (matching the old requestPluginContextUse behavior).
+      const combined = !trimmedQuery
+        ? prompt
+        : !currentDraft
+          ? trimmedQuery
+          : `${prompt.trimEnd()}\n\n${trimmedQuery}`;
+      await usePlugin(record, combined, { ...(inputs ? { inputs } : {}) });
+      return;
+    }
     await usePlugin(record, undefined, {
       ...(inputs ? { inputs } : {}),
-      suppressPromptUpdate: action !== 'use-with-query',
+      suppressPromptUpdate: true,
     });
     scrollHomeToTop();
   }

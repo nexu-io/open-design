@@ -477,6 +477,9 @@ test('[P1] home starters can browse registry and use a starter query from Home',
       },
     });
   });
+  await page.route('**/api/plugins/localized-plugin/apply', async (route) => {
+    await route.fulfill({ json: makeApplyResult('localized-plugin') });
+  });
 
   await gotoEntryHome(page);
   await expect(page.getByTestId('plugins-home-browse-registry')).toBeVisible();
@@ -793,6 +796,9 @@ test('[P1] home starters Use plugin from the details modal applies the plugin to
       body: '<!doctype html><html><body><h1>Detail Use Preview</h1></body></html>',
     });
   });
+  await page.route('**/api/plugins/detail-use-plugin/apply', async (route) => {
+    await route.fulfill({ json: makeApplyResult('detail-use-plugin') });
+  });
 
   await gotoEntryHome(page);
   await page.locator('article.plugins-home__card[data-plugin-id="detail-use-plugin"]').hover();
@@ -802,18 +808,23 @@ test('[P1] home starters Use plugin from the details modal applies the plugin to
   await expect(dialog).toBeVisible();
   await page.getByTestId('plugin-details-use-detail-use-plugin').click();
   await expect(dialog).toHaveCount(0);
-  // Plugin context no longer renders a visible badge row; the plain "Use"
-  // action attaches the plugin as context without injecting prompt text.
+  // Plain "Use" now routes the plugin as the active driver (its own pipeline
+  // applies on submit) and surfaces the active-plugin chip, but does not
+  // inject prompt text, so the editor stays empty.
+  await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
   await expect(page.getByTestId('home-hero-input')).toHaveText('');
 });
 
-test('[P0] home starters direct Use keeps prompt empty and still allows a freeform submit', async ({ page }) => {
+test('[P0] home starters direct Use routes the plugin as the active driver and keeps the prompt freeform', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
         plugins: [STARTER_PLUGIN],
       },
     });
+  });
+  await page.route('**/api/plugins/localized-plugin/apply', async (route) => {
+    await route.fulfill({ json: makeApplyResult('localized-plugin') });
   });
 
   await gotoEntryHome(page);
@@ -823,9 +834,12 @@ test('[P0] home starters direct Use keeps prompt empty and still allows a freefo
 
   await page.locator('article.plugins-home__card[data-plugin-id="localized-plugin"]').hover();
   await page.getByTestId('plugins-home-use-localized-plugin').click({ force: true });
+  // Plain "Use" routes the starter as the active driver (active-plugin chip)
+  // without seeding the prompt; the user can still type their own brief.
+  await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
   await expect(input).toHaveText('');
 
-  await input.fill('Use the selected starter as context');
+  await input.fill('Use the selected starter as the driver');
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
   const runRequestPromise = page.waitForRequest(isCreateRunRequest);
   await page.getByTestId('home-hero-submit').click();
@@ -835,22 +849,26 @@ test('[P0] home starters direct Use keeps prompt empty and still allows a freefo
     pluginId?: string;
     pendingPrompt?: string;
   };
-  expect(projectBody.pendingPrompt).toBe('Use the selected starter as context');
-  expect(projectBody.pluginId).toBe('od-default');
+  expect(projectBody.pendingPrompt).toBe('Use the selected starter as the driver');
+  // The picked plugin now drives the run instead of the hidden od-default router.
+  expect(projectBody.pluginId).toBe('localized-plugin');
 
   const runRequest = await runRequestPromise;
   const runBody = runRequest.postDataJSON() as { message?: string };
-  expect(runBody.message).toContain('Use the selected starter as context');
+  expect(runBody.message).toContain('Use the selected starter as the driver');
   await expect(page).toHaveURL(/\/projects\//);
 });
 
-test('[P1] home starters Use with query hydrates the prompt and keeps plugin context visible', async ({ page }) => {
+test('[P1] home starters Use with query hydrates the prompt and routes the plugin as the active driver', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
         plugins: [STARTER_PLUGIN],
       },
     });
+  });
+  await page.route('**/api/plugins/localized-plugin/apply', async (route) => {
+    await route.fulfill({ json: makeApplyResult('localized-plugin') });
   });
 
   await gotoEntryHome(page);
@@ -864,6 +882,9 @@ test('[P1] home starters Use with query hydrates the prompt and keeps plugin con
   await page.getByTestId('plugins-home-use-menu-localized-plugin').click();
   await page.getByTestId('plugins-home-use-with-query-localized-plugin').click();
   await expect(input).toHaveText('Make a design systems brief.');
+  // The query hydrates the empty draft and the plugin is routed as the active
+  // driver (active-plugin chip), so its pipeline/context bind on submit.
+  await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
 });
 
 test('[P0] home starters Use with query carries the hydrated starter prompt into the created project and first user turn', async ({ page }) => {
@@ -873,6 +894,9 @@ test('[P0] home starters Use with query carries the hydrated starter prompt into
         plugins: [STARTER_PLUGIN],
       },
     });
+  });
+  await page.route('**/api/plugins/localized-plugin/apply', async (route) => {
+    await route.fulfill({ json: makeApplyResult('localized-plugin') });
   });
 
   await gotoEntryHome(page);
@@ -897,7 +921,8 @@ test('[P0] home starters Use with query carries the hydrated starter prompt into
     pluginId?: string;
   };
   expect(projectBody.pendingPrompt).toBe('Make a design systems brief.');
-  expect(projectBody.pluginId).toBe('od-default');
+  // The picked starter drives the run instead of the hidden od-default router.
+  expect(projectBody.pluginId).toBe('localized-plugin');
   expect(typeof projectBody.metadata?.kind).toBe('string');
 
   const runRequest = await runRequestPromise;
@@ -1225,6 +1250,41 @@ function isCreateRunRequest(request: Request): boolean {
 function isCreateProjectRequest(request: Request): boolean {
   const url = new URL(request.url());
   return url.pathname === '/api/projects' && request.method() === 'POST';
+}
+
+// Minimal `/api/plugins/:id/apply` response for routing a picked plugin as
+// the active driver. The Home composer only needs a resolvable snapshot id
+// plus the echoed query/inputs to bind the plugin on submit.
+function makeApplyResult(pluginId: string, query = 'Make a design systems brief.') {
+  return {
+    ok: true,
+    query,
+    contextItems: [],
+    inputs: [{ name: 'topic', type: 'string', default: 'design systems' }],
+    assets: [],
+    mcpServers: [],
+    trust: 'trusted',
+    capabilitiesGranted: ['prompt:inject'],
+    capabilitiesRequired: ['prompt:inject'],
+    appliedPlugin: {
+      snapshotId: `snap-${pluginId}`,
+      pluginId,
+      pluginVersion: '1.0.0',
+      manifestSourceDigest: 'a'.repeat(64),
+      inputs: {},
+      resolvedContext: { items: [] },
+      capabilitiesGranted: ['prompt:inject'],
+      capabilitiesRequired: ['prompt:inject'],
+      assetsStaged: [],
+      taskKind: 'new-generation',
+      appliedAt: 0,
+      connectorsRequired: [],
+      connectorsResolved: [],
+      mcpServers: [],
+      status: 'fresh',
+    },
+    projectMetadata: {},
+  };
 }
 
 function makeStarterPlugin({

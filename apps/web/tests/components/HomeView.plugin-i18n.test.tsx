@@ -75,10 +75,16 @@ describe('HomeView plugin i18n', () => {
     cleanup();
   });
 
-  it('adds the plugin card Use action as context without hydrating the query', async () => {
+  it('routes the plugin card Use action as the active driver without hydrating the query', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [PLUGIN_ROW] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/apply')) {
+        return new Response(JSON.stringify(APPLY_RESULT), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -104,20 +110,20 @@ describe('HomeView plugin i18n', () => {
 
     fireEvent.click(await waitFor(() => screen.getByTestId('plugins-home-use-localized-plugin')));
 
-    // The per-plugin context badge row was removed; staged context with an empty
-    // prompt now surfaces via the active context row's localized resolved-count
-    // label (zh-CN: "已解析 1 个上下文项"). Assert that count rather than the
-    // dropped badge.
+    // Plain "Use" now routes the plugin as the active driver (so its own
+    // pipeline + context apply on submit) and applies it, surfacing the
+    // active-plugin chip.
     await waitFor(() => {
-      expect(screen.getByLabelText(/已解析 1 个上下文项/)).toBeTruthy();
+      expect(screen.getByTestId('home-hero-active-plugin')).toBeTruthy();
     });
-    // "Use" adds the plugin as context only — it must NOT hydrate the query into
-    // the prompt editor, so the Lexical editor stays empty. An empty Lexical
-    // contenteditable serializes to whitespace, so assert via the composer's
-    // clear-empty convention (`homeHeroPromptText().trim()` === '').
+    await waitFor(() => expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes('/apply')),
+    ).toBe(true));
+    // Plain `use` must NOT hydrate the query into the prompt editor, so the
+    // Lexical editor stays empty (serializes to whitespace).
     await screen.findByTestId('home-hero-input');
     expect(homeHeroPromptText().trim()).toBe('');
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
+    // Routing the plugin scrolls the Home surface back to the top.
     await waitFor(() => {
       expect(scrollContainer.scrollTop).toBe(0);
     });
@@ -156,13 +162,17 @@ describe('HomeView plugin i18n', () => {
     fireEvent.click(screen.getByTestId('plugins-home-use-with-query-localized-plugin'));
 
     await screen.findByTestId('home-hero-input');
-    // The localized query hydrates the Lexical editor's serialized text. The
-    // caret-at-end assertion (selectionStart/selectionEnd) is dropped: a
-    // contenteditable has no selectionStart/End, and the caret is placed by the
-    // editor's own selection model, not observable through the textarea API.
+    // The localized query hydrates the Lexical editor's serialized text (the
+    // draft was empty, so the appended query is the whole prompt). The
+    // caret-at-end assertion is dropped: a contenteditable has no
+    // selectionStart/End, and the caret is placed by the editor's own model.
     await waitFor(() => {
       expect(homeHeroPromptText()).toBe('生成一份关于 设计系统 的简报。');
     });
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
+    // use-with-query now also routes the plugin as the active driver, so it
+    // applies (binding its pipeline/context for submit).
+    await waitFor(() => expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes('/apply')),
+    ).toBe(true));
   });
 });

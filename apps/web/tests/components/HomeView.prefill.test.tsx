@@ -495,10 +495,16 @@ describe('HomeView prompt handoff', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('adds a plugin-use handoff from the Plugins page as context', async () => {
+  it('routes a plugin-use handoff from the Plugins page as the active driver', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')) {
+        return new Response(JSON.stringify(WEB_PROTOTYPE_APPLY_RESULT), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -518,16 +524,19 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    // The per-plugin context badge row was removed; staged plugin context now
-    // only renders as an inline @mention pill (or, when the prompt is empty as
-    // here, surfaces via the active context row's resolved-count label). Assert
-    // the plugin was staged through that count rather than the dropped badge.
+    // "Use" now routes the picked plugin as the active driver (so its own
+    // pipeline + context apply on submit), not merely as background context.
+    // The active-plugin badge surfaces and the plugin is applied; a plain
+    // `use` leaves the draft empty (suppressPromptUpdate).
     await waitFor(() => {
-      expect(screen.getByLabelText(/1 context items resolved/i)).toBeTruthy();
+      expect(screen.getByTestId('home-hero-active-plugin')).toBeTruthy();
     });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-web-prototype/apply',
+      expect.anything(),
+    ));
     await screen.findByTestId('home-hero-input');
     expect(homeHeroPromptValue()).toBe('');
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
   });
 
   it('routes free-form submits through the hidden default plugin without applying a visible chip', async () => {
@@ -1131,6 +1140,12 @@ describe('HomeView prompt handoff', () => {
           headers: { 'content-type': 'application/json' },
         });
       }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')) {
+        return new Response(JSON.stringify(WEB_PROTOTYPE_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -1165,17 +1180,21 @@ describe('HomeView prompt handoff', () => {
       '',
       'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
     ].join('\n');
-    // The caret-at-end assertion (selectionStart/selectionEnd) is not
-    // meaningful on a contenteditable; the appended-text behavior is what this
-    // test guards, so we keep the text assertion and drop the caret offsets.
+    // `use-with-query` must APPEND the plugin query to the user's existing
+    // draft, never replace it — this is the regression the reviewer flagged.
     await waitFor(() => {
       expect(homeHeroPromptText()).toBe(expectedPrompt);
     });
     expect(screen.queryByRole('dialog', { name: /replace current prompt/i })).toBeNull();
-    // Plugin context stays staged across the appended-prompt handoff; the
-    // dropped per-plugin badge is replaced by the active context row's count.
-    expect(screen.getByLabelText(/1 context items resolved/i)).toBeTruthy();
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
+    // The plugin is now routed as the active driver (active-plugin badge),
+    // and applied so its pipeline/context bind on submit.
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-plugin')).toBeTruthy();
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-web-prototype/apply',
+      expect.anything(),
+    ));
   });
 
   it('binds od-plugin-authoring before submitting the rail create-plugin prompt', async () => {
