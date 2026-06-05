@@ -5630,7 +5630,7 @@ export async function startServer({
     res.json({
       ok: true,
       version: versionInfo.version,
-      bindHost: host,
+      bindHost: effectiveHost,
       port: resolvedPort,
       dataDir: RUNTIME_DATA_DIR,
       mediaConfigDir: process.env.OD_MEDIA_CONFIG_DIR ?? null,
