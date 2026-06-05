@@ -5467,7 +5467,6 @@ export async function startServer({
     }
     res.json({ ok: true });
   });
-  });
 
   // ── MCP key management (AES-256-GCM encrypted, UI-retrievable) ──
 
