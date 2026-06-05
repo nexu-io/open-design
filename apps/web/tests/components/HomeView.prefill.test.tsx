@@ -1213,6 +1213,78 @@ describe('HomeView prompt handoff', () => {
     ));
   });
 
+  it('extracts edited values from a hydrated use-with-query prompt into the submitted inputs', async () => {
+    // Regression: routing use-with-query passed the rendered prompt as
+    // nextPrompt, which nulled active.queryTemplate, so editing a hydrated
+    // `{{...}}` value no longer flowed back into pluginInputs and the snapshot
+    // refreshed from stale defaults. routePluginUse now passes an aligned
+    // queryTemplate so extraction keeps working on the appended draft + query.
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')) {
+        return new Response(JSON.stringify(WEB_PROTOTYPE_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    const { rerender } = render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
+    // Empty draft + use-with-query hydrates the rendered query into the editor.
+    rerender(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        promptHandoff={createPluginUseHandoff(3, 'example-web-prototype', {
+          action: 'use-with-query',
+        })}
+      />,
+    );
+
+    const hydrated =
+      'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.';
+    await waitFor(() => expect(homeHeroPromptText()).toBe(hydrated));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-web-prototype/apply',
+      expect.anything(),
+    ));
+
+    // The user edits the hydrated audience from "product evaluators" to a new
+    // value. With the query template preserved, that edit must flow back into
+    // the submitted pluginInputs (not stay at the stale default).
+    const edited = hydrated.replace('product evaluators', 'enterprise architects');
+    await setPromptAndSettle(edited);
+    await waitFor(() => {
+      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-web-prototype',
+      pluginInputs: expect.objectContaining({ audience: 'enterprise architects' }),
+    })));
+  });
+
   it('binds od-plugin-authoring before submitting the rail create-plugin prompt', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {

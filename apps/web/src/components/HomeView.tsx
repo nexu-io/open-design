@@ -870,7 +870,23 @@ export function HomeView({
         : !currentDraft
           ? trimmedQuery
           : `${prompt.trimEnd()}\n\n${trimmedQuery}`;
-      await usePlugin(record, combined, { ...(inputs ? { inputs } : {}) });
+      // Pass an explicit query template aligned with the combined prompt so
+      // usePlugin does NOT null out `active.queryTemplate` (which happens by
+      // default whenever nextPrompt is set). Without this, editing a `{{...}}`
+      // value in the hydrated text would no longer be extracted back into
+      // active.inputs and the snapshot would refresh from stale inputs. The
+      // template mirrors the combined shape: the untouched draft prefix plus
+      // the raw (placeholder-bearing) plugin query.
+      const rawQueryTemplate =
+        resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale) || null;
+      const combinedTemplate =
+        rawQueryTemplate && trimmedQuery
+          ? (currentDraft ? `${prompt.trimEnd()}\n\n${rawQueryTemplate}` : rawQueryTemplate)
+          : null;
+      await usePlugin(record, combined, {
+        ...(inputs ? { inputs } : {}),
+        queryTemplate: combinedTemplate,
+      });
       return;
     }
     await usePlugin(record, undefined, {
