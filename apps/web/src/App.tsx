@@ -1684,6 +1684,17 @@ function AppInner() {
     navigate({ kind: 'home', view: 'integrations' });
   }, []);
 
+  // The composer "+" menu's "add plugin" / "add connector" rows route to the
+  // home plugin-registry / connector-integration surfaces.
+  const openPluginRegistry = useCallback(() => {
+    navigate({ kind: 'home', view: 'plugins' });
+  }, []);
+
+  const openConnectorIntegrations = useCallback(() => {
+    setIntegrationInitialTab('connectors');
+    navigate({ kind: 'home', view: 'integrations' });
+  }, []);
+
   const handleCompleteOnboarding = useCallback(() => {
     const current = latestPersistedConfigRef.current;
     if (current.onboardingCompleted) return;
@@ -1878,6 +1889,8 @@ function AppInner() {
         onOpenSettings={openSettings}
         onOpenAmrSettings={openAmrSettings}
         onOpenMcpSettings={openMcpSettings}
+        onBrowsePlugins={openPluginRegistry}
+        onOpenConnectors={openConnectorIntegrations}
         onAdoptPetInline={handleAdoptPet}
         onTogglePet={handleTogglePet}
         onOpenPetSettings={openPetSettings}

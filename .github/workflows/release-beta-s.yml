@@ -4,61 +4,467 @@ name: release-beta-s
 on:
   workflow_dispatch:
     inputs:
-      enable_win:
+      win_enable:
         description: "Run the Windows self-hosted beta lane."
         required: true
         type: boolean
         default: true
-      publish:
-        description: "Publish release assets and metadata. Keep disabled while validating the runner lane."
+      mac_enable:
+        description: "Run the mac arm64 self-hosted beta lane."
         required: true
         type: boolean
-        default: false
+        default: true
+      publish:
+        description: "Publish release assets and metadata to the MinIO-backed beta origin."
+        required: true
+        type: boolean
+        default: true
+      release_version:
+        description: "Optional beta version override. Leave empty to resolve the next MinIO-backed beta version from metadata."
+        required: false
+        type: string
+        default: ""
+      s3_public_origin:
+        description: "Explicit anonymous-read public origin for the self-hosted S3 publish target."
+        required: true
+        type: string
+        default: "https://s3.nexu.space/od-releases"
+      win_update_metadata_url:
+        description: "Optional external updater metadata URL for full Windows smoke."
+        required: false
+        type: string
+        default: ""
+      win_update_target_version:
+        description: "Optional external updater target version expected by full Windows smoke."
+        required: false
+        type: string
+        default: ""
+      win_smoke_mode:
+        description: "Windows smoke coverage. Skip only builds; core gates install/start/cleanup; full adds the real upgrade lifecycle."
+        required: true
+        type: choice
+        options:
+          - skip
+          - core
+          - full
+        default: core
+      win_target:
+        description: "Windows build target."
+        required: true
+        type: choice
+        options:
+          - nsis
+          - all
+          - zip
+          - dir
+        default: nsis
+      win_sign_mode:
+        description: "Windows signing mode. on requires signing capability and fails fast when unavailable."
+        required: true
+        type: choice
+        options:
+          - "off"
+          - "on"
+        default: "off"
+      mac_sign_mode:
+        description: "mac arm64 signing mode. sign-only signs without notarization; notarize signs and submits to Apple."
+        required: true
+        type: choice
+        options:
+          - "no"
+          - "sign-only"
+          - "notarize"
+        default: "sign-only"
+      mac_smoke_mode:
+        description: "mac arm64 smoke coverage. Skip only builds; core gates install/start/cleanup; full adds updater checks."
+        required: true
+        type: choice
+        options:
+          - skip
+          - core
+          - full
+        default: core
 
 permissions:
   contents: read
   actions: read
 
 concurrency:
-  group: release-beta-s-win
+  group: release-beta-s
   cancel-in-progress: false
 
+env:
+  OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
+  POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+  POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
+  POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+  POSTHOG_CLI_PROJECT_ID: ${{ vars.POSTHOG_CLI_PROJECT_ID }}
+
 jobs:
-  windows_probe:
-    name: Probe Windows self-hosted runner
-    if: ${{ inputs.enable_win }}
-    runs-on: [self-hosted, Windows, X64, nexu-win, release-beta]
-    timeout-minutes: 15
+  metadata:
+    name: Prepare beta metadata
+    if: ${{ inputs.win_enable || inputs.mac_enable }}
+    runs-on: [self-hosted, macOS, ARM64, nexu-mac, release-beta]
+    env:
+      OPEN_DESIGN_RELEASE_PROFILE: /Users/runner/.profile
+      OPEN_DESIGN_BETA_METADATA_URL: ${{ inputs.s3_public_origin }}/beta/latest/metadata.json
+      OPEN_DESIGN_STABLE_METADATA_URL: https://releases.open-design.ai/stable/latest/metadata.json
+    outputs:
+      asset_version_suffix: ${{ steps.beta.outputs.asset_version_suffix }}
+      base_version: ${{ steps.beta.outputs.base_version }}
+      beta_version: ${{ steps.beta.outputs.beta_version }}
+      branch: ${{ steps.beta.outputs.branch }}
+      commit: ${{ steps.beta.outputs.commit }}
+      release_name: ${{ steps.beta.outputs.release_name }}
+      state_source: ${{ steps.beta.outputs.state_source }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          lfs: true
+          clean: false
+          fetch-depth: 1
+          lfs: false
+          path: _release-metadata
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            apps/packaged/package.json
+            scripts/release-beta.ts
 
-      - name: Verify preinstalled toolchain
+      - name: Validate self-hosted beta inputs
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.win_enable }}" != "true" ] && [ "${{ inputs.mac_enable }}" != "true" ]; then
+            echo "release-beta-s requires at least one self-hosted platform" >&2
+            exit 1
+          fi
+          if [ -z "${{ inputs.s3_public_origin }}" ]; then
+            echo "release-beta-s requires a non-empty s3_public_origin" >&2
+            exit 1
+          fi
+
+      - name: Prepare beta release metadata
+        id: beta
+        working-directory: _release-metadata
+        run: |
+          set -euo pipefail
+          if ! command -v rehash >/dev/null 2>&1; then
+            rehash() { hash -r; }
+          fi
+          # shellcheck disable=SC1090
+          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          node --experimental-strip-types ./scripts/release-beta.ts
+
+  build_win:
+    name: Build Windows beta candidate
+    needs: metadata
+    if: ${{ inputs.win_enable }}
+    runs-on: [self-hosted, Windows, X64, nexu-win, release-beta]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          clean: false
+          fetch-depth: 1
+          lfs: false
+
+      - name: Probe Windows signing capability
+        id: sign_probe
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          where.exe git
-          where.exe git-lfs
-          where.exe node
-          where.exe pnpm
-          where.exe cargo
-          where.exe makensis
-          git --version
-          git lfs version
-          node --version
-          pnpm --version
-          cargo --version
-          makensis /VERSION
+          .\.github\scripts\release\probe-win-signing.ps1 -SignMode "${{ inputs.win_sign_mode }}"
 
-      - name: Confirm workflow boundary
+      - name: Build beta candidate
+        shell: pwsh
+        env:
+          OD_BETA_WINDOWS_SIGNING_CERTIFICATE_FOUND: ${{ steps.sign_probe.outputs.certificate_found }}
+          OD_BETA_WINDOWS_SIGNING_ENABLED: ${{ steps.sign_probe.outputs.enabled }}
+          OD_BETA_WINDOWS_SIGNING_MODE: ${{ steps.sign_probe.outputs.mode }}
+          OD_BETA_WINDOWS_SIGNING_PROBED: ${{ steps.sign_probe.outputs.probed }}
+          OD_BETA_WINDOWS_SIGNING_REASON: ${{ steps.sign_probe.outputs.reason }}
+          OD_BETA_WINDOWS_SIGNING_REQUESTED: ${{ steps.sign_probe.outputs.requested }}
+          OD_BETA_WINDOWS_SIGNING_SIGNTOOL_FOUND: ${{ steps.sign_probe.outputs.signtool_found }}
+          OD_BETA_WINDOWS_SIGNTOOL_PATH: ${{ steps.sign_probe.outputs.signtool_path }}
+          OD_BETA_WINDOWS_SIGN_CERT_SHA1: ${{ steps.sign_probe.outputs.thumbprint }}
+          OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_update_metadata_url }}
+          OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_update_target_version }}
+        run: |
+          .\.github\scripts\release\build-beta.ps1 -Platform win -Lane self-hosted -Namespace release-beta-win -ReleaseVersion "${{ inputs.release_version || needs.metadata.outputs.beta_version }}" -MetadataUrl "${{ inputs.s3_public_origin }}/beta/latest/metadata.json" -SmokeMode "${{ inputs.win_smoke_mode }}" -Target "${{ inputs.win_target }}" -SignMode "${{ inputs.win_sign_mode }}"
+
+      - name: Publish windows build report
+        if: ${{ always() }}
+        shell: pwsh
+        continue-on-error: true
+        env:
+          BUILD_JSON_PATH: C:\.tmp\runner\od-beta\win\windows-tools-pack-build.json
+          CACHE_ROOT: C:\.tmp\runner\od-beta\win\tools-pack-cache
+          INDEX_PATH: C:\.tmp\runner\od-beta\win\index\index.json
+          RELEASE_CHANNEL: beta
+          RELEASE_VERSION: ${{ inputs.release_version || needs.metadata.outputs.beta_version }}
+          REPORT_ROOT: C:\.tmp\runner\od-beta\win\release-report\win
+          REPORT_SMOKE_MODE: ${{ inputs.win_smoke_mode }}
+          REPORT_TARGET: ${{ inputs.win_target }}
+          REPORT_ZIP_PATH: C:\.tmp\runner\od-beta\win\release-report\win-report.zip
+          SUMMARY_TITLE: Windows self-hosted tools-pack build
+        run: |
+          .\.github\scripts\release\report\win.ps1
+
+      - name: Publish beta candidate platform to Nexu S3
+        id: publish_platform
+        if: ${{ inputs.publish }}
+        shell: pwsh
+        env:
+          S3_ENDPOINT: ${{ secrets.NEXU_S3_ENDPOINT }}
+          S3_REGION: ${{ secrets.NEXU_S3_REGION }}
+          S3_BUCKET: ${{ secrets.NEXU_S3_BUCKET }}
+          S3_ACCESS_KEY_ID: ${{ secrets.NEXU_S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.NEXU_S3_SECRET_ACCESS_KEY }}
+          S3_PUBLIC_ORIGIN: ${{ inputs.s3_public_origin || vars.NEXU_S3_PUBLIC_ORIGIN }}
+          REPORT_ZIP_PATH: C:\.tmp\runner\od-beta\win\release-report\win-report.zip
+        run: |
+          .\.github\scripts\release\publish-platform.ps1 -IndexPath "C:\.tmp\runner\od-beta\win\index\index.json" -ChannelPrefix beta -Platform win -Probe -Publish
+
+      - name: Publish local summary
+        if: ${{ always() }}
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
           "workspace=$env:GITHUB_WORKSPACE"
           "runner_temp=$env:RUNNER_TEMP"
           "runner_tool_cache=$env:RUNNER_TOOL_CACHE"
-          if ($env:GITHUB_WORKSPACE -like "C:\Users\runner\Projects\*") {
-            throw "GITHUB_WORKSPACE must not point at the operator Projects directory"
+          if ($env:GITHUB_WORKSPACE -like 'C:\Users\runner\Projects\*') {
+            throw 'GITHUB_WORKSPACE must not point at the operator Projects directory'
           }
+          if (Test-Path -LiteralPath "C:\.tmp\runner\od-beta\win\summary.md") {
+            "local_summary=C:\.tmp\runner\od-beta\win\summary.md"
+          }
+
+  build_mac:
+    name: Build mac arm64 beta candidate
+    needs: metadata
+    if: ${{ inputs.mac_enable }}
+    runs-on: [self-hosted, macOS, ARM64, nexu-mac, release-beta]
+    timeout-minutes: 45
+    env:
+      MAC_TOOLS_PACK_CACHE_DIR: /Users/runner/.tmp/runner/od-beta/mac/tools-pack-cache
+      MAC_TOOLS_PACK_DIR: /Users/runner/.tmp/runner/od-beta/mac/tools-pack
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          clean: false
+          fetch-depth: 1
+          lfs: false
+          path: _release-build
+
+      - name: Build beta mac artifacts
+        working-directory: _release-build
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_NOTARY_KEYCHAIN_PROFILE: open-design-release-notary
+          APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
+          APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MAC_BUILD_TARGET: dmg
+          MAC_COMPRESSION: normal
+          MAC_SIGN_MODE: ${{ inputs.mac_sign_mode }}
+          OPEN_DESIGN_MAC_SIGNING_HELPER: /usr/local/libexec/open-design/install-signing-identity.zsh
+          OPEN_DESIGN_RELEASE_PROFILE: /Users/runner/.profile
+          RELEASE_VERSION: ${{ inputs.release_version || needs.metadata.outputs.beta_version }}
+          TOOLS_PACK_CACHE_DIR: ${{ env.MAC_TOOLS_PACK_CACHE_DIR }}
+          TOOLS_PACK_DIR: ${{ env.MAC_TOOLS_PACK_DIR }}
+          TOOLS_PACK_NAMESPACE: release-beta
+        run: bash .github/scripts/release/build-mac.sh
+
+      - name: Publish mac build summary
+        if: ${{ always() }}
+        working-directory: _release-build
+        continue-on-error: true
+        env:
+          BUILD_JSON_PATH: ${{ runner.temp }}/mac-tools-pack-build.json
+          RELEASE_CHANNEL: beta
+          RELEASE_VERSION: ${{ inputs.release_version || needs.metadata.outputs.beta_version }}
+          REPORT_ROOT: ${{ runner.temp }}/release-report/mac
+          REPORT_SMOKE_MODE: ${{ inputs.mac_smoke_mode }}
+          REPORT_TARGET: dmg
+          REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac-report.zip
+          SUMMARY_TITLE: macOS self-hosted tools-pack build
+        run: bash .github/scripts/release/report/mac.sh
+
+      - name: Smoke beta mac packaged runtime
+        if: ${{ inputs.mac_smoke_mode != 'skip' }}
+        working-directory: _release-build/e2e
+        env:
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/mac-tools-pack-build.json
+          OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/mac-tools-pack-build.log
+          OD_PACKAGED_E2E_MAC: "1"
+          OD_PACKAGED_E2E_MAC_SMOKE_PROFILE: ${{ inputs.mac_smoke_mode }}
+          OD_PACKAGED_E2E_NAMESPACE: release-beta
+          OD_PACKAGED_E2E_RELEASE_CHANNEL: beta
+          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ inputs.release_version || needs.metadata.outputs.beta_version }}
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ env.MAC_TOOLS_PACK_DIR }}
+          OPEN_DESIGN_RELEASE_PROFILE: /Users/runner/.profile
+        run: |
+          set -euo pipefail
+          if ! command -v rehash >/dev/null 2>&1; then
+            rehash() { hash -r; }
+          fi
+          # shellcheck disable=SC1090
+          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          corepack prepare pnpm@10.33.2 --activate
+          hash -r
+          pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
+
+      - name: Refresh mac release report
+        if: ${{ always() }}
+        working-directory: _release-build
+        continue-on-error: true
+        env:
+          BUILD_JSON_PATH: ${{ runner.temp }}/mac-tools-pack-build.json
+          RELEASE_CHANNEL: beta
+          RELEASE_VERSION: ${{ inputs.release_version || needs.metadata.outputs.beta_version }}
+          REPORT_ROOT: ${{ runner.temp }}/release-report/mac
+          REPORT_SMOKE_MODE: ${{ inputs.mac_smoke_mode }}
+          REPORT_TARGET: dmg
+          REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac-report.zip
+          SUMMARY_TITLE: macOS self-hosted tools-pack build after smoke
+          WRITE_STEP_SUMMARY: "false"
+        run: bash .github/scripts/release/report/mac.sh
+
+      - name: Prune mac tools-pack cache
+        if: ${{ always() }}
+        working-directory: _release-build
+        continue-on-error: true
+        env:
+          CACHE_ROOT: ${{ env.MAC_TOOLS_PACK_CACHE_DIR }}
+        run: bash .github/scripts/release/cache/mac.sh
+
+      - name: Prepare beta mac assets
+        if: ${{ inputs.publish }}
+        working-directory: _release-build
+        env:
+          ASSET_VERSION_SUFFIX: ${{ inputs.mac_sign_mode != 'no' && '.signed' || '.unsigned' }}
+          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ inputs.s3_public_origin }}
+          MAC_ARTIFACT_MODE: dmg-only
+          OPEN_DESIGN_RELEASE_PROFILE: /Users/runner/.profile
+          RELEASE_CHANNEL: beta
+          RELEASE_NOTES: Open Design beta ${{ inputs.release_version || needs.metadata.outputs.beta_version }}${{ inputs.mac_sign_mode != 'no' && '.signed' || '.unsigned' }}
+          RELEASE_VERSION: ${{ inputs.release_version || needs.metadata.outputs.beta_version }}
+          TOOLS_PACK_DIR: ${{ env.MAC_TOOLS_PACK_DIR }}
+          TOOLS_PACK_NAMESPACE: release-beta
+        run: bash .github/scripts/release/assets/mac.sh
+
+      - name: Publish beta mac candidate platform to Nexu S3
+        if: ${{ inputs.publish }}
+        working-directory: _release-build
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.NEXU_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.NEXU_S3_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.NEXU_S3_REGION }}
+          AWS_EC2_METADATA_DISABLED: "true"
+          ASSET_VERSION_SUFFIX: ${{ inputs.mac_sign_mode != 'no' && '.signed' || '.unsigned' }}
+          CLOUDFLARE_R2_RELEASES_BUCKET: ${{ secrets.NEXU_S3_BUCKET }}
+          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ inputs.s3_public_origin }}
+          CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.NEXU_S3_ENDPOINT }}
+          MAC_ARTIFACT_MODE: dmg-only
+          OPEN_DESIGN_RELEASE_PROFILE: /Users/runner/.profile
+          RELEASE_CHANNEL: beta
+          RELEASE_PLATFORM: mac
+          RELEASE_ROOT: ${{ runner.temp }}/release-assets
+          RELEASE_SIGNED: ${{ inputs.mac_sign_mode != 'no' && 'true' || 'false' }}
+          RELEASE_VERSION: ${{ inputs.release_version || needs.metadata.outputs.beta_version }}
+          REPORT_ROOT: ${{ runner.temp }}/release-report/mac
+          REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac-report.zip
+        run: |
+          set -euo pipefail
+          if ! command -v rehash >/dev/null 2>&1; then
+            rehash() { hash -r; }
+          fi
+          # shellcheck disable=SC1090
+          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          node --experimental-strip-types .github/scripts/release/r2/publish-platform.ts
+
+  publish:
+    name: Publish beta metadata to Nexu S3
+    needs:
+      - metadata
+      - build_win
+      - build_mac
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.metadata.result == 'success' &&
+        (inputs.win_enable || inputs.mac_enable) &&
+        inputs.publish
+      }}
+    runs-on: [self-hosted, macOS, ARM64, nexu-mac, release-beta]
+    timeout-minutes: 10
+    env:
+      OPEN_DESIGN_RELEASE_PROFILE: /Users/runner/.profile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          clean: false
+          fetch-depth: 1
+          lfs: false
+          path: _release-publish
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .github/scripts/release/r2/
+
+      - name: Publish beta metadata to Nexu S3
+        id: publish_metadata
+        working-directory: _release-publish
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.NEXU_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.NEXU_S3_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.NEXU_S3_REGION }}
+          AWS_EC2_METADATA_DISABLED: "true"
+          ASSET_VERSION_SUFFIX: auto
+          BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
+          BRANCH_NAME: ${{ needs.metadata.outputs.branch }}
+          CLOUDFLARE_R2_RELEASES_BUCKET: ${{ secrets.NEXU_S3_BUCKET }}
+          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ inputs.s3_public_origin }}
+          CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.NEXU_S3_ENDPOINT }}
+          ENABLE_MAC: ${{ inputs.mac_enable }}
+          ENABLE_MAC_INTEL: "false"
+          ENABLE_LINUX: "false"
+          ENABLE_WIN: ${{ inputs.win_enable }}
+          MAC_RESULT: ${{ needs.build_mac.result }}
+          PLATFORM_MANIFEST_PREFIX: beta/latest/platforms
+          PLATFORM_MANIFEST_ROOT: ${{ runner.temp }}/release-platform-manifests
+          RELEASE_CHANNEL: beta
+          RELEASE_SIGNED: "false"
+          RELEASE_VERSION: ${{ inputs.release_version || needs.metadata.outputs.beta_version }}
+          STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}
+          WIN_RESULT: ${{ needs.build_win.result }}
+        run: |
+          set -euo pipefail
+          if ! command -v rehash >/dev/null 2>&1; then
+            rehash() { hash -r; }
+          fi
+          # shellcheck disable=SC1090
+          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          node --experimental-strip-types .github/scripts/release/r2/publish-beta-metadata.ts
+
+      - name: Verify beta metadata
+        working-directory: _release-publish
+        env:
+          ENABLE_MAC: ${{ inputs.mac_enable }}
+          ENABLE_MAC_INTEL: "false"
+          ENABLE_LINUX: "false"
+          ENABLE_WIN: ${{ inputs.win_enable }}
+          MAC_RESULT: ${{ needs.build_mac.result }}
+          R2_METADATA_URL: ${{ steps.publish_metadata.outputs.version_metadata_url }}
+          RELEASE_VERSION: ${{ inputs.release_version || needs.metadata.outputs.beta_version }}
+          WIN_RESULT: ${{ needs.build_win.result }}
+        run: |
+          set -euo pipefail
+          if ! command -v rehash >/dev/null 2>&1; then
+            rehash() { hash -r; }
+          fi
+          # shellcheck disable=SC1090
+          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          node --experimental-strip-types .github/scripts/release/r2/verify-beta-metadata.ts

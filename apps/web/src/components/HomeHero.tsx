@@ -58,6 +58,7 @@ import { PreviewSurface } from './plugins-home/cards/PreviewSurface';
 import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
 import { inferPluginPreview } from './plugins-home/preview';
 import { SessionModeToggle } from './SessionModeToggle';
+import { ComposerPlusMenu } from './ComposerPlusMenu';
 import {
   LexicalComposerInput,
   type LexicalComposerInputHandle,
@@ -271,9 +272,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // Local-only: it filters the example-prompt cards below the rail. It never
   // binds a plugin or stamps an active badge.
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
-  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
-  const [plusSubmenu, setPlusSubmenu] = useState<'connectors' | 'plugins' | 'mcp' | null>(null);
-  const [plusQuery, setPlusQuery] = useState('');
   const [selectedPromptExample, setSelectedPromptExample] = useState<SelectedPromptExample | null>(null);
   const [previewHomeFileKey, setPreviewHomeFileKey] = useState<string | null>(null);
   const [stagedFilePreviewUrls, setStagedFilePreviewUrls] = useState<Map<string, string>>(() => new Map());
@@ -284,7 +282,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   const editorRef = useRef<LexicalComposerInputHandle | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const shortcutsMenuRef = useRef<HTMLDivElement>(null);
-  const plusMenuRef = useRef<HTMLDivElement>(null);
   const canSubmit = (prompt.trim().length > 0 || stagedFiles.length > 0) && !submitDisabled;
   const previewHomeFile = useMemo(() => {
     if (!previewHomeFileKey) return null;
@@ -457,17 +454,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     () => new Map(pluginInputFields.map((field) => [field.name, field])),
     [pluginInputFields],
   );
-  // "+" menu flyout lists: filtered against the menu's own search box (plusQuery),
-  // independent of the @-mention picker's mentionQuery.
-  const plusNeedle = plusQuery.trim().toLocaleLowerCase();
-  const plusPluginOptions = useMemo(
-    () => (plusNeedle ? pluginOptions.filter((p) => pluginMatchesQuery(p, plusNeedle)) : pluginOptions),
-    [pluginOptions, plusNeedle],
-  );
-  const plusMcpOptions = useMemo(
-    () => (plusNeedle ? mcpOptions.filter((s) => mcpServerMatchesQuery(s, plusNeedle)) : mcpOptions),
-    [mcpOptions, plusNeedle],
-  );
   const footerInputNameSet = useMemo(
     () => new Set(footerInputNames),
     [footerInputNames],
@@ -551,36 +537,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       document.removeEventListener('keydown', closeOnEscape);
     };
   }, [shortcutsOpen]);
-
-  useEffect(() => {
-    if (!plusMenuOpen) {
-      setPlusSubmenu(null);
-      setPlusQuery('');
-      return;
-    }
-    const closeOnPointer = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Node && plusMenuRef.current?.contains(target)) return;
-      setPlusMenuOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setPlusMenuOpen(false);
-    };
-    document.addEventListener('pointerdown', closeOnPointer);
-    document.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.removeEventListener('pointerdown', closeOnPointer);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [plusMenuOpen]);
-
-  // The plugin and MCP flyouts share one `plusQuery`, but the query is scoped to
-  // whichever submenu is open. Reset it whenever the active submenu changes so a
-  // stale plugin search (e.g. "deck") never filters the MCP list — which would
-  // otherwise show "No MCP servers" even when servers exist.
-  useEffect(() => {
-    setPlusQuery('');
-  }, [plusSubmenu]);
 
   useEffect(() => {
     const urls = new Map<string, string>();
@@ -1188,194 +1144,26 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             }}
           />
           <div className="home-hero__foot-left">
-            <div className="home-hero__plus-menu" ref={plusMenuRef}>
-              <button
-                type="button"
-                className={`home-hero__tool home-hero__plus-trigger od-tooltip${plusMenuOpen ? ' is-active' : ''}`}
-                data-testid="home-hero-plus-trigger"
-                onClick={() => {
-                  trackHomeChatComposerClick(analytics.track, {
-                    page_name: 'home',
-                    area: 'chat_composer',
-                    element: 'action_chip',
-                  });
-                  setPlusMenuOpen((open) => !open);
-                }}
-                title={t('homeHero.addMenu')}
-                data-tooltip={t('homeHero.addMenu')}
-                aria-label={t('homeHero.addMenu')}
-                aria-haspopup="menu"
-                aria-expanded={plusMenuOpen}
-              >
-                <Icon name="plus" size={16} />
-              </button>
-              {plusMenuOpen ? (
-                <div className="home-hero__plus-popup" role="menu">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="home-hero__plus-item"
-                    data-testid="home-hero-plus-attach"
-                    onClick={() => {
-                      setPlusMenuOpen(false);
-                      trackHomeChatComposerClick(analytics.track, {
-                        page_name: 'home',
-                        area: 'chat_composer',
-                        element: 'attachment',
-                      });
-                      fileInputRef.current?.click();
-                    }}
-                  >
-                    <Icon name="attach" size={15} className="home-hero__plus-item-icon" />
-                    <span>{t('chat.attachAria')}</span>
-                  </button>
-                  <PlusSubmenuRow
-                    label={t('connectors.title')}
-                    icon="link"
-                    open={plusSubmenu === 'connectors'}
-                    onOpen={() => setPlusSubmenu('connectors')}
-                    onClose={() => setPlusSubmenu(null)}
-                  >
-                    <div className="home-hero__plus-list">
-                      {connectorOptions.length === 0 ? (
-                        <div className="home-hero__plus-empty">{t('homeHero.noConnectors')}</div>
-                      ) : (
-                        connectorOptions.map((connector) => (
-                          <button
-                            key={connector.id}
-                            type="button"
-                            role="menuitem"
-                            className="home-hero__plus-item"
-                            onClick={() => {
-                              setPlusMenuOpen(false);
-                              pickConnector(connector);
-                            }}
-                          >
-                            <Icon name="link" size={15} className="home-hero__plus-item-icon" />
-                            <span>{connector.name}</span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                    <div className="home-hero__plus-divider" />
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="home-hero__plus-item"
-                      onClick={() => {
-                        setPlusMenuOpen(false);
-                        onAddConnector();
-                      }}
-                    >
-                      <Icon name="plus" size={15} className="home-hero__plus-item-icon" />
-                      <span>{t('homeHero.addConnectors')}</span>
-                    </button>
-                  </PlusSubmenuRow>
-                  <PlusSubmenuRow
-                    label={t('entry.navPlugins')}
-                    icon="sparkles"
-                    open={plusSubmenu === 'plugins'}
-                    onOpen={() => setPlusSubmenu('plugins')}
-                    onClose={() => setPlusSubmenu(null)}
-                  >
-                    <div className="home-hero__plus-search">
-                      <Icon name="search" size={13} />
-                      <input
-                        value={plusQuery}
-                        onChange={(event) => setPlusQuery(event.target.value)}
-                        placeholder={t('entry.navPlugins')}
-                        aria-label={t('entry.navPlugins')}
-                      />
-                    </div>
-                    <div className="home-hero__plus-list">
-                      {plusPluginOptions.length === 0 ? (
-                        <div className="home-hero__plus-empty">{t('homeHero.noPlugins')}</div>
-                      ) : (
-                        plusPluginOptions.map((plugin) => (
-                          <button
-                            key={plugin.id}
-                            type="button"
-                            role="menuitem"
-                            className="home-hero__plus-item"
-                            onClick={() => {
-                              setPlusMenuOpen(false);
-                              pickPlugin(plugin);
-                            }}
-                          >
-                            <Icon name="sparkles" size={15} className="home-hero__plus-item-icon" />
-                            <span>{plugin.title}</span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                    <div className="home-hero__plus-divider" />
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="home-hero__plus-item"
-                      onClick={() => {
-                        setPlusMenuOpen(false);
-                        onAddPlugin();
-                      }}
-                    >
-                      <Icon name="plus" size={15} className="home-hero__plus-item-icon" />
-                      <span>{t('homeHero.addPlugin')}</span>
-                    </button>
-                  </PlusSubmenuRow>
-                  <PlusSubmenuRow
-                    label="MCP"
-                    icon="link"
-                    open={plusSubmenu === 'mcp'}
-                    onOpen={() => setPlusSubmenu('mcp')}
-                    onClose={() => setPlusSubmenu(null)}
-                  >
-                    <div className="home-hero__plus-search">
-                      <Icon name="search" size={13} />
-                      <input
-                        value={plusQuery}
-                        onChange={(event) => setPlusQuery(event.target.value)}
-                        placeholder="MCP"
-                        aria-label="MCP"
-                      />
-                    </div>
-                    <div className="home-hero__plus-list">
-                      {plusMcpOptions.length === 0 ? (
-                        <div className="home-hero__plus-empty">{t('homeHero.noMcp')}</div>
-                      ) : (
-                        plusMcpOptions.map((server) => (
-                          <button
-                            key={server.id}
-                            type="button"
-                            role="menuitem"
-                            className="home-hero__plus-item"
-                            onClick={() => {
-                              setPlusMenuOpen(false);
-                              pickMcp(server);
-                            }}
-                          >
-                            <Icon name="link" size={15} className="home-hero__plus-item-icon" />
-                            <span>{server.label || server.id}</span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                    <div className="home-hero__plus-divider" />
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="home-hero__plus-item"
-                      onClick={() => {
-                        setPlusMenuOpen(false);
-                        onAddMcp();
-                      }}
-                    >
-                      <Icon name="plus" size={15} className="home-hero__plus-item-icon" />
-                      <span>{t('homeHero.addMcp')}</span>
-                    </button>
-                  </PlusSubmenuRow>
-                </div>
-              ) : null}
-            </div>
+            <ComposerPlusMenu
+              triggerTestId="home-hero-plus-trigger"
+              connectors={connectorOptions}
+              onPickConnector={pickConnector}
+              onAddConnector={onAddConnector}
+              plugins={pluginOptions}
+              onPickPlugin={pickPlugin}
+              onAddPlugin={onAddPlugin}
+              mcpServers={mcpOptions}
+              onPickMcp={pickMcp}
+              onAddMcp={onAddMcp}
+              onAttachFiles={() => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'attachment',
+                });
+                fileInputRef.current?.click();
+              }}
+            />
             {onPickWorkingDir ? (
               <div className="home-hero__working-dir-wrap">
                 <button
@@ -2026,8 +1814,11 @@ function FooterSelectOption({
           {groupedOptions.length === 0 ? (
             <div className="home-hero__footer-select-empty">{t('homeHero.footer.noMatches')}</div>
           ) : (
-            groupedOptions.map((group) => (
-              <div className="home-hero__footer-select-group" key={group.label ?? 'ungrouped'}>
+            groupedOptions.map((group, index) => (
+              <div
+                className="home-hero__footer-select-group"
+                key={`${group.label ?? 'ungrouped'}:${group.options[0]?.value ?? index}`}
+              >
                 {group.label ? (
                   <div className="home-hero__footer-select-group-label">{group.label}</div>
                 ) : null}
@@ -2552,48 +2343,6 @@ function SubTypeRow({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-function PlusSubmenuRow({
-  label,
-  icon,
-  open,
-  onOpen,
-  onClose,
-  children,
-}: {
-  label: string;
-  icon: IconName;
-  open: boolean;
-  onOpen: () => void;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className="home-hero__plus-submenu-row"
-      onMouseEnter={onOpen}
-      onMouseLeave={onClose}
-    >
-      <button
-        type="button"
-        role="menuitem"
-        className="home-hero__plus-item home-hero__plus-parent"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => (open ? onClose() : onOpen())}
-      >
-        <Icon name={icon} size={15} className="home-hero__plus-item-icon" />
-        <span>{label}</span>
-        <Icon name="chevron-right" size={13} className="home-hero__plus-chevron" />
-      </button>
-      {open ? (
-        <div className="home-hero__plus-flyout" role="menu">
-          {children}
-        </div>
-      ) : null}
     </div>
   );
 }

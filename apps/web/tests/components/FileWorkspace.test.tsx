@@ -1187,6 +1187,34 @@ describe('FileWorkspace launcher tab creation', () => {
       });
     });
   });
+
+  it('focuses an already-open file tab without adding a duplicate tab', async () => {
+    const onTabsStateChange = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('Web Prototype mutuals-v2.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['Web Prototype mutuals-v2.html'],
+          active: 'notes.html',
+        }}
+        openRequest={{ name: 'Web Prototype mutuals-v2.html', nonce: 1 }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['Web Prototype mutuals-v2.html'],
+        active: 'Web Prototype mutuals-v2.html',
+      });
+    });
+  });
 });
 
 describe('FileWorkspace generation failure recovery', () => {
@@ -1699,25 +1727,40 @@ describe('FileWorkspace Questions tab', () => {
     expect(screen.getByTestId('questions-tab')).toBeTruthy();
   });
 
-  it('removes the Questions tab once the form has been answered', () => {
-    // Regression for #3355: answering a question moved the answered copy back
-    // into chat but left a locked duplicate mounted in the Questions tab.
-    render(
+  it('closes the Questions preview after submit, then lets the answered form reopen', async () => {
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-1',
+      projectKind: 'prototype',
+      files: [],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+      questionForm: discoveryForm,
+      focusQuestionsRequest: { nonce: 1 },
+    };
+    const { rerender } = render(<FileWorkspace {...baseProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Quick brief')).toBeTruthy();
+    });
+
+    rerender(
       <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: [], active: null }}
-        onTabsStateChange={vi.fn()}
-        questionForm={discoveryForm}
+        {...baseProps}
         questionFormSubmittedAnswers={{ platform: 'Mobile' }}
       />,
     );
 
-    expect(screen.queryByTestId('questions-tab')).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByText('Quick brief')).toBeNull();
+    });
+    expect(screen.getByTestId('questions-tab')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('questions-tab'));
+    expect(screen.getByText('Quick brief')).toBeTruthy();
+    expect(screen.getByText('Mobile')).toBeTruthy();
   });
 });
 

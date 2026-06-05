@@ -1895,6 +1895,7 @@ export interface Dict {
   'chat.you': string;
   'chat.openFile': string;
   'chat.copyPrompt': string;
+  'chat.copyErrorDiagnostic': string;
   'chat.copyDone': string;
   'chat.composerPlaceholder': string;
   'chat.activeFileEditingLabel': string;
@@ -1920,6 +1921,7 @@ export interface Dict {
   'chat.cliSettingsTitle': string;
   'chat.cliSettingsAria': string;
   'chat.attachTitle': string;
+  'chat.addContextTitle': string;
   'chat.attachAria': string;
   'chat.importTitle': string;
   'chat.importLabel': string;

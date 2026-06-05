@@ -871,14 +871,14 @@
   border-radius: var(--radius-sm);
 }
 .home-hero__foot-right .session-mode-toggle {
-  height: 30px;
+  height: 32px;
 }
 .home-hero__foot-right .session-mode-toggle__trigger {
-  height: 30px;
+  height: 32px;
   max-width: 120px;
-  padding: 0 8px;
+  padding: 0 12px;
   gap: 6px;
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   font-size: 12px;
 }
 .home-hero__foot-right .session-mode-toggle__label {
@@ -982,6 +982,16 @@
 .home-hero__plus-item-icon {
   flex: 0 0 auto;
   opacity: 0.8;
+}
+/* Plugin / MCP names that exceed the menu width truncate to a single line
+   with an ellipsis instead of wrapping onto a second line. The icon and
+   trailing chevron keep their intrinsic size; the label takes the rest. */
+.home-hero__plus-item > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .home-hero__plus-chevron {
   margin-left: auto;
@@ -1829,7 +1839,7 @@
   min-width: 64px;
   height: 32px;
   padding: 0 16px;
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   border: 1px solid var(--accent);
   background: var(--accent);
   color: white;

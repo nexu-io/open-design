@@ -34,7 +34,9 @@ describe('HomeHero compact composer controls', () => {
       '.home-hero__execution-switcher .inline-switcher__chip',
     );
 
-    expect(ruleValue(modeTrigger, 'height')).toBe('30px');
+    // The footer buttons were unified to a single 32px pill height; the
+    // session-mode trigger matches the other footer controls.
+    expect(ruleValue(modeTrigger, 'height')).toBe('32px');
     expect(ruleValue(modeTrigger, 'max-width')).toBe('120px');
     expect(ruleValue(switcherChip, 'height')).toBe('30px');
     expect(ruleValue(switcherChip, 'max-width')).toBe('48px');

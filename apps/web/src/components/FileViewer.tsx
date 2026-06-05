@@ -5218,7 +5218,7 @@ function HtmlViewer({
     needsFocusGuard,
   }) && !manualEditRequiresSrcDoc;
   const basePreviewSrcUrl = useMemo(
-    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll&odPreviewBridge=selection`,
+    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`,
     [projectId, file.name, file.mtime, reloadKey],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
@@ -7208,6 +7208,14 @@ function HtmlViewer({
       await waitForIframeLoadOrTimeout(activeIframe, 250);
       await waitForAnimationFrame();
       return requestPreviewSnapshotWithRetry(activeIframe);
+    }
+
+    const urlIframe = iframeRef.current ?? urlPreviewIframeRef.current;
+    if (urlIframe) {
+      await waitForIframeLoadOrTimeout(urlIframe, 250);
+      await waitForAnimationFrame();
+      const urlSnapshot = await requestPreviewSnapshotWithRetry(urlIframe);
+      if (urlSnapshot) return urlSnapshot;
     }
 
     const srcDocIframe = srcDocPreviewIframeRef.current;

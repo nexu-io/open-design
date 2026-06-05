@@ -174,6 +174,10 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
       path.join(dir, 'selection-bridged.html'),
       Buffer.from('<html><body><script data-od-url-selection-bridge></script><main>Preview</main></body></html>'),
     );
+    await writeFile(
+      path.join(dir, 'snapshot-bridged.html'),
+      Buffer.from('<html><body><script data-od-url-snapshot-bridge></script><main>Preview</main></body></html>'),
+    );
   });
 
   afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
@@ -266,14 +270,29 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(html).not.toContain('data-od-url-scroll-bridge');
   });
 
+  it('injects the URL preview snapshot bridge only when requested', async () => {
+    const plain = await fetch(rawUrl('page.html'));
+    expect(await plain.text()).toBe('<html/>');
+
+    const bridged = await fetch(`${rawUrl('page.html')}?odPreviewBridge=snapshot`);
+    expect(bridged.status).toBe(200);
+    const html = await bridged.text();
+    expect(html).toContain('data-od-url-snapshot-bridge');
+    expect(html).toContain("type: 'od:snapshot:result'");
+    expect(html).not.toContain('data-od-url-scroll-bridge');
+    expect(html).not.toContain('data-od-url-selection-bridge');
+  });
+
   it('injects scroll and selection URL preview bridges together', async () => {
-    const bridged = await fetch(`${rawUrl('body.html')}?odPreviewBridge=scroll&odPreviewBridge=selection`);
+    const bridged = await fetch(`${rawUrl('body.html')}?odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`);
     expect(bridged.status).toBe(200);
     const html = await bridged.text();
     expect(html).toContain('data-od-url-scroll-bridge');
     expect(html).toContain('data-od-url-selection-bridge');
+    expect(html).toContain('data-od-url-snapshot-bridge');
     expect(html.indexOf('data-od-url-scroll-bridge')).toBeLessThan(html.indexOf('</body>'));
     expect(html.indexOf('data-od-url-selection-bridge')).toBeLessThan(html.indexOf('</body>'));
+    expect(html.indexOf('data-od-url-snapshot-bridge')).toBeLessThan(html.indexOf('</body>'));
   });
 
   it('does not inject the URL preview scroll bridge twice', async () => {
@@ -288,6 +307,13 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(bridged.status).toBe(200);
     const html = await bridged.text();
     expect(html.match(/data-od-url-selection-bridge/g)?.length).toBe(1);
+  });
+
+  it('does not inject the URL preview snapshot bridge twice', async () => {
+    const bridged = await fetch(`${rawUrl('snapshot-bridged.html')}?odPreviewBridge=snapshot`);
+    expect(bridged.status).toBe(200);
+    const html = await bridged.text();
+    expect(html.match(/data-od-url-snapshot-bridge/g)?.length).toBe(1);
   });
 
   it('returns 404 for a missing file', async () => {

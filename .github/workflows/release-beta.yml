@@ -201,78 +201,20 @@ jobs:
         with:
           node-version: 24
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Inspect mac Electron framework symlinks
-        run: |
-          set -euo pipefail
-          electron_dist="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist"));')"
-          framework="$electron_dist/Electron.app/Contents/Frameworks/Electron Framework.framework"
-          missing_links=0
-          for link in \
-            "$framework/Electron Framework" \
-            "$framework/Helpers" \
-            "$framework/Libraries" \
-            "$framework/Resources" \
-            "$framework/Versions/Current"; do
-            if [ ! -L "$link" ]; then
-              echo "::warning::Expected Electron framework symlink, got non-symlink: $link"
-              missing_links=1
-            fi
-          done
-          if [ "$missing_links" -ne 0 ]; then
-            ls -la "$framework" >&2 || true
-            ls -la "$framework/Versions" >&2 || true
-            echo "Continuing into tools-pack because electron-builder is the source of truth for whether packaging actually works."
-          fi
-
-      - name: Prepare Apple signing certificate
-        env:
-          APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
-          APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
-        run: |
-          set -euo pipefail
-          cert_path="$RUNNER_TEMP/open-design-signing.p12"
-          if ! printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$cert_path" 2>/dev/null; then
-            printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 -D > "$cert_path"
-          fi
-          {
-            echo "CSC_LINK=$cert_path"
-            echo "CSC_KEY_PASSWORD=$APPLE_SIGNING_CERTIFICATE_PASSWORD"
-          } >> "$GITHUB_ENV"
-
       - name: Build beta mac artifacts
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
+          APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MAC_BUILD_TARGET: dmg
+          MAC_COMPRESSION: normal
+          MAC_SIGN_MODE: "on"
+          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          TOOLS_PACK_NAMESPACE: release-beta
         run: |
-          set -euo pipefail
-          tools_pack_dir="$RUNNER_TEMP/tools-pack"
-          build_json_path="$RUNNER_TEMP/mac-tools-pack-build.json"
-          build_log_path="$RUNNER_TEMP/mac-tools-pack-build.log"
-          rm -rf "$tools_pack_dir"
-          : > "$build_log_path"
-          build_args=(
-            exec tools-pack mac build
-            --dir "$tools_pack_dir"
-            --namespace release-beta
-            --portable
-            --app-version "${{ needs.metadata.outputs.beta_version }}"
-            --mac-compression normal
-            --to dmg
-            --json
-            --require-vela-cli
-            --signed
-          )
-          if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then
-            printf '%s\n' "$build_output" | tee "$build_json_path"
-          else
-            build_status=$?
-            printf '%s\n' "$build_output"
-            exit "$build_status"
-          fi
+          bash .github/scripts/release/build-mac.sh
 
       - name: Capture mac framework diagnostics
         if: ${{ failure() }}

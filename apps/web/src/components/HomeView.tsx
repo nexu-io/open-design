@@ -1335,10 +1335,12 @@ export function HomeView({
       trimmed,
     );
     const submittedPluginInputs = submittedActive
-      ? applyHomeDesignSystemSelectionToInputs(
-          submittedActive.inputs,
-          submittedDesignSystemSelection,
-          designSystemOptions,
+      ? stripArtifactFooterInputs(
+          applyHomeDesignSystemSelectionToInputs(
+            submittedActive.inputs,
+            submittedDesignSystemSelection,
+            designSystemOptions,
+          ),
         )
       : defaultInputs;
     const activeInputsChangedForSubmit = submittedActive
@@ -1463,7 +1465,9 @@ export function HomeView({
         onAddConnector={onOpenIntegrations}
         onAddMcp={onOpenMcp}
         onOpenPluginDetails={setDetailsRecord}
-        pluginInputFields={active?.inputFields ?? []}
+        pluginInputFields={(active?.inputFields ?? []).filter(
+          (field) => !ARTIFACT_FOOTER_FIELD_NAMES.has(field.name),
+        )}
         pluginInputValues={active?.inputs ?? {}}
         pluginInputTemplate={active?.queryTemplate ?? null}
         onPluginInputValuesChange={updateActiveInputs}
@@ -1767,9 +1771,39 @@ function homeHeroChipLabelForId(chipId: string, t: ReturnType<typeof useI18n>['t
   }
 }
 
+// Prototype/deck-specific settings (fidelity, slide count, speaker notes) are
+// no longer promoted into the home composer footer — the agent asks for those
+// via the first-turn discovery flow, so the prototype/deck footer keeps only
+// the design-system picker. Media surfaces (image/video/audio/hyperframes)
+// still surface their generation controls (model / ratio / resolution /
+// duration / audio type) in the footer, since that footer IS their primary
+// configuration UI and has no discovery-form equivalent.
+const ARTIFACT_FOOTER_FIELD_NAMES = new Set([
+  'fidelity',
+  'slideCount',
+  'speakerNotes',
+]);
+
+// The prototype/deck footer no longer exposes these settings, so any plugin
+// default for them must NOT be seeded into the Home composer's inputs — that
+// would forward a prefilled value (e.g. `fidelity: high-fidelity`) to the run
+// instead of leaving it "unknown" for the first-turn discovery flow to ask.
+function stripArtifactFooterInputs(
+  inputs: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!Object.keys(inputs).some((key) => ARTIFACT_FOOTER_FIELD_NAMES.has(key))) {
+    return inputs;
+  }
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(inputs)) {
+    if (ARTIFACT_FOOTER_FIELD_NAMES.has(key)) continue;
+    next[key] = value;
+  }
+  return next;
+}
+
 function footerInputNamesForChip(chipId: string | null): string[] {
-  if (chipId === 'prototype') return ['designSystem', 'fidelity'];
-  if (chipId === 'deck') return ['designSystem', 'slideCount', 'speakerNotes'];
+  if (chipId === 'prototype' || chipId === 'deck') return ['designSystem'];
   if (chipId === 'image') return ['designSystem', 'model', 'ratio', 'resolution'];
   if (chipId === 'video') return ['designSystem', 'model', 'ratio', 'duration', 'resolution'];
   if (chipId === 'audio') return ['audioType', 'model', 'duration'];
@@ -1779,58 +1813,21 @@ function footerInputNamesForChip(chipId: string | null): string[] {
 
 function homeCreateProjectMetadata(
   projectKind: ProjectKind | null,
-  inputs: Record<string, unknown> | null,
+  _inputs: Record<string, unknown> | null,
   existing: ProjectMetadata | null,
 ): ProjectMetadata | null {
   const kind = projectKind ?? existing?.kind ?? null;
   if (!kind) return existing;
 
+  // Artifact-specific settings (fidelity, speaker notes, slide count, …) are no
+  // longer collected in the home composer; the agent asks for them via
+  // AskUserQuestion, so we only seed `kind` here and let those fields stay
+  // unset (the system prompt then marks them "unknown — ask").
   const next: ProjectMetadata = {
     ...(existing ?? {}),
     kind,
   };
-  const fidelity = normalizeHomeFidelity(inputs?.fidelity);
-  if (fidelity) next.fidelity = fidelity;
-  const speakerNotes = normalizeHomeSpeakerNotes(inputs?.speakerNotes);
-  if (speakerNotes !== null) next.speakerNotes = speakerNotes;
-  const slideCount = normalizeHomeSlideCount(inputs?.slideCount);
-  if (slideCount) next.slideCount = slideCount;
   return next;
-}
-
-function normalizeHomeFidelity(value: unknown): ProjectMetadata['fidelity'] | null {
-  if (value === 'wireframe' || value === 'high-fidelity') return value;
-  return null;
-}
-
-function normalizeHomeSpeakerNotes(value: unknown): boolean | null {
-  if (typeof value === 'boolean') return value;
-  if (typeof value !== 'string') return null;
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) return null;
-  if (
-    normalized === 'true' ||
-    normalized === 'yes' ||
-    normalized === 'include' ||
-    normalized.includes('include')
-  ) {
-    return true;
-  }
-  if (
-    normalized === 'false' ||
-    normalized === 'no' ||
-    normalized === 'none' ||
-    normalized.includes('no speaker')
-  ) {
-    return false;
-  }
-  return null;
-}
-
-function normalizeHomeSlideCount(value: unknown): string | null {
-  if (typeof value !== 'string' && typeof value !== 'number') return null;
-  const normalized = String(value).trim();
-  return normalized.length > 0 ? normalized : null;
 }
 
 function designSystemOptionsForHome(
@@ -1868,7 +1865,13 @@ function designSystemOptionsForHome(
     auto: true,
     summary: t('homeHero.footer.autoDesignSystemSummary'),
   };
-  const defaultOption = systemOptions.find((option) => option.isDefault);
+  // Only a user-owned ("Personal") design system should be pre-selected as the
+  // default. Official/enterprise presets must not auto-select — when the user
+  // has no personal default, the composer defaults to "Auto" (which matches a
+  // fitting system from the prompt) rather than locking onto a starter preset.
+  const defaultOption = systemOptions.find(
+    (option) => option.isDefault && option.group === 'Personal',
+  );
   if (!defaultOption) return [autoOption, ...systemOptions];
   return [
     defaultOption,

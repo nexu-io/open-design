@@ -788,8 +788,13 @@
      collapsed there's no text, so let the downward tooltip escape. */
   overflow: visible;
 }
-/* Hide every text fragment; keep only the leading icon glyph. */
+/* Hide every text fragment; keep only the leading icon glyph. The Discord
+   badge also carries a "· {n} online" suffix; collapsed it must hide too,
+   otherwise the separator + count leak out of the 32px square and render as
+   clipped text (e.g. "212 在s"). The full label lives in the hover tooltip. */
 .entry-main__topbar-chips--icon-only .entry-discord-badge__label,
+.entry-main__topbar-chips--icon-only .entry-discord-badge__sep,
+.entry-main__topbar-chips--icon-only .entry-discord-badge__online,
 .entry-main__topbar-chips--icon-only .use-everywhere-chip__label,
 .entry-main__topbar-chips--icon-only .inline-switcher__chip-text,
 .entry-main__topbar-chips--icon-only .inline-switcher__chip-chevron {

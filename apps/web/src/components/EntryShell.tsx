@@ -349,16 +349,12 @@ function navElementForView(
 }
 
 // Tab views stay mounted (so previews/thumbnails survive a tab switch) but the
-// inactive ones must leave the accessibility tree and tab order — otherwise
-// keyboard users tab into off-screen controls and screen readers announce
-// several pages at once. `content-visibility: hidden` only skips paint, so the
-// inactive wrapper also gets `inert` (drops it from focus + a11y) and
-// `aria-hidden`. React renders `inert={false}` as no attribute and
-// `inert={true}` as the real boolean attribute, so toggling on `!active` is
-// enough — the active view stays fully interactive.
+// inactive ones must leave layout, the accessibility tree, and tab order.
+// `content-visibility: hidden` still reserves the hidden pane's block size,
+// which pushes later sidebar destinations far below the sticky topbar.
 function inactiveViewProps(active: boolean) {
   return {
-    style: active ? undefined : ({ contentVisibility: 'hidden' } as const),
+    style: active ? undefined : ({ display: 'none' } as const),
     inert: !active,
     'aria-hidden': !active,
   };

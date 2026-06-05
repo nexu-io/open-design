@@ -1,6 +1,6 @@
 /*
  * Copy for the Solution → Use case and Role landing pages
- * (`/solutions/<slug>/` and `/for/<slug>/`).
+ * (`/solutions/<slug>/` and `/roles/<slug>/`).
  *
  * These pages are image + text + table surfaces that explain how a given
  * workflow or role uses Open Design. They are kept OUT of the large

@@ -1,0 +1,7 @@
+{
+  "toolName": "tools-serve",
+  "packageName": "@open-design/tools-serve",
+  "buildCommand": "pnpm --filter @open-design/tools-serve build",
+  "distEntries": ["dist/index.mjs"],
+  "inputs": ["src", "meta.json", "package.json", "esbuild.config.mjs", "tsconfig.json"]
+}

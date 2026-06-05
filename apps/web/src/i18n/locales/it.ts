@@ -829,6 +829,7 @@ export const it: Dict = {
   'chat.cliSettingsTitle': 'Impostazioni CLI e modello',
   'chat.cliSettingsAria': 'Apri impostazioni CLI e modello',
   'chat.attachTitle': 'Allega file (o incolla / trascina)',
+  'chat.addContextTitle': 'Add context',
   'chat.attachAria': 'Allega file',
   'chat.importTitle': 'Importa fonti (presto disponibile)',
   'chat.importLabel': 'Importa',
