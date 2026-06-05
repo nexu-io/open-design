@@ -548,6 +548,7 @@ function findNextRouteFiles(files: ProjectFile[]): string[] {
       /(^|\/)(src\/)?app\/.*page\.[cm]?[jt]sx?$/u.test(file) ||
       /(^|\/)(src\/)?pages\/.+\.[cm]?[jt]sx?$/u.test(file),
     )
+    .filter((file) => !/(^|\/)(src\/)?pages\/api\//u.test(file))
     .filter((file) => !/\/(?:_app|_document|_error)\.[cm]?[jt]sx?$/u.test(file))
     .sort(compareProjectPaths);
 }

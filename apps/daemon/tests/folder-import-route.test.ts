@@ -356,6 +356,45 @@ describe('POST /api/import/folder', () => {
     expect(JSON.stringify(surface)).not.toContain('node_modules');
   });
 
+  it('excludes Next API route files from UI surfaces', async () => {
+    const folder = makeFolder();
+    await mkdir(path.join(folder, 'pages/api'), { recursive: true });
+    await mkdir(path.join(folder, 'src/pages/api'), { recursive: true });
+    await writeFile(
+      path.join(folder, 'package.json'),
+      JSON.stringify({
+        dependencies: {
+          next: '16.0.0',
+          react: '18.0.0',
+        },
+      }),
+    );
+    await writeFile(path.join(folder, 'pages/index.tsx'), 'export default function Home(){return <main>Home</main>}');
+    await writeFile(path.join(folder, 'pages/api/hello.ts'), 'export default function handler(_req, res){res.status(200).json({ok:true})}');
+    await writeFile(path.join(folder, 'src/pages/api/health.ts'), 'export default function handler(_req, res){res.status(200).json({ok:true})}');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const resp = await fetch(`${baseUrl}/api/projects/${project.id}/ui-surfaces`);
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      surfaces: Array<{
+        route: string | null;
+        entryFile: string;
+      }>;
+    };
+    const entryFiles = body.surfaces.map((surface) => surface.entryFile);
+    const routes = body.surfaces.map((surface) => surface.route);
+
+    expect(entryFiles).toContain('pages/index.tsx');
+    expect(entryFiles).not.toContain('pages/api/hello.ts');
+    expect(entryFiles).not.toContain('src/pages/api/health.ts');
+    expect(routes).not.toContain('/api/hello');
+    expect(routes).not.toContain('/api/health');
+  });
+
   it('starts an imported app runtime for source-backed UI surfaces', async () => {
     const folder = makeFolder();
     await mkdir(path.join(folder, 'app/messages/[conversationId]'), { recursive: true });
