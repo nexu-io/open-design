@@ -25,6 +25,10 @@ describe('git command guard', () => {
   });
 
   it('classifies destructive git invocations', () => {
+    const checkoutDisambiguation = {
+      checkoutPathExists: (arg: string) => arg === 'src/file.ts',
+      checkoutRefExists: (arg: string) => arg === 'feature/foo' || arg === 'main',
+    };
     expect(gitCommandBlockedReason(['status'])).toBeNull();
     expect(gitCommandBlockedReason(['-C', '/repo', 'status'])).toBeNull();
     expect(gitCommandBlockedReason(['--exec-path', '/tmp/git-core', 'status'])).toBeNull();
@@ -48,6 +52,10 @@ describe('git command guard', () => {
     expect(gitCommandBlockedReason(['push', '--force-with-lease=origin/main'])).toContain('push');
     expect(gitCommandBlockedReason(['checkout', 'main'])).toBeNull();
     expect(gitCommandBlockedReason(['checkout', 'feature/foo'])).toBeNull();
+    expect(gitCommandBlockedReason(['checkout', 'feature/foo'], checkoutDisambiguation)).toBeNull();
+    expect(gitCommandBlockedReason(['checkout', 'src/file.ts'], checkoutDisambiguation)).toContain(
+      'checkout',
+    );
     expect(gitCommandBlockedReason(['checkout', '-b', 'feature', 'main'])).toBeNull();
     expect(gitCommandBlockedReason(['checkout', '--force', 'main'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', '.'])).toContain('checkout');
@@ -63,7 +71,29 @@ describe('git command guard', () => {
     const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-git-real-'));
     tempDirs.push(binDir);
     const realGit = path.join(binDir, 'git');
-    fs.writeFileSync(realGit, '#!/bin/sh\nprintf "real git: %s\\n" "$*"\n', { mode: 0o755 });
+    fs.writeFileSync(
+      realGit,
+      `#!/bin/sh
+if [ "$1" = "rev-parse" ]; then
+  ref=""
+  for arg in "$@"; do ref="$arg"; done
+  case "$ref" in
+    main^{commit}|feature/foo^{commit}|HEAD^{commit}) exit 0 ;;
+    *) exit 1 ;;
+  esac
+fi
+if [ "$1" = "ls-files" ]; then
+  target=""
+  for arg in "$@"; do target="$arg"; done
+  case "$target" in
+    src/file.ts) exit 0 ;;
+    *) exit 1 ;;
+  esac
+fi
+printf "real git: %s\\n" "$*"
+`,
+      { mode: 0o755 },
+    );
 
     const install = installGitCommandGuard({
       OD_GIT_COMMAND_GUARD: '1',
@@ -175,6 +205,13 @@ describe('git command guard', () => {
     });
     expect(destructiveCheckoutRelativePath.status).toBe(126);
     expect(destructiveCheckoutRelativePath.stderr).toContain('git command guard blocked');
+
+    const destructiveCheckoutTrackedPath = spawnSync('git', ['checkout', 'src/file.ts'], {
+      env: install.env as NodeJS.ProcessEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveCheckoutTrackedPath.status).toBe(126);
+    expect(destructiveCheckoutTrackedPath.stderr).toContain('git command guard blocked');
 
     const destructiveCheckoutHeadPath = spawnSync('git', ['checkout', 'HEAD', 'src/file.ts'], {
       env: install.env as NodeJS.ProcessEnv,
