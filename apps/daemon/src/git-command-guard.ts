@@ -195,6 +195,7 @@ function hasDestructiveCheckoutArg(
     }
     if (arg === '-f' || arg === '--force') return true;
     if (arg === '--' && index + 1 < args.length) return true;
+    if (checkoutPathspecFromFileArg(arg)) return true;
     if (checkoutOptionConsumesSeparateValue(arg)) {
       skipNext = true;
       continue;
@@ -207,7 +208,11 @@ function hasDestructiveCheckoutArg(
 }
 
 function checkoutOptionConsumesSeparateValue(arg: string): boolean {
-  return arg === '-b' || arg === '-B' || arg === '--orphan' || arg === '--pathspec-from-file';
+  return arg === '-b' || arg === '-B' || arg === '--orphan';
+}
+
+function checkoutPathspecFromFileArg(arg: string): boolean {
+  return arg === '--pathspec-from-file' || arg.startsWith('--pathspec-from-file=');
 }
 
 function isLikelyCheckoutPathOperand(arg: string, options: GitCommandBlockedReasonOptions): boolean {
@@ -274,7 +279,7 @@ option_consumes_next() {
 
 checkout_option_consumes_next() {
   case "$1" in
-    -b|-B|--orphan|--pathspec-from-file) return 0 ;;
+    -b|-B|--orphan) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -411,6 +416,7 @@ case "$cmd" in
       case "$arg" in
         -f|--force) blocked="git checkout can discard workspace changes" ;;
         --) saw_pathspec_delimiter="1" ;;
+        --pathspec-from-file|--pathspec-from-file=*) blocked="git checkout can discard workspace changes" ;;
         -*) checkout_option_consumes_next "$arg" && skip_checkout_value="1" ;;
         *)
           checkout_operand_count=$((checkout_operand_count + 1))
@@ -441,7 +447,7 @@ if errorlevel 1 (
   echo Open Design git command guard requires node on PATH. 1>&2
   exit /b 126
 )
-node -e "const cp=require('node:child_process'); const args=process.argv.slice(1); const realGit=process.env.OD_REAL_GIT_BIN||'git'; const valueOptions=new Set(['-C','-c','--exec-path','--git-dir','--namespace','--object-directory','--super-prefix','--work-tree']); const inlineValueOptions=['--exec-path','--git-dir','--namespace','--object-directory','--super-prefix','--work-tree']; const checkoutValueOptions=new Set(['-b','-B','--orphan','--pathspec-from-file']); const contextArgs=[]; let cmd='',cmdIndex=-1; for(let i=0;i<args.length;i++){const a=args[i]||''; if(valueOptions.has(a)){contextArgs.push(a); if(i+1<args.length) contextArgs.push(args[i+1]||''); i++; continue} if(inlineValueOptions.some(o=>a.startsWith(o+'='))){contextArgs.push(a); continue} if(a.startsWith('-')){contextArgs.push(a); continue} cmd=a; cmdIndex=i; break} const c=cmd.toLowerCase(); const gitOk=a=>cp.spawnSync(realGit,[...contextArgs,...a],{stdio:'ignore',windowsHide:true,timeout:1000}).status===0; const isClean=a=>a==='--force'||a==='-f'||a==='-d'||a==='-x'||a==='-X'||(a.startsWith('-')&&!a.startsWith('--')&&/[dfxX]/.test(a.slice(1))); const isCleanDryRun=a=>a==='--dry-run'||a==='-n'||(a.startsWith('-')&&!a.startsWith('--')&&a.slice(1).includes('n')); const isPush=a=>a==='-f'||a==='--force'||a.startsWith('--force-with-lease')||a.startsWith('+'); const isCheckoutPath=a=>{if(a==='.'||a==='..'||a.startsWith('./')||a.startsWith('../')) return true; if(gitOk(['rev-parse','--verify','--quiet',a+'^{commit}'])) return false; return gitOk(['ls-files','--error-unmatch','--',a])}; const isCheckout=()=>{let operands=0,skip=false; for(let i=cmdIndex+1;i<args.length;i++){const a=args[i]||''; if(skip){skip=false; continue} if(a==='-f'||a==='--force') return true; if(a==='--'&&i+1<args.length) return true; if(checkoutValueOptions.has(a)){skip=true; continue} if(a.startsWith('-')) continue; operands++; if(operands>1||isCheckoutPath(a)) return true} return false}; const commandArgs=args.slice(cmdIndex+1); const cleanArgs=args.slice(cmdIndex+1); const blocked=(c==='reset'&&args.includes('--hard'))||(c==='clean'&&!cleanArgs.some(isCleanDryRun)&&cleanArgs.some(isClean))||(c==='stash'&&['drop','clear'].includes((args[cmdIndex+1]||'').toLowerCase()))||(c==='push'&&commandArgs.some(isPush))||(c==='checkout'&&isCheckout())||c==='restore'; if(blocked){console.error('Open Design git command guard blocked destructive git command'); process.exit(126)}" %*
+node -e "const cp=require('node:child_process'); const args=process.argv.slice(1); const realGit=process.env.OD_REAL_GIT_BIN||'git'; const valueOptions=new Set(['-C','-c','--exec-path','--git-dir','--namespace','--object-directory','--super-prefix','--work-tree']); const inlineValueOptions=['--exec-path','--git-dir','--namespace','--object-directory','--super-prefix','--work-tree']; const checkoutValueOptions=new Set(['-b','-B','--orphan']); const contextArgs=[]; let cmd='',cmdIndex=-1; for(let i=0;i<args.length;i++){const a=args[i]||''; if(valueOptions.has(a)){contextArgs.push(a); if(i+1<args.length) contextArgs.push(args[i+1]||''); i++; continue} if(inlineValueOptions.some(o=>a.startsWith(o+'='))){contextArgs.push(a); continue} if(a.startsWith('-')){contextArgs.push(a); continue} cmd=a; cmdIndex=i; break} const c=cmd.toLowerCase(); const gitOk=a=>cp.spawnSync(realGit,[...contextArgs,...a],{stdio:'ignore',windowsHide:true,timeout:1000}).status===0; const isClean=a=>a==='--force'||a==='-f'||a==='-d'||a==='-x'||a==='-X'||(a.startsWith('-')&&!a.startsWith('--')&&/[dfxX]/.test(a.slice(1))); const isCleanDryRun=a=>a==='--dry-run'||a==='-n'||(a.startsWith('-')&&!a.startsWith('--')&&a.slice(1).includes('n')); const isPush=a=>a==='-f'||a==='--force'||a.startsWith('--force-with-lease')||a.startsWith('+'); const isCheckoutPathspecFile=a=>a==='--pathspec-from-file'||a.startsWith('--pathspec-from-file='); const isCheckoutPath=a=>{if(a==='.'||a==='..'||a.startsWith('./')||a.startsWith('../')) return true; if(gitOk(['rev-parse','--verify','--quiet',a+'^{commit}'])) return false; return gitOk(['ls-files','--error-unmatch','--',a])}; const isCheckout=()=>{let operands=0,skip=false; for(let i=cmdIndex+1;i<args.length;i++){const a=args[i]||''; if(skip){skip=false; continue} if(a==='-f'||a==='--force') return true; if(a==='--'&&i+1<args.length) return true; if(isCheckoutPathspecFile(a)) return true; if(checkoutValueOptions.has(a)){skip=true; continue} if(a.startsWith('-')) continue; operands++; if(operands>1||isCheckoutPath(a)) return true} return false}; const commandArgs=args.slice(cmdIndex+1); const cleanArgs=args.slice(cmdIndex+1); const blocked=(c==='reset'&&args.includes('--hard'))||(c==='clean'&&!cleanArgs.some(isCleanDryRun)&&cleanArgs.some(isClean))||(c==='stash'&&['drop','clear'].includes((args[cmdIndex+1]||'').toLowerCase()))||(c==='push'&&commandArgs.some(isPush))||(c==='checkout'&&isCheckout())||c==='restore'; if(blocked){console.error('Open Design git command guard blocked destructive git command'); process.exit(126)}" %*
 if errorlevel 1 exit /b %errorlevel%
 "%OD_REAL_GIT_BIN%" %*
 `;

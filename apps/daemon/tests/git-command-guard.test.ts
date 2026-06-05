@@ -58,6 +58,12 @@ describe('git command guard', () => {
     );
     expect(gitCommandBlockedReason(['checkout', '-b', 'feature', 'main'])).toBeNull();
     expect(gitCommandBlockedReason(['checkout', '--force', 'main'])).toContain('checkout');
+    expect(gitCommandBlockedReason(['checkout', '--pathspec-from-file', 'paths.txt'])).toContain(
+      'checkout',
+    );
+    expect(gitCommandBlockedReason(['checkout', '--pathspec-from-file=paths.txt'])).toContain(
+      'checkout',
+    );
     expect(gitCommandBlockedReason(['checkout', '.'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', './src/file.ts'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', 'HEAD', 'src/file.ts'])).toContain('checkout');
@@ -228,6 +234,24 @@ describe('git command guard', () => {
     });
     expect(destructiveCheckoutWithContext.status).toBe(126);
     expect(destructiveCheckoutWithContext.stderr).toContain('git command guard blocked');
+
+    const destructiveCheckoutPathspecFile = spawnSync('git', ['checkout', '--pathspec-from-file', 'paths.txt'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveCheckoutPathspecFile.status).toBe(126);
+    expect(destructiveCheckoutPathspecFile.stderr).toContain('git command guard blocked');
+
+    const destructiveCheckoutInlinePathspecFile = spawnSync(
+      'git',
+      ['checkout', '--pathspec-from-file=paths.txt'],
+      {
+        env: guardEnv,
+        encoding: 'utf8',
+      },
+    );
+    expect(destructiveCheckoutInlinePathspecFile.status).toBe(126);
+    expect(destructiveCheckoutInlinePathspecFile.stderr).toContain('git command guard blocked');
 
     const destructiveCheckoutHeadPath = spawnSync('git', ['checkout', 'HEAD', 'src/file.ts'], {
       env: guardEnv,
