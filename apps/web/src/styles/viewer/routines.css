@@ -118,8 +118,9 @@
   pointer-events: auto;
 }
 .od-toast.placement-top {
-  top: 24px;
+  top: 64px;
   bottom: auto;
+  z-index: 1200;
 }
 .od-toast.tone-success {
   border: 1px solid color-mix(in srgb, var(--success, #2da44e) 42%, var(--border));
