@@ -840,28 +840,24 @@ export function HomeView({
     });
   }
 
-  function requestPluginContextUse(
+  // Picking "Use" on a plugin (from the library hand-off, the Home plugin
+  // section, or the details modal) should make that plugin the routed
+  // driver of the next run — i.e. set it as the active plugin so its own
+  // pipeline + SKILL.md/asset context are applied — rather than only
+  // attaching it as background context. Without this, the submit path
+  // falls back to the hidden od-default scenario and the plugin's design
+  // brief never reaches the agent. `use-with-query` additionally seeds the
+  // textarea with the rendered useCase.query; plain `use` leaves the draft
+  // untouched (suppressPromptUpdate) while still routing the plugin.
+  async function routePluginUse(
     record: InstalledPluginRecord,
     action: PluginUseAction = 'use',
     inputs?: Record<string, unknown>,
   ) {
-    let shouldFocusOnly = true;
-    setSelectedPluginContexts((prev) => {
-      if (prev.some((item) => item.record.id === record.id)) return prev;
-      return [...prev, { record, inlineBacked: false }];
+    await usePlugin(record, undefined, {
+      ...(inputs ? { inputs } : {}),
+      suppressPromptUpdate: action !== 'use-with-query',
     });
-    if (action === 'use-with-query') {
-      const queryPrompt = renderPluginContextPrompt(record, inputs);
-      if (queryPrompt) {
-        shouldFocusOnly = false;
-        pendingPromptFocusEndRef.current = true;
-        setPromptEditedByUser(true);
-        setPrompt((current) => appendPromptQuery(current, queryPrompt));
-      }
-    }
-    setError(null);
-    setDetailsRecord(null);
-    if (shouldFocusOnly) focusPromptAtEnd();
     scrollHomeToTop();
   }
 
@@ -907,18 +903,6 @@ export function HomeView({
     return renderPluginBriefTemplate(query, hydratePluginInputs(fields, options?.inputs));
   }
 
-  function renderPluginContextPrompt(
-    record: InstalledPluginRecord,
-    inputs?: Record<string, unknown>,
-  ): string | null {
-    const query = resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
-    if (!query) return null;
-    return renderPluginBriefTemplate(
-      query,
-      hydratePluginInputs(record.manifest?.od?.inputs ?? [], inputs),
-    );
-  }
-
   useEffect(() => {
     if (!pendingPluginUseHandoff || pluginsLoading) return;
     const record = plugins.find((plugin) => plugin.id === pendingPluginUseHandoff.pluginId);
@@ -929,7 +913,7 @@ export function HomeView({
       );
       return;
     }
-    requestPluginContextUse(
+    void routePluginUse(
       record,
       pendingPluginUseHandoff.action,
       pendingPluginUseHandoff.inputs,
@@ -1571,7 +1555,7 @@ export function HomeView({
           loading={pluginsLoading}
           activePluginId={active?.record.id ?? null}
           pendingApplyId={pendingApplyId}
-          onUse={(record, action) => requestPluginContextUse(record, action)}
+          onUse={(record, action) => void routePluginUse(record, action)}
           onOpenDetails={setDetailsRecord}
           onBrowseRegistry={onBrowseRegistry}
           preferDefaultFacet={false}
@@ -1584,7 +1568,7 @@ export function HomeView({
           <PluginDetailsModal
             record={detailsRecord}
             onClose={() => setDetailsRecord(null)}
-            onUse={(record) => requestPluginContextUse(record, 'use')}
+            onUse={(record) => void routePluginUse(record, 'use')}
             isApplying={pendingApplyId === detailsRecord.id}
           />
         ) : null}
@@ -2162,12 +2146,6 @@ function removeContextMentionsFromPrompt(prompt: string, labels: string[]): stri
   }, prompt);
 }
 
-function appendPromptQuery(current: string, query: string): string {
-  const next = query.trim();
-  if (!next) return current;
-  if (!current.trim()) return next;
-  return `${current.trimEnd()}\n\n${next}`;
-}
 
 function inputsEqual(
   left: Record<string, unknown> | undefined,
