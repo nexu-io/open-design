@@ -35,10 +35,18 @@ afterEach(async () => {
 });
 
 describe('bound-API-token guard', () => {
-  it('refuses to start with OD_BIND_HOST=0.0.0.0 when OD_API_TOKEN is unset', async () => {
+  it('starts with OD_BIND_HOST=0.0.0.0 when OD_API_TOKEN is unset (warns, does not throw)', async () => {
     delete process.env.OD_API_TOKEN;
-    await expect(startServer({ port: 0, host: '0.0.0.0', returnServer: true }))
-      .rejects.toThrow(/OD_API_TOKEN/);
+    // HEAD behaviour: daemon starts but emits a warning and blocks unauthenticated
+    // network requests via auth middleware (redirect to /login). It no longer throws.
+    const started = (await startServer({ port: 0, host: '0.0.0.0', returnServer: true })) as {
+      url: string;
+      server: http.Server;
+      shutdown?: () => Promise<void> | void;
+    };
+    server = started.server;
+    shutdown = started.shutdown;
+    expect(started.url).toMatch(/^http:\/\//);
   });
 
   it('starts on a public host when OD_API_TOKEN is set', async () => {
