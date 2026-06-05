@@ -86,28 +86,6 @@ export async function waitForDesktopRuntime(runtime: AppRuntimeLookup, timeoutMs
   return waitForRuntime<DesktopStatusSnapshot>(runtime, APP_KEYS.DESKTOP, timeoutMs);
 }
 
-// ─── Tray ───────────────────────────────────────────────────────────────────
-
-export type TrayStatusSnapshot = {
-  isRunning: boolean;
-  port: number;
-  url: string | null;
-  autoStart: boolean;
-  version: string;
-};
-
-export function resolveTrayIpcPath(runtime: AppRuntimeLookup): string {
-  return resolveIpcPath(runtime, APP_KEYS.TRAY);
-}
-
-export async function inspectTrayRuntime(runtime: AppRuntimeLookup, timeoutMs = 800): Promise<TrayStatusSnapshot | null> {
-  return inspectRuntime<TrayStatusSnapshot>(runtime, APP_KEYS.TRAY, timeoutMs);
-}
-
-export async function waitForTrayRuntime(runtime: AppRuntimeLookup, timeoutMs = 15000): Promise<TrayStatusSnapshot> {
-  return waitForRuntime<TrayStatusSnapshot>(runtime, APP_KEYS.TRAY, timeoutMs);
-}
-
 // ─── Utilities ──────────────────────────────────────────────────────────────
 
 /** Generate a unique namespace suffix to avoid pipe/socket conflicts after daemon restart */

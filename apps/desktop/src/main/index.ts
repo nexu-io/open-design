@@ -35,6 +35,7 @@ import {
 import { readProcessStamp } from "@open-design/platform";
 
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
+import { createDesktopTray, type DesktopTrayController } from "./tray.js";
 import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
 import { createDesktopUpdater, createDesktopUpdaterScheduler, type DesktopUpdaterScheduler } from "./updater.js";
 import {
@@ -412,6 +413,7 @@ export async function runDesktopMain(
   let disposeMenu: () => void = () => undefined;
   let updateScheduler: DesktopUpdaterScheduler | null = null;
   let removeDiagnosticsIpc: () => void = () => undefined;
+  let tray: DesktopTrayController | null = null;
   let ipcServer: JsonIpcServerHandle | null = null;
   let shuttingDown = false;
 
@@ -422,6 +424,7 @@ export async function runDesktopMain(
       console.error("desktop beforeShutdown failed", error);
     });
     updateScheduler?.stop("shutdown");
+    await tray?.dispose().catch(() => undefined);
     disposeMenu();
     removeDiagnosticsIpc();
     await ipcServer?.close().catch(() => undefined);
@@ -459,6 +462,18 @@ export async function runDesktopMain(
     intervalMs: updater.config.checkIntervalMs,
   });
   if (updater.shouldAutoCheck()) updateScheduler.start();
+
+  // Phase D merge: tray now lives inside the desktop process. The tray
+  // listens to daemon status on its own 5s poll and answers
+  // STATUS/SHUTDOWN IPC for tools-dev / tools-pack. Closing the main
+  // window doesn't quit — it hides to the tray. Tray "Quit Open Design"
+  // triggers the same `shutdown()` path as app.on("before-quit").
+  // TODO: plumb `desktop.window` into the tray controller once the
+  // runtime exposes a mainWindow accessor, then add hide-on-close.
+  tray = await createDesktopTray({
+    runtime,
+    configPath: join(namespaceRoot, "tray-config.json"),
+  });
 
   attachParentMonitor(shutdown);
 

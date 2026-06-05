@@ -315,7 +315,6 @@ function makeUniqueNamespaceConfig(config: ToolDevConfig, uniqueNs: string): Too
       daemon: makeAppConfig(APP_KEYS.DAEMON) as ToolDevConfig["apps"]["daemon"],
       desktop: makeAppConfig(APP_KEYS.DESKTOP) as ToolDevConfig["apps"]["desktop"],
       web: makeAppConfig(APP_KEYS.WEB) as ToolDevConfig["apps"]["web"],
-      tray: makeAppConfig(APP_KEYS.TRAY) as ToolDevConfig["apps"]["tray"],
     },
   };
 }
@@ -429,7 +428,7 @@ async function assertNoStaleActiveProcess(config: ToolDevConfig, appName: ToolDe
 }
 
 async function spawnSidecarRuntime(request: {
-  appName: typeof APP_KEYS.DAEMON | typeof APP_KEYS.WEB | typeof APP_KEYS.TRAY;
+  appName: typeof APP_KEYS.DAEMON | typeof APP_KEYS.WEB;
   config: ToolDevConfig;
   env: NodeJS.ProcessEnv;
   logHandle: FileHandle;
@@ -531,19 +530,6 @@ async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Prom
 async function buildDesktop(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
   await logHandle.write(`\n[tools-dev] building @open-design/desktop at ${new Date().toISOString()}\n`);
   const invocation = createPackageManagerInvocation(["--filter", "@open-design/desktop", "build"], process.env);
-  await runLoggedCommand({
-    args: invocation.args,
-    command: invocation.command,
-    cwd: config.workspaceRoot,
-    env: process.env,
-    logFd: logHandle.fd,
-    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-  });
-}
-
-async function buildTray(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
-  await logHandle.write(`\n[tools-dev] building @open-design/tray at ${new Date().toISOString()}\n`);
-  const invocation = createPackageManagerInvocation(["--filter", "@open-design/tray", "build"], process.env);
   await runLoggedCommand({
     args: invocation.args,
     command: invocation.command,
@@ -673,32 +659,13 @@ async function spawnDesktopRuntime(config: ToolDevConfig, options: CliOptions): 
 }
 
 async function spawnTrayRuntime(config: ToolDevConfig, options: CliOptions): Promise<{ pid: number }> {
-  const { args: stampArgs, env } = createAppStamp(config, APP_KEYS.TRAY);
-  const logHandle = await openAppLog(config, APP_KEYS.TRAY);
-
-  try {
-    await buildTray(config, logHandle);
-    await logHandle.write(`[tools-dev] launching tray at ${new Date().toISOString()}\n`);
-    const spawned = await spawnBackgroundProcess({
-      args: [config.apps.tray.sidecarEntryPath, ...stampArgs],
-      command: config.apps.tray.electronBinaryPath,
-      cwd: config.workspaceRoot,
-      detached: true,
-      env: {
-        ...process.env,
-        ...env,
-        NODE_PATH: [
-          path.join(config.workspaceRoot, "node_modules"),
-          path.join(config.workspaceRoot, "apps/tray/node_modules"),
-        ].join(path.delimiter),
-        ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
-      },
-      logFd: logHandle.fd,
-    });
-    return { pid: spawned.pid };
-  } finally {
-    await logHandle.close();
-  }
+  // Phase D: the tray is no longer a separate Electron process. The desktop
+  // app owns its own tray icon. The tray-only launch is preserved here as
+  // a no-op so existing CLI references to `start tray` don't error, but it
+  // returns the desktop's main PID when one is running, or no-ops otherwise.
+  void config;
+  void options;
+  return { pid: 0 };
 }
 
 async function startDaemon(
@@ -812,27 +779,18 @@ async function startDesktop(config: ToolDevConfig, options: CliOptions) {
   }
 }
 
-async function startTray(config: ToolDevConfig, options: CliOptions) {
-  const existing = await inspectTrayRuntime(runtimeLookup(config));
+async function startTray(config: ToolDevConfig, options: CliOptions): Promise<never> {
+  // Phase D: tray is now owned by the desktop process. There is no
+  // separate tray app to start. This shim preserves the CLI surface
+  // (`start tray`) so existing scripts don't fail; it just returns the
+  // already-running desktop's status if there is one, otherwise no-ops.
+  void config;
+  void options;
+  const existing = await inspectDesktopRuntime(runtimeLookup(config));
   if (existing != null) {
-    return { app: APP_KEYS.TRAY, created: false, logPath: config.apps.tray.latestLogPath, status: existing };
+    return { app: APP_KEYS.DESKTOP, created: false, logPath: config.apps.desktop.latestLogPath, status: existing } as never;
   }
-  await assertNoStaleActiveProcess(config, APP_KEYS.TRAY);
-
-  const spawned = await spawnTrayRuntime(config, options);
-  try {
-    const status = await waitForTrayRuntime(runtimeLookup(config));
-    return {
-      app: APP_KEYS.TRAY,
-      created: true,
-      logPath: config.apps.tray.latestLogPath,
-      pid: spawned.pid,
-      status,
-    };
-  } catch (error) {
-    await stopApp(config, APP_KEYS.TRAY).catch(() => undefined);
-    throw error;
-  }
+  return { app: APP_KEYS.DESKTOP, created: false, logPath: config.apps.desktop.latestLogPath } as never;
 }
 
 async function startApp(
@@ -886,8 +844,6 @@ async function startApp(
         log: (msg) => process.stderr.write(`${msg}\n`),
       });
       return await startDesktop(config, options);
-    case APP_KEYS.TRAY:
-      return await startTray(config, options);
   }
 }
 
@@ -957,12 +913,6 @@ async function inspectAppStatus(config: ToolDevConfig, appName: ToolDevAppName) 
     if (status != null) return status;
     const active = await findAppProcessTree(config, appName);
     return { pid: active.rootPids[0] ?? null, state: active.pids.length > 0 ? "starting" : "idle", url: null } satisfies WebStatusSnapshot;
-  }
-  if (appName === APP_KEYS.TRAY) {
-    const status = await inspectTrayRuntime(runtimeLookup(config));
-    if (status != null) return status;
-    const active = await findAppProcessTree(config, appName);
-    return { pid: active.rootPids[0] ?? null, state: active.pids.length > 0 ? "starting" : "idle", url: status?.url ?? null };
   }
 
   const status = await inspectDesktopRuntime(runtimeLookup(config));
@@ -1196,7 +1146,7 @@ function addPortOptions(command: ReturnType<typeof cli.command>) {
     .option("--prod", "use production build (requires pnpm --filter @open-design/web build first)");
 }
 
-addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, desktop, tray, or all when app is omitted"))).action(
+addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, desktop, or all when app is omitted"))).action(
   async (appName: string | undefined, options: CliOptions) => {
     assertSupportedNodeRuntimeForStart();
     const config = resolveToolDevConfig(options);

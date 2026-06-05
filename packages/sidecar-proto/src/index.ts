@@ -1,7 +1,6 @@
 export const APP_KEYS = Object.freeze({
   DAEMON: "daemon",
   DESKTOP: "desktop",
-  TRAY: "tray",
   WEB: "web",
 } as const);
 
