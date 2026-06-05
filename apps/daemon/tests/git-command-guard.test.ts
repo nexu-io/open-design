@@ -63,8 +63,11 @@ describe('git command guard', () => {
       'checkout',
     );
     expect(gitCommandBlockedReason(['checkout', '-b', 'feature', 'main'])).toBeNull();
+    expect(gitCommandBlockedReason(['checkout', '-B', 'feature'])).toContain('checkout');
+    expect(gitCommandBlockedReason(['checkout', '-B', 'feature', 'HEAD'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', '-q', 'main'])).toBeNull();
     expect(gitCommandBlockedReason(['checkout', '--force', 'main'])).toContain('checkout');
+    expect(gitCommandBlockedReason(['checkout', '-qB', 'feature', 'HEAD'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', '-fq', 'other'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', '-p'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', '--patch'])).toContain('checkout');
@@ -81,8 +84,10 @@ describe('git command guard', () => {
     expect(gitCommandBlockedReason(['checkout', 'HEAD', '--', 'src/file.ts'])).toContain('checkout');
     expect(gitCommandBlockedReason(['switch', 'main'])).toBeNull();
     expect(gitCommandBlockedReason(['switch', '-c', 'temp', 'main'])).toBeNull();
+    expect(gitCommandBlockedReason(['switch', '-C', 'temp', 'HEAD'])).toContain('switch');
     expect(gitCommandBlockedReason(['switch', '-f', 'other'])).toContain('switch');
     expect(gitCommandBlockedReason(['switch', '-fC', 'temp', 'other'])).toContain('switch');
+    expect(gitCommandBlockedReason(['switch', '-qC', 'temp', 'HEAD'])).toContain('switch');
     expect(gitCommandBlockedReason(['switch', '--force', 'other'])).toContain('switch');
     expect(gitCommandBlockedReason(['switch', '--discard-changes', 'other'])).toContain('switch');
     expect(gitCommandBlockedReason(['restore', '.'])).toContain('restore');
@@ -353,6 +358,31 @@ describe('git command guard', () => {
     expect(destructiveCheckoutBundledForce.status).toBe(126);
     expect(destructiveCheckoutBundledForce.stderr).toContain('git command guard blocked');
 
+    const destructiveCheckoutResetBranch = spawnSync('git', ['checkout', '-B', 'feature', 'HEAD'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveCheckoutResetBranch.status).toBe(126);
+    expect(destructiveCheckoutResetBranch.stderr).toContain('git command guard blocked');
+
+    const destructiveCheckoutBundledResetBranch = spawnSync(
+      'git',
+      ['checkout', '-qB', 'feature', 'HEAD'],
+      {
+        env: guardEnv,
+        encoding: 'utf8',
+      },
+    );
+    expect(destructiveCheckoutBundledResetBranch.status).toBe(126);
+    expect(destructiveCheckoutBundledResetBranch.stderr).toContain('git command guard blocked');
+
+    const destructiveCheckoutResetBranchFromHead = spawnSync('git', ['checkout', '-B', 'feature'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveCheckoutResetBranchFromHead.status).toBe(126);
+    expect(destructiveCheckoutResetBranchFromHead.stderr).toContain('git command guard blocked');
+
     const destructiveCheckoutHeadPath = spawnSync('git', ['checkout', 'HEAD', 'src/file.ts'], {
       env: guardEnv,
       encoding: 'utf8',
@@ -373,6 +403,20 @@ describe('git command guard', () => {
     });
     expect(destructiveSwitchBundledForce.status).toBe(126);
     expect(destructiveSwitchBundledForce.stderr).toContain('git command guard blocked');
+
+    const destructiveSwitchResetBranch = spawnSync('git', ['switch', '-C', 'temp', 'HEAD'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveSwitchResetBranch.status).toBe(126);
+    expect(destructiveSwitchResetBranch.stderr).toContain('git command guard blocked');
+
+    const destructiveSwitchBundledResetBranch = spawnSync('git', ['switch', '-qC', 'temp', 'HEAD'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveSwitchBundledResetBranch.status).toBe(126);
+    expect(destructiveSwitchBundledResetBranch.stderr).toContain('git command guard blocked');
 
     const destructiveSwitchLongForce = spawnSync('git', ['switch', '--force', 'other'], {
       env: guardEnv,
