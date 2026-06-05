@@ -203,7 +203,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       const body = { project: updated, baseDir: normalizedPath, entryFile };
       res.json(body);
     } catch (err: any) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
 
@@ -347,7 +347,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       const body = { project, conversationId: cid, entryFile };
       res.json(body);
     } catch (err: any) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
 

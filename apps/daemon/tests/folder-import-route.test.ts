@@ -151,6 +151,20 @@ describe('POST /api/import/folder', () => {
     });
   });
 
+  it('rejects relative sandbox import allowed roots', async () => {
+    await withSandboxMode(async () => {
+      const folder = makeFolder();
+      await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+      await withSandboxImportAllowedRoots(['tmp'], async () => {
+        const resp = await importFolder({ baseDir: folder });
+        expect(resp.status).toBe(400);
+        const body = (await resp.json()) as { error?: { message?: string } };
+        expect(body.error?.message).toMatch(/OD_SANDBOX_IMPORT_ALLOWED_ROOTS.*absolute/i);
+      });
+    });
+  });
+
   it('rejects sandbox runs for imported folders before creating a run', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');

@@ -108,6 +108,17 @@ describe('resolveProjectDir', () => {
       });
     });
   });
+
+  it('rejects relative sandbox import allowed roots', () => {
+    withSandboxMode(() => {
+      const baseDir = path.join(path.parse(process.cwd()).root, 'tmp', 'od-clone', 'job-1');
+      withSandboxImportAllowedRoots(['tmp'], () => {
+        expect(() =>
+          assertSandboxProjectRootAvailable({ kind: 'prototype', baseDir }),
+        ).toThrowError(/OD_SANDBOX_IMPORT_ALLOWED_ROOTS.*absolute/i);
+      });
+    });
+  });
 });
 
 describe('detectEntryFile', () => {

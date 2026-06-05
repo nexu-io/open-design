@@ -8,6 +8,8 @@ export const SANDBOX_IMPORT_ALLOWED_ROOTS_ENV = 'OD_SANDBOX_IMPORT_ALLOWED_ROOTS
 export const SANDBOX_IMPORTED_PROJECT_UNAVAILABLE_MESSAGE =
   `Imported-folder projects are not available in ${SANDBOX_MODE_ENV} unless ` +
   `their root is under ${SANDBOX_IMPORT_ALLOWED_ROOTS_ENV}.`;
+export const SANDBOX_IMPORT_ALLOWED_ROOTS_INVALID_MESSAGE =
+  `${SANDBOX_IMPORT_ALLOWED_ROOTS_ENV} entries must be absolute paths.`;
 
 export interface SandboxRuntimeRoots {
   agentHomeDir: string;
@@ -51,14 +53,19 @@ function configuredSandboxImportRoots(
 ): string[] {
   const raw = env[SANDBOX_IMPORT_ALLOWED_ROOTS_ENV];
   if (typeof raw !== 'string' || !raw.trim()) return [];
-  return raw
+  const roots = raw
     .split(path.delimiter)
     .map((part) => part.trim())
     .filter(Boolean);
+  const relativeRoot = roots.find((root) => !path.isAbsolute(path.normalize(root)));
+  if (relativeRoot) {
+    throw new Error(`${SANDBOX_IMPORT_ALLOWED_ROOTS_INVALID_MESSAGE} Got: ${relativeRoot}`);
+  }
+  return roots;
 }
 
 function canonicalizePathForContainment(value: string): string {
-  const resolved = path.resolve(value);
+  const resolved = path.normalize(value);
   try {
     return fs.realpathSync.native(resolved);
   } catch {
