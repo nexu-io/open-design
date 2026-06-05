@@ -43,9 +43,13 @@ describe('git command guard', () => {
     expect(gitCommandBlockedReason(['clean', '-fdx'])).toContain('clean');
     expect(gitCommandBlockedReason(['clean', '-df'])).toContain('clean');
     expect(gitCommandBlockedReason(['-c', 'clean.requireForce=false', 'clean', '-d'])).toContain('clean');
+    expect(gitCommandBlockedReason(['clean', '-i'])).toContain('clean');
+    expect(gitCommandBlockedReason(['clean', '--interactive'])).toContain('clean');
     expect(gitCommandBlockedReason(['clean', '-nd'])).toBeNull();
     expect(gitCommandBlockedReason(['clean', '-n', '-d'])).toBeNull();
+    expect(gitCommandBlockedReason(['clean', '-ni'])).toBeNull();
     expect(gitCommandBlockedReason(['clean', '--dry-run', '-fdx'])).toBeNull();
+    expect(gitCommandBlockedReason(['clean', '--dry-run', '--interactive'])).toBeNull();
     expect(gitCommandBlockedReason(['stash', 'drop'])).toContain('stash');
     expect(gitCommandBlockedReason(['push', 'origin', 'HEAD:main'])).toBeNull();
     expect(gitCommandBlockedReason(['push', 'origin', '+HEAD:main'])).toContain('push');
@@ -158,6 +162,20 @@ describe('git command guard', () => {
     expect(safeCleanLongDryRun.status).toBe(0);
     expect(safeCleanLongDryRun.stdout).toContain('real git: clean --dry-run -fdx');
 
+    const safeCleanInteractiveDryRun = spawnSync('git', ['clean', '-ni'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(safeCleanInteractiveDryRun.status).toBe(0);
+    expect(safeCleanInteractiveDryRun.stdout).toContain('real git: clean -ni');
+
+    const safeCleanLongInteractiveDryRun = spawnSync('git', ['clean', '--dry-run', '--interactive'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(safeCleanLongInteractiveDryRun.status).toBe(0);
+    expect(safeCleanLongInteractiveDryRun.stdout).toContain('real git: clean --dry-run --interactive');
+
     const destructive = spawnSync('git', ['reset', '--hard'], {
       env: guardEnv,
       encoding: 'utf8',
@@ -192,6 +210,20 @@ describe('git command guard', () => {
     });
     expect(destructiveCleanDirectory.status).toBe(126);
     expect(destructiveCleanDirectory.stderr).toContain('git command guard blocked');
+
+    const destructiveCleanInteractive = spawnSync('git', ['clean', '-i'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveCleanInteractive.status).toBe(126);
+    expect(destructiveCleanInteractive.stderr).toContain('git command guard blocked');
+
+    const destructiveCleanLongInteractive = spawnSync('git', ['clean', '--interactive'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveCleanLongInteractive.status).toBe(126);
+    expect(destructiveCleanLongInteractive.stderr).toContain('git command guard blocked');
 
     const destructivePushRefspec = spawnSync('git', ['push', 'origin', '+HEAD:main'], {
       env: guardEnv,
