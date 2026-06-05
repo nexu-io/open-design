@@ -38,12 +38,16 @@ describe('git command guard', () => {
     expect(gitCommandBlockedReason(['reset', '--hard'])).toContain('reset --hard');
     expect(gitCommandBlockedReason(['clean', '-fdx'])).toContain('clean');
     expect(gitCommandBlockedReason(['clean', '-df'])).toContain('clean');
+    expect(gitCommandBlockedReason(['-c', 'clean.requireForce=false', 'clean', '-d'])).toContain('clean');
     expect(gitCommandBlockedReason(['stash', 'drop'])).toContain('stash');
     expect(gitCommandBlockedReason(['push', 'origin', 'HEAD:main'])).toBeNull();
     expect(gitCommandBlockedReason(['push', 'origin', '+HEAD:main'])).toContain('push');
     expect(gitCommandBlockedReason(['push', '--force-with-lease=origin/main'])).toContain('push');
     expect(gitCommandBlockedReason(['checkout', 'main'])).toBeNull();
+    expect(gitCommandBlockedReason(['checkout', '-b', 'feature', 'main'])).toBeNull();
     expect(gitCommandBlockedReason(['checkout', '--force', 'main'])).toContain('checkout');
+    expect(gitCommandBlockedReason(['checkout', '.'])).toContain('checkout');
+    expect(gitCommandBlockedReason(['checkout', 'HEAD', 'src/file.ts'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', '--', 'src/file.ts'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', 'HEAD', '--', 'src/file.ts'])).toContain('checkout');
     expect(gitCommandBlockedReason(['restore', '.'])).toContain('restore');
@@ -76,6 +80,13 @@ describe('git command guard', () => {
     expect(safeCheckout.status).toBe(0);
     expect(safeCheckout.stdout).toContain('real git: checkout main');
 
+    const safeCheckoutBranch = spawnSync('git', ['checkout', '-b', 'feature', 'main'], {
+      env: install.env as NodeJS.ProcessEnv,
+      encoding: 'utf8',
+    });
+    expect(safeCheckoutBranch.status).toBe(0);
+    expect(safeCheckoutBranch.stdout).toContain('real git: checkout -b feature main');
+
     const destructive = spawnSync('git', ['reset', '--hard'], {
       env: install.env as NodeJS.ProcessEnv,
       encoding: 'utf8',
@@ -104,6 +115,13 @@ describe('git command guard', () => {
     expect(destructiveCleanGroup.status).toBe(126);
     expect(destructiveCleanGroup.stderr).toContain('git command guard blocked');
 
+    const destructiveCleanDirectory = spawnSync('git', ['-c', 'clean.requireForce=false', 'clean', '-d'], {
+      env: install.env as NodeJS.ProcessEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveCleanDirectory.status).toBe(126);
+    expect(destructiveCleanDirectory.stderr).toContain('git command guard blocked');
+
     const destructivePushRefspec = spawnSync('git', ['push', 'origin', '+HEAD:main'], {
       env: install.env as NodeJS.ProcessEnv,
       encoding: 'utf8',
@@ -117,6 +135,20 @@ describe('git command guard', () => {
     });
     expect(destructiveCheckoutPath.status).toBe(126);
     expect(destructiveCheckoutPath.stderr).toContain('git command guard blocked');
+
+    const destructiveCheckoutDot = spawnSync('git', ['checkout', '.'], {
+      env: install.env as NodeJS.ProcessEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveCheckoutDot.status).toBe(126);
+    expect(destructiveCheckoutDot.stderr).toContain('git command guard blocked');
+
+    const destructiveCheckoutHeadPath = spawnSync('git', ['checkout', 'HEAD', 'src/file.ts'], {
+      env: install.env as NodeJS.ProcessEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveCheckoutHeadPath.status).toBe(126);
+    expect(destructiveCheckoutHeadPath.stderr).toContain('git command guard blocked');
   });
 
   it('preserves a Path-only environment when installing the shim', () => {

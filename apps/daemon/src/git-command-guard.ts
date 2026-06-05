@@ -124,8 +124,8 @@ function findPathEnvKey(env: NodeJS.ProcessEnv): string | null {
 }
 
 function isDestructiveCleanArg(arg: string): boolean {
-  if (arg === '--force' || arg === '-f' || arg === '-x' || arg === '-X') return true;
-  return arg.startsWith('-') && !arg.startsWith('--') && /[fxX]/.test(arg.slice(1));
+  if (arg === '--force' || arg === '-f' || arg === '-d' || arg === '-x' || arg === '-X') return true;
+  return arg.startsWith('-') && !arg.startsWith('--') && /[dfxX]/.test(arg.slice(1));
 }
 
 function isForcePushArg(arg: string): boolean {
@@ -133,12 +133,34 @@ function isForcePushArg(arg: string): boolean {
 }
 
 function hasDestructiveCheckoutArg(args: readonly string[], commandIndex: number): boolean {
+  let checkoutOperandCount = 0;
+  let skipNext = false;
   for (let index = commandIndex + 1; index < args.length; index += 1) {
     const arg = String(args[index] ?? '').trim();
+    if (!arg) continue;
+    if (skipNext) {
+      skipNext = false;
+      continue;
+    }
     if (arg === '-f' || arg === '--force') return true;
     if (arg === '--' && index + 1 < args.length) return true;
+    if (checkoutOptionConsumesSeparateValue(arg)) {
+      skipNext = true;
+      continue;
+    }
+    if (arg.startsWith('-')) continue;
+    checkoutOperandCount += 1;
+    if (checkoutOperandCount > 1 || isLikelyCheckoutPathOperand(arg)) return true;
   }
   return false;
+}
+
+function checkoutOptionConsumesSeparateValue(arg: string): boolean {
+  return arg === '-b' || arg === '-B' || arg === '--orphan' || arg === '--pathspec-from-file';
+}
+
+function isLikelyCheckoutPathOperand(arg: string): boolean {
+  return arg === '.' || arg === '..' || arg.startsWith('./') || arg.startsWith('../') || /[/\\]/.test(arg);
 }
 
 function resolveGitBinary(pathValue: string): string | null {
@@ -167,6 +189,20 @@ option_consumes_next() {
   esac
 }
 
+checkout_option_consumes_next() {
+  case "$1" in
+    -b|-B|--orphan|--pathspec-from-file) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+checkout_operand_is_path() {
+  case "$1" in
+    .|..|./*|../*|*/*|*\\*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 for arg in "$@"; do
   if [ "$skip_next" = "1" ]; then
     skip_next=""
@@ -190,9 +226,9 @@ case "$cmd" in
   clean)
     for arg in "$@"; do
       case "$arg" in
-        --force|-f|-x|-X) blocked="git clean with force/delete flags removes untracked files" ;;
+        --force|-f|-d|-x|-X) blocked="git clean with force/delete flags removes untracked files" ;;
         --*) ;;
-        -*) case "\${arg#-}" in *f*|*x*|*X*) blocked="git clean with force/delete flags removes untracked files" ;; esac ;;
+        -*) case "\${arg#-}" in *d*|*f*|*x*|*X*) blocked="git clean with force/delete flags removes untracked files" ;; esac ;;
       esac
     done
     ;;
@@ -215,8 +251,14 @@ case "$cmd" in
   checkout)
     seen=""
     saw_pathspec_delimiter=""
+    skip_checkout_value=""
+    checkout_operand_count=0
     for arg in "$@"; do
       [ "$seen" = "1" ] || { [ "$arg" = "checkout" ] && seen="1"; continue; }
+      if [ "$skip_checkout_value" = "1" ]; then
+        skip_checkout_value=""
+        continue
+      fi
       if [ "$saw_pathspec_delimiter" = "1" ]; then
         blocked="git checkout can discard workspace changes"
         break
@@ -224,6 +266,14 @@ case "$cmd" in
       case "$arg" in
         -f|--force) blocked="git checkout can discard workspace changes" ;;
         --) saw_pathspec_delimiter="1" ;;
+        -*) checkout_option_consumes_next "$arg" && skip_checkout_value="1" ;;
+        *)
+          checkout_operand_count=$((checkout_operand_count + 1))
+          if [ "$checkout_operand_count" -gt 1 ] || checkout_operand_is_path "$arg"; then
+            blocked="git checkout can discard workspace changes"
+            break
+          fi
+          ;;
       esac
     done
     ;;
@@ -246,7 +296,7 @@ if errorlevel 1 (
   echo Open Design git command guard requires node on PATH. 1>&2
   exit /b 126
 )
-node -e "const args=process.argv.slice(1); const valueOptions=new Set(['-C','-c','--exec-path','--git-dir','--namespace','--object-directory','--super-prefix','--work-tree']); let cmd='',cmdIndex=-1; for(let i=0;i<args.length;i++){const a=args[i]||''; if(valueOptions.has(a)){i++; continue} if(a.startsWith('-')) continue; cmd=a; cmdIndex=i; break} const c=cmd.toLowerCase(); const isClean=a=>a==='--force'||a==='-f'||a==='-x'||a==='-X'||(a.startsWith('-')&&!a.startsWith('--')&&/[fxX]/.test(a.slice(1))); const isPush=a=>a==='-f'||a==='--force'||a.startsWith('--force-with-lease')||a.startsWith('+'); const isCheckout=()=>{for(let i=cmdIndex+1;i<args.length;i++){const a=args[i]||''; if(a==='-f'||a==='--force') return true; if(a==='--'&&i+1<args.length) return true} return false}; const commandArgs=args.slice(cmdIndex+1); const blocked=(c==='reset'&&args.includes('--hard'))||(c==='clean'&&args.some(isClean))||(c==='stash'&&['drop','clear'].includes((args[cmdIndex+1]||'').toLowerCase()))||(c==='push'&&commandArgs.some(isPush))||(c==='checkout'&&isCheckout())||c==='restore'; if(blocked){console.error('Open Design git command guard blocked destructive git command'); process.exit(126)}" %*
+node -e "const args=process.argv.slice(1); const valueOptions=new Set(['-C','-c','--exec-path','--git-dir','--namespace','--object-directory','--super-prefix','--work-tree']); const checkoutValueOptions=new Set(['-b','-B','--orphan','--pathspec-from-file']); let cmd='',cmdIndex=-1; for(let i=0;i<args.length;i++){const a=args[i]||''; if(valueOptions.has(a)){i++; continue} if(a.startsWith('-')) continue; cmd=a; cmdIndex=i; break} const c=cmd.toLowerCase(); const isClean=a=>a==='--force'||a==='-f'||a==='-d'||a==='-x'||a==='-X'||(a.startsWith('-')&&!a.startsWith('--')&&/[dfxX]/.test(a.slice(1))); const isPush=a=>a==='-f'||a==='--force'||a.startsWith('--force-with-lease')||a.startsWith('+'); const isCheckoutPath=a=>a==='.'||a==='..'||a.startsWith('./')||a.startsWith('../')||a.includes('/')||a.includes(String.fromCharCode(92)); const isCheckout=()=>{let operands=0,skip=false; for(let i=cmdIndex+1;i<args.length;i++){const a=args[i]||''; if(skip){skip=false; continue} if(a==='-f'||a==='--force') return true; if(a==='--'&&i+1<args.length) return true; if(checkoutValueOptions.has(a)){skip=true; continue} if(a.startsWith('-')) continue; operands++; if(operands>1||isCheckoutPath(a)) return true} return false}; const commandArgs=args.slice(cmdIndex+1); const blocked=(c==='reset'&&args.includes('--hard'))||(c==='clean'&&args.some(isClean))||(c==='stash'&&['drop','clear'].includes((args[cmdIndex+1]||'').toLowerCase()))||(c==='push'&&commandArgs.some(isPush))||(c==='checkout'&&isCheckout())||c==='restore'; if(blocked){console.error('Open Design git command guard blocked destructive git command'); process.exit(126)}" %*
 if errorlevel 1 exit /b %errorlevel%
 "%OD_REAL_GIT_BIN%" %*
 `;
