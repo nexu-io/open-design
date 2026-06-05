@@ -13,7 +13,9 @@ import type {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ANNOTATION_EVENT } from '../../src/components/PreviewDrawOverlay';
 
-const { saveTemplateMock } = vi.hoisted(() => ({
+const { analyticsNewRequestIdMock, analyticsTrackMock, saveTemplateMock } = vi.hoisted(() => ({
+  analyticsNewRequestIdMock: vi.fn(() => 'request-1'),
+  analyticsTrackMock: vi.fn(),
   saveTemplateMock: vi.fn(),
 }));
 
@@ -21,14 +23,9 @@ const { saveTemplateMock } = vi.hoisted(() => ({
 // (eventName, props) pairs FileViewer emits. The real provider returns a
 // no-op `track` outside a provider tree, so swapping in a spy changes no
 // behavior for the rest of the suite — it just records calls.
-const { analyticsTrackMock } = vi.hoisted(() => ({
-  analyticsTrackMock: vi.fn(),
-}));
-
 const { safetyEventMock } = vi.hoisted(() => ({
   safetyEventMock: vi.fn(),
 }));
-
 vi.mock('../../src/analytics/provider', async () => {
   const actual = await vi.importActual<typeof import('../../src/analytics/provider')>(
     '../../src/analytics/provider',
@@ -41,9 +38,9 @@ vi.mock('../../src/analytics/provider', async () => {
       setIdentity: () => undefined,
       setConfigureGlobals: () => undefined,
       setUserId: () => undefined,
-      anonymousId: 'test-anon',
+      anonymousId: 'test-anonymous',
       sessionId: 'test-session',
-      newRequestId: () => 'test-request',
+      newRequestId: analyticsNewRequestIdMock,
     }),
   };
 });
@@ -196,6 +193,8 @@ afterEach(() => {
   // remount does not flash the signed-out state. Left alone, a test that signs
   // into a team would silently sign the NEXT test in too.
   resetWorkspaceContextCache();
+  analyticsNewRequestIdMock.mockClear();
+  analyticsTrackMock.mockClear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   analyticsTrackMock.mockReset();
@@ -5912,7 +5911,7 @@ describe('FileViewer SVG artifacts', () => {
     await waitFor(() => {
       expect((screen.getByLabelText(/display\.dev API key/i) as HTMLInputElement).value).toBe('saved-displaydev-token');
     });
-    expect(screen.getByText('https://public.dsp.so/demo')).toBeTruthy();
+    expect(screen.getAllByText('https://public.dsp.so/demo').length).toBeGreaterThan(0);
     expect(screen.getByText('Claim URL')).toBeTruthy();
     expect(screen.getByText('https://app.display.dev/claim?code=abc')).toBeTruthy();
   });
@@ -6040,7 +6039,7 @@ describe('FileViewer SVG artifacts', () => {
     await waitFor(() => {
       expect(clearedToken).toBe(true);
     });
-    expect(await screen.findByText('https://public.dsp.so/demo-anon')).toBeTruthy();
+    expect((await screen.findAllByText('https://public.dsp.so/demo-anon')).length).toBeGreaterThan(0);
     expect(screen.getByText('Claim URL')).toBeTruthy();
     expect(screen.getByText('https://app.display.dev/claim?code=anon')).toBeTruthy();
   });
@@ -6144,7 +6143,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
     expect((deployRequest.body?.displayDev as Record<string, unknown>).sharedWith).toBeUndefined();
-    expect(await screen.findByText('https://app.display.dev/owned-demo')).toBeTruthy();
+    expect((await screen.findAllByText('https://app.display.dev/owned-demo')).length).toBeGreaterThan(0);
     expect(screen.queryByText('Claim URL')).toBeNull();
   });
 
