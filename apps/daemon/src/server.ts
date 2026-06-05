@@ -473,6 +473,7 @@ import { registerMemoryRoutes } from './routes/memory.js';
 import { registerStaticResourceRoutes } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
 import { installRouteRegistrationGuard } from './route-registration-guard.js';
+import { stopProjectUiPreviewRuntimesForProject } from './project-ui-preview-runtime.js';
 import { submitToolResultToRunState } from './run-tool-results.js';
 import { assertServerContextSatisfiesRoutes } from './route-context-contract.js';
 import { configureConnectorCredentialStore, connectorService, ConnectorServiceError, FileConnectorCredentialStore } from './connectors/service.js';
@@ -6232,6 +6233,7 @@ export async function startServer({
 
   app.delete('/api/projects/:id', async (req, res) => {
     try {
+      await stopProjectUiPreviewRuntimesForProject(req.params.id);
       dbDeleteProject(db, req.params.id);
       await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
       /** @type {import('@open-design/contracts').OkResponse} */

@@ -114,6 +114,14 @@ export async function stopAllProjectUiPreviewRuntimes(): Promise<void> {
   await Promise.all(entries.map((entry) => stopRuntime(entry)));
 }
 
+export async function stopProjectUiPreviewRuntimesForProject(projectId: string): Promise<void> {
+  const entries = [...previewRuntimes.values()].filter((entry) => entry.projectId === projectId);
+  for (const entry of entries) {
+    previewRuntimes.delete(entry.key);
+  }
+  await Promise.all(entries.map((entry) => stopRuntime(entry)));
+}
+
 async function launchRuntime(input: {
   key: string;
   projectId: string;

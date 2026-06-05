@@ -6,7 +6,10 @@ import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
-import { stopAllProjectUiPreviewRuntimes } from '../src/project-ui-preview-runtime.js';
+import {
+  projectUiPreviewRuntimeProxyTarget,
+  stopAllProjectUiPreviewRuntimes,
+} from '../src/project-ui-preview-runtime.js';
 
 describe('POST /api/import/folder', () => {
   let server: http.Server;
@@ -383,6 +386,16 @@ const server = http.createServer((req, res) => {
     res.end("@font-face{font-family:Inter;src:url('/fonts/Inter.woff2')}body{font-family:Inter}");
     return;
   }
+  if (req.method === 'POST' && req.url === '/submit') {
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      res.setHeader('content-type', 'text/html');
+      res.end('<!doctype html><h1>Posted</h1><p>Content-Type ' + req.headers['content-type'] + '</p><p>Body ' + body + '</p>');
+    });
+    return;
+  }
   if (req.url === '/fonts/Inter.woff2') {
     res.setHeader('content-type', 'font/woff2');
     res.end('font');
@@ -390,7 +403,7 @@ const server = http.createServer((req, res) => {
   }
   res.setHeader('content-type', 'text/html');
   res.write('<!doctype html>');
-  res.end('<html><head><link rel="stylesheet" href="/styles.css"><script type="module">import RefreshRuntime from "/@react-refresh"; import "/@vite/client";</script></head><body><a href="/search">Search</a><h1>Preview ' + req.url + '</h1></body></html>');
+  res.end('<html><head><link rel="stylesheet" href="/styles.css"><script type="module">import RefreshRuntime from "/@react-refresh"; import "/@vite/client";</script></head><body><form method="post" action="/submit"><input name="query" value="Search"></form><a href="/search">Search</a><h1>Preview ' + req.url + '</h1></body></html>');
 });
 server.listen(port, '127.0.0.1');
 process.on('SIGTERM', () => server.close(() => process.exit(0)));
@@ -458,13 +471,31 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
     expect(renderedHtml).toContain(`<link rel="stylesheet" href="${previewBody.baseUrl}/styles.css">`);
     expect(renderedHtml).toContain(`from "${previewBody.baseUrl}/@react-refresh"`);
     expect(renderedHtml).toContain(`import "${previewBody.baseUrl}/@vite/client"`);
-    expect(renderedHtml).toContain('<a href="/search">Search</a>');
+    expect(renderedHtml).toContain(`action="${previewBody.baseUrl}/submit"`);
+    expect(renderedHtml).toContain(`<a href="${previewBody.baseUrl}/search">Search</a>`);
+
+    const postResp = await fetch(`${baseUrl}${previewBody.baseUrl!}/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'query=Search&intent=preview',
+    });
+    expect(postResp.status).toBe(200);
+    const postHtml = await postResp.text();
+    expect(postHtml).toContain('Content-Type application/x-www-form-urlencoded');
+    expect(postHtml).toContain('Body query=Search&intent=preview');
 
     const font = await fetch(`${baseUrl}${previewBody.baseUrl!}/fonts/Inter.woff2`, {
       headers: { Origin: 'null' },
     });
     expect(font.status).toBe(200);
     expect(font.headers.get('access-control-allow-origin')).toBe('*');
+
+    const proxyToken = previewBody.baseUrl!.split('/').pop();
+    expect(proxyToken).toBeTruthy();
+    expect(projectUiPreviewRuntimeProxyTarget(project.id, proxyToken!)).not.toBeNull();
+    const deleteResp = await fetch(`${baseUrl}/api/projects/${project.id}`, { method: 'DELETE' });
+    expect(deleteResp.status).toBe(200);
+    expect(projectUiPreviewRuntimeProxyTarget(project.id, proxyToken!)).toBeNull();
   });
 
   it('does not wait for a source-backed route render before returning the preview runtime', async () => {

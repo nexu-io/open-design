@@ -34,9 +34,19 @@ import { discoverProjectUiSurfaces } from './project-ui-surfaces.js';
 import {
   projectUiPreviewRuntimeProxyTarget,
   startProjectUiPreviewRuntime,
+  stopProjectUiPreviewRuntimesForProject,
 } from './project-ui-preview-runtime.js';
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'validation'> {}
+
+const PREVIEW_PROXY_MAX_BODY_BYTES = 25 * 1024 * 1024;
+
+class PreviewProxyBodyTooLargeError extends Error {
+  constructor(limit: number) {
+    super(`preview proxy request body exceeds ${limit} bytes`);
+    this.name = 'PreviewProxyBodyTooLargeError';
+  }
+}
 
 function projectDetailResolvedDir(
   projectsRoot: string,
@@ -765,10 +775,11 @@ async function proxyProjectUiPreviewRequest(
 ): Promise<void> {
   const query = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
   const upstreamUrl = `${target.baseUrl}${proxySuffixPath(suffix)}${query}`;
+  const requestBody = await proxyRequestBody(req);
   const upstream = await fetch(upstreamUrl, {
     method: req.method,
     headers: proxyRequestHeaders(req),
-    ...(proxyRequestBody(req) ?? {}),
+    ...(requestBody ?? {}),
   });
   const contentType = upstream.headers.get('content-type') ?? '';
   const transformText = shouldTransformPreviewProxyText(contentType);
@@ -823,12 +834,38 @@ function proxyRequestHeaders(req: Request): Headers {
   return headers;
 }
 
-function proxyRequestBody(req: Request): { body: string | Uint8Array } | null {
+async function proxyRequestBody(req: Request): Promise<{ body: string | Uint8Array } | null> {
   if (req.method === 'GET' || req.method === 'HEAD') return null;
+  if (!isPreviewProxyJsonContentType(req.headers['content-type'])) {
+    const raw = await readProxyRequestBody(req);
+    return raw.byteLength > 0 ? { body: raw } : null;
+  }
   const body = req.body as unknown;
-  if (body == null) return null;
+  if (body == null) {
+    const raw = await readProxyRequestBody(req);
+    return raw.byteLength > 0 ? { body: raw } : null;
+  }
   if (typeof body === 'string' || body instanceof Uint8Array) return { body };
   return { body: JSON.stringify(body) };
+}
+
+function isPreviewProxyJsonContentType(value: string | string[] | undefined): boolean {
+  const contentType = Array.isArray(value) ? value[0] : value;
+  return typeof contentType === 'string' && /(?:^|;|\s)(?:application\/json|[^/;]+\/[^;]+\+json)\b/i.test(contentType);
+}
+
+async function readProxyRequestBody(req: Request): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buffer.byteLength;
+    if (total > PREVIEW_PROXY_MAX_BODY_BYTES) {
+      throw new PreviewProxyBodyTooLargeError(PREVIEW_PROXY_MAX_BODY_BYTES);
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks, total);
 }
 
 function proxySuffixPath(suffix: string): string {
@@ -905,6 +942,11 @@ function rewritePreviewProxyHtmlPaths(html: string, proxyBasePath: string): stri
     )
     .replace(
       /(<link\b[^>]*\bhref\s*=\s*)(["'])\/(?!\/|api\/projects\/)([^"']*)\2/gi,
+      (_match, prefix: string, quote: string, value: string) =>
+        `${prefix}${quote}${proxyBasePath}/${value}${quote}`,
+    )
+    .replace(
+      /(<a\b[^>]*\bhref\s*=\s*)(["'])\/(?!\/|api\/projects\/)([^"']*)\2/gi,
       (_match, prefix: string, quote: string, value: string) =>
         `${prefix}${quote}${proxyBasePath}/${value}${quote}`,
     )
@@ -1609,6 +1651,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.delete('/api/projects/:id', async (req, res) => {
     try {
+      await stopProjectUiPreviewRuntimesForProject(req.params.id);
       dbDeleteProject(db, req.params.id);
       await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
       /** @type {import('@open-design/contracts').OkResponse} */
@@ -2287,6 +2330,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       }
       await proxyProjectUiPreviewRequest(req, res, target, suffix);
     } catch (err: any) {
+      if (err instanceof PreviewProxyBodyTooLargeError) {
+        sendApiError(res, 413, 'PAYLOAD_TOO_LARGE', err.message);
+        return;
+      }
       sendApiError(res, 502, 'PREVIEW_PROXY_ERROR', String(err));
     }
   });
