@@ -10,14 +10,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
+import { useAnalytics } from '../analytics/provider';
+import { recordAmrEntry, type AmrEntryAttribution } from '../analytics/amr-attribution';
 import { KNOWN_PROVIDERS } from '../state/config';
+import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
 import {
   cancelVelaLogin,
   fetchVelaLoginStatus,
   startVelaLogin,
   type VelaLoginStatus,
 } from '../providers/daemon';
-import type { AgentInfo, ApiProtocol, AppConfig, ExecMode, ProviderModelOption } from '../types';
+import type { AgentInfo, ApiProtocol, AppConfig, ExecMode } from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
 import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
@@ -31,10 +34,16 @@ import {
 } from './amrLoginPolling';
 import { normalizeAgentModelChoice } from './agentModelSelection';
 import { SearchableModelSelect } from './modelOptions';
+import {
+  mergeProviderModelOptions,
+  providerModelsCacheKey,
+  type ProviderModelsCache,
+} from './providerModelsCache';
 
 interface Props {
   config: AppConfig;
   agents: AgentInfo[];
+  providerModelsCache?: ProviderModelsCache;
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
   onAgentChange: (id: string) => void;
@@ -44,7 +53,6 @@ interface Props {
   ) => void;
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
-  providerModelsCache?: Record<string, ProviderModelOption[]>;
   onOpenSettings: (
     section?:
       | 'execution'
@@ -103,21 +111,22 @@ function displayAgentChipName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
 export function InlineModelSwitcher({
   config,
   agents,
+  providerModelsCache,
   daemonLive,
   onModeChange,
   onAgentChange,
   onAgentModelChange,
   onApiProtocolChange,
   onApiModelChange,
-  providerModelsCache,
   onOpenSettings,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
-  const [amrLoginError, setAmrLoginError] = useState(false);
+  const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
   const [amrReminderSeen, setAmrReminderSeen] = useState(readAmrReminderSeen);
   const [showAmrReminderInPopover, setShowAmrReminderInPopover] =
     useState(false);
@@ -172,34 +181,36 @@ export function InlineModelSwitcher({
         }
         amrLoginStartedAtRef.current = null;
         setAmrLoginPending(false);
-        setAmrLoginError(true);
+        setAmrLoginError(t('settings.amrLoginErrorCompact'));
       }
     };
     amrPollRef.current = window.setInterval(() => {
       void tick();
     }, AMR_LOGIN_POLL_INTERVAL_MS);
-  }, [refreshAmrStatus, stopAmrPolling]);
+  }, [refreshAmrStatus, stopAmrPolling, t]);
 
-  const handleAmrSignIn = useCallback(async () => {
+  const handleAmrSignIn = useCallback(async (
+    attribution?: AmrEntryAttribution | null,
+  ) => {
     const startedAt = Date.now();
     amrLoginStartedAtRef.current = startedAt;
-    setAmrLoginError(false);
+    setAmrLoginError(null);
     setAmrLoginPending(true);
-    const result = await startVelaLogin();
+    const result = await startVelaLogin(attribution);
     if (!result.ok && !result.alreadyRunning) {
       amrLoginStartedAtRef.current = null;
       setAmrLoginPending(false);
-      setAmrLoginError(true);
+      setAmrLoginError(result.error || t('settings.amrLoginErrorCompact'));
       return;
     }
     notifyAmrLoginStatusChanged('login-started');
     startAmrPolling(startedAt);
-  }, [startAmrPolling]);
+  }, [startAmrPolling, t]);
 
   const handleAmrCancelLogin = useCallback(async () => {
     stopAmrPolling();
     amrLoginStartedAtRef.current = null;
-    setAmrLoginError(false);
+    setAmrLoginError(null);
     setAmrLoginPending(false);
     await cancelVelaLogin();
     notifyAmrLoginStatusChanged('login-canceled');
@@ -214,12 +225,17 @@ export function InlineModelSwitcher({
         await handleAmrCancelLogin();
         return;
       }
+      const attribution = recordAmrEntry(
+        analytics.track,
+        'inline_model_switcher_amr_row',
+      );
       const latest = await refreshAmrStatus();
       if (latest?.loggedIn) return;
-      await handleAmrSignIn();
+      await handleAmrSignIn(attribution);
     },
     [
       amrLoginPending,
+      analytics.track,
       handleAmrCancelLogin,
       handleAmrSignIn,
       onAgentChange,
@@ -257,7 +273,7 @@ export function InlineModelSwitcher({
       if (reason === 'login-started') {
         const startedAt = Date.now();
         amrLoginStartedAtRef.current = startedAt;
-        setAmrLoginError(false);
+        setAmrLoginError(null);
         setAmrLoginPending(true);
         startAmrPolling(startedAt);
       } else if (reason === 'login-canceled') {
@@ -337,7 +353,7 @@ export function InlineModelSwitcher({
       : t('settings.amrSignIn');
   const amrPendingHoverLabel = t('settings.amrCancelSignIn');
   const amrInlineStatus = amrLoginError
-    ? t('settings.amrLoginErrorCompact')
+    ? amrLoginError
     : amrLoggedIn
       ? t('settings.amrSignedIn')
       : amrLoginPending
@@ -350,12 +366,6 @@ export function InlineModelSwitcher({
         : null;
 
   const apiProtocol = config.apiProtocol ?? 'anthropic';
-  const providerModelsInputKey = [
-    apiProtocol,
-    config.baseUrl.trim().replace(/\/+$/, ''),
-    config.apiKey.trim(),
-    config.apiVersion?.trim() ?? '',
-  ].join('\n');
   const providerForProtocol = useMemo(
     () =>
       KNOWN_PROVIDERS.find(
@@ -367,16 +377,38 @@ export function InlineModelSwitcher({
       ) ?? KNOWN_PROVIDERS.find((p) => p.protocol === apiProtocol),
     [apiProtocol, config.apiProviderBaseUrl],
   );
-  const fetchedProviderModels = providerModelsCache?.[providerModelsInputKey] ?? [];
-  const apiModelOptions = useMemo(() => {
-    const discovered = fetchedProviderModels.map((model) => model.id);
-    const staticOptions = providerForProtocol?.models ?? [];
-    const merged = new Set<string>([...discovered, ...staticOptions]);
-    if (config.model.trim()) merged.add(config.model.trim());
-    return Array.from(merged);
-  }, [config.model, fetchedProviderModels, providerForProtocol?.models]);
+  const providerModelsKey = useMemo(
+    () =>
+      providerModelsCacheKey(
+        apiProtocol,
+        config.baseUrl,
+        config.apiKey,
+        config.apiVersion ?? '',
+      ),
+    [apiProtocol, config.apiKey, config.apiVersion, config.baseUrl],
+  );
+  const fetchedApiModelOptions = providerModelsCache?.[providerModelsKey] ?? [];
+  const suggestedApiModelIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          providerForProtocol?.models?.length
+            ? providerForProtocol.models
+            : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
+        ),
+      ),
+    [apiProtocol, providerForProtocol],
+  );
+  const apiModelOptions = useMemo(
+    () => mergeProviderModelOptions(fetchedApiModelOptions, suggestedApiModelIds),
+    [fetchedApiModelOptions, suggestedApiModelIds],
+  );
+  const apiModelIds = useMemo(
+    () => apiModelOptions.map((model) => model.id),
+    [apiModelOptions],
+  );
   const apiModelChoices = useMemo(
-    () => apiModelOptions.map((id) => ({ id, label: id })),
+    () => apiModelOptions.map((model) => ({ id: model.id, label: model.label })),
     [apiModelOptions],
   );
 
@@ -712,7 +744,7 @@ export function InlineModelSwitcher({
                     value={config.model}
                     onChange={(nextValue) => onApiModelChange?.(nextValue)}
                     additionalOptions={
-                      config.model && !apiModelOptions.includes(config.model)
+                      config.model && !apiModelIds.includes(config.model)
                         ? [
                             {
                               value: config.model,

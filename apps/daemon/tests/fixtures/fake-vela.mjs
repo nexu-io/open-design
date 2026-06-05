@@ -2,9 +2,9 @@
 /**
  * Fake vela CLI used by AMR integration tests. Routes by the first argv:
  *
- *   `vela models`                       → prints the live link model catalog
- *                                         in the same tabular shape as Vela
- *                                         0.0.1.
+ *   `vela model preset --format json`   → prints the local AMR picker seed.
+ *   `vela model list --format json`     → prints the authoritative remote
+ *                                         AMR model catalog.
  *
  *   `vela login`                        → writes ~/.amr/config.json (the
  *                                         active VELA_PROFILE only) and
@@ -43,6 +43,8 @@
  *   FAKE_VELA_SET_MODEL_ERROR    – when set, session/set_model returns a JSON-RPC error
  *   FAKE_VELA_PROMPT_ERROR       – when set, session/prompt returns a JSON-RPC error
  *   FAKE_VELA_MODELS             – newline-separated `vela models` stdout
+ *   FAKE_VELA_MODEL_PRESET_JSON  – JSON stdout for `model preset --format json`
+ *   FAKE_VELA_MODEL_LIST_JSON    – JSON stdout for `model list --format json`
  *   FAKE_VELA_REQUIRE_SET_MODEL  – strict gate (default on); set to '0' to
  *                                   accept session/prompt without prior
  *                                   session/set_model (legacy behaviour)
@@ -82,6 +84,35 @@ const DEFAULT_MODELS_STDOUT = [
   'public_model_qwen3_235b_a22b  vela',
   'public_model_seedance_2    vela',
 ].join('\n');
+const DEFAULT_MODEL_PRESET_JSON = JSON.stringify({
+  source: 'preset',
+  data: [
+    { id: 'deepseek-v4-flash' },
+    { id: 'deepseek-v3.2' },
+    { id: 'glm-5.1' },
+    { id: 'gemini-2.5-flash' },
+  ],
+});
+const DEFAULT_MODEL_LIST_JSON = JSON.stringify({
+  source: 'remote',
+  data: [
+    { id: 'deepseek-v3.2' },
+    { id: 'deepseek-v4-flash' },
+    { id: 'deepseek-v4-pro' },
+    { id: 'gemini-2.5-flash' },
+    { id: 'gemini-3.1-flash-lite-preview' },
+    { id: 'gemini-3.1-pro-preview' },
+    { id: 'gpt-5.4' },
+    { id: 'gpt-5.4-mini' },
+    { id: 'glm-5' },
+    { id: 'glm-5.1' },
+    { id: 'gpt-image-2' },
+    { id: 'kimi-k2.6' },
+    { id: 'minimax-m2.7' },
+    { id: 'qwen3-235b-a22b' },
+    { id: 'seedance-2' },
+  ],
+});
 
 // Real `vela agent run --runtime opencode` rejects session/prompt until
 // session/set_model has been called for the current session — see the
@@ -303,4 +334,15 @@ if (argv[2] === 'login') {
 if (argv[2] === 'models') {
   stdout.write(`${env.FAKE_VELA_MODELS || DEFAULT_MODELS_STDOUT}\n`);
   exit(0);
+}
+
+if (argv[2] === 'model' && argv[4] === '--format' && argv[5] === 'json') {
+  if (argv[3] === 'preset') {
+    stdout.write(`${env.FAKE_VELA_MODEL_PRESET_JSON || DEFAULT_MODEL_PRESET_JSON}\n`);
+    exit(0);
+  }
+  if (argv[3] === 'list') {
+    stdout.write(`${env.FAKE_VELA_MODEL_LIST_JSON || DEFAULT_MODEL_LIST_JSON}\n`);
+    exit(0);
+  }
 }

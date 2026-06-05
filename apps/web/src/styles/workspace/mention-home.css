@@ -1,53 +1,83 @@
-/* -------- Mention popover ------------------------------------------- */
+/* -------- Floating caret layer (shared shell: mention + slash) ------ */
+/* position/left/top/width/--cfl-max-h come from the inline style set by
+   CaretFloatingLayer; this rule only owns stacking + the enter animation. */
+.caret-floating-layer {
+  z-index: 1600; /* above the composer's own popover-elevation tier (1500) */
+}
+@keyframes cflEnterAbove {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+@keyframes cflEnterBelow {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+.caret-floating-layer[data-placement='above'] > * {
+  transform-origin: bottom left;
+  animation: cflEnterAbove 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.caret-floating-layer[data-placement='below'] > * {
+  transform-origin: top left;
+  animation: cflEnterBelow 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .caret-floating-layer > * { animation: none; }
+}
+
+/* -------- Mention popover (FLOATING — no order/flex/margin) --------- */
 .mention-popover {
-  order: -1;
-  flex: 0 0 clamp(300px, 52vh, 480px);
-  min-height: 248px;
-  max-height: min(480px, 72vh);
-  margin: 0 0 6px;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: var(--cfl-max-h, 460px);
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
 .mention-tabs {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   min-height: 42px;
-  padding: 6px;
+  padding: 7px 8px;
   background: var(--bg-subtle);
   border-bottom: 1px solid var(--border-soft);
   overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
-.mention-tabs::-webkit-scrollbar {
-  display: none;
-}
+.mention-tabs::-webkit-scrollbar { display: none; }
 .mention-tab {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: max-content;
-  min-height: 30px;
-  padding: 5px 10px;
+  min-inline-size: max-content;
+  min-height: 28px;
+  padding: 4px 11px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-muted);
   font: inherit;
   font-size: 11.5px;
+  font-weight: 500;
   line-height: 18px;
+  white-space: nowrap;
   cursor: pointer;
+  transition:
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
+.mention-tab:hover { color: var(--text); background: var(--bg-panel); }
 .mention-tab.active {
   background: var(--bg-panel);
-  color: var(--text);
+  color: var(--text-strong);
   border-color: var(--border);
   box-shadow: var(--shadow-xs);
 }
@@ -55,44 +85,55 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 3px 0;
+  padding: 5px;
+  scroll-padding-block: 6px;
 }
 .mention-empty {
-  padding: 14px 10px;
+  padding: 22px 14px;
   color: var(--text-muted);
   font-size: 12px;
   text-align: center;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 .mention-item {
   display: flex;
   align-items: center;
   width: 100%;
   background: transparent;
-  border: none;
-  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 7px 9px;
   font-size: 12px;
   text-align: left;
-  gap: 8px;
+  gap: 9px;
   color: var(--text);
-  min-height: 32px;
+  min-height: 34px;
+  cursor: pointer;
+  transition: background-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.mention-item:hover { background: var(--bg-subtle); border-color: transparent; }
+.mention-item:hover { background: var(--bg-subtle); }
+.mention-item[aria-selected='true'],
+.mention-item.is-active {
+  background: var(--accent-tint);
+  border-color: var(--accent-soft);
+  box-shadow: inset 2px 0 0 0 var(--accent);
+}
 .mention-section-label {
   font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  padding: 4px 8px 2px;
+  letter-spacing: 0.05em;
+  color: var(--text-soft);
+  padding: 8px 9px 3px;
 }
+.mention-section-label:first-child { padding-top: 3px; }
 .mention-section-label + .mention-section-label,
 .mention-item + .mention-section-label {
-  margin-top: 4px;
-  border-top: 1px solid var(--border);
+  margin-top: 2px;
+  border-top: none;
 }
-.mention-item--plugin {
-  align-items: flex-start;
-}
+.mention-item--plugin { align-items: flex-start; }
+.mention-item--plugin .mention-item-body { padding-top: 1px; }
 .mention-item-body {
   display: flex;
   flex-direction: column;
@@ -101,8 +142,12 @@
   min-width: 0;
 }
 .mention-item-body strong {
-  font-weight: 500;
+  font-weight: 600;
   font-size: 12px;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .mention-meta--desc {
   white-space: normal;
@@ -123,7 +168,30 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mention-meta { color: var(--text-muted); font-size: 10px; flex-shrink: 0; }
+.mention-item > svg { flex-shrink: 0; color: var(--text-muted); }
+.mention-item[aria-selected='true'] > svg,
+.mention-item.is-active > svg { color: var(--accent); }
+.mention-meta {
+  color: var(--text-soft);
+  font-size: 10px;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+@media (max-width: 520px) {
+  .mention-tabs {
+    gap: 4px;
+    min-height: 38px;
+    padding: 6px;
+  }
+
+  .mention-tab {
+    min-height: 26px;
+    padding: 3px 9px;
+    font-size: 11px;
+    line-height: 16px;
+  }
+}
 
 /* Section header inside the @-popover when both skills and files appear. */
 .mention-section-head {
@@ -472,6 +540,7 @@
   height: min(720px, calc(100vh - 64px));
   padding: 0;
   gap: 0;
+  overflow: hidden;
   /* Anchor for the absolutely-positioned `.settings-chrome` strip
      (close button + autosave indicator). Without this the chrome
      would escape to the viewport on long-scrolling sections. */
@@ -1108,9 +1177,27 @@
 .protocol-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 10px 14px;
   margin: 4px 0 8px;
   padding: 0;
+  min-width: 0;
+}
+.protocol-chip-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.protocol-chip-group-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.protocol-chip-group-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   min-width: 0;
 }
 .protocol-chip {
@@ -2248,4 +2335,21 @@
     grid-column: 1 / -1;
     justify-content: flex-start;
   }
+}
+
+/* -------- Composer context section (PluginsSection inside the shell) -- */
+/* .plugins-section > .plugins-section__active hosts ContextChipStrip +
+   PluginInputsForm above the editor. Inside the shell it needs its own
+   rhythm + a hairline separating it from the editor below. showRail=false
+   in the ChatComposer mount, so this is purely the active-context bar. */
+.composer-shell .plugins-section {
+  display: flex;
+  flex-direction: column;
+}
+.composer-shell .plugins-section__active {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-soft);
 }

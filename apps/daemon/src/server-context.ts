@@ -1,7 +1,7 @@
 import type { Express } from 'express';
 import type { SkillInfo } from './skills.js';
 import type { DesignSystemSummary } from './design-systems.js';
-import type { RoutineRoutesService } from './routine-routes.js';
+import type { RoutineRoutesService } from './routes/routine.js';
 
 export interface HttpDeps {
   createSseResponse: (...args: any[]) => any;
@@ -53,6 +53,11 @@ export interface RoutineDeps {
   routineService: RoutineRoutesService;
 }
 
+export interface ProjectPreviewScopeDeps {
+  mint: (projectId: string) => string;
+  validate: (projectId: string, scope: string) => boolean;
+}
+
 export interface TelemetryDeps {
   reportFinalizedMessage: (saved: any, body?: any) => void;
   /**
@@ -101,6 +106,7 @@ export interface ServerContext {
   mcp: any;
   resources: ResourceDeps;
   routines: RoutineDeps;
+  projectPreviewScopes: ProjectPreviewScopeDeps;
   telemetry?: TelemetryDeps;
   validation: any;
   finalize: any;

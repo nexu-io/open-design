@@ -13,7 +13,7 @@
 //   4. Removing a chip clears the active plugin and invokes onCleared.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { PluginsSection } from '../../src/components/PluginsSection';
 
 const PLUGIN_ROW = {
@@ -97,12 +97,16 @@ describe('PluginsSection', () => {
     expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
   });
 
-  it('hydrates a brief, chip strip, and inputs form on apply', async () => {
+  it('hydrates a brief, single plugin chip, and inputs form on apply', async () => {
     const onApplied = vi.fn();
     render(<PluginsSection onApplied={onApplied} />);
     fireEvent.click(await waitFor(() => screen.getByTitle('A fixture')));
-    await waitFor(() => screen.getByTestId('context-chip-strip'));
-    expect(screen.getByText('Sample Skill')).toBeTruthy();
+    const strip = await waitFor(() => screen.getByTestId('context-chip-strip'));
+    // The chip strip now shows ONE chip — the applied plugin itself —
+    // never the per-category (skill / design / asset) fan-out.
+    expect(within(strip).getByText('Sample Plugin')).toBeTruthy();
+    expect(within(strip).queryByText('Sample Skill')).toBeNull();
+    expect(strip.querySelectorAll('.context-chip-strip__chip')).toHaveLength(1);
     expect(screen.getByTestId('plugin-inputs-form')).toBeTruthy();
     expect(onApplied).toHaveBeenCalled();
     const [brief, applied] = onApplied.mock.calls[0]!;
@@ -130,7 +134,7 @@ describe('PluginsSection', () => {
     render(<PluginsSection onCleared={onCleared} />);
     fireEvent.click(await waitFor(() => screen.getByTitle('A fixture')));
     await waitFor(() => screen.getByTestId('context-chip-strip'));
-    fireEvent.click(screen.getByLabelText(/Remove Skill Sample Skill/));
+    fireEvent.click(screen.getByLabelText(/Remove Plugin Sample Plugin/));
     await waitFor(() => expect(onCleared).toHaveBeenCalled());
     expect(screen.queryByTestId('context-chip-strip')).toBeNull();
     expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();

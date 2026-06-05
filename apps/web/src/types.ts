@@ -1,5 +1,7 @@
 import type {
   AgentInfo,
+  AgentDiagnostic,
+  AgentFixIntent,
   AgentCliEnvPrefs,
   AgentModelPrefs,
   AgentTestRequest,
@@ -52,16 +54,20 @@ import type {
   Project,
   ProjectLocationPrefs,
   ProjectPlatform,
+  ProjectBrowserWorkspaceTab,
+  ProjectTabsState,
   PreviewCommentMember,
   PreviewAnnotationStyle,
   PreviewCommentSelectionKind,
   PreviewComment,
+  PreviewCommentAttachment,
   PreviewCommentStatus,
   PreviewCommentTarget,
   PreviewCommentUpsertRequest,
   PreviewVisualMarkKind,
   ProjectDisplayStatus,
   ProjectFile,
+  ProjectFolder,
   ProjectFileKind,
   ProjectKind,
   ProjectMetadata,
@@ -98,7 +104,14 @@ export type ExecMode = 'daemon' | 'api';
 export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama' | 'senseaudio';
 
 export type LiveArtifactTabId = `live:${string}`;
-export type ProjectWorkspaceTabId = string | LiveArtifactTabId;
+// Tab ids are arbitrary strings; the template-literal members below are
+// conventions FileWorkspace's `.ws-body` switch keys off (`live:` → live
+// artifact viewer, `chat:` → Side Chat tab). See `SideChatTabId` below.
+export type ProjectWorkspaceTabId =
+  | string
+  | LiveArtifactTabId
+  | SideChatTabId
+  | TerminalTabId;
 
 export function liveArtifactTabId(artifactId: string): LiveArtifactTabId {
   return `live:${artifactId}`;
@@ -110,6 +123,42 @@ export function isLiveArtifactTabId(tabId: string): tabId is LiveArtifactTabId {
 
 export function liveArtifactIdFromTabId(tabId: LiveArtifactTabId): string {
   return tabId.slice('live:'.length);
+}
+
+// Side Chat tab convention. A `chat:<conversationId>` tab mounts a secondary
+// ChatPane bound to that conversation (Stage 2), mirroring the `live:` scheme
+// above. The conversation is a normal conversation, so it also shows up in the
+// header ConversationsMenu.
+export type SideChatTabId = `chat:${string}`;
+
+export function sideChatTabId(conversationId: string): SideChatTabId {
+  return `chat:${conversationId}`;
+}
+
+export function isSideChatTabId(tabId: string): tabId is SideChatTabId {
+  return tabId.startsWith('chat:') && tabId.length > 'chat:'.length;
+}
+
+export function conversationIdFromSideChatTabId(tabId: SideChatTabId): string {
+  return tabId.slice('chat:'.length);
+}
+
+// Terminal tab convention. A `terminal:<terminalId>` tab mounts an xterm.js
+// surface bound to a daemon PTY session (Stage 3), mirroring the `chat:` and
+// `live:` schemes above. The terminal id is the session id returned by
+// `POST /api/projects/:id/terminals`.
+export type TerminalTabId = `terminal:${string}`;
+
+export function terminalTabId(terminalId: string): TerminalTabId {
+  return `terminal:${terminalId}`;
+}
+
+export function isTerminalTabId(tabId: string): tabId is TerminalTabId {
+  return tabId.startsWith('terminal:') && tabId.length > 'terminal:'.length;
+}
+
+export function terminalIdFromTabId(tabId: TerminalTabId): string {
+  return tabId.slice('terminal:'.length);
 }
 
 export type LiveArtifactViewerTab =
@@ -413,6 +462,10 @@ export type {
   ChatMessageFeedbackReasonCode,
 };
 
+export type {
+  ProjectBrowserWorkspaceTab,
+};
+
 export interface Artifact {
   identifier: string;
   artifactType?: string;
@@ -462,6 +515,8 @@ export interface PromptTemplateDetail extends PromptTemplateSummary {
 
 export type {
   AgentInfo,
+  AgentDiagnostic,
+  AgentFixIntent,
   AgentTestRequest,
   AppVersionInfo,
   AppVersionResponse,
@@ -496,11 +551,13 @@ export type {
   Project,
   ProjectPlatform,
   PreviewComment,
+  PreviewCommentAttachment,
   PreviewCommentStatus,
   PreviewCommentTarget,
   PreviewCommentUpsertRequest,
   ProjectDisplayStatus,
   ProjectFile,
+  ProjectFolder,
   ProjectFileKind,
   ProjectKind,
   ProjectMetadata,
@@ -524,8 +581,4 @@ export type {
   UpdateDeployConfigRequest,
 };
 
-export interface OpenTabsState {
-  tabs: ProjectWorkspaceTabId[];
-  active: ProjectWorkspaceTabId | null;
-  hasSavedState?: boolean;
-}
+export type OpenTabsState = ProjectTabsState;

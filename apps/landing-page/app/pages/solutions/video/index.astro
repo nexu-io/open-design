@@ -1,0 +1,217 @@
+---
+/*
+ * /solutions/video/ — Solution use-case page: motion & video with Open Design.
+ *
+ * Structure mirrors /solutions/prototype/ (the template), with ONE
+ * difference: the feature grid is replaced by real Video-category plugins
+ * (the same <TemplateCard> the /plugins/ catalogue uses). Those carry a
+ * Cloudflare Stream clip, so the card plays the actual motion on hover —
+ * far better than a static thumbnail for a video page. Hand-picked for the
+ * best-looking, most cinematic covers. Copy lives in solution-pages-i18n.ts
+ * under the 'video' key.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import LazyImg from '../../../_components/lazy-img.astro';
+import TemplateCard from '../../../_components/template-card.astro';
+import { getInfoPageCopy } from '../../../info-page-i18n';
+import { getSolutionPageCopy } from '../../../solution-pages-i18n';
+import { getBundledPlugins } from '../../../_lib/bundled-plugins';
+import { bundledRecordOf, categorizePlugin } from '../../../_lib/plugin-facets';
+import { pickSolutionPlugins } from '../../../_lib/solution-featured';
+import { imageAsset, imageAssetSrcset } from '../../../image-assets';
+import { localeFromPath, localizedHref, localePath, stripLocaleFromPath } from '../../../i18n';
+
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const REPO = 'https://github.com/nexu-io/open-design';
+const REPO_RELEASES = `${REPO}/releases`;
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const common = getInfoPageCopy(locale).common;
+const page = getSolutionPageCopy(locale, 'video');
+
+const title = page.title;
+const description = page.description;
+
+const heroImg = imageAsset('solutions/video/hero.png', { width: 1280, quality: 82 });
+const heroSrcset = imageAssetSrcset('solutions/video/hero.png', [768, 1280]);
+
+// Real Video-category plugins, hand-screened for the best cinematic covers
+// and clean (minimal-watermark) thumbnails, across varied genres (sci-fi,
+// 3D animation, anime, automotive, aerial, game, fashion). Each plays its
+// Cloudflare Stream clip on hover via <TemplateCard>.
+const FEATURED_VIDEO_IDS = [
+  'video-template-crimson-horizon-sci-fi-cinematic-sequence',
+  'video-template-3d-animated-boy-building-lego',
+  'video-template-live-action-anime-adaptation-water-vs-thunder-breathing-duel',
+  'video-template-cinematic-street-racing-sequence-for-seedance-2',
+  'video-template-ancient-indian-kingdom-fpv-video',
+  'video-template-cyberpunk-game-trailer-script',
+  'video-template-luxury-supercar-cinematic-narrative',
+  'video-template-cinematic-dragon-interaction-flight',
+  'video-template-cinematic-vampire-alley-fight-sequence',
+];
+const videoPlugins = getBundledPlugins().filter(
+  (p) => categorizePlugin(bundledRecordOf(p)) === 'video',
+);
+const featuredVideos = pickSolutionPlugins(videoPlugins, FEATURED_VIDEO_IDS, 'video');
+
+const pagePath = localePath(locale, stripLocaleFromPath(Astro.url.pathname).pathname);
+const pageUrl = new URL(pagePath, SITE).toString();
+
+const faq = page.faq;
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: pageUrl },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: title,
+    description,
+    url: pageUrl,
+    isPartOf: { '@id': `${SITE}#website` },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faq.map(({ q, a }) => ({
+      '@type': 'Question',
+      name: q,
+      acceptedAnswer: { '@type': 'Answer', text: a },
+    })),
+  },
+];
+---
+
+<Layout title={title} description={description} active="solution" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <span aria-current="page">{page.breadcrumb}</span>
+  </nav>
+
+  <article class="info-page solution-page">
+    <div class="solution-hero-band">
+      <header class="catalog-head">
+        <span class="label">{page.label}</span>
+        <h1 class="display">{page.heading}</h1>
+        <p class="lead">{page.lead}</p>
+        <div class="solution-hero-cta">
+          <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
+          <a class="btn btn-ghost" href={href('/download/')}>{common.downloadDesktop}</a>
+        </div>
+      </header>
+      <figure class="solution-hero">
+        <LazyImg
+          src={heroImg}
+          srcset={heroSrcset}
+          sizes="(max-width: 880px) 100vw, 540px"
+          alt={page.heroImageAlt}
+          loading="priority"
+          width={1280}
+          height={853}
+        />
+      </figure>
+    </div>
+
+    <div class="tldr-card">
+      <h3>{page.tldrTitle}</h3>
+      <p>{page.tldrBody}</p>
+    </div>
+
+    <section class="info-section" id="how">
+      <h2>{page.stepsTitle}</h2>
+      <ol class="solution-steps">
+        {page.steps.map((step, idx) => (
+          <li class="solution-step">
+            <span class="solution-step-index">{String(idx + 1).padStart(2, '0')}</span>
+            <div class="solution-step-text">
+              <h3>{step.title}</h3>
+              <p>{step.body}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+
+    <section class="info-section" id="features">
+      <h2>{page.featuresTitle}</h2>
+      <ul class="tpl-grid solution-tpl-grid">
+        {featuredVideos.map((record, idx) => (
+          <TemplateCard record={record} index={idx} />
+        ))}
+      </ul>
+    </section>
+
+    <section class="info-section" id="compare">
+      <h2>{page.tableTitle}</h2>
+      <div class="compare-table-wrap">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>{page.tableColCapability}</th>
+              <th>{page.tableColWithOd}</th>
+              <th>{page.tableColWithout}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {page.tableRows.map((row) => (
+              <tr>
+                <th scope="row">{row.capability}</th>
+                <td class="yes"><span class="check">●</span>{row.withOd}</td>
+                <td>{row.without}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="info-section" id="browse">
+      <p>{page.galleryLead}</p>
+      <p>
+        <a class="inline-link" href={href(page.exampleHref)}>{page.exampleLinkLabel} →</a>
+      </p>
+    </section>
+
+    <section class="info-section" id="faq">
+      <h2>{page.faqTitle}</h2>
+      <ol class="faq-list">
+        {faq.map(({ q, a }, idx) => (
+          <li class="faq-item">
+            <details>
+              <summary>
+                <span class="faq-index">{String(idx + 1).padStart(2, '0')}</span>
+                <span class="faq-q">{q}</span>
+                <span class="faq-toggle" aria-hidden="true">+</span>
+              </summary>
+              <p class="faq-a">{a}</p>
+            </details>
+          </li>
+        ))}
+      </ol>
+    </section>
+
+    <section class="info-cta" aria-label="Open Design call to action">
+      <div>
+        <h2>{page.ctaTitle}</h2>
+        <p>{page.ctaBody}</p>
+      </div>
+      <div class="info-cta-actions">
+        <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
+        <a class="btn btn-ghost" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">{common.downloadDesktop}</a>
+      </div>
+      <div class="info-cta-meta">
+        <span class="stamp">● {common.apache}</span>
+        <span>{common.localFirst} · {common.byok}</span>
+        <span>{common.macWinLinux}</span>
+      </div>
+    </section>
+  </article>
+</Layout>

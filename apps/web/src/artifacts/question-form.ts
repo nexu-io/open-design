@@ -138,6 +138,48 @@ export function splitOnQuestionForms(input: string): FormSegment[] {
   return out;
 }
 
+// First parseable form in a message, used to surface the active discovery
+// form in the right-hand Questions tab instead of inline in the chat.
+export function findFirstQuestionForm(
+  input: string,
+): { form: QuestionForm; raw: string } | null {
+  for (const seg of splitOnQuestionForms(input)) {
+    if (seg.kind === 'form') return { form: seg.form, raw: seg.raw };
+  }
+  return null;
+}
+
+// Drop a trailing, not-yet-closed question-form block from streaming text so
+// the chat doesn't flash raw `<question-form>{…` markup before the JSON
+// finishes. Returns the visible text plus whether such an open block existed
+// (which means a form is mid-generation).
+export function stripTrailingOpenQuestionForm(
+  input: string,
+): { text: string; hadOpenForm: boolean } {
+  let cursor = 0;
+  while (cursor < input.length) {
+    const slice = input.slice(cursor);
+    const m = OPEN_RE.exec(slice);
+    if (!m) break;
+    const tagName = (m[1] ?? 'question-form').toLowerCase();
+    const closeTag = `</${tagName}>`;
+    const openStart = cursor + m.index;
+    const openEnd = openStart + m[0].length;
+    const closeIdx = findCloseTag(input, openEnd, closeTag);
+    if (closeIdx === -1) {
+      return { text: input.slice(0, openStart), hadOpenForm: true };
+    }
+    cursor = closeIdx + closeTag.length;
+  }
+  return { text: input, hadOpenForm: false };
+}
+
+// True when a question-form open tag is present but its close tag hasn't
+// streamed in yet — i.e. the model is still generating the form.
+export function hasUnterminatedQuestionForm(input: string): boolean {
+  return stripTrailingOpenQuestionForm(input).hadOpenForm;
+}
+
 function findCloseTag(input: string, from: number, closeTag: string): number {
   const closeLower = closeTag.toLowerCase();
   const tagLen = closeTag.length;
@@ -181,38 +223,8 @@ function tryParseForm(body: string, attrs: Record<string, string>): QuestionForm
   if (!rawQuestions) return null;
   const questions: FormQuestion[] = [];
   rawQuestions.forEach((q, i) => {
-    if (!q || typeof q !== 'object') return;
-    const qo = q as Record<string, unknown>;
-    const id =
-      typeof qo.id === 'string' && qo.id.trim().length > 0
-        ? qo.id.trim()
-        : `q${i + 1}`;
-    const label = typeof qo.label === 'string' ? qo.label : id;
-    const type = normalizeType(qo.type);
-    const options = parseOptions(qo.options);
-    const placeholder = typeof qo.placeholder === 'string' ? qo.placeholder : undefined;
-    const help = typeof qo.help === 'string' ? qo.help : undefined;
-    const required = qo.required === true;
-    const maxSelections =
-      typeof qo.maxSelections === 'number' &&
-      Number.isInteger(qo.maxSelections) &&
-      qo.maxSelections > 0
-        ? qo.maxSelections
-        : undefined;
-    const cards = parseDirectionCards(qo.cards);
-    const defaultValue = parseDefaultValue(qo, options);
-    questions.push({
-      id,
-      label,
-      type,
-      ...(options ? { options } : {}),
-      ...(placeholder ? { placeholder } : {}),
-      ...(help ? { help } : {}),
-      ...(required ? { required } : {}),
-      ...(defaultValue !== undefined ? { defaultValue } : {}),
-      ...(maxSelections !== undefined && type === 'checkbox' ? { maxSelections } : {}),
-      ...(cards ? { cards } : {}),
-    });
+    const mapped = mapRawQuestion(q, i);
+    if (mapped) questions.push(mapped);
   });
   if (questions.length === 0) return null;
   const id = attrs.id ?? (typeof obj.id === 'string' ? obj.id : 'discovery');
@@ -227,6 +239,136 @@ function tryParseForm(body: string, attrs: Record<string, string>): QuestionForm
     ...(description ? { description } : {}),
     ...(submitLabel ? { submitLabel } : {}),
   };
+}
+
+function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
+  if (!q || typeof q !== 'object') return null;
+  const qo = q as Record<string, unknown>;
+  const id =
+    typeof qo.id === 'string' && qo.id.trim().length > 0 ? qo.id.trim() : `q${index + 1}`;
+  const label = typeof qo.label === 'string' ? qo.label : id;
+  const type = normalizeType(qo.type);
+  const options = parseOptions(qo.options);
+  const placeholder = typeof qo.placeholder === 'string' ? qo.placeholder : undefined;
+  const help = typeof qo.help === 'string' ? qo.help : undefined;
+  const required = qo.required === true;
+  const maxSelections =
+    typeof qo.maxSelections === 'number' &&
+    Number.isInteger(qo.maxSelections) &&
+    qo.maxSelections > 0
+      ? qo.maxSelections
+      : undefined;
+  const cards = parseDirectionCards(qo.cards);
+  const defaultValue = parseDefaultValue(qo, options);
+  return {
+    id,
+    label,
+    type,
+    ...(options ? { options } : {}),
+    ...(placeholder ? { placeholder } : {}),
+    ...(help ? { help } : {}),
+    ...(required ? { required } : {}),
+    ...(defaultValue !== undefined ? { defaultValue } : {}),
+    ...(maxSelections !== undefined && type === 'checkbox' ? { maxSelections } : {}),
+    ...(cards ? { cards } : {}),
+  };
+}
+
+/**
+ * Tolerant parser for a still-streaming `<question-form>` block. Unlike
+ * {@link tryParseForm} it does not require valid, complete JSON: it reads the
+ * title/id from the open tag's attrs (available the instant the tag streams in)
+ * and extracts however many *complete* question objects have arrived so far.
+ * This lets the Questions tab render a frame immediately and fill questions in
+ * progressively as the model streams them, instead of flashing a skeleton and
+ * then a finished table. Returns null only when no open tag is present.
+ */
+export function parsePartialQuestionForm(input: string): QuestionForm | null {
+  const m = OPEN_RE.exec(input);
+  if (!m) return null;
+  const tagName = (m[1] ?? 'question-form').toLowerCase();
+  const closeTag = `</${tagName}>`;
+  const openEnd = m.index + m[0].length;
+  const attrs = parseAttrs(m[2] ?? '');
+  const closeIdx = findCloseTag(input, openEnd, closeTag);
+  const rawBody = closeIdx === -1 ? input.slice(openEnd) : input.slice(openEnd, closeIdx);
+  // Strip a leading fenced ```json wrapper; the closing fence may not have
+  // streamed in yet, so only the opening fence is removed.
+  const body = rawBody.replace(/^\s*```(?:json)?\s*/i, '');
+  const id = attrs.id ?? extractJsonStringField(body, 'id') ?? 'discovery';
+  const title =
+    attrs.title ?? extractJsonStringField(body, 'title') ?? 'A few quick questions';
+  const description = extractJsonStringField(body, 'description');
+  const questions = extractCompleteQuestions(body);
+  return {
+    id,
+    title,
+    questions,
+    ...(description ? { description } : {}),
+  };
+}
+
+// Pull complete `{...}` question objects out of a partial `"questions": [ … ]`
+// array, stopping at the first object whose closing brace hasn't streamed in.
+function extractCompleteQuestions(body: string): FormQuestion[] {
+  const keyMatch = /"questions"\s*:\s*\[/.exec(body);
+  if (!keyMatch) return [];
+  const out: FormQuestion[] = [];
+  let i = keyMatch.index + keyMatch[0].length;
+  let index = 0;
+  while (i < body.length) {
+    while (i < body.length && /[\s,]/.test(body[i] as string)) i++;
+    if (i >= body.length || body[i] === ']') break;
+    if (body[i] !== '{') break;
+    const objStr = extractBalancedObject(body, i);
+    if (!objStr) break;
+    try {
+      const mapped = mapRawQuestion(JSON.parse(objStr), index);
+      if (mapped) out.push(mapped);
+    } catch {
+      break;
+    }
+    i += objStr.length;
+    index++;
+  }
+  return out;
+}
+
+// Return the substring for the balanced `{...}` object starting at `start`,
+// or null if it never closes (string-aware so braces inside strings don't count).
+function extractBalancedObject(s: string, start: number): string | null {
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < s.length; i++) {
+    const c = s[i] as string;
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === '{') depth++;
+    else if (c === '}') {
+      depth--;
+      if (depth === 0) return s.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+// Best-effort extraction of a top-level "field": "value" string from a partial
+// JSON body — used for title/id/description before the full body parses.
+function extractJsonStringField(body: string, field: string): string | undefined {
+  const re = new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`);
+  const m = re.exec(body);
+  if (!m) return undefined;
+  try {
+    return JSON.parse(`"${m[1]}"`) as string;
+  } catch {
+    return m[1];
+  }
 }
 
 function normalizeType(raw: unknown): QuestionType {

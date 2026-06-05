@@ -56,6 +56,7 @@
       # Keep in sync with .github/workflows/ci.yml change_scopes
       # nix_validation_required filter.
       webWorkspacePaths = [
+        "packages/components"
         "packages/contracts"
         "packages/host"
         "packages/platform"

@@ -48,7 +48,9 @@ import type {
   IntegrationsSkillsTabClickProps,
   IntegrationsUseEverywhereTabClickProps,
   ChatPanelClickProps,
+  NextStepActionClickProps,
   RunFailedToastClickProps,
+  AmrEntryClickProps,
   RunFailedToastSurfaceViewProps,
   ChatPanelResourcesPopoverClickProps,
   FileManagerClickProps,
@@ -86,6 +88,7 @@ import type {
   FeedbackSubmitResultProps,
   SettingsViewProps,
   SettingsCliTestResultProps,
+  SettingsByokModelsFetchResultProps,
   SettingsByokTestResultProps,
   SettingsConnectorAuthResultProps,
   OnboardingClickProps,
@@ -172,6 +175,13 @@ export function trackRunFailedToastSurfaceView(
 export function trackRunFailedToastGoAmrClick(
   track: Track,
   props: RunFailedToastClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackAmrEntryClick(
+  track: Track,
+  props: AmrEntryClickProps,
 ): void {
   send(track, 'ui_click', props);
 }
@@ -430,6 +440,13 @@ export function trackChatPanelClick(
   send(track, 'ui_click', props);
 }
 
+export function trackNextStepActionClick(
+  track: Track,
+  props: NextStepActionClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
 export function trackChatPanelResourcesPopoverClick(
   track: Track,
   props: ChatPanelResourcesPopoverClickProps,
@@ -671,6 +688,13 @@ export function trackSettingsByokTestResult(
   props: SettingsByokTestResultProps,
 ): void {
   send(track, 'settings_byok_test_result', props);
+}
+
+export function trackSettingsByokModelsFetchResult(
+  track: Track,
+  props: SettingsByokModelsFetchResultProps,
+): void {
+  send(track, 'settings_byok_models_fetch_result', props);
 }
 
 export function trackSettingsConnectorAuthResult(

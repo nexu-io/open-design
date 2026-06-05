@@ -7,9 +7,10 @@
 // surface by lifting its plugin orchestration up here so the prompt
 // textarea can live centered in the hero.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ApplyResult,
+  ChatSessionMode,
   ConnectorDetail,
   InputFieldSpec,
   McpServerConfig,
@@ -41,7 +42,8 @@ import {
   localizeSkillPrompt,
 } from '../i18n/content';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
-import { fetchProjectFiles, projectFileUrl } from '../providers/registry';
+import { fetchProjectFiles, openFolderDialog, projectFileUrl } from '../providers/registry';
+import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type {
   DesignSystemSummary,
   Project,
@@ -51,7 +53,7 @@ import type {
   SkillSummary,
 } from '../types';
 import { inlineMentionToken } from '../utils/inlineMentions';
-import { HomeHero } from './HomeHero';
+import { HomeHero, type ExamplePromptInfo, type HomeHeroHandle } from './HomeHero';
 import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
 import {
   buildHomeMediaComposer,
@@ -73,6 +75,7 @@ import type { PluginLoopSubmit } from './PluginLoopHome';
 import type { FacetSelection } from './plugins-home/facets';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
+import { AnimatePresence } from 'motion/react';
 
 interface ActivePlugin {
   record: InstalledPluginRecord;
@@ -231,15 +234,25 @@ export function HomeView({
   const [fallbackProjectMetadata, setFallbackProjectMetadata] =
     useState<ProjectMetadata | null>(null);
   const [active, setActive] = useState<ActivePlugin | null>(null);
+  const [sessionMode, setSessionMode] = useState<ChatSessionMode>('design');
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [selectedPluginContexts, setSelectedPluginContexts] = useState<SelectedPluginContext[]>([]);
   const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
   const [selectedConnectorContexts, setSelectedConnectorContexts] = useState<SelectedConnectorContext[]>([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  const [workingDir, setWorkingDir] = useState<string | null>(null);
+  // Token paired with `workingDir` when picked through the desktop host's
+  // native dialog. Spent on the post-creation working-dir POST so the
+  // daemon's desktop-auth gate accepts the path. Null for web picks.
+  const [workingDirToken, setWorkingDirToken] = useState<string | null>(null);
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
   const [mcpLoading, setMcpLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
   const [promptEditedByUser, setPromptEditedByUser] = useState(false);
+  const examplePromptInfoRef = useRef<ExamplePromptInfo | null>(null);
+  const handleExamplePromptStatusChange = useCallback((info: ExamplePromptInfo | null) => {
+    examplePromptInfoRef.current = info;
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [designSystemLogoById, setDesignSystemLogoById] = useState<Record<string, string>>({});
   const [elevenLabsVoices, setElevenLabsVoices] = useState<AudioVoiceOption[]>([]);
@@ -265,7 +278,7 @@ export function HomeView({
       area: 'plugin_replacement_modal',
     });
   }, [pendingReplacement, analytics.track]);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const inputRef = useRef<HomeHeroHandle | null>(null);
   const consumedHandoffIdRef = useRef<number | null>(null);
   const pendingPromptFocusEndRef = useRef(false);
   const activePluginApplyRequestRef = useRef(0);
@@ -385,12 +398,7 @@ export function HomeView({
   useEffect(() => {
     if (!pendingPromptFocusEndRef.current) return;
     pendingPromptFocusEndRef.current = false;
-    const input = inputRef.current;
-    if (!input) return;
-    input.focus();
-    const position = input.value.length;
-    input.setSelectionRange(position, position);
-    input.scrollTop = input.scrollHeight;
+    inputRef.current?.focusEnd();
   }, [prompt]);
 
   useEffect(() => {
@@ -540,12 +548,7 @@ export function HomeView({
 
   function focusPromptAtEnd() {
     requestAnimationFrame(() => {
-      const input = inputRef.current;
-      if (!input) return;
-      input.focus();
-      const position = input.value.length;
-      input.setSelectionRange(position, position);
-      input.scrollTop = input.scrollHeight;
+      inputRef.current?.focusEnd();
     });
   }
 
@@ -926,6 +929,40 @@ export function HomeView({
     setStagedFiles((current) => current.filter((_, i) => i !== index));
   }
 
+  async function handlePickWorkingDir() {
+    // On desktop the working-dir POST is gated behind a host-minted token, so
+    // pick through the host bridge to capture { baseDir, token } together.
+    if (isOpenDesignHostAvailable()) {
+      const result = await pickHostWorkingDir();
+      if (result.ok) {
+        setWorkingDir(result.baseDir);
+        setWorkingDirToken(result.token);
+        return;
+      }
+      // The user explicitly cancelled the host picker — respect that and do
+      // not pop a second dialog.
+      if ('canceled' in result && result.canceled) return;
+      // The host is present but could not service the pick (mixed-version
+      // upgrade where the preload lacks `project.pickWorkingDir`, or a host
+      // error). We must NOT fall back to openFolderDialog() here: the browser
+      // dialog yields a raw path with no host-minted token, so the later
+      // POST /api/projects/:id/working-dir would be rejected by the desktop
+      // auth gate and surface as a confusing late create-time failure.
+      // Surface the host error instead and keep the existing working dir.
+      setError(
+        `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update Open Design and try again.`,
+      );
+      return;
+    }
+    // Pure web path: no desktop host, so there is no token gate — the raw
+    // browser folder path is the expected, working input.
+    const picked = await openFolderDialog();
+    if (picked) {
+      setWorkingDir(picked);
+      setWorkingDirToken(null);
+    }
+  }
+
   function updateActiveInputs(next: Record<string, unknown>) {
     if (!active) return;
     const normalized = active.mediaSurface
@@ -1020,6 +1057,18 @@ export function HomeView({
     focusPromptAtEnd();
   }
 
+  function removeMcpContext(serverId: string) {
+    const server = selectedMcpContexts.find((item) => item.server.id === serverId)?.server ?? null;
+    setSelectedMcpContexts((current) => current.filter((item) => item.server.id !== serverId));
+    if (server) {
+      setPrompt((current) => removeContextMentionsFromPrompt(current, [
+        server.label || server.id,
+        server.id,
+      ]));
+      setPromptEditedByUser(true);
+    }
+  }
+
   function useConnector(connector: ConnectorDetail, nextPrompt: string) {
     setSelectedConnectorContexts((current) => (
       current.some((item) => item.connector.id === connector.id)
@@ -1030,6 +1079,18 @@ export function HomeView({
     setPromptEditedByUser(false);
     setError(null);
     focusPromptAtEnd();
+  }
+
+  function removeConnectorContext(connectorId: string) {
+    const connector = selectedConnectorContexts.find((item) => item.connector.id === connectorId)?.connector ?? null;
+    setSelectedConnectorContexts((current) => current.filter((item) => item.connector.id !== connectorId));
+    if (connector) {
+      setPrompt((current) => removeContextMentionsFromPrompt(current, [
+        connector.name,
+        connector.id,
+      ]));
+      setPromptEditedByUser(true);
+    }
   }
 
   function queuePluginAuthoring(chipId: string | null, goal?: string) {
@@ -1256,9 +1317,13 @@ export function HomeView({
     // Scenario plugins (chips / preset cards) and explicit skill picks are
     // mutually exclusive routing sources — never send both (#2972).
     const resolvedSkillId = submittedActive ? null : activeSkill?.id ?? null;
+    const routedPluginId =
+      sessionMode === 'design'
+        ? submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
+        : submittedActive?.record.id ?? null;
     onSubmit({
       prompt: trimmed,
-      pluginId: submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
+      pluginId: routedPluginId,
       skillId: resolvedSkillId,
       appliedPluginSnapshotId: submittedActive?.result?.appliedPlugin?.snapshotId ?? null,
       pluginTitle: submittedActive?.record.title ?? null,
@@ -1271,6 +1336,16 @@ export function HomeView({
       contextMcpServers,
       contextConnectors,
       attachments: stagedFiles,
+      ...(workingDir ? { workingDir } : {}),
+      ...(workingDirToken ? { workingDirToken } : {}),
+      conversationMode: sessionMode,
+      ...(() => {
+        if (!examplePromptInfoRef.current) return {};
+        const key = 'od:example-prompt-used';
+        if (localStorage.getItem(key)) return {};
+        localStorage.setItem(key, '1');
+        return { examplePromptContext: examplePromptInfoRef.current };
+      })(),
     });
   }
 
@@ -1281,6 +1356,8 @@ export function HomeView({
         prompt={prompt}
         onPromptChange={handlePromptChange}
         onSubmit={submit}
+        sessionMode={sessionMode}
+        onSessionModeChange={setSessionMode}
         activePluginTitle={activeBadgeTitle}
         activePluginRecord={active?.record ?? null}
         activeSkillId={activeSkill?.id ?? null}
@@ -1291,7 +1368,11 @@ export function HomeView({
         onClearActiveChip={clearActiveChipSelection}
         onClearActiveSkill={() => setActiveSkill(null)}
         selectedPluginContexts={selectedPluginContexts.map((item) => item.record)}
+        selectedMcpContexts={selectedMcpContexts.map((item) => item.server)}
+        selectedConnectorContexts={selectedConnectorContexts.map((item) => item.connector)}
         onRemovePluginContext={removePluginContext}
+        onRemoveMcpContext={removeMcpContext}
+        onRemoveConnectorContext={removeConnectorContext}
         onOpenPluginDetails={setDetailsRecord}
         pluginInputFields={active?.inputFields ?? []}
         pluginInputValues={active?.inputs ?? {}}
@@ -1330,6 +1411,13 @@ export function HomeView({
         onPickChip={pickChip}
         contextItemCount={contextItemCount}
         error={error}
+        workingDir={workingDir}
+        onPickWorkingDir={handlePickWorkingDir}
+        onClearWorkingDir={() => {
+          setWorkingDir(null);
+          setWorkingDirToken(null);
+        }}
+        onExamplePromptStatusChange={handleExamplePromptStatusChange}
       />
 
       <RecentProjectsStrip
@@ -1373,14 +1461,16 @@ export function HomeView({
         presetSelection={presetStartersSelection}
       />
 
-      {detailsRecord ? (
-        <PluginDetailsModal
-          record={detailsRecord}
-          onClose={() => setDetailsRecord(null)}
-          onUse={(record) => requestPluginContextUse(record, 'use')}
-          isApplying={pendingApplyId === detailsRecord.id}
-        />
-      ) : null}
+      <AnimatePresence>
+        {detailsRecord ? (
+          <PluginDetailsModal
+            record={detailsRecord}
+            onClose={() => setDetailsRecord(null)}
+            onUse={(record) => requestPluginContextUse(record, 'use')}
+            isApplying={pendingApplyId === detailsRecord.id}
+          />
+        ) : null}
+      </AnimatePresence>
       {pendingReplacement ? (
         <div className="home-hero-confirm__backdrop" role="presentation">
           <div
@@ -1899,6 +1989,17 @@ function removePluginMentionFromPrompt(prompt: string, record: InstalledPluginRe
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n[ \t]+/g, '\n')
     .trim();
+}
+
+function removeContextMentionsFromPrompt(prompt: string, labels: string[]): string {
+  const uniqueLabels = Array.from(new Set(labels.filter(Boolean)));
+  return uniqueLabels.reduce((current, label) => {
+    const token = inlineMentionToken(label);
+    return current.replace(
+      new RegExp(`(^|[\\s([{"'])${escapeRegExp(token)}(?=$|\\s|[.,;:!?)}\\]"'])([^\\S\\r\\n])?`, 'g'),
+      '$1',
+    );
+  }, prompt);
 }
 
 function appendPromptQuery(current: string, query: string): string {

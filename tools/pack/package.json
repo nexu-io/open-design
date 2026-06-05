@@ -1,6 +1,6 @@
 {
   "name": "@open-design/tools-pack",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "bin": {
@@ -22,7 +22,7 @@
     "electron-builder": "26.8.1"
   },
   "optionalDependencies": {
-    "@powerformer/vela-cli": "0.0.4"
+    "@powerformer/vela-cli": "0.0.10"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
