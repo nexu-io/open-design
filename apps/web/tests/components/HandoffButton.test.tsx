@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { HostEditor, HostEditorsResponse } from '@open-design/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 function stubEditors(editors: HostEditor[], platform: HostEditorsResponse['platform'] = 'darwin') {
-  vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input) => {
+  const fetchMock = vi.fn<typeof fetch>(async (input) => {
     if (String(input) === '/api/editors') {
       return new Response(JSON.stringify({ editors, platform }), {
         status: 200,
@@ -24,7 +24,9 @@ function stubEditors(editors: HostEditor[], platform: HostEditorsResponse['platf
       });
     }
     throw new Error(`unexpected fetch ${String(input)}`);
-  }));
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
 }
 
 function renderLocalized(locale: Locale) {
@@ -97,5 +99,28 @@ describe('HandoffButton i18n', () => {
     expect(screen.getByTestId('handoff-menu-item-cursor').textContent).toBe('Cursor');
     expect(screen.getByTestId('handoff-menu-item-cursor').getAttribute('title'))
       .toBe('Cursor - 未在 $PATH 中检测到');
+  });
+
+  it('copies the project path instead of POSTing open-in when no host editor is available', async () => {
+    const fetchMock = stubEditors([], 'linux');
+    const writeText = vi.fn<NonNullable<Navigator['clipboard']>['writeText']>(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <I18nProvider initial="en">
+        <HandoffButton projectId="project-1" projectDir="/tmp/open-design/project-1" />
+      </I18nProvider>,
+    );
+
+    const button = await screen.findByRole('button', { name: /copy path/i });
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith('/tmp/open-design/project-1');
+    });
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual(['/api/editors']);
   });
 });

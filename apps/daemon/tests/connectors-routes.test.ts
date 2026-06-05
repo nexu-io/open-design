@@ -223,7 +223,13 @@ async function jsonFetch<TBody = JsonObject>(url: string, init?: RequestInit): P
   return { status: response.status, body: await response.json() as TBody };
 }
 
-async function requestWithHostHeader(method: string, url: string, host: string, body?: JsonObject): Promise<HostHeaderResponse> {
+async function requestWithHostHeader(
+  method: string,
+  url: string,
+  host: string,
+  body?: JsonObject,
+  headers: Record<string, string> = {},
+): Promise<HostHeaderResponse> {
   const target = new URL(url);
   return await new Promise<HostHeaderResponse>((resolve, reject) => {
     const req = httpRequest(
@@ -235,6 +241,7 @@ async function requestWithHostHeader(method: string, url: string, host: string, 
         method,
         headers: {
           host,
+          ...headers,
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
       },
@@ -258,8 +265,13 @@ async function postWithHostHeader(url: string, host: string): Promise<HostHeader
   return requestWithHostHeader('POST', url, host);
 }
 
-async function putWithHostHeader(url: string, host: string, body: JsonObject): Promise<HostHeaderResponse> {
-  return requestWithHostHeader('PUT', url, host, body);
+async function putWithHostHeader(
+  url: string,
+  host: string,
+  body: JsonObject,
+  headers: Record<string, string> = {},
+): Promise<HostHeaderResponse> {
+  return requestWithHostHeader('PUT', url, host, body, headers);
 }
 
 function mintConnectorToolToken(projectId = 'connector-route-project', runId = 'connector-route-run', overrides: Partial<Parameters<typeof toolTokenRegistry.mint>[0]> = {}): string {
@@ -477,7 +489,30 @@ describe('connector routes', () => {
     expect(readComposioConfig().apiKey).toBe('cmp_test');
   });
 
-  it('clears Composio connector credentials when rotating to a key with the same tail', async () => {
+  it('accepts Composio config updates from an explicitly allowed browser origin through the loopback web proxy', async () => {
+    const previousAllowedOrigins = process.env.OD_ALLOWED_ORIGINS;
+    await closeServer();
+    process.env.OD_ALLOWED_ORIGINS = 'https://khal-1.nebulosa-cirius.ts.net:7456';
+    try {
+      const started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+      server = started.server;
+      baseUrl = started.url;
+      const response = await putWithHostHeader(
+        `${baseUrl}/api/connectors/composio/config`,
+        new URL(baseUrl).host,
+        { apiKey: '' },
+        { origin: 'https://khal-1.nebulosa-cirius.ts.net:7456' },
+      );
+
+      expect(response.status).toBe(200);
+      expect(JSON.parse(response.body)).toMatchObject({ configured: false, apiKeyTail: '' });
+    } finally {
+      if (previousAllowedOrigins === undefined) delete process.env.OD_ALLOWED_ORIGINS;
+      else process.env.OD_ALLOWED_ORIGINS = previousAllowedOrigins;
+    }
+  });
+
+  it('clears connector credentials when Composio API key rotates', async () => {
     const connect = await jsonFetch(`${baseUrl}/api/connectors/github/connect`, { method: 'POST' });
 
     expect(connect.status).toBe(200);
@@ -1067,6 +1102,20 @@ describe('connector routes', () => {
     expect(secondResponse.headers.get('content-type')).toBe('image/png');
     expect(Buffer.from(await secondResponse.arrayBuffer())).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     expect(upstreamRequests).toBe(2);
+  });
+
+  it('serves a generated SVG fallback for upstream-missing Composio logos', async () => {
+    mockComposioFetch({
+      logoFetch: async () => new Response('', { status: 404 }),
+    });
+
+    const response = await fetch(`${baseUrl}/api/connectors/logos/apifymcp?theme=dark`);
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('image/svg+xml');
+    expect(body).toContain('connector logo');
+    expect(body).toContain('A');
   });
 
   it('evicts the least recently used Composio logo cache entry when the cache is full', async () => {

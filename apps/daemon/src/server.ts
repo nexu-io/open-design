@@ -3269,7 +3269,7 @@ function localOriginFromHeader(value) {
     const parsed = new URL(trimmed);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
     if (parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) return null;
-    if (!isLoopbackHostname(parsed.hostname)) return null;
+    if (!isLoopbackHostname(parsed.hostname) && !configuredAllowedOrigins().includes(parsed.origin)) return null;
     return parsed.origin;
   } catch {
     return null;
@@ -6454,7 +6454,17 @@ export async function startServer({
       });
       res.json(response);
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      const message = err instanceof Error ? err.message : String(err);
+      if (/AMR vela binary could not be resolved|vela binary not found/i.test(message)) {
+        res.json({
+          source: 'preset',
+          models: [],
+          refreshing: false,
+          remoteError: message,
+        });
+        return;
+      }
+      res.status(500).json({ error: message });
     }
   });
 

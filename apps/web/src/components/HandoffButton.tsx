@@ -478,37 +478,39 @@ export function HandoffButton({
     const fallbackLabel = platform === 'win32' ? 'Explorer' : platform === 'linux' ? 'File Manager' : 'Finder';
     const fallbackId: HostEditorId =
       platform === 'win32' ? 'explorer' : platform === 'linux' ? 'file-manager' : 'finder';
-    // Wrap the solo button so a daemon spawn failure can surface an
-    // inline error next to it — without this, ProjectView's
-    // `<HandoffButton projectId={…} />` (no reveal callback) turns a
-    // rejected `openProjectInEditor` into a silent no-op.
+    const canRevealInHost = Boolean(onRequestRevealInFinder);
+    const canCopyProjectPath = Boolean(projectDir);
+    const fallbackTitle = canRevealInHost
+      ? t('handoff.fallbackTitle', { target: fallbackLabel })
+      : canCopyProjectPath
+        ? 'No editors found on $PATH — copy the project path instead'
+        : t('handoff.projectPathUnavailable');
+    const fallbackBusy = busy === fallbackId || copyBusy === PROJECT_PATH_COPY_ID;
+    // Avoid POSTing to /api/projects/:id/open-in when the daemon has already
+    // told us no native editor/file-manager is available. That request can only
+    // return 409 and shows up as a noisy console resource failure in browser QA.
     return (
       <div className="handoff-wrap handoff-wrap--solo" data-testid="handoff-wrap">
         <button
           type="button"
           className="handoff-trigger handoff-trigger--solo od-tooltip"
-          title={t('handoff.fallbackTitle', { target: fallbackLabel })}
-          data-tooltip={t('handoff.fallbackTitle', { target: fallbackLabel })}
+          title={fallbackTitle}
+          data-tooltip={fallbackTitle}
           data-tooltip-placement="bottom"
-          disabled={busy === fallbackId}
+          disabled={fallbackBusy || (!canRevealInHost && !canCopyProjectPath)}
           onClick={() => {
-            // The fallback opens the project folder in the OS file manager.
-            // finder / explorer / file-manager are real entries in the daemon's
-            // open-in catalogue (open / explorer / xdg-open), so this performs a
-            // genuine reveal rather than a no-op; the renderer reveal bridge is a
-            // secondary fallback if the daemon spawn fails.
             setError(null);
-            setBusy(fallbackId);
-            void openProjectInEditor(projectId, fallbackId)
-              .catch((err) => {
-                setError(err instanceof Error ? err.message : String(err));
-                onRequestRevealInFinder?.();
-              })
-              .finally(() => setBusy(null));
+            if (canRevealInHost) {
+              onRequestRevealInFinder?.();
+              return;
+            }
+            void copyProjectPath();
           }}
         >
           <EditorIcon editorId={fallbackId} size={20} />
-          <span className="handoff-trigger-label">{fallbackLabel}</span>
+          <span className="handoff-trigger-label">
+            {canRevealInHost ? fallbackLabel : copiedCliId === PROJECT_PATH_COPY_ID ? t('handoff.copied') : 'Copy path'}
+          </span>
         </button>
         {error ? (
           <div className="handoff-menu-error" role="alert" data-testid="handoff-fallback-error">

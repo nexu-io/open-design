@@ -113,6 +113,25 @@ function sendMissingComposioLogo(res: Response): void {
   res.status(404).end();
 }
 
+function fallbackComposioLogo(slug: string, theme: 'light' | 'dark'): CachedComposioLogo {
+  const initials = slug
+    .split(/[_\-\s]+/g)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('') || '?';
+  const bg = theme === 'light' ? '#f5f1ec' : '#181716';
+  const border = theme === 'light' ? '#d8d4cb' : '#3a342e';
+  const fg = theme === 'light' ? '#1a1916' : '#f4eee7';
+  const safeInitials = initials.replace(/[&<>'"]/g, '');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="${safeInitials} connector logo"><rect width="64" height="64" rx="16" fill="${bg}"/><rect x="0.5" y="0.5" width="63" height="63" rx="15.5" fill="none" stroke="${border}"/><text x="32" y="39" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="700" fill="${fg}">${safeInitials}</text></svg>`;
+  return {
+    body: Buffer.from(svg, 'utf8'),
+    contentType: 'image/svg+xml',
+    expiresAtMs: Date.now() + COMPOSIO_LOGO_CACHE_TTL_MS,
+  };
+}
+
 function normalizeImageContentType(value: string | null): string | null {
   const contentType = value?.split(';')[0]?.trim().toLowerCase();
   if (!contentType?.startsWith('image/')) return null;
@@ -198,7 +217,11 @@ async function fetchComposioLogo(slug: string, theme: 'light' | 'dark'): Promise
         headers: { accept: 'image/avif,image/webp,image/apng,image/png,image/jpeg' },
         signal: controller.signal,
       });
-      if (!response.ok) return null;
+      if (!response.ok) {
+        const fallback = fallbackComposioLogo(slug, theme);
+        cacheComposioLogo(cacheKey, fallback);
+        return fallback;
+      }
       const body = await readComposioLogoBody(response);
       if (!body) return null;
       const contentType = normalizeImageContentType(response.headers.get('content-type'));
