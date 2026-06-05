@@ -20,14 +20,22 @@ describe('resolveDataDir', () => {
   let projectRoot: string;
   let homedirSpy: ReturnType<typeof vi.spyOn>;
 
+  let prevToolsDevPid: string | undefined;
+
   beforeEach(() => {
     fakeHome = mkdtempSync(path.join(os.tmpdir(), 'rdd-home-'));
     projectRoot = mkdtempSync(path.join(os.tmpdir(), 'rdd-project-'));
     homedirSpy = vi.spyOn(os, 'homedir').mockReturnValue(fakeHome);
+    // Force dev-mode so resolveDataDir(undefined, ...) returns projectRoot/.od
+    // (not $HOME/.od via migrateOrCreateHomeDir) — matches the test intent.
+    prevToolsDevPid = process.env.OD_TOOLS_DEV_PARENT_PID;
+    process.env.OD_TOOLS_DEV_PARENT_PID = 'test';
   });
 
   afterEach(async () => {
     homedirSpy.mockRestore();
+    if (prevToolsDevPid === undefined) delete process.env.OD_TOOLS_DEV_PARENT_PID;
+    else process.env.OD_TOOLS_DEV_PARENT_PID = prevToolsDevPid;
     await rm(fakeHome, { recursive: true, force: true });
     await rm(projectRoot, { recursive: true, force: true });
   });
