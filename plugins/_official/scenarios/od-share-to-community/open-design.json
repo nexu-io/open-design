@@ -54,6 +54,22 @@
         { "path": "./SKILL.md" }
       ]
     },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "inspect-project",
+          "atoms": [
+            "file-read"
+          ]
+        },
+        {
+          "id": "package-plugin",
+          "atoms": [
+            "file-write"
+          ]
+        }
+      ]
+    },
     "capabilities": [
       "prompt:inject",
       "fs:read",
