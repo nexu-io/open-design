@@ -495,7 +495,7 @@ describe('HomeView prompt handoff', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('routes a plugin-use handoff from the Plugins page as the active driver', async () => {
+  it('routes a plugin-use handoff from the Plugins page as the active driver and submits it as the run driver', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
@@ -513,11 +513,12 @@ describe('HomeView prompt handoff', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     stubAnimationFrame();
+    const onSubmit = vi.fn();
 
     render(
       <HomeView
         projects={[]}
-        onSubmit={() => undefined}
+        onSubmit={onSubmit}
         onOpenProject={() => undefined}
         onViewAllProjects={() => undefined}
         promptHandoff={createPluginUseHandoff(1, 'example-web-prototype')}
@@ -537,6 +538,21 @@ describe('HomeView prompt handoff', () => {
     ));
     await screen.findByTestId('home-hero-input');
     expect(homeHeroPromptValue()).toBe('');
+
+    // The user types their own brief over the empty draft, then submits — the
+    // routed plugin (not od-default) must drive the created run. Mirrors the
+    // P0 e2e "direct Use ... keeps the prompt freeform" flow.
+    await setPromptAndSettle('Use the selected starter as the driver');
+    await waitFor(() => {
+      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'Use the selected starter as the driver',
+      pluginId: 'example-web-prototype',
+      appliedPluginSnapshotId: 'snap-web-prototype',
+    })));
   });
 
   it('routes free-form submits through the hidden default plugin without applying a visible chip', async () => {
