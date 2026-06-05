@@ -12,6 +12,15 @@ export interface GitCommandGuardInstall {
 const DISABLED_VALUES = new Set(['', '0', 'false', 'no', 'off']);
 const FORCE_PUSH_ARGS = new Set(['-f', '--force']);
 const STASH_DESTRUCTIVE_SUBCOMMANDS = new Set(['drop', 'clear']);
+const GIT_GLOBAL_OPTIONS_WITH_SEPARATE_VALUE = new Set([
+  '-C',
+  '-c',
+  '--git-dir',
+  '--namespace',
+  '--object-directory',
+  '--super-prefix',
+  '--work-tree',
+]);
 
 export function isGitCommandGuardEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const raw = String(env.OD_GIT_COMMAND_GUARD ?? '').trim().toLowerCase();
@@ -53,7 +62,8 @@ export function installGitCommandGuard(env: NodeJS.ProcessEnv = process.env): Gi
   if (!isGitCommandGuardEnabled(env)) {
     return { env, cleanup: () => undefined };
   }
-  const realGit = resolveGitBinary(env.PATH ?? process.env.PATH ?? '');
+  const envPath = readPathEnv(env);
+  const realGit = resolveGitBinary(envPath.value);
   if (!realGit) {
     return { env, cleanup: () => undefined };
   }
@@ -64,7 +74,7 @@ export function installGitCommandGuard(env: NodeJS.ProcessEnv = process.env): Gi
     env: {
       ...env,
       OD_REAL_GIT_BIN: realGit,
-      PATH: `${guardDir}${path.delimiter}${env.PATH ?? ''}`,
+      [envPath.key]: `${guardDir}${path.delimiter}${envPath.value}`,
     },
     cleanup: () => {
       try {
@@ -82,11 +92,7 @@ function firstGitSubcommand(args: readonly string[]): { value: string; index: nu
   for (let index = 0; index < args.length; index += 1) {
     const value = String(args[index] ?? '').trim();
     if (!value) continue;
-    if (value === '-C') {
-      index += 1;
-      continue;
-    }
-    if (value === '-c') {
+    if (gitGlobalOptionConsumesSeparateValue(value)) {
       index += 1;
       continue;
     }
@@ -94,6 +100,26 @@ function firstGitSubcommand(args: readonly string[]): { value: string; index: nu
     return { value: value.toLowerCase(), index };
   }
   return null;
+}
+
+function gitGlobalOptionConsumesSeparateValue(value: string): boolean {
+  return GIT_GLOBAL_OPTIONS_WITH_SEPARATE_VALUE.has(value);
+}
+
+function readPathEnv(env: NodeJS.ProcessEnv): { key: string; value: string } {
+  const envPathKey = findPathEnvKey(env);
+  if (envPathKey) {
+    return { key: envPathKey, value: env[envPathKey] ?? '' };
+  }
+  const processPathKey = findPathEnvKey(process.env);
+  return {
+    key: processPathKey ?? 'PATH',
+    value: processPathKey ? process.env[processPathKey] ?? '' : '',
+  };
+}
+
+function findPathEnvKey(env: NodeJS.ProcessEnv): string | null {
+  return Object.keys(env).find((key) => key.toLowerCase() === 'path') ?? null;
 }
 
 function isDestructiveCleanArg(arg: string): boolean {
@@ -123,14 +149,24 @@ function resolveGitBinary(pathValue: string): string | null {
 
 const POSIX_GIT_GUARD = `#!/bin/sh
 cmd=""
-prev=""
+skip_next=""
+option_consumes_next() {
+  case "$1" in
+    -C|-c|--git-dir|--namespace|--object-directory|--super-prefix|--work-tree) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 for arg in "$@"; do
-  if [ "$prev" = "-C" ] || [ "$prev" = "-c" ]; then
-    prev=""
+  if [ "$skip_next" = "1" ]; then
+    skip_next=""
+    continue
+  fi
+  if option_consumes_next "$arg"; then
+    skip_next="1"
     continue
   fi
   case "$arg" in
-    -C|-c) prev="$arg"; continue ;;
     -*) continue ;;
     *) cmd="$arg"; break ;;
   esac
@@ -186,7 +222,7 @@ if errorlevel 1 (
   echo Open Design git command guard requires node on PATH. 1>&2
   exit /b 126
 )
-node -e "const args=process.argv.slice(1); const cmd=args.find((a,i)=>a&&a[0]!=='-'&&args[i-1]!=='-C'&&args[i-1]!=='-c'); const c=(cmd||'').toLowerCase(); const blocked=(c==='reset'&&args.includes('--hard'))||(c==='clean'&&args.some(a=>a==='--force'||a==='-f'||a==='-x'||a==='-X'||/^-[A-Za-z]*[fxX][A-Za-z]*$/.test(a)))||(c==='stash'&&['drop','clear'].includes((args[args.indexOf(cmd)+1]||'').toLowerCase()))||(c==='push'&&args.some(a=>a==='-f'||a==='--force'||a.startsWith('--force-with-lease')))||(c==='checkout'&&args.some(a=>a==='-f'||a==='--force'))||c==='restore'; if(blocked){console.error('Open Design git command guard blocked destructive git command'); process.exit(126)}" %*
+node -e "const args=process.argv.slice(1); const valueOptions=new Set(['-C','-c','--git-dir','--namespace','--object-directory','--super-prefix','--work-tree']); let cmd='',cmdIndex=-1; for(let i=0;i<args.length;i++){const a=args[i]||''; if(valueOptions.has(a)){i++; continue} if(a.startsWith('-')) continue; cmd=a; cmdIndex=i; break} const c=cmd.toLowerCase(); const blocked=(c==='reset'&&args.includes('--hard'))||(c==='clean'&&args.some(a=>a==='--force'||a==='-f'||a==='-x'||a==='-X'||/^-[A-Za-z]*[fxX][A-Za-z]*$/.test(a)))||(c==='stash'&&['drop','clear'].includes((args[cmdIndex+1]||'').toLowerCase()))||(c==='push'&&args.some(a=>a==='-f'||a==='--force'||a.startsWith('--force-with-lease')))||(c==='checkout'&&args.some(a=>a==='-f'||a==='--force'))||c==='restore'; if(blocked){console.error('Open Design git command guard blocked destructive git command'); process.exit(126)}" %*
 if errorlevel 1 exit /b %errorlevel%
 "%OD_REAL_GIT_BIN%" %*
 `;

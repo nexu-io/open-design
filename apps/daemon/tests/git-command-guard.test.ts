@@ -27,6 +27,10 @@ describe('git command guard', () => {
   it('classifies destructive git invocations', () => {
     expect(gitCommandBlockedReason(['status'])).toBeNull();
     expect(gitCommandBlockedReason(['-C', '/repo', 'status'])).toBeNull();
+    expect(gitCommandBlockedReason(['--git-dir', '/tmp/repo/.git', 'status'])).toBeNull();
+    expect(gitCommandBlockedReason(['--git-dir', '/tmp/repo/.git', 'reset', '--hard'])).toContain(
+      'reset --hard',
+    );
     expect(gitCommandBlockedReason(['reset', '--hard'])).toContain('reset --hard');
     expect(gitCommandBlockedReason(['clean', '-fdx'])).toContain('clean');
     expect(gitCommandBlockedReason(['stash', 'drop'])).toContain('stash');
@@ -61,5 +65,29 @@ describe('git command guard', () => {
     });
     expect(destructive.status).toBe(126);
     expect(destructive.stderr).toContain('git command guard blocked');
+
+    const destructiveWithGlobalOption = spawnSync('git', ['--git-dir', '/tmp/repo/.git', 'reset', '--hard'], {
+      env: install.env as NodeJS.ProcessEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveWithGlobalOption.status).toBe(126);
+    expect(destructiveWithGlobalOption.stderr).toContain('git command guard blocked');
+  });
+
+  it('preserves a Path-only environment when installing the shim', () => {
+    const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-git-real-'));
+    tempDirs.push(binDir);
+    const realGit = path.join(binDir, process.platform === 'win32' ? 'git.cmd' : 'git');
+    fs.writeFileSync(realGit, process.platform === 'win32' ? '@echo off\r\n' : '#!/bin/sh\n', { mode: 0o755 });
+
+    const install = installGitCommandGuard({
+      OD_GIT_COMMAND_GUARD: '1',
+      Path: binDir,
+    });
+    tempDirs.push(install.guardDir!);
+
+    expect(install.realGit).toBe(realGit);
+    expect(install.env.Path).toBe(`${install.guardDir}${path.delimiter}${binDir}`);
+    expect(install.env.PATH).toBeUndefined();
   });
 });
