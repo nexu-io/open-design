@@ -7514,6 +7514,8 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
   const [newKeyId, setNewKeyId] = useState<string | null>(null);
   const [label, setLabel] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [pendingRestart, setPendingRestart] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const networkExposed = bindHost !== '127.0.0.1' && bindHost !== '::1' && bindHost !== 'localhost';
   const portTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -7560,8 +7562,37 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
         }),
       });
       if (!res.ok) setError(t('settings.networkSaveError'));
+      else setPendingRestart(true);
     } catch {
       setError(t('settings.networkSaveError'));
+    }
+  };
+
+  const restartDaemon = async () => {
+    setRestarting(true);
+    setError(null);
+    const savedPort = port || 7456;
+    try {
+      await fetch('/api/restart', { method: 'POST' });
+    } catch { /* expected — daemon exits */ }
+    const checkHealth = async (retries: number): Promise<boolean> => {
+      for (let i = 0; i < retries; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        try {
+          const r = await fetch(`http://${window.location.hostname}:${savedPort}/api/health`);
+          if (r.ok) return true;
+        } catch { /* not back yet */ }
+      }
+      return false;
+    };
+    const back = await checkHealth(30);
+    if (back) {
+      setPendingRestart(false);
+      setRestarting(false);
+      window.location.href = `http://${window.location.hostname}:${savedPort}`;
+    } else {
+      setRestarting(false);
+      setError(t('settings.restartFailed'));
     }
   };
 
@@ -7674,7 +7705,17 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
         </>
       )}
 
-      <p className="hint" style={{ marginTop: '16px' }}>{t('settings.networkRestartHint')}</p>
+      {pendingRestart && !restarting && (
+        <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <p className="hint" style={{ margin: 0 }}>{t('settings.networkRestartHint')}</p>
+          <button type="button" className="seg-btn active" onClick={restartDaemon}>{t('settings.restartDaemon')}</button>
+        </div>
+      )}
+      {restarting && (
+        <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <p className="hint" style={{ margin: 0 }}>{t('settings.restartingDaemon')}</p>
+        </div>
+      )}
     </section>
   );
 }

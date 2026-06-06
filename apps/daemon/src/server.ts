@@ -5276,6 +5276,11 @@ export async function startServer({
     res.json({ ok: true });
   });
 
+  app.post('/api/restart', async (_req, res) => {
+    res.json({ ok: true });
+    setTimeout(() => process.exit(0), 150);
+  });
+
   app.get('/api/auth/keys', async (_req, res) => {
     const keys = await listKeys(RUNTIME_DATA_DIR);
     res.json({ keys });

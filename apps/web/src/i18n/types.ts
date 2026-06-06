@@ -369,6 +369,9 @@ export interface Dict {
   'settings.keyLabel': string;
   'settings.generateKey': string;
   'settings.networkRestartHint': string;
+  'settings.restartDaemon': string;
+  'settings.restartingDaemon': string;
+  'settings.restartFailed': string;
   'settings.networkSaveError': string;
   'settings.networkLoadError': string;
   'settings.themeSystem': string;
