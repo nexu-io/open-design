@@ -1,4 +1,13 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
+import { createPortal } from 'react-dom';
 import type {
   ConnectorDetail,
   InstalledPluginRecord,
@@ -6,6 +15,10 @@ import type {
 } from '@open-design/contracts';
 import { useT } from '../i18n';
 import { Icon, type IconName } from './Icon';
+import {
+  computeComposerPlusFlyoutPosition,
+  type ComposerPlusFlyoutPosition,
+} from './composerPlusFlyoutPosition';
 
 export interface ComposerPlusMenuProps {
   /** Connector context options shown under the "Connectors" submenu. */
@@ -344,6 +357,8 @@ export function ComposerPlusMenu({
               open={submenu === 'toolbox'}
               onOpen={() => setSubmenu('toolbox')}
               onClose={() => setSubmenu(null)}
+              floating
+              flyoutClassName="plus-menu__flyout--toolbox"
             >
               {renderToolbox(close)}
             </PlusSubmenuRow>
@@ -361,6 +376,8 @@ function PlusSubmenuRow({
   onOpen,
   onClose,
   children,
+  floating = false,
+  flyoutClassName,
 }: {
   label: string;
   icon: IconName;
@@ -368,12 +385,140 @@ function PlusSubmenuRow({
   onOpen: () => void;
   onClose: () => void;
   children: ReactNode;
+  floating?: boolean;
+  flyoutClassName?: string;
 }) {
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const flyoutRef = useRef<HTMLDivElement | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const [position, setPosition] = useState<ComposerPlusFlyoutPosition | null>(null);
+
+  const clearCloseTimer = useCallback(() => {
+    if (closeTimerRef.current === null) return;
+    window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = null;
+  }, []);
+
+  const scheduleClose = useCallback(() => {
+    clearCloseTimer();
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      onClose();
+    }, 80);
+  }, [clearCloseTimer, onClose]);
+
+  const reposition = useCallback(() => {
+    if (!floating || !open || !rowRef.current) return;
+    const anchor = rowRef.current.getBoundingClientRect();
+    const flyout = flyoutRef.current;
+    const size = flyout
+      ? {
+          width: flyout.offsetWidth || 360,
+          height: flyout.scrollHeight || flyout.offsetHeight || 360,
+        }
+      : { width: 360, height: 360 };
+    setPosition(
+      computeComposerPlusFlyoutPosition(anchor, size, {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }),
+    );
+  }, [floating, open]);
+
+  useLayoutEffect(() => {
+    if (!floating || !open) {
+      setPosition(null);
+      return;
+    }
+    reposition();
+  }, [floating, open, reposition]);
+
+  useEffect(() => {
+    if (!floating || !open) return;
+    let raf = 0;
+    const update = () => {
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        reposition();
+      });
+    };
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    const flyout = flyoutRef.current;
+    const observer =
+      typeof ResizeObserver === 'undefined' || !flyout
+        ? null
+        : new ResizeObserver(update);
+    if (flyout) observer?.observe(flyout);
+    return () => {
+      if (raf) window.cancelAnimationFrame(raf);
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+      observer?.disconnect();
+    };
+  }, [floating, open, reposition]);
+
+  useEffect(() => () => clearCloseTimer(), [clearCloseTimer]);
+
+  function onRowLeave(event: React.MouseEvent<HTMLDivElement>) {
+    if (!floating) {
+      onClose();
+      return;
+    }
+    const next = event.relatedTarget as Node | null;
+    if (next && flyoutRef.current?.contains(next)) return;
+    scheduleClose();
+  }
+
+  function onFlyoutLeave(event: React.MouseEvent<HTMLDivElement>) {
+    const next = event.relatedTarget as Node | null;
+    if (next && rowRef.current?.contains(next)) return;
+    onClose();
+  }
+
+  const flyoutStyle: CSSProperties | undefined = floating
+    ? position
+      ? ({
+          position: 'fixed',
+          left: `${position.left}px`,
+          top: `${position.top}px`,
+          width: `${position.width}px`,
+          ['--plus-menu-flyout-max-height' as string]: `${position.maxHeight}px`,
+        } satisfies CSSProperties)
+      : {
+          position: 'fixed',
+          left: '-9999px',
+          top: '0px',
+          visibility: 'hidden',
+        }
+    : undefined;
+
+  const flyout = open ? (
+    <div
+      ref={flyoutRef}
+      className={`plus-menu__flyout${floating ? ' plus-menu__flyout--floating' : ''}${flyoutClassName ? ` ${flyoutClassName}` : ''}`}
+      role="menu"
+      style={flyoutStyle}
+      data-placement={position?.placement}
+      data-plus-menu-floating={floating ? 'true' : undefined}
+      onMouseEnter={floating ? clearCloseTimer : undefined}
+      onMouseLeave={floating ? onFlyoutLeave : undefined}
+      onMouseDown={floating ? (event) => event.stopPropagation() : undefined}
+    >
+      {children}
+    </div>
+  ) : null;
+
   return (
     <div
+      ref={rowRef}
       className="plus-menu__submenu-row"
-      onMouseEnter={onOpen}
-      onMouseLeave={onClose}
+      onMouseEnter={() => {
+        clearCloseTimer();
+        onOpen();
+      }}
+      onMouseLeave={onRowLeave}
     >
       <button
         type="button"
@@ -387,11 +532,9 @@ function PlusSubmenuRow({
         <span>{label}</span>
         <Icon name="chevron-right" size={13} className="plus-menu__chevron" />
       </button>
-      {open ? (
-        <div className="plus-menu__flyout" role="menu">
-          {children}
-        </div>
-      ) : null}
+      {floating && flyout && typeof document !== 'undefined'
+        ? createPortal(flyout, document.body)
+        : flyout}
     </div>
   );
 }

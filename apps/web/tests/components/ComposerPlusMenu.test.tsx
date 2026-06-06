@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { ComposerPlusMenu } from '../../src/components/ComposerPlusMenu';
+import { computeComposerPlusFlyoutPosition } from '../../src/components/composerPlusFlyoutPosition';
 import { I18nProvider } from '../../src/i18n';
 import type { Locale } from '../../src/i18n/types';
 
@@ -78,5 +79,68 @@ describe('ComposerPlusMenu pick-row caret protection', () => {
     const mcpSearch = screen.getByPlaceholderText('MCP') as HTMLInputElement;
     expect(mcpSearch.value).toBe('');
     expect(screen.getByText('Linear')).toBeTruthy();
+  });
+
+  it('renders the design toolbox flyout as a viewport-aware fixed layer', () => {
+    renderMenu({
+      renderToolbox: () => (
+        <div
+          className="composer-design-toolbox-menu"
+          data-testid="design-toolbox-panel"
+        >
+          Design toolbox content
+        </div>
+      ),
+    });
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 420 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 300 });
+
+    fireEvent.click(screen.getByTestId('plus-trigger'));
+    const row = screen.getByRole('menuitem', { name: /Design toolbox/i });
+    Object.defineProperty(row.parentElement, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        top: 250,
+        right: 390,
+        bottom: 282,
+        left: 250,
+        width: 140,
+        height: 32,
+        x: 250,
+        y: 250,
+        toJSON: () => ({}),
+      }),
+    });
+
+    fireEvent.mouseEnter(row.parentElement!);
+
+    const floatingFlyout = document.querySelector<HTMLElement>(
+      '[data-plus-menu-floating="true"]',
+    );
+    expect(floatingFlyout).toBeTruthy();
+    expect(floatingFlyout?.style.position).toBe('fixed');
+    expect(floatingFlyout?.dataset.placement).toBe('left');
+    expect(parseFloat(floatingFlyout?.style.top ?? '0')).toBeLessThan(250);
+    expect(
+      screen.getByTestId('plus-trigger').closest('.plus-menu')?.contains(floatingFlyout),
+    ).toBe(false);
+    expect(floatingFlyout?.contains(screen.getByTestId('design-toolbox-panel'))).toBe(
+      true,
+    );
+  });
+});
+
+describe('computeComposerPlusFlyoutPosition', () => {
+  it('keeps oversized flyouts inside narrow viewports', () => {
+    const position = computeComposerPlusFlyoutPosition(
+      { top: 140, right: 176, bottom: 172, left: 28 },
+      { width: 360, height: 320 },
+      { width: 180, height: 160 },
+    );
+
+    expect(position.left).toBeGreaterThanOrEqual(8);
+    expect(position.left + position.width).toBeLessThanOrEqual(172);
+    expect(position.top).toBeGreaterThanOrEqual(8);
+    expect(position.top + position.maxHeight).toBeLessThanOrEqual(152);
   });
 });

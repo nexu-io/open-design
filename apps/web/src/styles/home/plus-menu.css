@@ -102,6 +102,15 @@
     0 1px 2px rgba(0, 0, 0, 0.04),
     0 10px 28px -10px rgba(0, 0, 0, 0.18);
 }
+.plus-menu__flyout--floating {
+  margin-left: 0;
+  z-index: 1600;
+  max-height: var(--plus-menu-flyout-max-height, calc(100vh - 16px));
+}
+.plus-menu__flyout--toolbox {
+  width: min(360px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+}
 /* Invisible bridge so the cursor can cross the gap into the flyout without
    triggering the row's mouseleave. */
 .plus-menu__flyout::before {
@@ -111,6 +120,10 @@
   bottom: 0;
   left: -8px;
   width: 8px;
+}
+.plus-menu__flyout--floating[data-placement='left']::before {
+  left: auto;
+  right: -8px;
 }
 .plus-menu__search {
   display: flex;
@@ -159,11 +172,14 @@
    let the panel's own styling (composer-design-toolbox-*) drive the rest. */
 .plus-menu__flyout .composer-design-toolbox-menu {
   position: static;
-  width: auto;
-  min-width: 320px;
+  width: 100%;
+  min-width: min(320px, calc(100vw - 16px));
   border: 0;
   border-radius: 0;
   box-shadow: none;
   padding: 0;
   background: transparent;
+}
+.plus-menu__flyout--floating .composer-design-toolbox-menu {
+  max-height: calc(var(--plus-menu-flyout-max-height, 430px) - 12px);
 }
