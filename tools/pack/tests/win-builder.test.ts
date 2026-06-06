@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { NtExecutable, NtExecutableResource, Resource } from "resedit";
 import { describe, expect, it } from "vitest";
 
-import { materializeCachedUnpackedForInstaller } from "../src/win/builder.js";
+import { isWinCodeSignSymlinkPrivilegeError, materializeCachedUnpackedForInstaller } from "../src/win/builder.js";
 import type { WinPaths } from "../src/win/types.js";
 import { readWinExecutableVersionSnapshot } from "../src/win/version-resource.js";
 
@@ -139,3 +139,20 @@ async function createVersionedExecutable(packagedVersion: string): Promise<Buffe
   resource.outputResource(executable);
   return Buffer.from(executable.generate());
 }
+
+describe("isWinCodeSignSymlinkPrivilegeError", () => {
+  it("matches electron-builder winCodeSign extraction failures caused by blocked Windows symlinks", () => {
+    expect(
+      isWinCodeSignSymlinkPrivilegeError({
+        stdout: [
+          "workingDir=C:\\Users\\louis\\AppData\\Local\\electron-builder\\Cache\\winCodeSign",
+          "ERROR: Cannot create symbolic link : user lacks privilege : C:\\Users\\louis\\AppData\\Local\\electron-builder\\Cache\\winCodeSign\\093751595\\darwin\\10.12\\lib\\libcrypto.dylib",
+        ].join("\n"),
+      }),
+    ).toBe(true);
+  });
+
+  it("does not match unrelated electron-builder failures", () => {
+    expect(isWinCodeSignSymlinkPrivilegeError({ stdout: "cannot execute rcedit" })).toBe(false);
+  });
+});
