@@ -1,3 +1,10 @@
+import net from 'node:net';
+
+/** Bracket IPv6 literals for use in Host headers and URL authorities. */
+function bracketHost(host: string): string {
+  return net.isIPv6(host) ? `[${host}]` : host;
+}
+
 export interface ParsedHostHeader {
   hostname: string;
   host: string;
@@ -71,6 +78,15 @@ export function isPrivateIpv4(hostname: unknown): boolean {
   );
 }
 
+/** Returns true for IPv6 unique-local (fc00::/7) addresses. */
+export function isPrivateIpv6(hostname: unknown): boolean {
+  const host = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
+  if (!net.isIPv6(host)) return false;
+  const firstHextet = parseInt(host.split(':')[0]!, 16);
+  // fc00::/7 → high byte is 0xfc or 0xfd
+  return (firstHextet >> 8 & 0xfe) === 0xfc;
+}
+
 export function isIpLiteralHostname(hostname: unknown): boolean {
   const host = String(hostname || '').trim();
   if (!host) return false;
@@ -90,7 +106,8 @@ export function isLoopbackOrPrivateLanHost(hostname: unknown): boolean {
     host === '[::1]' ||
     host === '0.0.0.0' ||
     host === '::' ||
-    isPrivateIpv4(host)
+    isPrivateIpv4(host) ||
+    isPrivateIpv6(host)
   );
 }
 
@@ -104,10 +121,11 @@ export function isAllowedBrowserHost(
   if (!requestHost) return false;
 
   const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
+  const bracketed = bracketHost(bindHost);
   const explicitHosts = new Set([
     ...ports.flatMap((p) => [
       ...loopbackHosts.map((h) => `${h}:${p}`),
-      `${bindHost}:${p}`,
+      `${bracketed}:${p}`,
     ]),
     ...configuredAllowedHosts(extraAllowedOrigins),
   ]);
@@ -139,10 +157,11 @@ export function isAllowedBrowserOrigin(
 
   const schemes = ['http', 'https'];
   const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
+  const bracketed = bracketHost(bindHost);
   const explicitOrigins = new Set(
     ports.flatMap((p) => [
       ...schemes.flatMap((s) => loopbackHosts.map((h) => `${s}://${h}:${p}`)),
-      ...schemes.map((s) => `${s}://${bindHost}:${p}`),
+      ...schemes.map((s) => `${s}://${bracketed}:${p}`),
     ]),
   );
   if (explicitOrigins.has(String(origin))) return true;

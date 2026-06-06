@@ -254,6 +254,11 @@ export type OpenDesignHostBridge = {
   shell: {
     openExternal(url: string): Promise<OpenDesignHostActionResult>;
     openPath(projectId: string): Promise<OpenDesignHostActionResult>;
+    /** Optional so older host builds still satisfy the bridge shape. */
+    autoLaunch?: {
+      get(): Promise<boolean>;
+      set(enabled: boolean): Promise<boolean>;
+    };
   };
   updater: {
     check(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;

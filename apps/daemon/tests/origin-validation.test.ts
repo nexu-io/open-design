@@ -642,3 +642,32 @@ describe('isLocalSameOrigin: Sec-Fetch-Site fallback for no-Origin same-origin G
     expect(isLocalSameOrigin(req, 7456, env)).toBe(false);
   });
 });
+
+describe('IPv6 bind host origin validation', () => {
+  it('accepts browser request when bindHost is IPv6 (fd00::1)', () => {
+    expect(isLocalSameOrigin(
+      { headers: { host: '[fd00::1]:7456', origin: 'http://[fd00::1]:7456' } },
+      7456,
+      process.env,
+      'fd00::1',
+    )).toBe(true);
+  });
+
+  it('accepts browser request when bindHost is IPv4', () => {
+    expect(isLocalSameOrigin(
+      { headers: { host: '192.168.1.10:7456', origin: 'http://192.168.1.10:7456' } },
+      7456,
+      process.env,
+      '192.168.1.10',
+    )).toBe(true);
+  });
+
+  it('rejects cross-origin when bindHost is IPv6 but origin differs', () => {
+    expect(isLocalSameOrigin(
+      { headers: { host: '[fd00::1]:7456', origin: 'http://[fd00::2]:7456' } },
+      7456,
+      process.env,
+      'fd00::1',
+    )).toBe(false);
+  });
+});

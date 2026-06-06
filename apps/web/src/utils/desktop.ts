@@ -1,4 +1,4 @@
-import { detectOpenDesignHostClientType } from '@open-design/host';
+import { detectOpenDesignHostClientType, getOpenDesignHost } from '@open-design/host';
 
 export function isDesktopApp(): boolean {
   return typeof window !== 'undefined'
@@ -14,12 +14,10 @@ export function isPackagedDesktop(): boolean {
 
 /** Read the current auto-launch preference from the desktop bridge. */
 export function getAutoLaunchEnabled(): Promise<boolean> {
-  return (window as unknown as { electronAPI?: { autoLaunch?: { get?: () => Promise<boolean> } } })
-    .electronAPI?.autoLaunch?.get?.() ?? Promise.resolve(false);
+  return getOpenDesignHost()?.shell?.autoLaunch?.get?.() ?? Promise.resolve(false);
 }
 
 /** Set the auto-launch preference through the desktop bridge. */
 export function setAutoLaunch(enabled: boolean): Promise<boolean> {
-  return (window as unknown as { electronAPI?: { autoLaunch?: { set?: (v: boolean) => Promise<boolean> } } })
-    .electronAPI?.autoLaunch?.set?.(enabled) ?? Promise.resolve(false);
+  return getOpenDesignHost()?.shell?.autoLaunch?.set?.(enabled) ?? Promise.resolve(false);
 }
