@@ -297,6 +297,11 @@ test("json agent dry-run: prints the entry under the right dot-keyPath (cursor)"
     const entry = extractPrintedJsonEntry(result.stdout);
     assert.equal(entry.command, "od");
     assert.deepEqual(entry.args, ["mcp", "--daemon-url", "http://daemon.test:7456"]);
+    // Cursor is the only JSON-config agent whose entry must carry
+    // `type: "stdio"`. The daemon's planAgentInstall('cursor', ...)
+    // produces this via jsonEntry(spec, { type: 'stdio' }), and
+    // apps/daemon/tests/mcp-agent-install.test.ts asserts the same.
+    assert.equal(entry.type, "stdio", "cursor entry must include type: 'stdio' to match the daemon's planAgentInstall('cursor', ...)");
     assert.equal(entry.env.OD_DAEMON_URL, "http://daemon.test:7456");
   } finally {
     rmSync(home, { recursive: true, force: true });
@@ -363,9 +368,21 @@ test("json agent --write-config: writes the file from a fresh temp HOME (cursor)
     assert.equal(existsSync(target), true, `expected ${target} to be created`);
     const parsed = JSON.parse(readFileSync(target, "utf8"));
     assert.deepEqual(Object.keys(parsed.mcpServers), ["open-design"]);
-    assert.equal(parsed.mcpServers["open-design"].command, "od");
-    assert.deepEqual(parsed.mcpServers["open-design"].args, ["mcp", "--daemon-url", "http://daemon.test:7456"]);
-    assert.equal(parsed.mcpServers["open-design"].env.OD_DAEMON_URL, "http://daemon.test:7456");
+    // The full entry shape must match what the daemon's
+    // planAgentInstall('cursor', ...) produces. Asserting the
+    // whole object (not just the fields we care about) prevents
+    // future drift if install.sh adds or renames fields.
+    //
+    // Source of truth: the daemon's own test
+    // apps/daemon/tests/mcp-agent-install.test.ts, "cursor merges
+    // a stdio entry under mcpServers". If that test changes, this
+    // fixture must be updated to match.
+    assert.deepEqual(parsed.mcpServers["open-design"], {
+      command: "od",
+      args: ["mcp", "--daemon-url", "http://daemon.test:7456"],
+      type: "stdio",
+      env: { OD_DAEMON_URL: "http://daemon.test:7456" },
+    });
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
@@ -742,6 +759,36 @@ test("json agent 'antigravity' --write-config writes the right file", () => {
     assert.equal(existsSync(target), true);
     const parsed = JSON.parse(readFileSync(target, "utf8"));
     assert.deepEqual(Object.keys(parsed.mcpServers), ["open-design"]);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("json agent 'cursor' --write-config: round-trips a URL with RFC 3986 sub-delims and percent-encoding", () => {
+  // The new CURSOR_ENTRY printf must not corrupt URLs that contain
+  // the characters allowed by the URL regex: `;`, `&`, `=`, `,`, `+`,
+  // `$`, `(`, `)`, `*`, `!`, `@`, `~`, `?`, `#`, `/`, `:`, `%`.
+  // The strict URL regex (validated up-front in install.sh) allows
+  // these in path / query / fragment; the printf here must write
+  // them as a valid JSON string. A regression would surface as
+  // JSON.parse throwing, or as a corrupted args/env value.
+  const home = makeTempHome();
+  try {
+    const url = "http://daemon.test:7456/a?x=1&y=2#frag;id,ok$*()+:@!~%25";
+    const result = runInstall(
+      ["cursor", "--write-config", "--daemon-url", url],
+      { HOME: home },
+    );
+    assert.equal(result.status, 0, `stderr: ${result.stderr}`);
+    const target = join(home, ".cursor", "mcp.json");
+    const parsed = JSON.parse(readFileSync(target, "utf8"));
+    assert.deepEqual(parsed.mcpServers["open-design"].args, [
+      "mcp",
+      "--daemon-url",
+      url,
+    ]);
+    assert.equal(parsed.mcpServers["open-design"].env.OD_DAEMON_URL, url);
+    assert.equal(parsed.mcpServers["open-design"].type, "stdio");
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

@@ -537,10 +537,19 @@ EOF
   # --write-config, deep-merge into the per-agent config file.
   # ============================================================
   cursor)
+    # Cursor is the only JSON-config agent that gets a `type: "stdio"`
+    # field on top of the generic command/args/env shape; the daemon's
+    # planAgentInstall('cursor', ...) calls jsonEntry(spec, { type: 'stdio' }),
+    # and apps/daemon/tests/mcp-agent-install.test.ts asserts that
+    # exact shape under mcpServers. Keeping this in lock-step with
+    # the daemon matters because users running both installers
+    # (install.sh first, od mcp install later) would see a
+    # different config file otherwise.
     CURSOR_CFG="${HOME}/.cursor/mcp.json"
-    print_json_plan "$CURSOR_CFG" "mcpServers" "$ENTRY_JSON" "Cursor (mcpServers at \$HOME/.cursor/mcp.json)"
+    CURSOR_ENTRY="$(printf '{"command":"od","args":["mcp","--daemon-url","%s"],"type":"stdio","env":{"OD_DAEMON_URL":"%s"}}' "$DAEMON_URL" "$DAEMON_URL")"
+    print_json_plan "$CURSOR_CFG" "mcpServers" "$CURSOR_ENTRY" "Cursor (mcpServers at \$HOME/.cursor/mcp.json)"
     if [ "$DRY_RUN" = "0" ]; then
-      merge_json_config "$CURSOR_CFG" "mcpServers" "$SERVER_NAME" "$ENTRY_JSON"
+      merge_json_config "$CURSOR_CFG" "mcpServers" "$SERVER_NAME" "$CURSOR_ENTRY"
     fi
     ;;
 
