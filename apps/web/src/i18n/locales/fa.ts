@@ -390,6 +390,8 @@ export const fa: Dict = {
   'settings.mcpKeysRevokeConfirm': 'این کلید MCP ابطال شود؟',
   'settings.mcpKeysNetworkWarning': 'دیمون در شبکه نمایان است. یک کلید MCP تولید کنید تا احراز هویت فعال شود.',
   'settings.mcpKeysGenerate': 'تولید کلید MCP',
+  'settings.mcpKeysRotate': 'Rotate token',
+  'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
   'settings.externalMcpTitle': 'MCP خارجی',
   'settings.externalMcpHint': 'افزودن ابزارهای MCP از سرویس‌های خارجی (Higgsfield, GitHub, …).',
   'settings.mediaProviderApiKey': 'کلید API',

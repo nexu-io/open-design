@@ -390,6 +390,8 @@ export const ja: Dict = {
   'settings.mcpKeysRevokeConfirm': 'このMCPキーを取り消しますか？',
   'settings.mcpKeysNetworkWarning': 'デーモンがネットワークに公開されています。MCPキーを生成して認証を有効にしてください。',
   'settings.mcpKeysGenerate': 'MCPキーを生成',
+  'settings.mcpKeysRotate': 'Rotate token',
+  'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
   'settings.externalMcpTitle': '外部 MCP',
   'settings.externalMcpHint': '外部サービス（Higgsfield、GitHub など）の MCP ツールを追加します。',
   'settings.mediaProviderApiKey': 'APIキー',

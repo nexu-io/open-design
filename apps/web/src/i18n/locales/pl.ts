@@ -390,6 +390,8 @@ export const pl: Dict = {
   'settings.mcpKeysRevokeConfirm': 'Odwołać ten klucz MCP?',
   'settings.mcpKeysNetworkWarning': 'Demon jest eksponowany w sieci. Wygeneruj klucz MCP, aby włączyć uwierzytelnianie.',
   'settings.mcpKeysGenerate': 'Generuj klucz MCP',
+  'settings.mcpKeysRotate': 'Rotate token',
+  'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
   'settings.externalMcpTitle': 'Zewnętrzny MCP',
   'settings.externalMcpHint': 'Dodaj narzędzia MCP z usług zewnętrznych (Higgsfield, GitHub, …).',
   'settings.mediaProviderApiKey': 'Klucz API',

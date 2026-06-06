@@ -390,6 +390,8 @@ export const ko: Dict = {
   'settings.mcpKeysRevokeConfirm': '이 MCP 키를 삭제하시겠습니까?',
   'settings.mcpKeysNetworkWarning': '네트워크에 노출된 상태입니다. MCP 키를 생성하여 인증을 활성화하세요.',
   'settings.mcpKeysGenerate': 'MCP 키 생성',
+  'settings.mcpKeysRotate': 'Rotate token',
+  'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
   'settings.externalMcpTitle': '외부 MCP',
   'settings.externalMcpHint': '외부 서비스(Higgsfield, GitHub 등)의 MCP 도구를 추가합니다.',
   'settings.mediaProviderApiKey': 'API 키',

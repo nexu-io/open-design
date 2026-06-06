@@ -390,6 +390,8 @@ export const de: Dict = {
   'settings.mcpKeysRevokeConfirm': 'Diesen MCP-Schlüssel widerrufen?',
   'settings.mcpKeysNetworkWarning': 'Der Daemon ist im Netzwerk freigegeben. Erzeugen Sie einen MCP-Schlüssel zur Authentifizierung.',
   'settings.mcpKeysGenerate': 'MCP-Schlüssel erzeugen',
+  'settings.mcpKeysRotate': 'Rotate token',
+  'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
   'settings.externalMcpTitle': 'Externes MCP',
   'settings.externalMcpHint': 'MCP-Tools aus externen Diensten hinzufügen (Higgsfield, GitHub, …).',
   'settings.mediaProviderApiKey': 'API-Key',

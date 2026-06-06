@@ -33,6 +33,7 @@ export { resolveProjectRoot };
 import { createAuthMiddleware } from './auth-middleware.js';
 import { allValidHashes, verifyKey, generateKey, listKeys, revokeKey } from './auth-store.js';
 import { initMcpKeyStore, allMcpKeyHashes, generateMcpKey, listMcpKeys, revealMcpKey, revokeMcpKey } from './mcp-key-store.js';
+import { setShellEnvVar } from './shell-env.js';
 import { createIpAllowlistMiddleware } from './ip-allowlist.js';
 import { renderLoginPage } from './login-page.js';
 import { isNetworkExposed, parseAllowedHosts } from './network-config.js';
@@ -5368,7 +5369,14 @@ export async function startServer({
     const entry = await generateMcpKey(RUNTIME_DATA_DIR, typeof label === 'string' ? label : '');
     bustInstallInfoCache();
     await refreshAuthEnabled();
-    res.json(entry);
+    let shellEnvFile: string | null = null;
+    try {
+      const result = await setShellEnvVar('OD_MCP_TOKEN', entry.key);
+      shellEnvFile = result.file;
+    } catch (err) {
+      console.warn('[mcp-keys] shell profile update failed:', err);
+    }
+    res.json({ ...entry, shellEnvFile });
   });
 
   app.get('/api/mcp-keys/:id', async (req, res) => {

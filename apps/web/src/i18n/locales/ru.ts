@@ -390,6 +390,8 @@ export const ru: Dict = {
   'settings.mcpKeysRevokeConfirm': 'Отозвать этот ключ MCP?',
   'settings.mcpKeysNetworkWarning': 'Демон открыт в сети. Создайте ключ MCP для включения аутентификации.',
   'settings.mcpKeysGenerate': 'Создать ключ MCP',
+  'settings.mcpKeysRotate': 'Rotate token',
+  'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
   'settings.externalMcpTitle': 'Внешний MCP',
   'settings.externalMcpHint': 'Добавьте MCP-инструменты из внешних сервисов (Higgsfield, GitHub, …).',
   'settings.mediaProviderApiKey': 'API-ключ',

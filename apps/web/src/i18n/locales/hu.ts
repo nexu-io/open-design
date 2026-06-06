@@ -390,6 +390,8 @@ export const hu: Dict = {
   'settings.mcpKeysRevokeConfirm': 'Visszavonod ezt az MCP-kulcsot?',
   'settings.mcpKeysNetworkWarning': 'A daemon ki van téve a hálózatnak. Hozz létre egy MCP-kulcsot a hitelesítés engedélyezéséhez.',
   'settings.mcpKeysGenerate': 'MCP-kulcs létrehozása',
+  'settings.mcpKeysRotate': 'Rotate token',
+  'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
   'settings.externalMcpTitle': 'Külső MCP',
   'settings.externalMcpHint': 'Adj hozzá MCP-eszközöket külső szolgáltatásokból (Higgsfield, GitHub, …).',
   'settings.mediaProviderApiKey': 'API-kulcs',

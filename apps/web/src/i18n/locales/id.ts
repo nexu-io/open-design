@@ -390,6 +390,8 @@ export const id: Dict = {
   'settings.mcpKeysRevokeConfirm': 'Cabut kunci MCP ini?',
   'settings.mcpKeysNetworkWarning': 'Daemon terekspos ke jaringan. Buat kunci MCP untuk mengaktifkan autentikasi.',
   'settings.mcpKeysGenerate': 'Buat kunci MCP',
+  'settings.mcpKeysRotate': 'Rotate token',
+  'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
   'settings.externalMcpTitle': 'MCP eksternal',
   'settings.externalMcpHint': 'Tambahkan alat MCP dari layanan eksternal (Higgsfield, GitHub, …).',
   'settings.mediaProviderApiKey': 'API key',

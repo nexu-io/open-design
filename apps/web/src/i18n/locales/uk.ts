@@ -390,6 +390,8 @@ export const uk: Dict = {
   'settings.mcpKeysRevokeConfirm': 'Відкликати цей ключ MCP?',
   'settings.mcpKeysNetworkWarning': 'Демон відкритий у мережі. Створіть ключ MCP для увімкнення автентифікації.',
   'settings.mcpKeysGenerate': 'Створити ключ MCP',
+  'settings.mcpKeysRotate': 'Rotate token',
+  'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
   'settings.externalMcpTitle': 'Зовнішній MCP',
   'settings.externalMcpHint': 'Додайте MCP-інструменти із зовнішніх сервісів (Higgsfield, GitHub, …).',
   'settings.mediaProviderApiKey': 'API-ключ',

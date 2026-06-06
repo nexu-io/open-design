@@ -390,6 +390,8 @@ export const tr: Dict = {
   'settings.mcpKeysRevokeConfirm': 'Bu MCP anahtarı iptal edilsin mi?',
   'settings.mcpKeysNetworkWarning': 'Daemon ağa açık. Kimlik doğrulamayı etkinleştirmek için bir MCP anahtarı oluşturun.',
   'settings.mcpKeysGenerate': 'MCP anahtarı oluştur',
+  'settings.mcpKeysRotate': 'Rotate token',
+  'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
   'settings.externalMcpTitle': 'Dış MCP',
   'settings.externalMcpHint': 'Dış servislerden (Higgsfield, GitHub, …) MCP araçları ekleyin.',
   'settings.mediaProviderApiKey': 'API anahtarı',

@@ -390,6 +390,8 @@ export const th: Dict = {
   'settings.mcpKeysRevokeConfirm': 'เพิกถอนคีย์ MCP นี้?',
   'settings.mcpKeysNetworkWarning': 'Daemon เปิดเผยไปยังเครือข่าย สร้างคีย์ MCP เพื่อเปิดการยืนยันตัวตน',
   'settings.mcpKeysGenerate': 'สร้างคีย์ MCP',
+  'settings.mcpKeysRotate': 'Rotate token',
+  'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
   'settings.externalMcpTitle': 'MCP ภายนอก',
   'settings.externalMcpHint': 'เพิ่มเครื่องมือ MCP จากบริการภายนอก (Higgsfield, GitHub, …)',
   'settings.mediaProviderApiKey': 'API key',

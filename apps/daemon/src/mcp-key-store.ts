@@ -144,10 +144,8 @@ export async function generateMcpKey(
     label,
     createdAt: Date.now(),
   };
-  await lockedWrite(dataDir, async (keys) => {
-    keys.push(entry);
-    return keys;
-  });
+  // Enforce 1-key limit: atomically replace any existing keys.
+  await lockedWrite(dataDir, async (_keys) => [entry]);
   return { id, key: rawKey, label, createdAt: entry.createdAt };
 }
 

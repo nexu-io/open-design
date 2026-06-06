@@ -6564,7 +6564,7 @@ function CodexInstallToggle(): JSX.Element | null {
 
 function buildRemoteHeaders(info: McpInstallInfo): Record<string, string> {
   if (!info.remoteMcpKey) return {};
-  return { Authorization: `Bearer ${info.remoteMcpKey}` };
+  return { Authorization: 'Bearer $OD_MCP_TOKEN' };
 }
 
 function buildSharedRemoteMcpJson(info: McpInstallInfo): string {
@@ -6587,6 +6587,7 @@ function McpKeysSection({ info, onKeyChanged }: { info: McpInstallInfo | null; o
   const [keys, setKeys] = useState<Array<{ id: string; keyPrefix: string; label: string; createdAt: number }>>([]);
   const [revealedKeys, setRevealedKeys] = useState<Map<string, string>>(new Map());
   const [generating, setGenerating] = useState(false);
+  const [shellEnvFile, setShellEnvFile] = useState<string | null>(null);
 
   const loadKeys = () => {
     fetch('/api/mcp-keys')
@@ -6599,6 +6600,7 @@ function McpKeysSection({ info, onKeyChanged }: { info: McpInstallInfo | null; o
 
   const handleGenerate = async () => {
     setGenerating(true);
+    setShellEnvFile(null);
     try {
       const res = await fetch('/api/mcp-keys', {
         method: 'POST',
@@ -6606,6 +6608,8 @@ function McpKeysSection({ info, onKeyChanged }: { info: McpInstallInfo | null; o
         body: JSON.stringify({ label: '' }),
       });
       if (res.ok) {
+        const data = await res.json();
+        if (data.shellEnvFile) setShellEnvFile(data.shellEnvFile);
         loadKeys();
         onKeyChanged();
       }
@@ -6624,40 +6628,29 @@ function McpKeysSection({ info, onKeyChanged }: { info: McpInstallInfo | null; o
     } catch { /* ignore */ }
   };
 
-  const handleRevoke = async (id: string) => {
-    if (!confirm(t('settings.mcpKeysRevokeConfirm'))) return;
-    const res = await fetch(`/api/mcp-keys/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      setRevealedKeys((prev) => { const next = new Map(prev); next.delete(id); return next; });
-      loadKeys();
-      onKeyChanged();
-    }
-  };
+  const key = keys[0] ?? null;
 
   return (
     <div>
       <p className="settings-label">{t('settings.mcpKeysTitle')}</p>
-      {(info as any)?.networkExposed && keys.length === 0 && !(info?.env?.OD_API_KEY && info.env.OD_API_KEY !== '<your-api-key>') ? (
+      {(info as any)?.networkExposed && !key && !(info?.env?.OD_API_KEY && info.env.OD_API_KEY !== '<your-api-key>') ? (
         <div className="settings-card warn" style={{ fontSize: 12, marginBottom: 8 }}>
           {t('settings.mcpKeysNetworkWarning')}
         </div>
       ) : null}
-      {keys.length === 0 ? (
+      {shellEnvFile ? (
+        <div className="settings-card" style={{ fontSize: 12, marginBottom: 8 }}>
+          {t('settings.mcpKeysShellEnv', { file: shellEnvFile })}
+        </div>
+      ) : null}
+      {!key ? (
         <p className="hint" style={{ marginBottom: 8 }}>{t('settings.mcpKeysEmpty')}</p>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {keys.map((k) => (
-            <div key={k.id} className="mcp-key-row">
-              <code>{revealedKeys.get(k.id) || `${k.keyPrefix}...`}</code>
-              {k.label ? <span style={{ color: 'var(--text-muted)' }}>{k.label}</span> : null}
-              <button type="button" className="ghost" onClick={() => handleReveal(k.id)}>
-                {t('settings.mcpKeysReveal')}
-              </button>
-              <button type="button" className="ghost" onClick={() => handleRevoke(k.id)}>
-                {t('settings.mcpKeysRevoke')}
-              </button>
-            </div>
-          ))}
+        <div className="mcp-key-row" style={{ marginBottom: 8 }}>
+          <code>{revealedKeys.get(key.id) || `${key.keyPrefix}...`}</code>
+          <button type="button" className="ghost" onClick={() => handleReveal(key.id)}>
+            {t('settings.mcpKeysReveal')}
+          </button>
         </div>
       )}
       <button
@@ -6666,7 +6659,7 @@ function McpKeysSection({ info, onKeyChanged }: { info: McpInstallInfo | null; o
         disabled={generating}
         onClick={handleGenerate}
       >
-        {generating ? '...' : t('settings.mcpKeysGenerate')}
+        {generating ? '...' : key ? t('settings.mcpKeysRotate') : t('settings.mcpKeysGenerate')}
       </button>
     </div>
   );
@@ -6687,11 +6680,12 @@ function IntegrationsSection() {
       },
       buildSnippetLang: () => 'bash',
       buildRemoteSnippet: (info) => {
-        const server: Record<string, unknown> = { type: 'http', url: info.remoteUrl ?? '' };
+        const url = info.remoteUrl ?? '';
         const headers = buildRemoteHeaders(info);
-        if (Object.keys(headers).length > 0) server.headers = headers;
-        const inner = JSON.stringify(server);
-        return `claude mcp add-json --scope user open-design '${inner}'`;
+        if (Object.keys(headers).length > 0) {
+          return `claude mcp add --transport http open-design ${url} --header "Authorization: Bearer $OD_MCP_TOKEN"`;
+        }
+        return `claude mcp add --transport http open-design ${url}`;
       },
       buildRemoteSnippetLang: () => 'bash',
     },

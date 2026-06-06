@@ -88,4 +88,14 @@ describe('mcp-key-store', () => {
     const revoked = await revokeMcpKey(dataDir, 'does-not-exist');
     expect(revoked).toBe(false);
   });
+
+  it('second generateMcpKey replaces the first (1-key limit)', async () => {
+    const first = await generateMcpKey(dataDir, 'first');
+    const second = await generateMcpKey(dataDir, 'second');
+    const keys = await listMcpKeys(dataDir);
+    expect(keys).toHaveLength(1);
+    expect(keys[0]!.id).toBe(second.id);
+    expect(await revealMcpKey(dataDir, first.id)).toBeNull();
+    expect(await revealMcpKey(dataDir, second.id)).not.toBeNull();
+  });
 });

@@ -390,6 +390,8 @@ export const ar: Dict = {
   'settings.mcpKeysRevokeConfirm': 'إلغاء مفتاح MCP هذا؟',
   'settings.mcpKeysNetworkWarning': 'البرنامج الخفي معروض على الشبكة. أنشئ مفتاح MCP لتفعيل المصادقة.',
   'settings.mcpKeysGenerate': 'إنشاء مفتاح MCP',
+  'settings.mcpKeysRotate': 'Rotate token',
+  'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
   'settings.externalMcpTitle': 'MCP خارجي',
   'settings.externalMcpHint': 'أضف أدوات MCP من خدمات خارجية (Higgsfield، GitHub، …).',
   'settings.mediaProviderApiKey': 'مفتاح API',

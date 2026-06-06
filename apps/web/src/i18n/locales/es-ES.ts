@@ -390,6 +390,8 @@ export const esES: Dict = {
   'settings.mcpKeysRevokeConfirm': '¿Revocar esta clave MCP?',
   'settings.mcpKeysNetworkWarning': 'El demonio está expuesto en la red. Genere una clave MCP para habilitar la autenticación.',
   'settings.mcpKeysGenerate': 'Generar clave MCP',
+  'settings.mcpKeysRotate': 'Rotate token',
+  'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
   'settings.externalMcpTitle': 'MCP externo',
   'settings.externalMcpHint': 'Añade herramientas MCP desde servicios externos (Higgsfield, GitHub, …).',
   'settings.mediaProviderApiKey': 'Clave de API',
