@@ -1,5 +1,6 @@
 import type { AppConfigPrefs } from '@open-design/contracts';
 import { MEDIA_PROVIDERS } from '../media/models';
+import { detectOpenDesignHostClientType } from '@open-design/host';
 import { isOpenAICompatible } from '../providers/openai-compatible';
 import type {
   ApiProtocol,
@@ -57,8 +58,16 @@ export const DEFAULT_ORBIT: OrbitConfig = {
   templateSkillId: 'orbit-general',
 };
 
+function defaultExecMode(): AppConfig['mode'] {
+  if (typeof window === 'undefined') return 'daemon';
+  if (detectOpenDesignHostClientType() === 'android') {
+    return 'api';
+  }
+  return 'daemon';
+}
+
 export const DEFAULT_CONFIG: AppConfig = {
-  mode: 'daemon',
+  mode: defaultExecMode(),
   apiKey: '',
   baseUrl: 'https://api.anthropic.com',
   model: 'claude-sonnet-4-5',

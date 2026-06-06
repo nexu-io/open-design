@@ -1,0 +1,130 @@
+/* Mobile and Android-specific overrides for a native feel */
+
+[data-od-client-type="android"] .workspace-tabs-chrome {
+  display: none !important;
+}
+
+[data-od-client-type="android"] .app-chrome-traffic-space {
+  display: none !important;
+}
+
+[data-od-client-type="android"] .workspace-shell {
+  grid-template-rows: 0 1fr !important;
+}
+
+[data-od-client-type="android"] .entry-nav-rail {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 1000;
+  transform: translateX(-100%);
+  transition: transform 0.3s ease;
+  background: var(--bg-panel);
+  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.1);
+}
+
+[data-od-client-type="android"] .entry--rail-open .entry-nav-rail {
+  transform: translateX(0);
+}
+
+[data-od-client-type="android"] .entry-main {
+  margin-left: 0 !important;
+  width: 100% !important;
+}
+
+[data-od-client-type="android"] .entry-main__inner {
+  padding: 16px 16px 80px !important;
+  max-width: 100% !important;
+}
+
+[data-od-client-type="android"] .entry-rail-toggle {
+  display: flex !important;
+}
+
+[data-od-client-type="android"] .entry-shell--no-header .entry {
+  grid-template-columns: 1fr !important;
+}
+
+/* Make touch targets larger */
+[data-od-client-type="android"] button,
+[data-od-client-type="android"] .workspace-tab,
+[data-od-client-type="android"] .entry-nav-rail__btn {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Settings dialog full screen on mobile */
+[data-od-client-type="android"] .settings-dialog {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  transform: none !important;
+}
+
+[data-od-client-type="android"] .settings-dialog__close {
+  top: 12px !important;
+  right: 12px !important;
+}
+
+/* Hide desktop pet overlay on mobile if it gets in the way */
+[data-od-client-type="android"] .pet-overlay {
+  display: none !important;
+}
+
+/* Adjust composer for mobile */
+[data-od-client-type="android"] .chat-composer {
+  padding: 8px 12px !important;
+  border-radius: 24px !important;
+  margin: 8px !important;
+  max-width: calc(100vw - 16px) !important;
+}
+
+[data-od-client-type="android"] .chat-composer__input {
+  font-size: 16px !important; /* Prevent iOS/Android zoom on focus */
+}
+
+/* Ensure hero is visible and centered */
+[data-od-client-type="android"] .home-hero {
+  padding: 20px 0 !important;
+  margin: 0 !important;
+  width: 100% !important;
+}
+
+[data-od-client-type="android"] .home-hero__title {
+  font-size: 32px !important;
+}
+
+/* Voice input button styling */
+.voice-input-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    color: var(--text-soft);
+    transition: all 0.2s;
+}
+
+.voice-input-btn:hover {
+    color: var(--accent);
+    background: var(--accent-tint);
+}
+
+.voice-input-btn.is-recording {
+    color: #fff;
+    background: #ef4444;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+    70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}

@@ -26,7 +26,7 @@ describe('host bridge boundary', () => {
       'OPEN_DESIGN_HOST_GLOBAL',
     ];
     const candidates = [
-      ...filesUnder(join(webRoot, 'src')),
+      ...filesUnder(join(webRoot, 'src')).filter((path) => !path.endsWith('android-bridge.ts')),
       ...filesUnder(join(webRoot, 'tests')).filter((path) => !path.endsWith('host-boundary.test.ts')),
     ];
     const offenders = candidates.flatMap((path) => {

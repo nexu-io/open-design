@@ -57,6 +57,7 @@ import {
   type CaretRect,
 } from './composer/LexicalComposerInput';
 import { CaretFloatingLayer } from './composer/CaretFloatingLayer';
+import { useVoiceInput } from '../hooks/useVoiceInput';
 import { ANNOTATION_EVENT, type AnnotationEventDetail } from "./PreviewDrawOverlay";
 import { DesignSystemSwitchPicker } from "./DesignSystemSwitchPicker";
 import { listenForConnectorsChanged } from './connectors-events';
@@ -390,6 +391,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
   ) {
     const t = useT();
     const analytics = useAnalytics();
+    const { isRecording, startRecording, stopRecording } = useVoiceInput();
     const activeFileContext =
       projectMetadata?.importedFrom === 'folder' && activeProjectFileName
         ? activeProjectFileName
@@ -2133,6 +2135,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               )}
             />
             <span className="composer-spacer" />
+            <button
+                type="button"
+                className={`ghost icon-btn voice-input-btn ${isRecording ? 'is-recording' : ''}`}
+                onClick={isRecording ? () => void stopRecording() : () => void startRecording()}
+                title={isRecording ? "Stop recording" : "Voice input"}
+            >
+                <Icon name={isRecording ? 'stop' : 'mic'} size={14} color={isRecording ? 'red' : 'currentColor'} />
+            </button>
             {footerAccessory}
             <SessionModeToggle
               mode={sessionMode}
