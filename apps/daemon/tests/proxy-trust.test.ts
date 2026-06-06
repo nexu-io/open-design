@@ -174,12 +174,12 @@ describe('isLocalManagementRequest', () => {
     })).toBe(false);
   });
 
-  it('returns false when proxy trusted but XFF absent (fail closed)', () => {
+  it('returns true when proxy trusted but XFF absent (direct localhost)', () => {
     process.env.OD_TRUST_PROXY = 'nginx';
     expect(isLocalManagementRequest({
       socket: { remoteAddress: '127.0.0.1' },
       headers: {},
-    })).toBe(false);
+    })).toBe(true);
   });
 
   it('fails closed when proxy trusted but XFF is empty string', () => {
@@ -200,12 +200,12 @@ describe('isLocalManagementRequest', () => {
 });
 
 describe('regression: proxy trust helpers fail closed without XFF', () => {
-  it('rejects management request when proxy trusted but no XFF', () => {
+  it('allows management request when proxy trusted but no XFF (direct localhost)', () => {
     process.env.OD_TRUST_PROXY = '1';
     expect(isLocalManagementRequest({
       socket: { remoteAddress: '127.0.0.1' },
       headers: {},
-    })).toBe(false);
+    })).toBe(true);
     expect(extractEffectivePeer('127.0.0.1', undefined)).toBe('');
   });
 

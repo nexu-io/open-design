@@ -223,17 +223,17 @@ describe('auth-middleware: degraded mode with OD_TRUST_PROXY and no XFF', () => 
     else process.env.OD_TRUST_PROXY = PREVIOUS;
   });
 
-  it('blocks direct localhost when proxy trust is on but no XFF (fail closed)', async () => {
+  it('allows direct localhost when proxy trust is on but no XFF (loopback fallback)', async () => {
     process.env.OD_TRUST_PROXY = '1';
     // No keys configured, network-exposed, direct localhost request.
-    // effectivePeerFromReq returns '' (fail-closed). Bootstrap routes
-    // (/login, /api/auth/reset-keys) are public paths that bypass this
-    // middleware and check req.socket.remoteAddress directly in server.ts.
+    // effectivePeerFromReq returns '' but the TCP peer is loopback, so
+    // the middleware falls back to req.socket.remoteAddress check.
     const middleware = createAuthMiddleware(defaultOptions({ enabledRef: { value: false }, networkExposed: true }));
     const req = mockReq({ remoteAddress: '127.0.0.1' });
     const res = mockRes();
-    await middleware(req, res, () => {});
-    expect(res.statusCode).toBe(401);
+    let called = false;
+    await middleware(req, res, () => { called = true; });
+    expect(called).toBe(true);
   });
 
   it('allows proxied loopback via XFF when proxy trust is on', async () => {

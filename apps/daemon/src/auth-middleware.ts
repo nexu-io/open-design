@@ -13,6 +13,8 @@ export interface AuthMiddlewareOptions {
 
 const PUBLIC_PATHS = new Set([
   "/api/health",
+  "/api/ready",
+  "/api/version",
   "/login",
   "/app-icon.svg",
   "/logo.svg",
