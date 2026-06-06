@@ -378,6 +378,30 @@ export const ko: Dict = {
   'settings.mediaProviders': '미디어 프로바이더',
   'settings.mediaProvidersHint': '이미지, 비디오, 오디오 생성을 위한 API 키입니다. 로컬에 저장되며 로컬 데몬과 동기화됩니다.',
   'settings.mcpServerTitle': 'MCP 서버',
+  'settings.mcpTitle': 'MCP 서버',
+  'settings.mcpHint':
+    '다른 저장소의 코딩 에이전트(Claude Code, Cursor, VS Code, Antigravity, Gemini, Gemini, Zed, Windsurf)가 Open Design 프로젝트를 읽을 수 있도록 합니다. zip을 내보내지 않고도 디자인을 앱으로 가져올 수 있습니다.',
+  'settings.mcpMethodCli': 'CLI 명령',
+  'settings.mcpInstructionCli': '터미널에서 이 명령을 실행하세요.',
+  'settings.mcpMethodToml': 'TOML 설정',
+  'settings.mcpInstructionCodex':
+    '이 테이블을 {path}에 추가하세요. 동일한 설정이 Codex CLI와 Codex IDE 확장 프로그램 간에 공유됩니다.',
+  'settings.mcpInstructionGemini': '이 JSON을 {path}에 병합하세요.',
+  'settings.mcpMethodOneClick': '원클릭 설치',
+  'settings.mcpInstructionCursor':
+    '"Install in Cursor"를 클릭하여 승인 대화 상자를 통해 설치하거나, 이 JSON을 {path}에 병합하세요.',
+  'settings.mcpDeeplinkInstallCursor': 'Cursor에 설치',
+  'settings.mcpMethodJson': 'JSON 설정',
+  'settings.mcpInstructionCopilot':
+    '명령 팔레트({shortcut})를 열고 "MCP: Open User Configuration"을 실행한 후 이 JSON을 병합하세요. 도구가 표시되려면 Copilot Chat이 Agent 모드여야 합니다.',
+  'settings.mcpInstructionAntigravity':
+    'Antigravity에서: 에이전트 패널 "..." 메뉴 → MCP 서버 → MCP 서버 관리 → 원본 설정 보기(View raw config). 이 JSON을 병합하세요.',
+  'settings.mcpInstructionZed':
+    'Zed 설정({shortcut})을 열고 이 내용을 최상위 객체에 병합하세요. Zed는 "mcpServers"가 아닌 "context_servers"를 사용합니다.',
+  'settings.mcpInstructionWindsurf':
+    '{path}를 열거나(또는 Cascade의 MCPs 아이콘 → Configure 사용) 다음을 병합하세요:',
+  'settings.mcpCopy': '복사',
+  'settings.mcpCopied': '복사됨',
   'settings.mcpServerHint': 'Open Design을 코딩 에이전트용 MCP 서버로 노출합니다.',
   'settings.mcpTabLocal': '로컬',
   'settings.mcpTabRemote': '원격',

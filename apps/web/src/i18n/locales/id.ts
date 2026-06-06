@@ -393,6 +393,7 @@ export const id: Dict = {
   'settings.mcpKeysGenerate': 'Buat kunci MCP',
   'settings.mcpKeysRotate': 'Rotate token',
   'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
+  'settings.mcpInstructionGemini': 'Gabungkan JSON ini ke dalam {path}.',
   'settings.externalMcpTitle': 'MCP eksternal',
   'settings.externalMcpHint': 'Tambahkan alat MCP dari layanan eksternal (Higgsfield, GitHub, …).',
   'settings.mediaProviderApiKey': 'API key',

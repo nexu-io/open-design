@@ -6342,6 +6342,7 @@ type McpClientId =
   | 'vscode'
   | 'zed'
   | 'windsurf'
+  | 'gemini'
   | 'antigravity';
 
 interface McpInstallInfo {
@@ -6567,6 +6568,48 @@ function buildRemoteHeaders(info: McpInstallInfo): Record<string, string> {
   return { Authorization: 'Bearer $OD_MCP_TOKEN' };
 }
 
+// Windsurf uses ${env:VAR_NAME} interpolation syntax in mcp_config.json,
+// unlike shell-based tools where $VAR_NAME is expanded by the shell.
+function toWindsurfInterpolation(s: string): string {
+  return s.replace(/\$([A-Z_][A-Z0-9_]*)/g, '${env:$1}');
+}
+
+function buildWindsurfMcpJson(info: McpInstallInfo): string {
+  const inner = buildMcpStdioServerConfig(info);
+  if (inner.env) {
+    inner.env = Object.fromEntries(
+      Object.entries(inner.env).map(([k, v]) => [k, toWindsurfInterpolation(v)])
+    );
+  }
+  const innerJson = JSON.stringify(inner, null, 2)
+    .split('\n')
+    .map((line, i) => (i === 0 ? line : `    ${line}`))
+    .join('\n');
+  return `{
+  "mcpServers": {
+    "open-design": ${innerJson}
+  }
+}`;
+}
+
+function buildWindsurfRemoteMcpJson(info: McpInstallInfo): string {
+  const headers = buildRemoteHeaders(info);
+  const windsurfHeaders = Object.fromEntries(
+    Object.entries(headers).map(([k, v]) => [k, toWindsurfInterpolation(v)])
+  );
+  const server: Record<string, unknown> = { url: info.remoteUrl ?? '' };
+  if (Object.keys(windsurfHeaders).length > 0) server.headers = windsurfHeaders;
+  const innerJson = JSON.stringify(server, null, 2)
+    .split('\n')
+    .map((line, i) => (i === 0 ? line : `    ${line}`))
+    .join('\n');
+  return `{
+  "mcpServers": {
+    "open-design": ${innerJson}
+  }
+}`;
+}
+
 function buildSharedRemoteMcpJson(info: McpInstallInfo): string {
   const headers = buildRemoteHeaders(info);
   const server: Record<string, unknown> = { url: info.remoteUrl ?? '' };
@@ -6780,6 +6823,19 @@ function IntegrationsSection() {
       buildInstruction: (info) =>
         t('settings.mcpInstructionWindsurf', {
           path: homeConfigPath(info.platform, '~/.codeium/windsurf/mcp_config.json', '%USERPROFILE%\\.codeium\\windsurf\\mcp_config.json'),
+        }),
+      buildSnippet: buildWindsurfMcpJson,
+      buildSnippetLang: () => 'json',
+      buildRemoteSnippet: buildWindsurfRemoteMcpJson,
+      buildRemoteSnippetLang: () => 'json',
+    },
+    {
+      id: 'gemini',
+      label: 'Gemini',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionGemini', {
+          path: homeConfigPath(info.platform, '~/.gemini/mcp.json', '%USERPROFILE%\\.gemini\\mcp.json'),
         }),
       buildSnippet: buildSharedMcpJson,
       buildSnippetLang: () => 'json',
@@ -7114,32 +7170,9 @@ function IntegrationsSection() {
           </div>
         ) : null}
 
-        <div style={{ position: 'relative' }}>
+        <div className="mcp-snippet">
           <pre
-            style={{
-              background: 'var(--surface-2, #11141a)',
-              color: 'var(--fg-1, #e6e6e6)',
-              // Reserve top clearance for the absolutely-positioned
-              // Copy button so the first line of the snippet does not
-              // sit underneath it, and reserve right clearance so a
-              // wrapped bash one-liner stops short of the button rather
-              // than scrolling behind it. The right padding is sized
-              // for the wider "Copied" post-click state (icon + text +
-              // button padding + the 8px right offset) with a few px
-              // of buffer for elevated font sizes / zoom. Issue #632.
-              padding: '40px 104px 12px 14px',
-              borderRadius: 8,
-              overflowX: 'auto',
-              fontFamily:
-                'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-              fontSize: 12,
-              lineHeight: 1.55,
-              margin: 0,
-              userSelect: 'text',
-              whiteSpace: snippetLang === 'bash' ? 'pre-wrap' : 'pre',
-              wordBreak: snippetLang === 'bash' ? 'break-all' : 'normal',
-              minHeight: 60,
-            }}
+            className={snippetLang === 'bash' ? 'wrap' : ''}
             data-lang={snippetLang}
           >
             <code>
@@ -7680,15 +7713,15 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
       </div>
 
       {networkExposed && (
-        <div className="settings-subsection" style={{ background: 'var(--accent-tint)', border: '1px solid var(--accent)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
-          <strong style={{ color: 'var(--accent)' }}>{t('settings.networkWarning')}</strong>
-          <p className="hint" style={{ color: 'var(--text-muted)' }}>{t('settings.networkWarningHint')}</p>
+        <div className="settings-card warn" style={{ marginBottom: '16px' }}>
+          <strong>{t('settings.networkWarning')}</strong>
+          <p className="hint">{t('settings.networkWarningHint')}</p>
         </div>
       )}
 
       {error && (
-        <div className="settings-subsection" style={{ background: 'var(--red-bg)', border: '1px solid var(--red)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
-          <strong style={{ color: 'var(--red)' }}>{error}</strong>
+        <div className="settings-card danger" style={{ marginBottom: '16px' }}>
+          <strong>{error}</strong>
         </div>
       )}
 
@@ -7715,9 +7748,9 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
           <div className="settings-subsection">
             <div className="section-head"><div><h4>{t('settings.apiKeys')}</h4><p className="hint">{t('settings.apiKeysHint')}</p></div></div>
             {keys.length > 0 && (
-              <ul style={{ listStyle: 'none', padding: 0, marginBottom: '12px' }}>
+              <ul className="settings-key-list">
                 {keys.map((k) => (
-                  <li key={k.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <li key={k.id}>
                     <span><code>{k.id}</code>{k.label ? ` — ${k.label}` : ''}</span>
                     <button type="button" className="seg-btn" onClick={() => revoke(k.id)}>{t('settings.revoke')}</button>
                   </li>
@@ -7725,13 +7758,13 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
               </ul>
             )}
             {newKey && (
-              <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green)', padding: '12px', borderRadius: '8px', marginBottom: '12px', wordBreak: 'break-all' }}>
-                <strong style={{ color: 'var(--green)' }}>{t('settings.newApiKey')}:</strong>
-                <code style={{ display: 'block', marginTop: '4px', userSelect: 'all' }}>{newKey}</code>
+              <div className="settings-new-key">
+                <strong>{t('settings.newApiKey')}:</strong>
+                <code>{newKey}</code>
                 <p className="hint">{t('settings.newApiKeyHint')}</p>
               </div>
             )}
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div className="settings-actions">
               <input aria-label={t('settings.keyLabel')} type="text" value={label} placeholder={t('settings.keyLabel')} onChange={(e) => setLabel(e.target.value)} />
               <button type="button" className="seg-btn active" onClick={generateNewKey}>{t('settings.generateKey')}</button>
             </div>

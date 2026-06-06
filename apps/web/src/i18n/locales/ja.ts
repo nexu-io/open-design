@@ -393,6 +393,7 @@ export const ja: Dict = {
   'settings.mcpKeysGenerate': 'MCPキーを生成',
   'settings.mcpKeysRotate': 'Rotate token',
   'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
+  'settings.mcpInstructionGemini': 'この JSON を {path} にマージしてください。',
   'settings.externalMcpTitle': '外部 MCP',
   'settings.externalMcpHint': '外部サービス（Higgsfield、GitHub など）の MCP ツールを追加します。',
   'settings.mediaProviderApiKey': 'APIキー',

@@ -393,6 +393,7 @@ export const fa: Dict = {
   'settings.mcpKeysGenerate': 'تولید کلید MCP',
   'settings.mcpKeysRotate': 'Rotate token',
   'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
+  'settings.mcpInstructionGemini': 'این JSON را در {path} ادغام کنید.',
   'settings.externalMcpTitle': 'MCP خارجی',
   'settings.externalMcpHint': 'افزودن ابزارهای MCP از سرویس‌های خارجی (Higgsfield, GitHub, …).',
   'settings.mediaProviderApiKey': 'کلید API',

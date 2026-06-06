@@ -393,6 +393,7 @@ export const th: Dict = {
   'settings.mcpKeysGenerate': 'สร้างคีย์ MCP',
   'settings.mcpKeysRotate': 'Rotate token',
   'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
+  'settings.mcpInstructionGemini': 'รวม JSON นี้เข้ากับ {path}',
   'settings.externalMcpTitle': 'MCP ภายนอก',
   'settings.externalMcpHint': 'เพิ่มเครื่องมือ MCP จากบริการภายนอก (Higgsfield, GitHub, …)',
   'settings.mediaProviderApiKey': 'API key',

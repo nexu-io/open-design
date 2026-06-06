@@ -393,6 +393,7 @@ export const hu: Dict = {
   'settings.mcpKeysGenerate': 'MCP-kulcs létrehozása',
   'settings.mcpKeysRotate': 'Rotate token',
   'settings.mcpKeysShellEnv': '$OD_MCP_TOKEN saved to {file}',
+  'settings.mcpInstructionGemini': 'Illeszd be ezt a JSON-t a {path} fájlba.',
   'settings.externalMcpTitle': 'Külső MCP',
   'settings.externalMcpHint': 'Adj hozzá MCP-eszközöket külső szolgáltatásokból (Higgsfield, GitHub, …).',
   'settings.mediaProviderApiKey': 'API-kulcs',
