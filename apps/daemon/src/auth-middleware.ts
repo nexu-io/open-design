@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 
 export interface AuthMiddlewareOptions {
-  enabled: boolean;
+  enabledRef: { value: boolean };
   networkExposed: boolean;
   isLocalPeer: (ip: string) => boolean;
   resolveHashes: () => Promise<string[]>;
@@ -39,7 +39,7 @@ function isPublicPath(path: string, method: string): boolean {
  *    keys exist, external devices cannot authenticate and remain locked out.
  */
 export function createAuthMiddleware(options: AuthMiddlewareOptions) {
-  if (!options.enabled && !options.networkExposed) {
+  if (!options.enabledRef.value && !options.networkExposed) {
     return (_req: Request, _res: Response, next: NextFunction) => next();
   }
 
@@ -47,7 +47,7 @@ export function createAuthMiddleware(options: AuthMiddlewareOptions) {
     if (isPublicPath(req.path, req.method)) return next();
 
     // No keys configured — allow localhost, block everyone else.
-    if (!options.enabled) {
+    if (!options.enabledRef.value) {
       const ip = req.socket.remoteAddress ?? "";
       if (options.isLocalPeer(ip)) return next();
       return rejectRequest(req, res, "No API keys configured — access from localhost only");

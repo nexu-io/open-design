@@ -592,30 +592,34 @@ dig od.yourdomain.com
 4. **Prefer specific interface binding** (`--host 192.168.1.10` or `--host 100.64.0.1`) over `0.0.0.0` when possible.
 5. **Use a reverse proxy** (Caddy, nginx) with TLS for production deployments. The daemon itself is HTTP-only.
 6. **Do not expose the daemon to the public internet** without a VPN (Tailscale, WireGuard) or SSH tunnel.
+7. **Session cookies are transmitted over HTTP.** The daemon does not support TLS, so on a LAN without encryption an attacker who can sniff traffic (ARP spoofing, rogue AP) can capture session tokens. Use Tailscale (WireGuard encryption) or a TLS-terminating reverse proxy for protection.
 
 ## Architecture
 
-```
-┌──────────────┐     ┌───────────────────────────────────────┐
-│  LAN client  │────▶│  IP allowlist (OD_ALLOWED_HOSTS)      │
-│              │     │  ── 403 if IP not in list              │
-└──────────────┘     ├───────────────────────────────────────┤
-                     │  API key / MCP key auth                │
-┌──────────────┐     │  ── 401 if key missing or invalid      │
-│  Any client  │────▶│  ── SHA-256 hash comparison             │
-│  (incl.      │     │  ── applies to ALL requests when bound  │
-│   loopback)  │     │    to non-loopback address               │
-└──────────────┘     ├───────────────────────────────────────┤
-                     │  No keys + network-exposed              │
-┌──────────────┐     │  ── localhost: allowed through          │
-│  Loopback    │────▶│  ── external: blocked, redirect /login  │
-│  (local)     │     ├───────────────────────────────────────┤
-└──────────────┘     │  Origin validation (existing)          │
-                     │  ── CORS + Host header checks          │
-┌──────────────┐     ├───────────────────────────────────────┤
-│  External    │────▶│  Route handlers                        │
-│  (no keys)   │     └───────────────────────────────────────┘
-└──────────────┘
+```mermaid
+flowchart TB
+  subgraph clients["Client examples"]
+    direction TB
+    LAN["LAN client"]
+    ANY["Any client (incl. loopback)"]
+    LOOP["Loopback (local)"]
+    EXT["External (no keys)"]
+  end
+
+  subgraph stack["Server-side layers"]
+    direction TB
+    IP["IP allowlist (OD_ALLOWED_HOSTS)<br/>403 if IP not in list"]
+    API["API key / MCP key auth<br/>401 if key missing or invalid<br/>SHA-256 hash comparison<br/>applies to ALL requests when bound to non-loopback"]
+    NK["No keys + network-exposed<br/>localhost: allowed through<br/>external: blocked, redirect /login"]
+    OV["Origin validation<br/>CORS + Host header checks"]
+    RH["Route handlers"]
+    IP --> API --> NK --> OV --> RH
+  end
+
+  LAN -.-> IP
+  ANY -.-> API
+  LOOP -.-> NK
+  EXT -.-> RH
 ```
 
 When bound to `127.0.0.1` (default / desktop app), all security layers are disabled — local-only access. When bound to any other address (`0.0.0.0`, Tailscale IP, LAN IP), API key or MCP key authentication is required for all requests including those from localhost. If no keys exist, only localhost is allowed — external devices are blocked and redirected to the login page.

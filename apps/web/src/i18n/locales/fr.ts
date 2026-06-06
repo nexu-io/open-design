@@ -379,6 +379,10 @@ export const fr: Dict = {
   'settings.mediaProvidersHint': 'Clés API pour la génération d’images, de vidéos et d’audio.',
   'settings.mcpServerTitle': 'Serveur MCP',
   'settings.mcpServerHint': 'Exposez Open Design comme serveur MCP pour votre agent de code.',
+  'settings.mcpTabLocal': 'Local',
+  'settings.mcpTabRemote': 'Remote',
+  'settings.mcpRemoteDisabled':
+    'Remote access requires the daemon to be bound to a non-loopback address. Start with --host 0.0.0.0 or set OD_BIND_HOST to expose the daemon on the network.',
   'settings.mcpKeysTitle': 'Clés MCP',
   'settings.mcpKeysEmpty': 'Aucune clé MCP. Générez-en une pour l\'inclure automatiquement dans les extraits de configuration.',
   'settings.mcpKeysReveal': 'Afficher',

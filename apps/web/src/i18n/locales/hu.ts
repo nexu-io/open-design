@@ -379,6 +379,10 @@ export const hu: Dict = {
   'settings.mediaProvidersHint': 'API-kulcsok kép-, videó- és hanggeneráláshoz. Helyben tárolva, és a helyi daemonnal szinkronizálva.',
   'settings.mcpServerTitle': 'MCP-szerver',
   'settings.mcpServerHint': 'Tedd elérhetővé az Open Designt MCP-szerverként a kódügynököd számára.',
+  'settings.mcpTabLocal': 'Local',
+  'settings.mcpTabRemote': 'Remote',
+  'settings.mcpRemoteDisabled':
+    'Remote access requires the daemon to be bound to a non-loopback address. Start with --host 0.0.0.0 or set OD_BIND_HOST to expose the daemon on the network.',
   'settings.mcpKeysTitle': 'MCP-kulcsok',
   'settings.mcpKeysEmpty': 'Nincsenek MCP-kulcsok. Hozz létre egyet a konfig-részletekben történő automatikus felvételhez.',
   'settings.mcpKeysReveal': 'Megjelenítés',

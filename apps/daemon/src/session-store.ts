@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 
 const SESSION_COOKIE_NAME = "od_session";
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_SESSIONS = 100;
 
 interface SessionEntry {
   token: string;
@@ -11,6 +12,14 @@ interface SessionEntry {
 const sessions = new Map<string, SessionEntry>();
 
 export function createSession(): { token: string; cookieName: string } {
+  if (sessions.size >= MAX_SESSIONS) {
+    let oldest = '';
+    let oldestTime = Infinity;
+    for (const [t, e] of sessions) {
+      if (e.createdAt < oldestTime) { oldest = t; oldestTime = e.createdAt; }
+    }
+    if (oldest) sessions.delete(oldest);
+  }
   const token = crypto.randomBytes(32).toString("base64url");
   sessions.set(token, { token, createdAt: Date.now() });
   return { token, cookieName: SESSION_COOKIE_NAME };

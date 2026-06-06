@@ -1,3 +1,5 @@
+import os from 'node:os';
+
 // Pure builder for the /api/mcp/install-info payload. Extracted from
 // the Express handler so the test fixture and the production handler
 // share the exact env/argv/buildHint shape; a divergence here is the
@@ -120,6 +122,10 @@ export function buildMcpInstallPayload(
         '--daemon-url',
         `http://127.0.0.1:${inputs.port}`,
       ];
+  // Resolve the connectable remote host: 0.0.0.0 / :: are listen-all
+  // addresses that cannot be connected to — use the machine hostname
+  // instead so remote MCP clients get a working URL.
+  const remoteHost = resolveRemoteHost(inputs.bindHost);
   return {
     command: inputs.execPath,
     args,
@@ -138,8 +144,23 @@ export function buildMcpInstallPayload(
     buildHint: hints.length ? hints.join(' ') : null,
     ...(inputs.networkExposed ? {
       networkExposed: true,
-      remoteUrl: `http://${inputs.bindHost || '127.0.0.1'}:${inputs.port}/mcp`,
+      remoteUrl: `http://${remoteHost}:${inputs.port}/mcp`,
       ...(inputs.mcpKey ? { remoteMcpKey: inputs.mcpKey } : {}),
     } : {}),
   };
+}
+
+/** Map a bind host to a connectable address for remote clients. */
+function resolveRemoteHost(bindHost?: string): string {
+  if (!bindHost || bindHost === '127.0.0.1' || bindHost === '::1' || bindHost === 'localhost') {
+    return '127.0.0.1';
+  }
+  // 0.0.0.0 and [::] mean "listen on all interfaces" — not connectable.
+  // Fall back to the machine hostname so LAN / Tailscale clients can
+  // connect. Users can override with OD_PUBLIC_BASE_URL if they need a
+  // specific IP.
+  if (bindHost === '0.0.0.0' || bindHost === '::') {
+    return os.hostname();
+  }
+  return bindHost;
 }

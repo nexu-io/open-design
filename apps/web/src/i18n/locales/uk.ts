@@ -379,6 +379,10 @@ export const uk: Dict = {
   'settings.mediaProvidersHint': 'API-ключі для генерації зображень, відео та аудіо. Зберігаються локально та синхронізуються з локальним фоновим процесом.',
   'settings.mcpServerTitle': 'MCP-сервер',
   'settings.mcpServerHint': 'Відкрийте Open Design як MCP-сервер для вашого кодинг-агента.',
+  'settings.mcpTabLocal': 'Local',
+  'settings.mcpTabRemote': 'Remote',
+  'settings.mcpRemoteDisabled':
+    'Remote access requires the daemon to be bound to a non-loopback address. Start with --host 0.0.0.0 or set OD_BIND_HOST to expose the daemon on the network.',
   'settings.mcpKeysTitle': 'Ключі MCP',
   'settings.mcpKeysEmpty': 'Немає ключів MCP. Створіть один для автоматичного включення в сніпети конфігурації.',
   'settings.mcpKeysReveal': 'Показати',

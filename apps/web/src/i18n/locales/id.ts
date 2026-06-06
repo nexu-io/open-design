@@ -379,6 +379,10 @@ export const id: Dict = {
   'settings.mediaProvidersHint': 'API key untuk generasi gambar, video, dan audio. Disimpan lokal dan disinkronkan ke daemon lokal.',
   'settings.mcpServerTitle': 'Server MCP',
   'settings.mcpServerHint': 'Ekspos Open Design sebagai server MCP untuk agen koding Anda.',
+  'settings.mcpTabLocal': 'Local',
+  'settings.mcpTabRemote': 'Remote',
+  'settings.mcpRemoteDisabled':
+    'Remote access requires the daemon to be bound to a non-loopback address. Start with --host 0.0.0.0 or set OD_BIND_HOST to expose the daemon on the network.',
   'settings.mcpKeysTitle': 'Kunci MCP',
   'settings.mcpKeysEmpty': 'Tidak ada kunci MCP. Buat satu untuk otomatis disertakan dalam cuplikan konfigurasi.',
   'settings.mcpKeysReveal': 'Tampilkan',

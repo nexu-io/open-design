@@ -36,3 +36,7 @@ function prune() {
     }
   }
 }
+
+export function startCleanupInterval(): NodeJS.Timeout {
+  return setInterval(prune, WINDOW_MS);
+}

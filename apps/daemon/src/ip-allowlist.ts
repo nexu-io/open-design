@@ -9,6 +9,11 @@ import type { Request, Response, NextFunction } from "express";
  * Entries may be plain IPs ("192.168.1.5") or CIDR ranges
  * ("192.168.1.0/24"). Loopback addresses (127.0.0.1, ::1) are always
  * allowed so local tools-dev and the desktop app are never locked out.
+ *
+ * **IPv6 limitation:** Only IPv4 addresses are supported. IPv6 entries
+ * (e.g. `fd00::1`, `fe80::1`) are silently ignored with a console
+ * warning. For IPv6-heavy networks, use Tailscale (which provides IPv4
+ * CGNAT addresses) or a reverse proxy that normalizes to IPv4.
  */
 export function createIpAllowlistMiddleware(allowedHosts: string[]) {
   if (allowedHosts.length === 0) {
@@ -43,6 +48,9 @@ interface IpMatcher {
 
 function parseEntry(raw: string): IpMatcher {
   const trimmed = raw.trim();
+  if (trimmed.includes(':')) {
+    throw new Error(`IPv6 allowlist entries are not supported: "${trimmed}". Use Tailscale (provides IPv4 CGNAT addresses) or a reverse proxy that normalizes to IPv4.`);
+  }
   if (trimmed.includes("/")) {
     const parts = trimmed.split("/");
     const network = parts[0] ?? "";

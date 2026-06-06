@@ -379,6 +379,10 @@ export const ar: Dict = {
   'settings.mediaProvidersHint': 'مفاتيح API لإنشاء الصور والفيديو والصوت. تخزن محلياً وتزامن مع البرنامج الخفي المحلي.',
   'settings.mcpServerTitle': 'خادم MCP',
   'settings.mcpServerHint': 'كشف Open Design كخادم MCP لوكيل البرمجة الخاص بك.',
+  'settings.mcpTabLocal': 'Local',
+  'settings.mcpTabRemote': 'Remote',
+  'settings.mcpRemoteDisabled':
+    'Remote access requires the daemon to be bound to a non-loopback address. Start with --host 0.0.0.0 or set OD_BIND_HOST to expose the daemon on the network.',
   'settings.mcpKeysTitle': 'مفاتيح MCP',
   'settings.mcpKeysEmpty': 'لا توجد مفاتيح MCP. أنشئ واحدًا لتضمينه تلقائيًا في مقتطفات التكوين.',
   'settings.mcpKeysReveal': 'كشف',

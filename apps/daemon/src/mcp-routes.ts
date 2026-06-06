@@ -6,9 +6,9 @@ import { allMcpKeyHashes, listMcpKeys, revealMcpKey } from './mcp-key-store.js';
 import { buildMcpInstallPayload, type McpInstallPayload } from './mcp-install-info.js';
 import { installCodexMcp, probeCodexInstall, uninstallCodexMcp } from './codex-cli.js';
 import { isNetworkExposed } from './network-config.js';
-import { MCP_TEMPLATES, buildAcpMcpServers, buildClaudeMcpJson, isManagedProjectCwd, readMcpConfig, writeMcpConfig } from './mcp-config.js';
-import { beginAuth, exchangeCodeForToken, refreshAccessToken } from './mcp-oauth.js';
-import { clearToken, getToken, isTokenExpired, readAllTokens, setToken } from './mcp-tokens.js';
+import { MCP_TEMPLATES, readMcpConfig, writeMcpConfig } from './mcp-config.js';
+import { beginAuth, exchangeCodeForToken } from './mcp-oauth.js';
+import { clearToken, getToken, setToken } from './mcp-tokens.js';
 import type { RouteDeps } from './server-context.js';
 
 export interface RegisterMcpRoutesDeps extends RouteDeps<'http' | 'paths' | 'mcp'> {}
@@ -22,10 +22,9 @@ export function bustInstallInfoCache() {
 
 export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   const { isLocalSameOrigin, resolvedPortRef, sendApiError } = ctx.http;
-  const { OD_BIN, RUNTIME_DATA_DIR, PROJECTS_DIR } = ctx.paths;
-  const { pendingAuth, daemonUrlRef, authEnabled } = ctx.mcp;
+  const { OD_BIN, RUNTIME_DATA_DIR } = ctx.paths;
+  const { pendingAuth, authEnabledRef, effectiveHost } = ctx.mcp;
   const getResolvedPort = () => resolvedPortRef.current;
-  const getDaemonUrl = () => daemonUrlRef.current;
 
   // Resolve the install snippet for the current daemon. Shared by the
   // public GET /api/mcp/install-info endpoint (renders TOML/JSON for
@@ -72,7 +71,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       const revealed = await revealMcpKey(RUNTIME_DATA_DIR, mcpKeys[0].id);
       if (revealed) apiKey = revealed.key;
     }
-    if (!apiKey && authEnabled) {
+    if (!apiKey && authEnabledRef.value) {
       const apiHashes = await allValidHashes(RUNTIME_DATA_DIR);
       const mcpHashes = await allMcpKeyHashes(RUNTIME_DATA_DIR);
       if (apiHashes.length > 0 || mcpHashes.length > 0) {
@@ -99,8 +98,8 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       webBaseUrl,
       ...(apiKey ? { apiKey } : {}),
       authRequired,
-      networkExposed: isNetworkExposed(process.env.OD_BIND_HOST ?? '127.0.0.1'),
-      bindHost: process.env.OD_BIND_HOST ?? '127.0.0.1',
+      networkExposed: isNetworkExposed(effectiveHost ?? '127.0.0.1'),
+      bindHost: effectiveHost ?? '127.0.0.1',
       ...(apiKey ? { mcpKey: apiKey } : {}),
     });
   }

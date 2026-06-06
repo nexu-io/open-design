@@ -379,6 +379,10 @@ export const ja: Dict = {
   'settings.mediaProvidersHint': '画像・動画・音声生成のための API キー。ローカルに保存され、ローカルデーモンに同期されます。',
   'settings.mcpServerTitle': 'MCP サーバー',
   'settings.mcpServerHint': 'Open Design を MCP サーバーとしてコーディングエージェントに公開します。',
+  'settings.mcpTabLocal': 'Local',
+  'settings.mcpTabRemote': 'Remote',
+  'settings.mcpRemoteDisabled':
+    'Remote access requires the daemon to be bound to a non-loopback address. Start with --host 0.0.0.0 or set OD_BIND_HOST to expose the daemon on the network.',
   'settings.mcpKeysTitle': 'MCPキー',
   'settings.mcpKeysEmpty': 'MCPキーがありません。生成すると設定スニペットに自動的に含まれます。',
   'settings.mcpKeysReveal': '表示',
