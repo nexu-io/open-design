@@ -4761,11 +4761,10 @@ export async function startServer({
   // "Reset all keys". This deletes every API key and MCP key so the
   // daemon returns to an unauthenticated state.
   app.post('/api/auth/reset-keys', express.urlencoded({ extended: false }), async (req, res) => {
-    // Check raw TCP peer directly (not isLocalManagementRequest) so a direct
-    // localhost browser can reset keys even when OD_TRUST_PROXY is enabled
-    // without X-Forwarded-For. "Lost all keys" is the emergency case that
-    // must always work from the local machine.
-    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
+    // Use isLocalManagementRequest so a same-host reverse proxy with
+    // OD_TRUST_PROXY=1 cannot make a remote browser look local. Direct
+    // localhost (no XFF) still passes — "lost all keys" recovery works.
+    if (!isLocalManagementRequest(req)) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.status(403).send(renderLoginPage('Key reset is only available from localhost.', undefined, true));
       return;
@@ -4794,9 +4793,10 @@ export async function startServer({
     res.redirect(302, '/');
   });
 
+  const backgroundTimers: ReturnType<typeof setInterval>[] = [];
   if (networkExposed) {
-    startCleanupInterval();
-    startRateLimitCleanup();
+    backgroundTimers.push(startCleanupInterval());
+    backgroundTimers.push(startRateLimitCleanup());
   }
 
   // Multi-directory scanning shared by every skill / template surface. The
@@ -15442,6 +15442,7 @@ export async function startServer({
   return await new Promise((resolve, reject) => {
     let daemonShutdownStarted = false;
     const cleanupDaemonBackgroundWork = () => {
+      for (const t of backgroundTimers) clearInterval(t);
       composioConnectorProvider.stopCatalogRefreshLoop();
       orbitService.stop();
       routineService?.stop();
