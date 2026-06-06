@@ -35,6 +35,8 @@ import {
   connectConnector,
   fetchConnectorStatuses,
 } from '../providers/registry';
+import { notifyConnectorsChanged } from './connectors-events';
+import { hasConnectorStatusChanges } from './connectors-state';
 
 const TYPES: MemoryType[] = ['user', 'feedback', 'project', 'reference'];
 
@@ -751,6 +753,7 @@ export function MemorySection({
     readPendingConnectorAuthIds,
   );
   const [connectorConnectErrors, setConnectorConnectErrors] = useState<Record<string, string>>({});
+  const connectorsRef = useRef(connectors);
 
   const fireFlash = useCallback((kind: FlashKind) => {
     setFlash({ kind, key: Date.now() });
@@ -761,6 +764,10 @@ export function MemorySection({
     const id = setTimeout(() => setFlash(null), 1800);
     return () => clearTimeout(id);
   }, [flash]);
+
+  useEffect(() => {
+    connectorsRef.current = connectors;
+  }, [connectors]);
 
   useEffect(() => {
     if (!editingTarget) return;
@@ -1079,6 +1086,7 @@ export function MemorySection({
 
   const refreshMemoryConnectorStatuses = useCallback(async () => {
     const statuses = await fetchConnectorStatuses();
+    const statusChanged = hasConnectorStatusChanges(connectorsRef.current, statuses);
     setConnectorStatuses(statuses);
     setConnectors((prev) => applyMemoryConnectorStatuses(prev, statuses));
     setPendingConnectorAuthIds((prev) => {
@@ -1099,6 +1107,7 @@ export function MemorySection({
       }
       return changed ? next : prev;
     });
+    if (statusChanged) notifyConnectorsChanged();
   }, []);
 
   useEffect(() => {
@@ -1139,6 +1148,7 @@ export function MemorySection({
     });
     try {
       const result = await connectConnector(connectorId);
+      if (result.connector?.status === 'connected') notifyConnectorsChanged();
       const requiresAuthorizationCompletion =
         result.auth?.kind === 'redirect_required' || result.auth?.kind === 'pending';
       setConnectors((prev) =>

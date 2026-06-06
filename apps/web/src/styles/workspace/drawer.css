@@ -1459,7 +1459,11 @@
   transition: background 120ms ease, color 120ms ease;
 }
 .ws-tab.live-artifact-tab {
-  max-width: 160px;
+  /* Wide enough to hold the icon, a truncated title, the status badges
+     (LIVE + REFRESH FAILED) and the close button without any of them
+     spilling onto the neighbouring tab. The title yields space first
+     (see .ws-tab-text override below), so the badges stay fully legible. */
+  max-width: 260px;
 }
 .ws-tab:hover { background: var(--bg-subtle); color: var(--text); }
 .ws-tab.draggable { cursor: grab; }
@@ -1546,11 +1550,22 @@
 .ws-tab.live-artifact-tab .ws-tab-label {
   max-width: none;
 }
+/* The title is the lowest-priority element in a live-artifact tab: when the
+   tab is squeezed, collapse the title (it stays available via the tab tooltip)
+   before clipping the status badges or pushing the close button out. */
+.ws-tab.live-artifact-tab .ws-tab-text {
+  flex-shrink: 100;
+}
 .ws-live-artifact-badges {
-  flex: 0 0 auto;
+  /* Shrink (and clip) as a last resort instead of overflowing the tab box.
+     Previously flex:0 0 auto + overflow:visible let long badge combinations
+     (e.g. LIVE + REFRESH FAILED, or longer locales) bleed the badges and the
+     close button onto the adjacent tab. */
+  flex: 0 1 auto;
   flex-wrap: nowrap;
+  min-width: 0;
   max-width: none;
-  overflow: visible;
+  overflow: hidden;
 }
 .ws-live-artifact-badges .live-artifact-badge:not(.live):not(.refreshing):not(.refresh-failed):not(.archived) {
   display: none;

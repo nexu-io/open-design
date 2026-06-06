@@ -14,7 +14,8 @@ import { join } from "node:path";
 
 const cacheRoot = process.env.CACHE_ROOT;
 const entryRoot = join(cacheRoot, "entries");
-const maxBytes = 6 * 1024 * 1024 * 1024;
+const maxBytes = Number(process.env.TOOLS_PACK_CACHE_MAX_BYTES || 16 * 1024 * 1024 * 1024);
+const keepPerNode = Number(process.env.TOOLS_PACK_CACHE_KEEP_PER_NODE || 5);
 const entries = [];
 
 function directoryBytes(path) {
@@ -43,7 +44,20 @@ try {
   process.exit(0);
 }
 
-entries.sort((left, right) => right.mtimeMs - left.mtimeMs);
+const rankByPath = new Map();
+for (const node of new Set(entries.map((entry) => entry.node))) {
+  entries
+    .filter((entry) => entry.node === node)
+    .sort((left, right) => right.mtimeMs - left.mtimeMs)
+    .forEach((entry, index) => rankByPath.set(entry.path, index + 1));
+}
+
+entries.sort((left, right) => {
+  const leftProtected = (rankByPath.get(left.path) ?? Number.MAX_SAFE_INTEGER) <= keepPerNode ? 0 : 1;
+  const rightProtected = (rankByPath.get(right.path) ?? Number.MAX_SAFE_INTEGER) <= keepPerNode ? 0 : 1;
+  if (leftProtected !== rightProtected) return leftProtected - rightProtected;
+  return right.mtimeMs - left.mtimeMs;
+});
 let keptBytes = 0;
 let removedBytes = 0;
 let removedCount = 0;
@@ -56,5 +70,5 @@ for (const entry of entries) {
   removedBytes += entry.size;
   removedCount += 1;
 }
-console.log(`keptBytes=${keptBytes} removedBytes=${removedBytes} removedCount=${removedCount} maxBytes=${maxBytes}`);
+console.log(`keptBytes=${keptBytes} removedBytes=${removedBytes} removedCount=${removedCount} maxBytes=${maxBytes} keepPerNode=${keepPerNode}`);
 NODE

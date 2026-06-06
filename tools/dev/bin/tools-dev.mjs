@@ -1,18 +1,13 @@
 #!/usr/bin/env node
 
-import { existsSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dirname, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+import { assertFreshToolBuildFromMeta } from "../../../packages/metatool/src/index.ts";
 
 const entryDir = dirname(fileURLToPath(import.meta.url));
-const distEntry = resolve(entryDir, '../dist/index.mjs');
-const requiredDistEntries = [distEntry];
-const missingDistEntries = requiredDistEntries.filter((entry) => !existsSync(entry));
+const toolRoot = resolve(entryDir, "..");
+const distEntry = resolve(toolRoot, "dist/index.mjs");
 
-if (missingDistEntries.length > 0) {
-  throw new Error(
-    `tools-dev dist entries not found: ${missingDistEntries.join(', ')}. Run "pnpm --filter @open-design/tools-dev build" first.`,
-  );
-}
-
+await assertFreshToolBuildFromMeta(toolRoot);
 await import(pathToFileURL(distEntry).href);

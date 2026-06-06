@@ -1,6 +1,16 @@
 name: Notify main CI failure
 
 on:
+  workflow_dispatch:
+    inputs:
+      send_test:
+        description: Send a test Feishu alert card.
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
   workflow_run:
     workflows:
       - ci
@@ -19,9 +29,16 @@ jobs:
     runs-on: ubuntu-latest
     if: >-
       ${{
-        github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_branch == 'main' &&
-        contains(fromJSON('["failure","timed_out","cancelled"]'), github.event.workflow_run.conclusion)
+        (
+          github.event_name == 'workflow_dispatch' &&
+          inputs.send_test == 'true'
+        ) ||
+        (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'main' &&
+          contains(fromJSON('["failure","timed_out"]'), github.event.workflow_run.conclusion)
+        )
       }}
     steps:
       - name: Send main CI failure alert
@@ -36,47 +53,404 @@ jobs:
               return;
             }
 
-            const run = context.payload.workflow_run;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const isTest = context.eventName === 'workflow_dispatch';
+            const run = isTest
+              ? {
+                  id: context.runId,
+                  name: 'main-ci-alert-test',
+                  conclusion: 'failure',
+                  event: 'workflow_dispatch',
+                  head_branch: context.ref.replace(/^refs\/heads\//, ''),
+                  head_sha: context.sha,
+                  run_started_at: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                  display_title: 'Manual Feishu alert smoke test',
+                  html_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                  actor: context.actor ? { login: context.actor } : null,
+                  head_commit: {
+                    message: 'Manual Feishu alert smoke test',
+                    author: { name: context.actor || 'unknown' },
+                  },
+                }
+              : context.payload.workflow_run;
+            if (!isTest && run.conclusion === 'cancelled') {
+              core.info('Skipping cancelled workflow run.');
+              return;
+            }
             const startedAt = new Date(run.run_started_at || run.created_at).getTime();
             const updatedAt = new Date(run.updated_at).getTime();
             const durationMinutes = Number.isFinite(startedAt) && Number.isFinite(updatedAt)
               ? Math.round((updatedAt - startedAt) / 60000)
               : null;
 
-            if (run.conclusion === 'cancelled' && durationMinutes !== null && durationMinutes < 35) {
-              core.info(`Skipping short cancelled run (${durationMinutes}m), likely superseded by a newer main push.`);
+            const problemJobs = isTest
+              ? [{ name: 'Feishu notification smoke test', conclusion: 'failure' }]
+              : (await github.rest.actions.listJobsForWorkflowRun({
+                  owner,
+                  repo,
+                  run_id: run.id,
+                  per_page: 100,
+                })).data.jobs.filter((job) => ['failure', 'timed_out'].includes(job.conclusion));
+
+            if (!isTest && problemJobs.length === 0) {
+              core.info('Skipping run with no failed or timed-out jobs.');
               return;
             }
 
-            const jobsResponse = await github.rest.actions.listJobsForWorkflowRun({
-              owner,
-              repo,
-              run_id: run.id,
-              per_page: 100,
-            });
-            const failedJobs = jobsResponse.data.jobs
-              .filter((job) => ['failure', 'timed_out', 'cancelled'].includes(job.conclusion))
+            const failedJobs = problemJobs
               .map((job) => `- ${job.name} (${job.conclusion})`)
               .join('\n') || '- Unknown';
 
-            const pullsResponse = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-              owner,
-              repo,
-              commit_sha: run.head_sha,
+            function textFromLogData(data) {
+              if (typeof data === 'string') {
+                return data;
+              }
+              if (data instanceof ArrayBuffer) {
+                return Buffer.from(data).toString('utf8');
+              }
+              if (ArrayBuffer.isView(data)) {
+                return Buffer.from(data.buffer).toString('utf8');
+              }
+              return String(data || '');
+            }
+
+            function countMatches(text, patterns) {
+              return patterns.reduce((count, pattern) => count + (pattern.test(text) ? 1 : 0), 0);
+            }
+
+            function sampleMatches(text, patterns, labels) {
+              const matches = [];
+              patterns.forEach((pattern, index) => {
+                if (pattern.test(text)) {
+                  matches.push(labels[index]);
+                }
+              });
+              return matches;
+            }
+
+            function extractTopFailures(text) {
+              const failures = [];
+              for (const line of text.split('\n')) {
+                const clean = line.replace(/\x1b\[[0-9;]*m/g, '').trim();
+                const match = clean.match(/(?:\d+\)\s+|\[[^\]]+\]\s+)?(?:\[chromium\]\s+)?[›>]\s+(ui\/[^›]+)\s+›\s+(.+)/);
+                if (match) {
+                  failures.push(`${match[1]} › ${match[2].replace(/\s+/g, ' ')}`);
+                }
+                if (failures.length >= 4) {
+                  break;
+                }
+              }
+              return [...new Set(failures)];
+            }
+
+            function classifyFailure({ runName, conclusion, problemJobs, logs }) {
+              const combined = logs.join('\n').slice(0, 250_000);
+              const jobText = problemJobs.map((job) => `${job.name} ${job.conclusion}`).join('\n');
+              const text = `${jobText}\n${combined}`;
+              const stalePatterns = [
+                /strict mode violation/i,
+                /element\(s\) not found/i,
+                /waiting for getBy(TestId|Role|Text|Label|Placeholder)/i,
+                /not an input element/i,
+                /locator\.(click|fill|selectOption|check|hover): Test timeout/i,
+                /getByTestId\('new-conversation'\)/i,
+                /Open settings\|.*Account & settings/i,
+                /AMR v\|AMR CLI|onboarding-view__setup-panel/i,
+              ];
+              const staleLabels = [
+                '选择器 strict mode 命中多个元素',
+                '页面元素/文案未按旧选择器出现',
+                '失败卡在 getBy* 定位等待',
+                '控件类型已从原生 input/select 变更',
+                'locator 交互阶段超时',
+                '仍在依赖旧 new-conversation testid',
+                '设置入口选择器命中过宽',
+                '仍在依赖旧 AMR/onboarding UI',
+              ];
+              const productPatterns = [
+                /expect\(received\)\.(toEqual|toBe|toContain|toMatch)/i,
+                /Received:\s+\[\]/i,
+                /Generation failed|No output|provider ended the request/i,
+                /\b(500|502|503|504)\b|Internal Server Error|Bad Gateway/i,
+                /artifact.*not found|file.*not found|conversation.*not found/i,
+                /toHaveCount\(expected\).*Received:\s+0/i,
+              ];
+              const productLabels = [
+                '业务结果断言不符合预期',
+                '预期产物/文件列表为空',
+                '生成链路返回失败或空输出',
+                '服务端/API 返回 5xx',
+                '核心业务对象缺失',
+                '预期实体数量为 0',
+              ];
+              const infraPatterns = [
+                /Process from config\.webServer was not able to start/i,
+                /command failed:.*pnpm.*build|ELIFECYCLE|ERR_PNPM/i,
+                /browserType\.launch|Executable doesn't exist|playwright install/i,
+                /No space left on device|ENOSPC/i,
+                /Cannot find module|MODULE_NOT_FOUND|node_modules/i,
+              ];
+              const infraLabels = [
+                'Playwright webServer 启动失败',
+                '构建/包管理命令失败',
+                '浏览器安装或启动失败',
+                'Runner 磁盘空间不足',
+                '依赖或模块缺失',
+              ];
+              const flakyPatterns = [
+                /Test timeout of \d+ms exceeded/i,
+                /Timeout \d+ms exceeded while waiting/i,
+                /page\.waitFor(Response|Request|URL).*Timeout|Test ended/i,
+                /ECONNRESET|ETIMEDOUT|socket hang up/i,
+              ];
+              const flakyLabels = [
+                '测试整体超时',
+                '等待条件超时',
+                '请求/响应等待超时',
+                '网络连接短暂异常',
+              ];
+
+              const infraReasons = sampleMatches(text, infraPatterns, infraLabels);
+              const staleReasons = sampleMatches(text, stalePatterns, staleLabels);
+              const productReasons = sampleMatches(text, productPatterns, productLabels);
+              const flakyReasons = sampleMatches(text, flakyPatterns, flakyLabels);
+              const infraScore = countMatches(text, infraPatterns);
+              const staleScore = countMatches(text, stalePatterns);
+              const productScore = countMatches(text, productPatterns);
+              const flakyScore = countMatches(text, flakyPatterns);
+              const failedTests = extractTopFailures(text);
+              const failedJobNames = problemJobs.map((job) => job.name);
+
+              let category = '需要人工判断';
+              let confidence = '低';
+              let suggestedAction = '先打开失败 job 的 Playwright report 和日志确认首个真实失败。';
+              let reasons = [];
+
+              if (conclusion === 'timed_out' || problemJobs.some((job) => job.conclusion === 'timed_out')) {
+                category = '可能是超时/资源问题';
+                confidence = flakyScore >= 2 ? '中' : '低';
+                reasons = flakyReasons;
+                suggestedAction = '先看是否集中在长耗时 shard；必要时继续拆分或提高单 job 超时。';
+              }
+
+              if (infraScore > 0) {
+                category = '环境/CI 启动问题';
+                confidence = infraScore >= 2 ? '高' : '中';
+                reasons = infraReasons;
+                suggestedAction = '优先修复 build、依赖、Playwright browser 或 webServer 启动。';
+              } else if (staleScore >= Math.max(2, productScore + 1)) {
+                category = '疑似用例过时/选择器漂移';
+                confidence = staleScore >= 3 || failedJobNames.length >= 2 ? '高' : '中';
+                reasons = staleReasons;
+                suggestedAction = '优先对齐测试选择器、文案或等待条件，再判断是否有产品回归。';
+              } else if (productScore > staleScore) {
+                category = '疑似产品回归';
+                confidence = productScore >= 2 ? '中' : '低';
+                reasons = productReasons;
+                suggestedAction = '优先复现对应 P0 流程，检查最近合入的业务代码和接口响应。';
+              } else if (flakyScore > 0) {
+                category = '可能 flaky/等待不足';
+                confidence = problemJobs.length === 1 ? '中' : '低';
+                reasons = flakyReasons;
+                suggestedAction = '先 rerun failed jobs；若重现，再补稳定等待或拆分耗时 case。';
+              }
+
+              if (runName !== 'ui-extended-main' && infraScore === 0 && staleScore === 0 && productScore === 0) {
+                category = '非 UI CI 失败';
+                confidence = '低';
+                suggestedAction = '查看失败 job 日志定位 build/test/lint 具体阶段。';
+              }
+
+              if (!reasons.length) {
+                reasons = ['未命中明确规则'];
+              }
+
+              return {
+                category,
+                confidence,
+                reasons: reasons.slice(0, 4),
+                failedTests,
+                suggestedAction,
+              };
+            }
+
+            function normalizeFingerprintPart(value) {
+              return String(value || '')
+                .replace(/\x1b\[[0-9;]*m/g, '')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+            }
+
+            function failureFingerprint({ runName, conclusion, problemJobs, triage }) {
+              const jobs = problemJobs
+                .map((job) => `${normalizeFingerprintPart(job.name)}:${job.conclusion}`)
+                .sort();
+              const signals = (triage.failedTests.length ? triage.failedTests : triage.reasons)
+                .map(normalizeFingerprintPart)
+                .sort();
+              return JSON.stringify({
+                workflow: normalizeFingerprintPart(runName),
+                conclusion: conclusion === 'timed_out' ? 'timed_out' : 'failure',
+                category: normalizeFingerprintPart(triage.category),
+                jobs,
+                signals,
+              });
+            }
+
+            async function shouldSkipDuplicateAlert({ currentRun, currentFingerprint }) {
+              if (isTest || !currentRun.workflow_id) return false;
+
+              const windowMs = 24 * 60 * 60 * 1000;
+              const currentCreatedAt = new Date(currentRun.created_at || currentRun.run_started_at || currentRun.updated_at).getTime();
+              const cutoff = Number.isFinite(currentCreatedAt)
+                ? currentCreatedAt - windowMs
+                : Date.now() - windowMs;
+
+              let recentRuns = [];
+              try {
+                recentRuns = (await github.rest.actions.listWorkflowRuns({
+                  owner,
+                  repo,
+                  workflow_id: currentRun.workflow_id,
+                  branch: 'main',
+                  event: 'push',
+                  status: 'completed',
+                  per_page: 20,
+                })).data.workflow_runs;
+              } catch (error) {
+                core.warning(`Failed to list recent workflow runs for duplicate check: ${error.message}`);
+                return false;
+              }
+
+              recentRuns.sort((left, right) => {
+                const leftCreatedAt = new Date(left.created_at || left.run_started_at || left.updated_at).getTime();
+                const rightCreatedAt = new Date(right.created_at || right.run_started_at || right.updated_at).getTime();
+                return (Number.isFinite(rightCreatedAt) ? rightCreatedAt : 0) - (Number.isFinite(leftCreatedAt) ? leftCreatedAt : 0);
+              });
+
+              for (const candidate of recentRuns) {
+                if (candidate.id === currentRun.id) continue;
+                const candidateCreatedAt = new Date(candidate.created_at || candidate.run_started_at || candidate.updated_at).getTime();
+                if (Number.isFinite(currentCreatedAt) && Number.isFinite(candidateCreatedAt) && candidateCreatedAt > currentCreatedAt) continue;
+                if (Number.isFinite(candidateCreatedAt) && candidateCreatedAt < cutoff) break;
+                if (candidate.conclusion === 'success') return false;
+                if (!['failure', 'timed_out'].includes(candidate.conclusion)) continue;
+
+                let candidateJobs = [];
+                try {
+                  candidateJobs = (await github.rest.actions.listJobsForWorkflowRun({
+                    owner,
+                    repo,
+                    run_id: candidate.id,
+                    per_page: 100,
+                  })).data.jobs.filter((job) => ['failure', 'timed_out'].includes(job.conclusion));
+                } catch (error) {
+                  core.warning(`Failed to list jobs for duplicate check run ${candidate.id}: ${error.message}`);
+                  continue;
+                }
+                if (candidateJobs.length === 0) continue;
+
+                const candidateLogTexts = [];
+                for (const job of candidateJobs.slice(0, 6)) {
+                  try {
+                    const logResponse = await github.rest.actions.downloadJobLogsForWorkflowRun({
+                      owner,
+                      repo,
+                      job_id: job.id,
+                    });
+                    candidateLogTexts.push(textFromLogData(logResponse.data).slice(-80_000));
+                  } catch (error) {
+                    core.warning(`Failed to download logs for duplicate check job ${job.name}: ${error.message}`);
+                  }
+                }
+
+                const candidateTriage = classifyFailure({
+                  runName: candidate.name,
+                  conclusion: candidate.conclusion,
+                  problemJobs: candidateJobs,
+                  logs: candidateLogTexts,
+                });
+                const candidateFingerprint = failureFingerprint({
+                  runName: candidate.name,
+                  conclusion: candidate.conclusion,
+                  problemJobs: candidateJobs,
+                  triage: candidateTriage,
+                });
+                if (candidateFingerprint === currentFingerprint) {
+                  core.info(`Skipping duplicate CI alert; same failure fingerprint already appeared in run ${candidate.id}: ${candidate.html_url}`);
+                  return true;
+                }
+              }
+
+              return false;
+            }
+
+            const logTexts = [];
+            if (isTest) {
+              logTexts.push([
+                "1) [chromium] › ui/example-stale.test.ts:1:1 › [P0] sample stale selector",
+                "Error: locator.click: Test timeout of 30000ms exceeded.",
+                "Call log:",
+                "  - waiting for getByRole('dialog').getByRole('tab', { name: /Old Settings/i })",
+              ].join('\n'));
+            } else {
+              for (const job of problemJobs.slice(0, 6)) {
+                try {
+                  const logResponse = await github.rest.actions.downloadJobLogsForWorkflowRun({
+                    owner,
+                    repo,
+                    job_id: job.id,
+                  });
+                  logTexts.push(textFromLogData(logResponse.data).slice(-80_000));
+                } catch (error) {
+                  core.warning(`Failed to download logs for ${job.name}: ${error.message}`);
+                }
+              }
+            }
+            const triage = classifyFailure({
+              runName: run.name,
+              conclusion: run.conclusion,
+              problemJobs,
+              logs: logTexts,
             });
-            const pull = pullsResponse.data[0];
+            const currentFingerprint = failureFingerprint({
+              runName: run.name,
+              conclusion: run.conclusion,
+              problemJobs,
+              triage,
+            });
+            if (await shouldSkipDuplicateAlert({ currentRun: run, currentFingerprint })) {
+              return;
+            }
+            const topFailuresText = triage.failedTests.length
+              ? triage.failedTests.map((failure) => `- ${failure}`).join('\n')
+              : '- 未从日志解析到具体失败用例';
+
+            const pull = isTest
+              ? null
+              : (await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                  owner,
+                  repo,
+                  commit_sha: run.head_sha,
+                })).data[0];
             const prText = pull
               ? `#${pull.number} ${pull.title}\n${pull.html_url}`
-              : '未解析到关联 PR';
+              : (isTest ? '手动测试，无关联 PR' : '未解析到关联 PR');
 
             const shortSha = run.head_sha.slice(0, 7);
             const author = run.head_commit?.author?.name || run.actor?.login || 'unknown';
             const subject = run.head_commit?.message?.split('\n')[0] || run.display_title || 'unknown';
             const repoName = `${owner}/${repo}`;
-            const title = run.name === 'ui-extended-main'
-              ? 'Open Design Main UI regression failed'
+            const title = isTest
+              ? '[TEST] Open Design Main CI alert'
+              : run.name === 'ui-extended-main'
+              ? (run.conclusion === 'cancelled'
+                  ? 'Open Design Main UI regression stopped after failures'
+                  : 'Open Design Main UI regression failed')
               : 'Open Design Main CI failed';
 
             const body = {
@@ -99,7 +473,7 @@ jobs:
                       tag: 'lark_md',
                       content: [
                         `**Repository:** ${repoName}`,
-                        `**Branch:** main`,
+                        `**Branch:** ${isTest ? run.head_branch : 'main'}`,
                         `**Workflow:** ${run.name}`,
                         `**Conclusion:** ${run.conclusion}`,
                         `**Duration:** ${durationMinutes === null ? 'unknown' : `${durationMinutes}m`}`,
@@ -107,6 +481,19 @@ jobs:
                         `**Author:** ${author}`,
                         `**Subject:** ${subject}`,
                         `**Related PR:** ${prText}`,
+                      ].join('\n'),
+                    },
+                  },
+                  {
+                    tag: 'div',
+                    text: {
+                      tag: 'lark_md',
+                      content: [
+                        `**Triage:** ${triage.category}`,
+                        `**Confidence:** ${triage.confidence}`,
+                        `**Why:** ${triage.reasons.join('；')}`,
+                        `**Suggested action:** ${triage.suggestedAction}`,
+                        `**Top failures:**\n${topFailuresText}`,
                       ].join('\n'),
                     },
                   },
@@ -142,8 +529,19 @@ jobs:
               },
               body: JSON.stringify(body),
             });
-
-            if (!response.ok) {
-              const text = await response.text();
-              core.setFailed(`Feishu notification failed: ${response.status} ${text}`);
+            const responseText = await response.text();
+            let responseJson = null;
+            try {
+              responseJson = JSON.parse(responseText);
+            } catch {
+              responseJson = null;
             }
+            const feishuCode = responseJson?.StatusCode ?? responseJson?.code;
+            const hasFeishuError = feishuCode !== undefined && Number(feishuCode) !== 0;
+
+            if (!response.ok || hasFeishuError) {
+              core.setFailed(`Feishu notification failed: ${response.status} ${responseText}`);
+              return;
+            }
+
+            core.info(`Feishu notification accepted: ${response.status} ${responseText}`);

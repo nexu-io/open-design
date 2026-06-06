@@ -1,6 +1,7 @@
 import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os, { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import process from "node:process";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -245,9 +246,16 @@ describe("validateMacNativeRebuildOutput", () => {
       await mkdir(dirname(buildPath), { recursive: true });
       await writeFile(buildPath, "not a directory", "utf8");
 
-      await expect(validateMacNativeRebuildOutput(root)).resolves.toContain(
-        `native module output could not be inspected: ${nativePath}: ENOTDIR: not a directory, stat '${nativePath}'`,
-      );
+      const result = await validateMacNativeRebuildOutput(root);
+      if (process.platform === "win32") {
+        await expect(Promise.resolve(result)).resolves.toBe(
+          `native module output is missing: ${nativePath}`,
+        );
+      } else {
+        await expect(Promise.resolve(result)).resolves.toContain(
+          `native module output could not be inspected: ${nativePath}: ENOTDIR: not a directory, stat '${nativePath}'`,
+        );
+      }
     } finally {
       await rm(root, { force: true, recursive: true });
     }

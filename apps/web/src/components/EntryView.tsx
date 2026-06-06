@@ -1,9 +1,5 @@
-import { useCallback, useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import type { DesignSystemGenerateSnapshot } from './DesignSystemFlow';
-import type {
-  ConnectorDetail,
-  ConnectorStatusResponse,
-} from '@open-design/contracts';
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import type { ConnectorDetail } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import {
   DEFAULT_AUDIO_MODEL,
@@ -33,9 +29,10 @@ import { EntryShell } from './EntryShell';
 import type { IntegrationTab } from './IntegrationsView';
 import type { CreateInput, ImportClaudeDesignOutcome } from './NewProjectPanel';
 import {
-  fetchConnectors,
-  fetchConnectorStatuses,
-} from '../providers/registry';
+  CONNECTOR_CALLBACK_MESSAGE_TYPE,
+  listenForConnectorsChanged,
+} from './connectors-events';
+import { fetchConnectorCatalogSnapshot } from './connectors-state';
 import type {
   PluginShareAction,
   PluginShareProjectOutcome,
@@ -115,26 +112,12 @@ interface Props {
   onRenameProject: (id: string, name: string) => void;
   onChangeDefaultDesignSystem: (id: string) => void;
   onCreateDesignSystem?: () => void;
-  renderDesignSystemCreation?: (
-    onBack: () => void,
-    hooks?: {
-      onBeforeGenerate?: (snapshot: DesignSystemGenerateSnapshot) => void;
-      onGenerateSettled?: (
-        snapshot: DesignSystemGenerateSnapshot,
-        outcome:
-          | { result: 'success' }
-          | { result: 'failed'; errorCode: string },
-      ) => void;
-    },
-  ) => ReactNode;
   onOpenDesignSystem?: (id: string) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
   onOpenSettings: (section?: 'execution' | 'media' | 'composio' | 'orbit' | 'integrations' | 'mcpClient' | 'language' | 'appearance' | 'notifications' | 'pet' | 'projectLocations' | 'library' | 'about' | 'memory' | 'designSystems') => void;
   onCompleteOnboarding: () => void;
 }
-
-const CONNECTOR_CALLBACK_MESSAGE_TYPE = 'open-design:connector-connected';
 
 export function isTrustedConnectorCallbackOrigin(origin: string, currentOrigin?: string): boolean {
   const expectedOrigin = currentOrigin ?? (typeof window === 'undefined' ? '' : window.location.origin);
@@ -146,24 +129,6 @@ export function isTrustedConnectorCallbackOrigin(origin: string, currentOrigin?:
   } catch {
     return false;
   }
-}
-
-function applyConnectorStatuses(
-  current: ConnectorDetail[],
-  statuses: ConnectorStatusResponse['statuses'],
-): ConnectorDetail[] {
-  if (!Object.keys(statuses).length) return current;
-  return current.map((connector) => {
-    const next = statuses[connector.id];
-    if (!next) return connector;
-    const { accountLabel: _accountLabel, lastError: _lastError, ...base } = connector;
-    return {
-      ...base,
-      status: next.status,
-      ...(next.accountLabel === undefined ? {} : { accountLabel: next.accountLabel }),
-      ...(next.lastError === undefined ? {} : { lastError: next.lastError }),
-    };
-  });
 }
 
 export function sortConnectorsForDisplay(connectors: ConnectorDetail[]): ConnectorDetail[] {
@@ -286,7 +251,6 @@ export function EntryView({
   onRenameProject,
   onChangeDefaultDesignSystem,
   onCreateDesignSystem,
-  renderDesignSystemCreation,
   onOpenDesignSystem,
   onDesignSystemsRefresh,
   onPersistComposioKey,
@@ -296,9 +260,8 @@ export function EntryView({
   const [connectors, setConnectors] = useState<ConnectorDetail[]>([]);
   const [connectorsLoading, setConnectorsLoading] = useState(false);
 
-  const reloadConnectorStatuses = useCallback(async () => {
-    const statuses = await fetchConnectorStatuses();
-    setConnectors((curr) => applyConnectorStatuses(curr, statuses));
+  const reloadConnectorCatalog = useCallback(async (options: { refreshDiscovery?: boolean } = {}) => {
+    setConnectors(await fetchConnectorCatalogSnapshot(options));
   }, []);
 
   useEffect(() => {
@@ -308,7 +271,7 @@ export function EntryView({
     // open the Settings → Connectors surface.
     setConnectorsLoading(true);
     (async () => {
-      const next = await fetchConnectors();
+      const next = await fetchConnectorCatalogSnapshot();
       if (cancelled) return;
       setConnectors(next);
       setConnectorsLoading(false);
@@ -323,11 +286,18 @@ export function EntryView({
       const data = event.data;
       if (!data || typeof data !== 'object' || (data as { type?: unknown }).type !== CONNECTOR_CALLBACK_MESSAGE_TYPE) return;
       if (!isTrustedConnectorCallbackOrigin(event.origin)) return;
-      void reloadConnectorStatuses();
+      void reloadConnectorCatalog({ refreshDiscovery: true });
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [reloadConnectorStatuses]);
+  }, [reloadConnectorCatalog]);
+
+  useEffect(() => {
+    function onConnectorsChanged() {
+      void reloadConnectorCatalog({ refreshDiscovery: true });
+    }
+    return listenForConnectorsChanged(onConnectorsChanged);
+  }, [reloadConnectorCatalog]);
 
   // When the OAuth flow is handed off to the user's system browser (desktop
   // shell opens connector auth URLs externally rather than in an Electron
@@ -335,12 +305,22 @@ export function EntryView({
   // Refresh connector statuses whenever the window regains focus so the UI
   // picks up a just-completed connection without manual intervention.
   useEffect(() => {
-    function onFocus() {
-      void reloadConnectorStatuses();
+    function refreshAfterReturn() {
+      void reloadConnectorCatalog({ refreshDiscovery: true });
     }
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [reloadConnectorStatuses]);
+    function onVisibilityChange() {
+      if (document.visibilityState !== 'visible') return;
+      refreshAfterReturn();
+    }
+    window.addEventListener('focus', refreshAfterReturn);
+    window.addEventListener('pageshow', refreshAfterReturn);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', refreshAfterReturn);
+      window.removeEventListener('pageshow', refreshAfterReturn);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [reloadConnectorCatalog]);
 
   return (
     <EntryShell
@@ -383,7 +363,6 @@ export function EntryView({
       onRenameProject={onRenameProject}
       onChangeDefaultDesignSystem={onChangeDefaultDesignSystem}
       onCreateDesignSystem={onCreateDesignSystem}
-      renderDesignSystemCreation={renderDesignSystemCreation}
       onOpenDesignSystem={onOpenDesignSystem}
       onDesignSystemsRefresh={onDesignSystemsRefresh}
       onPersistComposioKey={onPersistComposioKey}

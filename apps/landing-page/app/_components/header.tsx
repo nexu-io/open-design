@@ -67,11 +67,11 @@ const SOLUTION_ROLES: ReadonlyArray<{
   key: SolutionPageKey;
   href: string;
 }> = [
-  { key: 'roleSoloBuilder', href: '/for/solo-builder/' },
-  { key: 'roleDesigner', href: '/for/designer/' },
-  { key: 'roleEngineering', href: '/for/engineering/' },
-  { key: 'roleProductManagers', href: '/for/product-managers/' },
-  { key: 'roleMarketing', href: '/for/marketing/' },
+  { key: 'roleSoloBuilder', href: '/solutions/solo-builder/' },
+  { key: 'roleDesigner', href: '/solutions/designer/' },
+  { key: 'roleEngineering', href: '/solutions/engineering/' },
+  { key: 'roleProductManagers', href: '/solutions/product-managers/' },
+  { key: 'roleMarketing', href: '/solutions/marketing/' },
 ];
 
 
@@ -81,6 +81,7 @@ export interface HeaderProps {
     | 'home'
     | 'product'
     | 'html-anything'
+    | 'html-video'
     | 'plugins'
     /*
      * `library` is kept as an alias for the dropdown trigger so older
@@ -118,7 +119,7 @@ export interface HeaderProps {
   locale?: LandingLocaleCode;
   /** Optional override for callers that already resolved localized chrome. */
   copy?: HeaderCopy;
-  /** Brand link target — `#top` on the homepage, `/` on sub-pages. */
+  /** Brand link target — `/` (home) everywhere; callers may override. */
   brandHref?: string;
   /**
    * Current request pathname (e.g. `/zh/blog/x/`). Used to build the
@@ -138,7 +139,7 @@ export function Header({
   github,
   locale = DEFAULT_LOCALE,
   copy,
-  brandHref = '#top',
+  brandHref = '/',
   currentPath = '/',
 }: HeaderProps) {
   const linkClass = (key: NonNullable<HeaderProps['active']>) =>
@@ -199,7 +200,8 @@ export function Header({
                 className={
                   active === 'product' ||
                   active === 'home' ||
-                  active === 'html-anything'
+                  active === 'html-anything' ||
+                  active === 'html-video'
                     ? 'is-active'
                     : undefined
                 }
@@ -238,6 +240,18 @@ export function Header({
                     </span>
                   </a>
                 </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/html-video/')}
+                    className={linkClass('html-video')}
+                  >
+                    <span className='dropdown-name'>{productMenuCopy.htmlVideoName}</span>
+                    <span className='dropdown-blurb'>
+                      {productMenuCopy.htmlVideoBlurb}
+                    </span>
+                  </a>
+                </li>
                 {/* AMR is no longer listed here — per the Header spec it now
                   heads the Agent dropdown (the design Agent above the coding
                   agents). Listing it in both places would be redundant. */}
@@ -253,7 +267,7 @@ export function Header({
             */}
             <li className='has-dropdown'>
               <a
-                href={href('/compare/')}
+                href={href('/solutions/')}
                 className={active === 'solution' ? 'is-active' : undefined}
                 aria-haspopup='true'
                 aria-expanded='false'

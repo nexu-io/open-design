@@ -1,13 +1,13 @@
 {
   "name": "@open-design/tools-pack",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "bin": {
     "tools-pack": "./bin/tools-pack.mjs"
   },
   "scripts": {
-    "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly && node --experimental-strip-types ../../packages/metatool/src/cli.ts write .",
     "dev": "tsx ./src/index.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
@@ -19,10 +19,11 @@
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
     "cac": "6.7.14",
-    "electron-builder": "26.8.1"
+    "electron-builder": "26.8.1",
+    "resedit": "1.7.2"
   },
   "optionalDependencies": {
-    "@powerformer/vela-cli": "0.0.10"
+    "@powerformer/vela-cli": "0.0.12"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

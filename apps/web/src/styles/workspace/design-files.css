@@ -3,7 +3,7 @@
   position: relative;
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 380px);
   min-height: 0;
   background: var(--bg);
 }
@@ -24,6 +24,9 @@
   min-height: 0;
   background: var(--bg);
   border-right: 1px solid var(--border);
+  /* Query container so the toolbar can react to the *list column* width
+     (which depends on the chat/preview split, not the viewport). */
+  container-type: inline-size;
 }
 .df-main:last-child { border-right: none; }
 .df-body {
@@ -41,6 +44,7 @@
   padding: 0 20px 6px;
   font-size: 14px;
   color: var(--text-muted);
+  min-width: 0;
 }
 .df-breadcrumb-btn {
   all: unset;
@@ -50,12 +54,27 @@
   border-radius: 3px;
   font-size: 14px;
   transition: color 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms cubic-bezier(0.23, 1, 0.32, 1);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .df-breadcrumb-btn:hover { color: var(--text); background: var(--bg-subtle); }
 .df-breadcrumb-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.df-breadcrumb-segment { display: inline-flex; align-items: center; }
+.df-breadcrumb-segment { display: inline-flex; align-items: center; min-width: 0; }
 .df-breadcrumb-sep { padding: 0 2px; color: var(--text-faint); font-size: 12px; user-select: none; }
-.df-breadcrumb-current { padding: 2px 4px; color: var(--text-strong); font-weight: 600; font-size: 14px; }
+.df-breadcrumb-current {
+  padding: 2px 4px;
+  color: var(--text-strong);
+  font-weight: 600;
+  font-size: 14px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* Single-line top toolbar: left = up + refresh + breadcrumbs, right = file actions. */
 .df-topbar {
   margin: 0 20px 8px;
@@ -63,6 +82,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  /* Stay on a single row: the breadcrumb (min-width:0 + ellipsis) shrinks
+     and the actions hold their place on the right, instead of the actions
+     wrapping below the breadcrumb. */
+  flex-wrap: nowrap;
 }
 .df-topbar-left {
   display: flex;
@@ -74,10 +97,14 @@
   padding: 0;
   margin: 0;
   min-width: 0;
+  max-width: 100%;
 }
 .df-topbar-right {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  margin-left: auto;
   flex-shrink: 0;
 }
 .df-actions {
@@ -85,6 +112,9 @@
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
+  /* Keep the action cluster intact on one row; the breadcrumb yields space
+     instead. Combined with the icon-only collapse below, the toolbar never
+     wraps to a second line. */
   flex-wrap: nowrap;
   flex-shrink: 0;
 }
@@ -107,6 +137,15 @@
 .df-actions button.danger:hover:not(:disabled) {
   background: var(--red-bg);
   color: var(--red);
+}
+/* When the list column is too narrow to fit labelled actions beside the
+   breadcrumb (~180px breadcrumb basis + ~243px of action text), drop the
+   button text to icons-only so the toolbar stays on a single row instead
+   of wrapping below the breadcrumb. The `title`/tooltip on each button is
+   kept for hover + a11y. */
+@container (max-width: 470px) {
+  .df-actions button > span { display: none; }
+  .df-actions button { padding: 6px; }
 }
 /* Upload error banner. */
 .df-upload-banner {

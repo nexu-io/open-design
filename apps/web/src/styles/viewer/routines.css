@@ -118,8 +118,9 @@
   pointer-events: auto;
 }
 .od-toast.placement-top {
-  top: 24px;
+  top: 64px;
   bottom: auto;
+  z-index: 1200;
 }
 .od-toast.tone-success {
   border: 1px solid color-mix(in srgb, var(--success, #2da44e) 42%, var(--border));
@@ -1621,9 +1622,9 @@
 }
 .app .working-dir-pill-menu {
   position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
-  z-index: 40;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 220;
   min-width: 260px;
   max-width: 340px;
   padding: 6px;
@@ -1766,7 +1767,13 @@
   background: var(--bg-panel);
 }
 .app .df-panel:not(.no-preview) {
-  grid-template-columns: minmax(320px, 1fr) minmax(320px, 360px);
+  /* Keep a usable minimum for the file list (toolbar + names stay
+     clickable) but let the preview pane YIELD instead of forcing a rigid
+     320px track. A rigid min on both columns overflowed the panel on
+     narrow splits (list 460 + preview 320 = 780px), pushing the toolbar
+     buttons and the preview off-screen. With `minmax(0, …)` the preview
+     shrinks first so the panel never exceeds its container width. */
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 360px);
 }
 .app .df-main {
   border-right-color: var(--border);

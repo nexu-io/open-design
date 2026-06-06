@@ -5,6 +5,7 @@ import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatComposer } from '../../src/components/ChatComposer';
+import { CONNECTORS_CHANGED_EVENT } from '../../src/components/connectors-events';
 import { composerText, flushMounts } from '../helpers/lexical-composer';
 
 const DESIGN_TASTE_SKILL = {
@@ -97,6 +98,17 @@ const FIGMA_CONNECTOR = {
   toolCount: 1,
 };
 
+const GMAIL_CONNECTOR = {
+  ...FIGMA_CONNECTOR,
+  id: 'gmail',
+  name: 'Gmail',
+  category: 'email',
+  description: 'Reads Gmail messages.',
+  accountLabel: 'Inbox',
+  allowedToolNames: ['GMAIL_FETCH_EMAILS'],
+  curatedToolNames: ['GMAIL_FETCH_EMAILS'],
+};
+
 let fetchMock: ReturnType<typeof vi.fn>;
 
 function renderComposer(
@@ -173,6 +185,18 @@ beforeEach(() => {
         headers: { 'content-type': 'application/json' },
       });
     }
+    if (url === '/api/connectors/status') {
+      return new Response(JSON.stringify({ statuses: { figma: { status: 'connected' } } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url === '/api/connectors/discovery?refresh=true') {
+      return new Response(JSON.stringify({ connectors: [FIGMA_CONNECTOR, GMAIL_CONNECTOR] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
     throw new Error(`unexpected fetch ${url}`);
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -189,10 +213,11 @@ describe('ChatComposer design toolbox', () => {
     renderComposer({ onSend });
     await flushMounts();
 
-    const trigger = screen.getByLabelText('Open design toolbox');
-    fireEvent.click(trigger);
+    // The design toolbox is now a submenu of the composer "+" menu.
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Design toolbox/i }));
 
-    await waitFor(() => expect(screen.getByText('Design toolbox')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Remove AI feel')).toBeTruthy());
     fireEvent.click(screen.getByText('Remove AI feel'));
 
     await waitFor(() => {
@@ -225,7 +250,8 @@ describe('ChatComposer design toolbox', () => {
     });
     await flushMounts();
 
-    fireEvent.click(screen.getByLabelText('Open design toolbox'));
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Design toolbox/i }));
 
     const search = screen.getByLabelText('Search design toolbox resources');
     fireEvent.change(search, { target: { value: 'research' } });
@@ -246,6 +272,26 @@ describe('ChatComposer design toolbox', () => {
       expect(composerText()).toContain('Figma');
       expect(composerText()).toContain('data/proof.csv');
       expect(composerText()).toContain('Do not only use design toolbox recommendations');
+    });
+  });
+
+  it('refreshes connected connectors when connector auth changes in another surface', async () => {
+    renderComposer();
+    await flushMounts();
+
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Design toolbox/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Figma')).toBeTruthy();
+    });
+
+    window.dispatchEvent(new Event(CONNECTORS_CHANGED_EVENT));
+
+    const search = screen.getByLabelText('Search design toolbox resources');
+    fireEvent.change(search, { target: { value: 'gmail' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Gmail')).toBeTruthy();
     });
   });
 });

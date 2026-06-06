@@ -19,6 +19,7 @@
 }
 
 .workspace-shell {
+  --workspace-tabs-chrome-height: 38px;
   width: 100vw;
   max-width: 100vw;
   height: 100vh;
@@ -162,8 +163,8 @@
   height: 24px;
   /* Fixed width — never shrink. The strip scrolls when the tabs
      don't fit anymore. */
-  width: 156px;
-  flex: 0 0 156px;
+  width: 124px;
+  flex: 0 0 124px;
   padding: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 22px;
@@ -181,6 +182,13 @@
   cursor: default;
   z-index: 1;
   will-change: transform;
+}
+/* The pinned Home tab has no close button, so it drops the close column and
+   sits a little narrower than the project tabs. */
+.workspace-tab.is-pinned {
+  width: 96px;
+  flex: 0 0 96px;
+  grid-template-columns: minmax(0, 1fr);
 }
 .workspace-tab.is-dragging {
   opacity: 0.88;

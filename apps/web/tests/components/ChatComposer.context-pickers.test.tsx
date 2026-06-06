@@ -528,6 +528,9 @@ describe('ChatComposer context pickers', () => {
       }),
       context: { pluginIds: [USER_PLUGIN.id] },
     });
+    await waitFor(() => {
+      expect(screen.queryByTestId('context-chip-strip')).toBeNull();
+    });
   });
 
   it('removes the inline design file token when its staged chip is removed', async () => {
@@ -736,40 +739,10 @@ describe('ChatComposer context pickers', () => {
     expect(screen.getByTestId('staged-attachments').textContent).toContain('recovered.txt');
   });
 
-  it('lets the tools panel switch between Official and My plugins', async () => {
-    renderComposer();
-    await flushMounts();
-    fireEvent.click(screen.getByLabelText('Open CLI and model settings'));
-
-    await waitFor(() => expect(screen.getByText('Community Deck')).toBeTruthy());
-    expect(screen.queryByText('My Export')).toBeNull();
-
-    fireEvent.click(screen.getByText('My plugins'));
-    expect(screen.getByText('My Export')).toBeTruthy();
-    expect(screen.queryByText('Community Deck')).toBeNull();
-
-    fireEvent.change(screen.getByLabelText('Search plugins'), {
-      target: { value: 'private' },
-    });
-    expect(screen.getByText('Private export workflow')).toBeTruthy();
-  });
-
-  it('tracks separate events for the resources menu and mention trigger', async () => {
-    renderComposer();
-    await flushMounts();
-
-    fireEvent.click(screen.getByLabelText('Open CLI and model settings'));
-    expect(trackChatPanelClickMock).toHaveBeenCalledWith(
-      expect.any(Function),
-      expect.objectContaining({ element: 'resources_popover_trigger' }),
-    );
-
-    fireEvent.click(screen.getByLabelText('Mention surfaces'));
-    expect(trackChatPanelClickMock).toHaveBeenCalledWith(
-      expect.any(Function),
-      expect.objectContaining({ element: 'mention_popover_trigger' }),
-    );
-  });
+  // The sliders "tools" popover (Official / My plugins switch, plugin search)
+  // and the standalone "@" mention trigger button were removed from the
+  // composer; plugins/skills/MCP are now reached via typed @-mentions and the
+  // "+" menu, so their dedicated click-tracking coverage moved out with them.
 
   // The inline pet popover (the "Pets — wake, tuck, or pick one" button and
   // its `.composer-pet-menu` flyout) was removed from ChatComposer; only the

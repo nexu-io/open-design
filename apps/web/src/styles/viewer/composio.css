@@ -307,7 +307,10 @@
 
 .present-overlay {
   position: fixed;
-  inset: 0;
+  top: var(--workspace-tabs-chrome-height, 38px);
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 1000;
   background: black;
   display: flex;
@@ -2480,6 +2483,35 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
+}
+/*
+ * "Share to Open Design" button — sits inside the completion row, below
+ * the AssistantFeedback / AssistantFooter widgets so it visually pairs
+ * with the post-thumbs-up Discord note (`assistant-feedback-discord-note`)
+ * that appears nearby. Styled as a quiet pill so it doesn't compete with
+ * the in-message tool-card buttons or the primary chat composer.
+ */
+.assistant-share-to-od-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  color: var(--text-default);
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+              border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.assistant-share-to-od-btn:hover:not(:disabled) {
+  background: var(--bg-default);
+  border-color: var(--border-strong);
+}
+.assistant-share-to-od-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 .assistant-footer {
   display: inline-flex;

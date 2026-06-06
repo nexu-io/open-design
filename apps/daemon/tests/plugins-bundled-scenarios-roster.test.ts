@@ -35,6 +35,7 @@ const SIBLINGS = new Map<string, { taskKind: string }>([
   ['od-default',          { taskKind: 'new-generation' }],
   ['od-media-generation', { taskKind: 'new-generation' }],
   ['od-plugin-authoring', { taskKind: 'new-generation' }],
+  ['od-share-to-community', { taskKind: 'new-generation' }],
   ['od-design-refine',    { taskKind: 'tune-collab' }],
   ['od-react-export',     { taskKind: 'tune-collab' }],
   ['od-nextjs-export',    { taskKind: 'tune-collab' }],

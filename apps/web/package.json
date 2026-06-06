@@ -1,6 +1,6 @@
 {
   "name": "@open-design/web",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -30,6 +30,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.32.1",
     "@formkit/auto-animate": "0.9.0",
+    "@lexical/react": "0.36.2",
+    "@lexical/utils": "0.36.2",
     "@open-design/components": "workspace:*",
     "@open-design/contracts": "workspace:*",
     "@open-design/host": "workspace:*",
@@ -38,6 +40,7 @@
     "@open-design/sidecar-proto": "workspace:*",
     "@xterm/addon-fit": "0.10.0",
     "@xterm/xterm": "5.5.0",
+    "lexical": "0.36.2",
     "lucide-react": "1.16.0",
     "motion": "12.40.0",
     "next": "16.2.6",
@@ -45,10 +48,7 @@
     "posthog-js": "1.374.2",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "shiki": "4.1.0",
-    "lexical": "0.36.2",
-    "@lexical/react": "0.36.2",
-    "@lexical/utils": "0.36.2"
+    "shiki": "4.1.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.0",

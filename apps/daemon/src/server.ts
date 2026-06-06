@@ -128,6 +128,7 @@ import {
   updateUserDesignSystemRevisionStatus,
 } from './design-systems.js';
 import { createDesignSystemGenerationJobStore } from './design-system-generation-jobs.js';
+import { prepareDesignTokenContractRebuild } from './design-token-contract-rebuild.js';
 import {
   applyDiffReviewDecisionToCwd,
   applyPlugin,
@@ -5969,6 +5970,21 @@ export async function startServer({
       listAllDesignSystems,
       mimeFor,
     },
+    tokenContractRebuild: {
+      maybeStartForImportedDesignSystem: async (designSystemId) => {
+        const preparation = await prepareDesignTokenContractRebuild(
+          USER_DESIGN_SYSTEMS_DIR,
+          designSystemId,
+        );
+        if (!preparation.revision) return { decision: preparation.decision };
+        const job = designSystemGenerationJobs.rebuildTokenContract({
+          designSystemId,
+          decision: preparation.decision,
+          ...preparation.revision,
+        });
+        return { decision: preparation.decision, job };
+      },
+    },
   });
   registerProjectArtifactRoutes(app, {
     http: httpDeps,
@@ -6712,6 +6728,30 @@ export async function startServer({
         body: typeof req.body?.body === 'string' ? req.body.body : undefined,
       });
       res.status(202).json({ job });
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/design-systems/:id/token-contract/rebuild-jobs', async (req, res) => {
+    try {
+      const preparation = await prepareDesignTokenContractRebuild(
+        USER_DESIGN_SYSTEMS_DIR,
+        req.params.id,
+        { force: req.body?.force === true },
+      );
+      if (!preparation.decision.available) {
+        return res.status(200).json({ decision: preparation.decision });
+      }
+      if (!preparation.revision) {
+        return res.status(200).json({ decision: preparation.decision });
+      }
+      const job = designSystemGenerationJobs.rebuildTokenContract({
+        designSystemId: req.params.id,
+        decision: preparation.decision,
+        ...preparation.revision,
+      });
+      res.status(202).json({ decision: preparation.decision, job });
     } catch (err) {
       res.status(400).json({ error: String(err) });
     }

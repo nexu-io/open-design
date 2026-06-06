@@ -788,8 +788,13 @@
      collapsed there's no text, so let the downward tooltip escape. */
   overflow: visible;
 }
-/* Hide every text fragment; keep only the leading icon glyph. */
+/* Hide every text fragment; keep only the leading icon glyph. The Discord
+   badge also carries a "· {n} online" suffix; collapsed it must hide too,
+   otherwise the separator + count leak out of the 32px square and render as
+   clipped text (e.g. "212 在s"). The full label lives in the hover tooltip. */
 .entry-main__topbar-chips--icon-only .entry-discord-badge__label,
+.entry-main__topbar-chips--icon-only .entry-discord-badge__sep,
+.entry-main__topbar-chips--icon-only .entry-discord-badge__online,
 .entry-main__topbar-chips--icon-only .use-everywhere-chip__label,
 .entry-main__topbar-chips--icon-only .inline-switcher__chip-text,
 .entry-main__topbar-chips--icon-only .inline-switcher__chip-chevron {
@@ -1602,7 +1607,7 @@
 
 .onboarding-view__steps {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   width: min(860px, 100%);
   margin: 0;
@@ -2758,6 +2763,43 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 16px;
+}
+
+.onboarding-view__email-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 16px;
+}
+
+.onboarding-view__email-label {
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.onboarding-view__email-input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 13px;
+  color: var(--text-strong);
+  background: var(--bg-panel);
+  font: inherit;
+  font-size: 13px;
+  box-shadow: var(--shadow-xs);
+  transition: border-color 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-view__email-input::placeholder {
+  color: var(--text-muted);
+}
+
+.onboarding-view__email-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent);
 }
 
 .onboarding-view__select-field {

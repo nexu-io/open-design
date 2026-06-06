@@ -162,6 +162,7 @@ import { ProjectDesignSystemPicker } from './ProjectDesignSystemPicker';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { ChatPane } from './ChatPane';
+import type { QuestionFormOpenRequest } from './AssistantMessage';
 import { WorkingDirPill } from './WorkingDirPill';
 import type { ChatSendMeta } from './ChatComposer';
 import {
@@ -169,13 +170,17 @@ import {
   useCritiqueTheaterEnabled,
 } from './Theater';
 import { useIframeKeepAlivePool } from './IframeKeepAlivePool';
-import { decideAutoOpenAfterWrite } from './auto-open-file';
+import {
+  decideAutoOpenAfterWrite,
+  selectAutoOpenProducedHtml,
+} from './auto-open-file';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
 import { FileWorkspace } from './FileWorkspace';
 import {
   type PluginFolderAgentAction,
 } from './design-files/pluginFolderActions';
+import { SHARE_TO_COMMUNITY_PROMPT } from './share-to-community/shareToCommunityPrompt';
 import { CenteredLoader } from './Loading';
 import type { SettingsSection } from './SettingsDialog';
 import { Toast } from './Toast';
@@ -254,6 +259,8 @@ interface Props {
   onOpenSettings: (section?: SettingsSection) => void;
   onOpenAmrSettings?: () => void;
   onOpenMcpSettings?: () => void;
+  onBrowsePlugins?: () => void;
+  onOpenConnectors?: () => void;
   // Pet wiring forwarded to the chat composer so users can adopt /
   // wake / tuck a pet without leaving the project view.
   onAdoptPetInline?: (petId: string) => void;
@@ -753,6 +760,8 @@ export function ProjectView({
   onOpenSettings,
   onOpenAmrSettings,
   onOpenMcpSettings,
+  onBrowsePlugins,
+  onOpenConnectors,
   onAdoptPetInline,
   onTogglePet,
   onOpenPetSettings,
@@ -970,6 +979,8 @@ export function ProjectView({
     tabs: [],
     active: null,
   });
+  const routeFileNameRef = useRef(routeFileName);
+  routeFileNameRef.current = routeFileName;
   const [activeWorkspaceContext, setActiveWorkspaceContext] =
     useState<WorkspaceContextItem | null>(null);
   const [workspaceContexts, setWorkspaceContexts] = useState<WorkspaceContextItem[]>([]);
@@ -1141,6 +1152,28 @@ export function ProjectView({
     [activeConversationId, lastAssistantMessageId, questionForm, questionFormPreview],
   );
 
+  // Release #3661: let a past question form be manually re-opened in the
+  // Questions panel. Layered on top of main's stable questionFormKey (#3644) —
+  // the `displayed*` values fall back to the live form when nothing is manually
+  // pinned, so both fixes coexist.
+  const [manualQuestionFormRequest, setManualQuestionFormRequest] =
+    useState<QuestionFormOpenRequest | null>(null);
+  useEffect(() => {
+    setManualQuestionFormRequest(null);
+  }, [project.id, activeConversationId]);
+  useEffect(() => {
+    if (hasQuestions && questionFormKey) setManualQuestionFormRequest(null);
+  }, [hasQuestions, questionFormKey]);
+  const displayedQuestionForm = manualQuestionFormRequest?.form ?? questionForm;
+  const displayedQuestionFormPreview = manualQuestionFormRequest ? null : questionFormPreview;
+  const displayedQuestionFormSubmittedAnswers =
+    manualQuestionFormRequest?.submittedAnswers ?? questionFormSubmittedAnswers;
+  const displayedQuestionFormActive = manualQuestionFormRequest ? false : questionFormActive;
+  const displayedQuestionsGenerating = manualQuestionFormRequest ? false : questionsGenerating;
+  const displayedQuestionFormKey = manualQuestionFormRequest
+    ? `${activeConversationId ?? 'conversation'}:${manualQuestionFormRequest.messageId}:${manualQuestionFormRequest.form.id}:manual`
+    : questionFormKey;
+
   // Auto-switch the workspace to the Questions tab when a new discovery form
   // first appears, and let the chat banner re-focus it on click. The nonce
   // bump is what FileWorkspace listens to.
@@ -1156,9 +1189,29 @@ export function ProjectView({
     () => (questionsFocusNonce > 0 ? { nonce: questionsFocusNonce } : null),
     [questionsFocusNonce],
   );
-  const openQuestionsTab = useCallback(() => {
+  const submittedAnswersForQuestionFormRequest = useCallback((request: QuestionFormOpenRequest) => {
+    const assistantIndex = messages.findIndex((m) => m.id === request.messageId);
+    if (assistantIndex < 0) return null;
+    for (let i = assistantIndex + 1; i < messages.length; i++) {
+      const m = messages[i];
+      if (!m) continue;
+      if (m.role === 'assistant') break;
+      if (m.role !== 'user') continue;
+      const parsed = parseSubmittedAnswers(request.form, m.content ?? '');
+      if (parsed) return parsed;
+    }
+    return null;
+  }, [messages]);
+  const openQuestionsTab = useCallback((request?: QuestionFormOpenRequest) => {
+    if (request) {
+      setManualQuestionFormRequest({
+        ...request,
+        submittedAnswers:
+          request.submittedAnswers ?? submittedAnswersForQuestionFormRequest(request) ?? undefined,
+      });
+    }
     setQuestionsFocusNonce((n) => n + 1);
-  }, []);
+  }, [submittedAnswersForQuestionFormRequest]);
 
   const currentConversationQueuedItems = activeConversationId
     ? queuedChatSends
@@ -1463,8 +1516,22 @@ export function ProjectView({
     (async () => {
       const state = await loadTabs(project.id);
       if (cancelled) return;
+      const routeActive = routeFileNameRef.current;
+      let nextState = routeActive
+        ? {
+            ...state,
+            tabs: state.tabs.includes(routeActive)
+              ? state.tabs
+              : [...state.tabs, routeActive],
+            active: routeActive,
+          }
+        : state;
+      if (routeActive) {
+        nextState = cacheTabsLocally(project.id, nextState);
+        void persistTabsToDaemonNow(project.id, nextState);
+      }
       tabsHydratedFromSavedStateRef.current = state.hasSavedState === true;
-      setOpenTabsState(state);
+      setOpenTabsState(nextState);
       tabsLoadedRef.current = true;
     })();
     return () => {
@@ -2592,6 +2659,8 @@ export function ProjectView({
                 }
                 const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
                 const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
+                const producedHtmlToOpen = selectAutoOpenProducedHtml(produced);
+                if (producedHtmlToOpen) requestOpenFile(producedHtmlToOpen);
                 if (produced.length > 0) {
                   updateMessageById(
                     message.id,
@@ -2910,7 +2979,7 @@ export function ProjectView({
             )
           : apiProtocolModelLabel(config.apiProtocol, config.model);
       const preTurnFileNames = projectFiles.map((f) => f.name);
-      const assistantId = retryTarget?.failedAssistant.id ?? randomUUID();
+      const assistantId = randomUUID();
       const assistantMsg: ChatMessage = {
         id: assistantId,
         role: 'assistant',
@@ -2918,7 +2987,7 @@ export function ProjectView({
         agentId: assistantAgentId,
         agentName: assistantAgentName,
         events: [],
-        createdAt: retryTarget?.failedAssistant.createdAt ?? startedAt,
+        createdAt: startedAt,
         runStatus: config.mode === 'daemon' ? 'running' : undefined,
         startedAt,
         preTurnFileNames,
@@ -2953,7 +3022,10 @@ export function ProjectView({
       const nextHistory = retryTarget
         ? [...retryTarget.priorMessages, userMsg]
         : [...historyBase, userMsg];
-      setMessages([...nextHistory, assistantMsg]);
+      const nextVisibleMessages = retryTarget
+        ? [...nextHistory, ...retryTarget.preservedAttempts, assistantMsg]
+        : [...nextHistory, assistantMsg];
+      setMessages(nextVisibleMessages);
       markStreamingConversation(runConversationId);
       updateConversationLatestRun(config.mode === 'daemon' ? 'running' : 'queued');
       setArtifact(null);
@@ -3279,6 +3351,8 @@ export function ProjectView({
               nextFiles = await refreshProjectFiles();
             }
             const produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+            const producedHtmlToOpen = selectAutoOpenProducedHtml(produced);
+            if (producedHtmlToOpen) requestOpenFile(producedHtmlToOpen);
             setMessages((curr) => {
               const updated = curr.map((m) =>
                 m.id === assistantId
@@ -4056,6 +4130,24 @@ export function ProjectView({
     ],
   );
 
+  // "Share to Open Design" — kicks off the bundled `od-share-to-community`
+  // scenario in the active conversation. We just inject the trigger prompt
+  // through the standard chat-send path; the agent then loads SKILL.md and
+  // drives the rest. Busy flag debounces the double-click while the send
+  // request is in flight (handleSend is async).
+  const [shareToOpenDesignBusy, setShareToOpenDesignBusy] = useState(false);
+  const shareToOpenDesignBusyRef = useRef(false);
+  const handleShareToOpenDesign = useCallback(() => {
+    if (currentConversationActionDisabled || shareToOpenDesignBusyRef.current) return;
+    shareToOpenDesignBusyRef.current = true;
+    setShareToOpenDesignBusy(true);
+    void Promise.resolve(handleSend(SHARE_TO_COMMUNITY_PROMPT, [], []))
+      .finally(() => {
+        shareToOpenDesignBusyRef.current = false;
+        setShareToOpenDesignBusy(false);
+      });
+  }, [currentConversationActionDisabled, handleSend]);
+
   const sentDesignSystemReviewTaskKeysRef = useRef<Set<string>>(new Set());
   const persistDesignSystemReviewEntry = useCallback((
     sectionTitle: string,
@@ -4355,26 +4447,6 @@ export function ProjectView({
     [activeConversationId, handleConversationSessionModeChange],
   );
 
-  // Side Chat launcher: create a NEW conversation seeded with the current
-  // chat's context (the daemon copies the source conversation's messages) and
-  // resolve its id. The new conversation is a normal conversation, so it shows
-  // up in the header ConversationsMenu the moment we prepend it here. The
-  // FileWorkspace launcher action then opens it as a `chat:<id>` tab.
-  const handleCreateSideChat = useCallback(
-    async (seedFromConversationId: string | null): Promise<string | null> => {
-      const fresh = await createConversation(
-        project.id,
-        t('workspace.sideChatDefaultTitle'),
-        { seedFromConversationId },
-      );
-      if (!fresh) return null;
-      setConversations((curr) => [fresh, ...curr]);
-      onProjectsRefresh();
-      return fresh.id;
-    },
-    [project.id, t, onProjectsRefresh],
-  );
-
   const handleForkFromMessage = useCallback(
     async (assistantMessage: ChatMessage) => {
       if (!activeConversationId || forkingMessageId) return;
@@ -4467,6 +4539,23 @@ export function ProjectView({
     },
     [project, onProjectChange],
   );
+
+  const handleSaveProjectInstructions = useCallback(async () => {
+    if (instructionsSaving) return;
+    const nextInstructions = instructionsDraft.trim();
+    setInstructionsSaving(true);
+    const saved = await patchProject(project.id, {
+      customInstructions: nextInstructions || null,
+    });
+    setInstructionsSaving(false);
+    if (saved) {
+      onProjectChange(saved);
+      setInstructionsDraft(saved.customInstructions ?? '');
+      setInstructionsMode(saved.customInstructions?.trim() ? 'review' : 'closed');
+      return;
+    }
+    setError('Could not save project instructions.');
+  }, [instructionsDraft, instructionsSaving, onProjectChange, project]);
 
   const activeConversationChatState = useMemo(
     () =>
@@ -5179,6 +5268,98 @@ export function ProjectView({
         projectId={project.id}
         enabled={critiqueTheaterEnabled}
       />
+      {instructionsMode !== 'closed' ? (
+        <div
+          className="project-instructions-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setInstructionsDraft(project.customInstructions ?? '');
+              setInstructionsMode('closed');
+            }
+          }}
+        >
+          <section
+            className="project-instructions-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="project-instructions-title"
+          >
+            <div className="project-instructions-modal-head">
+              <div className="project-instructions-modal-title-wrap">
+                <h2 id="project-instructions-title" className="project-instructions-modal-title">
+                  {t('project.customInstructions')}
+                </h2>
+                {project.customInstructions?.trim() ? (
+                  <span className="project-instructions-status">
+                    <Icon name="check" size={12} />
+                    {t('sketch.saved')}
+                  </span>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                className="project-instructions-modal-close"
+                aria-label={t('common.close')}
+                title={t('common.close')}
+                onClick={() => {
+                  setInstructionsDraft(project.customInstructions ?? '');
+                  setInstructionsMode('closed');
+                }}
+              >
+                <Icon name="close" size={16} />
+              </button>
+            </div>
+            {instructionsMode === 'edit' ? (
+              <>
+                <textarea
+                  className="project-instructions-input"
+                  data-testid="project-instructions-textarea"
+                  value={instructionsDraft}
+                  placeholder={t('project.customInstructionsPlaceholder')}
+                  onChange={(event) => setInstructionsDraft(event.target.value)}
+                />
+                <div className="project-instructions-actions">
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    onClick={() => {
+                      setInstructionsDraft(project.customInstructions ?? '');
+                      setInstructionsMode(project.customInstructions?.trim() ? 'review' : 'closed');
+                    }}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn primary"
+                    data-testid="project-instructions-save"
+                    disabled={instructionsSaving}
+                    onClick={() => void handleSaveProjectInstructions()}
+                  >
+                    {instructionsSaving ? t('sketch.saving') : t('common.save')}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="project-instructions-preview" data-testid="project-instructions-preview">
+                  {project.customInstructions}
+                </div>
+                <div className="project-instructions-actions">
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    onClick={() => setInstructionsMode('edit')}
+                  >
+                    {t('common.edit')}
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+      ) : null}
       {/* ProjectActionsToolbar removed per 00efdcba — hide finalize-design
           toolbar from project header. Restore from cf1cd9bb if product
           wants the Finalize + Continue-in-CLI buttons back in the chrome. */}
@@ -5239,6 +5420,8 @@ export function ProjectView({
               onRequestPluginFolderAgentAction={handlePluginFolderAgentAction}
               activePluginActionPaths={activePluginActionPaths}
               hiddenPluginActionPaths={hiddenAssistantPluginActionPaths}
+              onShareToOpenDesign={handleShareToOpenDesign}
+              shareToOpenDesignBusy={shareToOpenDesignBusy}
               forceStreamingMessageIds={forceStreamingPluginMessageIds}
               initialDraft={chatInitialDraft}
               onSubmitForm={(text) => {
@@ -5277,6 +5460,8 @@ export function ProjectView({
               onSwitchToAmrAndRetry={handleSwitchToAmrAndRetry}
               onLaunchAntigravityOauth={handleLaunchAntigravityOauth}
               onOpenMcpSettings={onOpenMcpSettings}
+              onBrowsePlugins={onBrowsePlugins}
+              onOpenConnectors={onOpenConnectors}
               connectRepoNeeded={connectRepoNeeded}
               githubConnected={githubConnected}
               onConnectRepo={handleConnectRepo}
@@ -5336,6 +5521,36 @@ export function ProjectView({
                   >
                     {project.name}
                   </span>
+                  {project.customInstructions?.trim() ? (
+                    <button
+                      type="button"
+                      className={[
+                        'project-instructions-chip',
+                        instructionsMode === 'review' ? 'is-open' : '',
+                      ].filter(Boolean).join(' ')}
+                      onClick={() => {
+                        setInstructionsDraft(project.customInstructions ?? '');
+                        setInstructionsMode('review');
+                      }}
+                    >
+                      <Icon name="comment" size={12} />
+                      <span>{project.customInstructions}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="project-instructions-toggle"
+                      data-testid="project-instructions-add"
+                      aria-label={t('project.customInstructions')}
+                      title={t('project.customInstructions')}
+                      onClick={() => {
+                        setInstructionsDraft(project.customInstructions ?? '');
+                        setInstructionsMode('edit');
+                      }}
+                    >
+                      <Icon name="plus" size={14} />
+                    </button>
+                  )}
                   {projectMeta !== t('project.metaFreeform') ? (
                     <span className="meta" data-testid="project-meta">{projectMeta}</span>
                   ) : null}
@@ -5438,7 +5653,6 @@ export function ProjectView({
           onConversationSessionModeChange={handleConversationSessionModeChange}
           onNewConversation={handleNewConversation}
           activeConversationChat={activeConversationChatState}
-          onCreateSideChat={handleCreateSideChat}
           onActiveContextChange={handleActiveWorkspaceContextChange}
           onWorkspaceContextsChange={handleWorkspaceContextsChange}
           messages={messages}
@@ -5483,13 +5697,13 @@ export function ProjectView({
               />
             </>
           )}
-          questionForm={questionForm}
-          questionFormPreview={questionFormPreview}
-          questionFormKey={questionFormKey}
-          questionFormInteractive={questionFormActive}
+          questionForm={displayedQuestionForm}
+          questionFormPreview={displayedQuestionFormPreview}
+          questionFormKey={displayedQuestionFormKey}
+          questionFormInteractive={displayedQuestionFormActive}
           questionFormSubmitDisabled={currentConversationActionDisabled}
-          questionFormSubmittedAnswers={questionFormSubmittedAnswers}
-          questionsGenerating={questionsGenerating}
+          questionFormSubmittedAnswers={displayedQuestionFormSubmittedAnswers}
+          questionsGenerating={displayedQuestionsGenerating}
           focusQuestionsRequest={focusQuestionsRequest}
           onSubmitQuestionForm={(text) => {
             if (currentConversationActionDisabled) return;
@@ -5713,6 +5927,7 @@ export interface RetryTarget {
   failedAssistant: ChatMessage;
   userMsg: ChatMessage;
   priorMessages: ChatMessage[];
+  preservedAttempts: ChatMessage[];
 }
 
 export function resolveRetryTarget(
@@ -5727,14 +5942,24 @@ export function resolveRetryTarget(
   );
   if (failedIndex <= 0 || failedIndex !== messages.length - 1) return null;
 
-  const userMsg = messages[failedIndex - 1];
+  let userIndex = failedIndex - 1;
+  while (
+    userIndex >= 0 &&
+    messages[userIndex]?.role === 'assistant' &&
+    messages[userIndex]?.runStatus === 'failed'
+  ) {
+    userIndex -= 1;
+  }
+
+  const userMsg = messages[userIndex];
   const failedAssistant = messages[failedIndex];
   if (!userMsg || userMsg.role !== 'user' || !failedAssistant) return null;
 
   return {
     failedAssistant,
     userMsg,
-    priorMessages: messages.slice(0, failedIndex - 1),
+    priorMessages: messages.slice(0, userIndex),
+    preservedAttempts: messages.slice(userIndex + 1, failedIndex + 1),
   };
 }
 

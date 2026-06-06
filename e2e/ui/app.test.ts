@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { ensureRailOpen } from '@/playwright/rail';
-import type { Dialog, Page, Request, Response } from '@playwright/test';
+import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -782,6 +782,21 @@ async function sendPrompt(page: Page, prompt: string) {
   ]);
 }
 
+async function startNewConversation(page: Page) {
+  await page.getByTestId('conversation-history-trigger').click();
+  await expect(page.getByTestId('conversation-list')).toBeVisible();
+  await page.getByTestId('conversation-history-new').click();
+  await expect(page.getByTestId('conversation-list')).toHaveCount(0);
+}
+
+function tabBySuffix(page: Page, name: string): Locator {
+  return page.getByRole('tab', { name: new RegExp(`${escapeRegExp(name)}(?:\\s+Close tab)?$`, 'i') });
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function isCreateRunResponse(resp: Response): boolean {
   const url = new URL(resp.url());
   return url.pathname === '/api/runs' && resp.request().method() === 'POST';
@@ -851,7 +866,7 @@ async function runHyperframesProjectRoutingFlow(
   await expectWorkspaceReady(page);
   await sendPrompt(page, entry.prompt);
   const { projectId } = await getCurrentProjectContext(page);
-  await expect(page.getByRole('tab', { name: new RegExp(`${entry.mockArtifact!.fileName.replace('.', '\\.')}$`, 'i') })).toBeVisible();
+  await expect(tabBySuffix(page, entry.mockArtifact!.fileName)).toBeVisible();
   await expectProjectFileToContain(page, projectId, entry.mockArtifact!.fileName, entry.mockArtifact!.heading);
   await expectScenarioProjectState(page, entry, projectId);
 }
@@ -1442,7 +1457,7 @@ async function expectArtifactVisible(
   entry: UiScenario,
 ) {
   const artifact = entry.mockArtifact!;
-  await expect(page.getByRole('tab', { name: new RegExp(`${artifact.fileName.replace('.', '\\.')}$`, 'i') })).toBeVisible();
+  await expect(tabBySuffix(page, artifact.fileName)).toBeVisible();
   if ((await artifactPreview(page).count()) === 0) {
     const turnCard = page.locator('.msg.assistant').filter({ hasText: artifact.fileName }).last();
     if ((await turnCard.count()) > 0) {
@@ -1476,11 +1491,11 @@ async function runConversationPersistenceFlow(
   await sendPrompt(page, entry.prompt);
   await expect(page.locator('.msg.user').getByText(entry.prompt, { exact: true })).toBeVisible();
   const firstContext = await getCurrentProjectContext(page);
-  await expect(page.getByRole('tab', { name: new RegExp(`${entry.mockArtifact!.fileName.replace('.', '\\.')}$`, 'i') })).toBeVisible();
+  await expect(tabBySuffix(page, entry.mockArtifact!.fileName)).toBeVisible();
   await expectProjectFileToContain(page, firstContext.projectId, entry.mockArtifact!.fileName, entry.mockArtifact!.heading);
   const firstConversationId = firstContext.conversationId;
 
-  await page.getByTestId('new-conversation').click();
+  await startNewConversation(page);
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toHaveText('');
 
@@ -1629,7 +1644,7 @@ async function runConversationDeleteRecoveryFlow(
     page.locator('.msg.user .user-text').filter({ hasText: entry.prompt }).first(),
   ).toBeVisible();
 
-  await page.getByTestId('new-conversation').click();
+  await startNewConversation(page);
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toHaveText('');
 

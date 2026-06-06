@@ -4,12 +4,37 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import {
   buildDesignSystemCreateSelection,
   defaultDesignSystemSelection,
   NewProjectPanel,
 } from '../../src/components/NewProjectPanel';
+import { openFolderDialog } from '../../src/providers/registry';
 import type { DesignSystemSummary, ProjectTemplate, SkillSummary } from '../../src/types';
+
+vi.mock('@open-design/host', async () => {
+  const actual = await vi.importActual<typeof import('@open-design/host')>('@open-design/host');
+  return {
+    ...actual,
+    isOpenDesignHostAvailable: vi.fn(),
+    pickHostWorkingDir: vi.fn(),
+  };
+});
+
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
+    '../../src/providers/registry',
+  );
+  return {
+    ...actual,
+    openFolderDialog: vi.fn(),
+  };
+});
+
+const mockedIsHostAvailable = vi.mocked(isOpenDesignHostAvailable);
+const mockedPickHostWorkingDir = vi.mocked(pickHostWorkingDir);
+const mockedOpenFolderDialog = vi.mocked(openFolderDialog);
 
 const skills: SkillSummary[] = [
   {
@@ -75,6 +100,9 @@ class ResizeObserverMock {
 beforeEach(() => {
   globalThis.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
   Element.prototype.scrollIntoView = vi.fn();
+  vi.clearAllMocks();
+  mockedIsHostAvailable.mockReturnValue(false);
+  mockedOpenFolderDialog.mockResolvedValue(null);
 });
 
 describe('NewProjectPanel design system defaults', () => {
@@ -632,6 +660,106 @@ describe('NewProjectPanel design system defaults', () => {
         }),
       }),
     );
+  });
+});
+
+describe('NewProjectPanel working directory picker', () => {
+  it('includes a browser-picked working directory in the create payload', async () => {
+    const onCreate = vi.fn();
+    mockedIsHostAvailable.mockReturnValue(false);
+    mockedOpenFolderDialog.mockResolvedValue('/Users/me/product-designs');
+
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose folder' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /product-designs/i })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          userWorkingDir: '/Users/me/product-designs',
+        }),
+      }),
+    );
+    expect(mockedPickHostWorkingDir).not.toHaveBeenCalled();
+  });
+
+  it('threads the desktop host working-dir token into the create payload', async () => {
+    const onCreate = vi.fn();
+    mockedIsHostAvailable.mockReturnValue(true);
+    mockedPickHostWorkingDir.mockResolvedValue({
+      ok: true,
+      baseDir: '/Users/me/host-designs',
+      token: 'host-token',
+    });
+
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose folder' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /host-designs/i })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userWorkingDirToken: 'host-token',
+        metadata: expect.objectContaining({
+          userWorkingDir: '/Users/me/host-designs',
+        }),
+      }),
+    );
+    expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
+  });
+
+  it('surfaces host picker failures without falling back to an untokened browser path', async () => {
+    mockedIsHostAvailable.mockReturnValue(true);
+    mockedPickHostWorkingDir.mockResolvedValue({
+      ok: false,
+      reason: 'host build does not support pickWorkingDir',
+    });
+
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose folder' }));
+
+    expect(await screen.findByText(/Couldn't open the folder picker/i)).toBeTruthy();
+    expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
   });
 });
 

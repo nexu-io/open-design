@@ -19,10 +19,13 @@ describe('od design-systems help surface', () => {
     expect(isDesignSystemsHelpArg(undefined)).toBe(false);
   });
 
-  it('advertises rename and import-shadcn alongside list and show so the surface cannot drift', () => {
+  it('advertises rename and import commands alongside list and show so the surface cannot drift', () => {
     expect(DESIGN_SYSTEMS_USAGE).toContain('list');
     expect(DESIGN_SYSTEMS_USAGE).toContain('show');
     expect(DESIGN_SYSTEMS_USAGE).toContain('rename');
+    expect(DESIGN_SYSTEMS_USAGE).toContain('import-local');
+    expect(DESIGN_SYSTEMS_USAGE).toContain('import-github');
     expect(DESIGN_SYSTEMS_USAGE).toContain('import-shadcn');
+    expect(DESIGN_SYSTEMS_USAGE).toContain('rebuild-token-contract');
   });
 });

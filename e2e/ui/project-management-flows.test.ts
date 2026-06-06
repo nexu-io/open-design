@@ -65,6 +65,8 @@ const TAB_SKILLS = [
 test.beforeEach(async ({ page }) => {
   let appConfig = {
     onboardingCompleted: true,
+    privacyDecisionAt: 1,
+    telemetry: { metrics: false, content: false, artifactManifest: false },
     mode: 'daemon',
     agentId: 'codex',
     skillId: null,
@@ -85,6 +87,8 @@ test.beforeEach(async ({ page }) => {
         skillId: null,
         designSystemId: null,
         onboardingCompleted: true,
+        privacyDecisionAt: 1,
+        telemetry: { metrics: false, content: false, artifactManifest: false },
         agentModels: { codex: { model: 'default' } },
       }),
     );
@@ -323,11 +327,13 @@ test('[P1] project detail header design system picker switches the active projec
   const popover = page.getByTestId('project-ds-picker-popover');
   await expect(popover).toBeVisible();
   await page.getByTestId('project-ds-picker-search').fill('editorial');
+  const editorialOption = page.getByRole('option', { name: /^Editorial Noir$/ });
+  await expect(editorialOption).toBeVisible();
   const patchRequest = page.waitForRequest((request) => {
     const url = new URL(request.url());
     return url.pathname === `/api/projects/${getProjectContextFromUrl(page).projectId}` && request.method() === 'PATCH';
   });
-  await page.getByTestId('project-ds-picker-option-editorial-noir').click();
+  await editorialOption.click();
 
   await expect(popover).toHaveCount(0);
   await expect(trigger).toContainText(/Editorial Noir/i);
@@ -373,7 +379,9 @@ test('[P0] project detail header design system switch carries into the next run 
   const trigger = page.getByTestId('project-ds-picker-trigger');
   await trigger.click();
   await page.getByTestId('project-ds-picker-search').fill('editorial');
-  await page.getByTestId('project-ds-picker-option-editorial-noir').click();
+  const editorialOption = page.getByRole('option', { name: /^Editorial Noir$/ });
+  await expect(editorialOption).toBeVisible();
+  await editorialOption.click();
   await expect(trigger).toContainText(/Editorial Noir/i);
 
   const input = page.getByTestId('chat-composer-input');
@@ -393,6 +401,8 @@ test('[P0] project instructions flow into the next API run as project-level syst
   let capturedSystemPrompt = '';
   const apiConfig = {
     onboardingCompleted: true,
+    privacyDecisionAt: 1,
+    telemetry: { metrics: false, content: false, artifactManifest: false },
     mode: 'api',
     apiProtocol: 'openai',
     apiKey: 'sk-project-test',
@@ -438,17 +448,18 @@ test('[P0] project instructions flow into the next API run as project-level syst
   await createProject(page, 'Project instruction run context');
   await expectWorkspaceReady(page);
 
+  const instructions = 'Use tabs for indentation and keep CTA copy terse.';
   await page.getByTestId('project-instructions-add').click();
-  await page.getByTestId('project-instructions-textarea').fill('Use tabs for indentation and keep CTA copy terse.');
+  await page.getByTestId('project-instructions-textarea').fill(instructions);
   await page.getByTestId('project-instructions-save').click();
-  await expect(page.getByTestId('project-instructions-preview')).toContainText('Use tabs for indentation and keep CTA copy terse.');
+  await expect(page.getByTestId('project-instructions-preview')).toContainText(instructions);
 
   const input = page.getByTestId('chat-composer-input');
   await input.fill('Generate the onboarding screen.');
   await page.getByTestId('chat-send').click();
 
   await expect.poll(() => capturedSystemPrompt).toContain('## Custom instructions (project-level)');
-  expect(capturedSystemPrompt).toContain('Use tabs for indentation and keep CTA copy terse.');
+  expect(capturedSystemPrompt).toContain(instructions);
 });
 
 test('[P0] project detail avatar menu lets the user switch Local CLI agents and models', async ({ page }) => {
@@ -469,7 +480,7 @@ test('[P0] project detail avatar menu lets the user switch Local CLI agents and 
   await expect(modelSelect).toBeVisible();
   await expect(modelSelect).toContainText(/default/i);
   await modelSelect.click();
-  await page.getByRole('option', { name: /Sonnet/i }).click();
+  await page.getByRole('option', { name: /^Sonnet \(alias\)$/i }).click();
   await expect(modelSelect).toContainText(/Sonnet/i);
 });
 
@@ -503,7 +514,7 @@ test('[P0] project detail agent and model switches carry into the next daemon ru
   await menu.getByRole('button', { name: /Claude Code/i }).click();
   const modelSelect = menu.locator('.avatar-model-section [role=\"combobox\"]').first();
   await modelSelect.click();
-  await page.getByRole('option', { name: /Sonnet/i }).click();
+  await page.getByRole('option', { name: /^Sonnet \(alias\)$/i }).click();
   await expect(modelSelect).toContainText(/Sonnet/i);
 
   const input = page.getByTestId('chat-composer-input');
@@ -557,7 +568,9 @@ test('[P0] clearing the project design system removes designSystemId from the ne
   const trigger = page.getByTestId('project-ds-picker-trigger');
   await trigger.click();
   await page.getByTestId('project-ds-picker-search').fill('editorial');
-  await page.getByTestId('project-ds-picker-option-editorial-noir').click();
+  const editorialOption = page.getByRole('option', { name: /^Editorial Noir$/ });
+  await expect(editorialOption).toBeVisible();
+  await editorialOption.click();
   await expect(trigger).toContainText(/Editorial Noir/i);
 
   await trigger.click();
@@ -1464,9 +1477,18 @@ async function openEntrySettingsDialog(page: Page, sectionName?: RegExp | string
 
 async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
+  await dismissPrivacyDialog(page);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
+}
+
+async function dismissPrivacyDialog(page: Page) {
+  const privacyRegion = page.getByRole('region', { name: /Help us improve Open Design/i });
+  if (await privacyRegion.isVisible().catch(() => false)) {
+    await privacyRegion.getByRole('button', { name: /I get it|not now|got it/i }).click();
+    await expect(privacyRegion).toBeHidden();
+  }
 }
 
 async function renameProjectTitle(
@@ -1494,12 +1516,17 @@ async function uploadTinyHtml(
     mimeType: 'text/html',
     buffer: Buffer.from(content),
   });
-  await expect(page.getByRole('tab', { name: new RegExp(`${escapeRegExp(name)}$`, 'i') })).toBeVisible();
   const { projectId } = getProjectContextFromUrl(page);
-  const files = await listProjectFiles(page, projectId);
-  const uploaded = files.find((file) => file.name.endsWith(name));
-  expect(uploaded?.name).toBeTruthy();
-  return uploaded!.name;
+  let uploadedName = '';
+  await expect
+    .poll(async () => {
+      const files = await listProjectFiles(page, projectId);
+      uploadedName = files.find((file) => file.name.endsWith(name))?.name ?? '';
+      return uploadedName;
+    })
+    .not.toBe('');
+  await expect(tabBySuffix(page, uploadedName)).toBeVisible();
+  return uploadedName;
 }
 
 async function uploadTinyPng(
@@ -1534,7 +1561,7 @@ async function openUploadedHtmlArtifactPreview(page: Page, uploadedName: string)
 }
 
 function tabBySuffix(page: Page, name: string): Locator {
-  return page.getByRole('tab', { name: new RegExp(`${escapeRegExp(name)}$`, 'i') });
+  return page.getByRole('tab', { name: new RegExp(`${escapeRegExp(name)}(?:\\s+Close tab)?$`, 'i') });
 }
 
 function rowByFileName(page: Page, name: string): Locator {

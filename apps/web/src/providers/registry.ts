@@ -46,6 +46,8 @@ import type {
   DesignSystemRevisionJobRequest,
   DesignSystemRevisionStatus,
   DesignSystemSummary,
+  DesignSystemTokenContractRebuildJobRequest,
+  DesignSystemTokenContractRebuildJobResponse,
   LiveArtifact,
   LiveArtifactRefreshLogEntry,
   LiveArtifactSummary,
@@ -655,6 +657,23 @@ export async function startDesignSystemRevisionJob(
     if (!resp.ok) return null;
     const json = (await resp.json()) as { job?: DesignSystemGenerationJob };
     return json.job ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function startDesignSystemTokenContractRebuildJob(
+  id: string,
+  input: DesignSystemTokenContractRebuildJobRequest = {},
+): Promise<DesignSystemTokenContractRebuildJobResponse | null> {
+  try {
+    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}/token-contract/rebuild-jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as DesignSystemTokenContractRebuildJobResponse;
   } catch {
     return null;
   }
