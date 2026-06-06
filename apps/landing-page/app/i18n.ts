@@ -752,6 +752,24 @@ export interface HomePageCopy {
     titleMiddle: string;
     titleSuffix: string;
   };
+  /*
+   * AMR band — the "Open Design AMR" model band. The product name "AMR"
+   * and the vendor/model names rendered in the scrolling marquee stay in
+   * their canonical English form regardless of locale (same no-translate
+   * rule the nav uses for product names). Only the surrounding marketing
+   * copy localizes: kicker, title, lead, and the four feature chips.
+   */
+  amrBand: {
+    kicker: string;
+    title: string;
+    lead: string;
+    chips: readonly string[];
+    cta: string;
+    /** aria-label for the vendor-logo row (screen-reader only). */
+    logosAriaLabel: string;
+    /** aria-label for the trailing "…" item that signals "and more". */
+    moreAriaLabel: string;
+  };
   cta: {
     rule: string;
     command: string;
@@ -2653,6 +2671,20 @@ const HOME_PAGE_COPY_EN: HomePageCopy = {
     titleMiddle: 'and the',
     titleSuffix: 'open-source Claude Design alternative',
   },
+  amrBand: {
+    kicker: 'Open Design AMR · Design Agent',
+    title: 'The world’s top Agents and LLMs, powering Open Design',
+    lead: 'Top up once and reach GPT, Claude, Gemini, DeepSeek and more. AMR auto-routes each step to the right frontier model — billed by real token usage, with your wallet balance and request log in one console.',
+    chips: [
+      '20+ flagship models',
+      'Zero setup',
+      'SOTA Harness For Design',
+      'Real token-based billing',
+    ],
+    cta: 'Explore AMR',
+    logosAriaLabel: 'Built-in frontier models',
+    moreAriaLabel: 'and more',
+  },
   cta: {
     rule: 'Contact / Conversation',
     command: 'Three commands to ship',
@@ -2939,6 +2971,20 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
       titleMiddle: '以及',
       titleSuffix: 'Claude Design 开源替代方案的问题',
     },
+    amrBand: {
+      kicker: 'Open Design AMR · 设计 Agent',
+      title: '为 Open Design 提供全球顶尖的 Agent 和 LLMs',
+      lead: '一次充值即可使用 GPT、Claude、Gemini、DeepSeek。AMR 自动为每一步路由到最合适的前沿模型，按真实 Token 用量计费，在同一个控制台查看钱包余额和请求记录。',
+      chips: [
+        '20+ 旗舰模型',
+        '零配置即用',
+        'SOTA Harness For Design',
+        '真实 Token 计费',
+      ],
+      cta: '了解 AMR',
+      logosAriaLabel: '内置的前沿模型',
+      moreAriaLabel: '以及更多',
+    },
     cta: {
       rule: '联系 / 对话',
       command: '三条命令开始交付',
@@ -3001,6 +3047,15 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
 
 HOME_PAGE_COPY['zh-tw'] = {
   ...HOME_PAGE_COPY.zh!,
+  amrBand: {
+    kicker: 'Open Design AMR · 設計 Agent',
+    title: '為 Open Design 提供全球頂尖的 Agent 和 LLMs',
+    lead: '一次儲值即可使用 GPT、Claude、Gemini、DeepSeek。AMR 自動為每一步路由到最合適的前沿模型，依真實 Token 用量計費，在同一個控制台查看錢包餘額和請求記錄。',
+    chips: ['20+ 旗艦模型', '零配置即用', 'SOTA Harness For Design', '真實 Token 計費'],
+    cta: '了解 AMR',
+    logosAriaLabel: '內建的前沿模型',
+    moreAriaLabel: '以及更多',
+  },
   rail: {
     right: 'Open Design — 第 01 卷 · 第 26 期 · Apache-2.0',
     left: 'Skills · 設計系統 · Agents · BYOK · 本地優先',
@@ -4260,6 +4315,15 @@ const FIRST_SCREEN_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial
 
 const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<HomePageCopy>>> = {
   ja: {
+    amrBand: {
+      kicker: 'Open Design AMR · デザイン Agent',
+      title: 'Open Design を支える、世界トップクラスの Agent と LLM',
+      lead: '一度チャージするだけで GPT、Claude、Gemini、DeepSeek を利用可能。AMR が各ステップを最適なフロンティアモデルへ自動ルーティングし、実際のトークン使用量で課金。ウォレット残高とリクエスト履歴は同じコンソールで確認できます。',
+      chips: ['20+ のフラッグシップモデル', 'ゼロ設定', 'SOTA Harness For Design', '実トークン課金'],
+      cta: 'AMR を見る',
+      logosAriaLabel: '内蔵のフロンティアモデル',
+      moreAriaLabel: 'ほか',
+    },
     hero: {
       label: 'オープンソース・デザインスタジオ',
       titlePrefix: 'オープンソースの',
@@ -4280,6 +4344,15 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     footer: { summary: 'Claude Design のオープンソース代替。local-first、BYOK、Apache-2.0。', download: 'デスクトップをダウンロード' },
   },
   ko: {
+    amrBand: {
+      kicker: 'Open Design AMR · 디자인 Agent',
+      title: 'Open Design을 구동하는 세계 최고의 Agent와 LLM',
+      lead: '한 번 충전하면 GPT, Claude, Gemini, DeepSeek를 사용할 수 있습니다. AMR이 각 단계를 최적의 프런티어 모델로 자동 라우팅하고 실제 토큰 사용량으로 과금하며, 지갑 잔액과 요청 기록을 하나의 콘솔에서 확인할 수 있습니다.',
+      chips: ['20+ 플래그십 모델', '제로 설정', 'SOTA Harness For Design', '실제 토큰 과금'],
+      cta: 'AMR 살펴보기',
+      logosAriaLabel: '내장된 프런티어 모델',
+      moreAriaLabel: '그 외 더 보기',
+    },
     hero: {
       label: '오픈소스 디자인 스튜디오',
       titlePrefix: '오픈소스',
@@ -4300,6 +4373,15 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     footer: { summary: 'Claude Design의 오픈소스 대안. Local-first, BYOK, Apache-2.0.', download: '데스크톱 다운로드' },
   },
   de: {
+    amrBand: {
+      kicker: 'Open Design AMR · Design-Agent',
+      title: 'Die besten Agents und LLMs der Welt – für Open Design',
+      lead: 'Einmal aufladen und GPT, Claude, Gemini und DeepSeek nutzen. AMR routet jeden Schritt automatisch zum passenden Frontier-Modell, rechnet nach realem Token-Verbrauch ab und zeigt Guthaben und Anfrageverlauf in einer Konsole.',
+      chips: ['20+ Flaggschiff-Modelle', 'Keine Einrichtung', 'SOTA Harness For Design', 'Abrechnung nach echten Tokens'],
+      cta: 'AMR entdecken',
+      logosAriaLabel: 'Integrierte Frontier-Modelle',
+      moreAriaLabel: 'und mehr',
+    },
     hero: {
       label: 'Open-Source-Designstudio',
       titlePrefix: 'Open-source',
@@ -4320,6 +4402,15 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     footer: { summary: 'Die Open-Source-Alternative zu Claude Design. Local-first, BYOK, Apache-2.0.', download: 'Desktop herunterladen' },
   },
   fr: {
+    amrBand: {
+      kicker: 'Open Design AMR · Agent de design',
+      title: 'Les meilleurs Agents et LLM du monde, au service d’Open Design',
+      lead: 'Rechargez une fois et accédez à GPT, Claude, Gemini et DeepSeek. AMR route automatiquement chaque étape vers le bon modèle de pointe, facture à l’usage réel de tokens et réunit solde et historique des requêtes dans une seule console.',
+      chips: ['20+ modèles phares', 'Zéro configuration', 'SOTA Harness For Design', 'Facturation au token réel'],
+      cta: 'Découvrir AMR',
+      logosAriaLabel: 'Modèles de pointe intégrés',
+      moreAriaLabel: 'et plus encore',
+    },
     hero: {
       label: 'Studio de design open source',
       titlePrefix: 'Claude Design',
@@ -4340,6 +4431,15 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     footer: { summary: "L'alternative open source à Claude Design. Local-first, BYOK, Apache-2.0.", download: 'Télécharger le desktop' },
   },
   ru: {
+    amrBand: {
+      kicker: 'Open Design AMR · Дизайн-агент',
+      title: 'Лучшие в мире агенты и LLM на службе Open Design',
+      lead: 'Пополните счёт один раз и используйте GPT, Claude, Gemini и DeepSeek. AMR автоматически направляет каждый шаг к подходящей передовой модели, тарифицирует по реальному расходу токенов и показывает баланс и историю запросов в одной консоли.',
+      chips: ['20+ флагманских моделей', 'Нулевая настройка', 'SOTA Harness For Design', 'Оплата по реальным токенам'],
+      cta: 'Узнать об AMR',
+      logosAriaLabel: 'Встроенные передовые модели',
+      moreAriaLabel: 'и другие',
+    },
     hero: {
       label: 'Open-source дизайн-студия',
       titlePrefix: 'Open-source',
@@ -4360,6 +4460,15 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     footer: { summary: 'Open-source альтернатива Claude Design. Local-first, BYOK, Apache-2.0.', download: 'Скачать desktop' },
   },
   es: {
+    amrBand: {
+      kicker: 'Open Design AMR · Agente de diseño',
+      title: 'Los mejores Agents y LLM del mundo, impulsando Open Design',
+      lead: 'Recarga una vez y usa GPT, Claude, Gemini y DeepSeek. AMR enruta automáticamente cada paso al modelo de frontera adecuado, factura por el uso real de tokens y reúne saldo e historial de solicitudes en una sola consola.',
+      chips: ['20+ modelos insignia', 'Cero configuración', 'SOTA Harness For Design', 'Facturación por tokens reales'],
+      cta: 'Explorar AMR',
+      logosAriaLabel: 'Modelos de frontera integrados',
+      moreAriaLabel: 'y más',
+    },
     hero: {
       label: 'Estudio de diseño open source',
       titlePrefix: 'Claude Design',
@@ -4380,6 +4489,15 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     footer: { summary: 'La alternativa open source a Claude Design. Local-first, BYOK, Apache-2.0.', download: 'Descargar desktop' },
   },
   'pt-br': {
+    amrBand: {
+      kicker: 'Open Design AMR · Agente de design',
+      title: 'Os melhores Agents e LLMs do mundo, impulsionando o Open Design',
+      lead: 'Recarregue uma vez e use GPT, Claude, Gemini e DeepSeek. O AMR roteia automaticamente cada etapa para o modelo de fronteira certo, cobra pelo uso real de tokens e reúne saldo e histórico de solicitações em um único console.',
+      chips: ['20+ modelos de ponta', 'Configuração zero', 'SOTA Harness For Design', 'Cobrança por tokens reais'],
+      cta: 'Conhecer o AMR',
+      logosAriaLabel: 'Modelos de fronteira integrados',
+      moreAriaLabel: 'e mais',
+    },
     hero: {
       label: 'Estúdio de design open source',
       titlePrefix: 'Claude Design',
@@ -4400,6 +4518,15 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     footer: { summary: 'A alternativa open source ao Claude Design. Local-first, BYOK, Apache-2.0.', download: 'Baixar desktop' },
   },
   it: {
+    amrBand: {
+      kicker: 'Open Design AMR · Agente di design',
+      title: 'I migliori Agent e LLM al mondo, al servizio di Open Design',
+      lead: 'Ricarica una volta e usa GPT, Claude, Gemini e DeepSeek. AMR instrada automaticamente ogni passaggio verso il modello di frontiera giusto, fattura in base al consumo reale di token e raccoglie saldo e cronologia delle richieste in un’unica console.',
+      chips: ['20+ modelli di punta', 'Zero configurazione', 'SOTA Harness For Design', 'Fatturazione a token reali'],
+      cta: 'Scopri AMR',
+      logosAriaLabel: 'Modelli di frontiera integrati',
+      moreAriaLabel: 'e altri',
+    },
     hero: {
       label: 'Studio di design open source',
       titlePrefix: 'Claude Design',
@@ -4420,6 +4547,15 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     footer: { summary: "L'alternativa open source a Claude Design. Local-first, BYOK, Apache-2.0.", download: 'Scarica desktop' },
   },
   vi: {
+    amrBand: {
+      kicker: 'Open Design AMR · Agent thiết kế',
+      title: 'Những Agent và LLM hàng đầu thế giới, tiếp sức cho Open Design',
+      lead: 'Nạp một lần và dùng GPT, Claude, Gemini và DeepSeek. AMR tự động định tuyến mỗi bước tới mô hình tiên tiến phù hợp, tính phí theo lượng token thực tế và hiển thị số dư cùng lịch sử yêu cầu trong cùng một bảng điều khiển.',
+      chips: ['20+ mô hình hàng đầu', 'Không cần cấu hình', 'SOTA Harness For Design', 'Tính phí theo token thực'],
+      cta: 'Khám phá AMR',
+      logosAriaLabel: 'Mô hình tiên tiến tích hợp sẵn',
+      moreAriaLabel: 'và nhiều hơn nữa',
+    },
     hero: {
       label: 'Studio thiết kế mã nguồn mở',
       titlePrefix: 'Claude Design',
@@ -4440,6 +4576,15 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     footer: { summary: 'Lựa chọn mã nguồn mở thay Claude Design. Local-first, BYOK, Apache-2.0.', download: 'Tải desktop' },
   },
   pl: {
+    amrBand: {
+      kicker: 'Open Design AMR · Agent projektowy',
+      title: 'Najlepsze na świecie Agenty i LLM napędzają Open Design',
+      lead: 'Doładuj raz i korzystaj z GPT, Claude, Gemini i DeepSeek. AMR automatycznie kieruje każdy krok do właściwego modelu frontier, rozlicza według rzeczywistego zużycia tokenów i pokazuje saldo oraz historię żądań w jednej konsoli.',
+      chips: ['20+ flagowych modeli', 'Zero konfiguracji', 'SOTA Harness For Design', 'Rozliczenie za realne tokeny'],
+      cta: 'Poznaj AMR',
+      logosAriaLabel: 'Wbudowane modele frontier',
+      moreAriaLabel: 'i więcej',
+    },
     hero: {
       label: 'Studio designu open source',
       titlePrefix: 'Claude Design',
@@ -4460,6 +4605,15 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     footer: { summary: 'Open-source alternatywa dla Claude Design. Local-first, BYOK, Apache-2.0.', download: 'Pobierz desktop' },
   },
   id: {
+    amrBand: {
+      kicker: 'Open Design AMR · Agen desain',
+      title: 'Agent dan LLM terbaik dunia, menggerakkan Open Design',
+      lead: 'Isi saldo sekali dan pakai GPT, Claude, Gemini, dan DeepSeek. AMR otomatis merutekan setiap langkah ke model frontier yang tepat, menagih berdasarkan pemakaian token nyata, dan menyatukan saldo serta riwayat permintaan dalam satu konsol.',
+      chips: ['20+ model unggulan', 'Tanpa konfigurasi', 'SOTA Harness For Design', 'Tagihan per token nyata'],
+      cta: 'Jelajahi AMR',
+      logosAriaLabel: 'Model frontier bawaan',
+      moreAriaLabel: 'dan lainnya',
+    },
     hero: {
       label: 'Studio desain open source',
       titlePrefix: 'Claude Design',
@@ -4480,6 +4634,15 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     footer: { summary: 'Alternatif open source untuk Claude Design. Local-first, BYOK, Apache-2.0.', download: 'Unduh desktop' },
   },
   nl: {
+    amrBand: {
+      kicker: 'Open Design AMR · Design-agent',
+      title: '’s Werelds beste Agents en LLM’s, krachtbron van Open Design',
+      lead: 'Eén keer opwaarderen en GPT, Claude, Gemini en DeepSeek gebruiken. AMR routeert elke stap automatisch naar het juiste frontier-model, rekent af op werkelijk tokengebruik en toont saldo en aanvraaggeschiedenis in één console.',
+      chips: ['20+ vlaggenschipmodellen', 'Geen configuratie', 'SOTA Harness For Design', 'Afrekenen op echte tokens'],
+      cta: 'Ontdek AMR',
+      logosAriaLabel: 'Ingebouwde frontier-modellen',
+      moreAriaLabel: 'en meer',
+    },
     hero: {
       label: 'Open-source designstudio',
       titlePrefix: 'Claude Design',
@@ -4500,6 +4663,15 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     footer: { summary: 'Het open-source alternatief voor Claude Design. Local-first, BYOK, Apache-2.0.', download: 'Desktop downloaden' },
   },
   ar: {
+    amrBand: {
+      kicker: 'Open Design AMR · وكيل التصميم',
+      title: 'أفضل الوكلاء ونماذج LLM في العالم، تشغّل Open Design',
+      lead: 'اشحن مرة واحدة واستخدم GPT و Claude و Gemini و DeepSeek. يوجّه AMR كل خطوة تلقائيًا إلى النموذج الرائد المناسب، ويحاسب حسب الاستهلاك الفعلي للتوكنات، ويعرض الرصيد وسجل الطلبات في وحدة تحكم واحدة.',
+      chips: ['أكثر من 20 نموذجًا رائدًا', 'بدون إعداد', 'SOTA Harness For Design', 'محاسبة بالتوكن الفعلي'],
+      cta: 'استكشف AMR',
+      logosAriaLabel: 'نماذج رائدة مدمجة',
+      moreAriaLabel: 'والمزيد',
+    },
     hero: {
       label: 'استوديو تصميم مفتوح المصدر',
       titlePrefix: 'Claude Design',
@@ -4520,6 +4692,15 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     footer: { summary: 'البديل مفتوح المصدر لـ Claude Design. محلي أولاً، BYOK، Apache-2.0.', download: 'تنزيل سطح المكتب' },
   },
   tr: {
+    amrBand: {
+      kicker: 'Open Design AMR · Tasarım Ajanı',
+      title: 'Open Design’a güç veren dünyanın en iyi Agent ve LLM’leri',
+      lead: 'Bir kez yükleyin; GPT, Claude, Gemini ve DeepSeek’i kullanın. AMR her adımı otomatik olarak doğru sınır modeline yönlendirir, gerçek token kullanımına göre ücretlendirir ve bakiye ile istek geçmişini tek konsolda gösterir.',
+      chips: ['20+ amiral gemisi model', 'Sıfır kurulum', 'SOTA Harness For Design', 'Gerçek token bazlı faturalama'],
+      cta: 'AMR’yi keşfedin',
+      logosAriaLabel: 'Yerleşik sınır modelleri',
+      moreAriaLabel: 've daha fazlası',
+    },
     hero: {
       label: 'Açık kaynak tasarım stüdyosu',
       titlePrefix: 'Claude Design',
@@ -4540,6 +4721,15 @@ const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<Ho
     footer: { summary: "Claude Design'ın açık kaynak alternatifi. Local-first, BYOK, Apache-2.0.", download: 'Desktop indir' },
   },
   uk: {
+    amrBand: {
+      kicker: 'Open Design AMR · Агент дизайну',
+      title: 'Найкращі у світі агенти та LLM рухають Open Design',
+      lead: 'Поповніть рахунок один раз і користуйтеся GPT, Claude, Gemini та DeepSeek. AMR автоматично спрямовує кожен крок до відповідної передової моделі, тарифікує за реальним використанням токенів і показує баланс та історію запитів в одній консолі.',
+      chips: ['20+ флагманських моделей', 'Нуль налаштувань', 'SOTA Harness For Design', 'Оплата за реальні токени'],
+      cta: 'Дізнатися про AMR',
+      logosAriaLabel: 'Вбудовані передові моделі',
+      moreAriaLabel: 'та інші',
+    },
     hero: {
       label: 'Open-source дизайн-студія',
       titlePrefix: 'Open-source',

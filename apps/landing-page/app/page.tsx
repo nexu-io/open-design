@@ -9,7 +9,7 @@
  * islands only when behavior is needed.
  */
 
-import { Header, type HeaderProps } from './_components/header';
+import { AMR_URL, Header, type HeaderProps } from './_components/header';
 import { Wire } from './_components/wire';
 import {
   DEFAULT_LOCALE,
@@ -222,6 +222,30 @@ export default function Page({
       }))
     : [];
   const href = (path: string) => localizedHref(path, locale);
+
+  /*
+   * Frontier model brands AMR routes to, shown as a monochrome logo strip
+   * (mirrors opencode's Zen band). Names are display-only and not part of
+   * the localized copy — they are product/brand marks. The SVGs in
+   * /public/agents/ use fill="currentColor"; rendered through <img> they
+   * resolve against the SVG's own default ink (near-black), so the strip
+   * reads as one dark monochrome row. (An <img>-loaded SVG renders in an
+   * isolated context and cannot inherit the page's `color`, so recoloring
+   * the strip would require inlining the SVGs or a CSS mask — not a one-
+   * line `color:` change.)
+   */
+  const amrModelLogos: ReadonlyArray<{ slug: string; name: string }> = [
+    { slug: 'openai', name: 'OpenAI' },
+    { slug: 'anthropic', name: 'Anthropic' },
+    { slug: 'gemini', name: 'Google Gemini' },
+    { slug: 'deepseek', name: 'DeepSeek' },
+    { slug: 'zhipu', name: 'Zhipu GLM' },
+    { slug: 'moonshot', name: 'Moonshot Kimi' },
+    { slug: 'qwen', name: 'Qwen' },
+    { slug: 'minimax', name: 'MiniMax' },
+    { slug: 'xiaomi', name: 'Xiaomi MiMo' },
+    { slug: 'xai', name: 'xAI' },
+  ];
 
   return (
     <>
@@ -1079,12 +1103,62 @@ export default function Page({
                     <small>{home.testimonial.partnerLabels[4]}</small>
                   </a>
                 </div>
-                <a className='read-more' href={REPO} {...ext}>
+                <a className='read-more' href={href('/solutions/')}>
                   {home.testimonial.readMore}
                 </a>
               </div>
               <div className='testimonial-art' data-reveal='right'>
                 <LazyImg src={imageAsset('testimonial.png', { width: 1024, quality: 82 })} />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ====== AMR band ======
+          The "Open Design AMR" model band: AMR is the built-in design Agent
+          that ships SOTA frontier models out of the box (zero provider setup,
+          real token-metered billing). Sits directly under the testimonial,
+          outside the roman-numbered main sequence. A static monochrome row of
+          vendor logos, trailing with an ellipsis to signal "and more". */}
+        <section className='amr-band' data-od-id='amr-band' data-reveal>
+          <div className='container'>
+            <div className='amr-band-inner'>
+              <span className='amr-band-kicker'>{home.amrBand.kicker}</span>
+              <h2 className='amr-band-title'>{home.amrBand.title}</h2>
+              <p className='amr-band-lead'>{home.amrBand.lead}</p>
+              <ul className='amr-band-chips' aria-label={home.amrBand.kicker}>
+                {home.amrBand.chips.map((chip) => (
+                  <li className='amr-band-chip' key={chip}>
+                    <span className='amr-band-chip-dot' aria-hidden='true' />
+                    {chip}
+                  </li>
+                ))}
+              </ul>
+              <ul
+                className='amr-band-logos'
+                aria-label={home.amrBand.logosAriaLabel}
+              >
+                {amrModelLogos.map((m) => (
+                  <li key={m.slug}>
+                    <img
+                      className='amr-band-logo'
+                      src={`/agents/${m.slug}.svg`}
+                      alt={m.name}
+                      title={m.name}
+                      width={26}
+                      height={26}
+                      loading='lazy'
+                    />
+                  </li>
+                ))}
+                <li className='amr-band-more' aria-label={home.amrBand.moreAriaLabel}>
+                  …
+                </li>
+              </ul>
+              <div className='amr-band-actions'>
+                <a className='nav-cta amr-band-cta' href={AMR_URL}>
+                  {home.amrBand.cta}
+                </a>
               </div>
             </div>
           </div>
