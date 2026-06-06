@@ -52,11 +52,11 @@ Body: Inter font, `height:100vh`, `padding:32px 40px`, `display:flex; flex-direc
 
 ## Top Navigation (grid: `auto auto 1fr auto auto`, gap 16px, mb 40px)
 
-1. **Profile button** — 48×48 circular avatar `https://api.dicebear.com/9.x/avataaars/png?size=100&seed=current_user`.
+1. **Profile button** — 48×48 circular avatar (reuse the inlined `seed=current_user` `data:` avatar from `example.html`; never fetch a remote avatar URL).
 2. **Toggle container** — pill containing:
    - **Mode switch** (88×48, white pill, inner blue track 76×40 `#3b82f6`, white 32×32 handle on right; in dark mode handle slides left via `transform: translateX(-36px)`; small icon `☾`/`☀` slides via `translateX(42px)`).
    - **Settings nav-btn** — pill, 10px 24px, `rgba(0,0,0,0.04)` bg with blur, white text.
-3. **Meeting alert** (justify-self center) — white pill, `padding 6px 6px 6px 16px`, gap 12, shadow `0 4px 20px rgba(0,0,0,0.08)`. Contains: 32px host avatar `https://api.dicebear.com/9.x/avataaars/png?size=100&seed=meeting_host`, label "Meeting is about to start", grey time-tag pill "-5:23" (`#f0f0f0`, 4px 10px), and a 32×32 close button with an SVG progress ring (gray track + black arc, `stroke-dasharray=88 stroke-dashoffset=25 rotate(-90)`) and a centered Lucide `X` (12px). Hidden on mobile.
+3. **Meeting alert** (justify-self center) — white pill, `padding 6px 6px 6px 16px`, gap 12, shadow `0 4px 20px rgba(0,0,0,0.08)`. Contains: 32px host avatar (reuse the inlined `seed=meeting_host` `data:` avatar from `example.html`; never fetch a remote avatar URL), label "Meeting is about to start", grey time-tag pill "-5:23" (`#f0f0f0`, 4px 10px), and a 32×32 close button with an SVG progress ring (gray track + black arc, `stroke-dasharray=88 stroke-dashoffset=25 rotate(-90)`) and a centered Lucide `X` (12px). Hidden on mobile.
 4. **View switcher** — pill, `rgba(0,0,0,0.04)` bg, 4px padding, two buttons "Dashboard" and "Rooms"; active = white bg, black text, shadow `0 4px 12px rgba(0,0,0,0.1)`. Default active = "Rooms".
 5. **Search button** — 48×48 circular, Lucide `Search`.
 
