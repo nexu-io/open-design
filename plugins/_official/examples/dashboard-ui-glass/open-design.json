@@ -1,0 +1,90 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-dashboard-ui-glass",
+  "title": "Dashboard UI — Liquid Glass",
+  "title_i18n": {
+    "zh-CN": "Dashboard UI — 液态玻璃会议仪表盘",
+    "en": "Dashboard UI — Liquid Glass"
+  },
+  "version": "0.3.0",
+  "description": "Premium liquid-glassmorphism conference dashboard: dual fullscreen background videos swapped by theme, a 4x2 glass/solid card grid, animated voice-wave participant indicators, and a floating control bar.",
+  "description_i18n": {
+    "zh-CN": "高端液态玻璃会议仪表盘：随主题切换的双全屏背景视频、4×2 玻璃/实心卡片网格、带声波动画的参与者指示器，以及悬浮控制栏。",
+    "en": "Premium liquid-glassmorphism conference dashboard: dual fullscreen background videos swapped by theme, a 4x2 glass/solid card grid, animated voice-wave participant indicators, and a floating control bar."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Eli"
+  },
+  "homepage": "https://motionsites.ai/sections",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "dashboard",
+    "glassmorphism",
+    "conference",
+    "meeting"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "gif": "https://image.mux.com/d9Hv9NuqK501CgRYX6l5SgAbYuTYg399On4jee0101pmuI/animated.webp"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a premium **Conference Dashboard** in **React + TypeScript + Vite + Tailwind** with a **liquid glassmorphism** aesthetic. Use **lucide-react** for icons. Use the **Inter** font family (weights 300, 400, 500, 600, 700) loaded from Google Fonts. A complete single-file reference implementation ships beside this plugin at example.html — match its tokens, glass treatment, card grid, voice-wave animation, and responsive behavior.\n\n**Avatars (critical):** the bundled example.html ships every avatar as an inlined `data:image/svg+xml;base64,…` URI — reuse those inline data URIs and keep them as-is. Do NOT swap them for `i.pravatar.cc`, `api.dicebear.com`, or any other remote avatar host: external avatar URLs rate-limit / 403 inside the preview sandbox and render as broken images. Screen-share thumbnails may use `https://picsum.photos/seed/screen1..4/300/200`.\n\n## Background\n\nUse two looping fullscreen background videos (autoplay, muted, loop, playsInline, object-fit: cover, fixed inset, z-index -1) — swap them based on dark/light theme. **No overlays.**\n\n- Light mode video: `https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260514_103318_2aa26b55-df1a-43a6-903d-941e718c9366.mp4`\n- Dark mode video: `https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260514_102933_4e8f73b5-775a-4179-b2fb-472f59063dcd.mp4`\n\n## CSS Variables (`:root`)\n\n```\n--glass-bg: rgba(255, 255, 255, 0.55);\n--glass-border: rgba(255, 255, 255, 0.6);\n--glass-blur: 8px;\n--text-main: #1a1a1a;\n--text-muted: #6b7280;\n--accent: #000000;\n--card-radius: 40px;\n--transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);\n```\n\nIn `.dark-mode`: `--glass-bg: rgba(0,0,0,0.45)`; `--glass-border: rgba(255,255,255,0.08)`; `--text-main:#fff`; `--text-muted:#b0b0b0`; `--accent:#fff`.\n\nBody: Inter font, `height:100vh`, `padding:32px 40px`, `display:flex; flex-direction:column; overflow:hidden`, black fallback bg.\n\n## Top Navigation (grid: auto auto 1fr auto auto, gap 16px, mb 40px)\n\n1. **Profile button** — 48×48 circular avatar `seed=current_user`.\n2. **Toggle container** — pill containing: a **mode switch** (88×48 white pill, inner blue track 76×40 `#3b82f6`, white 32×32 handle on right; dark mode slides handle left via `translateX(-36px)`, icon `☾`/`☀` via `translateX(42px)`) and a **Settings nav-btn** (pill, 10px 24px, `rgba(0,0,0,0.04)` blur bg, white text).\n3. **Meeting alert** (justify-self center) — white pill, `padding 6px 6px 6px 16px`, gap 12, shadow `0 4px 20px rgba(0,0,0,0.08)`: 32px host avatar `seed=meeting_host`, label \"Meeting is about to start\", grey time-tag pill \"-5:23\" (`#f0f0f0`, 4px 10px), 32×32 close button with SVG progress ring (gray track + black arc, `stroke-dasharray=88 stroke-dashoffset=25 rotate(-90)`) + centered Lucide `X` (12px). Hidden on mobile.\n4. **View switcher** — pill, `rgba(0,0,0,0.04)` bg, 4px padding, buttons \"Dashboard\" and \"Rooms\"; active = white bg, black text, shadow `0 4px 12px rgba(0,0,0,0.1)`. Default active = \"Rooms\".\n5. **Search button** — 48×48 circular, Lucide `Search`.\n\n## Dashboard Grid (4 cols × 2 rows, 24px gap, max-width 1400px, fills available height)\n\nCard base: `padding:28px 20px`, flex column, `border-radius:40px`, hover `translateY(-3px) scale(1.01)`.\n\n- **Card 1 — Create Room (glass):** translucent dark glass `rgba(0,0,0,0.18)` light / `rgba(255,255,255,0.08)` dark; centered Lucide `Plus` (32px) + \"Create a room\", white text.\n- **Card 2 — Subscription Growth Experiments (solid white):** title (1.35rem, weight 400, ls -0.03em) + subtitle \"Sprint Retrospective\"; header Lucide `Zap` (16px, opacity 0.5); footer 3 overlapping 32px avatars (`u=1,2,3`, `margin-left:-12px`) + badge \"9\" (38×38, `rgba(0,0,0,0.08)`).\n- **Card 3 — Weekly Insights (solid white):** title only; **bar chart** (height 60px, gap 2px, align flex-end): first 24 bars blue `#3b82f6` heights `35,45,30,55,40,65,50,75,60,85,70,80,65,55,45,70,60,75,55,65,50,75,60,55`, next 36 bars grey `#e5e7eb` heights `45,70,60,75,55,65,50,75,60,85,70,55,45,70,60,75,55,65,50,75,60,55,45,70,60,75,55,65,50,75,60,55,45,70,60,75`; markers row (space-between, padding 0 20px, mb 24px): 18px avatar `u=m1`, pair `u=m2`(-8)+`u=m3`, pair `u=m4`(-8)+`u=m5`, all 1.5px white border; footer 2 overlapping avatars `u=large1,large2` + 54×54 white play button (`rgba(245,245,245,0.85)`) with Lucide `Play` (20px, fill black).\n- **Card 4 — Product Strategy 2023 (glass dark translucent):** subtitle \"No upcoming meetings\"; Lucide `MoreHorizontal` (16px, opacity 0.5); footer avatar `u=6` + badge \"32\".\n- **Card 5 — User Onboarding Team (solid white):** subtitle \"Sprint Planning\"; Lucide `BarChart2`; footer avatars `u=7,8,9` + badge \"3\".\n- **Card 6 — User & Market Research (glass):** subtitle \"No upcoming meetings\"; `MoreHorizontal`; footer avatar `u=10` + badge \"6\".\n- **Card 7 — Core Product Team (solid white):** title+subtitle both \"Core Product Team\"; Lucide `Video`; footer avatars `u=11,12` + badge \"2\".\n- **Card 8 — Screen Share (gradient `linear-gradient(to bottom,#f4f4f4 0%,#ffffff 50%,#ffffff 100%)`):** two pill chips \"Screen Share\" (blue `#3b82f6`) + \"0:30\" (black), white pills `padding:6px 14px; font-size:0.75rem; box-shadow:0 2px 8px rgba(0,0,0,0.06)`; horizontal drag-to-scroll row (overflow-x auto, gap 12px, hidden scrollbar, cursor grab) of 4 thumbnails 160×100 radius 16px `https://picsum.photos/seed/screen1..4/300/200`; thumbnail #2 has bottom-right tag: 24px avatar `u=alice_av` + orange `#e05e36` pill \"Alice\" (white 0.65rem, 2px 8px, radius 100); footer avatars `u=13,14` + badge \"8\" (`#F3F3F3`).\n\n## Indicators\n\nThree 12×12 white dots, gap 16, `margin: 24px 0 120px`. First active (opacity 1), others 0.3.\n\n## Bottom Bar (fixed, centered, glass pill)\n\n`bottom:32px; left:50%; translateX(-50%); padding:10px 16px; border-radius:100px`: active speaker 44×44 `u=speaker` with voice indicator (top-right -2/-2: white 18×18 circle + shadow, 3 wave bars 2px wide grey `#4b5563`, `@keyframes voice-wave` 4px↔10px, 1s ease-in-out infinite, delays 0/0.2/0.4s); 40×40 `u=p1` (opacity 0.7); 40×40 `u=p2` with voice indicator; 40×40 `u=p3`; \"+17\" 40×40 chip `rgba(255,255,255,0.25)` white bold.\n\n## Components button (fixed bottom-left, 32px)\n\n44×44 rounded-rect (radius 14, `rgba(0,0,0,0.04)` blur), 2×2 grid of avatars `u=c1..c4`.\n\n## Floating Controls (fixed bottom-right, 32px)\n\nPill `rgba(0,0,0,0.04)`, padding 10px 14px, gap 12; two 44×44 round buttons: Video `Video`↔`VideoOff` (off = bg `#ff4545` white icon), Mic `Mic`↔`MicOff` (muted = bg `#ff4545`); hover `scale(1.08)`.\n\n## Glass Utility\n\n```\n.glass { background: var(--glass-bg); backdrop-filter: blur(8px) saturate(1.8); border-radius: 40px; box-shadow: 0 4px 24px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.5); }\n.glass::after { content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; filter:url(#noise-filter); opacity:0.06; mix-blend-mode:overlay; }\n```\n\nInline an SVG `<filter id=\"noise-filter\">` with `feTurbulence baseFrequency=0.65 numOctaves=3 stitchTiles=stitch` + `feComposite operator=in in2=SourceGraphic`.\n\n## Solid Card\n\n`background:#fff; box-shadow:0 4px 20px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.01)`. Dark: `rgba(26,26,26,0.98)` white text.\n\n## State / Interactions\n\n`isDark` toggles `body.dark-mode` and swaps the background `<video>` (force reload). View switcher toggles active. Mic/video toggle muted/off swapping icons. Screen-share strip supports mouse drag-to-scroll.\n\n## Responsive\n\n≤1200px: grid → 2 columns, rows 280px, body scrollable. ≤768px: grid → 1 column, padding 16px, hide meeting alert, view-switcher full-width second row, bottom bar near full width, floating controls + components button move to bottom 80px.\n\n## Color Rules\n\nAvoid purple/indigo. Palette: blue accent `#3b82f6`, neutral whites/blacks/greys, alert red `#ff4545`, orange tag `#e05e36`. All text contrast-safe in both themes. The blue `#3b82f6` is locked — do not substitute teal/green/indigo."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Conference Dashboard — Liquid Glass"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "network"
+    ]
+  }
+}
