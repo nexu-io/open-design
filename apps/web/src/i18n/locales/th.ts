@@ -379,10 +379,10 @@ export const th: Dict = {
   'settings.mediaProvidersHint': 'API keys สำหรับการสร้างภาพ วิดีโอ และเสียง บันทึกในเครื่องและซิงค์กับ local daemon',
   'settings.mcpServerTitle': 'เซิร์ฟเวอร์ MCP',
   'settings.mcpServerHint': 'เปิดให้ Open Design เป็นเซิร์ฟเวอร์ MCP สำหรับเอเจนต์โค้ด',
-  'settings.mcpTabLocal': 'Local',
-  'settings.mcpTabRemote': 'Remote',
+  'settings.mcpTabLocal': 'ภายใน',
+  'settings.mcpTabRemote': 'ระยะไกล',
   'settings.mcpRemoteDisabled':
-    'Remote access requires the daemon to be bound to a non-loopback address. Start with --host 0.0.0.0 or set OD_BIND_HOST to expose the daemon on the network.',
+    'การเข้าถึงระยะไกลต้องการให้ daemon ผูกกับที่อยู่ที่ไม่ใช่ loopback เริ่มด้วย --host 0.0.0.0 หรือตั้งค่า OD_BIND_HOST เพื่อเปิดเผย daemon บนเครือข่าย',
   'settings.mcpKeysTitle': 'คีย์ MCP',
   'settings.mcpKeysEmpty': 'ไม่มีคีย์ MCP สร้างหนึ่งเพื่อรวมอัตโนมัติในตัวอย่างการกำหนดค่า',
   'settings.mcpKeysReveal': 'เปิดเผย',

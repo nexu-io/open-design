@@ -379,10 +379,10 @@ export const fa: Dict = {
   'settings.mediaProvidersHint': 'کلیدهای API برای تولید تصویر، ویدئو و صدا. به صورت محلی ذخیره و با daemon محلی همگام می‌شود.',
   'settings.mcpServerTitle': 'سرور MCP',
   'settings.mcpServerHint': 'Open Design را به‌عنوان سرور MCP برای عامل برنامه‌نویسی خود در دسترس قرار دهید.',
-  'settings.mcpTabLocal': 'Local',
-  'settings.mcpTabRemote': 'Remote',
+  'settings.mcpTabLocal': 'محلی',
+  'settings.mcpTabRemote': 'راه دور',
   'settings.mcpRemoteDisabled':
-    'Remote access requires the daemon to be bound to a non-loopback address. Start with --host 0.0.0.0 or set OD_BIND_HOST to expose the daemon on the network.',
+    'دسترسی از راه دور نیازمند آن است که دیمون به آدرس غیر loopback متصل باشد. با --host 0.0.0.0 شروع کنید یا OD_BIND_HOST را تنظیم کنید تا دیمون در شبکه نمایش داده شود.',
   'settings.mcpKeysTitle': 'کلیدهای MCP',
   'settings.mcpKeysEmpty': 'کلید MCP وجود ندارد. یکی تولید کنید تا خودکار در قطعه‌های پیکربندی گنجانده شود.',
   'settings.mcpKeysReveal': 'نمایش',

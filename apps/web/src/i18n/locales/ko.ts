@@ -379,10 +379,10 @@ export const ko: Dict = {
   'settings.mediaProvidersHint': '이미지, 비디오, 오디오 생성을 위한 API 키입니다. 로컬에 저장되며 로컬 데몬과 동기화됩니다.',
   'settings.mcpServerTitle': 'MCP 서버',
   'settings.mcpServerHint': 'Open Design을 코딩 에이전트용 MCP 서버로 노출합니다.',
-  'settings.mcpTabLocal': 'Local',
-  'settings.mcpTabRemote': 'Remote',
+  'settings.mcpTabLocal': '로컬',
+  'settings.mcpTabRemote': '원격',
   'settings.mcpRemoteDisabled':
-    'Remote access requires the daemon to be bound to a non-loopback address. Start with --host 0.0.0.0 or set OD_BIND_HOST to expose the daemon on the network.',
+    '원격 접속을 하려면 데몬을 루프백이 아닌 주소에 바인딩해야 합니다. --host 0.0.0.0으로 시작하거나 OD_BIND_HOST를 설정하여 네트워크에 데몬을 노출하세요.',
   'settings.mcpKeysTitle': 'MCP 키',
   'settings.mcpKeysEmpty': 'MCP 키가 없습니다. 새 키를 생성하면 설정 스니펫에 자동으로 포함됩니다.',
   'settings.mcpKeysReveal': '보기',

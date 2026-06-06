@@ -379,10 +379,10 @@ export const tr: Dict = {
   'settings.mediaProvidersHint': 'Görsel, video ve ses oluşumu için API anahtarları. Yerel saklanır ve yerel arka plan servisiyle senkronize edilir.',
   'settings.mcpServerTitle': 'MCP sunucusu',
   'settings.mcpServerHint': 'Open Design\'ı kodlama ajanınız için MCP sunucusu olarak yayınlayın.',
-  'settings.mcpTabLocal': 'Local',
-  'settings.mcpTabRemote': 'Remote',
+  'settings.mcpTabLocal': 'Yerel',
+  'settings.mcpTabRemote': 'Uzak',
   'settings.mcpRemoteDisabled':
-    'Remote access requires the daemon to be bound to a non-loopback address. Start with --host 0.0.0.0 or set OD_BIND_HOST to expose the daemon on the network.',
+    'Uzaktan erişim, daemon\'un loopback olmayan bir adrese bağlanmasını gerektirir. Daemon\'u ağda kullanıma açmak için --host 0.0.0.0 ile başlatın veya OD_BIND_HOST ayarlayın.',
   'settings.mcpKeysTitle': 'MCP Anahtarları',
   'settings.mcpKeysEmpty': 'MCP anahtarı yok. Yapılandırma parçacıklarına otomatik eklemek için bir tane oluşturun.',
   'settings.mcpKeysReveal': 'Göster',

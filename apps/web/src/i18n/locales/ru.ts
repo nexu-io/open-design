@@ -379,10 +379,10 @@ export const ru: Dict = {
   'settings.mediaProvidersHint': 'API-ключи для генерации изображений, видео и аудио. Хранятся локально и синхронизируются с локальным демоном.',
   'settings.mcpServerTitle': 'MCP-сервер',
   'settings.mcpServerHint': 'Откройте Open Design как MCP-сервер для вашего кодинг-агента.',
-  'settings.mcpTabLocal': 'Local',
-  'settings.mcpTabRemote': 'Remote',
+  'settings.mcpTabLocal': 'Локальный',
+  'settings.mcpTabRemote': 'Удалённый',
   'settings.mcpRemoteDisabled':
-    'Remote access requires the daemon to be bound to a non-loopback address. Start with --host 0.0.0.0 or set OD_BIND_HOST to expose the daemon on the network.',
+    'Для удалённого доступа необходимо привязать демон к адресу, отличному от loopback. Запустите с --host 0.0.0.0 или задайте OD_BIND_HOST, чтобы открыть демон в сети.',
   'settings.mcpKeysTitle': 'Ключи MCP',
   'settings.mcpKeysEmpty': 'Нет ключей MCP. Создайте один для автоматического включения в сниппеты конфигурации.',
   'settings.mcpKeysReveal': 'Показать',
