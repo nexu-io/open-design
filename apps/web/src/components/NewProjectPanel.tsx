@@ -238,10 +238,7 @@ export function defaultDesignSystemSelection(
 }
 
 function isSelectableProjectDesignSystem(system: DesignSystemSummary): boolean {
-  if (system.source === 'user' || system.isEditable === true) {
-    return (system.status ?? 'draft') === 'published';
-  }
-  return true;
+  return system.status !== 'draft';
 }
 
 export function buildDesignSystemCreateSelection(
