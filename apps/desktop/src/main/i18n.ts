@@ -16,6 +16,7 @@ export interface DesktopI18n {
   port: string;
   auto: string;
   webUi: string;
+  showWindow: string;
   stopService: string;
   startService: string;
   restartDaemon: string;
@@ -38,6 +39,7 @@ function en(): DesktopI18n {
     port: "Port",
     auto: "auto",
     webUi: "Web UI",
+    showWindow: "Show window",
     stopService: "Stop Service",
     startService: "Start Service",
     restartDaemon: "Restart Daemon",
@@ -59,6 +61,7 @@ function zhCN(): DesktopI18n {
     port: "端口",
     auto: "自动",
     webUi: "Web UI",
+    showWindow: "显示窗口",
     stopService: "停止服务",
     startService: "启动服务",
     restartDaemon: "重启守护进程",
@@ -80,6 +83,7 @@ function zhTW(): DesktopI18n {
     port: "連接埠",
     auto: "自動",
     webUi: "Web UI",
+    showWindow: "顯示視窗",
     stopService: "停止服務",
     startService: "啟動服務",
     restartDaemon: "重啟守護程序",

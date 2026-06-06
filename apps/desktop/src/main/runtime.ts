@@ -296,6 +296,17 @@ export type DesktopRuntime = {
   console(): DesktopConsoleResult;
   eval(input: DesktopEvalInput): Promise<DesktopEvalResult>;
   exportPdf(input: DesktopExportPdfInput): Promise<DesktopExportPdfResult>;
+  /**
+   * Hide the main BrowserWindow. Used by the tray controller when the
+   * user clicks the close button — close should minimise to the tray, not
+   * quit the process.
+   */
+  hide(): void;
+  /**
+   * Expose the main BrowserWindow so the tray controller can listen to
+   * its `close` event. Returns null if the window has been destroyed.
+   */
+  getMainWindow(): BrowserWindow | null;
   screenshot(input: DesktopScreenshotInput): Promise<DesktopScreenshotResult>;
   show(): void;
   status(): DesktopStatusSnapshot;
@@ -1729,6 +1740,14 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         window.show();
         window.focus();
       }
+    },
+    hide() {
+      if (!window.isDestroyed()) {
+        window.hide();
+      }
+    },
+    getMainWindow() {
+      return window.isDestroyed() ? null : window;
     },
     status() {
       return {

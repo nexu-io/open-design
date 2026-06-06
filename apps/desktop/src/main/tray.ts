@@ -210,6 +210,7 @@ function buildMenuItems(
     onRestart: () => Promise<void>;
     onToggleAutoStart: (enabled: boolean) => Promise<void>;
     onQuit: () => Promise<void>;
+    onShowWindow: () => void;
   },
 ): MenuItemConstructorOptions[] {
   const TR = t();
@@ -226,6 +227,7 @@ function buildMenuItems(
       },
     });
   }
+  items.push({ label: TR.showWindow, click: () => callbacks.onShowWindow() });
   items.push({ type: "separator" });
   if (state.isRunning) {
     items.push({ label: TR.stopService, click: () => void callbacks.onStop() });
@@ -307,6 +309,13 @@ export async function createDesktopTray(
         state.autoStart = enabled;
         await persistAutoStart(enabled);
         refreshMenu();
+      },
+      onShowWindow: () => {
+        if (currentWindow && !currentWindow.isDestroyed()) {
+          if (currentWindow.isMinimized()) currentWindow.restore();
+          currentWindow.show();
+          currentWindow.focus();
+        }
       },
       onQuit: async () => {
         shuttingDown = true;

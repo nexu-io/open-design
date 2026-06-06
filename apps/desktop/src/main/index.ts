@@ -468,12 +468,25 @@ export async function runDesktopMain(
   // STATUS/SHUTDOWN IPC for tools-dev / tools-pack. Closing the main
   // window doesn't quit — it hides to the tray. Tray "Quit Open Design"
   // triggers the same `shutdown()` path as app.on("before-quit").
-  // TODO: plumb `desktop.window` into the tray controller once the
-  // runtime exposes a mainWindow accessor, then add hide-on-close.
   tray = await createDesktopTray({
     runtime,
     configPath: join(namespaceRoot, "tray-config.json"),
   });
+
+  // Hide-on-close: wire the main window into the tray so the menu's
+  // "Show window" can restore it, and intercept window close so the X
+  // button minimises to the tray instead of tearing down the process.
+  // Quit still happens via tray "Quit Open Design" / app.before-quit
+  // (both routes set `shuttingDown = true` before app.quit()).
+  const mainWindow = desktop.getMainWindow();
+  if (mainWindow) {
+    tray.setWindow(mainWindow);
+    mainWindow.on("close", (event) => {
+      if (shuttingDown) return;
+      event.preventDefault();
+      desktop?.hide();
+    });
+  }
 
   attachParentMonitor(shutdown);
 
