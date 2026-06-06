@@ -995,6 +995,9 @@
   box-sizing: border-box;
   padding: clamp(48px, 7vh, 88px) 16px;
 }
+.viewer-modal-backdrop.modal-backdrop {
+  z-index: 1700;
+}
 .deploy-flow-modal.modal {
   /* --modal-padding feeds the .deploy-form horizontal padding below. */
   --modal-padding: 22px;
