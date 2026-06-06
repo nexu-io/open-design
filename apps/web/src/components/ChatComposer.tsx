@@ -480,6 +480,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       () => (draft ?? '').trim().length > 0,
     );
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const folderInputRef = useRef<HTMLInputElement | null>(null);
     // The Lexical editor handle — drives text/mention/clear/focus from the
     // host. Replaces the old textareaRef + manual selection plumbing. IME
     // composition guarding now lives inside the editor's command handlers.
@@ -1170,7 +1171,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     async function uploadFiles(files: File[]) {
       if (files.length === 0) return;
       const id = await ensureProject();
-      if (!id) return;
+      if (!id) {
+        // No project yet (no conversation started) — surface a hint instead of
+        // silently dropping the upload. See #211.
+        setUploadError(t('chat.uploadNoProject'));
+        return;
+      }
       setUploading(true);
       setUploadError(null);
       // Cohort math is identical to the Design Files Upload button; see
@@ -2097,6 +2103,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 e.target.value = '';
               }}
             />
+            <input
+              ref={folderInputRef}
+              data-testid="chat-folder-input"
+              type="file"
+              multiple
+              // `webkitdirectory` makes the native picker select a whole folder
+              // (files arrive recursively). Set via spread because it is not in
+              // React's JSX attribute types.
+              {...{ webkitdirectory: '', directory: '' }}
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                void uploadFiles(files);
+                e.target.value = '';
+              }}
+            />
             <ComposerPlusMenu
               triggerTestId="chat-plus-trigger"
               onOpen={() => setComposerEngaged(true)}
@@ -2116,6 +2138,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   element: 'attachment',
                 });
                 fileInputRef.current?.click();
+              }}
+              onAttachFolder={() => {
+                trackChatPanelClick(analytics.track, {
+                  page_name: 'chat_panel',
+                  area: 'chat_panel',
+                  element: 'attachment',
+                });
+                folderInputRef.current?.click();
               }}
               attachLoading={uploading}
               toolboxLabel={t('chat.designToolbox.title')}

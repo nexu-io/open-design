@@ -110,6 +110,8 @@ export interface ComposerPlusMenuProps {
 
   /** Triggers file attachment (opens the native picker). */
   onAttachFiles: () => void;
+  /** Triggers folder attachment (opens the native picker in directory mode). */
+  onAttachFolder?: () => void;
   attachLoading?: boolean;
 
   /**
@@ -159,6 +161,7 @@ export function ComposerPlusMenu({
   onPickMcp,
   onAddMcp,
   onAttachFiles,
+  onAttachFolder,
   attachLoading,
   renderToolbox,
   toolboxLabel,
@@ -358,6 +361,26 @@ export function ComposerPlusMenu({
             />
             <span>{t('chat.attachAria')}</span>
           </button>
+          {onAttachFolder ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="plus-menu__item"
+              data-testid="composer-plus-attach-folder"
+              disabled={attachLoading}
+              onClick={() => {
+                close();
+                onAttachFolder();
+              }}
+            >
+              <Icon
+                name={attachLoading ? 'spinner' : 'folder'}
+                size={15}
+                className="plus-menu__item-icon"
+              />
+              <span>{t('chat.attachFolderAria')}</span>
+            </button>
+          ) : null}
           <PlusSubmenuRow
             label={t('connectors.title')}
             icon="link"

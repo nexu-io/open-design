@@ -1531,6 +1531,8 @@ export const en: Dict = {
   'chat.attachTitle': 'Attach files (or paste / drop)',
   'chat.addContextTitle': 'Add context',
   'chat.attachAria': 'Attach files',
+  'chat.attachFolderAria': 'Upload folder',
+  'chat.uploadNoProject': 'Start a conversation first, then attach files.',
   'chat.importTitle': 'Import sources (coming soon)',
   'chat.importLabel': 'Import',
   'chat.importComingSoon': 'Coming soon',

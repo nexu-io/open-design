@@ -2078,6 +2078,8 @@ export interface Dict {
   'chat.attachTitle': string;
   'chat.addContextTitle': string;
   'chat.attachAria': string;
+  'chat.attachFolderAria': string;
+  'chat.uploadNoProject': string;
   'chat.importTitle': string;
   'chat.importLabel': string;
   'chat.importComingSoon': string;
