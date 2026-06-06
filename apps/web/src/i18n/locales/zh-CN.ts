@@ -71,7 +71,7 @@ export const zhCN: Dict = {
   'plugins.availableDetails.versionDeprecatedSuffix': '（已弃用）',
   'plugins.availableDetails.versionYankedSuffix': '（已撤回）',
   'plugins.availableDetails.ref': '引用',
-  'plugins.availableDetails.integrity': '完整性',
+  'plugins.availableDetails.integrity': 'Integrity',
   'plugins.availableDetails.permissions': '权限',
   'plugins.availableDetails.capabilitySummary': '能力摘要',
   'plugins.actions.copyInstallCommand': '复制安装命令',

@@ -86,7 +86,7 @@ export const fr: Dict = {
   'plugins.availableDetails.versionDeprecatedSuffix': ' (dépréciée)',
   'plugins.availableDetails.versionYankedSuffix': ' (retirée)',
   'plugins.availableDetails.ref': 'Réf.',
-  'plugins.availableDetails.integrity': 'Intégrité',
+  'plugins.availableDetails.integrity': 'Integrity',
   'plugins.availableDetails.permissions': 'Autorisations',
   'plugins.availableDetails.capabilitySummary': 'Résumé des capacités',
   'app.brand': 'Open Design',

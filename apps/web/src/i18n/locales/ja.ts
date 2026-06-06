@@ -1,8 +1,6 @@
 import type { Dict } from '../types';
-import { en } from './en';
 
 export const ja: Dict = {
-  ...en,
   'homeHero.addMenu': 'コンテキストを追加',
   'homeHero.addPlugin': 'プラグインを追加',
   'homeHero.addConnectors': 'コネクタを追加',
