@@ -155,3 +155,10 @@ The shape system is ultra-soft: 12px on most cards, 16–20px on larger panels, 
 - **Duration**: 180ms for hover; 280ms for menu open; 420ms for editor sidebar collapse.
 - **Easing**: `cubic-bezier(0.4, 0, 0.2, 1)` (Material-style).
 - **Card lift**: translateY(-2px) + shadow grow on hover, single transition.
+
+## 7. Usage Guardrails
+
+- Keep the white canvas dominant; the purple-to-cyan gradient should signal brand, Pro, Magic, or one primary CTA moment.
+- Use filled rounded icons and soft 12-20px geometry rather than sharp enterprise controls.
+- Keep category colors in tags, templates, and supporting metadata; do not let them compete with the main gradient action.
+- Preserve the friendly editor/product tone: dense tool UI is fine, but it should stay approachable and visually generous.
