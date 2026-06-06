@@ -74,6 +74,18 @@ const SOLUTION_ROLES: ReadonlyArray<{
   { key: 'roleMarketing', href: '/solutions/marketing/' },
 ];
 
+// Solution → Compare. Surfaces the existing comparison/alternative pages that
+// previously had no nav entry (so they earned no internal link equity). Labels
+// are proper nouns (product/brand names) and stay identical across locales, so
+// only the group heading (`nav.compare`) is localized.
+const SOLUTION_COMPARE: ReadonlyArray<{
+  label: string;
+  href: string;
+}> = [
+  { label: 'Open Design vs…', href: '/compare/' },
+  { label: 'Claude Design', href: '/alternatives/claude-design/' },
+];
+
 
 export interface HeaderProps {
   /** Nav highlight target. `'home'` is the default for `/`. */
@@ -293,6 +305,16 @@ export function Header({
                   <li role='none' key={`role-${item.key}`}>
                     <a role='menuitem' href={href(item.href)}>
                       <span className='dropdown-name'>{getSolutionPageCopy(locale, item.key).breadcrumb}</span>
+                    </a>
+                  </li>
+                ))}
+                <li role='none' className='nav-dropdown-group'>
+                  <span className='nav-dropdown-group-label'>{headerCopy.nav.compare}</span>
+                </li>
+                {SOLUTION_COMPARE.map((item) => (
+                  <li role='none' key={`cmp-${item.href}`}>
+                    <a role='menuitem' href={href(item.href)}>
+                      <span className='dropdown-name'>{item.label}</span>
                     </a>
                   </li>
                 ))}
