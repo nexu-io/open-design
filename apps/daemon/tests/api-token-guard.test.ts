@@ -35,10 +35,10 @@ afterEach(async () => {
 });
 
 describe('bound-API-token guard', () => {
-  it('refuses to start with OD_BIND_HOST=0.0.0.0 when OD_API_TOKEN is unset', async () => {
+  it('refuses to start with OD_BIND_HOST=0.0.0.0 when no token and no auth-store keys', async () => {
     delete process.env.OD_API_TOKEN;
     await expect(startServer({ port: 0, host: '0.0.0.0', returnServer: true }))
-      .rejects.toThrow(/OD_API_TOKEN/);
+      .rejects.toThrow(/OD_API_TOKEN or at least one API key/);
   });
 
   it('starts on a public host when OD_API_TOKEN is set', async () => {

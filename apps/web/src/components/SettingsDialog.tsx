@@ -7571,6 +7571,7 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
   const [label, setLabel] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [restarting, setRestarting] = useState(false);
+  const [pendingBindHost, setPendingBindHost] = useState<string | null>(null);
   const restartingRef = useRef(false);
   const initialBindHost = useRef<string | null>(null);
   const initialPort = useRef<number | null>(null);
@@ -7718,6 +7719,22 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
         </div>
       )}
 
+      {pendingBindHost && keys.length === 0 && (
+        <div className="settings-card warn" style={{ marginBottom: '16px' }}>
+          <strong>{t('settings.networkKeyRequired')}</strong>
+          <p className="hint">{t('settings.networkKeyRequiredHint')}</p>
+          <div className="settings-actions">
+            <button type="button" className="seg-btn active" onClick={async () => {
+              await generateNewKey();
+              setBindHost(pendingBindHost);
+              saveConfig({ bindHost: pendingBindHost });
+              setPendingBindHost(null);
+            }}>{t('settings.generateAndSwitch')}</button>
+            <button type="button" className="seg-btn" onClick={() => setPendingBindHost(null)}>{t('common.cancel')}</button>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="settings-card danger" style={{ marginBottom: '16px' }}>
           <strong>{error}</strong>
@@ -7726,7 +7743,16 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
 
       <div className="settings-subsection">
         <div className="section-head"><div><h4>{t('settings.bindHost')}</h4><p className="hint">{t('settings.bindHostHint')}</p></div></div>
-        <select aria-label={t('settings.bindHost')} value={bindHost} onChange={(e) => { setBindHost(e.target.value); saveConfig({ bindHost: e.target.value }); }} disabled={!loaded}>
+        <select aria-label={t('settings.bindHost')} value={pendingBindHost ?? bindHost} onChange={(e) => {
+          const newHost = e.target.value;
+          const exposed = newHost !== '127.0.0.1' && newHost !== '::1' && newHost !== 'localhost';
+          if (exposed && keys.length === 0) {
+            setPendingBindHost(newHost);
+          } else {
+            setBindHost(newHost);
+            saveConfig({ bindHost: newHost });
+          }
+        }} disabled={!loaded}>
           <option value="127.0.0.1">127.0.0.1 (localhost only)</option>
           <option value="0.0.0.0">0.0.0.0 (all interfaces)</option>
         </select>
@@ -7771,7 +7797,12 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
         </>
       )}
 
-      {restarting ? (
+      {networkExposed && keys.length === 0 ? (
+        <div className="settings-card danger" style={{ marginTop: 16 }}>
+          <strong>{t('settings.networkNoKeysWarning')}</strong>
+          <p className="hint">{t('settings.networkNoKeysWarningHint')}</p>
+        </div>
+      ) : restarting ? (
         <div className="settings-actions" style={{ marginTop: 16 }}>
           <p className="hint" style={{ margin: 0 }}>{t('settings.restartingDaemon')}</p>
         </div>

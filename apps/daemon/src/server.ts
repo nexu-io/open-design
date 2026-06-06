@@ -4535,10 +4535,12 @@ export async function startServer({
   // matching `Authorization: Bearer <token>` header (loopback origins
   // are exempted so the desktop UI keeps working).
   const apiToken = (process.env.OD_API_TOKEN ?? '').trim();
-  if (!isLoopbackHostname(effectiveHost) && apiToken.length === 0) {
+  const authStoreKeyCount = (await allValidHashes(RUNTIME_DATA_DIR)).length
+    + (await allMcpKeyHashes(RUNTIME_DATA_DIR)).length;
+  if (!isLoopbackHostname(effectiveHost) && apiToken.length === 0 && authStoreKeyCount === 0) {
     throw new Error(
-      `OD_BIND_HOST=${effectiveHost} requires OD_API_TOKEN to be set. ` +
-      `Generate one with \`openssl rand -hex 32\` and re-launch. ` +
+      `OD_BIND_HOST=${effectiveHost} requires OD_API_TOKEN or at least one API key. ` +
+      `Generate one in Settings > Network, or set OD_API_TOKEN with \`openssl rand -hex 32\`. ` +
       `(Loopback hosts 127.0.0.1 / ::1 / localhost do not need a token.)`,
     );
   }

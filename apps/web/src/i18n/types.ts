@@ -368,6 +368,11 @@ export interface Dict {
   'settings.newApiKeyHint': string;
   'settings.keyLabel': string;
   'settings.generateKey': string;
+  'settings.networkKeyRequired': string;
+  'settings.networkKeyRequiredHint': string;
+  'settings.generateAndSwitch': string;
+  'settings.networkNoKeysWarning': string;
+  'settings.networkNoKeysWarningHint': string;
   'settings.networkRestartHint': string;
   'settings.restartDaemon': string;
   'settings.restartingDaemon': string;
