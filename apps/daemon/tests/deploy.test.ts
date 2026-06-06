@@ -1020,6 +1020,63 @@ describe('deployToDisplayDev', () => {
     expect(calls[0]?.body?.get('name')).toBe('intro');
   });
 
+  it('omits stale display.dev default recipients when authenticated create visibility is not private', async () => {
+    const calls: Array<{ url: string; method?: string; auth?: string | null; body?: FormData }> = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      calls.push({
+        url,
+        ...(init?.method ? { method: init.method } : {}),
+        auth: init?.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)
+          ? (init.headers as Record<string, string>).Authorization ?? null
+          : null,
+        ...(init?.body instanceof FormData ? { body: init.body } : {}),
+      });
+      if (url.endsWith('/v1/artifacts')) {
+        return new Response(JSON.stringify({
+          shortId: 'company1',
+          url: 'https://display.dsp.so/company1-index',
+          version: 1,
+        }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://display.dsp.so/company1-index') {
+        return new Response('', { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await deployToDisplayDev({
+      config: {
+        token: 'Bearer dsp_live_secret',
+        apiUrl: 'https://api.display.dev',
+        displayDev: {
+          defaultVisibility: 'company',
+          defaultSharedWith: ['old@example.com'],
+        },
+      },
+      files: [{ file: 'index.html', sourcePath: 'index.html', data: '<!doctype html><h1>Hello</h1>', contentType: 'text/html' }],
+      projectId: 'project-1',
+    });
+
+    expect(calls[0]).toMatchObject({
+      url: 'https://api.display.dev/v1/artifacts',
+      method: 'POST',
+      auth: 'Bearer dsp_live_secret',
+    });
+    expect(calls[0]?.body?.get('visibility')).toBe('company');
+    expect(calls[0]?.body?.get('sharedWith')).toBeNull();
+    expect(calls[0]?.body?.get('showBranding')).toBe('inherit');
+  });
+
   it('preserves display.dev access settings when updating an owned artifact without overrides', async () => {
     const calls: Array<{ url: string; method?: string; auth?: string | null; body?: FormData }> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {

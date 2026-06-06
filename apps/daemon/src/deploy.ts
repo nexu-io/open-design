@@ -821,11 +821,13 @@ export async function deployToDisplayDev(input: { config: DeployConfig; files: D
     } else {
       const visibility = selection.visibility || config?.displayDev?.defaultVisibility || 'company';
       body.append('visibility', visibility);
-      const sharedWith = selection.sharedWith?.length
-        ? selection.sharedWith
-        : selection.clearSharedWith
-          ? []
-          : config?.displayDev?.defaultSharedWith || [];
+      const sharedWith = visibility === 'private'
+        ? selection.sharedWith?.length
+          ? selection.sharedWith
+          : selection.clearSharedWith
+            ? []
+            : config?.displayDev?.defaultSharedWith || []
+        : [];
       for (const email of sharedWith) body.append('sharedWith', email);
       const showBranding = selection.showBranding || config?.displayDev?.defaultShowBranding || 'inherit';
       body.append('showBranding', showBranding);
