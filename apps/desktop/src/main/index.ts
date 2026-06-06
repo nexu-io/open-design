@@ -440,6 +440,12 @@ export async function runDesktopMain(
     desktopAuthSecret,
     discoverUrl: options.discoverWebUrl ?? createWebDiscovery(runtime),
     discoverDaemonUrl: options.discoverDaemonUrl,
+    // Tray mode: clicking the window's X hides to the tray instead of
+    // tearing down the process. Quit still goes through shutdown()
+    // (tray "Quit Open Design" / app.before-quit), which calls
+    // desktop.close() and flips the runtime's internal `stopped` flag
+    // so the close handler then lets the window go through.
+    hideOnClose: true,
     osLocale,
     preloadPath: options.preloadPath,
     // Round-5 (lefarcen P1, mrcfps): runtime hands this back to itself
@@ -466,27 +472,14 @@ export async function runDesktopMain(
   // Phase D merge: tray now lives inside the desktop process. The tray
   // listens to daemon status on its own 5s poll and answers
   // STATUS/SHUTDOWN IPC for tools-dev / tools-pack. Closing the main
-  // window doesn't quit — it hides to the tray. Tray "Quit Open Design"
-  // triggers the same `shutdown()` path as app.on("before-quit").
+  // window doesn't quit — the runtime owns the hide-on-close policy
+  // (see `hideOnClose: true` above). Tray "Quit Open Design" triggers
+  // the same `shutdown()` path as app.on("before-quit").
   tray = await createDesktopTray({
     runtime,
     configPath: join(namespaceRoot, "tray-config.json"),
+    onShowWindow: () => desktop?.show(),
   });
-
-  // Hide-on-close: wire the main window into the tray so the menu's
-  // "Show window" can restore it, and intercept window close so the X
-  // button minimises to the tray instead of tearing down the process.
-  // Quit still happens via tray "Quit Open Design" / app.before-quit
-  // (both routes set `shuttingDown = true` before app.quit()).
-  const mainWindow = desktop.getMainWindow();
-  if (mainWindow) {
-    tray.setWindow(mainWindow);
-    mainWindow.on("close", (event) => {
-      if (shuttingDown) return;
-      event.preventDefault();
-      desktop?.hide();
-    });
-  }
 
   attachParentMonitor(shutdown);
 
@@ -526,12 +519,6 @@ export async function runDesktopMain(
           return { accepted: true };
       }
     },
-  });
-
-  app.on("before-quit", (event) => {
-    if (shuttingDown) return;
-    event.preventDefault();
-    shutdownAndExit();
   });
 
   app.on("window-all-closed", () => {

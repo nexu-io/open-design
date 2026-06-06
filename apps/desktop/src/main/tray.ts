@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
-import { app, Menu, Tray, nativeImage, type BrowserWindow, type NativeImage, type MenuItemConstructorOptions, shell } from "electron";
+import { app, Menu, Tray, nativeImage, type NativeImage, type MenuItemConstructorOptions, shell } from "electron";
 import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT, type SidecarStamp } from "@open-design/sidecar-proto";
 import { type SidecarRuntimeContext } from "@open-design/sidecar";
 
@@ -43,8 +43,6 @@ export type DesktopTrayController = {
   dispose: () => Promise<void>;
   /** Force a refresh of the menu + tooltip from the current state. */
   refresh: () => Promise<void>;
-  /** Update the underlying BrowserWindow reference (after re-creation). */
-  setWindow: (window: BrowserWindow | null) => void;
 };
 
 export type DesktopTrayOptions = {
@@ -59,6 +57,13 @@ export type DesktopTrayOptions = {
   initialAutoStart?: boolean;
   /** Initial daemon port, used as a fallback before the first status poll. */
   initialDaemonPort?: number;
+  /**
+   * Restore the main BrowserWindow. Called from the tray context menu's
+   * "Show window" entry and from the tray-icon single click when the
+   * daemon isn't reachable through a web URL. The desktop main process
+   * wires this to `runtime.show()` (which also restores from minimised).
+   */
+  onShowWindow: () => void;
 };
 
 // ─── Config persistence (dev only) ─────────────────────────────────────────
@@ -267,7 +272,7 @@ function buildMenuItems(
 export async function createDesktopTray(
   options: DesktopTrayOptions,
 ): Promise<DesktopTrayController> {
-  const { runtime, configPath, initialAutoStart = false, initialDaemonPort = 0 } = options;
+  const { runtime, configPath, initialAutoStart = false, initialDaemonPort = 0, onShowWindow } = options;
 
   const manager = new DaemonManager({
     namespace: runtime.namespace,
@@ -281,7 +286,6 @@ export async function createDesktopTray(
     autoStart: initialAutoStart,
     version: APP_VERSION,
   };
-  let currentWindow: BrowserWindow | null = null;
   let polling: NodeJS.Timeout | null = null;
   let shuttingDown = false;
   let tray: Tray | null = null;
@@ -310,13 +314,7 @@ export async function createDesktopTray(
         await persistAutoStart(enabled);
         refreshMenu();
       },
-      onShowWindow: () => {
-        if (currentWindow && !currentWindow.isDestroyed()) {
-          if (currentWindow.isMinimized()) currentWindow.restore();
-          currentWindow.show();
-          currentWindow.focus();
-        }
-      },
+      onShowWindow,
       onQuit: async () => {
         shuttingDown = true;
         await manager.stop().catch(() => undefined);
@@ -337,7 +335,7 @@ export async function createDesktopTray(
   tray.on("click", () => {
     if (state.webUrl) shell.openExternal(state.webUrl);
     else if (state.isRunning) shell.openExternal(`http://127.0.0.1:${state.daemonPort || 53450}`);
-    else if (currentWindow && !currentWindow.isDestroyed()) currentWindow.show();
+    else onShowWindow();
   });
 
   refreshMenu();
@@ -362,9 +360,6 @@ export async function createDesktopTray(
   });
 
   return {
-    setWindow: (window) => {
-      currentWindow = window;
-    },
     refresh: refreshFromDaemon,
     async dispose() {
       shuttingDown = true;

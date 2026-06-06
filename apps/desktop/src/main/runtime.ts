@@ -296,17 +296,8 @@ export type DesktopRuntime = {
   console(): DesktopConsoleResult;
   eval(input: DesktopEvalInput): Promise<DesktopEvalResult>;
   exportPdf(input: DesktopExportPdfInput): Promise<DesktopExportPdfResult>;
-  /**
-   * Hide the main BrowserWindow. Used by the tray controller when the
-   * user clicks the close button — close should minimise to the tray, not
-   * quit the process.
-   */
+  /** Hide the main BrowserWindow (no-op if destroyed). */
   hide(): void;
-  /**
-   * Expose the main BrowserWindow so the tray controller can listen to
-   * its `close` event. Returns null if the window has been destroyed.
-   */
-  getMainWindow(): BrowserWindow | null;
   screenshot(input: DesktopScreenshotInput): Promise<DesktopScreenshotResult>;
   show(): void;
   status(): DesktopStatusSnapshot;
@@ -360,6 +351,15 @@ export type DesktopRuntimeOptions = {
    */
   rendererLogPath?: string | null;
   requestQuit?: () => void;
+  /**
+   * When `true`, the runtime owns the close-policy: clicking the window's
+   * X button hides the window instead of tearing down the process. Quit
+   * still happens via the tray "Quit" item / `app.before-quit`, which
+   * call `runtime.close()` — that flips the internal `stopped` flag and
+   * the close handler then lets the close go through. Tray apps want
+   * this on; headless / test runtimes leave it off (the default).
+   */
+  hideOnClose?: boolean;
   updater?: DesktopUpdater;
 };
 
@@ -1602,6 +1602,16 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       });
     });
   } else {
+    if (options.hideOnClose) {
+      // Tray mode: X button hides the window; only the runtime's
+      // close() (called from shutdown) flips `stopped` and lets the
+      // close proceed to the 'closed' handler below.
+      window.on("close", (event) => {
+        if (stopped) return;
+        event.preventDefault();
+        window.hide();
+      });
+    }
     attachNonDarwinMainWindowCloseShutdown(window, {
       isStopped: () => stopped,
       requestQuit: options.requestQuit,
@@ -1737,7 +1747,8 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     show() {
       if (!window.isDestroyed()) {
-        window.show();
+        if (window.isMinimized()) window.restore();
+        if (!window.isVisible()) window.show();
         window.focus();
       }
     },
@@ -1745,9 +1756,6 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (!window.isDestroyed()) {
         window.hide();
       }
-    },
-    getMainWindow() {
-      return window.isDestroyed() ? null : window;
     },
     status() {
       return {
