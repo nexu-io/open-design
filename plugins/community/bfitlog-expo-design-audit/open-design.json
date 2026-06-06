@@ -1,0 +1,121 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "bfitlog-expo-design-audit",
+  "title": "Expo gym app design audit",
+  "version": "0.1.0",
+  "description": "Audit a mobile-first Expo gym tracking app for product design quality, responsive Expo Web behavior, workout-flow usability, accessibility, and reusable UI-system opportunities.",
+  "license": "MIT",
+  "author": {
+    "name": "theHimanshuShekhar",
+    "url": "https://github.com/theHimanshuShekhar"
+  },
+  "plugin": {
+    "repo": "https://github.com/theHimanshuShekhar/bfitlog-expo-design-audit"
+  },
+  "tags": [
+    "expo",
+    "react-native",
+    "expo-web",
+    "mobile",
+    "fitness",
+    "design-audit",
+    "responsive",
+    "accessibility"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "tune-collab",
+    "mode": "critique",
+    "platform": "responsive",
+    "scenario": "design-audit",
+    "preview": {
+      "type": "markdown",
+      "entry": "./examples/bfitlog-design-audit.md"
+    },
+    "useCase": {
+      "query": {
+        "en": "Analyze the current design of this personal gym tracking app. It is an Expo app, mobile layout first, with Expo Web used to make it responsive for web. Inspect the current screens and styling, then summarize what works, the main design risks, and the next design pass."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./examples/bfitlog-design-audit.md",
+          "title": "BFitLog design audit"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "projectPath",
+        "label": "Project path",
+        "type": "string",
+        "required": false,
+        "placeholder": "Path to the Expo app repository",
+        "default": "."
+      },
+      {
+        "name": "focus",
+        "label": "Audit focus",
+        "type": "select",
+        "required": false,
+        "options": [
+          "overall design",
+          "workout flow",
+          "responsive web",
+          "component system",
+          "accessibility"
+        ],
+        "default": "overall design"
+      },
+      {
+        "name": "depth",
+        "label": "Audit depth",
+        "type": "select",
+        "required": false,
+        "options": [
+          "summary",
+          "detailed"
+        ],
+        "default": "detailed"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./examples/bfitlog-design-audit.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "inspect-project",
+          "atoms": [
+            "file-read"
+          ]
+        },
+        {
+          "id": "analyze-design",
+          "atoms": [
+            "critique-theater"
+          ]
+        },
+        {
+          "id": "report",
+          "atoms": [
+            "file-write"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:read"
+    ]
+  }
+}
