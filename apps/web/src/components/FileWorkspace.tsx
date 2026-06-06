@@ -162,16 +162,14 @@ interface Props {
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
   // Side Chat (`chat:<conversationId>` tab) wiring. Threaded from ProjectView
-  // so a secondary ChatPane can render an already-open conversation tab without
+  // so a secondary ChatPane can run against a seeded conversation without
   // FileWorkspace owning any chat state. All optional: a workspace mounted
-  // without these simply does not render restored side-chat tabs. There is no
-  // launcher affordance to create new side chats — only persisted `chat:` tabs
-  // are restored.
+  // without these simply offers no "New Side Chat" launcher entry.
   chatConfig?: AppConfig;
   chatAgentsById?: Map<string, AgentInfo>;
   chatLocale?: string;
   conversations?: Conversation[];
-  /** The primary chat's active conversation. */
+  /** The primary chat's active conversation — the seed source for new side chats. */
   activeConversationId?: string | null;
   onSelectConversation?: (id: string) => void;
   onDeleteConversation?: (id: string) => void;
@@ -179,6 +177,8 @@ interface Props {
   onConversationSessionModeChange?: (id: string, mode: ChatSessionMode) => void;
   onNewConversation?: () => void;
   activeConversationChat?: ActiveConversationChatState;
+  /** Create a context-seeded conversation and resolve its id (backs the launcher). */
+  onCreateSideChat?: (seedFromConversationId: string | null) => Promise<string | null>;
   onActiveContextChange?: (context: WorkspaceContextItem | null) => void;
   onWorkspaceContextsChange?: (contexts: WorkspaceContextItem[]) => void;
   messages?: ChatMessage[];
@@ -406,6 +406,7 @@ export function FileWorkspace({
   onConversationSessionModeChange,
   onNewConversation,
   activeConversationChat,
+  onCreateSideChat,
   onActiveContextChange,
   onWorkspaceContextsChange,
   messages = [],
@@ -1747,12 +1748,14 @@ export function FileWorkspace({
     && !activeFile;
 
   // The "+" launcher's create-new actions come from the registry. `openTab`
-  // reuses the same tab-state path as opening a file so a new terminal:<id>
-  // tab is focused; `createBrowser` opens an embedded browser tab.
+  // reuses the same tab-state path as opening a file so a new chat:<id> /
+  // terminal:<id> tab is focused; `createBrowser` opens an embedded browser tab.
+  // `createSideChat` is only wired when the parent threaded the chat callbacks,
+  // so a chat-less workspace hides that action entirely.
   // Built fresh each render (not memoized): `createBrowser` closes over
   // `openBrowserTab`, which reads the live `browserTabs` state — memoizing it
   // would capture a stale closure and make every "New Browser" click overwrite
-  // the same single tab. The terminal action routes through `openFile`
+  // the same single tab. The terminal/side-chat actions route through `openFile`
   // (ref-based), so freshness here is cheap and only matters while the launcher
   // is open.
   const launcherContext: LauncherContext = {
@@ -1761,6 +1764,9 @@ export function FileWorkspace({
     // Browser is owned by this branch's DesignBrowserPanel: spin up a browser
     // tab synchronously (no daemon round-trip) and let the launcher close.
     createBrowser: () => openBrowserTab(),
+    ...(onCreateSideChat
+      ? { createSideChat: () => onCreateSideChat(activeConversationId) }
+      : {}),
     // Terminal needs only the project id — spawn the PTY here and hand the
     // resulting session id back so the launcher opens a terminal:<id> tab.
     // Surface a toast when the daemon can't start one (e.g. node-pty not

@@ -31,7 +31,6 @@ import type {
   PluginSourceKind,
   TrustTier,
 } from '@open-design/contracts';
-import { defaultTrustForRecord, resolveCapabilitiesGranted } from './trust.js';
 import type Database from 'better-sqlite3';
 
 type SqliteDb = Database.Database;
@@ -163,21 +162,11 @@ export async function resolvePluginFolder(opts: ResolveOptions): Promise<Resolve
   // folderId fallback only kicks in when an adapter-only manifest forgot to
   // set name, which Zod validation already rejects.
   const id = (manifest.name ?? opts.folderId).toLowerCase();
-  const sourceKind = opts.sourceKind ?? 'local';
-  // Spec §5.3 / trust.ts: a `local` install is implicitly trusted (the user
-  // copied the folder here themselves), everything else starts restricted
-  // until an explicit `od plugin trust` flip. Fall back to that source-kind
-  // policy when the caller did not pin a trust tier — previously this was
-  // hard-coded to 'restricted', which left local scenario plugins unable to
-  // obtain the `pipeline:*` capability they need to run their own pipeline.
-  const trust: TrustTier = opts.trust ?? defaultTrustForRecord({ sourceKind });
-  const capabilitiesGranted =
-    opts.capabilitiesGranted ?? resolveCapabilitiesGranted({ manifest, trust });
   const record: InstalledPluginRecord = {
     id,
     title: manifest.title ?? manifest.name,
     version: manifest.version,
-    sourceKind,
+    sourceKind: opts.sourceKind ?? 'local',
     source: opts.source ?? folder,
     pinnedRef: opts.pinnedRef,
     sourceMarketplaceId: opts.sourceMarketplaceId,
@@ -188,14 +177,20 @@ export async function resolvePluginFolder(opts: ResolveOptions): Promise<Resolve
     resolvedRef: opts.resolvedRef,
     manifestDigest: opts.manifestDigest,
     archiveIntegrity: opts.archiveIntegrity,
-    trust,
-    capabilitiesGranted,
+    trust: opts.trust ?? 'restricted',
+    capabilitiesGranted: opts.capabilitiesGranted ?? defaultRestrictedCapabilities(),
     manifest,
     fsPath: folder,
     installedAt: now,
     updatedAt: now,
   };
   return { ok: true, record, warnings };
+}
+
+function defaultRestrictedCapabilities(): string[] {
+  // Spec §5.3: restricted plugins start with prompt:inject only. Apply-time
+  // grants land additional capabilities on the snapshot, never here.
+  return ['prompt:inject'];
 }
 
 // Map a SQLite row back into an InstalledPluginRecord. Centralized so every

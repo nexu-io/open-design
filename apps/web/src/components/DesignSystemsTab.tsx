@@ -379,7 +379,7 @@ export function DesignSystemsTab({
   return (
     <div className="tab-panel design-systems-manager" data-testid="design-systems-tab">
       <div className="ds-manager-tabs">
-        <div className="subtab-pill" role="tablist" aria-label={t('dsManager.areaAria')}>
+        <div className="subtab-pill" role="tablist" aria-label="Design systems area">
           <button
             type="button"
             role="tab"
@@ -387,7 +387,7 @@ export function DesignSystemsTab({
             className={primaryCollection === 'design-system' ? 'active' : ''}
             onClick={() => setPrimaryCollection('design-system')}
           >
-            {t('dsManager.tabDesignSystem')}
+            Design system
           </button>
           <button
             type="button"
@@ -396,14 +396,14 @@ export function DesignSystemsTab({
             className={primaryCollection === 'template' ? 'active' : ''}
             onClick={() => setPrimaryCollection('template')}
           >
-            {t('dsManager.tabTemplate')}
+            Template
           </button>
         </div>
       </div>
 
       {primaryCollection === 'design-system' ? (
         <div className="ds-manager-subtabs">
-          <div className="ds-tag-tabs" role="tablist" aria-label={t('dsManager.sourceAria')}>
+          <div className="ds-tag-tabs" role="tablist" aria-label="Design system source">
             <button
               type="button"
               role="tab"
@@ -411,7 +411,7 @@ export function DesignSystemsTab({
               className={designSystemCollection === 'mine' ? 'active' : ''}
               onClick={() => setDesignSystemCollection('mine')}
             >
-              {t('dsManager.yourSystems')}
+              Your systems
             </button>
             <button
               type="button"
@@ -420,7 +420,7 @@ export function DesignSystemsTab({
               className={designSystemCollection === 'official' ? 'active' : ''}
               onClick={() => setDesignSystemCollection('official')}
             >
-              {t('dsManager.officialPresets')}
+              Official presets
             </button>
             <button
               type="button"
@@ -429,13 +429,13 @@ export function DesignSystemsTab({
               className={designSystemCollection === 'enterprise' ? 'active' : ''}
               onClick={() => setDesignSystemCollection('enterprise')}
             >
-              {t('dsManager.enterprise')}
+              Enterprise
             </button>
           </div>
         </div>
       ) : (
         <div className="ds-manager-subtabs">
-          <div className="ds-tag-tabs" role="tablist" aria-label={t('dsManager.templateSourceAria')}>
+          <div className="ds-tag-tabs" role="tablist" aria-label="Template source">
             <button
               type="button"
               role="tab"
@@ -443,7 +443,7 @@ export function DesignSystemsTab({
               className={templateCollection === 'mine' ? 'active' : ''}
               onClick={() => setTemplateCollection('mine')}
             >
-              {t('dsManager.yourTemplates')}
+              Your templates
             </button>
             <button
               type="button"
@@ -452,43 +452,43 @@ export function DesignSystemsTab({
               className={templateCollection === 'enterprise' ? 'active' : ''}
               onClick={() => setTemplateCollection('enterprise')}
             >
-              {t('dsManager.enterprise')}
+              Enterprise
             </button>
           </div>
         </div>
       )}
 
       {primaryCollection === 'design-system' && designSystemCollection === 'mine' ? (
-        <section className="ds-settings-card" aria-label={t('dsManager.yourSystemsAria')}>
+        <section className="ds-settings-card" aria-label="Your design systems">
         <div className="ds-settings-card__head">
           <div>
-            <span className="ds-manager-eyebrow">{t('dsManager.eyebrowDesignSystems')}</span>
-            <h2>{t('dsManager.yourSystemsHeading')}</h2>
+            <span className="ds-manager-eyebrow">Design Systems</span>
+            <h2>Your systems</h2>
           </div>
           <select
-            aria-label={t('dsManager.filterAria')}
+            aria-label="Filter design systems"
             value={userFilter}
             onChange={(event) => setUserFilter(event.target.value as UserListFilter)}
           >
-            <option value="all">{t('dsManager.filterAll')}</option>
-            <option value="published">{t('dsManager.filterPublished')}</option>
-            <option value="draft">{t('dsManager.filterDraft')}</option>
+            <option value="all">All</option>
+            <option value="published">Published</option>
+            <option value="draft">Draft</option>
           </select>
         </div>
 
         {onCreate ? (
           <button type="button" className="ds-create-row" onClick={onCreate}>
             <span>
-              <strong>{t('dsManager.createTitle')}</strong>
-              <small>{t('dsManager.createBody')}</small>
+              <strong>Create new design system</strong>
+              <small>Teach Open Design your brand, product, code, assets, and design references.</small>
             </span>
-            <span className="ds-create-row__action">{t('dsManager.createAction')}</span>
+            <span className="ds-create-row__action">Create</span>
           </button>
         ) : null}
 
         {userSystems.length === 0 ? (
           <div className="ds-user-empty">
-            {t('dsManager.emptyMine')}
+            No design systems yet. Create one from real product context, review the draft, then publish it for future projects.
           </div>
         ) : (
           <div className="ds-user-list">
@@ -506,10 +506,10 @@ export function DesignSystemsTab({
                   >
                     <span className="ds-user-row__title">
                       <span>{system.title}</span>
-                      {selected ? <span className="ds-card-badge">{t('dsManager.badgeDefault')}</span> : null}
+                      {selected ? <span className="ds-card-badge">Default</span> : null}
                     </span>
                     <span className="ds-user-row__meta">
-                      {t('dsManager.rowMetaUpdated', { date: formatShortDate(system.updatedAt) })}
+                      You · updated {formatShortDate(system.updatedAt)}
                     </span>
                   </button>
                   <div className="ds-user-row__actions">
@@ -520,7 +520,7 @@ export function DesignSystemsTab({
                         onClick={() => onOpenSystem(system.id)}
                         disabled={busy}
                       >
-                        {t('dsManager.edit')}
+                        Edit
                       </button>
                     ) : null}
                     {!selected && canUseInProjects ? (
@@ -530,7 +530,7 @@ export function DesignSystemsTab({
                         onClick={() => handleMakeDefaultClick(system)}
                         disabled={busy}
                       >
-                        {t('dsManager.makeDefault')}
+                        Make default
                       </button>
                     ) : null}
                     <button
@@ -540,13 +540,13 @@ export function DesignSystemsTab({
                       onClick={() => void togglePublished(system)}
                       disabled={busy}
                     >
-                      <span>{status === 'published' ? t('dsManager.statusPublished') : t('dsManager.statusDraft')}</span>
+                      <span>{status === 'published' ? 'Published' : 'Draft'}</span>
                       <i aria-hidden />
                     </button>
                     {onOpenSystem ? (
                       <Button
                         size="icon"
-                        aria-label={t('dsManager.openSystemAria', { title: system.title })}
+                        aria-label={`Open ${system.title}`}
                         onClick={() => onOpenSystem(system.id)}
                       >
                         <Icon name="external-link" />
@@ -555,7 +555,7 @@ export function DesignSystemsTab({
                     <button
                       type="button"
                       className="icon-btn danger"
-                      aria-label={t('dsManager.deleteSystemAria', { title: system.title })}
+                      aria-label={`Delete ${system.title}`}
                       onClick={() => void deleteSystem(system)}
                       disabled={busy}
                     >
@@ -571,11 +571,11 @@ export function DesignSystemsTab({
       ) : null}
 
       {primaryCollection === 'design-system' && designSystemCollection === 'official' ? (
-        <section className="ds-settings-card" aria-label={t('dsManager.presetsAria')}>
+        <section className="ds-settings-card" aria-label="Official design system presets">
         <div className="ds-settings-card__head">
           <div>
-            <span className="ds-manager-eyebrow">{t('dsManager.eyebrowLibrary')}</span>
-            <h2>{t('dsManager.officialPresets')}</h2>
+            <span className="ds-manager-eyebrow">Library</span>
+            <h2>Official presets</h2>
           </div>
         </div>
         <div className="tab-panel-toolbar ds-manager-toolbar">
@@ -690,24 +690,23 @@ export function DesignSystemsTab({
 
       {primaryCollection === 'design-system' && designSystemCollection === 'enterprise' ? (
         <ComingSoonPanel
-          eyebrow={t('dsManager.eyebrowDesignSystems')}
-          title={t('dsManager.enterpriseDsTitle')}
-          body={t('dsManager.enterpriseDsBody')}
-          comingSoonLabel={t('dsManager.comingSoonBadge')}
+          eyebrow="Design Systems"
+          title="Enterprise design systems"
+          body="Shared team design systems and governed brand libraries are coming soon."
         />
       ) : null}
 
       {primaryCollection === 'template' && templateCollection === 'mine' ? (
-        <section className="ds-settings-card ds-templates-card" aria-label={t('dsManager.yourTemplatesAria')}>
+        <section className="ds-settings-card ds-templates-card" aria-label="Your templates">
           <div className="ds-settings-card__head">
             <div>
-              <span className="ds-manager-eyebrow">{t('dsManager.eyebrowTemplates')}</span>
-              <h2>{t('dsManager.yourTemplates')}</h2>
+              <span className="ds-manager-eyebrow">Templates</span>
+              <h2>Your templates</h2>
             </div>
           </div>
           {templates.length === 0 ? (
             <div className="ds-user-empty">
-              {t('dsManager.emptyTemplates')}
+              No templates yet. Create one from any generated project via Share once template publishing is enabled.
             </div>
           ) : (
             <div className="ds-template-list">
@@ -715,7 +714,7 @@ export function DesignSystemsTab({
                 <div className="ds-template-row" key={template.id}>
                   <div>
                     <strong>{template.name}</strong>
-                    <span>{template.description?.trim() || t('dsManager.templateDescFallback')}</span>
+                    <span>{template.description?.trim() || 'Created from a project'}</span>
                   </div>
                   <small>{formatShortDate(template.createdAt)}</small>
                 </div>
@@ -727,10 +726,9 @@ export function DesignSystemsTab({
 
       {primaryCollection === 'template' && templateCollection === 'enterprise' ? (
         <ComingSoonPanel
-          eyebrow={t('dsManager.eyebrowTemplates')}
-          title={t('dsManager.enterpriseTplTitle')}
-          body={t('dsManager.enterpriseTplBody')}
-          comingSoonLabel={t('dsManager.comingSoonBadge')}
+          eyebrow="Templates"
+          title="Enterprise templates"
+          body="Team-approved templates and organization-wide publishing are coming soon."
         />
       ) : null}
     </div>
@@ -741,12 +739,10 @@ function ComingSoonPanel({
   eyebrow,
   title,
   body,
-  comingSoonLabel,
 }: {
   eyebrow: string;
   title: string;
   body: string;
-  comingSoonLabel: string;
 }) {
   return (
     <section className="ds-settings-card ds-coming-soon-card" aria-label={title}>
@@ -755,7 +751,7 @@ function ComingSoonPanel({
           <span className="ds-manager-eyebrow">{eyebrow}</span>
           <h2>{title}</h2>
         </div>
-        <span className="ds-coming-soon-badge">{comingSoonLabel}</span>
+        <span className="ds-coming-soon-badge">Coming soon</span>
       </div>
       <div className="ds-user-empty">{body}</div>
     </section>

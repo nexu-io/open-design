@@ -12,7 +12,6 @@ import {
   resolvePluginQueryFallback,
 } from '../state/projects';
 import { useI18n } from '../i18n';
-import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import { Icon } from './Icon';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { TrustBadge } from './TrustBadge';
@@ -177,7 +176,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
           <div className="plugin-loop-home__active" data-active-plugin-id={active.record.id}>
             <span className="plugin-loop-home__active-chip">
               <span className="plugin-loop-home__active-dot" aria-hidden />
-              <span>Plugin: {localizePluginTitle(locale, active.record)}</span>
+              <span>Plugin: {active.record.title}</span>
               <button
                 type="button"
                 className="plugin-loop-home__active-clear"
@@ -248,8 +247,6 @@ export function PluginLoopHome({ onSubmit }: Props) {
             const isActive = active?.record.id === p.id;
             const isPending = pendingApplyId === p.id;
             const links = derivePluginSourceLinks(p);
-            const cardTitle = localizePluginTitle(locale, p);
-            const cardDescription = localizePluginDescription(locale, p);
             return (
               <div
                 key={p.id}
@@ -258,12 +255,12 @@ export function PluginLoopHome({ onSubmit }: Props) {
                 data-plugin-id={p.id}
               >
                 <div className="plugin-loop-home__card-head">
-                  <span className="plugin-loop-home__card-title">{cardTitle}</span>
+                  <span className="plugin-loop-home__card-title">{p.title}</span>
                   <TrustBadge trust={p.trust} />
                 </div>
-                {cardDescription ? (
+                {p.manifest?.description ? (
                   <div className="plugin-loop-home__card-desc">
-                    {cardDescription}
+                    {p.manifest.description}
                   </div>
                 ) : null}
                 <div className="plugin-loop-home__card-meta">

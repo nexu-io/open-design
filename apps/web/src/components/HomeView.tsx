@@ -8,6 +8,7 @@
 // textarea can live centered in the hero.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import type {
   ApplyResult,
   ChatSessionMode,
@@ -60,6 +61,7 @@ import type {
 import { inlineMentionToken, mentionTokenPresent } from '../utils/inlineMentions';
 import { missingRequiredInputs, pluginInputsAreValid } from '../utils/pluginRequiredInputs';
 import { HomeHero, type ExamplePromptInfo, type HomeHeroHandle } from './HomeHero';
+import { Icon } from './Icon';
 import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
 import {
   buildHomeMediaComposer,
@@ -83,6 +85,8 @@ import type { FacetSelection } from './plugins-home/facets';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
 import { AnimatePresence } from 'motion/react';
+import { Toast } from './Toast';
+import { useOpenFolderImport } from './useOpenFolderImport';
 
 interface ActivePlugin {
   record: InstalledPluginRecord;
@@ -96,11 +100,6 @@ interface ActivePlugin {
   inputFields: InputFieldSpec[];
   inputsValid: boolean;
   queryTemplate: string | null;
-  // True when `queryTemplate` covers only a suffix of the prompt (the plugin
-  // query appended after a user-owned draft), so input extraction must allow
-  // an arbitrary mutable prefix instead of anchoring at the start. Set by the
-  // use-with-query route.
-  queryTemplateAllowsPrefix?: boolean;
   lastRenderedPrompt: string | null;
   // Stage B of plugin-driven-flow-plan: when the user applied this
   // plugin through the Home chip rail, the chip carries the project
@@ -201,6 +200,8 @@ interface Props {
   onBrowseRegistry?: () => void;
   onOpenIntegrations?: () => void;
   onOpenMcp?: () => void;
+  onImportFolder?: (baseDir: string) => Promise<void> | void;
+  onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
   // Stage B: optional callbacks the rail's migration chips need.
   // HomeView itself never imports them; EntryShell threads them
   // through so the dispatcher can stay declarative.
@@ -229,6 +230,8 @@ export function HomeView({
   onBrowseRegistry,
   onOpenIntegrations,
   onOpenMcp,
+  onImportFolder,
+  onImportFolderResponse,
   onOpenNewProject,
   promptHandoff,
   skills = EMPTY_SKILLS,
@@ -314,22 +317,16 @@ export function HomeView({
     });
   }, [pendingReplacement, analytics.track]);
   const inputRef = useRef<HomeHeroHandle | null>(null);
-  const homeViewRef = useRef<HTMLDivElement | null>(null);
   const consumedHandoffIdRef = useRef<number | null>(null);
   const pendingPromptFocusEndRef = useRef(false);
   const activePluginApplyRequestRef = useRef(0);
-  const scrollHomeToTop = useCallback(() => {
-    requestAnimationFrame(() => {
-      const scrollContainer = homeViewRef.current?.closest('.entry-main--scroll');
-      if (!(scrollContainer instanceof HTMLElement)) return;
-      if (typeof scrollContainer.scrollTo === 'function') {
-        scrollContainer.scrollTo({ top: 0, left: 0 });
-      } else {
-        scrollContainer.scrollTop = 0;
-        scrollContainer.scrollLeft = 0;
-      }
-    });
-  }, []);
+  const importSkillId = useMemo(() => {
+    const prototypeSkills = skills.filter((skill) => skill.mode === 'prototype');
+    return prototypeSkills.find((skill) => skill.defaultFor.includes('prototype'))?.id
+      ?? prototypeSkills[0]?.id
+      ?? null;
+  }, [skills]);
+
   useEffect(() => {
     let cancelled = false;
     const load = () => {
@@ -462,7 +459,6 @@ export function HomeView({
       if (promptHandoff.focus) {
         focusPromptAtEnd();
       }
-      scrollHomeToTop();
       return;
     }
 
@@ -482,8 +478,7 @@ export function HomeView({
     setPendingAuthoringInputs(promptHandoff.inputs);
     setPendingAuthoringChipId('create-plugin');
     setPendingChipId('create-plugin');
-    scrollHomeToTop();
-  }, [promptHandoff, scrollHomeToTop]);
+  }, [promptHandoff]);
 
   const activeContextItemCount = useMemo(
     () =>
@@ -639,11 +634,6 @@ export function HomeView({
       // Slide deck binds the plugin context, leaving the user's draft
       // alone.
       suppressPromptUpdate?: boolean;
-      // When true, `queryTemplate` only covers the trailing plugin-query
-      // segment (use-with-query appends it after a mutable user draft), so
-      // input extraction must allow an arbitrary prefix instead of anchoring
-      // the whole prompt.
-      queryTemplateAllowsPrefix?: boolean;
       // Type chips are a mode switch, not a commitment to run. Keeping
       // their apply deferred makes Prototype <-> Deck <-> Media changes
       // feel instant; submit() still resolves the snapshot before sending.
@@ -690,7 +680,6 @@ export function HomeView({
       inputFields,
       inputsValid,
       queryTemplate,
-      queryTemplateAllowsPrefix: options?.queryTemplateAllowsPrefix === true,
       // When prompt updates are suppressed we leave lastRenderedPrompt
       // null so the inline pattern-extraction in handlePromptChange
       // doesn't claim ownership of the user's typed text.
@@ -836,61 +825,28 @@ export function HomeView({
     });
   }
 
-  // Picking "Use" on a plugin (from the library hand-off, the Home plugin
-  // section, or the details modal) should make that plugin the routed
-  // driver of the next run — i.e. set it as the active plugin so its own
-  // pipeline + SKILL.md/asset context are applied — rather than only
-  // attaching it as background context. Without this, the submit path
-  // falls back to the hidden od-default scenario and the plugin's design
-  // brief never reaches the agent.
-  //
-  // Prompt handling preserves the legacy context-use semantics:
-  //   - `use-with-query` APPENDS the rendered plugin query to whatever the
-  //     user has already typed (never replaces it), then routes the plugin
-  //     with that combined prompt as the explicit seed.
-  //   - plain `use` leaves the current draft untouched (suppressPromptUpdate)
-  //     while still routing the plugin as the active driver.
-  async function routePluginUse(
+  function requestPluginContextUse(
     record: InstalledPluginRecord,
     action: PluginUseAction = 'use',
     inputs?: Record<string, unknown>,
   ) {
-    if (action === 'use-with-query') {
-      const renderedQuery = previewPluginReplacement(record, undefined, inputs ? { inputs } : undefined);
-      const trimmedQuery = renderedQuery?.trim() ?? '';
-      const currentDraft = prompt.trim();
-      // Append, don't replace: keep the user's draft and add the plugin
-      // query below it (matching the old requestPluginContextUse behavior).
-      const combined = !trimmedQuery
-        ? prompt
-        : !currentDraft
-          ? trimmedQuery
-          : `${prompt.trimEnd()}\n\n${trimmedQuery}`;
-      // Pass the raw (placeholder-bearing) plugin query as the template so
-      // usePlugin does NOT null out `active.queryTemplate` (which happens by
-      // default whenever nextPrompt is set). Without a template, editing a
-      // `{{...}}` value in the hydrated text would no longer be extracted back
-      // into active.inputs and the snapshot would refresh from stale inputs.
-      //
-      // The template is the plugin query ONLY — it must not bake in the
-      // user's draft prefix, which is mutable: `queryTemplateAllowsPrefix`
-      // tells the extractor to match the query as a suffix after any prefix,
-      // so editing the draft prefix never breaks placeholder extraction.
-      const rawQueryTemplate =
-        resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale) || null;
-      const hasAppendedQuery = Boolean(rawQueryTemplate && trimmedQuery);
-      await usePlugin(record, combined, {
-        ...(inputs ? { inputs } : {}),
-        queryTemplate: hasAppendedQuery ? rawQueryTemplate : null,
-        queryTemplateAllowsPrefix: hasAppendedQuery && currentDraft.length > 0,
-      });
-      return;
-    }
-    await usePlugin(record, undefined, {
-      ...(inputs ? { inputs } : {}),
-      suppressPromptUpdate: true,
+    let shouldFocusOnly = true;
+    setSelectedPluginContexts((prev) => {
+      if (prev.some((item) => item.record.id === record.id)) return prev;
+      return [...prev, { record, inlineBacked: false }];
     });
-    scrollHomeToTop();
+    if (action === 'use-with-query') {
+      const queryPrompt = renderPluginContextPrompt(record, inputs);
+      if (queryPrompt) {
+        shouldFocusOnly = false;
+        pendingPromptFocusEndRef.current = true;
+        setPromptEditedByUser(true);
+        setPrompt((current) => appendPromptQuery(current, queryPrompt));
+      }
+    }
+    setError(null);
+    setDetailsRecord(null);
+    if (shouldFocusOnly) focusPromptAtEnd();
   }
 
   function runWithReplacementConfirmation(
@@ -935,6 +891,18 @@ export function HomeView({
     return renderPluginBriefTemplate(query, hydratePluginInputs(fields, options?.inputs));
   }
 
+  function renderPluginContextPrompt(
+    record: InstalledPluginRecord,
+    inputs?: Record<string, unknown>,
+  ): string | null {
+    const query = resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
+    if (!query) return null;
+    return renderPluginBriefTemplate(
+      query,
+      hydratePluginInputs(record.manifest?.od?.inputs ?? [], inputs),
+    );
+  }
+
   useEffect(() => {
     if (!pendingPluginUseHandoff || pluginsLoading) return;
     const record = plugins.find((plugin) => plugin.id === pendingPluginUseHandoff.pluginId);
@@ -945,7 +913,7 @@ export function HomeView({
       );
       return;
     }
-    void routePluginUse(
+    requestPluginContextUse(
       record,
       pendingPluginUseHandoff.action,
       pendingPluginUseHandoff.inputs,
@@ -987,7 +955,6 @@ export function HomeView({
       active.queryTemplate,
       nextPrompt,
       active.inputFields,
-      { allowPrefix: active.queryTemplateAllowsPrefix === true },
     );
     if (!extracted) return;
     const nextInputs = { ...active.inputs, ...extracted };
@@ -1471,7 +1438,7 @@ export function HomeView({
   }
 
   return (
-    <div className="home-view" data-testid="home-view" ref={homeViewRef}>
+    <div className="home-view" data-testid="home-view">
       <HomeHero
         ref={inputRef}
         prompt={prompt}
@@ -1545,6 +1512,12 @@ export function HomeView({
         executionSwitcher={executionSwitcher}
       />
 
+      <HomeExistingProjectAction
+        skillId={importSkillId}
+        onImportFolder={onImportFolder}
+        onImportFolderResponse={onImportFolderResponse}
+      />
+
       <RecentProjectsStrip
         projects={projects}
         designSystems={designSystems}
@@ -1582,7 +1555,7 @@ export function HomeView({
           loading={pluginsLoading}
           activePluginId={active?.record.id ?? null}
           pendingApplyId={pendingApplyId}
-          onUse={(record, action) => void routePluginUse(record, action)}
+          onUse={(record, action) => requestPluginContextUse(record, action)}
           onOpenDetails={setDetailsRecord}
           onBrowseRegistry={onBrowseRegistry}
           preferDefaultFacet={false}
@@ -1595,7 +1568,7 @@ export function HomeView({
           <PluginDetailsModal
             record={detailsRecord}
             onClose={() => setDetailsRecord(null)}
-            onUse={(record) => void routePluginUse(record, 'use')}
+            onUse={(record) => requestPluginContextUse(record, 'use')}
             isApplying={pendingApplyId === detailsRecord.id}
           />
         ) : null}
@@ -1678,6 +1651,60 @@ export function HomeView({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function HomeExistingProjectAction({
+  skillId,
+  onImportFolder,
+  onImportFolderResponse,
+}: {
+  skillId: string | null;
+  onImportFolder?: (baseDir: string) => Promise<void> | void;
+  onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
+}) {
+  const t = useT();
+  const folderImport = useOpenFolderImport({
+    skillId,
+    onImportFolder,
+    onImportFolderResponse,
+  });
+  if (!folderImport.available) return null;
+
+  return (
+    <section className="home-existing-project" data-testid="home-existing-project">
+      <form
+        className="home-existing-project__form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void folderImport.openFolder();
+        }}
+      >
+        <button
+          type="submit"
+          className="home-existing-project__button"
+          disabled={folderImport.importing}
+        >
+          <Icon name="folder" size={14} />
+          <span>
+            {folderImport.importing
+              ? t('home.openExistingProjectOpening')
+              : t('home.openExistingProject')}
+          </span>
+        </button>
+      </form>
+      <p className="home-existing-project__subtitle">
+        {t('home.chooseFolderSubtitle')}
+      </p>
+      {folderImport.error ? (
+        <Toast
+          message={folderImport.error.message}
+          details={folderImport.error.details ?? null}
+          ttlMs={6000}
+          onDismiss={folderImport.clearError}
+        />
+      ) : null}
+    </section>
   );
 }
 
@@ -2046,17 +2073,11 @@ function extractPluginInputsFromPrompt(
   template: string,
   prompt: string,
   fields: InputFieldSpec[],
-  options?: { allowPrefix?: boolean },
 ): Record<string, unknown> | null {
   TEMPLATE_INPUT_PATTERN.lastIndex = 0;
   const fieldByName = new Map(fields.map((field) => [field.name, field]));
   const keys: string[] = [];
-  // `allowPrefix` matches the template as a suffix of the prompt with any
-  // leading text allowed. Used by use-with-query, where the plugin query is
-  // appended after a user-owned draft prefix: the prefix is mutable and must
-  // not be baked into the anchored template, otherwise editing it would break
-  // placeholder extraction and leave pluginInputs stale.
-  let pattern = options?.allowPrefix ? '[\\s\\S]*?' : '^';
+  let pattern = '^';
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = TEMPLATE_INPUT_PATTERN.exec(template)) !== null) {
@@ -2125,6 +2146,12 @@ function removeContextMentionsFromPrompt(prompt: string, labels: string[]): stri
   }, prompt);
 }
 
+function appendPromptQuery(current: string, query: string): string {
+  const next = query.trim();
+  if (!next) return current;
+  if (!current.trim()) return next;
+  return `${current.trimEnd()}\n\n${next}`;
+}
 
 function inputsEqual(
   left: Record<string, unknown> | undefined,

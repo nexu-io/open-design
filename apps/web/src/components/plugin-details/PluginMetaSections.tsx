@@ -35,8 +35,6 @@ import { Icon } from '../Icon';
 import { TrustBadge } from '../TrustBadge';
 import { authorInitials, derivePluginSourceLinks } from '../../runtime/plugin-source';
 import { resolvePluginQueryFallback } from '../../state/projects';
-import { useI18n } from '../../i18n';
-import { localizePluginDescription } from '../plugins-home/localization';
 
 export interface PluginMetaOmit {
   description?: boolean;
@@ -72,13 +70,12 @@ interface Props {
 }
 
 export function PluginMetaSections({ record, omit, compact, heading }: Props) {
-  const { locale } = useI18n();
   const [copied, setCopied] = useState(false);
 
   const manifest: PluginManifest = record.manifest ?? ({} as PluginManifest);
   const specVersion = typeof manifest.specVersion === 'string' ? manifest.specVersion : '';
   const od = manifest.od ?? {};
-  const description = localizePluginDescription(locale, record);
+  const description = manifest.description ?? '';
   const query = resolvePluginQueryFallback(od.useCase?.query);
   const inputs = (od.inputs ?? []) as InputField[];
   const ctx = od.context ?? {};

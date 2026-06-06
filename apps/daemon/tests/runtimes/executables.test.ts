@@ -238,13 +238,11 @@ fsTest(
         '24.14.1',
         'bin',
       );
-      const pathBin = join(home, 'path-bin');
       mkdirSync(dir, { recursive: true });
-      mkdirSync(pathBin, { recursive: true });
       writeFileSync(join(dir, 'codex'), '');
       chmodSync(join(dir, 'codex'), 0o755);
       process.env.OD_AGENT_HOME = home;
-      process.env.PATH = pathBin;
+      process.env.PATH = '/usr/bin:/bin';
 
       const resolved = resolveAgentExecutable(minimalAgentDef({
         bin: 'codex',

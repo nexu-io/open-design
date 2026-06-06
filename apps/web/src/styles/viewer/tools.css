@@ -669,10 +669,6 @@
 }
 
 /* Present / Share menus */
-.present-wrap,
-.share-menu {
-  --viewer-action-menu-z: 220;
-}
 .present-wrap { position: relative; display: inline-block; }
 .present-trigger .caret {
   margin-left: 4px;
@@ -683,7 +679,7 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: var(--viewer-action-menu-z);
+  z-index: 60;
   min-width: 168px;
   padding: 4px;
   background: var(--bg-panel);
@@ -780,7 +776,7 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: var(--viewer-action-menu-z);
+  z-index: 50;
   min-width: 300px;
   padding: 4px;
   background: var(--bg-panel);

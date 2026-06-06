@@ -11,14 +11,12 @@ import { PreviewModal } from '../../src/components/PreviewModal';
 // mock them so the test can exercise the full button flow without a real
 // iframe or DOM snapshot.
 
-const { captureHostIframeSnapshotMock, exportAsImageMock, requestPreviewSnapshotMock } = vi.hoisted(() => ({
-  captureHostIframeSnapshotMock: vi.fn(),
+const { exportAsImageMock, requestPreviewSnapshotMock } = vi.hoisted(() => ({
   exportAsImageMock: vi.fn(),
   requestPreviewSnapshotMock: vi.fn(),
 }));
 
 vi.mock('../../src/runtime/exports', () => ({
-  captureHostIframeSnapshot: captureHostIframeSnapshotMock,
   exportAsHtml: vi.fn(),
   exportAsImage: exportAsImageMock,
   exportAsPdf: vi.fn(),
@@ -71,7 +69,6 @@ describe('PreviewModal image export', () => {
 
   it('calls requestPreviewSnapshot and exportAsImage on success', async () => {
     const fakeDataUrl = 'data:image/png;base64,iVBORw0KGgo=';
-    captureHostIframeSnapshotMock.mockResolvedValueOnce(null);
     requestPreviewSnapshotMock.mockResolvedValueOnce({
       dataUrl: fakeDataUrl,
       w: 800,
@@ -94,32 +91,8 @@ describe('PreviewModal image export', () => {
     });
   });
 
-  it('prefers the desktop host iframe snapshot when available', async () => {
-    const fakeDataUrl = 'data:image/png;base64,host';
-    captureHostIframeSnapshotMock.mockResolvedValueOnce({
-      dataUrl: fakeDataUrl,
-      w: 1024,
-      h: 768,
-    });
-
-    render(
-      <PreviewModal {...baseProps} onClose={() => {}} />,
-    );
-
-    openShareMenu();
-    fireEvent.click(screen.getByRole('menuitem', { name: /export as image/i }));
-
-    await waitFor(() => {
-      expect(captureHostIframeSnapshotMock).toHaveBeenCalledTimes(1);
-    });
-
-    expect(requestPreviewSnapshotMock).not.toHaveBeenCalled();
-    expect(exportAsImageMock).toHaveBeenCalledWith(fakeDataUrl, 'main');
-  });
-
   it('alerts when snapshot capture returns null', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-    captureHostIframeSnapshotMock.mockResolvedValueOnce(null);
     requestPreviewSnapshotMock.mockResolvedValueOnce(null);
 
     render(
@@ -141,7 +114,6 @@ describe('PreviewModal image export', () => {
 
   it('alerts when exportAsImage throws', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-    captureHostIframeSnapshotMock.mockResolvedValueOnce(null);
     requestPreviewSnapshotMock.mockResolvedValueOnce({
       dataUrl: 'data:image/png;base64,ok',
       w: 800,
@@ -167,7 +139,6 @@ describe('PreviewModal image export', () => {
 
   it('fires onSharePopoverItemClick with "image"', () => {
     const onItemClick = vi.fn();
-    captureHostIframeSnapshotMock.mockResolvedValueOnce(null);
     requestPreviewSnapshotMock.mockResolvedValueOnce({
       dataUrl: 'data:image/png;base64,ok',
       w: 800,
