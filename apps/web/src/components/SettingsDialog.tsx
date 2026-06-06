@@ -6355,6 +6355,9 @@ interface McpInstallInfo {
   cliExists: boolean;
   nodeExists: boolean;
   buildHint: string | null;
+  networkExposed?: boolean;
+  remoteUrl?: string;
+  remoteMcpKey?: string;
 }
 
 interface McpStdioServerConfig {
@@ -6377,6 +6380,10 @@ interface McpClient {
   buildInstruction: (info: McpInstallInfo) => string;
   buildSnippet: (info: McpInstallInfo) => string;
   buildSnippetLang: (info: McpInstallInfo) => 'bash' | 'json' | 'toml';
+  // Remote (Streamable HTTP) snippet builder. Uses remoteUrl and
+  // Authorization header instead of stdio command/args.
+  buildRemoteSnippet: (info: McpInstallInfo) => string;
+  buildRemoteSnippetLang: (info: McpInstallInfo) => 'bash' | 'json' | 'toml';
   // Optional one-click install action. Currently only Cursor
   // supports deeplinks of this shape.
   buildDeeplink?: (info: McpInstallInfo) => string;
@@ -6557,6 +6564,26 @@ function CodexInstallToggle(): JSX.Element | null {
   );
 }
 
+function buildRemoteHeaders(info: McpInstallInfo): Record<string, string> {
+  if (!info.remoteMcpKey) return {};
+  return { Authorization: `Bearer ${info.remoteMcpKey}` };
+}
+
+function buildSharedRemoteMcpJson(info: McpInstallInfo): string {
+  const headers = buildRemoteHeaders(info);
+  const server: Record<string, unknown> = { url: info.remoteUrl ?? '' };
+  if (Object.keys(headers).length > 0) server.headers = headers;
+  const innerJson = JSON.stringify(server, null, 2)
+    .split('\n')
+    .map((line, i) => (i === 0 ? line : `    ${line}`))
+    .join('\n');
+  return `{
+  "mcpServers": {
+    "open-design": ${innerJson}
+  }
+}`;
+}
+
 function McpKeysSection({ info, onKeyChanged }: { info: McpInstallInfo | null; onKeyChanged: () => void }) {
   const { t } = useI18n();
   const [keys, setKeys] = useState<Array<{ id: string; keyPrefix: string; label: string; createdAt: number }>>([]);
@@ -6683,6 +6710,14 @@ function IntegrationsSection() {
         return `claude mcp add-json --scope user open-design '${inner}'`;
       },
       buildSnippetLang: () => 'bash',
+      buildRemoteSnippet: (info) => {
+        const server: Record<string, unknown> = { url: info.remoteUrl ?? '' };
+        const headers = buildRemoteHeaders(info);
+        if (Object.keys(headers).length > 0) server.headers = headers;
+        const inner = JSON.stringify(server);
+        return `claude mcp add-json --scope user open-design '${inner}'`;
+      },
+      buildRemoteSnippetLang: () => 'bash',
     },
     {
       id: 'codex',
@@ -6698,6 +6733,16 @@ function IntegrationsSection() {
       },
       buildSnippet: (info) => `[mcp_servers.open-design]\ncommand = ${JSON.stringify(info.command)}\nargs = ${JSON.stringify(info.args)}${buildCodexEnvToml(info)}`,
       buildSnippetLang: () => 'toml',
+      buildRemoteSnippet: (info) => {
+        const headers = buildRemoteHeaders(info);
+        const lines = [`[mcp_servers.open-design]`, `url = ${JSON.stringify(info.remoteUrl ?? '')}`];
+        if (Object.keys(headers).length > 0) {
+          lines.push(`[mcp_servers.open-design.headers]`);
+          for (const [k, v] of Object.entries(headers)) lines.push(`${k} = ${JSON.stringify(v)}`);
+        }
+        return lines.join('\n');
+      },
+      buildRemoteSnippetLang: () => 'toml',
     },
     {
       id: 'cursor',
@@ -6709,6 +6754,8 @@ function IntegrationsSection() {
         }),
       buildSnippet: buildSharedMcpJson,
       buildSnippetLang: () => 'json',
+      buildRemoteSnippet: buildSharedRemoteMcpJson,
+      buildRemoteSnippetLang: () => 'json',
       buildDeeplink: (info) => {
         const inner = buildMcpStdioServerConfig(info);
         const encoded = utf8Btoa(JSON.stringify(inner));
@@ -6726,6 +6773,11 @@ function IntegrationsSection() {
         }),
       buildSnippet: (info) => `{\n  "servers": {\n    "open-design": {\n      "type": "stdio",\n      "command": ${JSON.stringify(info.command)},\n      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,\n      "env": ${JSON.stringify(info.env)}` : ''}\n    }\n  }\n}`,
       buildSnippetLang: () => 'json',
+      buildRemoteSnippet: (info) => {
+        const headers = buildRemoteHeaders(info);
+        return `{\n  "servers": {\n    "open-design": {\n      "type": "http",\n      "url": ${JSON.stringify(info.remoteUrl ?? '')}${Object.keys(headers).length > 0 ? `,\n      "headers": ${JSON.stringify(headers, null, 6).split('\n').map((l, i) => i === 0 ? l : '      ' + l).join('\n')}` : ''}\n    }\n  }\n}`;
+      },
+      buildRemoteSnippetLang: () => 'json',
     },
     {
       id: 'antigravity',
@@ -6734,6 +6786,8 @@ function IntegrationsSection() {
       buildInstruction: () => t('settings.mcpInstructionAntigravity'),
       buildSnippet: buildSharedMcpJson,
       buildSnippetLang: () => 'json',
+      buildRemoteSnippet: buildSharedRemoteMcpJson,
+      buildRemoteSnippetLang: () => 'json',
     },
     {
       id: 'zed',
@@ -6745,6 +6799,11 @@ function IntegrationsSection() {
         }),
       buildSnippet: (info) => `{\n  "context_servers": {\n    "open-design": {\n      "source": "custom",\n      "command": ${JSON.stringify(info.command)},\n      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,\n      "env": ${JSON.stringify(info.env)}` : ''}\n    }\n  }\n}`,
       buildSnippetLang: () => 'json',
+      buildRemoteSnippet: (info) => {
+        const headers = buildRemoteHeaders(info);
+        return `{\n  "context_servers": {\n    "open-design": {\n      "source": "custom",\n      "url": ${JSON.stringify(info.remoteUrl ?? '')}${Object.keys(headers).length > 0 ? `,\n      "headers": ${JSON.stringify(headers, null, 6).split('\n').map((l, i) => i === 0 ? l : '      ' + l).join('\n')}` : ''}\n    }\n  }\n}`;
+      },
+      buildRemoteSnippetLang: () => 'json',
     },
     {
       id: 'windsurf',
@@ -6756,10 +6815,13 @@ function IntegrationsSection() {
         }),
       buildSnippet: buildSharedMcpJson,
       buildSnippetLang: () => 'json',
+      buildRemoteSnippet: buildSharedRemoteMcpJson,
+      buildRemoteSnippetLang: () => 'json',
     },
   ];
 
   const [clientId, setClientId] = useState<McpClientId>('claude');
+  const [mcpMode, setMcpMode] = useState<'local' | 'remote'>('local');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [info, setInfo] = useState<McpInstallInfo | null>(null);
@@ -6821,9 +6883,16 @@ function IntegrationsSection() {
   }, [info]);
 
   const client = MCP_CLIENTS.find((c) => c.id === clientId) ?? MCP_CLIENTS[0]!;
-  const snippet = info ? client.buildSnippet(info) : '';
+  const isRemote = mcpMode === 'remote';
+  const snippet = info
+    ? isRemote
+      ? client.buildRemoteSnippet(info)
+      : client.buildSnippet(info)
+    : '';
   const snippetLang: 'bash' | 'json' | 'toml' = info
-    ? client.buildSnippetLang(info)
+    ? isRemote
+      ? client.buildRemoteSnippetLang(info)
+      : client.buildSnippetLang(info)
     : 'json';
 
   // Reset the "Copied" badge when the user flips to a different
@@ -6835,7 +6904,7 @@ function IntegrationsSection() {
       clearTimeout(copyTimerRef.current);
       copyTimerRef.current = null;
     }
-  }, [clientId]);
+  }, [clientId, mcpMode]);
 
   const onCopy = async () => {
     if (!snippet) return;
@@ -6854,6 +6923,73 @@ function IntegrationsSection() {
   return (
     <section className="settings-section">
       <div className="mcp-client-body">
+        <div className="section-head">
+          <div>
+            <h3>{t('settings.mcpTitle')}</h3>
+            <p className="hint">{t('settings.mcpHint')}</p>
+          </div>
+        </div>
+
+        <div className="settings-about-list" style={{ display: 'block' }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 0,
+            marginBottom: 14,
+            background: 'var(--surface-2, #11141a)',
+            borderRadius: 6,
+            padding: 3,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setMcpMode('local')}
+            style={{
+              flex: 1,
+              padding: '6px 12px',
+              fontSize: 12,
+              fontWeight: 600,
+              border: 'none',
+              borderRadius: 4,
+              cursor: 'pointer',
+              background: mcpMode === 'local' ? 'var(--surface-1, #1c2028)' : 'transparent',
+              color: mcpMode === 'local' ? 'var(--fg-1, #e6e6e6)' : 'var(--text-muted)',
+            }}
+          >
+            {t('settings.mcpTabLocal')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setMcpMode('remote')}
+            disabled={!info?.networkExposed}
+            style={{
+              flex: 1,
+              padding: '6px 12px',
+              fontSize: 12,
+              fontWeight: 600,
+              border: 'none',
+              borderRadius: 4,
+              cursor: info?.networkExposed ? 'pointer' : 'not-allowed',
+              background: mcpMode === 'remote' ? 'var(--surface-1, #1c2028)' : 'transparent',
+              color: mcpMode === 'remote' ? 'var(--fg-1, #e6e6e6)' : 'var(--text-muted)',
+              opacity: info?.networkExposed ? 1 : 0.5,
+            }}
+          >
+            {t('settings.mcpTabRemote')}
+          </button>
+        </div>
+
+        {isRemote && info && !info.networkExposed ? (
+          <div
+            className="empty-card"
+            style={{
+              marginBottom: 14,
+              borderLeft: '3px solid var(--warning-fg, #fbbf24)',
+            }}
+          >
+            {t('settings.mcpRemoteDisabled')}
+          </div>
+        ) : null}
         {infoError ? (
           <div
             className="empty-card"

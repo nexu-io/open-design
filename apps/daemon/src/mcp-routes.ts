@@ -100,6 +100,8 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       ...(apiKey ? { apiKey } : {}),
       authRequired,
       networkExposed: isNetworkExposed(process.env.OD_BIND_HOST ?? '127.0.0.1'),
+      bindHost: process.env.OD_BIND_HOST ?? '127.0.0.1',
+      ...(apiKey ? { mcpKey: apiKey } : {}),
     });
   }
 

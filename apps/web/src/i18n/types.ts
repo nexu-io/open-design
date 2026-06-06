@@ -758,6 +758,9 @@ export interface Dict {
   'settings.mcpCapabilityPull': string;
   'settings.mcpCapabilityDefault': string;
   'settings.mcpRunningNote': string;
+  'settings.mcpTabLocal': string;
+  'settings.mcpTabRemote': string;
+  'settings.mcpRemoteDisabled': string;
 
   // MCP Keys
   'settings.mcpKeysTitle': string;

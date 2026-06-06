@@ -22,8 +22,8 @@ import { randomUUID } from 'node:crypto';
 
 import { postCreateArtifactRequest } from './artifact-create.js';
 
-const SERVER_NAME = 'open-design';
-const SERVER_VERSION = '0.2.0';
+export const SERVER_NAME = 'open-design';
+export const SERVER_VERSION = '0.2.0';
 
 type JsonObject = Record<string, unknown>;
 interface RunMcpOptions { daemonUrl: string | URL }
@@ -431,106 +431,109 @@ const TOOL_DEFS = [
   },
 ];
 
-export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
-  const baseUrl = String(daemonUrl).replace(/\/$/, '');
+export const MCP_INSTRUCTIONS = [
+  'Open Design (OD) is a local-first design workspace. The user typically',
+  'has OD running on their machine; each project contains a rendered',
+  'artifact (HTML/JSX/CSS) plus its source files.',
+  '',
+  'Active context: get_artifact, get_project, get_file, search_files,',
+  'and list_files all accept project as OPTIONAL. When omitted, they',
+  'default to the project the user has open in OD right now; get_file',
+  'and get_artifact additionally default to the active file. So when',
+  'the user says "this file" / "the design I have open" / "find X",',
+  'just call the tool without project - no need to ask first. The',
+  'response carries usedActiveContext so you can confirm which',
+  'project/file you hit. Pass project explicitly to override.',
+  '',
+  'Pulling design context:',
+  ' - get_artifact() - entry file PLUS every referenced sibling',
+  '    (tokens CSS, JSX modules, imported assets) in one call.',
+  '    PREFER THIS over multiple get_file calls when the user',
+  '    wants to understand or extend a design.',
+  ' - get_file(path) for a single known file. Returns up to 2000',
+  '    lines starting at offset (default 0) and stamps a',
+  '    [od:file-window ...] marker when the file is longer; page',
+  '    by re-calling with the next offset.',
+  ' - search_files(query) to find a class/component/copy string',
+  '    without fetching every file.',
+  ' - list_files for metadata only.',
+  ' - create_artifact(name, content) to create one normal artifact',
+  '    entry file in the active or specified project. It rejects',
+  '    existing targets and can accept an artifactManifest sidecar.',
+  ' - write_file(path, content) to overwrite or freshly create any',
+  '    project file when an ArtifactManifest is not required.',
+  '    Use this to iterate on a file create_artifact already wrote.',
+  ' - delete_file(path) to remove one project file (nested paths ok).',
+  ' - delete_project(project, confirm:true) for irreversible project',
+  '    removal — requires explicit project + confirm:true.',
+  ' - list_projects to discover what is available on this daemon.',
+  ' - get_active_context() if you want the active project/file',
+  '    explicitly without making any other tool call.',
+  '',
+  'To make Open Design GENERATE or refine a design (rather than just',
+  'read/edit files), commission a run - you do not run skills yourself:',
+  ' - list_skills / list_plugins to see what you can ask OD to make.',
+  ' - list_agents when you need to pass start_run.agent — do not',
+  '    guess "claude" / "codex" / "gemini"; only agents in the',
+  '    returned list will actually spawn on this machine.',
+  ' - create_project(name) first if you need a fresh project to',
+  '    generate into; start_run requires an existing project.',
+  ' - start_run(prompt, [skill], [plugin], [inputs]) kicks off generation in',
+  '    the active or named project and returns a runId immediately.',
+  '    Open Design spawns its own agent to do the work.',
+  ' - get_run(runId) polls until status is succeeded/failed/canceled;',
+  '    on success it returns a previewUrl you can open in a browser',
+  '    and a hint to pull the files with get_artifact.',
+  ' - cancel_run(runId) aborts an in-flight run.',
+  '',
+  'Generation patience: Open Design runs typically take 5–30',
+  'minutes. Polls returning status:running with unchanged file',
+  'mtimes is the inner agent thinking, not a hang. Do NOT cancel',
+  'and substitute write_file as a "faster" workaround — that',
+  'throws away the pipeline\'s design quality and is exactly the',
+  'failure mode this surface is meant to avoid. Poll every 30–60',
+  'seconds, tell the user "still working" between polls, and let',
+  'the run finish. Only call cancel_run if the user explicitly',
+  'asks you to abort.',
+  '',
+  'Ambiguous-format requests: words like "PPT" / "deck" / "slides" /',
+  '"presentation" / "document" / "PDF" / "doc" map to two different',
+  'deliverables — Open Design natively produces browser-viewable',
+  'HTML/SVG (including HTML-rendered decks), but the user may want a',
+  'real binary file (.pptx / .docx / .pdf) which Open Design does NOT',
+  'produce and which you would have to export yourself from OD\'s',
+  'output. When the user\'s request is ambiguous, ASK them which one',
+  'they want before kicking off work; do not silently pick one and do',
+  'not run both paths in parallel.',
+  '',
+  'Project arguments accept either a UUID or a name substring',
+  '(e.g. "recaptr"); the server resolves the latter. When a project',
+  'is matched by slug or substring the response carries',
+  'resolvedProject:{id,name} so you can confirm which project was',
+  'resolved. Verify with the user if the match was unexpected.',
+  '',
+  'Reference material is exposed as MCP resources, not tools - read',
+  'od://design-systems/<id>/DESIGN.md when you need the brand spec',
+  'for a design (palette, typography, voice). Skills are similarly',
+  'available at od://skills/<id>/SKILL.md but are mostly relevant',
+  'when the user asks about how a particular artifact was generated.',
+  '',
+  'When extending an Open Design design in another codebase, pull',
+  'the full bundle once with get_artifact and work from those files',
+  'locally - do not fetch files one-by-one if you can avoid it.',
+].join('\n');
 
-  const server = new Server(
-    { name: SERVER_NAME, version: SERVER_VERSION },
-    {
-      capabilities: { tools: {}, resources: {} },
-      instructions: [
-        'Open Design (OD) is a local-first design workspace. The user typically',
-        'has OD running on their machine; each project contains a rendered',
-        'artifact (HTML/JSX/CSS) plus its source files.',
-        '',
-        'Active context: get_artifact, get_project, get_file, search_files,',
-        'and list_files all accept project as OPTIONAL. When omitted, they',
-        'default to the project the user has open in OD right now; get_file',
-        'and get_artifact additionally default to the active file. So when',
-        'the user says "this file" / "the design I have open" / "find X",',
-        'just call the tool without project - no need to ask first. The',
-        'response carries usedActiveContext so you can confirm which',
-        'project/file you hit. Pass project explicitly to override.',
-        '',
-        'Pulling design context:',
-        ' - get_artifact() - entry file PLUS every referenced sibling',
-        '    (tokens CSS, JSX modules, imported assets) in one call.',
-        '    PREFER THIS over multiple get_file calls when the user',
-        '    wants to understand or extend a design.',
-        ' - get_file(path) for a single known file. Returns up to 2000',
-        '    lines starting at offset (default 0) and stamps a',
-        '    [od:file-window ...] marker when the file is longer; page',
-        '    by re-calling with the next offset.',
-        ' - search_files(query) to find a class/component/copy string',
-        '    without fetching every file.',
-        ' - list_files for metadata only.',
-        ' - create_artifact(name, content) to create one normal artifact',
-        '    entry file in the active or specified project. It rejects',
-        '    existing targets and can accept an artifactManifest sidecar.',
-        ' - write_file(path, content) to overwrite or freshly create any',
-        '    project file when an ArtifactManifest is not required.',
-        '    Use this to iterate on a file create_artifact already wrote.',
-        ' - delete_file(path) to remove one project file (nested paths ok).',
-        ' - delete_project(project, confirm:true) for irreversible project',
-        '    removal — requires explicit project + confirm:true.',
-        ' - list_projects to discover what is available on this daemon.',
-        ' - get_active_context() if you want the active project/file',
-        '    explicitly without making any other tool call.',
-        '',
-        'To make Open Design GENERATE or refine a design (rather than just',
-        'read/edit files), commission a run - you do not run skills yourself:',
-        ' - list_skills / list_plugins to see what you can ask OD to make.',
-        ' - list_agents when you need to pass start_run.agent — do not',
-        '    guess "claude" / "codex" / "gemini"; only agents in the',
-        '    returned list will actually spawn on this machine.',
-        ' - create_project(name) first if you need a fresh project to',
-        '    generate into; start_run requires an existing project.',
-        ' - start_run(prompt, [skill], [plugin], [inputs]) kicks off generation in',
-        '    the active or named project and returns a runId immediately.',
-        '    Open Design spawns its own agent to do the work.',
-        ' - get_run(runId) polls until status is succeeded/failed/canceled;',
-        '    on success it returns a previewUrl you can open in a browser',
-        '    and a hint to pull the files with get_artifact.',
-        ' - cancel_run(runId) aborts an in-flight run.',
-        '',
-        'Generation patience: Open Design runs typically take 5–30',
-        'minutes. Polls returning status:running with unchanged file',
-        'mtimes is the inner agent thinking, not a hang. Do NOT cancel',
-        'and substitute write_file as a "faster" workaround — that',
-        'throws away the pipeline\'s design quality and is exactly the',
-        'failure mode this surface is meant to avoid. Poll every 30–60',
-        'seconds, tell the user "still working" between polls, and let',
-        'the run finish. Only call cancel_run if the user explicitly',
-        'asks you to abort.',
-        '',
-        'Ambiguous-format requests: words like "PPT" / "deck" / "slides" /',
-        '"presentation" / "document" / "PDF" / "doc" map to two different',
-        'deliverables — Open Design natively produces browser-viewable',
-        'HTML/SVG (including HTML-rendered decks), but the user may want a',
-        'real binary file (.pptx / .docx / .pdf) which Open Design does NOT',
-        'produce and which you would have to export yourself from OD\'s',
-        'output. When the user\'s request is ambiguous, ASK them which one',
-        'they want before kicking off work; do not silently pick one and do',
-        'not run both paths in parallel.',
-        '',
-        'Project arguments accept either a UUID or a name substring',
-        '(e.g. "recaptr"); the server resolves the latter. When a project',
-        'is matched by slug or substring the response carries',
-        'resolvedProject:{id,name} so you can confirm which project was',
-        'resolved. Verify with the user if the match was unexpected.',
-        '',
-        'Reference material is exposed as MCP resources, not tools - read',
-        'od://design-systems/<id>/DESIGN.md when you need the brand spec',
-        'for a design (palette, typography, voice). Skills are similarly',
-        'available at od://skills/<id>/SKILL.md but are mostly relevant',
-        'when the user asks about how a particular artifact was generated.',
-        '',
-        'When extending an Open Design design in another codebase, pull',
-        'the full bundle once with get_artifact and work from those files',
-        'locally - do not fetch files one-by-one if you can avoid it.',
-      ].join('\n'),
-    },
-  );
+/**
+ * Registers all MCP tool and resource handlers on a Server instance.
+ * Shared between stdio transport (`od mcp`) and Streamable HTTP
+ * transport (daemon `/mcp` endpoint).
+ */
+export function registerMcpHandlers(
+  server: Server,
+  baseUrl: string,
+  getAuthHeaders: () => Record<string, string>,
+): void {
+  const baseUrlNorm = baseUrl.replace(/\/$/, '');
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: TOOL_DEFS,
@@ -538,8 +541,8 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
 
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
     const [skillsData, dsData] = await Promise.all([
-      getJson<SkillsPayload>(`${baseUrl}/api/skills`).catch((): SkillsPayload => ({ skills: [] })),
-      getJson<DesignSystemsPayload>(`${baseUrl}/api/design-systems`).catch((): DesignSystemsPayload => ({ designSystems: [] })),
+      getJson<SkillsPayload>(`${baseUrlNorm}/api/skills`, getAuthHeaders).catch((): SkillsPayload => ({ skills: [] })),
+      getJson<DesignSystemsPayload>(`${baseUrlNorm}/api/design-systems`, getAuthHeaders).catch((): DesignSystemsPayload => ({ designSystems: [] })),
     ]);
     const resources = [
       {
@@ -571,7 +574,7 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
   server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
     const uri = req.params?.uri;
     if (uri === 'od://focus/active') {
-      const data = await getJson<ActiveContext>(`${baseUrl}/api/active`);
+      const data = await getJson<ActiveContext>(`${baseUrlNorm}/api/active`, getAuthHeaders);
       return {
         contents: [
           {
@@ -589,7 +592,8 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
     const [, kind, id] = m as [string, 'skills' | 'design-systems', string, string];
     const route = kind === 'skills' ? 'skills' : 'design-systems';
     const data = await getJson<ResourcePayload>(
-      `${baseUrl}/api/${route}/${encodeURIComponent(decodeURIComponent(id))}`,
+      `${baseUrlNorm}/api/${route}/${encodeURIComponent(decodeURIComponent(id))}`,
+      getAuthHeaders,
     );
     const text =
       data?.skill?.body ??
@@ -613,8 +617,22 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const name = req.params?.name;
     const args: McpArgs = (req.params?.arguments ?? {}) as McpArgs;
-    return handleMcpToolCall(baseUrl, name, args);
+    return handleMcpToolCall(baseUrlNorm, name, args);
   });
+}
+
+export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
+  const baseUrl = String(daemonUrl).replace(/\/$/, '');
+
+  const server = new Server(
+    { name: SERVER_NAME, version: SERVER_VERSION },
+    {
+      capabilities: { tools: {}, resources: {} },
+      instructions: MCP_INSTRUCTIONS,
+    },
+  );
+
+  registerMcpHandlers(server, baseUrl, () => authHeaders());
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -1284,7 +1302,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const PROJECT_LIST_TTL_MS = 5000;
 let projectListCache: ProjectListCache | null = null;
 
-async function fetchProjectList(baseUrl: string): Promise<ProjectSummary[]> {
+async function fetchProjectList(baseUrl: string, getAuthHeaders?: () => Record<string, string>): Promise<ProjectSummary[]> {
   const now = Date.now();
   if (
     projectListCache &&
@@ -1293,7 +1311,7 @@ async function fetchProjectList(baseUrl: string): Promise<ProjectSummary[]> {
   ) {
     return projectListCache.list;
   }
-  const data = await getJson<ProjectsPayload>(`${baseUrl}/api/projects`);
+  const data = await getJson<ProjectsPayload>(`${baseUrl}/api/projects`, getAuthHeaders);
   const list = Array.isArray(data?.projects) ? data.projects : [];
   projectListCache = { baseUrl, t: now, list };
   return list;
@@ -1304,14 +1322,14 @@ async function fetchProjectList(baseUrl: string): Promise<ProjectSummary[]> {
 // caller, the active-context payload that was used. Throws a clear
 // error when neither is available so the agent can prompt the user
 // rather than guessing.
-async function resolveProjectArg(baseUrl: string, arg: unknown): Promise<{ id: string; resolved: ResolvedProject | null; active: ActiveContext | null }> {
+async function resolveProjectArg(baseUrl: string, arg: unknown, getAuthHeaders?: () => Record<string, string>): Promise<{ id: string; resolved: ResolvedProject | null; active: ActiveContext | null }> {
   if (typeof arg === 'string' && arg.length > 0) {
-    const resolved = await resolveProjectId(baseUrl, arg);
+    const resolved = await resolveProjectId(baseUrl, arg, getAuthHeaders);
     return { id: resolved.id, resolved, active: null };
   }
   let active: ActiveContext;
   try {
-    active = await getJson<ActiveContext>(`${baseUrl}/api/active`);
+    active = await getJson<ActiveContext>(`${baseUrl}/api/active`, getAuthHeaders);
   } catch (err) {
     throw new Error(
       `project arg omitted and active context lookup failed: ${errorMessage(err)}. Pass project="<id-or-name>".`,
@@ -1325,13 +1343,13 @@ async function resolveProjectArg(baseUrl: string, arg: unknown): Promise<{ id: s
   return { id: active.projectId, resolved: null, active };
 }
 
-async function resolveProjectId(baseUrl: string, arg: unknown): Promise<ResolvedProject> {
+async function resolveProjectId(baseUrl: string, arg: unknown, getAuthHeaders?: () => Record<string, string>): Promise<ResolvedProject> {
   if (typeof arg !== 'string' || !arg) {
     throw new Error('project is required (string).');
   }
   if (UUID_RE.test(arg)) return { id: arg, name: arg, source: 'uuid' as const };
 
-  const list = await fetchProjectList(baseUrl);
+  const list = await fetchProjectList(baseUrl, getAuthHeaders);
   if (list.length === 0) {
     throw new Error('no projects on this daemon');
   }
@@ -1371,8 +1389,9 @@ function authHeaders(): Record<string, string> {
   return apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
 }
 
-async function getJson<T>(url: string): Promise<T> {
-  const resp = await fetch(url, { headers: authHeaders() });
+async function getJson<T>(url: string, getAuthHeaders?: () => Record<string, string>): Promise<T> {
+  const headers = getAuthHeaders ? getAuthHeaders() : authHeaders();
+  const resp = await fetch(url, { headers });
   if (!resp.ok) {
     const body = await safeText(resp);
     throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);
@@ -1380,13 +1399,14 @@ async function getJson<T>(url: string): Promise<T> {
   return (await resp.json()) as T;
 }
 
-async function getFile(baseUrl: string, project: string, relPath: string, active: ActiveContext | null, resolved?: ResolvedProject | null, offset = 0, limit = 2000) {
+async function getFile(baseUrl: string, project: string, relPath: string, active: ActiveContext | null, resolved?: ResolvedProject | null, offset = 0, limit = 2000, getAuthHeaders?: () => Record<string, string>) {
   const segments = String(relPath)
     .split('/')
     .filter((s) => s.length > 0)
     .map(encodeURIComponent);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(project)}/raw/${segments.join('/')}`;
-  const resp = await fetch(url, { headers: authHeaders() });
+  const headers = getAuthHeaders ? getAuthHeaders() : authHeaders();
+  const resp = await fetch(url, { headers });
   if (!resp.ok) {
     const body = await safeText(resp);
     return errorResult(
@@ -1471,7 +1491,7 @@ function totalTextBytes(files: ProjectFileBundleEntry[]): number {
   return n;
 }
 
-async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unknown, includeMode: unknown, maxBytesArg: unknown) {
+async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unknown, includeMode: unknown, maxBytesArg: unknown, getAuthHeaders?: () => Record<string, string>) {
   const include = includeMode == null || includeMode === '' ? 'auto' : includeMode;
   if (typeof include !== 'string' || !VALID_INCLUDE_MODES.has(include)) {
     return errorResult(
@@ -1481,8 +1501,8 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
   const maxBytes =
     typeof maxBytesArg === 'number' && Number.isFinite(maxBytesArg) && maxBytesArg > 0 ? maxBytesArg : DEFAULT_MAX_BYTES;
 
-  const { id, active, resolved } = await resolveProjectArg(baseUrl, projectArg);
-  const data = await getJson<ProjectPayload>(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
+  const { id, active, resolved } = await resolveProjectArg(baseUrl, projectArg, getAuthHeaders);
+  const data = await getJson<ProjectPayload>(`${baseUrl}/api/projects/${encodeURIComponent(id)}`, getAuthHeaders);
   const project = (data.project ?? data) as ProjectSummary;
   // Active-file beats project default entry when project also came
   // from active context - if the user is on landing.html and asks
@@ -1502,7 +1522,7 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
   if (include === 'shallow') {
     let file;
     try {
-      file = await fetchProjectFile(baseUrl, id, entry);
+      file = await fetchProjectFile(baseUrl, id, entry, undefined, getAuthHeaders);
     } catch (err) {
       return errorResult(errorMessage(err));
     }
@@ -1510,7 +1530,7 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
   }
 
   if (include === 'all') {
-    const meta = await getJson<{ files?: Array<{ name: string }> }>(`${baseUrl}/api/projects/${encodeURIComponent(id)}/files`);
+    const meta = await getJson<{ files?: Array<{ name: string }> }>(`${baseUrl}/api/projects/${encodeURIComponent(id)}/files`, getAuthHeaders);
     const allFiles = Array.isArray(meta?.files) ? meta.files : [];
     const fetched: ProjectFileBundleEntry[] = [];
     let truncated = false;
@@ -1521,7 +1541,7 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
       }
       try {
         const remaining = maxBytes - totalTextBytes(fetched);
-        fetched.push(await fetchProjectFile(baseUrl, id, f.name, remaining));
+        fetched.push(await fetchProjectFile(baseUrl, id, f.name, remaining, getAuthHeaders));
       } catch (err) {
         if (err instanceof BudgetExceededError) truncated = true;
         // Skip files that fail to fetch; keep going.
@@ -1535,7 +1555,7 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
   // returning an empty bundle would hide that.
   let entryFile;
   try {
-    entryFile = await fetchProjectFile(baseUrl, id, entry);
+    entryFile = await fetchProjectFile(baseUrl, id, entry, undefined, getAuthHeaders);
   } catch (err) {
     return errorResult(errorMessage(err));
   }
@@ -1561,7 +1581,7 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
       let file;
       try {
         const remaining = maxBytes - totalTextBytes(fetched);
-        file = await fetchProjectFile(baseUrl, id, refPath, remaining);
+        file = await fetchProjectFile(baseUrl, id, refPath, remaining, getAuthHeaders);
       } catch (err) {
         if (err instanceof BudgetExceededError) truncated = true;
         continue;
@@ -1584,13 +1604,15 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
 // failure of the whole bundle.
 class BudgetExceededError extends Error {}
 
-async function fetchProjectFile(baseUrl: string, projectId: string, relPath: string, remainingBytes = Infinity): Promise<ProjectFileBundleEntry> {
+async function fetchProjectFile(baseUrl: string, projectId: string, relPath: string, remainingBytes: number | undefined = undefined, getAuthHeaders?: () => Record<string, string>): Promise<ProjectFileBundleEntry> {
+  const _remainingBytes = remainingBytes ?? Infinity;
   const segments = String(relPath)
     .split('/')
     .filter((s) => s.length > 0)
     .map(encodeURIComponent);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/raw/${segments.join('/')}`;
-  const resp = await fetch(url, { headers: authHeaders() });
+  const headers = getAuthHeaders ? getAuthHeaders() : authHeaders();
+  const resp = await fetch(url, { headers });
   if (!resp.ok) {
     const body = await safeText(resp);
     throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);
@@ -1603,7 +1625,7 @@ async function fetchProjectFile(baseUrl: string, projectId: string, relPath: str
   }
   // If the server advertises a size that already exceeds our remaining
   // budget, skip reading the body to avoid a large allocation.
-  if (size !== null && size > remainingBytes) {
+  if (size !== null && size > _remainingBytes) {
     throw new BudgetExceededError(`file ${relPath} (${size} bytes) exceeds remaining budget`);
   }
   const content = await resp.text();
@@ -1760,5 +1782,5 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-// Exported for unit tests only.
-export { extractRelativeRefs, resolveProjectId, resolveProjectArg, withActiveEcho, fetchProjectFile, getArtifact, getFile, createArtifact, handleMcpToolCall };
+// Exported for mcp-http.ts and unit tests.
+export { TOOL_DEFS, extractRelativeRefs, resolveProjectId, resolveProjectArg, withActiveEcho, fetchProjectFile, getArtifact, getFile, createArtifact, handleMcpToolCall };

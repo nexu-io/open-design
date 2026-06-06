@@ -46,6 +46,12 @@ export interface BuildMcpInstallPayloadInputs {
   /** True when the daemon is bound to a non-loopback address (0.0.0.0,
    *  LAN IP, Tailscale IP). The UI uses this to prompt key setup. */
   networkExposed?: boolean;
+  /** The host the daemon is bound to (from --host or OD_BIND_HOST).
+   *  Used to compute the remote MCP URL. */
+  bindHost?: string;
+  /** First valid MCP key, when available. Included in the payload so
+   *  the UI can pre-fill Authorization headers in remote snippets. */
+  mcpKey?: string;
 }
 
 export interface McpInstallPayload {
@@ -62,6 +68,12 @@ export interface McpInstallPayload {
   nodeExists: boolean;
   buildHint: string | null;
   networkExposed?: boolean;
+  /** Streamable HTTP MCP URL for remote agents.
+   *  Only present when the daemon is network-exposed. */
+  remoteUrl?: string;
+  /** First valid MCP key for remote auth. Included so the UI
+   *  can pre-fill the Authorization header in remote snippets. */
+  remoteMcpKey?: string;
 }
 
 export function buildMcpInstallPayload(
@@ -124,6 +136,10 @@ export function buildMcpInstallPayload(
     cliExists: inputs.cliExists,
     nodeExists: inputs.nodeExists,
     buildHint: hints.length ? hints.join(' ') : null,
-    ...(inputs.networkExposed ? { networkExposed: true } : {}),
+    ...(inputs.networkExposed ? {
+      networkExposed: true,
+      remoteUrl: `http://${inputs.bindHost || '127.0.0.1'}:${inputs.port}/mcp`,
+      ...(inputs.mcpKey ? { remoteMcpKey: inputs.mcpKey } : {}),
+    } : {}),
   };
 }

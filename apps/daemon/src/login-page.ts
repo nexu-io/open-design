@@ -198,7 +198,7 @@ export function renderLoginPage(error?: string, next?: string, isLocal?: boolean
       <img src="/app-icon.svg" alt="" draggable="false" />
       <span class="logo-text">Open Design</span>
     </div>
-    <p class="subtitle">Enter your API key to access this daemon.</p>
+    <p class="subtitle">Open Design, Anywhere, Everywhere.</p>
     ${errorHtml}
     <form method="POST" action="/api/auth/login">
       <label for="key">API key</label>

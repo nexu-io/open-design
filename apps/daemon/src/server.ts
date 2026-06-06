@@ -464,6 +464,7 @@ import { registerActiveContextRoutes } from './routes/active-context.js';
 import { registerHostToolsRoutes } from './routes/host-tools.js';
 import { registerMcpRoutes, bustInstallInfoCache } from './mcp-routes.js';
 import { registerXaiRoutes } from './routes/xai.js';
+import { createMcpHttpHandler } from './mcp-http.js';
 import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
 import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './routes/deploy.js';
@@ -6220,6 +6221,11 @@ export async function startServer({
     http: httpDeps,
     paths: pathDeps,
   });
+
+  // Streamable HTTP MCP endpoint — remote agents connect here.
+  const mcpHttpHandler = createMcpHttpHandler(daemonUrl);
+  app.post('/mcp', mcpHttpHandler);
+  app.get('/mcp', mcpHttpHandler);
   // Project workspace
   registerActiveContextRoutes(app, {
     db,
