@@ -4589,11 +4589,12 @@ export async function startServer({
       if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
       const auth = req.get('authorization') ?? '';
       const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
-      if (!match || match[1] !== apiToken) {
+      if (!match || !timingSafeEqual(match[1], apiToken)) {
         return res.status(401).json({
           error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
         });
       }
+      return next();
     });
   }
 
@@ -4659,29 +4660,6 @@ export async function startServer({
     });
   }
 
-
-  // Plan §3.K1 — bearer-token middleware.
-  //
-  // Active only when OD_API_TOKEN is set. Loopback origins skip the
-  // check (the desktop UI / local CLI never carry a bearer); every
-  // other request must present `Authorization: Bearer <token>` with a
-  // value matching `OD_API_TOKEN`. Health / version / status remain
-  // open so monitoring probes don't need the token.
-  if (apiToken.length > 0) {
-    const openProbePaths = new Set(['/api/health', '/api/version', '/api/daemon/status']);
-    app.use('/api', (req, res, next) => {
-      if (openProbePaths.has(req.path)) return next();
-      if (isLoopbackAddress(req.socket?.remoteAddress)) return next();
-      const auth = req.get('authorization') ?? '';
-      const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
-      if (!match || !timingSafeEqual(match[1], apiToken)) {
-        return res.status(401).json({
-          error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
-        });
-      }
-      return next();
-    });
-  }
 
   // ── Login gateway for LAN browser access ───────────────────────
   app.get('/login', (req, res) => {

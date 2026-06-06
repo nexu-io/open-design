@@ -306,3 +306,36 @@ describe('GET /api/mcp/install-info', () => {
     }
   });
 });
+
+describe('buildMcpInstallPayload remote URL', () => {
+  const base = {
+    execPath: '/usr/bin/node',
+    cliPath: '/opt/od/cli.js',
+    cliExists: true,
+    nodeExists: true,
+    port: 7456,
+    platform: 'darwin' as NodeJS.Platform,
+    dataDir: '/tmp/od',
+    electronAsNode: false,
+    isSidecarMode: false,
+    sidecarEnv: {},
+  };
+
+  it('brackets IPv6 bind host in remote URL', () => {
+    const payload = buildMcpInstallPayload({
+      ...base,
+      networkExposed: true,
+      bindHost: 'fd00::1',
+    });
+    expect(payload.remoteUrl).toBe('http://[fd00::1]:7456/mcp');
+  });
+
+  it('does not bracket IPv4 bind host', () => {
+    const payload = buildMcpInstallPayload({
+      ...base,
+      networkExposed: true,
+      bindHost: '192.168.1.10',
+    });
+    expect(payload.remoteUrl).toBe('http://192.168.1.10:7456/mcp');
+  });
+});

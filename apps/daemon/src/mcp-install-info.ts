@@ -1,3 +1,4 @@
+import net from 'node:net';
 import os from 'node:os';
 
 // Pure builder for the /api/mcp/install-info payload. Extracted from
@@ -132,9 +133,11 @@ export function buildMcpInstallPayload(
   // Build the remote MCP URL. OD_PUBLIC_BASE_URL wins (Cloudflare Tunnel /
   // reverse proxy), otherwise derive from the bind host with interface
   // detection for Tailscale (100.x.x.x) and LAN IPs.
+  const rawHost = resolveRemoteHost(inputs.bindHost);
+  const hostForUrl = net.isIPv6(rawHost) ? `[${rawHost}]` : rawHost;
   const remoteUrl = inputs.publicBaseUrl
     ? `${inputs.publicBaseUrl}/mcp`
-    : `http://${resolveRemoteHost(inputs.bindHost)}:${inputs.port}/mcp`;
+    : `http://${hostForUrl}:${inputs.port}/mcp`;
   return {
     command: inputs.execPath,
     args,
