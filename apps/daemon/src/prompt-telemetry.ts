@@ -17,12 +17,14 @@ export type PromptTelemetrySectionKind =
   | 'runtimeToolPrompt'
   | 'researchCommandContract'
   | 'runContextPrompt'
+  | 'browserUsePromptGuard'
   | 'clientSystemPrompt'
   | 'echoGuard'
   | 'userRequest'
   | 'skillPrompt'
   | 'designSystemPrompt'
   | 'pluginStagePrompt'
+  | 'agentPrompt'
   | 'cwdHint'
   | 'linkedDirsHint'
   | 'attachments'
@@ -94,12 +96,14 @@ const REDACTED_CONTENT_KINDS = new Set<PromptTelemetrySectionKind>([
   'runtimeToolPrompt',
   'researchCommandContract',
   'runContextPrompt',
+  'browserUsePromptGuard',
   'clientSystemPrompt',
   'echoGuard',
   'userRequest',
   'skillPrompt',
   'designSystemPrompt',
   'pluginStagePrompt',
+  'agentPrompt',
 ]);
 
 const SECTION_PRIORITY = new Map<PromptTelemetrySectionKind, number>([
@@ -112,8 +116,10 @@ const SECTION_PRIORITY = new Map<PromptTelemetrySectionKind, number>([
   ['pluginStagePrompt', 5],
   ['researchCommandContract', 6],
   ['runContextPrompt', 7],
-  ['echoGuard', 8],
-  ['userRequest', 9],
+  ['browserUsePromptGuard', 8],
+  ['echoGuard', 9],
+  ['userRequest', 10],
+  ['agentPrompt', 11],
 ]);
 
 const FILE_LOCAL_PATH =

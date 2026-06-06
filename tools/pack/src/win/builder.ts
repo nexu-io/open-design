@@ -76,6 +76,7 @@ function logWinBuildProgress(message: string, fields: Record<string, unknown> = 
 
 export function isWinCodeSignSymlinkPrivilegeError(error: unknown): boolean {
   const output = [
+    error instanceof Error ? error.message : undefined,
     (error as { stdout?: unknown } | undefined)?.stdout,
     (error as { stderr?: unknown } | undefined)?.stderr,
   ]

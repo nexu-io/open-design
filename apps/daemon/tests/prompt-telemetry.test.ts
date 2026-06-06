@@ -311,6 +311,21 @@ describe('prompt telemetry builder', () => {
     expect(telemetry.sectionCount).toBe(1);
   });
 
+  it('captures runtime prompt transforms in the agent prompt section', () => {
+    const telemetry = buildPromptStackTelemetry({
+      composedPrompt: 'ultracode: Build a card',
+      sections: [
+        { kind: 'userRequest', content: 'Build a card' },
+        { kind: 'agentPrompt', content: 'ultracode: Build a card' },
+      ],
+    });
+
+    const agentPrompt = telemetry.sections.find((section) => section.kind === 'agentPrompt');
+    expect(agentPrompt?.redactedContent).toBe('ultracode: Build a card');
+    expect(agentPrompt?.contentMode).toBe('redacted-section-content');
+    expect(telemetry.promptFingerprint).toMatch(/^sha256:/);
+  });
+
   it('keeps only high-value flat metadata fields', () => {
     const telemetry = buildPromptStackTelemetry({
       composedPrompt: 'Build a card',

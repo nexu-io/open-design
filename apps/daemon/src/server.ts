@@ -10387,57 +10387,6 @@ export async function startServer({
         ? `\n\n${promptImagePaths.map((p) => `@${p}`).join(' ')}`
         : '',
     ].join('');
-    run.promptTelemetry = buildPromptStackTelemetry({
-      composedPrompt: composed,
-      sections: [
-        { kind: 'formOverride', content: formOverride },
-        // Phase 1 explicitly needs redactedContent for these aggregate prompts:
-        // they are the quickest way to inspect the system context sent to the
-        // model when diagnosing Langfuse traces.
-        { kind: 'daemonSystemPrompt', content: daemonSystemPrompt },
-        { kind: 'runtimeToolPrompt', content: runtimeToolPrompt },
-        { kind: 'researchCommandContract', content: researchCommandContract },
-        { kind: 'runContextPrompt', content: runContextPrompt },
-        { kind: 'browserUsePromptGuard', content: browserUsePromptGuard },
-        { kind: 'clientSystemPrompt', content: clientInstructionPrompt },
-        { kind: 'echoGuard', content: ECHO_GUARD },
-        { kind: 'userRequest', content: userRequestPrompt },
-        { kind: 'skillPrompt', content: promptTelemetryParts?.skillPrompt },
-        {
-          kind: 'designSystemPrompt',
-          content: promptTelemetryParts?.designSystemPrompt,
-        },
-        {
-          kind: 'pluginStagePrompt',
-          content: promptTelemetryParts?.pluginStagePrompt,
-        },
-        { kind: 'cwdHint', content: cwdHint, metadata: cwd ? [cwd] : [] },
-        {
-          kind: 'linkedDirsHint',
-          content: linkedDirsHint,
-          metadata: linkedDirs,
-        },
-        {
-          kind: 'attachments',
-          content: attachmentHint,
-          metadata: safeAttachments,
-        },
-        {
-          kind: 'commentAttachments',
-          content: commentHint,
-          metadata: safeCommentAttachments,
-        },
-        {
-          kind: 'promptImagePaths',
-          content: promptImagePaths.join('\n'),
-          metadata: promptImagePaths,
-        },
-      ],
-    });
-    run.analyticsTelemetry = {
-      ...(run.analyticsTelemetry ?? {}),
-      promptBuildEndAt: Date.now(),
-    };
     let configuredAgentEnv = {};
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
@@ -10502,6 +10451,61 @@ export async function startServer({
           hasPriorAssistantTurn,
         })
       : composed;
+    run.promptTelemetry = buildPromptStackTelemetry({
+      composedPrompt: agentPrompt,
+      sections: [
+        { kind: 'formOverride', content: formOverride },
+        // Phase 1 explicitly needs redactedContent for these aggregate prompts:
+        // they are the quickest way to inspect the system context sent to the
+        // model when diagnosing Langfuse traces.
+        { kind: 'daemonSystemPrompt', content: daemonSystemPrompt },
+        { kind: 'runtimeToolPrompt', content: runtimeToolPrompt },
+        { kind: 'researchCommandContract', content: researchCommandContract },
+        { kind: 'runContextPrompt', content: runContextPrompt },
+        { kind: 'browserUsePromptGuard', content: browserUsePromptGuard },
+        { kind: 'clientSystemPrompt', content: clientInstructionPrompt },
+        { kind: 'echoGuard', content: ECHO_GUARD },
+        { kind: 'userRequest', content: userRequestPrompt },
+        { kind: 'skillPrompt', content: promptTelemetryParts?.skillPrompt },
+        {
+          kind: 'designSystemPrompt',
+          content: promptTelemetryParts?.designSystemPrompt,
+        },
+        {
+          kind: 'pluginStagePrompt',
+          content: promptTelemetryParts?.pluginStagePrompt,
+        },
+        {
+          kind: 'agentPrompt',
+          content: agentPrompt === composed ? '' : agentPrompt,
+        },
+        { kind: 'cwdHint', content: cwdHint, metadata: cwd ? [cwd] : [] },
+        {
+          kind: 'linkedDirsHint',
+          content: linkedDirsHint,
+          metadata: linkedDirs,
+        },
+        {
+          kind: 'attachments',
+          content: attachmentHint,
+          metadata: safeAttachments,
+        },
+        {
+          kind: 'commentAttachments',
+          content: commentHint,
+          metadata: safeCommentAttachments,
+        },
+        {
+          kind: 'promptImagePaths',
+          content: promptImagePaths.join('\n'),
+          metadata: promptImagePaths,
+        },
+      ],
+    });
+    run.analyticsTelemetry = {
+      ...(run.analyticsTelemetry ?? {}),
+      promptBuildEndAt: Date.now(),
+    };
     // Accumulates the agent's visible text this run so the close handler can
     // tell whether the turn ended on a clarifying question form. The
     // `od-plugin-authoring` plugin's turn-1 flow is to emit a
