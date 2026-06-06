@@ -223,7 +223,32 @@ const WEB_STANDALONE_APP_NODE_MODULES = "apps/web/node_modules";
 // of the standalone tree and the audit aborts the packaged build.
 const STANDALONE_HOISTED_PEER_DEPS = ["react", "react-dom", "styled-jsx"];
 
-async function hoistStandaloneNextPeerDeps(standaloneRoot: string): Promise<void> {
+type CreateSymlink = (target: string, path: string) => Promise<void>;
+
+function shouldCopyWhenSymlinkFails(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return code === "EPERM" || code === "EACCES";
+}
+
+async function createHoistedPeerDependency(
+  target: string,
+  linkPath: string,
+  relativeTarget: string,
+  createLink: CreateSymlink,
+): Promise<void> {
+  try {
+    await createLink(relativeTarget, linkPath);
+  } catch (error) {
+    if (!shouldCopyWhenSymlinkFails(error)) throw error;
+    await cp(target, linkPath, { dereference: true, recursive: true });
+  }
+}
+
+export async function hoistStandaloneNextPeerDeps(
+  standaloneRoot: string,
+  options: { createLink?: CreateSymlink } = {},
+): Promise<void> {
+  const createLink = options.createLink ?? symlink;
   const appNodeModules = join(standaloneRoot, WEB_STANDALONE_APP_NODE_MODULES);
   const pnpmRoot = join(standaloneRoot, "node_modules", ".pnpm");
   let pnpmEntries: string[];
@@ -255,7 +280,7 @@ async function hoistStandaloneNextPeerDeps(standaloneRoot: string): Promise<void
     // from a previous build with different react/react-dom versions)
     // before recreating, so repeated invocations don't EEXIST.
     if (existing) await unlink(linkPath).catch(() => undefined);
-    await symlink(relativeTarget, linkPath);
+    await createHoistedPeerDependency(target, linkPath, relativeTarget, createLink);
   }
 }
 

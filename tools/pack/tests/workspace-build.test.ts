@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { ToolPackCache } from "../src/cache.js";
 import type { ToolPackConfig } from "../src/config.js";
-import { ensureWorkspaceBuildArtifacts } from "../src/workspace-build.js";
+import { ensureWorkspaceBuildArtifacts, hoistStandaloneNextPeerDeps } from "../src/workspace-build.js";
 
 const PACKAGE_DIRS = [
   "packages/components",
@@ -274,6 +274,34 @@ describe("ensureWorkspaceBuildArtifacts", () => {
       ]);
       expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "miss"]);
       expect(await readFile(join(root, "apps/packaged/dist/index.mjs"), "utf8")).toBe("mac-build\n");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("hoistStandaloneNextPeerDeps", () => {
+  it("falls back to copying peer dependency directories when Windows blocks symlink creation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-hoist-"));
+    const packageRoot = join(root, "node_modules", ".pnpm", "react@18.3.1", "node_modules", "react");
+    const hoistedRoot = join(root, "apps", "web", "node_modules", "react");
+
+    try {
+      await mkdir(packageRoot, { recursive: true });
+      await writeFile(join(packageRoot, "package.json"), '{"name":"react"}\n', "utf8");
+
+      await hoistStandaloneNextPeerDeps(root, {
+        createLink: async () => {
+          const error = new Error("operation not permitted") as NodeJS.ErrnoException;
+          error.code = "EPERM";
+          throw error;
+        },
+      });
+
+      const stats = await lstat(hoistedRoot);
+      expect(stats.isDirectory()).toBe(true);
+      expect(stats.isSymbolicLink()).toBe(false);
+      expect(await readFile(join(hoistedRoot, "package.json"), "utf8")).toBe('{"name":"react"}\n');
     } finally {
       await rm(root, { force: true, recursive: true });
     }
