@@ -18353,11 +18353,16 @@ function HtmlViewer({
                         value={displayDevVisibility}
                         onChange={(e) => {
                           const nextVisibility = e.target.value as 'public' | 'company' | 'private';
+                          const shouldClearSharedWith = displayDevVisibility === 'private' && nextVisibility !== 'private';
                           setDisplayDevVisibility(nextVisibility);
-                          if (nextVisibility !== 'private') {
+                          if (shouldClearSharedWith) {
                             setDisplayDevSharedWith('');
                           }
-                          setDisplayDevDeployTouched((current) => ({ ...current, visibility: true }));
+                          setDisplayDevDeployTouched((current) => ({
+                            ...current,
+                            visibility: true,
+                            ...(shouldClearSharedWith ? { sharedWith: true } : {}),
+                          }));
                         }}
                       >
                         <option value="public">{t('fileViewer.displayDevVisibilityPublic')}</option>
