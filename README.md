@@ -304,6 +304,12 @@ curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
 #         | pi | vibe | hermes | cline | kimi | trae | opencode
 ```
 
+> **If `open-design.ai/install.sh` returns 404 (the file isn't yet mirrored at the website),** fetch the canonical copy straight from the repo instead:
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/nexu-io/open-design/main/install.sh | sh -s <agent>
+> ```
+> The script is in the repo at `install.sh` and matches `apps/daemon/src/mcp-agent-install.ts` exactly — it prints (or, with `--write-config`, deep-merges) the per-agent MCP server entry without clobbering the rest of your config.
+
 Then, inside the agent:
 
 ```

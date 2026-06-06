@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Agent install bootstrap is now in the repo.** `install.sh` is the shell entry point referenced by the README's one-liner (`curl -fsSL https://open-design.ai/install.sh | sh -s <agent>`). Until the site mirrors it, fetch the canonical copy from the repo with `curl -fsSL https://raw.githubusercontent.com/nexu-io/open-design/main/install.sh | sh -s <agent>`. Supports all 14 agents in `apps/daemon/src/mcp-agent-install.ts` (`AGENT_SLUGS`): claude, codex, cursor, copilot, openclaw, antigravity, gemini, pi, vibe, hermes, cline, kimi, trae, opencode. The per-agent behavior (CLI argv, JSON deep-merge, manual-only print) mirrors the daemon's `mcp-agent-install.ts` exactly so the two installers stay in lock-step. Adds a vitest-style test under `scripts/install.sh.test.ts` that runs in `pnpm guard`; the first assertion (`install.sh exists at the repo root`) goes red on `main` and green on this branch, satisfying the bug-fix verification bar.
+
 ## [0.9.0] - 2026-05-29
 
 🎉 **310 PRs · 88 contributors · 7 days** — Meet the **install-and-create release**. No more API-key scavenger hunts. No more asking teammates to install three different CLIs before their first prompt. **Open Design AMR** is now built into the app: sign in once, pick a model, and start building. Around that zero-config first run, 0.9.0 brings a bigger agent bench, faster model picking, a more discoverable plugin marketplace, richer review workflows, smoother Studio tools, and easier installs across Windows, macOS, and Linux. 🚀
