@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // @ts-nocheck
 import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
+import { fileURLToPath } from 'node:url';
+import { generateKey, listKeys, revokeKey } from './auth-store.js';
+import { resolveDataDir } from './server.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
 import { runProjectHandoff } from './handoff-cli.js';
@@ -280,6 +283,7 @@ const SUBCOMMAND_MAP = {
   version: runVersion,
   doctor: runDoctor,
   config: runConfig,
+  auth: runAuth,
 };
 
 if (argv[0] === 'mcp' && argv[1] === 'live-artifacts') {
@@ -499,6 +503,81 @@ Flags:
   --query        Required search query.
   --max-sources  Optional source cap. Defaults to 5, clamped to Tavily's max.
   --daemon-url   Local daemon URL. Defaults to OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456.`);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od auth …
+// ---------------------------------------------------------------------------
+
+async function runAuth(args) {
+  const sub = args.find((a) => !a.startsWith('-')) || '';
+  if (sub === 'help' || sub === '-h' || sub === '--help' || sub === '') {
+    printAuthHelp();
+    process.exit(sub === 'help' || args.includes('--help') || args.includes('-h') ? 0 : 2);
+  }
+  if (sub !== 'key') {
+    console.error(`unknown subcommand: od auth ${sub}`);
+    printAuthHelp();
+    process.exit(2);
+  }
+  const keySub = args.find((a, i) => i > 0 && !a.startsWith('-')) || '';
+  const PROJECT_ROOT = fileURLToPath(new URL('..', import.meta.url));
+  const dataDir = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT);
+
+  if (keySub === 'generate') {
+    const labelIdx = args.indexOf('--label');
+    const label = labelIdx >= 0 ? args[labelIdx + 1] : '';
+    const entry = await generateKey(dataDir, label);
+    console.log(`Generated API key (id: ${entry.id}):`);
+    console.log(entry.key);
+    console.log('\nStore this key securely. It will not be shown again.');
+    process.exit(0);
+  }
+
+  if (keySub === 'list') {
+    const keys = await listKeys(dataDir);
+    if (keys.length === 0) {
+      console.log('No API keys configured.');
+    } else {
+      for (const k of keys) {
+        const label = k.label ? ` (${k.label})` : '';
+        console.log(`  ${k.id}${label}  created: ${new Date(k.createdAt).toISOString()}`);
+      }
+    }
+    process.exit(0);
+  }
+
+  if (keySub === 'revoke') {
+    const id = args[args.length - 1];
+    if (!id || id.startsWith('-')) {
+      console.error('Usage: od auth key revoke <id>');
+      process.exit(2);
+    }
+    const removed = await revokeKey(dataDir, id);
+    if (removed) {
+      console.log(`Key ${id} revoked.`);
+    } else {
+      console.error(`Key ${id} not found.`);
+      process.exit(1);
+    }
+    process.exit(0);
+  }
+
+  console.error(`unknown subcommand: od auth key ${keySub}`);
+  printAuthHelp();
+  process.exit(2);
+}
+
+function printAuthHelp() {
+  console.log(`Usage:
+  od auth key generate [--label <text>]
+      Generate a new API key for daemon authentication.
+
+  od auth key list
+      List API key IDs and labels.
+
+  od auth key revoke <id>
+      Revoke an API key by its ID.`);
 }
 
 // ---------------------------------------------------------------------------

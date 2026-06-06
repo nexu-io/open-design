@@ -156,6 +156,8 @@ import {
   showCompletionNotification,
 } from '../utils/notifications';
 
+import { isPackagedDesktop } from '../utils/desktop';
+
 export type SettingsSection =
   | 'execution'
   | 'instructions'
@@ -168,6 +170,8 @@ export type SettingsSection =
   | 'language'
   | 'appearance'
   | 'critiqueTheater'
+  | 'desktop'
+  | 'network'
   | 'notifications'
   | 'pet'
   | 'skills'
@@ -2646,6 +2650,8 @@ export function SettingsDialog({
       title: t('critiqueTheater.settingsNav'),
       subtitle: t('critiqueTheater.settingsNavHint'),
     },
+    desktop: { title: t('settings.desktop'), subtitle: t('settings.desktopHint') },
+    network: { title: t('settings.network'), subtitle: t('settings.networkHint') },
     notifications: { title: t('settings.notifications'), subtitle: t('settings.notificationsHint') },
     privacy: { title: t('settings.privacy'), subtitle: t('settings.privacyHint') },
     pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
@@ -3084,6 +3090,32 @@ export function SettingsDialog({
                 <small>{t('settings.appearanceHint')}</small>
               </span>
             </button>
+            {isPackagedDesktop() && (
+              <button
+                type="button"
+                className={`settings-nav-item${activeSection === 'desktop' ? ' active' : ''}`}
+                onClick={() => setActiveSection('desktop')}
+              >
+                <Icon name="settings" size={18} />
+                <span>
+                  <strong>{t('settings.desktop')}</strong>
+                  <small>{t('settings.desktopHint')}</small>
+                </span>
+              </button>
+            )}
+            {daemonLive && (
+              <button
+                type="button"
+                className={`settings-nav-item${activeSection === 'network' ? ' active' : ''}`}
+                onClick={() => setActiveSection('network')}
+              >
+                <Icon name="link" size={18} />
+                <span>
+                  <strong>{t('settings.network')}</strong>
+                  <small>{t('settings.networkHint')}</small>
+                </span>
+              </button>
+            )}
             <button
               type="button"
               className={`settings-nav-item${activeSection === 'critiqueTheater' ? ' active' : ''}`}
@@ -4404,6 +4436,14 @@ export function SettingsDialog({
 
           {activeSection === 'critiqueTheater' ? (
             <CritiqueTheaterSection />
+          ) : null}
+
+          {activeSection === 'desktop' ? (
+            <DesktopSection />
+          ) : null}
+
+          {activeSection === 'network' ? (
+            <NetworkSection daemonLive={daemonLive} />
           ) : null}
 
           {activeSection === 'notifications' ? (
@@ -7132,6 +7172,236 @@ function soundIdToTracking(
     default:
       return undefined;
   }
+}
+
+function DesktopSection() {
+  const { t } = useI18n();
+  const [enabled, setEnabled] = useState<boolean>(() => false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    window.electronAPI?.autoLaunch?.get?.().then((v) => {
+      setEnabled(v);
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
+  }, []);
+
+  const toggle = async () => {
+    const next = !enabled;
+    const ok = await window.electronAPI?.autoLaunch?.set?.(next);
+    if (ok === true) setEnabled(next);
+  };
+
+  if (!isPackagedDesktop()) return null;
+
+  return (
+    <section className="settings-section">
+      <div className="section-head">
+        <div>
+          <h3>{t('settings.desktop')}</h3>
+          <p className="hint">{t('settings.desktopHint')}</p>
+        </div>
+      </div>
+
+      <div className="settings-subsection">
+        <div className="section-head">
+          <div>
+            <h4>{t('settings.autoLaunch')}</h4>
+            <p className="hint">{t('settings.autoLaunchHint')}</p>
+          </div>
+        </div>
+        <div
+          className="seg-control"
+          role="group"
+          aria-label={t('settings.autoLaunch')}
+          style={{ '--seg-cols': 1 } as React.CSSProperties}
+        >
+          <button
+            type="button"
+            className={'seg-btn' + (loaded && enabled ? ' active' : '')}
+            aria-pressed={loaded && enabled}
+            disabled={!loaded}
+            onClick={toggle}
+          >
+            <span className="seg-title">
+              {loaded
+                ? enabled
+                  ? t('common.on')
+                  : t('common.off')
+                : '…'}
+            </span>
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
+  const { t } = useI18n();
+  const [bindHost, setBindHost] = useState('127.0.0.1');
+  const [port, setPort] = useState(7456);
+  const [allowedHosts, setAllowedHosts] = useState('');
+  const [keys, setKeys] = useState<Array<{ id: string; label: string; createdAt: number }>>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [newKey, setNewKey] = useState<string | null>(null);
+  const [newKeyId, setNewKeyId] = useState<string | null>(null);
+  const [label, setLabel] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const networkExposed = bindHost !== '127.0.0.1' && bindHost !== '::1' && bindHost !== 'localhost';
+  const portTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!daemonLive) return;
+    Promise.all([
+      fetch('/api/network-config').then((r) => r.ok ? r.json() : { bindHost: '127.0.0.1', port: 7456, allowedHosts: '' }),
+      fetch('/api/auth/keys').then((r) => r.ok ? r.json() : { keys: [] }),
+    ]).then(([nc, ak]) => {
+      setBindHost(nc.bindHost ?? '127.0.0.1');
+      setPort(nc.port ?? 7456);
+      setAllowedHosts(Array.isArray(nc.allowedHosts) ? nc.allowedHosts.join(', ') : '');
+      setKeys(ak.keys ?? []);
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
+  }, [daemonLive]);
+
+  const saveConfig = async (patch: Record<string, unknown>) => {
+    setError(null);
+    const portVal = typeof patch.port === 'number' ? patch.port : port;
+    if (patch.port !== undefined && (!Number.isInteger(portVal) || portVal < 1 || portVal > 65535)) {
+      setError(t('settings.networkSaveError'));
+      return;
+    }
+    try {
+      const res = await fetch('/api/network-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bindHost: patch.bindHost ?? bindHost,
+          port: portVal,
+          allowedHosts: patch.allowedHosts !== undefined
+            ? String(patch.allowedHosts).split(',').map((s: string) => s.trim()).filter(Boolean)
+            : allowedHosts.split(',').map((s) => s.trim()).filter(Boolean),
+        }),
+      });
+      if (!res.ok) setError(t('settings.networkSaveError'));
+    } catch {
+      setError(t('settings.networkSaveError'));
+    }
+  };
+
+  const generateNewKey = async () => {
+    setError(null);
+    try {
+      const res = await fetch('/api/auth/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label }),
+      });
+      if (!res.ok) { setError(t('settings.networkSaveError')); return; }
+      const data = await res.json();
+      setNewKey(data.key);
+      setNewKeyId(data.id);
+      setLabel('');
+      setKeys((k) => [...k, { id: data.id, label: data.label ?? '', createdAt: data.createdAt }]);
+    } catch {
+      setError(t('settings.networkSaveError'));
+    }
+  };
+
+  const revoke = async (id: string) => {
+    setError(null);
+    try {
+      const res = await fetch(`/api/auth/keys/${id}`, { method: 'DELETE' });
+      if (!res.ok) { setError(t('settings.networkSaveError')); return; }
+      setKeys((k) => k.filter((x) => x.id !== id));
+      if (newKeyId === id) { setNewKey(null); setNewKeyId(null); }
+    } catch {
+      setError(t('settings.networkSaveError'));
+    }
+  };
+
+  if (!daemonLive) {
+    return (
+      <section className="settings-section">
+        <div className="section-head"><div><h3>{t('settings.network')}</h3></div></div>
+        <p className="hint">{t('settings.networkRequiresDaemon')}</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="settings-section">
+      <div className="section-head">
+        <div>
+          <h3>{t('settings.network')}</h3>
+          <p className="hint">{t('settings.networkHint')}</p>
+        </div>
+      </div>
+
+      {networkExposed && (
+        <div className="settings-subsection" style={{ background: 'var(--color-warning-bg, #fff3cd)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+          <strong>{t('settings.networkWarning')}</strong>
+          <p className="hint">{t('settings.networkWarningHint')}</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="settings-subsection" style={{ background: 'var(--color-error-bg, #f8d7da)', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+          <strong>{error}</strong>
+        </div>
+      )}
+
+      <div className="settings-subsection">
+        <div className="section-head"><div><h4>{t('settings.bindHost')}</h4><p className="hint">{t('settings.bindHostHint')}</p></div></div>
+        <select value={bindHost} onChange={(e) => { setBindHost(e.target.value); saveConfig({ bindHost: e.target.value }); }} disabled={!loaded}>
+          <option value="127.0.0.1">127.0.0.1 (localhost only)</option>
+          <option value="0.0.0.0">0.0.0.0 (all interfaces)</option>
+        </select>
+      </div>
+
+      <div className="settings-subsection">
+        <div className="section-head"><div><h4>{t('settings.port')}</h4><p className="hint">{t('settings.portHint')}</p></div></div>
+        <input type="number" value={port} min={1} max={65535} onChange={(e) => { const v = Number(e.target.value); setPort(v); if (portTimer.current) clearTimeout(portTimer.current); portTimer.current = setTimeout(() => saveConfig({ port: v }), 800); }} disabled={!loaded} />
+      </div>
+
+      {networkExposed && (
+        <>
+          <div className="settings-subsection">
+            <div className="section-head"><div><h4>{t('settings.allowedHosts')}</h4><p className="hint">{t('settings.allowedHostsHint')}</p></div></div>
+            <input type="text" value={allowedHosts} placeholder="192.168.1.0/24, 10.0.0.5" onChange={(e) => setAllowedHosts(e.target.value)} onBlur={() => saveConfig({ allowedHosts: allowedHosts })} disabled={!loaded} />
+          </div>
+
+          <div className="settings-subsection">
+            <div className="section-head"><div><h4>{t('settings.apiKeys')}</h4><p className="hint">{t('settings.apiKeysHint')}</p></div></div>
+            {keys.length > 0 && (
+              <ul style={{ listStyle: 'none', padding: 0, marginBottom: '12px' }}>
+                {keys.map((k) => (
+                  <li key={k.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span><code>{k.id}</code>{k.label ? ` — ${k.label}` : ''}</span>
+                    <button type="button" className="seg-btn" onClick={() => revoke(k.id)}>{t('settings.revoke')}</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {newKey && (
+              <div style={{ background: 'var(--color-success-bg, #d4edda)', padding: '12px', borderRadius: '8px', marginBottom: '12px', wordBreak: 'break-all' }}>
+                <strong>{t('settings.newApiKey')}:</strong>
+                <code style={{ display: 'block', marginTop: '4px', userSelect: 'all' }}>{newKey}</code>
+                <p className="hint">{t('settings.newApiKeyHint')}</p>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input type="text" value={label} placeholder={t('settings.keyLabel')} onChange={(e) => setLabel(e.target.value)} />
+              <button type="button" className="seg-btn active" onClick={generateNewKey}>{t('settings.generateKey')}</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      <p className="hint" style={{ marginTop: '16px' }}>{t('settings.networkRestartHint')}</p>
+    </section>
+  );
 }
 
 function NotificationsSection({

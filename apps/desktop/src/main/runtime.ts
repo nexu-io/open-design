@@ -22,6 +22,7 @@ import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf
 import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
+import { enableAutoLaunch, disableAutoLaunch, isAutoLaunchEnabled } from "./auto-launch.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -1690,6 +1691,19 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     } catch (error) {
       return { ok: false, reason: error instanceof Error ? error.message : String(error) };
     }
+  });
+
+  ipcMain.removeHandler('auto-launch:get');
+  ipcMain.removeHandler('auto-launch:set');
+  ipcMain.handle('auto-launch:get', () => isAutoLaunchEnabled());
+  ipcMain.handle('auto-launch:set', (_event, enabled: boolean) => {
+    return enabled ? enableAutoLaunch() : disableAutoLaunch();
+  });
+
+  // Synchronous reply so the preload can resolve isPackaged before
+  // the bridge is exposed to the renderer.
+  ipcMain.on('auto-launch:is-packaged', (event) => {
+    event.returnValue = app.isPackaged;
   });
 
   let currentUrl: string | null = null;

@@ -368,7 +368,7 @@ od skill list --scenario marketing
 
 **For an agent starting from scratch,** the installer places `~/.config/<agent>/open-design.json` (or the platform equivalent) plus a copy-paste MCP snippet. Cursor gets a one-click deeplink; Claude Code gets a `claude mcp add-json` one-liner; every other agent gets JSON in the schema its config expects. Full per-agent flow → **Settings → MCP server** in the desktop app, or [`docs/agent-adapters.md`](docs/agent-adapters.md).
 
-**Security model.** Read-only by default, the daemon binds to `127.0.0.1`, and SSRF is blocked at the proxy edge. LAN exposure requires an explicit `OD_BIND_HOST` plus `OD_ALLOWED_ORIGINS`. Connector credentials and live-artifact preview routes stay loopback-only regardless.
+**Security model.** Read-only by default, the daemon binds to `127.0.0.1`, and SSRF is blocked at the proxy edge. LAN exposure requires an explicit `OD_BIND_HOST` plus `OD_ALLOWED_ORIGINS` — see [`docs/network-security.md`](docs/network-security.md) for API key auth, IP allowlisting, and Tailscale setup. Connector credentials and live-artifact preview routes stay loopback-only regardless.
 
 ---
 
@@ -571,6 +571,8 @@ Full architecture → [`docs/architecture.md`](docs/architecture.md). Skill prot
 - [x] **0.8.0** — plugin marketplace infrastructure (261 official plugins, manifest spec, per-agent install scripts)
 - [x] **0.9.0** — Open Design AMR (official Model Router built into the app: zero config, one-click sign-in)
 - [x] Packaged Electron builds — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (optional lane)
+- [x] Auto-launch support — macOS login item for packaged desktop app (`Settings → Desktop`), LaunchAgent plist and Nix Home Manager for headless daemon → [`docs/self-hosting.md`](docs/self-hosting.md)
+- [x] Network security — IP allowlist + API key auth for `0.0.0.0` exposure; Tailscale integration with zero-config WireGuard access → [`docs/network-security.md`](docs/network-security.md)
 - [ ] Comment-mode surgical edits — partially shipped; reliable targeted patching in progress
 - [ ] AI-emitted tweaks panel UX — not yet implemented
 - [ ] `npx od init` to scaffold a project with `DESIGN.md`

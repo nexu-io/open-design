@@ -215,6 +215,12 @@ const shell = {
       return actionFailure(reasonFromError(error));
     }
   },
+  autoLaunch: {
+    get: (): Promise<boolean> =>
+      ipcRenderer.invoke('auto-launch:get'),
+    set: (enabled: boolean): Promise<void> =>
+      ipcRenderer.invoke('auto-launch:set', enabled),
+  },
 };
 
 const browser = {
@@ -306,4 +312,5 @@ contextBridge.exposeInMainWorld(OPEN_DESIGN_HOST_GLOBAL, hostBridge);
 contextBridge.exposeInMainWorld('openDesignDesktop', {
   exportDiagnostics: (): Promise<DesktopDiagnosticsExportResult> =>
     ipcRenderer.invoke(DESKTOP_DIAGNOSTICS_IPC_CHANNEL) as Promise<DesktopDiagnosticsExportResult>,
+  isPackaged: ipcRenderer.sendSync('auto-launch:is-packaged'),
 });
