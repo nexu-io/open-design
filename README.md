@@ -299,16 +299,18 @@ You can use Open Design without ever opening the GUI — call it as a skill, plu
 
 ```bash
 # One-line install into the agent you're using:
-curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+curl -fsSL https://open-design.ai/install.sh | bash -s -- <agent>
 # <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
 #         | pi | vibe | hermes | cline | kimi | trae | opencode
 ```
 
+> **Use `bash`, not `sh`:** the script depends on bash semantics (`set -o pipefail`, `local`). On Debian/Ubuntu, `/bin/sh` is `dash` and will fail before doing anything useful.
+>
 > **If `open-design.ai/install.sh` returns 404 (the file isn't yet mirrored at the website),** fetch the canonical copy straight from the repo instead:
 > ```bash
-> curl -fsSL https://raw.githubusercontent.com/nexu-io/open-design/main/install.sh | sh -s <agent>
+> curl -fsSL https://raw.githubusercontent.com/nexu-io/open-design/main/install.sh | bash -s -- <agent>
 > ```
-> The script is in the repo at `install.sh` and matches `apps/daemon/src/mcp-agent-install.ts` exactly — it prints (or, with `--write-config`, deep-merges) the per-agent MCP server entry without clobbering the rest of your config.
+> The script is in the repo at `install.sh` and mirrors the supported agent roster and basic MCP server shape from `apps/daemon/src/mcp-agent-install.ts` — it prints (or, with `--write-config`, deep-merges) the per-agent MCP server entry without clobbering the rest of your config. For the full payload (env vars, sidecar, `OD_DATA_DIR`), use the daemon installer (`od mcp install <agent>`) once the daemon is installed.
 
 Then, inside the agent:
 
@@ -359,8 +361,8 @@ Node `~24`, pnpm `10.33.x`. Windows users, see [`docs/windows-troubleshooting.md
 Open Design ships a **stdio MCP server** and per-agent **install scripts**. Any MCP-compatible agent in another repo can read files from your local Open Design projects directly — tokens CSS, JSX components, entry HTML — as a structured API queryable by name. The agent always sees the live file, not a stale export.
 
 ```bash
-# One-line install (16+ CLIs supported):
-curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+# One-line install (14 agents supported):
+curl -fsSL https://open-design.ai/install.sh | bash -s -- <agent>
 
 # Then the agent can:
 od search-files "primary button"      # search files across projects

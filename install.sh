@@ -3,12 +3,19 @@
 #
 # This is the shell entry point referenced by the README's one-liner:
 #
-#   curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+#   curl -fsSL https://open-design.ai/install.sh | bash -s -- <agent>
 #
-# It is the no-Node-required, no-daemon-required first step. It prints
-# (or, with --write-config, writes) the agent-specific MCP server
-# registration for the Open Design stdio MCP server, so a coding agent
-# can talk to the local Open Design daemon at $DAEMON_URL.
+# IMPORTANT: use `bash`, not `sh`. This script depends on bash
+# semantics (`set -o pipefail`, `local`, arrays). On Debian/Ubuntu
+# /bin/sh is `dash`, which will fail before doing anything useful.
+#
+# The script is no-daemon-required. It is also no-Node-required in
+# dry-run mode; --write-config needs Node on PATH because the JSON
+# merge helper is implemented in Node (the same runtime the daemon
+# already requires, so it is not an extra dep for users who run `od`).
+# It prints (or, with --write-config, writes) the agent-specific MCP
+# server registration for the Open Design stdio MCP server, so a
+# coding agent can talk to the local Open Design daemon at $DAEMON_URL.
 #
 # The full agent-aware planner lives in the daemon at `od mcp install
 # <agent>` (apps/daemon/src/mcp-agent-install.ts). That path is the
@@ -35,13 +42,13 @@
 # Options:
 #   --daemon-url URL       Daemon URL (default: http://127.0.0.1:7456)
 #   --write-config         Write the config (default: dry-run, print only)
-#   --non-interactive      Don't prompt
+#   --dry-run              Print the config plan; never write (default)
 #   --help, -h             Show this help
 #
 # Exit codes:
 #   0   success (snippet printed or config written)
 #   1   generic error
-#   2   bad arguments (missing agent, unknown agent, bad flag)
+#   2   bad arguments (missing agent, unknown agent, bad flag, bad URL)
 
 set -euo pipefail
 
@@ -51,8 +58,14 @@ set -euo pipefail
 DEFAULT_DAEMON_URL="http://127.0.0.1:7456"
 DAEMON_URL="$DEFAULT_DAEMON_URL"
 DRY_RUN=1
-NON_INTERACTIVE=0
 AGENT=""
+
+# Strict URL allowlist. RFC 3986 unreserved + sub-delims + a controlled
+# set of pchar. Excludes quotes, backslashes, whitespace, and control
+# characters so the URL can be safely interpolated into JSON and
+# shell snippets without escaping. The URL is validated up-front; if
+# you need to add a character, do it in BOTH the regex and the test.
+URL_REGEX='^https?://[A-Za-z0-9._~%-]+(:[0-9]+)?(/[A-Za-z0-9._~:/?#@!$&'"'"'()*+,;=%-]*)?$'
 
 # ---------------------------------------------------------------------------
 # Colors & formatting (matches deploy/scripts/install.sh)
@@ -88,27 +101,28 @@ ${BOLD}Agents:${RESET}
     - cli    (claude, codex, gemini, kimi):
         prints a one-liner that drives the agent's own \`<bin> mcp add\`
         subcommand. Idempotent: re-running with the same server name
-        overwrites the previous entry.
+        overwrites the previous entry. --write-config is a no-op for
+        these agents (you must run the printed command by hand).
     - json   (cursor, copilot, cline, opencode, openclaw, antigravity, trae):
         prints (or, with --write-config, deep-merges) a JSON config file
         under the agent's well-known config dir. Never clobbers other
-        servers.
+        servers, and refuses to overwrite a non-object at the dot-path.
     - manual (pi, hermes, vibe):
         schema is unverified, so the script always prints only and
-        refuses to write. Paste the snippet by hand.
+        refuses --write-config. Paste the snippet by hand.
 
 ${BOLD}Options:${RESET}
   --daemon-url URL       Daemon URL (default: ${DEFAULT_DAEMON_URL})
   --write-config         Write the config (default: dry-run, print only)
-  --non-interactive      Don't prompt
+  --dry-run              Print the config plan; never write (default)
   --help, -h             Show this help
 
 ${BOLD}Examples:${RESET}
-  # Dry-run: print the snippet, write nothing
+  # Dry-run: print the snippet, write nothing, no network call
   install.sh claude
 
-  # Wire claude-code for real
-  install.sh claude --write-config
+  # Wire cursor for real (deep-merges into ~/.cursor/mcp.json)
+  install.sh cursor --write-config
 
   # Wire codex pointing at a non-default daemon
   install.sh codex --write-config --daemon-url http://od.lan:7456
@@ -123,14 +137,37 @@ EOF
 # ---------------------------------------------------------------------------
 while [ $# -gt 0 ]; do
   case "$1" in
-    --daemon-url)      shift; DAEMON_URL="$1" ;;
-    --daemon-url=*)    DAEMON_URL="${1#--daemon-url=}" ;;
+    --daemon-url)
+      if [ $# -lt 2 ]; then
+        error "--daemon-url requires a value"
+        step "Example: --daemon-url http://127.0.0.1:7456"
+        exit 2
+      fi
+      shift
+      case "$1" in
+        "")  error "--daemon-url value cannot be empty"; exit 2 ;;
+        -*)  error "--daemon-url value cannot start with '-': got '$1'"; exit 2 ;;
+      esac
+      DAEMON_URL="$1"
+      ;;
+    --daemon-url=*)
+      val="${1#--daemon-url=}"
+      case "$val" in
+        "") error "--daemon-url= value cannot be empty"; exit 2 ;;
+      esac
+      DAEMON_URL="$val"
+      ;;
     --write-config)    DRY_RUN=0 ;;
     --dry-run)         DRY_RUN=1 ;;
-    --non-interactive) NON_INTERACTIVE=1 ;;
     --help|-h)         usage; exit 0 ;;
     -*)                error "Unknown option: $1"; echo; usage; exit 2 ;;
-    *)                 AGENT="$1" ;;
+    *)
+      if [ -n "$AGENT" ]; then
+        error "Unexpected extra argument: $1 (only one <agent> is allowed)"
+        exit 2
+      fi
+      AGENT="$1"
+      ;;
   esac
   shift
 done
@@ -141,6 +178,27 @@ if [ -z "$AGENT" ]; then
   usage
   exit 2
 fi
+
+# Validate the daemon URL up-front so every downstream consumer
+# (banner, JSON entry, printed CLI command) sees a clean value and
+# no JSON-escape / shell-quote footguns remain. The regex is
+# strict on purpose: it is the only line of defense against a
+# URL with embedded quotes or backslashes making it into the
+# printed snippets and the written JSON entry.
+if ! printf '%s' "$DAEMON_URL" | grep -qE "$URL_REGEX"; then
+  error "Invalid --daemon-url: ${DAEMON_URL}"
+  step "URL must match: https?://<host>[:port][/path]"
+  step "Host is required (no empty host)."
+  step "Disallowed: double quotes, backslashes, whitespace, control chars"
+  exit 2
+fi
+
+# Shell-quoted form of DAEMON_URL, used ONLY in printed CLI snippets
+# (the JSON entries use the raw form, which is safe because the URL
+# regex already excludes `"` and `\`). `printf '%q'` produces a
+# POSIX-shell-safe quoted string, so a URL like `http://host:7456/;id`
+# prints as `'http://host:7456/;id'` and is safe to copy-paste.
+SHELL_DAEMON_URL="$(printf '%q' "$DAEMON_URL")"
 
 # ---------------------------------------------------------------------------
 # Agent whitelist — must match apps/daemon/src/mcp-agent-install.ts AGENT_SLUGS.
@@ -199,11 +257,13 @@ agent_meta() {
   esac
 }
 
+KIND="$(agent_meta "$AGENT")"
+
 # ---------------------------------------------------------------------------
 # Banner
 # ---------------------------------------------------------------------------
 printf "\n${BOLD}  Open Design — Agent MCP install bootstrap${RESET}\n"
-step "Agent:      ${AGENT}"
+step "Agent:      ${AGENT}  (${KIND})"
 step "Daemon URL: ${DAEMON_URL}"
 if [ "$DRY_RUN" = "1" ]; then
   step "Mode:       dry-run (use --write-config to actually write)"
@@ -213,21 +273,32 @@ fi
 printf "\n"
 
 # ---------------------------------------------------------------------------
-# JSON merge helper (used only by --write-config for json agents).
-# Avoids an external dep (jq) by delegating to a tiny Node script that
-# lives next to the tests in scripts/install-sh-merge.mjs. Node is the
-# same runtime the Open Design daemon already requires, so it is not
-# an extra dep for users who run `od`.
+# JSON merge helper. Two paths, one algorithm:
+#
+#   1. If the canonical scripts/install-sh-merge.mjs is on disk next
+#      to install.sh (local-clone path), use it directly.
+#   2. Otherwise (curl|bash path), inline the same algorithm via
+#      heredoc piped to `node --input-type=module`. The heredoc MUST
+#      stay byte-equivalent to scripts/install-sh-merge.mjs; the test
+#      suite verifies both paths produce the same result.
+#
+# The merge algorithm is also in scripts/install-sh-merge.mjs so it
+# can be unit-tested without going through bash.
 # ---------------------------------------------------------------------------
-SCRIPT_DIR_CD="$(cd "$(dirname "$0")" && pwd)"
-MERGE_SCRIPT="${SCRIPT_DIR_CD}/scripts/install-sh-merge.mjs"
+SCRIPT_DIR_CD="$(cd "$(dirname "$0")" && pwd 2>/dev/null || true)"
+MERGE_SCRIPT=""
+if [ -n "$SCRIPT_DIR_CD" ] && [ -f "${SCRIPT_DIR_CD}/scripts/install-sh-merge.mjs" ]; then
+  MERGE_SCRIPT="${SCRIPT_DIR_CD}/scripts/install-sh-merge.mjs"
+fi
 
 merge_json_config() {
   # merge_json_config <configPath> <dotKeyPath> <serverName> <entryJson>
-  # Creates the parent dir, deep-merges `entryJson` under
-  # `dotKeyPath.serverName` into the existing file (treating a missing
-  # or malformed file as {}), and writes back atomically.
+  # Deep-merges entryJson under dotKeyPath.serverName into the existing
+  # file (treating a missing or empty file as {}), refuses on malformed
+  # JSON or a non-object at the dot-path, and writes back atomically
+  # with a unique tmp name + preserved file mode.
   local config_path="$1" dot_key_path="$2" server_name="$3" entry_json="$4"
+  local merge_out rc
 
   if ! command -v node >/dev/null 2>&1; then
     error "node is required for --write-config but was not found on PATH."
@@ -235,15 +306,127 @@ merge_json_config() {
     return 1
   fi
 
-  if [ ! -f "$MERGE_SCRIPT" ]; then
-    error "merge helper not found at $MERGE_SCRIPT"
-    step "Reinstall Open Design (or pull this repo) so the helper is present."
-    return 1
+  # Disable set -e around the node call: the merge helper exits with
+  # non-zero for refused-to-clobber / malformed-JSON conditions, and
+  # we want to forward the helper's own stderr to the user (and the
+  # exit code back to the caller) rather than have the shell exit
+  # silently. This block is a deliberate, narrow exception to the
+  # script-wide `set -e` policy.
+  set +e
+  if [ -n "$MERGE_SCRIPT" ]; then
+    merge_out="$(node "$MERGE_SCRIPT" "$config_path" "$dot_key_path" "$server_name" "$entry_json" 2>&1)"
+  else
+    merge_out="$(node --input-type=module - "$config_path" "$dot_key_path" "$server_name" "$entry_json" 2>&1 <<'NODE_EOF'
+import { readFileSync, writeFileSync, mkdirSync, renameSync, statSync, chmodSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { dirname } from "node:path";
+
+const [configPath, dotKeyPath, serverName, entryJson] = process.argv.slice(2);
+
+if (!configPath || !dotKeyPath || !serverName || !entryJson) {
+  process.stderr.write(
+    "install-sh-merge: usage: install-sh-merge <configPath> <dotKeyPath> <serverName> <entryJson>\n",
+  );
+  process.exit(1);
+}
+
+let entry;
+try {
+  entry = JSON.parse(entryJson);
+} catch (err) {
+  process.stderr.write(`install-sh-merge: failed to parse entryJson: ${err.message}\n`);
+  process.exit(1);
+}
+
+// Missing or empty file is treated as {}. A non-object root or
+// malformed JSON refuses to clobber with exit 2.
+let cfg = {};
+try {
+  const raw = readFileSync(configPath, "utf8").trim();
+  if (raw.length > 0) {
+    cfg = JSON.parse(raw);
+    if (typeof cfg !== "object" || cfg === null || Array.isArray(cfg)) {
+      process.stderr.write(
+        `install-sh-merge: refusing to merge into non-object root in ${configPath}\n`,
+      );
+      process.exit(2);
+    }
+  }
+} catch (err) {
+  if (err && err.code !== "ENOENT") {
+    process.stderr.write(
+      `install-sh-merge: failed to parse ${configPath}: ${err.message}\n`,
+    );
+    process.exit(2);
+  }
+}
+
+// Walk the dot-path. Missing keys become {}. Existing non-object
+// values refuse — the user almost certainly meant something else and
+// we'd be silently clobbering it.
+const parts = dotKeyPath.split(".").filter(Boolean);
+let cursor = cfg;
+for (let i = 0; i < parts.length; i++) {
+  const part = parts[i];
+  if (!(part in cursor)) {
+    cursor[part] = {};
+  } else if (typeof cursor[part] !== "object" || cursor[part] === null || Array.isArray(cursor[part])) {
+    process.stderr.write(
+      `install-sh-merge: refusing to clobber non-object at "${parts.slice(0, i + 1).join(".")}" in ${configPath}\n`,
+    );
+    process.exit(2);
+  }
+  cursor = cursor[part];
+}
+cursor[serverName] = entry;
+
+const newContent = JSON.stringify(cfg, null, 2) + "\n";
+
+// Idempotency: skip the write if the file already has the same content.
+// Some agents and editor extensions watch their config file and
+// reload on mtime change; we'd rather be a no-op than cause a
+// needless reload when the merged content is byte-identical.
+let existingContent = null;
+try {
+  existingContent = readFileSync(configPath, "utf8");
+} catch {}
+if (existingContent === newContent) {
+  process.stdout.write(`install-sh-merge: ${configPath} unchanged\n`);
+  process.exit(0);
+}
+
+mkdirSync(dirname(configPath), { recursive: true });
+// Preserve the existing file's mode; default new files to 0o600
+// (the URL inside is not a credential, but it's a host + port and
+// 0o600 is the standard for new dotfiles).
+let oldMode = 0o600;
+try {
+  oldMode = statSync(configPath).mode & 0o777;
+} catch {}
+// PID + UUID suffix prevents tmp-name collisions across concurrent
+// runs of the installer. It does not implement safe symlink semantics;
+// if `configPath` is a symlink, `renameSync` will replace it with a
+// regular file. This is acceptable for the installer's threat model
+// (writing user-owned dotfiles in $HOME after explicit --write-config
+// opt-in) and is documented in the install.sh comments.
+const tmp = `${configPath}.install-sh.${process.pid}.${randomUUID()}.tmp`;
+writeFileSync(tmp, newContent, "utf8");
+chmodSync(tmp, oldMode);
+renameSync(tmp, configPath);
+NODE_EOF
+)"
   fi
+  rc=$?
+  set -e
 
-  node "$MERGE_SCRIPT" "$config_path" "$dot_key_path" "$server_name" "$entry_json"
-
-  ok "Wrote ${config_path}"
+  if [ "$rc" -ne 0 ]; then
+    printf '%s\n' "$merge_out" >&2
+    return "$rc"
+  fi
+  # Forward the helper's own message ("Wrote <path>" / "<path> unchanged")
+  # so the user sees what actually happened.
+  printf '%s\n' "$merge_out"
+  ok "Merge: ${config_path}"
 }
 
 # ---------------------------------------------------------------------------
@@ -277,13 +460,19 @@ case "$AGENT" in
   # ============================================================
   # CLI-driven agents: print the exact argv the daemon's
   # mcp-agent-install.ts generates for its <bin> mcp add flow.
+  # --write-config is a no-op for these (you must run the
+  # printed command by hand). The banner above already set the
+  # DRY_RUN mode, so the warning is emitted on the same line.
   # ============================================================
   claude)
+    if [ "$DRY_RUN" = "0" ]; then
+      warn "--write-config is ignored for claude (cli strategy). Run the printed command instead."
+    fi
     cat <<EOF
 ${BOLD}  Run this in your shell to register open-design with Claude Code:${RESET}
 
     claude mcp add --scope user ${SERVER_NAME} \\
-      -- od mcp --daemon-url ${DAEMON_URL}
+      -- od mcp --daemon-url ${SHELL_DAEMON_URL}
 
   This is idempotent: re-running with the same server name overwrites
   the previous entry. To remove later: \`claude mcp remove --scope user ${SERVER_NAME}\`.
@@ -295,11 +484,14 @@ EOF
     ;;
 
   codex)
+    if [ "$DRY_RUN" = "0" ]; then
+      warn "--write-config is ignored for codex (cli strategy). Run the printed command instead."
+    fi
     cat <<EOF
 ${BOLD}  Run this in your shell to register open-design with Codex:${RESET}
 
     codex mcp add ${SERVER_NAME} \\
-      -- od mcp --daemon-url ${DAEMON_URL}
+      -- od mcp --daemon-url ${SHELL_DAEMON_URL}
 
   This is idempotent: re-running overwrites the previous entry.
   To remove later: \`codex mcp remove ${SERVER_NAME}\`.
@@ -309,11 +501,14 @@ EOF
     ;;
 
   gemini)
+    if [ "$DRY_RUN" = "0" ]; then
+      warn "--write-config is ignored for gemini (cli strategy). Run the printed command instead."
+    fi
     cat <<EOF
 ${BOLD}  Run this in your shell to register open-design with Gemini CLI:${RESET}
 
     gemini mcp add -s user -t stdio ${SERVER_NAME} \\
-      -- od mcp --daemon-url ${DAEMON_URL}
+      -- od mcp --daemon-url ${SHELL_DAEMON_URL}
 
   This is idempotent. To remove later: \`gemini mcp remove ${SERVER_NAME}\`.
 
@@ -322,11 +517,14 @@ EOF
     ;;
 
   kimi)
+    if [ "$DRY_RUN" = "0" ]; then
+      warn "--write-config is ignored for kimi (cli strategy). Run the printed command instead."
+    fi
     cat <<EOF
 ${BOLD}  Run this in your shell to register open-design with Kimi:${RESET}
 
     kimi mcp add --transport stdio ${SERVER_NAME} \\
-      -- od mcp --daemon-url ${DAEMON_URL}
+      -- od mcp --daemon-url ${SHELL_DAEMON_URL}
 
   This is idempotent. To remove later: \`kimi mcp remove ${SERVER_NAME}\`.
 
@@ -397,7 +595,7 @@ EOF
         ;;
       *)
         warn "Cline is only supported on macOS and Linux from this script."
-        step "On Windows, run from a Bash shell that has \$APPDATA set, or use od mcp install cline."
+        step "On Windows, use \`od mcp install cline\` instead."
         CLINE_CFG=""
         ;;
     esac
@@ -423,7 +621,7 @@ EOF
         ;;
       *)
         warn "Trae is only supported on macOS and Linux from this script."
-        step "On Windows, run from a Bash shell that has \$APPDATA set, or use od mcp install trae."
+        step "On Windows, use \`od mcp install trae\` instead."
         TRAE_CFG=""
         ;;
     esac
@@ -532,10 +730,22 @@ EOF
 esac
 
 # ---------------------------------------------------------------------------
-# Daemon health check (advisory only — does not fail the install)
+# Daemon health check (advisory only — does not fail the install).
+#
+# Strict policy: dry-run = no side effects, so we do NOT touch the
+# network. The user opted into write mode → probing the daemon is
+# useful (it tells them whether to start the daemon before the next
+# step). `--max-time 3` is the only knob that could make this hang.
 # ---------------------------------------------------------------------------
 echo
 check_daemon() {
+  if [ "$DRY_RUN" = "1" ]; then
+    return 0
+  fi
+  if [ "${OD_INSTALL_SKIP_HEALTH_CHECK:-0}" = "1" ]; then
+    step "Health check skipped (OD_INSTALL_SKIP_HEALTH_CHECK=1)."
+    return 0
+  fi
   if ! command -v curl >/dev/null 2>&1; then
     step "curl not found; skipping daemon health check."
     return 0
@@ -559,4 +769,3 @@ check_daemon
 echo
 step "Next: open a new shell, run your agent (${AGENT}), and try:"
 step "  > Use open-design to generate a landing page with the Linear design system"
-
