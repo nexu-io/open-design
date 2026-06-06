@@ -9,7 +9,7 @@
 // every event inherits it.
 export const EVENT_SCHEMA_VERSION = 2;
 
-export type AnalyticsClientType = 'web' | 'desktop';
+export type AnalyticsClientType = 'web' | 'desktop' | 'android';
 
 export interface AnalyticsPublicParams {
   event_id: string;

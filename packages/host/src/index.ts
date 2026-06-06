@@ -3,6 +3,7 @@ export const OPEN_DESIGN_HOST_VERSION = 2;
 
 export const OPEN_DESIGN_HOST_CLIENT_TYPES = Object.freeze({
   DESKTOP: "desktop",
+  ANDROID: "android",
 } as const);
 
 export type OpenDesignHostClientType =
@@ -290,7 +291,13 @@ export function isOpenDesignHostBridge(value: unknown): value is OpenDesignHostB
   if (!isRecord(value)) return false;
   if (value.version !== OPEN_DESIGN_HOST_VERSION) return false;
   const client = value.client;
-  if (!isRecord(client) || client.type !== OPEN_DESIGN_HOST_CLIENT_TYPES.DESKTOP) return false;
+  if (
+    !isRecord(client) ||
+    (client.type !== OPEN_DESIGN_HOST_CLIENT_TYPES.DESKTOP &&
+      client.type !== OPEN_DESIGN_HOST_CLIENT_TYPES.ANDROID)
+  ) {
+    return false;
+  }
   if (client.platform != null && typeof client.platform !== "string") return false;
   if (client.osLocale != null && typeof client.osLocale !== "string") return false;
 

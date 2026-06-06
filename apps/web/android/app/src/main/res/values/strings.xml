@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Open Design</string>
+    <string name="title_activity_main">Open Design</string>
+    <string name="package_name">ai.opendesign.app</string>
+    <string name="custom_url_scheme">ai.opendesign.app</string>
+</resources>

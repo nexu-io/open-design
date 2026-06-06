@@ -4,6 +4,10 @@ import dynamic from 'next/dynamic';
 
 import { installErrorHandlers } from '../../src/analytics/error-tracking';
 import { installWebObservability } from '../../src/observability/install';
+import { initializeAndroidBridge } from '../../src/utils/android-bridge';
+
+// Install Android bridge for Capacitor runs
+initializeAndroidBridge();
 
 // Install browser exception handlers at module-load time, before any other
 // client code can throw. The hooks buffer events until AnalyticsProvider
