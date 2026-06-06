@@ -745,6 +745,136 @@ describe('ChatPane imported folder surfaces', () => {
     expect(onOpenEditableSurface.mock.calls[0]?.[0]?.html ?? '').not.toContain('Raw stale snapshot');
   });
 
+  it('captures a first editable snapshot from an isolated runtime preview bridge', async () => {
+    const metadata: ProjectMetadata = {
+      kind: 'prototype',
+      importedFrom: 'folder',
+      entryFile: 'app/page.tsx',
+    };
+    const onOpenEditableSurface = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+      if (typeof url === 'string' && url.includes('/ui-surfaces')) {
+        return json({
+          surfaces: [
+            {
+              id: 'messages',
+              label: 'Messages screen',
+              route: '/messages/:conversationId',
+              kind: 'next-route',
+              confidence: 'high',
+              framework: 'Next.js',
+              entryFile: 'app/messages/[conversationId]/page.tsx',
+              previewFile: null,
+              previewRuntimeRoot: '',
+              previewPath: '/messages/preview',
+              previewStatus: 'source-mapped',
+              sourceFiles: ['app/messages/[conversationId]/page.tsx'],
+              styleFiles: ['app/globals.css'],
+              scriptFiles: [],
+              assetFiles: [],
+              fontFiles: [],
+              externalDependencies: [
+                { packageName: 'next', importPath: 'next', kind: 'runtime' },
+              ],
+              reasons: ['Next.js route file detected'],
+              mtime: 20,
+            },
+          ],
+          generatedAt: '2026-06-02T00:00:00.000Z',
+        });
+      }
+      if (typeof url === 'string' && url.includes('/ui-preview')) {
+        expect(init).toEqual(expect.objectContaining({ method: 'POST' }));
+        return json({
+          status: 'ready',
+          runtimeRoot: '',
+          baseUrl: '/api/projects/project-1/ui-preview/proxy/proxy-token',
+          url: '/api/projects/project-1/ui-preview/proxy/proxy-token/messages/preview',
+          upstreamBaseUrl: 'http://127.0.0.1:43210',
+          route: '/messages/preview',
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    renderPane({
+      projectMetadata: metadata,
+      projectFiles: [
+        file('app/messages/[conversationId]/page.tsx', 'code', 20),
+        file('app/globals.css', 'code', 18),
+      ],
+      onRequestOpenFile: vi.fn(),
+      onOpenEditableSurface,
+    });
+
+    const surface = await screen.findByTestId('chat-ui-surface-0');
+    const iframe = await waitFor(() => {
+      const node = surface.querySelector('iframe');
+      expect(node?.getAttribute('src')).toBe(
+        '/api/projects/project-1/ui-preview/proxy/proxy-token/messages/preview',
+      );
+      return node!;
+    });
+    const frameWindow = iframe.contentWindow!;
+    const postMessage = vi.spyOn(frameWindow, 'postMessage').mockImplementation(() => undefined);
+    Object.defineProperty(iframe, 'contentDocument', {
+      configurable: true,
+      get() {
+        throw new DOMException('Blocked by sandbox', 'SecurityError');
+      },
+    });
+
+    fireEvent.click(within(surface).getByRole('button', { name: 'Edit design' }));
+
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'od:editable-snapshot' }),
+        '*',
+      );
+    });
+    const request = postMessage.mock.calls
+      .map(([message]) => message)
+      .find((message): message is { type: 'od:editable-snapshot'; id: string } =>
+        typeof message === 'object' &&
+        message !== null &&
+        (message as { type?: unknown }).type === 'od:editable-snapshot' &&
+        typeof (message as { id?: unknown }).id === 'string',
+      );
+    expect(request).toBeTruthy();
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frameWindow,
+        data: {
+          type: 'od:editable-snapshot:result',
+          id: request!.id,
+          html: `<!doctype html>
+            <html style="display: block; width: 1280px;">
+              <head><title>Runtime app</title><script>window.__runtime = true;</script></head>
+              <body style="margin: 0; background: rgb(10, 20, 30);">
+                <main style="display: grid; color: rgb(210, 75, 42);">
+                  <h1 style="font-size: 48px;">Bridge runtime headline</h1>
+                </main>
+              </body>
+            </html>
+          `,
+        },
+      }));
+    });
+
+    await waitFor(() => {
+      expect(onOpenEditableSurface).toHaveBeenCalledWith({
+        fileName: 'design-snapshots/messages.html',
+        html: expect.stringContaining('Bridge runtime headline'),
+      });
+    });
+    const snapshotHtml = onOpenEditableSurface.mock.calls[0]?.[0]?.html ?? '';
+    expect(snapshotHtml).toContain('data-od-editable-snapshot="true"');
+    expect(snapshotHtml).toContain('color: rgb(210, 75, 42)');
+    expect(snapshotHtml).not.toContain('<script');
+    expect(within(surface).queryByRole('button', { name: 'Preview not ready' })).toBeNull();
+  });
+
   it('captures a loaded runtime preview into an editable design snapshot', async () => {
     const metadata: ProjectMetadata = {
       kind: 'prototype',

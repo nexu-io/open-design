@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildEditableSnapshotHtml,
+  buildEditableSnapshotHtmlFromMarkup,
   editableSnapshotFileName,
   editableSnapshotViewportWidth,
   isEditableSnapshotRevisionFileName,
@@ -123,6 +124,29 @@ describe('editable snapshots', () => {
     expect(html).toContain('padding: 6px');
     expect(isReusableEditableSnapshotHtml(html)).toBe(true);
     frame.remove();
+  });
+
+  it('builds editable snapshots from bridge-provided markup', () => {
+    const html = buildEditableSnapshotHtmlFromMarkup(`<!doctype html>
+      <html style="display: block; width: 1280px;">
+        <head><title>Runtime app</title><script>window.__runtime = true;</script></head>
+        <body style="margin: 0; background: rgb(10, 20, 30);">
+          <main style="display: grid; color: rgb(210, 75, 42);">
+            <h1 style="font-size: 48px;">Bridge headline</h1>
+          </main>
+        </body>
+      </html>
+    `, surface(), {
+      baseUrl: 'http://localhost/api/projects/project-1/ui-preview/proxy/token/messages/preview',
+      projectId: 'project-1',
+      projectFileNames: ['app/messages/page.tsx'],
+    });
+
+    expect(html).toContain('data-od-editable-snapshot="true"');
+    expect(html).toContain('Bridge headline');
+    expect(html).toContain('color: rgb(210, 75, 42)');
+    expect(html).not.toContain('<script');
+    expect(isReusableEditableSnapshotHtml(html)).toBe(true);
   });
 
   it('inlines per-element styles so mockup snapshots do not fall back to browser defaults', () => {

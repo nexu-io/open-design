@@ -718,10 +718,36 @@ const URL_PREVIEW_SNAPSHOT_BRIDGE = `<script data-od-url-snapshot-bridge>
     };
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   }
+  function serializeEditableSnapshot(id){
+    waitForImages().then(function(){
+      try {
+        var clone = document.documentElement.cloneNode(true);
+        inlineSnapshotStyles(document.documentElement, clone);
+        pruneHiddenSnapshotNodes(document.documentElement, clone);
+        window.parent.postMessage({
+          type: 'od:editable-snapshot:result',
+          id: id,
+          html: '<!doctype html>\\n' + clone.outerHTML
+        }, '*');
+      } catch (err) {
+        window.parent.postMessage({
+          type: 'od:editable-snapshot:result',
+          id: id,
+          error: String(err && err.message || err)
+        }, '*');
+      }
+    });
+  }
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
-    if (!data || data.type !== 'od:snapshot' || !data.id) return;
-    waitForImages().then(function(){ renderSnapshot(String(data.id)); });
+    if (!data || !data.id) return;
+    if (data.type === 'od:snapshot') {
+      waitForImages().then(function(){ renderSnapshot(String(data.id)); });
+      return;
+    }
+    if (data.type === 'od:editable-snapshot') {
+      serializeEditableSnapshot(String(data.id));
+    }
   });
 })();
 </script>`;
@@ -911,7 +937,10 @@ function transformPreviewProxyText(text: string, contentType: string, proxyBaseP
   if (/text\/html/i.test(contentType)) {
     return rewritePreviewProxyScriptPaths(
       rewritePreviewProxyCssPaths(
-        rewritePreviewProxyHtmlPaths(injectPreviewProxyBase(text, proxyBasePath), proxyBasePath),
+        rewritePreviewProxyHtmlPaths(
+          injectUrlPreviewBridge(injectPreviewProxyBase(text, proxyBasePath), 'snapshot'),
+          proxyBasePath,
+        ),
         proxyBasePath,
       ),
       proxyBasePath,

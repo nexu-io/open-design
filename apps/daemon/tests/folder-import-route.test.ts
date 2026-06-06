@@ -512,6 +512,9 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
     expect(renderedHtml).toContain(`import "${previewBody.baseUrl}/@vite/client"`);
     expect(renderedHtml).toContain(`action="${previewBody.baseUrl}/submit"`);
     expect(renderedHtml).toContain(`<a href="${previewBody.baseUrl}/search">Search</a>`);
+    expect(renderedHtml).toContain('data-od-url-snapshot-bridge');
+    expect(renderedHtml).toContain("data.type === 'od:editable-snapshot'");
+    expect(renderedHtml).toContain("type: 'od:editable-snapshot:result'");
 
     const postResp = await fetch(`${baseUrl}${previewBody.baseUrl!}/submit`, {
       method: 'POST',

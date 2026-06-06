@@ -202,6 +202,16 @@ export function buildEditableSnapshotHtml(
   return `<!doctype html>\n${clone.outerHTML}`;
 }
 
+export function buildEditableSnapshotHtmlFromMarkup(
+  html: string | null,
+  surface: ProjectUiSurface,
+  options: EditableSnapshotBuildOptions = {},
+): string | null {
+  if (!html || typeof DOMParser === 'undefined') return null;
+  const document = new DOMParser().parseFromString(html, 'text/html');
+  return buildEditableSnapshotHtml(document, surface, options);
+}
+
 export function editableSnapshotViewportWidth(html: string | null): number | null {
   if (!html || !html.includes('data-od-editable-snapshot="true"')) return null;
   const explicitWidth = parseSnapshotViewportWidth(
@@ -663,7 +673,7 @@ function resourceBaseUrl(
   document: Document,
   options: EditableSnapshotBuildOptions,
 ): string | null {
-  for (const candidate of [document.baseURI, document.location?.href, options.baseUrl]) {
+  for (const candidate of [options.baseUrl, document.baseURI, document.location?.href]) {
     if (!candidate) continue;
     const url = safeUrl(candidate);
     if (url && /^https?:$/iu.test(url.protocol)) return url.href;

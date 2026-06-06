@@ -49,6 +49,7 @@ import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import type { SettingsSection } from './SettingsDialog';
 import {
   buildEditableSnapshotHtml,
+  buildEditableSnapshotHtmlFromMarkup,
   editableSnapshotFileName,
   isEditableSnapshotRevisionFileName,
   isReusableEditableSnapshotHtml,
@@ -256,6 +257,9 @@ const SURFACE_PREVIEW_VIEWPORT = {
 } as const;
 const SURFACE_PREVIEW_READY_DELAY_MS = 120;
 const SURFACE_PREVIEW_START_TIMEOUT_MS = 45_000;
+const EDITABLE_SNAPSHOT_BRIDGE_TIMEOUT_MS = 2_000;
+
+let editableSnapshotBridgeRequestSeq = 0;
 
 function ImportedProjectSurfaces({
   projectId,
@@ -289,6 +293,12 @@ function ImportedProjectSurfaces({
       return;
     }
     const baseFileName = editableSnapshotFileName(surface);
+    const projectFileNames = files
+      .filter((file) => file.type !== 'dir')
+      .map((file) => file.name);
+    const snapshotBuildOptions = projectId
+      ? { projectId, projectFileNames }
+      : {};
     const existingFileNames = files.map((file) => file.name);
     const activeSnapshotFileName = activeProjectFileName
       && fileByName.has(activeProjectFileName)
@@ -313,9 +323,7 @@ function ImportedProjectSurfaces({
           ? repairEditableSnapshotResourceUrls(snapshotText, surface, {
             baseUrl: typeof window === 'undefined' ? null : window.location.href,
             projectId,
-            projectFileNames: files
-              .filter((file) => file.type !== 'dir')
-              .map((file) => file.name),
+            projectFileNames,
           })
           : snapshotText;
         const snapshotHtml = repairedSnapshotText ?? snapshotText;
@@ -328,18 +336,23 @@ function ImportedProjectSurfaces({
     const frame = liveFrameRefs.current.get(surface.id);
     let html: string | null = null;
     try {
-      html = frame?.contentDocument
-        ? buildEditableSnapshotHtml(frame.contentDocument, surface, projectId
-          ? {
-            projectId,
-            projectFileNames: files
-              .filter((file) => file.type !== 'dir')
-              .map((file) => file.name),
-          }
-          : {})
-        : null;
+      const frameDocument = frame?.contentDocument ?? null;
+      html = html ?? (
+        frameDocument
+          ? buildEditableSnapshotHtml(frameDocument, surface, snapshotBuildOptions)
+          : null
+      );
     } catch {
-      html = null;
+      if (!html) html = null;
+    }
+    if (!html) {
+      const bridgeMarkup = frame ? await requestEditableSnapshotMarkup(frame) : null;
+      if (bridgeMarkup) {
+        html = buildEditableSnapshotHtmlFromMarkup(bridgeMarkup, surface, {
+          ...snapshotBuildOptions,
+          baseUrl: frame?.src ?? null,
+        });
+      }
     }
     if (!html) {
       setSnapshotErrorSurfaceId(surface.id);
@@ -461,6 +474,54 @@ function ImportedProjectSurfaces({
       })}
     </div>
   );
+}
+
+function requestEditableSnapshotMarkup(frame: HTMLIFrameElement): Promise<string | null> {
+  if (typeof window === 'undefined') return Promise.resolve(null);
+  const target = frame.contentWindow;
+  if (!target) return Promise.resolve(null);
+  const id = `editable-snapshot-${Date.now()}-${editableSnapshotBridgeRequestSeq += 1}`;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let timeout: number | null = null;
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('message', handleMessage);
+      if (timeout !== null) {
+        window.clearTimeout(timeout);
+        timeout = null;
+      }
+    };
+    const finish = (html: string | null) => {
+      cleanup();
+      resolve(html);
+    };
+    const handleMessage = (ev: MessageEvent) => {
+      if (ev.source !== target) return;
+      const data = ev.data;
+      if (!isEditableSnapshotBridgeResult(data, id)) return;
+      finish(typeof data.html === 'string' && data.html.trim() ? data.html : null);
+    };
+
+    window.addEventListener('message', handleMessage);
+    timeout = window.setTimeout(() => finish(null), EDITABLE_SNAPSHOT_BRIDGE_TIMEOUT_MS);
+    try {
+      target.postMessage({ type: 'od:editable-snapshot', id }, '*');
+    } catch {
+      finish(null);
+    }
+  });
+}
+
+function isEditableSnapshotBridgeResult(
+  value: unknown,
+  id: string,
+): value is { type: 'od:editable-snapshot:result'; id: string; html?: string | null } {
+  if (!value || typeof value !== 'object') return false;
+  const data = value as { type?: unknown; id?: unknown };
+  return data.type === 'od:editable-snapshot:result' && data.id === id;
 }
 
 function SurfaceLivePreviewFrame({
