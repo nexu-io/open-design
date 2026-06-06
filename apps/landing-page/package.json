@@ -9,6 +9,7 @@
     "build:static": "astro build && tsx scripts/copy-example-html.ts",
     "preview": "astro preview --host 127.0.0.1 --port 17574",
     "previews": "tsx scripts/generate-previews.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "astro check"
   },
   "dependencies": {

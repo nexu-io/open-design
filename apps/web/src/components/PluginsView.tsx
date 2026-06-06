@@ -39,6 +39,7 @@ import { PluginDetailsModal } from './PluginDetailsModal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import { TrustBadge } from './TrustBadge';
 import { useI18n } from '../i18n';
+import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { AnimatePresence } from 'motion/react';
@@ -605,10 +606,11 @@ function PluginShareConfirmModal({
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  const { locale } = useI18n();
   const details = PLUGIN_SHARE_DETAILS[action];
-  const actionTitle = actionRecord?.title ?? details.fallbackTitle;
+  const actionTitle = actionRecord ? localizePluginTitle(locale, actionRecord) : details.fallbackTitle;
   const actionDescription =
-    actionRecord?.manifest?.description ?? details.fallbackDescription;
+    (actionRecord ? localizePluginDescription(locale, actionRecord) : '') || details.fallbackDescription;
   const actionQuery = readLocalizedUseCaseQuery(actionRecord);
   const stagedPath = `plugin-source/${pluginShareSlug(sourceRecord.id)}`;
 

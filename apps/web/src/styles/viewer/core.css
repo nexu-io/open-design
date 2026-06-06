@@ -8,6 +8,12 @@
   background: var(--bg);
   overflow: hidden;
 }
+.workspace:has(.share-menu-popover, .present-menu),
+.viewer:has(.share-menu-popover, .present-menu) {
+  position: relative;
+  z-index: 220;
+  overflow: visible;
+}
 .viewer-toolbar {
   display: flex;
   justify-content: space-between;
