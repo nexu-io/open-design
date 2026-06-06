@@ -1,17 +1,20 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   createUserDesignSystem,
+  createUserDesignSystemRevision,
   deleteUserDesignSystem,
   linkUserDesignSystemProject,
   listDesignSystems,
   listUserDesignSystemFiles,
   readDesignSystem,
   readUserDesignSystemFile,
+  readUserDesignSystemRevision,
   updateUserDesignSystem,
+  updateUserDesignSystemRevisionStatus,
 } from '../src/design-systems.js';
 
 describe('design systems registry', () => {
@@ -197,6 +200,45 @@ describe('design systems registry', () => {
         'ui_kits/app/components/MessageBubble.jsx',
       ]),
     );
+  });
+
+  it('leaves revision acceptance pending when file-change writes fail', async () => {
+    const created = await createUserDesignSystem(root, {
+      title: 'Atomic Product',
+      status: 'draft',
+      artifactMode: 'agent-managed',
+      body: '# Atomic Product\n\n> Category: Custom\n> Surface: web\n\nOriginal guidance.\n',
+    });
+    const originalBody = await readDesignSystem(root, created.id, { idPrefix: 'user:' });
+    await writeFile(path.join(root, 'atomic-product', 'source'), 'not a directory');
+
+    const revision = await createUserDesignSystemRevision(root, created.id, {
+      feedback: 'Rebuild token contract from source evidence.',
+      baseBody: originalBody ?? '',
+      proposedBody: '# Atomic Product\n\n> Category: Custom\n> Surface: web\n\nAccepted guidance.\n',
+      fileChanges: [{
+        path: 'source/token-contract.rebuild-request.md',
+        baseContent: '',
+        proposedContent: '# Token Contract Rebuild Request\n',
+      }],
+    });
+
+    await expect(updateUserDesignSystemRevisionStatus(
+      root,
+      created.id,
+      revision?.id ?? '',
+      'accepted',
+    )).rejects.toThrow();
+
+    await expect(readDesignSystem(root, created.id, { idPrefix: 'user:' }))
+      .resolves
+      .toBe(originalBody);
+    await expect(readFile(path.join(root, 'atomic-product', 'source'), 'utf8'))
+      .resolves
+      .toBe('not a directory');
+    await expect(readUserDesignSystemRevision(root, created.id, revision?.id ?? ''))
+      .resolves
+      .toMatchObject({ status: 'pending' });
   });
 
   it('migrates older review artifact names into the Claude-style package structure', async () => {

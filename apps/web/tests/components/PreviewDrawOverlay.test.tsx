@@ -86,6 +86,8 @@ describe('PreviewDrawOverlay', () => {
 
     const canvas = container.querySelector<HTMLCanvasElement>('canvas');
     const toolbar = container.querySelector<HTMLElement>('.preview-draw-toolbar');
+    const toolCluster = container.querySelector<HTMLElement>('.preview-draw-tool-cluster');
+    const noteActions = container.querySelector<HTMLElement>('.preview-draw-note-actions');
     const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input');
 
     expect(canvas?.style.zIndex).toBe('80');
@@ -93,9 +95,13 @@ describe('PreviewDrawOverlay', () => {
     expect(toolbar?.style.flexWrap).toBe('wrap');
     expect(toolbar?.style.left).toBe('calc(50% - 52px)');
     expect(toolbar?.style.maxWidth).toContain('100% - 144px');
+    expect(toolCluster?.style.flex).toBe('0 0 auto');
+    expect(noteActions?.style.flex).toBe('1 1 360px');
+    expect(noteActions?.style.minWidth).toBe('0px');
+    expect(noteActions?.style.maxWidth).toBe('412px');
     expect(input?.style.flexGrow).toBe('1');
     expect(input?.style.flexShrink).toBe('1');
-    expect(input?.style.flexBasis).toBe('280px');
+    expect(input?.style.flexBasis).toBe('220px');
     expect(input?.style.minWidth).toBe('0px');
     expect(input?.style.maxWidth).toBe('100%');
   });

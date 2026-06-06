@@ -50,6 +50,7 @@ export type IconName =
   | 'more-horizontal'
   | 'orbit'
   | 'paint-bucket'
+  | 'panel-left'
   | 'palette'
   | 'palette-filled'
   | 'pencil'
@@ -384,6 +385,13 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <rect x="3" y="3" width="18" height="18" rx="2" />
           <circle cx="9" cy="9" r="2" />
           <path d="m21 15-4.5-4.5L7 20" />
+        </svg>
+      );
+    case 'panel-left':
+      return (
+        <svg {...common}>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <line x1="9" y1="3" x2="9" y2="21" />
         </svg>
       );
     case 'import':

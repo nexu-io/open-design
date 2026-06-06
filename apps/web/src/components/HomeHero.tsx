@@ -30,9 +30,7 @@ import type {
   McpServerConfig,
 } from '@open-design/contracts';
 import type { SkillSummary } from '../types';
-import { isImeComposing } from '../utils/imeComposing';
 import { Icon, type IconName } from './Icon';
-import { PluginInputsForm } from './PluginInputsForm';
 import { useAnalytics } from '../analytics/provider';
 import { trackHomeChatComposerClick } from '../analytics/events';
 import {
@@ -40,6 +38,12 @@ import {
   type ChipGroup,
   type HomeHeroChip,
 } from './home-hero/chips';
+import {
+  filterPluginsBySubChip,
+  isSubChipParent,
+  subChipsForChip,
+  type HomeHeroSubChip,
+} from './home-hero/sub-chips';
 import {
   inlineMentionToken,
   type InlineMentionEntity,
@@ -54,6 +58,7 @@ import { PreviewSurface } from './plugins-home/cards/PreviewSurface';
 import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
 import { inferPluginPreview } from './plugins-home/preview';
 import { SessionModeToggle } from './SessionModeToggle';
+import { ComposerPlusMenu } from './ComposerPlusMenu';
 import {
   LexicalComposerInput,
   type LexicalComposerInputHandle,
@@ -97,17 +102,25 @@ interface Props {
   selectedPluginContexts?: InstalledPluginRecord[];
   selectedMcpContexts?: McpServerConfig[];
   selectedConnectorContexts?: ConnectorDetail[];
+  // Context-only selections (staged through the plain `Use` action, no inline
+  // @mention pill). These have no in-prompt representation, so the active row
+  // renders a removable chip for each — otherwise a kept-in-payload context
+  // would be invisible and unremovable (silent context drift).
+  contextOnlyPlugins?: InstalledPluginRecord[];
+  contextOnlyMcpServers?: McpServerConfig[];
+  contextOnlyConnectors?: ConnectorDetail[];
   onRemovePluginContext?: (pluginId: string) => void;
   onRemoveMcpContext?: (serverId: string) => void;
   onRemoveConnectorContext?: (connectorId: string) => void;
+  onAddPlugin?: () => void;
+  onAddConnector?: () => void;
+  onAddMcp?: () => void;
   onOpenPluginDetails?: (record: InstalledPluginRecord) => void;
   pluginInputFields?: InputFieldSpec[];
   pluginInputValues?: Record<string, unknown>;
   pluginInputTemplate?: string | null;
   onPluginInputValuesChange?: (values: Record<string, unknown>) => void;
-  onPluginInputValidityChange?: (valid: boolean) => void;
   inlineEditableInputNames?: string[];
-  showPluginInputsForm?: boolean;
   footerInputNames?: string[];
   designSystemOptions?: HomeHeroDesignSystemOption[];
   stagedFiles?: File[];
@@ -136,6 +149,7 @@ interface Props {
   onPickWorkingDir?: () => void;
   onClearWorkingDir?: () => void;
   onExamplePromptStatusChange?: (info: ExamplePromptInfo | null) => void;
+  executionSwitcher?: ReactNode;
 }
 
 interface HomeHeroDesignSystemOption {
@@ -202,19 +216,19 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onClearActiveChip = onClearActivePlugin,
     onClearActiveSkill = () => undefined,
     selectedPluginContexts = EMPTY_PLUGIN_CONTEXTS,
-    selectedMcpContexts = EMPTY_MCP_CONTEXTS,
-    selectedConnectorContexts = EMPTY_CONNECTOR_CONTEXTS,
+    contextOnlyPlugins = EMPTY_PLUGIN_CONTEXTS,
+    contextOnlyMcpServers = EMPTY_MCP_OPTIONS,
+    contextOnlyConnectors = EMPTY_CONNECTOR_OPTIONS,
     onRemovePluginContext = () => undefined,
     onRemoveMcpContext = () => undefined,
     onRemoveConnectorContext = () => undefined,
+    onAddPlugin = () => undefined,
+    onAddConnector = () => undefined,
+    onAddMcp = () => undefined,
     onOpenPluginDetails = () => undefined,
     pluginInputFields = EMPTY_INPUT_FIELDS,
     pluginInputValues = EMPTY_PLUGIN_INPUT_VALUES,
-    pluginInputTemplate = null,
     onPluginInputValuesChange = () => undefined,
-    onPluginInputValidityChange = () => undefined,
-    inlineEditableInputNames = EMPTY_INPUT_NAMES,
-    showPluginInputsForm = true,
     footerInputNames = EMPTY_INPUT_NAMES,
     designSystemOptions = EMPTY_DESIGN_SYSTEM_OPTIONS,
     stagedFiles = EMPTY_STAGED_FILES,
@@ -243,6 +257,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onPickWorkingDir,
     onClearWorkingDir,
     onExamplePromptStatusChange,
+    executionSwitcher,
   },
   ref,
 ) {
@@ -253,6 +268,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   const [hoveredPlugin, setHoveredPlugin] = useState<InstalledPluginRecord | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // Selected second-level sub-category slug (Prototype / Slide deck rail).
+  // Local-only: it filters the example-prompt cards below the rail. It never
+  // binds a plugin or stamps an active badge.
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const [selectedPromptExample, setSelectedPromptExample] = useState<SelectedPromptExample | null>(null);
   const [previewHomeFileKey, setPreviewHomeFileKey] = useState<string | null>(null);
   const [stagedFilePreviewUrls, setStagedFilePreviewUrls] = useState<Map<string, string>>(() => new Map());
@@ -445,16 +464,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       .filter((field): field is InputFieldSpec => Boolean(field)),
     [fieldByName, footerInputNames],
   );
-  // Inline `{{slot}}` editing in the prompt body is gone with the Lexical
-  // migration; every non-footer input now renders in the structured
-  // inputs form below the editor (matching the project composer), so the
-  // only fields we exclude are the ones promoted into the footer.
-  const remainingInputFields = useMemo(
-    () => pluginInputFields.filter(
-      (field) => !footerInputNameSet.has(field.name),
-    ),
-    [footerInputNameSet, pluginInputFields],
-  );
   const activeCreateChip = useMemo(
     () => activeChipId
       ? chipsForGroup('create').find((chip) => chip.id === activeChipId) ?? null
@@ -468,6 +477,21 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         : [],
     [activeChipId, locale, pluginOptions],
   );
+  // Derive sub-category pills from the SAME list that feeds the preset cards
+  // (`activeExamplePlugins`), not the full install set. This guarantees every
+  // pill maps to at least one visible card, so selecting it always filters to
+  // a non-empty slice — no "looks unfiltered" fallback needed.
+  const activeSubChips = useMemo(
+    () => subChipsForChip(activeChipId, activeExamplePlugins),
+    [activeChipId, activeExamplePlugins],
+  );
+  // When a sub-category pill is active, narrow the example-prompt cards to that
+  // scene. Because the pills are derived from this very list, the slice is
+  // always non-empty for a real selection.
+  const filteredExamplePlugins = useMemo(() => {
+    if (!selectedSubcategory || !isSubChipParent(activeChipId)) return activeExamplePlugins;
+    return filterPluginsBySubChip(activeExamplePlugins, activeChipId, selectedSubcategory);
+  }, [activeExamplePlugins, activeChipId, selectedSubcategory]);
   const activePromptExamples = useMemo(
     () => activeChipId && activeExamplePlugins.length === 0
       ? homeHeroChipPromptExamples(activeChipId, locale)
@@ -493,6 +517,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
 
   useEffect(() => {
     setSelectedPromptExample(null);
+    setSelectedSubcategory(null);
   }, [activeChipId]);
 
   useEffect(() => {
@@ -632,6 +657,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     }
   }
 
+  function dismissMentionPicker() {
+    setMentionTrigger(null);
+    setMentionTab('all');
+    setHoveredPlugin(null);
+    setSelectedIndex(0);
+  }
+
   // Routes popover navigation keys from the Lexical editor over the visible
   // picker option union. Returns true when consumed so the editor can
   // preventDefault.
@@ -662,10 +694,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     return false;
   }
 
-  function updatePluginInput(name: string, value: unknown) {
-    onPluginInputValuesChange({ ...pluginInputValues, [name]: value });
-  }
-
   function handleFiles(files: File[]) {
     if (files.length === 0) return;
     onAddFiles(files);
@@ -675,15 +703,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     const nextPrompt = stripHomeMentionToken(prompt, file.name);
     if (nextPrompt !== prompt) onPromptChange(nextPrompt);
     onRemoveFile(index);
-  }
-
-  function clearSelectedPromptExample() {
-    if (selectedPromptExample) {
-      onPromptChange('');
-      editorRef.current?.clear();
-      onExamplePromptStatusChange?.(null);
-    }
-    setSelectedPromptExample(null);
   }
 
   function usePromptExample(example: string) {
@@ -727,14 +746,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     if (activePluginRecord) onOpenPluginDetails(activePluginRecord);
   }
 
+  // plugin/MCP/connector contexts now render as inline @mention pills in the
+  // composer, so they no longer drive this top row — only staged files (which
+  // have no inline representation) and the active plugin/skill/example chips do.
   const showActiveContextRow =
     contextItemCount > 0 ||
     (showActivePluginChip && activePluginTitle) ||
     activeSkillTitle ||
-    selectedPromptExample ||
-    selectedPluginContexts.length > 0 ||
-    selectedMcpContexts.length > 0 ||
-    selectedConnectorContexts.length > 0 ||
     stagedFiles.length > 0;
 
   let optionRenderIndex = 0;
@@ -840,82 +858,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 })}
               </span>
             ) : null}
-            {selectedPluginContexts.map((plugin) => (
-              <span
-                key={plugin.id}
-                className="home-hero__active-chip home-hero__active-chip--context"
-                data-testid={`home-hero-context-plugin-${plugin.id}`}
-              >
-                <button
-                  type="button"
-                  className="home-hero__active-chip-body"
-                  onClick={() => onOpenPluginDetails(plugin)}
-                  title={t('homeHero.pluginTitle', { title: plugin.title })}
-                >
-                  <span className="home-hero__active-icon" aria-hidden>
-                    <Icon name="sliders" size={12} />
-                  </span>
-                  <span className="home-hero__active-label">{plugin.title}</span>
-                </button>
-                <button
-                  type="button"
-                  className="home-hero__active-clear od-tooltip"
-                  onClick={() => onRemovePluginContext(plugin.id)}
-                  aria-label={t('homeHero.removePluginAria', { title: plugin.title })}
-                  title={t('homeHero.removePlugin')}
-                  data-tooltip={t('homeHero.removePlugin')}
-                >
-                  <Icon name="close" size={9} />
-                </button>
-              </span>
-            ))}
-            {selectedMcpContexts.map((server) => {
-              const label = server.label || server.id;
-              return (
-                <span
-                  key={server.id}
-                  className="home-hero__active-chip home-hero__active-chip--context"
-                  data-testid={`home-hero-context-mcp-${server.id}`}
-                >
-                  <span className="home-hero__active-icon" aria-hidden>
-                    <Icon name="link" size={12} />
-                  </span>
-                  <span className="home-hero__active-label">{label}</span>
-                  <button
-                    type="button"
-                    className="home-hero__active-clear od-tooltip"
-                    onClick={() => onRemoveMcpContext(server.id)}
-                    aria-label={t('chat.removeAria', { name: label })}
-                    title={t('common.delete')}
-                    data-tooltip={t('common.delete')}
-                  >
-                    <Icon name="close" size={9} />
-                  </button>
-                </span>
-              );
-            })}
-            {selectedConnectorContexts.map((connector) => (
-              <span
-                key={connector.id}
-                className="home-hero__active-chip home-hero__active-chip--context"
-                data-testid={`home-hero-context-connector-${connector.id}`}
-              >
-                <span className="home-hero__active-icon" aria-hidden>
-                  <Icon name="link" size={12} />
-                </span>
-                <span className="home-hero__active-label">{connector.name}</span>
-                <button
-                  type="button"
-                  className="home-hero__active-clear od-tooltip"
-                  onClick={() => onRemoveConnectorContext(connector.id)}
-                  aria-label={t('chat.removeAria', { name: connector.name })}
-                  title={t('common.delete')}
-                  data-tooltip={t('common.delete')}
-                >
-                  <Icon name="close" size={9} />
-                </button>
-              </span>
-            ))}
             {showActivePluginChip && activePluginTitle ? (
               <span className="home-hero__active-chip" data-testid="home-hero-active-plugin">
                 <button
@@ -973,27 +915,78 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 </button>
               </span>
             ) : null}
-            {selectedPromptExample ? (
+            {contextOnlyPlugins.map((plugin) => (
               <span
-                className="home-hero__active-chip home-hero__active-chip--example"
-                data-testid="home-hero-active-example"
+                key={`ctx-plugin-${plugin.id}`}
+                className="home-hero__active-chip home-hero__active-chip--context"
+                data-testid={`home-hero-context-plugin-${plugin.id}`}
               >
                 <span className="home-hero__active-icon" aria-hidden>
-                  <Icon name="pencil" size={12} />
+                  <Icon name="sliders" size={12} />
                 </span>
-                <span className="home-hero__active-label">{t('homeHero.promptExamples')}: {selectedPromptExample.label}</span>
+                <span className="home-hero__active-label">{plugin.title}</span>
                 <button
                   type="button"
                   className="home-hero__active-clear od-tooltip"
-                  onClick={clearSelectedPromptExample}
-                  aria-label={t('common.close')}
+                  onClick={() => onRemovePluginContext(plugin.id)}
+                  aria-label={t('chat.removeAria', { name: plugin.title })}
                   title={t('common.close')}
                   data-tooltip={t('common.close')}
+                  data-testid={`home-hero-context-clear-${plugin.id}`}
                 >
                   <Icon name="close" size={9} />
                 </button>
               </span>
-            ) : null}
+            ))}
+            {contextOnlyMcpServers.map((server) => {
+              const label = server.label || server.id;
+              return (
+                <span
+                  key={`ctx-mcp-${server.id}`}
+                  className="home-hero__active-chip home-hero__active-chip--context"
+                  data-testid={`home-hero-context-mcp-${server.id}`}
+                >
+                  <span className="home-hero__active-icon" aria-hidden>
+                    <Icon name="sliders" size={12} />
+                  </span>
+                  <span className="home-hero__active-label">{label}</span>
+                  <button
+                    type="button"
+                    className="home-hero__active-clear od-tooltip"
+                    onClick={() => onRemoveMcpContext(server.id)}
+                    aria-label={t('chat.removeAria', { name: label })}
+                    title={t('common.close')}
+                    data-tooltip={t('common.close')}
+                    data-testid={`home-hero-context-clear-${server.id}`}
+                  >
+                    <Icon name="close" size={9} />
+                  </button>
+                </span>
+              );
+            })}
+            {contextOnlyConnectors.map((connector) => (
+              <span
+                key={`ctx-connector-${connector.id}`}
+                className="home-hero__active-chip home-hero__active-chip--context"
+                data-testid={`home-hero-context-connector-${connector.id}`}
+              >
+                <span className="home-hero__active-icon" aria-hidden>
+                  <Icon name="link" size={12} />
+                </span>
+                <span className="home-hero__active-label">{connector.name}</span>
+                <button
+                  type="button"
+                  className="home-hero__active-clear od-tooltip"
+                  onClick={() => onRemoveConnectorContext(connector.id)}
+                  aria-label={t('chat.removeAria', { name: connector.name })}
+                  title={t('common.close')}
+                  data-tooltip={t('common.close')}
+                  data-testid={`home-hero-context-clear-${connector.id}`}
+                >
+                  <Icon name="close" size={9} />
+                </button>
+              </span>
+            ))}
           </div>
         ) : null}
         <div className="home-hero__prompt-surface">
@@ -1034,14 +1027,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               }}
             />
           </div>
-          {showPluginInputsForm && remainingInputFields.length > 0 ? (
-            <PluginInputsForm
-              fields={remainingInputFields}
-              values={pluginInputValues}
-              onChange={onPluginInputValuesChange}
-              onValidityChange={onPluginInputValidityChange}
-            />
-          ) : null}
         </div>
         <CaretFloatingLayer caret={caretRect} open={pickerOpen}>
           <div
@@ -1144,7 +1129,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 <button
                   type="button"
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => onOpenPluginDetails(hoveredPlugin)}
+                  onClick={() => {
+                    dismissMentionPicker();
+                    onOpenPluginDetails(hoveredPlugin);
+                  }}
                 >
                   {t('homeHero.details')}
                 </button>
@@ -1166,36 +1154,18 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             }}
           />
           <div className="home-hero__foot-left">
-            <button
-              type="button"
-              className={`home-hero__tool home-hero__context-trigger od-tooltip${pickerOpen ? ' is-active' : ''}`}
-              data-testid="home-hero-context-trigger"
-              onClick={() => {
-                trackHomeChatComposerClick(analytics.track, {
-                  page_name: 'home',
-                  area: 'chat_composer',
-                  element: 'action_chip',
-                });
-                editorRef.current?.focus();
-                if (pickerOpen) return;
-                editorRef.current?.replaceActiveTrigger('@');
-              }}
-              title={t('homeHero.contextSurfaces')}
-              data-tooltip={t('homeHero.contextSurfaces')}
-              aria-label={t('homeHero.contextSurfaces')}
-              aria-haspopup="listbox"
-              aria-expanded={pickerOpen}
-              aria-controls="home-hero-context-picker"
-            >
-              <span className="home-hero__tool-at" aria-hidden>
-                @
-              </span>
-            </button>
-            <button
-              type="button"
-              className="home-hero__tool home-hero__attach od-tooltip"
-              data-testid="home-hero-attach"
-              onClick={() => {
+            <ComposerPlusMenu
+              triggerTestId="home-hero-plus-trigger"
+              connectors={connectorOptions}
+              onPickConnector={pickConnector}
+              onAddConnector={onAddConnector}
+              plugins={pluginOptions}
+              onPickPlugin={pickPlugin}
+              onAddPlugin={onAddPlugin}
+              mcpServers={mcpOptions}
+              onPickMcp={pickMcp}
+              onAddMcp={onAddMcp}
+              onAttachFiles={() => {
                 trackHomeChatComposerClick(analytics.track, {
                   page_name: 'home',
                   area: 'chat_composer',
@@ -1203,12 +1173,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 });
                 fileInputRef.current?.click();
               }}
-              title={t('chat.attachAria')}
-              data-tooltip={t('chat.attachAria')}
-              aria-label={t('chat.attachAria')}
-            >
-              <Icon name="attach" size={15} />
-            </button>
+            />
             {onPickWorkingDir ? (
               <div className="home-hero__working-dir-wrap">
                 <button
@@ -1234,11 +1199,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 ) : null}
               </div>
             ) : null}
-            <SessionModeToggle
-              mode={sessionMode}
-              onChange={onSessionModeChange}
-              disabled={Boolean(submitDisabled)}
-            />
             {activeCreateChip ? (
               <ActiveTypeChip chip={activeCreateChip} onClear={onClearActiveChip} />
             ) : null}
@@ -1262,19 +1222,31 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               </div>
             ) : null}
           </div>
-          <button
-            type="button"
-            className="home-hero__submit od-tooltip"
-            data-testid="home-hero-submit"
-            onClick={onSubmit}
-            disabled={!canSubmit}
-            title={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
-            data-tooltip={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
-            aria-label={t('homeHero.run')}
-          >
-            <Icon name="send" size={13} />
-            <span>{t('chat.send')}</span>
-          </button>
+          <div className="home-hero__foot-right">
+            <SessionModeToggle
+              mode={sessionMode}
+              onChange={onSessionModeChange}
+              disabled={Boolean(submitDisabled)}
+            />
+            {executionSwitcher ? (
+              <div className="home-hero__execution-switcher">
+                {executionSwitcher}
+              </div>
+            ) : null}
+            <button
+              type="button"
+              className="home-hero__submit od-tooltip"
+              data-testid="home-hero-submit"
+              onClick={onSubmit}
+              disabled={!canSubmit}
+              title={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
+              data-tooltip={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
+              aria-label={t('homeHero.run')}
+            >
+              <Icon name="send" size={13} />
+              <span>{t('chat.send')}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1304,10 +1276,22 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         </RailGroup>
       )}
 
-      {activeExamplePlugins.length > 0 && activeChipId ? (
+      {activeSubChips.length > 0 && isSubChipParent(activeChipId) ? (
+        <SubTypeRow
+          subChips={activeSubChips}
+          selectedSlug={selectedSubcategory}
+          pluginsLoading={pluginsLoading}
+          onPickSubChip={(sub) =>
+            setSelectedSubcategory((current) => (current === sub.slug ? null : sub.slug))
+          }
+          onSelectAll={() => setSelectedSubcategory(null)}
+        />
+      ) : null}
+
+      {filteredExamplePlugins.length > 0 && activeChipId ? (
         <PluginPromptPresets
           chipId={activeChipId}
-          plugins={activeExamplePlugins}
+          plugins={filteredExamplePlugins}
           activePluginId={activePluginRecord?.id ?? null}
           pendingPluginId={pendingPluginId}
           locale={locale}
@@ -1452,16 +1436,15 @@ function PluginPromptPresetCard({
           pluginTitle={record.title}
           preview={preview}
         />
+        {active ? (
+          <span className="home-hero__plugin-preset-check" aria-hidden>
+            <Icon name="check" size={12} />
+          </span>
+        ) : null}
       </span>
-      <span className="home-hero__plugin-preset-body">
-        <span className="home-hero__plugin-preset-title">
-          {record.title}
-        </span>
-        <span className="home-hero__plugin-preset-prompt">
-          {promptPreview}
-        </span>
+      <span className="home-hero__plugin-preset-title">
+        {record.title}
       </span>
-      <Icon name={active ? 'check' : 'external-link'} size={13} aria-hidden />
     </button>
   );
 }
@@ -1841,8 +1824,11 @@ function FooterSelectOption({
           {groupedOptions.length === 0 ? (
             <div className="home-hero__footer-select-empty">{t('homeHero.footer.noMatches')}</div>
           ) : (
-            groupedOptions.map((group) => (
-              <div className="home-hero__footer-select-group" key={group.label ?? 'ungrouped'}>
+            groupedOptions.map((group, index) => (
+              <div
+                className="home-hero__footer-select-group"
+                key={`${group.label ?? 'ungrouped'}:${group.options[0]?.value ?? index}`}
+              >
                 {group.label ? (
                   <div className="home-hero__footer-select-group-label">{group.label}</div>
                 ) : null}
@@ -2308,6 +2294,65 @@ function RailGroup({
         );
       })}
       {children}
+    </div>
+  );
+}
+
+function SubTypeRow({
+  subChips,
+  selectedSlug,
+  pluginsLoading,
+  onPickSubChip,
+  onSelectAll,
+}: {
+  subChips: HomeHeroSubChip[];
+  selectedSlug: string | null;
+  pluginsLoading: boolean;
+  onPickSubChip: (sub: HomeHeroSubChip) => void;
+  onSelectAll: () => void;
+}) {
+  const t = useT();
+  const allActive = selectedSlug === null;
+  return (
+    <div
+      className="home-hero__subtype-row"
+      data-testid="home-hero-subtype-row"
+      role="tablist"
+      aria-label={t('homeHero.subTypeAria')}
+    >
+      <button
+        type="button"
+        className={`home-hero__subtype-chip${allActive ? ' is-active' : ''}`}
+        data-sub-chip-id="all"
+        data-testid="home-hero-subtype-all"
+        onClick={onSelectAll}
+        disabled={pluginsLoading}
+        role="tab"
+        aria-selected={allActive}
+      >
+        <span className="home-hero__subtype-chip-label">{t('common.all')}</span>
+      </button>
+      {subChips.map((sub) => {
+        const isActive = sub.slug === selectedSlug;
+        const cls = ['home-hero__subtype-chip'];
+        if (isActive) cls.push('is-active');
+        return (
+          <button
+            key={sub.slug}
+            type="button"
+            className={cls.join(' ')}
+            data-sub-chip-id={sub.slug}
+            data-testid={`home-hero-subtype-${sub.slug}`}
+            onClick={() => onPickSubChip(sub)}
+            disabled={pluginsLoading}
+            role="tab"
+            aria-selected={isActive}
+          >
+            <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
+            <span className="home-hero__subtype-chip-label">{sub.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

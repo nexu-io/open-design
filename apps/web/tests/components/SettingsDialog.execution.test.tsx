@@ -1085,7 +1085,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(testConnectionCalls).toHaveLength(1);
   });
 
-  it('shows long BYOK model lists without a search field after provider discovery succeeds', async () => {
+  it('filters long BYOK model lists after provider discovery succeeds without hiding the current selection', async () => {
     fetchProviderModelsMock.mockResolvedValueOnce({
       ok: true,
       kind: 'success',
@@ -1116,14 +1116,16 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     fireEvent.click(modelPicker);
 
     const modelPopover = screen.getByTestId('settings-byok-model-popover');
-    expect(within(modelPopover).queryByTestId('settings-byok-model-search')).toBeNull();
+    const searchInput = within(modelPopover).getByTestId('settings-byok-model-search') as HTMLInputElement;
+    fireEvent.change(searchInput, { target: { value: '5.5' } });
+
     expect(
       within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(expect.arrayContaining([
+    ).toEqual([
       'gpt-4.1-mini · From your account',
       'gpt-5.5 · From your account',
       'Custom (type below)…',
-    ]));
+    ]);
   });
 
   it('fetches provider models, merges them into the picker, and preserves a custom current model', async () => {

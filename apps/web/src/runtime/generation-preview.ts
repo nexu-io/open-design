@@ -161,10 +161,15 @@ export function buildGenerationPreviewState(input: {
   // Once the user has something previewable, only the error state takes
   // over the surface; the calmer waiting states defer to the live preview
   // so we never hide a finished artifact behind a status card.
-  if (hasPreviewSurface && phase !== 'failed') return null;
+  const events = latestAssistant.events ?? [];
+  if (hasPreviewSurface) {
+    if (phase !== 'failed') return null;
+    const hasExplicitFailure =
+      Boolean(input.conversationError?.trim()) || eventsHaveStatus(events, ['error']);
+    if (!hasExplicitFailure) return null;
+  }
 
   const failed = phase === 'failed';
-  const events = latestAssistant.events ?? [];
   const derived = deriveGenerationPreviewModel({
     events,
     hasArtifactHtml: Boolean(input.artifactHtml?.trim()),

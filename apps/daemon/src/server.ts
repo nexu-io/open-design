@@ -40,6 +40,7 @@ import {
   detectAgents,
   getAgentDef,
   isKnownModel,
+  openDesignAmrTraceEnv,
   applyAgentLaunchEnv,
   resolveAgentLaunch,
   sanitizeCustomModel,
@@ -126,6 +127,7 @@ import {
   updateUserDesignSystemRevisionStatus,
 } from './design-systems.js';
 import { createDesignSystemGenerationJobStore } from './design-system-generation-jobs.js';
+import { prepareDesignTokenContractRebuild } from './design-token-contract-rebuild.js';
 import {
   applyDiffReviewDecisionToCwd,
   applyPlugin,
@@ -427,7 +429,13 @@ import {
   upsertMessage,
   upsertPreviewComment,
 } from './db.js';
-import { resolveAgentResumeContext, isClaudeResumeFailure, hashStableInstructions, computeIncludeStable } from './agent-session-resume.js';
+import {
+  computeIncludeStable,
+  hashStableInstructions,
+  isClaudeResumeFailure,
+  persistCapturedAgentSession,
+  resolveAgentResumeContext,
+} from './agent-session-resume.js';
 import {
   createLiveArtifact,
   deleteLiveArtifact,
@@ -2544,6 +2552,78 @@ async function hasGeneratedPluginArtifacts(projectRoot) {
   } catch {
     return false;
   }
+}
+
+// Canonical open tag is `<question-form>`; `<ask-question>` is an accepted
+// alias models drift to. Mirrors the open-tag set in the web parser.
+const QUESTION_FORM_OPEN_RE = /<(question-form|ask-question)\b[^>]*>/i;
+
+// True when `body` is a renderable question-form body: JSON (optionally
+// fenced) parsing to an object with a non-empty `questions` array. This is
+// the minimal contract `tryParseForm` enforces in
+// `apps/web/src/artifacts/question-form.ts`; a body that fails it is kept as
+// raw prose by the UI (no form card renders).
+function questionFormBodyIsRenderable(body) {
+  const trimmed = typeof body === 'string' ? body.trim() : '';
+  if (!trimmed) return false;
+  const stripped = trimmed
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim();
+  let data;
+  try {
+    data = JSON.parse(stripped);
+  } catch {
+    return false;
+  }
+  if (!data || typeof data !== 'object') return false;
+  const questions = data.questions;
+  return Array.isArray(questions) && questions.some((q) => q && typeof q === 'object');
+}
+
+// Locate `closeTag` (case-insensitively) at or after `from`, returning an
+// index in the ORIGINAL `text` coordinate space. Mirrors the web parser's
+// `findCloseTag`: scanning char-by-char and lowercasing each fixed-length
+// candidate slice keeps the result aligned with `openEnd`. Lowercasing the
+// whole string up front instead would desync the index, because some code
+// points expand under `toLowerCase()` (e.g. `"İ" -> "i̇"`) and shift every
+// offset after them — corrupting the body slice and failing a valid form.
+function findQuestionFormCloseTag(text, from, closeTag) {
+  const closeLower = closeTag.toLowerCase();
+  const tagLen = closeTag.length;
+  const maxStart = text.length - tagLen;
+  for (let i = from; i <= maxStart; i++) {
+    if (text.slice(i, i + tagLen).toLowerCase() === closeLower) return i;
+  }
+  return -1;
+}
+
+// Whether the agent's visible text contains a *renderable* clarifying form —
+// a closed `<question-form>`/`<ask-question>` block whose body satisfies the
+// parser contract above. The plugin-authoring missing-artifacts guard treats
+// this as a legitimate "paused to ask the user" turn rather than a failure.
+//
+// We deliberately mirror (not import) the web parser: the app boundary
+// forbids `apps/daemon` importing `apps/web/src`. Matching only the open tag
+// would let a malformed, non-renderable body suppress the failure — a false
+// success with no usable brief card. Keep this in sync with
+// `apps/web/src/artifacts/question-form.ts`, or promote a shared parser into
+// `packages/contracts` if the two drift.
+function emittedRenderableQuestionForm(text) {
+  if (typeof text !== 'string' || !text) return false;
+  let cursor = 0;
+  while (cursor < text.length) {
+    const m = QUESTION_FORM_OPEN_RE.exec(text.slice(cursor));
+    if (!m) return false;
+    const tagName = (m[1] ?? 'question-form').toLowerCase();
+    const closeTag = `</${tagName}>`;
+    const openEnd = cursor + m.index + m[0].length;
+    const closeIdx = findQuestionFormCloseTag(text, openEnd, closeTag);
+    if (closeIdx === -1) return false;
+    if (questionFormBodyIsRenderable(text.slice(openEnd, closeIdx))) return true;
+    cursor = closeIdx + closeTag.length;
+  }
+  return false;
 }
 
 function detectSkillPluginCandidateOnRunSuccess(db, runs, run, input, projectRoot) {
@@ -5888,6 +5968,21 @@ export async function startServer({
       listAllDesignSystems,
       mimeFor,
     },
+    tokenContractRebuild: {
+      maybeStartForImportedDesignSystem: async (designSystemId) => {
+        const preparation = await prepareDesignTokenContractRebuild(
+          USER_DESIGN_SYSTEMS_DIR,
+          designSystemId,
+        );
+        if (!preparation.revision) return { decision: preparation.decision };
+        const job = designSystemGenerationJobs.rebuildTokenContract({
+          designSystemId,
+          decision: preparation.decision,
+          ...preparation.revision,
+        });
+        return { decision: preparation.decision, job };
+      },
+    },
   });
   registerProjectArtifactRoutes(app, {
     http: httpDeps,
@@ -6631,6 +6726,30 @@ export async function startServer({
         body: typeof req.body?.body === 'string' ? req.body.body : undefined,
       });
       res.status(202).json({ job });
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/design-systems/:id/token-contract/rebuild-jobs', async (req, res) => {
+    try {
+      const preparation = await prepareDesignTokenContractRebuild(
+        USER_DESIGN_SYSTEMS_DIR,
+        req.params.id,
+        { force: req.body?.force === true },
+      );
+      if (!preparation.decision.available) {
+        return res.status(200).json({ decision: preparation.decision });
+      }
+      if (!preparation.revision) {
+        return res.status(200).json({ decision: preparation.decision });
+      }
+      const job = designSystemGenerationJobs.rebuildTokenContract({
+        designSystemId: req.params.id,
+        decision: preparation.decision,
+        ...preparation.revision,
+      });
+      res.status(202).json({ decision: preparation.decision, job });
     } catch (err) {
       res.status(400).json({ error: String(err) });
     }
@@ -11261,12 +11380,14 @@ export async function startServer({
       research,
       message,
     );
-    // Resume-capable adapters (today: Claude) continue their own CLI
-    // session so they keep working memory across turns. Decide once per
-    // run; reuse for the prompt-composition skipTranscript choice, the
-    // buildArgs flags, and the create-turn persistence below.
+    // Resume-capable adapters continue their own upstream session so they
+    // keep working memory across turns. Decide once per run; reuse for the
+    // prompt-composition skipTranscript choice, the buildArgs flags, and the
+    // create-turn persistence below.
+    const agentSupportsSessionResume =
+      def.resumesSessionViaCli === true || def.streamFormat === 'pi-rpc';
     const agentResumeCtx =
-      def.resumesSessionViaCli === true && run.conversationId
+      agentSupportsSessionResume && run.conversationId
         ? resolveAgentResumeContext(db, {
             conversationId: run.conversationId,
             agentId: def.id,
@@ -11277,9 +11398,9 @@ export async function startServer({
       currentPrompt,
       // Only trim to the latest turn when we are actually resuming an
       // existing session. A create turn still sends the full transcript so
-      // a brand-new session (incl. first Claude turn after another agent)
+      // a brand-new session (incl. first turn after another agent)
       // is seeded with prior context.
-      { skipTranscript: def.resumesSessionViaCli === true && agentResumeCtx.isResuming },
+      { skipTranscript: agentResumeCtx.isResuming },
     );
     // The stable instruction slice (daemon prompt + tool contract + system
     // prompt = design system / skills / memory) is identical across turns of
@@ -11287,7 +11408,7 @@ export async function startServer({
     // holds it, so on resume turns we skip it unless it changed since the
     // session was seeded — keyed by a hash stored on agent_sessions. Create
     // turns and changed-hash turns send the full block (byte-identical to the
-    // previous behavior); non-Claude agents have isResuming === false and so
+    // previous behavior); non-resume agents have isResuming === false and so
     // always send the full block.
     const stableInstructionFingerprint = [daemonSystemPrompt, runtimeToolPrompt, systemPrompt]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
@@ -11423,7 +11544,34 @@ export async function startServer({
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
         : null;
     const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    // Accumulates the agent's visible text this run so the close handler can
+    // tell whether the turn ended on a clarifying question form. The
+    // `od-plugin-authoring` plugin's turn-1 flow is to emit a
+    // `<question-form>` collecting the plugin brief, then STOP and wait for
+    // the user to answer (see the `discovery-question-form` atom in
+    // `plugins/scaffold.ts`). That turn legitimately closes with `code === 0`
+    // and no `generated-plugin/` artifacts yet, so the missing-artifacts
+    // guard must not treat it as a failure. We buffer the streamed text
+    // rather than read the persisted message because the assistant message
+    // row may not be wired up at close time. The buffer is capped because a
+    // discovery form streams near the top of the turn; we only need enough to
+    // validate the first complete form block (see
+    // `emittedRenderableQuestionForm`).
+    const CLARIFYING_QUESTION_BUFFER_CAP = 256 * 1024;
+    let clarifyingQuestionText = '';
     const send = (event, data) => {
+      if (
+        event === 'agent' &&
+        data &&
+        data.type === 'text_delta' &&
+        typeof data.delta === 'string' &&
+        clarifyingQuestionText.length < CLARIFYING_QUESTION_BUFFER_CAP
+      ) {
+        clarifyingQuestionText = (clarifyingQuestionText + data.delta).slice(
+          0,
+          CLARIFYING_QUESTION_BUFFER_CAP,
+        );
+      }
       persistRunEventToAssistantMessage(db, run, event, data);
       design.runs.emit(run, event, data);
     };
@@ -12256,6 +12404,12 @@ export async function startServer({
         ...agentSpawnEnv,
         ...(mmdRouteLaunchEnv || {}),
         ...odMediaEnv,
+        ...openDesignAmrTraceEnv({
+          agentId: def.id,
+          runId: run.id,
+          conversationId: run.conversationId,
+          runAttempt: run.retryAttemptCount ?? 0,
+        }),
         // OpenCode external-MCP injection (issue #2142). Layered AFTER
         // spawnEnvForAgent / odMediaEnv / configuredAgentEnv so the
         // daemon-built MCP config wins over a stale value the user
@@ -12849,12 +13003,22 @@ export async function startServer({
         prompt: composed,
         cwd: effectiveCwd,
         model: safeModel,
+        parentSession: agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId
+          ? agentResumeCtx.resumeSessionId
+          : undefined,
         send: (channel, payload) => {
           if (channel === 'agent') {
             sendAgentEvent(payload);
           } else if (channel === 'error') {
             if (agentStreamError) return;
             agentStreamError = String(payload?.message || 'Pi session error');
+            const piErrorCode = typeof payload?.code === 'string' ? payload.code : null;
+            if (piErrorCode) {
+              run.errorCode = piErrorCode;
+            }
+            if (piErrorCode === 'PI_PARENT_SESSION_FAILED' && run.conversationId) {
+              clearAgentSession(db, run.conversationId, def.id);
+            }
             clearInactivityWatchdog();
             send('error', createSseErrorPayload(
               'AGENT_EXECUTION_FAILED',
@@ -13056,7 +13220,8 @@ export async function startServer({
         code === 0 &&
         !run.cancelRequested &&
         isPluginAuthoringRun(db, run) &&
-        !(await hasGeneratedPluginArtifacts(cwd))
+        !(await hasGeneratedPluginArtifacts(cwd)) &&
+        !emittedRenderableQuestionForm(clarifyingQuestionText)
       ) {
         send('error', createSseErrorPayload(
           'AGENT_EXECUTION_FAILED',
@@ -13294,6 +13459,21 @@ export async function startServer({
       }
       for (const chunk of plaintextStdoutBuffer) {
         send('stdout', { chunk });
+      }
+      // Capture the pi session file path for conversational continuity.
+      // The session path is discovered by attachPiRpcSession when it
+      // processes agent_end; persist it under (conversationId, agentId) so
+      // another conversation in the same cwd cannot inherit this history.
+      if (acpSession && typeof acpSession.getLastSessionPath === 'function') {
+        const sessionPath = acpSession.getLastSessionPath();
+        if (status === 'succeeded' && def.streamFormat === 'pi-rpc') {
+          persistCapturedAgentSession(db, {
+            conversationId: run.conversationId,
+            agentId: def.id,
+            sessionId: sessionPath,
+            stablePromptHash: currentStableHash,
+          });
+        }
       }
       if (status === 'succeeded') {
         persistDeliveredAgentSessionState();

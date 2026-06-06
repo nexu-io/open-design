@@ -877,177 +877,181 @@ export function PreviewDrawOverlay({
               visibility: chromeHidden ? 'hidden' : undefined,
             }}
           >
-          <button
-            type="button"
-            onClick={closeOverlay}
-            disabled={sending}
-            aria-label={t('common.close')}
-            title={t('common.close')}
-            style={closeButtonStyle}
-          >
-            <Icon name="close" size={13} />
-          </button>
-          <div style={subToolGroupStyle} aria-label={t('fileViewer.markTool')}>
+          <div className="preview-draw-tool-cluster" style={drawToolbarClusterStyle}>
             <button
               type="button"
-              onClick={() => setMarkTool('box')}
+              onClick={closeOverlay}
               disabled={sending}
-              aria-label={t('fileViewer.boxSelect')}
-              title={t('fileViewer.boxSelect')}
-              data-tooltip={t('fileViewer.boxSelect')}
-              className="preview-draw-subtool-action"
-              style={subToolButtonStyle(markTool === 'box')}
+              aria-label={t('common.close')}
+              title={t('common.close')}
+              style={closeButtonStyle}
             >
-              <RemixIcon name="checkbox-blank-line" size={14} />
+              <Icon name="close" size={13} />
+            </button>
+            <div style={subToolGroupStyle} aria-label={t('fileViewer.markTool')}>
+              <button
+                type="button"
+                onClick={() => setMarkTool('box')}
+                disabled={sending}
+                aria-label={t('fileViewer.boxSelect')}
+                title={t('fileViewer.boxSelect')}
+                data-tooltip={t('fileViewer.boxSelect')}
+                className="preview-draw-subtool-action"
+                style={subToolButtonStyle(markTool === 'box')}
+              >
+                <RemixIcon name="checkbox-blank-line" size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setMarkTool('pen')}
+                disabled={sending}
+                aria-label={t('sketch.toolPen')}
+                title={t('sketch.toolPen')}
+                data-tooltip={t('sketch.toolPen')}
+                className="preview-draw-subtool-action"
+                style={subToolButtonStyle(markTool === 'pen')}
+              >
+                <RemixIcon name="pencil-line" size={14} />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={undoStroke}
+              disabled={!canUndo}
+              style={historyButtonStyle(canUndo)}
+              aria-label={t('manualEdit.undo')}
+              title={t('manualEdit.undo')}
+            >
+              <RemixIcon name="arrow-go-back-line" size={14} />
             </button>
             <button
               type="button"
-              onClick={() => setMarkTool('pen')}
-              disabled={sending}
-              aria-label={t('sketch.toolPen')}
-              title={t('sketch.toolPen')}
-              data-tooltip={t('sketch.toolPen')}
-              className="preview-draw-subtool-action"
-              style={subToolButtonStyle(markTool === 'pen')}
+              onClick={redoStroke}
+              disabled={!canRedo}
+              style={historyButtonStyle(canRedo)}
+              aria-label={t('manualEdit.redo')}
+              title={t('manualEdit.redo')}
             >
-              <RemixIcon name="pencil-line" size={14} />
+              <RemixIcon name="arrow-go-forward-line" size={14} />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              style={{ display: 'none' }}
+              onChange={onFileInputChange}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sending}
+              aria-label={t('chat.annotationAttachImage')}
+              title={t('chat.annotationAttachImage')}
+              data-tooltip={t('chat.annotationAttachImage')}
+              className="preview-draw-icon-action"
+              style={historyButtonStyle(!sending)}
+            >
+              <RemixIcon name="image-add-line" size={14} />
             </button>
           </div>
-          <button
-            type="button"
-            onClick={undoStroke}
-            disabled={!canUndo}
-            style={historyButtonStyle(canUndo)}
-            aria-label={t('manualEdit.undo')}
-            title={t('manualEdit.undo')}
-          >
-            <RemixIcon name="arrow-go-back-line" size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={redoStroke}
-            disabled={!canRedo}
-            style={historyButtonStyle(canRedo)}
-            aria-label={t('manualEdit.redo')}
-            title={t('manualEdit.redo')}
-          >
-            <RemixIcon name="arrow-go-forward-line" size={14} />
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            style={{ display: 'none' }}
-            onChange={onFileInputChange}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={sending}
-            aria-label={t('chat.annotationAttachImage')}
-            title={t('chat.annotationAttachImage')}
-            data-tooltip={t('chat.annotationAttachImage')}
-            className="preview-draw-icon-action"
-            style={historyButtonStyle(!sending)}
-          >
-            <RemixIcon name="image-add-line" size={14} />
-          </button>
-          <input
-            className="preview-draw-note-input"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            onPaste={onNotePaste}
-            disabled={sending}
-            placeholder={t('chat.annotationNotePlaceholder')}
-            style={{
-              background: 'rgba(218, 97, 56, 0.18)',
-              border: '1px solid rgba(248, 150, 104, 0.82)',
-              borderRadius: 999,
-              outline: 'none',
-              boxShadow: '0 0 0 3px rgba(218, 97, 56, 0.22)',
-              color: 'inherit',
-              flexGrow: 1,
-              flexShrink: 1,
-              flexBasis: 280,
-              minWidth: 0,
-              width: 'clamp(160px, 40vw, 320px)',
-              maxWidth: '100%',
-              padding: '4px 8px',
-              fontSize: 13,
-              transition: 'background 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
-            }}
-            onCompositionStart={() => {
-              composingRef.current = true;
-            }}
-            onCompositionEnd={() => {
-              composingRef.current = false;
-            }}
-            onKeyDown={(e) => {
-              if (isImeComposing(e, composingRef.current)) return;
-              if (e.key === 'Enter') void send('queue');
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => void send('draft')}
-            disabled={sending || !canAddToInput}
-            aria-label={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : t('chat.annotationAddToInput')}
-            title={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : t('chat.annotationAddToInput')}
-            data-tooltip={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : t('chat.annotationAddToInput')}
-            className="preview-draw-icon-action"
-            style={{
-              ...drawActionButtonStyle(false),
-              opacity: canAddToInput ? 1 : 0.4,
-              cursor: sending ? 'wait' : (canAddToInput ? 'pointer' : 'not-allowed'),
-            }}
-          >
-            {pendingAction === 'draft' ? (
-              <Icon name="spinner" size={14} />
-            ) : (
-              <RemixIcon name="input-field" size={15} />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => void send('queue')}
-            disabled={sending || !canSubmit}
-            aria-label={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
-            title={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
-            data-tooltip={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
-            className="preview-draw-icon-action"
-            style={{
-              ...drawActionButtonStyle(false),
-              opacity: canSubmit ? 1 : 0.4,
-              cursor: sending ? 'wait' : (canSubmit ? 'pointer' : 'not-allowed'),
-            }}
-          >
-            {pendingAction === 'queue' ? (
-              <Icon name="spinner" size={14} />
-            ) : (
-              <RemixIcon name="list-check-2" size={15} />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => void send('send')}
-            disabled={sending || !canSend}
-            aria-label={pendingAction === 'send' ? t('chat.annotationSending') : t('chat.send')}
-            title={sendDisabled ? sendDisabledReason : pendingAction === 'send' ? t('chat.annotationSending') : t('chat.send')}
-            data-tooltip={sendDisabled ? sendDisabledReason : pendingAction === 'send' ? t('chat.annotationSending') : t('chat.send')}
-            className="preview-draw-icon-action"
-            style={{
-              ...drawActionButtonStyle(true),
-              opacity: canSend ? 1 : 0.4,
-              cursor: sending ? 'wait' : (canSend ? 'pointer' : 'not-allowed'),
-            }}
-          >
-            {pendingAction === 'send' ? (
-              <Icon name="spinner" size={14} />
-            ) : (
-              <Icon name="send" size={14} />
-            )}
-          </button>
+          <div className="preview-draw-note-actions" style={drawToolbarNoteActionsStyle}>
+            <input
+              className="preview-draw-note-input"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              onPaste={onNotePaste}
+              disabled={sending}
+              placeholder={t('chat.annotationNotePlaceholder')}
+              style={{
+                background: 'rgba(218, 97, 56, 0.18)',
+                border: '1px solid rgba(248, 150, 104, 0.82)',
+                borderRadius: 999,
+                outline: 'none',
+                boxShadow: '0 0 0 3px rgba(218, 97, 56, 0.22)',
+                color: 'inherit',
+                flexGrow: 1,
+                flexShrink: 1,
+                flexBasis: 220,
+                minWidth: 0,
+                width: 'clamp(148px, 32vw, 280px)',
+                maxWidth: '100%',
+                padding: '4px 8px',
+                fontSize: 13,
+                transition: 'background 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
+              }}
+              onCompositionStart={() => {
+                composingRef.current = true;
+              }}
+              onCompositionEnd={() => {
+                composingRef.current = false;
+              }}
+              onKeyDown={(e) => {
+                if (isImeComposing(e, composingRef.current)) return;
+                if (e.key === 'Enter') void send('queue');
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => void send('draft')}
+              disabled={sending || !canAddToInput}
+              aria-label={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : t('chat.annotationAddToInput')}
+              title={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : t('chat.annotationAddToInput')}
+              data-tooltip={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : t('chat.annotationAddToInput')}
+              className="preview-draw-icon-action"
+              style={{
+                ...drawActionButtonStyle(false),
+                opacity: canAddToInput ? 1 : 0.4,
+                cursor: sending ? 'wait' : (canAddToInput ? 'pointer' : 'not-allowed'),
+              }}
+            >
+              {pendingAction === 'draft' ? (
+                <Icon name="spinner" size={14} />
+              ) : (
+                <RemixIcon name="input-field" size={15} />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => void send('queue')}
+              disabled={sending || !canSubmit}
+              aria-label={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
+              title={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
+              data-tooltip={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
+              className="preview-draw-icon-action"
+              style={{
+                ...drawActionButtonStyle(false),
+                opacity: canSubmit ? 1 : 0.4,
+                cursor: sending ? 'wait' : (canSubmit ? 'pointer' : 'not-allowed'),
+              }}
+            >
+              {pendingAction === 'queue' ? (
+                <Icon name="spinner" size={14} />
+              ) : (
+                <RemixIcon name="list-check-2" size={15} />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => void send('send')}
+              disabled={sending || !canSend}
+              aria-label={pendingAction === 'send' ? t('chat.annotationSending') : t('chat.send')}
+              title={sendDisabled ? sendDisabledReason : pendingAction === 'send' ? t('chat.annotationSending') : t('chat.send')}
+              data-tooltip={sendDisabled ? sendDisabledReason : pendingAction === 'send' ? t('chat.annotationSending') : t('chat.send')}
+              className="preview-draw-icon-action"
+              style={{
+                ...drawActionButtonStyle(true),
+                opacity: canSend ? 1 : 0.4,
+                cursor: sending ? 'wait' : (canSend ? 'pointer' : 'not-allowed'),
+              }}
+            >
+              {pendingAction === 'send' ? (
+                <Icon name="spinner" size={14} />
+              ) : (
+                <Icon name="send" size={14} />
+              )}
+            </button>
+          </div>
           </div>
           {activePreview ? createPortal(
             <div
@@ -1152,6 +1156,24 @@ const subToolGroupStyle: CSSProperties = {
   padding: 3,
   borderRadius: 999,
   background: 'rgba(255,255,255,0.08)',
+};
+
+const drawToolbarClusterStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  flex: '0 0 auto',
+};
+
+const drawToolbarNoteActionsStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  flex: '1 1 360px',
+  minWidth: 0,
+  maxWidth: 412,
 };
 
 function subToolButtonStyle(active: boolean): CSSProperties {

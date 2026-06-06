@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { ensureRailOpen } from '@/playwright/rail';
 import type { Locator, Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
@@ -120,6 +121,7 @@ test('[P1] prompt template retry preserves the edited body in project metadata',
   });
 
   await gotoEntryHome(page);
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-new-project').click();
   await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
@@ -164,6 +166,7 @@ test('[P1] live artifact empty connector CTA opens the gated connector setup pat
   await routeComposioConfig(page, { configured: false, apiKeyTail: '' });
 
   await gotoEntryHome(page);
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-new-project').click();
   await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
@@ -374,6 +377,7 @@ async function gotoEntryHome(page: Page) {
 }
 
 async function openIntegrationsConnectors(page: Page): Promise<Locator> {
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-integrations').click();
   await expect(page).toHaveURL(/\/integrations$/);
   await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();

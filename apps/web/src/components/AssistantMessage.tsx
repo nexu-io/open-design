@@ -33,8 +33,8 @@ import {
   stripTrailingOpenQuestionForm,
   type QuestionForm,
 } from "../artifacts/question-form";
+import { parseSubmittedAnswers } from "./QuestionForm";
 import { splitStreamingArtifact, stripArtifact } from "../artifacts/strip";
-import { QuestionFormView, parseSubmittedAnswers } from "./QuestionForm";
 import {
   getPluginFolderCandidates,
   type PluginFolderCandidate,
@@ -72,6 +72,12 @@ type TranslateFn = (
   key: keyof Dict,
   vars?: Record<string, string | number>
 ) => string;
+
+export type QuestionFormOpenRequest = {
+  form: QuestionForm;
+  messageId: string;
+  submittedAnswers?: Record<string, string | string[]>;
+};
 
 const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";
 
@@ -306,17 +312,20 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
-  // True only for the most recent assistant message — gate question-form
-  // interactivity on this so older forms render as a locked "answered"
-  // capsule instead of being re-submittable.
+  // Click handler for the "Share to Open Design" button rendered next to
+  // the post-completion Discord prompt. ProjectView wires this to
+  // handleSend with the bundled `od-share-to-community` trigger prompt.
+  onShareToOpenDesign?: () => void;
+  shareToOpenDesignBusy?: boolean;
+  // True only for the most recent assistant message.
   isLast?: boolean;
   // Assistant message id whose run-failure error is rendered as ChatPane's
   // top-level error card; that message's per-message error pill is suppressed
   // to avoid duplication. Other messages keep their error pill.
   errorCardOwnerId?: string | null;
-  // The user message that immediately follows this assistant turn (if
-  // any). Used to detect that a form was already answered so we can
-  // render its locked state with the user's picks visible.
+  // The user message that immediately follows this assistant turn, if any.
+  // Kept for ChatPane compatibility; chat-side question forms now always
+  // render as a compact Questions banner.
   nextUserContent?: string;
   // Submit handler the form fires when the user picks answers — opaque
   // to AssistantMessage; ProjectView wires it into onSend.
@@ -324,7 +333,7 @@ interface Props {
   // Open the right-hand Questions tab. The active discovery form renders
   // there (Claude-Design style) instead of inline; this assistant message
   // shows a banner that focuses the tab on click.
-  onOpenQuestions?: () => void;
+  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onContinueRemainingTasks?: (todos: TodoItem[]) => void;
   onForkFromMessage?: () => void;
   forking?: boolean;
@@ -365,6 +374,7 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'errorCardOwnerId',
   'nextUserContent',
   'forking',
+  'shareToOpenDesignBusy',
   'suppressDirectionForms',
   'hasDesignSystemContext',
   // Live streaming tool input changes identity on every `tool_input_delta`.
@@ -410,6 +420,8 @@ function AssistantMessageImpl({
   onRequestPluginFolderAgentAction,
   activePluginActionPaths = new Set(),
   hiddenPluginActionPaths = new Set(),
+  onShareToOpenDesign,
+  shareToOpenDesignBusy = false,
   isLast,
   errorCardOwnerId = null,
   nextUserContent,
@@ -611,22 +623,10 @@ function AssistantMessageImpl({
     canFork;
   // Pre-output vs working: before any real content (text / thinking / tools /
   // files) the footer shimmers "Preparing…"; the moment content lands it
-  // flips to "Working" and the elapsed clock restarts from that instant.
+  // flips to "Working". The elapsed clock stays anchored to the persisted run
+  // start so switching project tabs or remounting the message cannot restart it.
   const hasContent = blocks.some((b) => b.kind !== "status") || fileOps.length > 0;
   const preparing = streaming && !hasContent;
-  const [outputStartedAt, setOutputStartedAt] = useState<number | undefined>(undefined);
-  useEffect(() => {
-    if (streaming && hasContent) {
-      setOutputStartedAt((prev) => prev ?? Date.now());
-    } else if (!streaming) {
-      setOutputStartedAt(undefined);
-    }
-  }, [streaming, hasContent]);
-  // Track which forms the user submitted in this session so we lock them
-  // immediately on click (without waiting for the parent to re-render).
-  const [locallySubmitted, setLocallySubmitted] = useState<Set<string>>(
-    () => new Set()
-  );
   const [dismissedCandidateIds, setDismissedCandidateIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -678,21 +678,15 @@ function AssistantMessageImpl({
               <ProseBlock
                 key={i}
                 text={b.text}
+                assistantMessageId={message.id}
                 isLastAssistant={!!isLast}
                 streaming={streaming}
                 showStreamCursor={streaming && i === lastTextBlockIndex}
                 nextUserContent={nextUserContent}
-                locallySubmitted={locallySubmitted}
                 suppressDirectionForms={suppressDirectionForms}
-                onSubmitForm={(formId, text) => {
-                  setLocallySubmitted((prev) => {
-                    const next = new Set(prev);
-                    next.add(formId);
-                    return next;
-                  });
-                  onSubmitForm?.(text);
-                }}
                 onOpenQuestions={onOpenQuestions}
+                projectId={projectId}
+                projectFileNames={projectFileNames}
                 onRequestOpenFile={onRequestOpenFile}
               />
             );
@@ -842,7 +836,6 @@ function AssistantMessageImpl({
                   hasUnfinishedTodos: unfinishedTodos.length > 0,
                   hasEmptyResponse,
                   preparing,
-                  outputStartedAt,
                   copyMarkdown,
                   onFork: canFork ? onForkFromMessage : undefined,
                   forking,
@@ -860,7 +853,6 @@ function AssistantMessageImpl({
                 hasUnfinishedTodos={unfinishedTodos.length > 0}
                 hasEmptyResponse={hasEmptyResponse}
                 preparing={preparing}
-                outputStartedAt={outputStartedAt}
                 copyMarkdown={copyMarkdown}
                 onFork={canFork ? onForkFromMessage : undefined}
                 forking={forking}
@@ -868,6 +860,28 @@ function AssistantMessageImpl({
                 isLast={!!isLast}
               />
             )}
+            {/*
+              "Share to Open Design" — pairs with the post-feedback Discord
+              prompt (assistant-feedback-discord-note). Only shows on the most
+              recent assistant message after a successful run, gated on the
+              same isFeedbackEligible signal so it appears alongside the
+              thumbs-up/down + Discord CTA — not on errored runs, partial
+              streams, or empty responses. Click hands the user a packaged
+              plugin via the bundled od-share-to-community scenario.
+            */}
+            {onShareToOpenDesign && isLast && showFeedback ? (
+              <button
+                type="button"
+                className="assistant-share-to-od-btn"
+                data-testid="assistant-share-to-od"
+                disabled={shareToOpenDesignBusy}
+                onClick={onShareToOpenDesign}
+              >
+                {shareToOpenDesignBusy
+                  ? t('assistant.shareToOpenDesignBusy')
+                  : t('assistant.shareToOpenDesign')}
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -1022,10 +1036,8 @@ interface AssistantFooterProps {
   hasUnfinishedTodos: boolean;
   hasEmptyResponse: boolean;
   // Pre-output phase: streaming but nothing rendered yet. The label shimmers
-  // "Preparing…"; once content lands it flips to "Working" and the elapsed
-  // counter restarts from `outputStartedAt` (the moment content appeared).
+  // "Preparing…"; once content lands it flips to "Working".
   preparing?: boolean;
-  outputStartedAt?: number | undefined;
   copyMarkdown?: string;
   onFork?: () => void;
   forking?: boolean;
@@ -1045,7 +1057,6 @@ function AssistantFooter({
   hasUnfinishedTodos,
   hasEmptyResponse,
   preparing = false,
-  outputStartedAt,
   copyMarkdown,
   onFork,
   forking = false,
@@ -1055,12 +1066,7 @@ function AssistantFooter({
   isLast = false,
 }: AssistantFooterProps) {
   const t = useT();
-  // While "working" (streaming with content) the timer counts from when
-  // content first appeared, not from the run start, so it reads as a fresh
-  // generation clock. Preparing and the final done state both use startedAt.
-  const elapsedStart =
-    streaming && !preparing ? outputStartedAt ?? startedAt : startedAt;
-  const elapsed = useLiveElapsed(streaming, elapsedStart, endedAt, usage?.durationMs);
+  const elapsed = useLiveElapsed(streaming, startedAt, endedAt, usage?.durationMs);
   const formattedCost =
     typeof usage?.costUsd === "number" &&
     Number.isFinite(usage.costUsd) &&
@@ -1950,25 +1956,27 @@ function hasPluginFinalActionHint(content: string): boolean {
 
 function ProseBlock({
   text,
+  assistantMessageId,
   isLastAssistant,
   streaming,
   showStreamCursor,
   nextUserContent,
-  locallySubmitted,
   suppressDirectionForms,
-  onSubmitForm,
   onOpenQuestions,
+  projectId,
+  projectFileNames,
   onRequestOpenFile,
 }: {
   text: string;
+  assistantMessageId: string;
   isLastAssistant: boolean;
   streaming: boolean;
   showStreamCursor?: boolean;
   nextUserContent?: string;
-  locallySubmitted: Set<string>;
   suppressDirectionForms: boolean;
-  onSubmitForm: (formId: string, text: string) => void;
-  onOpenQuestions?: () => void;
+  projectId?: string | null;
+  projectFileNames?: Set<string>;
+  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onRequestOpenFile?: (name: string) => void;
 }) {
   const t = useT();
@@ -2001,12 +2009,12 @@ function ProseBlock({
   const onLinkClick = useMemo<MarkdownLinkClickHandler | undefined>(() => {
     if (!onRequestOpenFile) return undefined;
     return (href, event) => {
-      const path = asInProjectFilePath(href);
+      const path = asInProjectFilePath(href, projectFileNames, projectId);
       if (!path) return;
       event.preventDefault();
       onRequestOpenFile(path);
     };
-  }, [onRequestOpenFile]);
+  }, [onRequestOpenFile, projectFileNames, projectId]);
   // Each text segment is further split on `<system-reminder>` blocks so
   // those render as their own collapsible chip instead of raw markup.
   const renderable = segments.flatMap(
@@ -2061,10 +2069,8 @@ function ProseBlock({
           <FormBlock
             key={seg.key}
             form={seg.form}
-            isLastAssistant={isLastAssistant}
+            assistantMessageId={assistantMessageId}
             nextUserContent={nextUserContent}
-            locallySubmitted={locallySubmitted}
-            onSubmitForm={onSubmitForm}
             onOpenQuestions={onOpenQuestions}
           />
         );
@@ -2081,8 +2087,9 @@ function ProseBlock({
   );
 }
 
-// Chat-side banner that points to the right-hand Questions tab where the
-// active discovery form lives. Clicking it focuses that tab.
+// Chat-side banner that points to the right-hand Questions tab where discovery
+// forms live. The chat column always stays compact: no inline form preview,
+// answered or not.
 function QuestionsBanner({ onOpen }: { onOpen?: () => void }) {
   const t = useT();
   return (
@@ -2111,40 +2118,27 @@ function isDirectionForm(form: QuestionForm): boolean {
 
 function FormBlock({
   form,
-  isLastAssistant,
+  assistantMessageId,
   nextUserContent,
-  locallySubmitted,
-  onSubmitForm,
   onOpenQuestions,
 }: {
   form: QuestionForm;
-  isLastAssistant: boolean;
+  assistantMessageId: string;
   nextUserContent?: string;
-  locallySubmitted: Set<string>;
-  onSubmitForm: (formId: string, text: string) => void;
-  onOpenQuestions?: () => void;
+  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
 }) {
-  // Reconstruct prior answers from a follow-up user message so older
-  // forms in the scrollback render in their answered state.
-  const submittedFromHistory = useMemo(() => {
-    if (!nextUserContent) return null;
-    return parseSubmittedAnswers(form, nextUserContent);
-  }, [form, nextUserContent]);
-  const wasSubmittedLocally = locallySubmitted.has(form.id);
-  // The live, still-unanswered form lives in the right-hand Questions tab —
-  // even mid-stream. In chat we only show a banner that focuses it, so the
-  // left side never renders the form itself. Answered / historical forms stay
-  // inline so the scrollback reads naturally.
-  const showBanner = isLastAssistant && !submittedFromHistory && !wasSubmittedLocally;
-  if (showBanner) {
-    return <QuestionsBanner onOpen={onOpenQuestions} />;
-  }
   return (
-    <QuestionFormView
-      form={form}
-      interactive={false}
-      submittedAnswers={submittedFromHistory ?? undefined}
-      onSubmit={(text) => onSubmitForm(form.id, text)}
+    <QuestionsBanner
+      onOpen={() => {
+        const submittedFromHistory = nextUserContent
+          ? parseSubmittedAnswers(form, nextUserContent)
+          : null;
+        onOpenQuestions?.({
+          form,
+          messageId: assistantMessageId,
+          submittedAnswers: submittedFromHistory ?? undefined,
+        });
+      }}
     />
   );
 }

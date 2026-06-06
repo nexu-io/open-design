@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type { QuestionForm } from '../artifacts/question-form';
 import { QuestionFormView, type QuestionFormHandle } from './QuestionForm';
@@ -22,6 +22,9 @@ const revealedOccurrences = new Set<string>();
 // for them — submitting whatever they picked (unanswered questions count as
 // skipped) so generation never stalls waiting on a reply.
 const SKIP_COUNTDOWN_SECONDS = 120;
+const QUESTION_FORM_DRAFT_STORAGE_PREFIX = 'open-design:question-form-draft:';
+
+type QuestionFormAnswers = Record<string, string | string[]>;
 
 interface Props {
   form: QuestionForm | null;
@@ -53,9 +56,37 @@ export function QuestionsPanel({
   const t = useT();
   const formRef = useRef<QuestionFormHandle>(null);
   const [ready, setReady] = useState(false);
+  const [draftAnswers, setDraftAnswers] = useState<QuestionFormAnswers | undefined>(() =>
+    readQuestionFormDraft(formKey),
+  );
 
   const total = form?.questions.length ?? 0;
   const answered = submittedAnswers !== undefined;
+
+  useEffect(() => {
+    setDraftAnswers(readQuestionFormDraft(formKey));
+  }, [formKey]);
+
+  useEffect(() => {
+    if (answered) clearQuestionFormDraft(formKey);
+  }, [answered, formKey]);
+
+  const updateDraftAnswers = useCallback(
+    (answers: QuestionFormAnswers) => {
+      setDraftAnswers(answers);
+      writeQuestionFormDraft(formKey, answers);
+    },
+    [formKey],
+  );
+
+  const submitAndClearDraft = useCallback(
+    (text: string) => {
+      clearQuestionFormDraft(formKey);
+      setDraftAnswers(undefined);
+      onSubmit(text);
+    },
+    [formKey, onSubmit],
+  );
   // If this occurrence already finished its reveal in a prior mount, show it in
   // full immediately rather than replaying the animation on remount.
   const [revealed, setRevealed] = useState(() =>
@@ -140,9 +171,11 @@ export function QuestionsPanel({
               form={visibleForm}
               interactive={interactive}
               submittedAnswers={submittedAnswers}
+              draftAnswers={draftAnswers}
               hideInternalSubmit
               onReadyChange={setReady}
-              onSubmit={(text) => onSubmit(text)}
+              onDraftChange={updateDraftAnswers}
+              onSubmit={(text) => submitAndClearDraft(text)}
             />
             {building ? (
               <div className="questions-panel-typing" aria-hidden>
@@ -184,4 +217,54 @@ export function QuestionsPanel({
       </div>
     </div>
   );
+}
+
+function questionFormDraftStorageKey(formKey: string | null | undefined): string | null {
+  return formKey ? `${QUESTION_FORM_DRAFT_STORAGE_PREFIX}${formKey}` : null;
+}
+
+function readQuestionFormDraft(formKey: string | null | undefined): QuestionFormAnswers | undefined {
+  const key = questionFormDraftStorageKey(formKey);
+  if (!key || typeof window === 'undefined') return undefined;
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return undefined;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    const out: QuestionFormAnswers = {};
+    for (const [id, value] of Object.entries(parsed)) {
+      if (typeof value === 'string') {
+        out[id] = value;
+      } else if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
+        out[id] = value;
+      }
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeQuestionFormDraft(
+  formKey: string | null | undefined,
+  answers: QuestionFormAnswers,
+): void {
+  const key = questionFormDraftStorageKey(formKey);
+  if (!key || typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(answers));
+  } catch {
+    // Losing an in-progress draft is preferable to blocking form input when
+    // browser storage is unavailable.
+  }
+}
+
+function clearQuestionFormDraft(formKey: string | null | undefined): void {
+  const key = questionFormDraftStorageKey(formKey);
+  if (!key || typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // Ignore storage failures; the submitted answer message is authoritative.
+  }
 }

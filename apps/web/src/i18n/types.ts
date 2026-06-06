@@ -34,6 +34,7 @@ export interface Dict {
   'common.cancel': string;
   'common.save': string;
   'common.close': string;
+  'common.clear': string;
   'common.delete': string;
   'common.rename': string;
   'common.edit': string;
@@ -130,6 +131,9 @@ export interface Dict {
   'settings.onboardingStepConnect': string;
   'settings.onboardingStepDesignSystem': string;
   'settings.onboardingStepProfile': string;
+  'settings.onboardingStepNewsletter': string;
+  'settings.onboardingNewsletterTitle': string;
+  'settings.onboardingNewsletterBody': string;
   'settings.onboardingConnectTitle': string;
   'settings.onboardingConnectBody': string;
   'settings.onboardingRecommended': string;
@@ -778,6 +782,10 @@ export interface Dict {
   'updater.readyVersion': string;
   'updater.upToDate': string;
 
+  // Newsletter email field on the onboarding About-you step.
+  'newsletter.label': string;
+  'newsletter.placeholder': string;
+
   // Entry view / tabs
   'entry.tabDesigns': string;
   'entry.tabTemplates': string;
@@ -797,6 +805,8 @@ export interface Dict {
   'entry.useEverywhereTitle': string;
   'entry.useEverywhereAria': string;
   // Left nav rail (icon-only) — surface labels also serve as tooltips
+  'entry.navExpand': string;
+  'entry.navCollapse': string;
   'entry.navNewProject': string;
   'entry.navHome': string;
   'entry.navProjects': string;
@@ -810,10 +820,19 @@ export interface Dict {
 
   // Entry home
   'homeHero.title': string;
+  'homeHero.templatesScrollHint': string;
+  'homeHero.templatesCollapse': string;
   'homeHero.subtitlePrefix': string;
   'homeHero.placeholder': string;
   'homeHero.placeholderActive': string;
   'homeHero.skills': string;
+  'homeHero.addMenu': string;
+  'homeHero.addPlugin': string;
+  'homeHero.addConnectors': string;
+  'homeHero.addMcp': string;
+  'homeHero.noPlugins': string;
+  'homeHero.noMcp': string;
+  'homeHero.noConnectors': string;
   'homeHero.applying': string;
   'homeHero.pluginTitle': string;
   'homeHero.pluginPrefix': string;
@@ -848,6 +867,7 @@ export interface Dict {
   'homeHero.footer.noMatches': string;
   'homeHero.moreShortcuts': string;
   'homeHero.railAria': string;
+  'homeHero.subTypeAria': string;
   'homeHero.confirmReplaceTitle': string;
   'homeHero.confirmReplaceBody': string;
   'homeHero.confirmReplace': string;
@@ -1879,8 +1899,12 @@ export interface Dict {
   'chat.you': string;
   'chat.openFile': string;
   'chat.copyPrompt': string;
+  'chat.copyErrorDiagnostic': string;
   'chat.copyDone': string;
   'chat.composerPlaceholder': string;
+  'chat.activeFileEditingLabel': string;
+  'chat.activeFilePlaceholder': string;
+  'chat.designArtifactsShowMore': string;
   'chat.mode.chat.label': string;
   'chat.mode.chat.title': string;
   'chat.mode.chat.summary': string;
@@ -1901,6 +1925,7 @@ export interface Dict {
   'chat.cliSettingsTitle': string;
   'chat.cliSettingsAria': string;
   'chat.attachTitle': string;
+  'chat.addContextTitle': string;
   'chat.attachAria': string;
   'chat.importTitle': string;
   'chat.importLabel': string;
@@ -1936,6 +1961,66 @@ export interface Dict {
   'browserUse.category.structure': string;
   'browserUse.category.project': string;
   'browserUse.category.general': string;
+  'browserUse.input.none': string;
+  'browserUse.input.assetKind': string;
+  'browserUse.input.optionalSelector': string;
+  'browserUse.input.requirementSelector': string;
+  'browserUse.input.selectorOptional': string;
+  'browserUse.input.scaleOne': string;
+  'browserUse.input.selectorScaleTwo': string;
+  'browserUse.input.gridOverlay': string;
+  'browserUse.input.bodySelector': string;
+  'browserUse.input.navigate': string;
+  'browserUse.input.selector': string;
+  'browserUse.input.selectorText': string;
+  'browserUse.input.scroll': string;
+  'browserUse.input.terminalRun': string;
+  'browserUse.input.command': string;
+  'browserUse.input.maxChars': string;
+  'browserUse.input.custom': string;
+  'browserUse.action.extract_logo.output': string;
+  'browserUse.action.list_images.output': string;
+  'browserUse.action.download_assets.output': string;
+  'browserUse.action.extract_svgs.output': string;
+  'browserUse.action.optimize_svgs.output': string;
+  'browserUse.action.extract_colors.output': string;
+  'browserUse.action.extract_fonts.output': string;
+  'browserUse.action.extract_design_tokens.output': string;
+  'browserUse.action.extract_type_scale.output': string;
+  'browserUse.action.extract_buttons.output': string;
+  'browserUse.action.extract_grid_system.output': string;
+  'browserUse.action.extract_breakpoints.output': string;
+  'browserUse.action.extract_gradients.output': string;
+  'browserUse.action.extract_shadows.output': string;
+  'browserUse.action.extract_easings.output': string;
+  'browserUse.action.export_tokens.output': string;
+  'browserUse.action.extract_animations.output': string;
+  'browserUse.action.validate_view.output': string;
+  'browserUse.action.audit_layout.output': string;
+  'browserUse.action.audit_accessibility.output': string;
+  'browserUse.action.responsive_screenshots.output': string;
+  'browserUse.action.screenshot_full.output': string;
+  'browserUse.action.screenshot_element.output': string;
+  'browserUse.action.screenshot_with_grid.output': string;
+  'browserUse.action.screenshot_dark_mode.output': string;
+  'browserUse.action.generate_styleguide.output': string;
+  'browserUse.action.extract_html.output': string;
+  'browserUse.action.extract_component_inventory.output': string;
+  'browserUse.action.extract_copy.output': string;
+  'browserUse.action.extract_nav.output': string;
+  'browserUse.action.extract_forms.output': string;
+  'browserUse.action.run_project.output': string;
+  'browserUse.action.detect_project.output': string;
+  'browserUse.action.page_info.output': string;
+  'browserUse.action.snapshot.output': string;
+  'browserUse.action.navigate.output': string;
+  'browserUse.action.click.output': string;
+  'browserUse.action.type_text.output': string;
+  'browserUse.action.scroll.output': string;
+  'browserUse.action.extract_og_metadata.output': string;
+  'browserUse.action.terminal_run.output': string;
+  'browserUse.action.terminal_run_background.output': string;
+  'browserUse.action.terminal_read.output': string;
   "chat.designToolbox.title": string;
   "chat.designToolbox.tooltip": string;
   "chat.designToolbox.aria": string;
@@ -2137,8 +2222,6 @@ export interface Dict {
   'workspace.allFiles': string;
   'workspace.createNew': string;
   'workspace.tabOpen': string;
-  'workspace.newSideChat': string;
-  'workspace.newSideChatDescription': string;
   'workspace.sideChatContextBanner': string;
   'workspace.sideChatDefaultTitle': string;
   'workspace.newTerminal': string;
@@ -2636,6 +2719,8 @@ export interface Dict {
   'assistant.copyMarkdown': string;
   'assistant.forkConversation': string;
   'assistant.forkingConversation': string;
+  'assistant.shareToOpenDesign': string;
+  'assistant.shareToOpenDesignBusy': string;
   'assistant.feedbackPrompt': string;
   'assistant.feedbackPositive': string;
   'assistant.feedbackNegative': string;

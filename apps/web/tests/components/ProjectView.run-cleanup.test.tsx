@@ -243,6 +243,37 @@ describe('retry target resolution', () => {
       failedAssistant,
       userMsg: userMessage,
       priorMessages: [systemContext],
+      preservedAttempts: [failedAssistant],
+    });
+  });
+
+  it('keeps earlier failed retry attempts visible while reusing the original user turn', () => {
+    const firstFailure: ChatMessage = {
+      ...failedAssistant,
+      id: 'assistant-1',
+      content: 'First attempt produced partial output',
+      events: [{ kind: 'text', text: 'thinking before failure' }],
+      producedFiles: [
+        {
+          name: 'partial.html',
+          kind: 'html',
+          mime: 'text/html',
+          mtime: 1,
+          size: 100,
+        },
+      ],
+    };
+    const secondFailure: ChatMessage = {
+      ...failedAssistant,
+      id: 'assistant-2',
+      content: 'Retry failed too',
+    };
+
+    expect(resolveRetryTarget([userMessage, firstFailure, secondFailure], secondFailure.id)).toEqual({
+      failedAssistant: secondFailure,
+      userMsg: userMessage,
+      priorMessages: [],
+      preservedAttempts: [firstFailure, secondFailure],
     });
   });
 
@@ -1242,7 +1273,7 @@ describe('ProjectView daemon cleanup', () => {
     });
   });
 
-  it('relinks terminal replay to an existing artifact without writing a duplicate file', async () => {
+  it('does not replay a terminal succeeded row with empty produced files', async () => {
     const runCreatedAt = Date.now();
     const existingArtifact = {
       artifactManifest: {
@@ -1329,20 +1360,17 @@ describe('ProjectView daemon cleanup', () => {
       />,
     );
 
-    await waitFor(() => {
-      expect(saveMessage.mock.calls).toEqual(
-        expect.arrayContaining([
-          expect.arrayContaining([
-            'project-1',
-            'conv-1',
-            expect.objectContaining({
-              id: 'msg-replay',
-              producedFiles: [existingArtifact],
-            }),
-          ]),
-        ]),
-      );
-    });
+    await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalledWith('project-1'));
+    expect(fetchChatRunStatus).not.toHaveBeenCalled();
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+    expect(saveMessage).not.toHaveBeenCalledWith(
+      'project-1',
+      'conv-1',
+      expect.objectContaining({
+        id: 'msg-replay',
+        producedFiles: [existingArtifact],
+      }),
+    );
     expect(writeProjectTextFile).not.toHaveBeenCalled();
   });
 });

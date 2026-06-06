@@ -291,6 +291,19 @@ vi.mock('../../src/components/ChatPane', () => ({
             .filter(Boolean)
             .join('\n')}
         </output>
+        <output data-testid="assistant-summary">
+          {(messages ?? [])
+            .filter((message) => message.role === 'assistant')
+            .map((message) =>
+              [
+                message.id,
+                message.runStatus ?? '',
+                message.content,
+                ...(message.producedFiles ?? []).map((file) => file.name),
+              ].join('|'),
+            )
+            .join('\n')}
+        </output>
         <output data-testid="attached-comment-count">{attached.length}</output>
         {queuedItems?.map((item, index) => (
           <button
@@ -1127,6 +1140,57 @@ describe('ProjectView conversation run isolation', () => {
     fireEvent.click(screen.getByTestId('workspace-retry'));
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+  });
+
+  it('preserves the failed attempt transcript when retry starts a replacement run', async () => {
+    const userMessage: ChatMessage = {
+      id: 'user-retry',
+      role: 'user',
+      content: 'make an editorial landing page',
+      createdAt: 1,
+    };
+    const failedAssistant: ChatMessage = {
+      id: 'assistant-failed',
+      role: 'assistant',
+      content: 'Partial plan before the crash',
+      createdAt: 2,
+      runStatus: 'failed',
+      events: [{ kind: 'text', text: 'I will build the page' }],
+      producedFiles: [
+        {
+          name: 'partial.html',
+          kind: 'html',
+          mime: 'text/html',
+          mtime: 2,
+          size: 100,
+        },
+      ],
+    };
+    conversationAMessages = [userMessage, failedAssistant];
+    fetchChatRunStatus.mockResolvedValue(null);
+    streamViaDaemon.mockImplementation(async () => {});
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('workspace-retry')).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId('workspace-retry'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    const retryCall = streamViaDaemon.mock.calls[0]?.[0] as {
+      assistantMessageId?: string;
+      history?: ChatMessage[];
+    };
+    expect(retryCall.assistantMessageId).toBeTruthy();
+    expect(retryCall.assistantMessageId).not.toBe('assistant-failed');
+    expect(retryCall.history).toEqual([userMessage]);
+
+    await waitFor(() => {
+      const summary = screen.getByTestId('assistant-summary').textContent ?? '';
+      expect(summary).toContain('assistant-failed|failed|Partial plan before the crash|partial.html');
+      expect(summary).toContain(`${retryCall.assistantMessageId}|running|`);
+    });
   });
 
   it('routes workspace authorize recovery through AMR mode switching for structured auth failures', async () => {

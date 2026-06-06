@@ -33,6 +33,7 @@ import {
 } from '../providers/registry';
 import { deriveFileOps, type FileOpEntry } from '../runtime/file-ops';
 import { latestTodosFromEvents, type TodoItem } from '../runtime/todos';
+import { deliverableSlideNavForActiveFile, isSlideNavDeliverableNow } from '../runtime/slide-nav';
 import {
   type AgentEvent,
   type AgentInfo,
@@ -115,6 +116,10 @@ interface Props {
   // Open the named file AND surface its Share/Export menu. Drives the chat-side
   // "Share" next-step action without a dedicated share backend.
   shareRequest?: { name: string; nonce: number } | null;
+  // Flip a deck preview to a given slide when a queued chat send starts. Mirrors
+  // `shareRequest`: the named file is activated (if open) and the matching
+  // FileViewer consumes the nonce to navigate.
+  slideNavRequest?: { name: string; slideIndex: number; nonce: number } | null;
   liveArtifactEvents?: LiveArtifactEventItem[];
   designSystemActivityEvents?: AgentEvent[];
   // Persisted set of open tabs + active tab. Owned by ProjectView so the
@@ -132,6 +137,8 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
+  preferredPreviewFile?: string | null;
+  autoPreviewDesignArtifacts?: boolean;
   focusMode?: boolean;
   onFocusModeChange?: (next: boolean) => void;
   designSystemProject?: DesignSystemSummary | null;
@@ -155,14 +162,16 @@ interface Props {
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
   // Side Chat (`chat:<conversationId>` tab) wiring. Threaded from ProjectView
-  // so a secondary ChatPane can run against a seeded conversation without
+  // so a secondary ChatPane can render an already-open conversation tab without
   // FileWorkspace owning any chat state. All optional: a workspace mounted
-  // without these simply offers no "New Side Chat" launcher entry.
+  // without these simply does not render restored side-chat tabs. There is no
+  // launcher affordance to create new side chats — only persisted `chat:` tabs
+  // are restored.
   chatConfig?: AppConfig;
   chatAgentsById?: Map<string, AgentInfo>;
   chatLocale?: string;
   conversations?: Conversation[];
-  /** The primary chat's active conversation — the seed source for new side chats. */
+  /** The primary chat's active conversation. */
   activeConversationId?: string | null;
   onSelectConversation?: (id: string) => void;
   onDeleteConversation?: (id: string) => void;
@@ -170,8 +179,6 @@ interface Props {
   onConversationSessionModeChange?: (id: string, mode: ChatSessionMode) => void;
   onNewConversation?: () => void;
   activeConversationChat?: ActiveConversationChatState;
-  /** Create a context-seeded conversation and resolve its id (backs the launcher). */
-  onCreateSideChat?: (seedFromConversationId: string | null) => Promise<string | null>;
   onActiveContextChange?: (context: WorkspaceContextItem | null) => void;
   onWorkspaceContextsChange?: (contexts: WorkspaceContextItem[]) => void;
   messages?: ChatMessage[];
@@ -232,6 +239,10 @@ const BROWSER_TAB_PREFIX = '__browser__:';
 // We keep an LRU of the most-recently-activated browser tabs live and unmount
 // the rest; switching back to an evicted tab remounts (reloads) it.
 const BROWSER_KEEPALIVE_CAP = 3;
+
+// Stable empty folder list so the render-phase project-switch reset is
+// idempotent (passing a fresh `[]` each render would re-trigger the reset).
+const EMPTY_PROJECT_FOLDERS: ProjectFolder[] = [];
 type TabDropEdge = 'before' | 'after';
 type BrowserWorkspaceTab = ProjectBrowserWorkspaceTab;
 type WorkspaceOrderedTab =
@@ -355,6 +366,7 @@ export function FileWorkspace({
   commentSendDisabled = false,
   openRequest,
   shareRequest,
+  slideNavRequest,
   liveArtifactEvents = [],
   designSystemActivityEvents = [],
   tabsState,
@@ -367,6 +379,8 @@ export function FileWorkspace({
   onPluginFolderAgentAction,
   activePluginActionPaths,
   hiddenPluginActionPaths,
+  preferredPreviewFile = null,
+  autoPreviewDesignArtifacts = false,
   focusMode = false,
   onFocusModeChange,
   designSystemProject = null,
@@ -392,7 +406,6 @@ export function FileWorkspace({
   onConversationSessionModeChange,
   onNewConversation,
   activeConversationChat,
-  onCreateSideChat,
   onActiveContextChange,
   onWorkspaceContextsChange,
   messages = [],
@@ -414,12 +427,10 @@ export function FileWorkspace({
   focusQuestionsRequest = null,
 }: Props) {
   const t = useT();
-  // The Questions tab only exists while there's an unanswered form. Once the
-  // user replies, the answered copy moves back into chat and the tab must close
-  // — so gate on `questionFormSubmittedAnswers === undefined` rather than the
-  // mere presence of a form, otherwise a locked duplicate lingers in the panel.
-  const showQuestionsTab =
-    Boolean(questionForm || questionsGenerating) && questionFormSubmittedAnswers === undefined;
+  // The chat column only shows a compact Questions banner; the form itself
+  // lives here, including after submission when a banner click can reopen the
+  // answered preview.
+  const showQuestionsTab = Boolean(questionForm || questionFormPreview || questionsGenerating);
   const analytics = useAnalytics();
   // P1 page_view page_name=file_manager — once per project the user lands
   // inside the workspace. Re-fire when the projectId changes so a
@@ -457,7 +468,20 @@ export function FileWorkspace({
   const [uploadDir, setUploadDir] = useState<string>('');
   const [sketches, setSketches] = useState<Record<string, SketchState>>({});
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
-  const [projectFolders, setProjectFolders] = useState<ProjectFolder[]>([]);
+  const [projectFolders, setProjectFolders] = useState<ProjectFolder[]>(EMPTY_PROJECT_FOLDERS);
+  // Reset the folder list during render — NOT in an effect — when the project
+  // changes. DesignFilesPanel is keyed by `projectId`, so an effect-based reset
+  // would let the new panel mount once with the previous project's folders and
+  // briefly suppress the new project's empty state (the exact regression this
+  // fix removes). Adjusting state during render discards this render before the
+  // child commits, so the new panel never sees stale folders. Mirrors the
+  // designFilesNav ref reset above. The stable empty constant keeps this
+  // idempotent (no re-entrant render loop).
+  const projectFoldersProjectIdRef = useRef(projectId);
+  if (projectFoldersProjectIdRef.current !== projectId) {
+    projectFoldersProjectIdRef.current = projectId;
+    setProjectFolders(EMPTY_PROJECT_FOLDERS);
+  }
   const [browserTabs, setBrowserTabs] = useState<BrowserWorkspaceTab[]>(
     () => browserTabsFromState(tabsState.browserTabs),
   );
@@ -525,6 +549,8 @@ export function FileWorkspace({
 
   useEffect(() => {
     let cancelled = false;
+    // The synchronous clear happens during render (see projectFoldersProjectIdRef
+    // above); here we only fetch the new project's folders.
     void fetchProjectFolders(projectId).then((next) => {
       if (!cancelled) setProjectFolders(next);
     });
@@ -721,9 +747,15 @@ export function FileWorkspace({
       setActiveTab(name);
       return;
     }
+    const isNewTab = !persistedTabs.includes(name);
+    const nextBrowserTabs = isNewTab
+      ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
+      : browserTabs;
+    if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
     onTabsStateChange(workspaceTabsState(
-      persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
+      isNewTab ? [...persistedTabs, name] : persistedTabs,
       name,
+      nextBrowserTabs,
     ));
     setActiveTab(name);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -743,6 +775,22 @@ export function FileWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shareRequest]);
 
+  // Slide-nav request: decide deliverability once, at fire time. Only if the
+  // named deck is already an open tab do we mark this nonce deliverable and
+  // bring it forward so the matching FileViewer is mounted and flips. We never
+  // open a closed file — auto-flipping is a follow-along, not a reason to yank
+  // the user into a tab they never opened. Recording the deliverable nonce in
+  // state (not a ref) also means a request for a closed deck stays undeliverable
+  // forever: opening that file later matches the name but not the nonce, so the
+  // stale request can't resurface and jump the preview.
+  const [slideNavDeliverableNonce, setSlideNavDeliverableNonce] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isSlideNavDeliverableNow(slideNavRequest, persistedTabs)) return;
+    setSlideNavDeliverableNonce(slideNavRequest!.nonce);
+    setActiveTab(slideNavRequest!.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slideNavRequest]);
+
   // Focus the Questions tab when the parent bumps the nonce (banner click in
   // chat, or a freshly generated form). The tab is transient — not added to
   // the persisted tab list.
@@ -752,8 +800,21 @@ export function FileWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusQuestionsRequest?.nonce]);
 
-  // If the Questions tab is active but the form is gone (answered, or a new
-  // assistant turn without a form), fall back to the default root tab.
+  // Submitting from the right-hand panel should close the preview once. The
+  // answered form remains available, so a later chat-banner click can reopen
+  // the same Questions tab without this effect immediately closing it again.
+  const previousQuestionFormSubmittedAnswersRef = useRef(questionFormSubmittedAnswers);
+  useEffect(() => {
+    const wasAnswered = previousQuestionFormSubmittedAnswersRef.current !== undefined;
+    const isAnswered = questionFormSubmittedAnswers !== undefined;
+    previousQuestionFormSubmittedAnswersRef.current = questionFormSubmittedAnswers;
+    if (activeTab === QUESTIONS_TAB && !wasAnswered && isAnswered) {
+      setActiveTab(defaultRootTab);
+    }
+  }, [activeTab, defaultRootTab, questionFormSubmittedAnswers]);
+
+  // If the Questions tab is active but the form is gone because a new assistant
+  // turn has no form, fall back to the default root tab.
   useEffect(() => {
     if (activeTab === QUESTIONS_TAB && !showQuestionsTab) {
       setActiveTab(defaultRootTab);
@@ -768,8 +829,13 @@ export function FileWorkspace({
     // resolves a new terminal/side-chat id), so the closure could be stale and
     // clobber tabs added in the meantime.
     const currentTabs = tabsStateRef.current.tabs;
+    const isNewTab = !currentTabs.includes(name);
+    const nextBrowserTabs = isNewTab
+      ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
+      : browserTabs;
     const nextTabs = currentTabs.includes(name) ? currentTabs : [...currentTabs, name];
-    commitTabsState(workspaceTabsState(nextTabs, name));
+    if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
+    commitTabsState(workspaceTabsState(nextTabs, name, nextBrowserTabs));
     setActiveTab(name);
   }
 
@@ -1656,9 +1722,24 @@ export function FileWorkspace({
 
   const isActiveSketch = activeFile?.kind === 'sketch' && isSketchName(activeFile.name);
   const activeSketch = activeFile && isActiveSketch ? sketches[activeFile.name] : null;
+  // The design-files tab is the default landing tab, so while a run is in
+  // flight and no previewable artifact exists yet the progress card must take
+  // over its empty "Creations will appear here" state rather than leave an idle
+  // empty list. (Pre-#3516 the preview branch rendered before the design-files
+  // branch with no tab guard; the composer rewrite added an `activeTab !==
+  // DESIGN_FILES_TAB` clause here that hid the progress card on the default
+  // tab.) But the override is scoped to the *empty* design-files tab: a
+  // populated project keeps its file browser while generating. The condition
+  // mirrors DesignFilesPanel's own empty-state gate exactly (no files, no live
+  // artifacts, no folders), so the card only wins where the panel would have
+  // shown its empty placeholder.
+  const designFilesTabIsEmpty =
+    visibleFiles.length === 0
+    && liveArtifactEntries.length === 0
+    && projectFolders.length === 0;
   const showGenerationPreview = Boolean(generationPreview)
-    && activeTab !== DESIGN_FILES_TAB
     && activeTab !== DESIGN_SYSTEM_TAB
+    && (activeTab !== DESIGN_FILES_TAB || designFilesTabIsEmpty)
     && !isBrowserTabId(activeTab)
     && !isSideChatTabId(activeTab)
     && !isTerminalTabId(activeTab)
@@ -1666,14 +1747,12 @@ export function FileWorkspace({
     && !activeFile;
 
   // The "+" launcher's create-new actions come from the registry. `openTab`
-  // reuses the same tab-state path as opening a file so a new chat:<id> /
-  // terminal:<id> tab is focused; `createBrowser` opens an embedded browser tab.
-  // `createSideChat` is only wired when the parent threaded the chat callbacks,
-  // so a chat-less workspace hides that action entirely.
+  // reuses the same tab-state path as opening a file so a new terminal:<id>
+  // tab is focused; `createBrowser` opens an embedded browser tab.
   // Built fresh each render (not memoized): `createBrowser` closes over
   // `openBrowserTab`, which reads the live `browserTabs` state — memoizing it
   // would capture a stale closure and make every "New Browser" click overwrite
-  // the same single tab. The terminal/side-chat actions route through `openFile`
+  // the same single tab. The terminal action routes through `openFile`
   // (ref-based), so freshness here is cheap and only matters while the launcher
   // is open.
   const launcherContext: LauncherContext = {
@@ -1682,9 +1761,6 @@ export function FileWorkspace({
     // Browser is owned by this branch's DesignBrowserPanel: spin up a browser
     // tab synchronously (no daemon round-trip) and let the launcher close.
     createBrowser: () => openBrowserTab(),
-    ...(onCreateSideChat
-      ? { createSideChat: () => onCreateSideChat(activeConversationId) }
-      : {}),
     // Terminal needs only the project id — spawn the PTY here and hand the
     // resulting session id back so the launcher opens a terminal:<id> tab.
     // Surface a toast when the daemon can't start one (e.g. node-pty not
@@ -1905,19 +1981,7 @@ export function FileWorkspace({
             );
           })}
         </div>
-        {/* Pinned to the right, OUTSIDE the horizontally-scrolling
-            `.ws-tabs-bar`, so the "+" launcher is never clipped by that
-            container's overflow and the middle file tabs scroll between the
-            sticky-left Design Files entry and this button. */}
-        <div className="ws-tabs-actions">
-          <div
-            id={APP_CHROME_FILE_ACTIONS_ID}
-            className="ws-tabs-file-actions"
-            data-app-chrome-file-actions="true"
-          />
-          {headerActions ? (
-            <div className="ws-tabs-project-actions">{headerActions}</div>
-          ) : null}
+        <div className="ws-add-tab">
           <button
             ref={launcherBtnRef}
             type="button"
@@ -1933,6 +1997,18 @@ export function FileWorkspace({
           >
             <Icon name="plus" size={15} />
           </button>
+        </div>
+        {/* Pinned to the right for project/file actions; the tab launcher sits
+            next to the file tabs so its spatial relationship stays clear. */}
+        <div className="ws-tabs-actions">
+          <div
+            id={APP_CHROME_FILE_ACTIONS_ID}
+            className="ws-tabs-file-actions"
+            data-app-chrome-file-actions="true"
+          />
+          {headerActions ? (
+            <div className="ws-tabs-project-actions">{headerActions}</div>
+          ) : null}
         </div>
       </div>
       {launcherOpen ? (
@@ -2070,6 +2146,7 @@ export function FileWorkspace({
             rootDirName={rootDirName}
             reloading={reloading}
             files={visibleFiles}
+            folders={projectFolders}
             liveArtifacts={liveArtifactEntries}
             onRefreshFiles={onRefreshFiles}
             onCurrentDirChange={setUploadDir}
@@ -2121,6 +2198,8 @@ export function FileWorkspace({
             }}
             uploadError={uploadError}
             onClearUploadError={() => setUploadError(null)}
+            preferredPreviewFile={preferredPreviewFile}
+            autoPreviewDesignArtifacts={autoPreviewDesignArtifacts}
             onPluginFolderAgentAction={onPluginFolderAgentAction}
             activePluginActionPaths={activePluginActionPaths}
             hiddenPluginActionPaths={hiddenPluginActionPaths}
@@ -2202,6 +2281,11 @@ export function FileWorkspace({
                 ? { nonce: shareRequest.nonce }
                 : null
             }
+            slideNavRequest={deliverableSlideNavForActiveFile(
+              slideNavRequest,
+              activeFile.name,
+              slideNavDeliverableNonce,
+            )}
           />
         ) : (
           <div className="viewer-empty">
@@ -3807,6 +3891,34 @@ function maxBrowserTabSequence(tabs: BrowserWorkspaceTab[]): number {
 
 function lastWorkspaceTabId(tabs: WorkspaceOrderedTab[]): string | null {
   return tabs[tabs.length - 1]?.id ?? null;
+}
+
+function reanchorBrowserTabsToCurrentOrder(
+  orderedTabs: WorkspaceOrderedTab[],
+  browserTabs: BrowserWorkspaceTab[],
+): BrowserWorkspaceTab[] {
+  if (browserTabs.length === 0) return browserTabs;
+  const anchorByBrowserId = new Map<string, string | null>();
+  let previousId: string | null = DESIGN_FILES_TAB;
+  for (const entry of orderedTabs) {
+    if (entry.kind === 'browser') {
+      anchorByBrowserId.set(entry.browserTab.id, previousId);
+      previousId = entry.browserTab.id;
+    } else {
+      previousId = entry.name;
+    }
+  }
+
+  let changed = false;
+  const nextTabs = browserTabs.map((tab) => {
+    if (!anchorByBrowserId.has(tab.id)) return tab;
+    const nextInsertAfter = anchorByBrowserId.get(tab.id) ?? null;
+    const currentInsertAfter = tab.insertAfter ?? null;
+    if (currentInsertAfter === nextInsertAfter) return tab;
+    changed = true;
+    return { ...tab, insertAfter: nextInsertAfter };
+  });
+  return changed ? nextTabs : browserTabs;
 }
 
 function orderWorkspaceTabs(

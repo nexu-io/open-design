@@ -7,6 +7,7 @@ import {
   importFolderProject,
   installGeneratedPluginFolder,
   listPlugins,
+  pickLocalFolderPath,
   publishGeneratedPluginToGitHub,
 } from '../../src/state/projects';
 
@@ -368,5 +369,42 @@ describe('importFolderProject', () => {
 
     await expect(importFolderProject({ baseDir: '/some/path' }))
       .rejects.toThrow('Failed to import folder');
+  });
+});
+
+describe('pickLocalFolderPath', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns the selected native folder path', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({ path: '/Users/me/Site' }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(pickLocalFolderPath()).resolves.toBe('/Users/me/Site');
+    expect(fetchMock).toHaveBeenCalledWith('/api/dialog/open-folder', {
+      method: 'POST',
+    });
+  });
+
+  it('returns null when the native picker is cancelled', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({ path: null }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    )));
+
+    await expect(pickLocalFolderPath()).resolves.toBeNull();
+  });
+
+  it('throws with the daemon picker error message', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({ error: 'cross-origin request rejected' }),
+      { status: 403, headers: { 'content-type': 'application/json' } },
+    )));
+
+    await expect(pickLocalFolderPath()).rejects.toThrow('cross-origin request rejected');
   });
 });

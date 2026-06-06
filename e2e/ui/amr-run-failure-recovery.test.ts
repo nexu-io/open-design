@@ -35,6 +35,57 @@ test.beforeAll(async () => {
   codexRuntime = runtimes.codex;
 });
 
+test('[P0] AMR insufficient-balance failures surface Top up AMR and keep Retry available', async ({ page }) => {
+  const profile = `balance-${Date.now()}`;
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        loggedIn: true,
+        profile,
+        configPath: '/tmp/.amr/config.json',
+        user: { id: 'balance-user', email: 'balance-ui@example.com', plan: 'free' },
+      }),
+    });
+  });
+
+  await page.addInitScript(() => {
+    const opened: string[] = [];
+    (window as Window & { __openedUrls?: string[] }).__openedUrls = opened;
+    const originalOpen = window.open.bind(window);
+    window.open = ((...args: Parameters<typeof window.open>) => {
+      if (typeof args[0] === 'string') opened.push(args[0]);
+      return originalOpen(...args);
+    }) as typeof window.open;
+  });
+
+  const amr = await setupAmrWorkspace(page, {
+    failBalanceAtPrompt: true,
+    profile,
+    requireLoginConfig: false,
+    selectedAgentId: 'amr',
+  });
+
+  await gotoProject(page, amr.projectId);
+  await sendPrompt(page, 'AMR insufficient balance recovery smoke');
+
+  const topUp = page.getByRole('button', { name: /Top up AMR|前往充值|前往儲值/i }).first();
+  const retry = page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first();
+  await expect(topUp).toBeVisible({ timeout: 15_000 });
+  await expect(retry).toBeVisible();
+
+  await topUp.click();
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as Window & { __openedUrls?: string[] }).__openedUrls ?? [],
+      ),
+    )
+    .toContainEqual(expect.stringMatching(/^https:\/\/open-design\.ai\/amr\/wallet(?:\?|$)/));
+});
+
 test('[P0] AMR auth failures offer Authorize & retry and open AMR authorization controls', async ({ page }) => {
   let loggedIn = false;
   await page.route('**/api/integrations/vela/status', async (route) => {
@@ -75,7 +126,7 @@ test('[P0] AMR auth failures offer Authorize & retry and open AMR authorization 
   await gotoProject(page, amr.projectId);
   await sendPrompt(page, 'AMR auth failure recovery smoke');
 
-  const authorizeAndRetry = page.getByTestId('generation-preview-authorize');
+  const authorizeAndRetry = page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first();
   await expect(authorizeAndRetry).toBeVisible({ timeout: 15_000 });
   await authorizeAndRetry.click();
 
@@ -88,41 +139,6 @@ test('[P0] AMR auth failures offer Authorize & retry and open AMR authorization 
   await expect(settings.getByRole('button', { name: /^Sign out$|^退出登录$/i })).toBeVisible({
     timeout: 10_000,
   });
-});
-
-test('[P0] AMR insufficient-balance failures surface Top up AMR and keep Retry available', async ({ page }) => {
-  await page.addInitScript(() => {
-    const opened: string[] = [];
-    (window as Window & { __openedUrls?: string[] }).__openedUrls = opened;
-    const originalOpen = window.open.bind(window);
-    window.open = ((...args: Parameters<typeof window.open>) => {
-      if (typeof args[0] === 'string') opened.push(args[0]);
-      return originalOpen(...args);
-    }) as typeof window.open;
-  });
-
-  const amr = await setupAmrWorkspace(page, {
-    failBalanceAtPrompt: true,
-    selectedAgentId: 'amr',
-  });
-
-  await gotoProject(page, amr.projectId);
-  await sendPrompt(page, 'AMR insufficient balance recovery smoke');
-
-  const topUp = page.getByTestId('generation-preview-recharge');
-  const retry = page.getByTestId('generation-preview-retry');
-  await expect(topUp).toBeVisible({ timeout: 15_000 });
-  await expect(retry).toBeVisible();
-
-  await topUp.click();
-
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () => (window as Window & { __openedUrls?: string[] }).__openedUrls ?? [],
-      ),
-    )
-    .toContain('https://open-design.ai/amr/wallet');
 });
 
 test('[P0] after an AMR failure the user can switch to Codex and complete a fresh run', async ({ page }) => {
@@ -224,8 +240,8 @@ test('[P0] upstream outages keep Retry available without promoting AMR', async (
 
   await gotoProject(page, projectId);
 
-  await expect(page.getByTestId('generation-preview-retry')).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText(/Generation service unavailable/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/Generation service unavailable|model provider is temporarily unavailable/i).first()).toBeVisible();
   await expect(page.getByRole('button', { name: /Switch to AMR & retry/i })).toHaveCount(0);
   await expect(page.getByText(/Model call failed/i)).toHaveCount(0);
 });
@@ -303,9 +319,9 @@ test('[P0] antigravity rate limits offer terminal model switching without promot
 
   await gotoProject(page, projectId);
 
-  const launchTerminal = page.getByTestId('generation-preview-launch-terminal');
+  const launchTerminal = page.getByRole('button', { name: /Switch model in terminal/i }).first();
   await expect(launchTerminal).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByTestId('generation-preview-retry')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: /Switch to AMR & retry/i })).toHaveCount(0);
 
   await launchTerminal.click();
@@ -318,6 +334,8 @@ async function setupAmrWorkspace(
   options: {
     failAuthAtPrompt?: boolean;
     failBalanceAtPrompt?: boolean;
+    profile?: string;
+    requireLoginConfig?: boolean;
     selectedAgentId: 'amr' | 'codex';
     seedLoginConfig?: boolean;
     assistantText?: string;
@@ -329,10 +347,11 @@ async function setupAmrWorkspace(
     ...(options.assistantText !== undefined ? { assistantText: options.assistantText } : {}),
     ...(options.failAuthAtPrompt !== undefined ? { failAuthAtPrompt: options.failAuthAtPrompt } : {}),
     ...(options.failBalanceAtPrompt !== undefined ? { failBalanceAtPrompt: options.failBalanceAtPrompt } : {}),
+    ...(options.requireLoginConfig !== undefined ? { requireLoginConfig: options.requireLoginConfig } : {}),
   });
   await mkdir(homeDir, { recursive: true });
   if (options.seedLoginConfig !== false) {
-    await seedVelaLoginConfig(homeDir, { email: 'ui-amr@example.com', profile: 'local' });
+    await seedVelaLoginConfig(homeDir, { email: 'ui-amr@example.com', profile: options.profile ?? 'local' });
   }
 
   const config = {
@@ -350,7 +369,13 @@ async function setupAmrWorkspace(
       codex: { model: 'default', reasoning: 'default' },
     },
     agentCliEnv: {
-      amr: { VELA_BIN: velaBin, HOME: homeDir },
+      amr: {
+        VELA_BIN: velaBin,
+        HOME: homeDir,
+        VELA_LINK_URL: 'http://localhost:18081',
+        VELA_RUNTIME_KEY: 'fake-runtime-key',
+        ...(options.profile ? { OPEN_DESIGN_AMR_PROFILE: options.profile } : {}),
+      },
       codex: codexRuntime.env,
     },
   };

@@ -21,6 +21,7 @@ const fetchDesignSystem = vi.fn();
 const getTemplate = vi.fn();
 const fetchChatRunStatus = vi.fn();
 const listActiveChatRuns = vi.fn();
+const listProjectRuns = vi.fn();
 const reattachDaemonRun = vi.fn();
 const streamViaDaemon = vi.fn();
 const saveMessage = vi.fn();
@@ -47,6 +48,7 @@ vi.mock('../../src/providers/anthropic', () => ({
 vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
+  listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
   streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
 }));
@@ -203,6 +205,42 @@ describe('ProjectView daemon reattach restore', () => {
     cleanup();
     vi.clearAllMocks();
     window.sessionStorage.clear();
+  });
+
+  it('does not replay a terminal succeeded row just because produced files are missing', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-done',
+        role: 'assistant',
+        content: 'All done!',
+        createdAt: startedAt,
+        startedAt,
+        runStatus: 'succeeded',
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+
+    renderProjectView();
+
+    await waitFor(() => expect(listMessages).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalled());
+    expect(listActiveChatRuns).not.toHaveBeenCalled();
+    expect(listProjectRuns).not.toHaveBeenCalled();
+    expect(fetchChatRunStatus).not.toHaveBeenCalled();
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+    expect(
+      saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .some((m) => m?.id === 'msg-done' && m.runStatus === 'failed'),
+    ).toBe(false);
   });
 
   it('populates producedFiles on the persisted message after reattach completes', async () => {

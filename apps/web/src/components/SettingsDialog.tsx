@@ -33,6 +33,10 @@ import { AgentIcon } from './AgentIcon';
 import { AgentDiagnosticRow } from './AgentDiagnosticRow';
 import { AmrLoginPill } from './AmrLoginPill';
 import {
+  AMR_LOGIN_STATUS_EVENT,
+  amrLoginStatusEventReason,
+} from './amrLoginPolling';
+import {
   fetchVelaLoginStatus,
   type VelaLoginStatus,
 } from '../providers/daemon';
@@ -85,6 +89,7 @@ import type {
   AppTheme,
   AppVersionInfo,
   ConnectionTestResponse,
+  DesignSystemGenerationJob,
   OrbitRunSummary,
   OrbitStatusResponse,
   ExecMode,
@@ -240,6 +245,7 @@ interface Props {
   onSkillsChanged?: (affectedSkillId?: string) => void;
   /** Same channel for design-system registry mutations. */
   onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
+  onDesignSystemImportRebuildJob?: (designSystemId: string, job: DesignSystemGenerationJob) => void;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
 }
 
@@ -976,6 +982,7 @@ export function SettingsDialog({
   onProjectsRefresh,
   onSkillsChanged,
   onDesignSystemsChanged,
+  onDesignSystemImportRebuildJob,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
 }: Props) {
@@ -1112,6 +1119,26 @@ export function SettingsDialog({
       cancelled = true;
       window.removeEventListener('focus', resyncAmrStatus);
       document.removeEventListener('visibilitychange', resyncAmrStatus);
+    };
+  }, [agents]);
+
+  useEffect(() => {
+    const hasAmrAgent = agents.some((agent) => agent.id === 'amr' && agent.available);
+    if (!hasAmrAgent) return;
+    let cancelled = false;
+    const resyncAmrStatus = (event: Event) => {
+      const reason = amrLoginStatusEventReason(event);
+      if (reason === 'login-canceled') return;
+      void fetchVelaLoginStatus().then((next) => {
+        if (cancelled || !next) return;
+        setAmrCardStatus(next);
+        setAmrCardStatusReady(true);
+      });
+    };
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, resyncAmrStatus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(AMR_LOGIN_STATUS_EVENT, resyncAmrStatus);
     };
   }, [agents]);
   const [byokPreconditionNotice, setByokPreconditionNotice] = useState<{
@@ -4389,6 +4416,7 @@ export function SettingsDialog({
               cfg={cfg}
               setCfg={setCfg}
               onDesignSystemsChanged={onDesignSystemsChanged}
+              onDesignSystemImportRebuildJob={onDesignSystemImportRebuildJob}
             />
           ) : null}
 

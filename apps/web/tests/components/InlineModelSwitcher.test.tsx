@@ -55,6 +55,7 @@ function renderSwitcher(
   config: Partial<AppConfig> = {},
   agents: AgentInfo[] = [amrAgent],
   providerModelsCache: Record<string, ProviderModelOption[]> = {},
+  options: { compact?: boolean } = {},
 ) {
   const onAgentModelChange = vi.fn();
   const view = render(
@@ -62,6 +63,7 @@ function renderSwitcher(
       config={{ ...baseConfig, ...config }}
       agents={agents}
       providerModelsCache={providerModelsCache}
+      compact={options.compact}
       daemonLive={true}
       onModeChange={vi.fn()}
       onAgentChange={vi.fn()}
@@ -162,10 +164,32 @@ describe('InlineModelSwitcher AMR row', () => {
     expect(screen.queryByTestId('inline-model-switcher-amr-reminder')).toBeNull();
   });
 
+  it('keeps an accessible name on the chip when the icon-only treatment hides its text', () => {
+    // Regression: in the icon-only topbar treatment `.inline-switcher__chip-text`
+    // is `display: none`, so the visible label is removed from the accessibility
+    // tree. The button must still expose a real accessible name (CLI/model state)
+    // for screen-reader users, not just an icon plus a `data-tooltip` hint.
+    renderSwitcher({}, [amrAgent, codexAgent]);
+
+    const chip = screen.getByRole('button', {
+      name: /AMR/i,
+    });
+    expect(chip).toBe(screen.getByTestId('inline-model-switcher-chip'));
+    expect(chip.getAttribute('aria-label')).toMatch(/·/u);
+  });
+
   it('does not show the AMR reminder dot when AMR is already selected', () => {
     renderSwitcher({}, [amrAgent, codexAgent]);
 
     expect(screen.queryByTestId('inline-model-switcher-amr-reminder')).toBeNull();
+  });
+
+  it('can render the compact home-hero chip variant', () => {
+    renderSwitcher({}, [amrAgent, codexAgent], {}, { compact: true });
+
+    expect(screen.getByTestId('inline-model-switcher').className).toContain(
+      'inline-switcher--compact',
+    );
   });
 
   it('labels AMR without vela branding and keeps AMR models from AgentInfo.models', async () => {

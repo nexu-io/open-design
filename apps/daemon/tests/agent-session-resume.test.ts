@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import {
   closeDatabase,
+  getAgentSessionRecord,
   insertConversation,
   insertProject,
   openDatabase,
@@ -14,6 +15,7 @@ import {
   computeIncludeStable,
   hashStableInstructions,
   isClaudeResumeFailure,
+  persistCapturedAgentSession,
   resolveAgentResumeContext,
 } from '../src/agent-session-resume.js';
 
@@ -83,6 +85,65 @@ describe('computeIncludeStable', () => {
   });
   it('includes the stable block on a resume turn with no stored hash (legacy session)', () => {
     expect(computeIncludeStable(true, null, 'h-1')).toBe(true);
+  });
+});
+
+describe('persistCapturedAgentSession', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'od-captured-session-'));
+  });
+  afterEach(() => {
+    closeDatabase();
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  function seed() {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const now = Date.now();
+    insertProject(db, { id: 'proj-1', name: 'P', createdAt: now, updatedAt: now });
+    insertConversation(db, {
+      id: 'conv-1', projectId: 'proj-1', title: 'C', createdAt: now, updatedAt: now,
+    });
+    return db;
+  }
+
+  it('stores the captured session path for the conversation and agent', () => {
+    const db = seed();
+    const result = persistCapturedAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'pi',
+      sessionId: '/tmp/current.jsonl',
+      stablePromptHash: 'hash-1',
+    });
+    expect(result).toBe('stored');
+    expect(getAgentSessionRecord(db, 'conv-1', 'pi')).toEqual({
+      sessionId: '/tmp/current.jsonl',
+      stablePromptHash: 'hash-1',
+    });
+  });
+
+  it('clears stale session state when a successful run has no safe captured session', () => {
+    const db = seed();
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'pi',
+      sessionId: '/tmp/stale.jsonl',
+      stablePromptHash: 'old-hash',
+    });
+
+    const result = persistCapturedAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'pi',
+      sessionId: null,
+      stablePromptHash: 'new-hash',
+    });
+
+    expect(result).toBe('cleared');
+    expect(getAgentSessionRecord(db, 'conv-1', 'pi')).toBeNull();
+    expect(resolveAgentResumeContext(db, { conversationId: 'conv-1', agentId: 'pi' }).isResuming)
+      .toBe(false);
   });
 });
 

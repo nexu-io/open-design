@@ -15,6 +15,7 @@ import {
   DEFAULT_LOCALE,
   getCommonCopy,
   getHomePageCopy,
+  getLandingUiCopy,
   localizedHref,
   type LandingLocaleCode,
 } from './i18n';
@@ -206,6 +207,7 @@ export default function Page({
   const systems = fmt(counts.systems);
   const commonCopy = getCommonCopy(locale);
   const home = getHomePageCopy(locale);
+  const ui = getLandingUiCopy(locale);
   const pcopy = getPluginsCopy(locale);
   // Labs pills mirror the live `/plugins/templates/` category strip: an
   // "All" chip plus the top categories by count, labelled and counted
@@ -1193,6 +1195,84 @@ export default function Page({
           </div>
         </section>
 
+        {/* ====== NEWSLETTER ====== */}
+        <section className='newsletter' id='newsletter' data-od-id='newsletter'>
+          <div className='container'>
+            <div className='newsletter-card' data-reveal>
+              <div className='newsletter-copy'>
+                <span className='label'>{home.newsletter.label}</span>
+                <h2 className='newsletter-title'>{home.newsletter.title}</h2>
+                <p className='lead'>{home.newsletter.lead}</p>
+              </div>
+              <form
+            className='newsletter-form'
+            data-newsletter-form
+            data-source='landing'
+            data-success={home.newsletter.success}
+            data-error={home.newsletter.error}
+          >
+                <input
+                  className='newsletter-input'
+                  type='email'
+                  name='email'
+                  required
+                  autoComplete='email'
+                  placeholder={home.newsletter.placeholder}
+                  aria-label={home.newsletter.placeholder}
+                  data-newsletter-email
+                />
+                <button className='btn btn-primary newsletter-submit' type='submit'>
+                  {home.newsletter.button}
+                </button>
+                <p className='newsletter-msg' data-newsletter-msg aria-live='polite'></p>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        {/* ====== NEWSLETTER POPUP (hidden until JS shows it) ====== */}
+        <aside
+          className='newsletter-popup'
+          data-newsletter-popup
+          hidden
+          role='dialog'
+          aria-label={home.newsletter.title}
+        >
+          <button
+            className='newsletter-popup__close'
+            type='button'
+            data-newsletter-dismiss
+            aria-label={home.newsletter.dismiss}
+          >
+            ×
+          </button>
+          <span className='label'>{home.newsletter.label}</span>
+          <h3 className='newsletter-popup__title'>{home.newsletter.title}</h3>
+          <p className='newsletter-popup__lead'>{home.newsletter.lead}</p>
+          <form
+            className='newsletter-form'
+            data-newsletter-form
+            data-source='landing'
+            data-success={home.newsletter.success}
+            data-error={home.newsletter.error}
+          >
+            <input
+              className='newsletter-input'
+              type='email'
+              name='email'
+              required
+              autoComplete='email'
+              placeholder={home.newsletter.placeholder}
+              aria-label={home.newsletter.placeholder}
+              data-newsletter-email
+            />
+            <button className='btn btn-primary newsletter-submit' type='submit'>
+              {home.newsletter.button}
+            </button>
+            <p className='newsletter-msg' data-newsletter-msg aria-live='polite'></p>
+          </form>
+        </aside>
+
         {/* ====== FOOTER ====== */}
         <footer data-od-id='footer'>
           <div className='container'>
@@ -1223,6 +1303,20 @@ export default function Page({
                     <span data-github-version>{github.versionLabel}</span>
                   </span>
                 </a>
+              </div>
+              <div className='foot-col'>
+                <h5>{ui.footer.products}</h5>
+                <ul>
+                  <li>
+                    <a href={href('/')}>Open Design</a>
+                  </li>
+                  <li>
+                    <a href={href('/html-anything/')}>{ui.footer.htmlAnything}</a>
+                  </li>
+                  <li>
+                    <a href={href('/html-video/')}>{ui.footer.htmlVideo}</a>
+                  </li>
+                </ul>
               </div>
               <div className='foot-col'>
                 <h5>{home.footer.columns.studio}</h5>
