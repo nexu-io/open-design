@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { effectivePeerFromReq } from "./proxy-trust.js";
+import { effectivePeerFromReq, isLoopbackAddress } from "./proxy-trust.js";
 
 export interface AuthMiddlewareOptions {
   enabledRef: { value: boolean };
@@ -56,6 +56,10 @@ export function createAuthMiddleware(options: AuthMiddlewareOptions) {
     // directly in server.ts.
     if (!options.enabledRef.value) {
       const peer = effectivePeerFromReq(req);
+      // When OD_TRUST_PROXY is enabled and the proxy omits X-Forwarded-For,
+      // effectivePeerFromReq returns ''. A direct localhost connection in that
+      // scenario still has a loopback TCP peer, which is safe for bootstrap.
+      if (peer === '' && isLoopbackAddress(req.socket?.remoteAddress)) return next();
       if (options.isLocalPeer(peer)) return next();
       return rejectRequest(req, res, "No API keys configured — access from localhost only");
     }

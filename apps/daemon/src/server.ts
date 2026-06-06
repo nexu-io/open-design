@@ -4586,7 +4586,7 @@ export async function startServer({
       // header here because a reverse proxy MUST always forward the
       // bearer; the loopback bypass exists for the localhost desktop
       // UI which has no proxy in the path.
-      if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
+      if (isLoopbackAddress(req.socket?.remoteAddress)) return next();
       const auth = req.get('authorization') ?? '';
       const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
       if (!match || !timingSafeEqual(match[1], apiToken)) {

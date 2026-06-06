@@ -18,10 +18,10 @@ const ENC_KEY_FILE = '.enc-key';
 const KEY_PREFIX = 'od_mcp_';
 const ALGO = 'aes-256-gcm';
 
-let cachedHashes: string[] | null = null;
+const cachedHashesByDir = new Map<string, string[]>();
 
-function invalidateHashCache(): void {
-  cachedHashes = null;
+function invalidateHashCache(dataDir: string): void {
+  cachedHashesByDir.delete(dataDir);
 }
 
 function storeFile(dataDir: string): string {
@@ -36,19 +36,20 @@ function hashKey(raw: string): string {
   return crypto.createHash('sha256').update(raw).digest('hex');
 }
 
-let cachedEncKey: Buffer | null = null;
+const cachedEncKeyByDir = new Map<string, Buffer>();
 
 export function resetEncKeyCache(): void {
-  cachedEncKey = null;
+  cachedEncKeyByDir.clear();
 }
 
 async function loadEncKey(dataDir: string): Promise<Buffer> {
-  if (cachedEncKey) return cachedEncKey;
+  const cached = cachedEncKeyByDir.get(dataDir);
+  if (cached) return cached;
   const file = encKeyFile(dataDir);
   try {
     const raw = await fs.readFile(file);
     if (raw.length === 32) {
-      cachedEncKey = raw;
+      cachedEncKeyByDir.set(dataDir, raw);
       return raw;
     }
   } catch {
@@ -59,7 +60,7 @@ async function loadEncKey(dataDir: string): Promise<Buffer> {
   const tmp = file + '.' + crypto.randomBytes(4).toString('hex') + '.tmp';
   await fs.writeFile(tmp, key, { mode: 0o600 });
   await fs.rename(tmp, file);
-  cachedEncKey = key;
+  cachedEncKeyByDir.set(dataDir, key);
   return key;
 }
 
@@ -126,7 +127,7 @@ async function lockedWrite(
     const keys = await readStore(dataDir);
     const result = await fn(keys);
     await doWrite(dataDir, result);
-    invalidateHashCache();
+    invalidateHashCache(dataDir);
   });
   writeLocks.set(dataDir, task);
   try {
@@ -211,10 +212,12 @@ export async function clearAllMcpKeys(dataDir: string): Promise<void> {
 export async function allMcpKeyHashes(
   dataDir: string,
 ): Promise<string[]> {
-  if (cachedHashes !== null) return cachedHashes;
+  const cached = cachedHashesByDir.get(dataDir);
+  if (cached !== undefined) return cached;
   const keys = await readStore(dataDir);
-  cachedHashes = keys.map((k) => k.keyHash);
-  return cachedHashes;
+  const hashes = keys.map((k) => k.keyHash);
+  cachedHashesByDir.set(dataDir, hashes);
+  return hashes;
 }
 
 export function verifyMcpKey(
