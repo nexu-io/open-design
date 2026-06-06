@@ -389,6 +389,18 @@ export const ja: Dict = {
   'settings.mcpInstallTypeAria': 'MCP install type',
   'settings.mcpRemoteDisabled':
     'リモートアクセスには、デーモンをループバック以外のアドレスにバインドする必要があります。--host 0.0.0.0 で起動するか、OD_BIND_HOST を設定してデーモンをネットワークに公開してください。',
+  'settings.mcpCapabilitiesTitle': 'エージェントができること',
+  'settings.mcpCapabilityRead':
+    'プロジェクト内のファイルの読み取り・検索 (HTML, JSX, CSS, JSON, SVG, Markdown)。',
+  'settings.mcpCapabilityPull':
+    '1回の呼び出しでデザインバンドルを取得: エントリファイルと参照されているCSS変数、コンポーネント、フォントをすべて含みます。',
+  'settings.mcpCapabilityDefault':
+    'Open Designで開いているプロジェクトとファイルをデフォルトとして使用。デザインを指定し直すことなく「このアプリに組み込んで」と指示できます。',
+  'settings.mcpRunningNote':
+    'MCPツール呼び出しが成功するには、Open Designが起動している必要があります。Open Designを開く前にコーディングエージェントを起動した場合は、エージェントを再起動して稼働中のデーモンに接続できるようにしてください。',
+  'settings.mcpRestartNote': 'クライアントを再起動して新しいサーバーを認識させてください。',
+  'settings.mcpRestartDetail':
+    'ほとんどのエディタは起動時にのみMCPサーバーを読み込みます。Cursor / VS Code / Antigravity / Windsurfでは、コマンドパレットから `Developer: Reload Window` を実行して完全再起動の代わりに更新できます。ZedとClaude Codeは終了して再び開く必要があります。',
   'settings.mcpKeysTitle': 'MCPキー',
   'settings.mcpKeysEmpty': 'MCPキーがありません。生成すると設定スニペットに自動的に含まれます。',
   'settings.mcpKeysReveal': '表示',

@@ -7040,12 +7040,12 @@ function IntegrationsSection() {
         </div>
 
         {isRemote && info && !info.networkExposed ? (
-          <div className="empty-card warn" style={{ marginBottom: 14 }}>
+          <div className="settings-card warn" style={{ marginBottom: 14 }}>
             {t('settings.mcpRemoteDisabled')}
           </div>
         ) : null}
         {infoError ? (
-          <div className="empty-card danger" style={{ marginBottom: 14 }}>
+          <div className="settings-card danger" style={{ marginBottom: 14 }}>
             {t('settings.mcpDaemonError', { error: infoError! })}
           </div>
         ) : null}
@@ -7063,7 +7063,7 @@ function IntegrationsSection() {
         </div>
 
         {info && (!info.cliExists || !info.nodeExists) ? (
-          <div className="empty-card warn" style={{ marginBottom: 14 }}>
+          <div className="settings-card warn" style={{ marginBottom: 14 }}>
             <strong>
               {!info.cliExists
                 ? t('settings.mcpBuildDaemon')

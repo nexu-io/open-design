@@ -389,6 +389,18 @@ export const ar: Dict = {
   'settings.mcpInstallTypeAria': 'MCP install type',
   'settings.mcpRemoteDisabled':
     'يتطلب الوصول البعيد أن يكون البرنامج الخفي مرتبطًا بعنوان غير حلقي. ابدأ بـ --host 0.0.0.0 أو اضبط OD_BIND_HOST لعرض البرنامج الخفي على الشبكة.',
+  'settings.mcpCapabilitiesTitle': 'What your agent can do',
+  'settings.mcpCapabilityRead':
+    'Read or search any file in a project (HTML, JSX, CSS, JSON, SVG, Markdown).',
+  'settings.mcpCapabilityPull':
+    'Pull a design bundle in one call: the entry file plus every CSS variable, component, and font it references.',
+  'settings.mcpCapabilityDefault':
+    'Default to the project and file you have open in Open Design, so you can say "build this in my app" without re-stating which design.',
+  'settings.mcpRunningNote':
+    'Open Design must be running for MCP tool calls to succeed. If you started your coding agent before opening Open Design, restart the agent so it can reach the live daemon.',
+  'settings.mcpRestartNote': 'Restart your client to pick up the new server.',
+  'settings.mcpRestartDetail':
+    'Most editors only load MCP servers at startup. In Cursor / VS Code / Antigravity / Windsurf you can run `Developer: Reload Window` from the command palette instead of a full restart. Zed and Claude Code need a quit and reopen.',
   'settings.mcpKeysTitle': 'مفاتيح MCP',
   'settings.mcpKeysEmpty': 'لا توجد مفاتيح MCP. أنشئ واحدًا لتضمينه تلقائيًا في مقتطفات التكوين.',
   'settings.mcpKeysReveal': 'كشف',

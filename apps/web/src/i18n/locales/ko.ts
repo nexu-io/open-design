@@ -413,6 +413,18 @@ export const ko: Dict = {
   'settings.mcpInstallTypeAria': 'MCP install type',
   'settings.mcpRemoteDisabled':
     '원격 접속을 하려면 데몬을 루프백이 아닌 주소에 바인딩해야 합니다. --host 0.0.0.0으로 시작하거나 OD_BIND_HOST를 설정하여 네트워크에 데몬을 노출하세요.',
+  'settings.mcpCapabilitiesTitle': '에이전트가 할 수 있는 작업',
+  'settings.mcpCapabilityRead':
+    '프로젝트의 모든 파일 읽기/검색 (HTML, JSX, CSS, JSON, SVG, Markdown).',
+  'settings.mcpCapabilityPull':
+    '한 번의 호출로 디자인 번들 가져오기: 진입 파일과 참조된 모든 CSS 변수, 컴포넌트, 폰트 포함.',
+  'settings.mcpCapabilityDefault':
+    'Open Design에서 열려 있는 프로젝트와 파일을 기본값으로 사용하여, 디자인을 다시 지정하지 않고도 "내 앱에 이걸 만들어줘"라고 할 수 있습니다.',
+  'settings.mcpRunningNote':
+    'MCP 도구 호출이 성공하려면 Open Design이 실행 중이어야 합니다. Open Design을 열기 전에 코딩 에이전트를 시작했다면, 에이전트를 다시 시작하여 실행 중인 데몬에 연결할 수 있도록 하세요.',
+  'settings.mcpRestartNote': '클라이언트를 다시 시작하여 새 서버를 인식하세요.',
+  'settings.mcpRestartDetail':
+    '대부분의 에디터는 시작할 때만 MCP 서버를 로드합니다. Cursor / VS Code / Antigravity / Windsurf에서는 명령 팔레트에서 `Developer: Reload Window`를 실행하여 전체 재시작 대신 갱신할 수 있습니다. Zed와 Claude Code는 종료 후 다시 열어야 합니다.',
   'settings.mcpKeysTitle': 'MCP 키',
   'settings.mcpKeysEmpty': 'MCP 키가 없습니다. 새 키를 생성하면 설정 스니펫에 자동으로 포함됩니다.',
   'settings.mcpKeysReveal': '보기',
