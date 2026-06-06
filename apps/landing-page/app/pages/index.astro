@@ -553,13 +553,19 @@ const pageHtml = renderToStaticMarkup(
           const input = form.querySelector('[data-newsletter-email]');
           const msg = form.querySelector('[data-newsletter-msg]');
           const submit = form.querySelector('.newsletter-submit');
+          const submitIdleText = submit ? (submit.textContent || '').trim() : '';
           const successText = form.getAttribute('data-success') || '';
           const errorText = form.getAttribute('data-error') || '';
           form.addEventListener('submit', (ev) => {
             ev.preventDefault();
             const email = (input && input.value ? input.value : '').trim();
             if (!email) return;
-            if (submit) submit.disabled = true;
+            if (submit) {
+              submit.disabled = true;
+              submit.classList.add('is-loading');
+              submit.setAttribute('aria-busy', 'true');
+              submit.textContent = submitIdleText ? `${submitIdleText}...` : 'Loading...';
+            }
             if (msg) msg.textContent = '';
             fetch('/subscribe', {
               method: 'POST',
@@ -570,6 +576,11 @@ const pageHtml = renderToStaticMarkup(
               .then((data) => {
                 if (!data || data.ok !== true) throw new Error('rejected');
                 form.classList.add('is-success');
+                if (submit) {
+                  submit.classList.remove('is-loading');
+                  submit.removeAttribute('aria-busy');
+                  submit.textContent = submitIdleText;
+                }
                 if (msg) msg.textContent = successText;
                 if (input) input.value = '';
                 setDismissed();
@@ -577,7 +588,12 @@ const pageHtml = renderToStaticMarkup(
               })
               .catch(() => {
                 if (msg) msg.textContent = errorText;
-                if (submit) submit.disabled = false;
+                if (submit) {
+                  submit.disabled = false;
+                  submit.classList.remove('is-loading');
+                  submit.removeAttribute('aria-busy');
+                  submit.textContent = submitIdleText;
+                }
                 track(area, 'error');
               });
           });
@@ -590,8 +606,23 @@ const pageHtml = renderToStaticMarkup(
 
         const popup = document.querySelector('[data-newsletter-popup]');
         if (popup && !dismissed()) {
+          const syncPopupRailMask = () => {
+            if (popup.hidden || !popup.classList.contains('is-visible')) return;
+            const rect = popup.getBoundingClientRect();
+            document.body.style.setProperty('--newsletter-popup-mask-top', `${Math.max(0, rect.top)}px`);
+            document.body.style.setProperty(
+              '--newsletter-popup-mask-bottom',
+              `${Math.min(window.innerHeight, rect.bottom)}px`,
+            );
+          };
+          const clearPopupRailMask = () => {
+            document.body.classList.remove('newsletter-popup-visible');
+            document.body.style.removeProperty('--newsletter-popup-mask-top');
+            document.body.style.removeProperty('--newsletter-popup-mask-bottom');
+          };
           const close = () => {
             popup.hidden = true;
+            clearPopupRailMask();
             setDismissed();
           };
           popup.querySelectorAll('[data-newsletter-dismiss]').forEach((btn) =>
@@ -604,8 +635,11 @@ const pageHtml = renderToStaticMarkup(
             if (dismissed()) return;
             popup.hidden = false;
             popup.classList.add('is-visible');
+            document.body.classList.add('newsletter-popup-visible');
+            requestAnimationFrame(syncPopupRailMask);
             track('popup', 'view');
           };
+          window.addEventListener('resize', syncPopupRailMask, { passive: true });
           // Show after the visitor has scrolled past the hero, or a delay
           // fallback — whichever comes first. Avoids interrupting the LCP.
           let shown = false;

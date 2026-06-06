@@ -131,6 +131,26 @@ body::before {
 }
 .side-rail.right { right: 0; border-left: 1px solid var(--line-faint); }
 .side-rail.left { left: 0; border-right: 1px solid var(--line-faint); }
+body.newsletter-popup-visible .side-rail.right {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 var(--newsletter-popup-mask-top, 0px),
+    transparent var(--newsletter-popup-mask-top, 0px),
+    transparent var(--newsletter-popup-mask-bottom, 0px),
+    #000 var(--newsletter-popup-mask-bottom, 0px),
+    #000 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 var(--newsletter-popup-mask-top, 0px),
+    transparent var(--newsletter-popup-mask-top, 0px),
+    transparent var(--newsletter-popup-mask-bottom, 0px),
+    #000 var(--newsletter-popup-mask-bottom, 0px),
+    #000 100%
+  );
+}
 .side-rail .rail-text {
   font-family: var(--sans);
   font-size: 10px;
@@ -397,17 +417,16 @@ body::before {
 .nav-inner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 24px;
 }
 /*
- * Desktop three-zone header: brand pinned left, the primary nav grows to
- * fill the middle and centers its links, the side actions sit right. The
- * brand and side columns keep their natural width so the centered nav is
- * centered against the full bar, not squeezed between them. Scoped to the
- * desktop breakpoint only — at ≤1080px the nav becomes an absolutely
- * positioned hamburger panel (rules further below), which must not inherit
- * this flex layout.
+ * Desktop header: keep the logo, primary nav, and side actions in one row
+ * without forcing the nav onto the page center. The primary nav should follow
+ * the logo; the side actions consume the remaining room by pinning themselves
+ * to the right edge. Scoped to desktop only — at ≤1080px the nav becomes an
+ * absolutely positioned hamburger panel (rules further below), which must not
+ * inherit this flex layout.
  */
 @media (min-width: 1081px) {
   /* Header spans the full viewport width (overriding the shared .container
@@ -417,29 +436,27 @@ body::before {
     max-width: none;
     /* Clear the fixed 46px decorative side-rails (plus breathing room) so
      * the brand and side actions never collide with the edge lines. */
-    padding-left: 60px;
-    padding-right: 60px;
+    padding-left: clamp(32px, 3.8vw, 60px);
+    padding-right: clamp(32px, 3.8vw, 60px);
   }
-  /* Three-zone header: the brand and side clusters take equal flexible
-   * width on either side, so the centered nav sits on (or very near) the
-   * bar's midline regardless of how wide the action cluster is — without the
-   * overlap an absolutely-centered nav causes at mid widths. The brand stays
-   * left-aligned in its column and the side actions stay right-aligned in
-   * theirs. */
+  .nav-inner {
+    gap: clamp(28px, 3vw, 56px);
+  }
   .nav-inner > .brand {
-    flex: 1 1 0;
-    min-width: 0;
+    flex: 0 0 auto;
     justify-content: flex-start;
   }
   .nav-inner > .nav-side {
-    flex: 1 1 0;
+    flex: 0 1 auto;
     min-width: 0;
+    margin-left: auto;
     justify-content: flex-end;
   }
   .nav-inner > nav[data-nav-primary] {
-    flex: 0 0 auto;
+    flex: 0 1 auto;
+    min-width: 0;
     display: flex;
-    justify-content: center;
+    justify-content: flex-start;
   }
 
   /* Scale the header chrome up a step so the bar reads as substantial across
@@ -448,9 +465,9 @@ body::before {
    * are deliberately one level more specific than the base rules below
    * (which appear later in source) so these win without !important. */
   .nav .nav-inner .brand-logo { height: 44px; }
-  .nav-inner .nav-links { gap: 44px; }
-  .nav-inner .nav-links a { font-size: 16px; }
-  .nav-inner .nav-side { gap: 14px; }
+  .nav-inner .nav-links { gap: clamp(24px, 2.55vw, 44px); }
+  .nav-inner .nav-links a { font-size: clamp(14px, 0.95vw, 16px); }
+  .nav-inner .nav-side { gap: clamp(8px, 0.85vw, 14px); }
   .nav-inner .nav-side .nav-cta.ghost { font-size: 13px; }
   .nav-inner .nav-side .locale-trigger { font-size: 13px; }
   .nav-inner .nav-side .nav-amr img { width: 68px; height: auto; }
@@ -525,6 +542,7 @@ body::before {
   font-family: var(--sans);
   font-size: 14px;
   font-weight: 500;
+  white-space: nowrap;
   transition: color 0.18s ease;
   position: relative;
   /*
@@ -3778,6 +3796,22 @@ footer {
 .newsletter-submit {
   flex: 0 0 auto;
 }
+.newsletter-submit.is-loading {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.newsletter-submit.is-loading::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.52);
+  border-top-color: var(--paper);
+  border-radius: 50%;
+  animation: newsletter-spin 760ms linear infinite;
+}
 .newsletter-submit:disabled {
   opacity: 0.55;
   cursor: progress;
@@ -3806,11 +3840,13 @@ footer {
   z-index: 90;
   width: min(360px, calc(100vw - 48px));
   padding: 22px 22px 20px;
-  background: var(--paper);
+  background: color-mix(in srgb, var(--paper) 96%, #fff 4%);
+  background-clip: padding-box;
   border: 1px solid var(--ink);
   border-radius: 4px;
   box-shadow: 0 18px 48px rgba(21, 20, 15, 0.22);
   opacity: 0;
+  isolation: isolate;
   transform: translateY(12px);
   transition: opacity 0.28s ease, transform 0.28s ease;
 }
@@ -3864,4 +3900,26 @@ footer {
     grid-template-columns: 1fr;
     gap: 24px;
   }
+}
+
+@media (min-width: 1081px) and (max-width: 1360px) {
+  .nav-inner .nav-side .nav-cta.ghost {
+    padding-inline: 13px;
+  }
+  .nav-inner .nav-side .nav-amr {
+    padding-inline: 12px;
+  }
+}
+
+@media (min-width: 1081px) and (max-width: 1240px) {
+  .nav-inner .nav-side .nav-icon {
+    display: none;
+  }
+  .nav-inner .nav-side .nav-amr img {
+    width: 64px;
+  }
+}
+
+@keyframes newsletter-spin {
+  to { transform: rotate(360deg); }
 }

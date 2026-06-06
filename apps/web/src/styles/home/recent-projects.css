@@ -3,62 +3,6 @@
    on the Home view, with a "View all" anchor that switches to the
    Projects view.
    ============================================================ */
-.home-existing-project {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--bg-panel) 78%, var(--bg-subtle));
-}
-.home-existing-project__subtitle {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.35;
-  text-align: center;
-  color: var(--text-muted);
-}
-.home-existing-project__form {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  flex: 0 1 auto;
-  min-width: 0;
-}
-.home-existing-project__button {
-  appearance: none;
-  height: 34px;
-  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--accent-foreground, #fff);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-width: 184px;
-  padding: 0 14px;
-  font-size: 12.5px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
-}
-.home-existing-project__button:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  transform: translateY(-1px);
-}
-.home-existing-project__button:disabled {
-  cursor: not-allowed;
-  opacity: 0.58;
-  transform: none;
-}
-
 .recent-projects {
   display: flex;
   flex-direction: column;
@@ -291,14 +235,5 @@
 @keyframes recent-projects-shimmer {
   to {
     background-position: -200% 0, 0 0;
-  }
-}
-
-@media (max-width: 720px) {
-  .home-existing-project__form {
-    justify-content: center;
-  }
-  .home-existing-project__button {
-    white-space: normal;
   }
 }
