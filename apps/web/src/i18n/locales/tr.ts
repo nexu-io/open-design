@@ -381,6 +381,7 @@ export const tr: Dict = {
   'settings.mcpServerHint': 'Open Design\'ı kodlama ajanınız için MCP sunucusu olarak yayınlayın.',
   'settings.mcpTabLocal': 'Yerel',
   'settings.mcpTabRemote': 'Uzak',
+  'settings.mcpInstallTypeAria': 'MCP install type',
   'settings.mcpRemoteDisabled':
     'Uzaktan erişim, daemon\'un loopback olmayan bir adrese bağlanmasını gerektirir. Daemon\'u ağda kullanıma açmak için --host 0.0.0.0 ile başlatın veya OD_BIND_HOST ayarlayın.',
   'settings.mcpKeysTitle': 'MCP Anahtarları',

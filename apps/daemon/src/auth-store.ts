@@ -137,6 +137,10 @@ export async function revokeKey(
   return removed;
 }
 
+export async function clearAllKeys(dataDir: string): Promise<void> {
+  await lockedWrite(dataDir, async () => []);
+}
+
 export async function allValidHashes(
   dataDir: string,
 ): Promise<string[]> {

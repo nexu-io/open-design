@@ -60,7 +60,6 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     const webBaseUrl = Number.isFinite(webPortNum) && webPortNum > 0
       ? `http://127.0.0.1:${webPortNum}`
       : null;
-    let authRequired = false;
     let apiKey: string | undefined;
     // Always include the first MCP key in the snippet when one exists,
     // regardless of whether auth is currently enabled. The MCP key's
@@ -71,13 +70,10 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       const revealed = await revealMcpKey(RUNTIME_DATA_DIR, mcpKeys[0].id);
       if (revealed) apiKey = revealed.key;
     }
-    if (!apiKey && authEnabledRef.value) {
-      const apiHashes = await allValidHashes(RUNTIME_DATA_DIR);
-      const mcpHashes = await allMcpKeyHashes(RUNTIME_DATA_DIR);
-      if (apiHashes.length > 0 || mcpHashes.length > 0) {
-        authRequired = true;
-      }
-    }
+    // authRequired = true whenever auth is active (key exists OR env-enabled),
+    // regardless of whether we could reveal the actual key value. This ensures
+    // OD_MCP_TOKEN is always included in the stdio snippet env when needed.
+    const authRequired = !!(apiKey || authEnabledRef.value);
     return buildMcpInstallPayload({
       cliPath,
       cliExists: fs.existsSync(cliPath),
@@ -284,16 +280,19 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     const code = typeof req.query.code === 'string' ? req.query.code : '';
     const state = typeof req.query.state === 'string' ? req.query.state : '';
     const error = typeof req.query.error === 'string' ? req.query.error : '';
+    const openerOrigin = getPublicBaseUrl(req);
     if (error) {
       return res.status(400).type('html').send(renderOAuthResultPage({
         ok: false,
         message: `Auth provider returned error: ${error}`,
+        openerOrigin,
       }));
     }
     if (!code || !state) {
       return res.status(400).type('html').send(renderOAuthResultPage({
         ok: false,
         message: 'Missing code or state — open Settings → External MCP servers and click Connect again.',
+        openerOrigin,
       }));
     }
     const pending = pendingAuth.consume(state);
@@ -301,6 +300,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       return res.status(400).type('html').send(renderOAuthResultPage({
         ok: false,
         message: 'Auth state expired or already used. Click Connect again.',
+        openerOrigin,
       }));
     }
     try {
@@ -337,6 +337,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       res.type('html').send(renderOAuthResultPage({
         ok: true,
         serverId: pending.serverId,
+        openerOrigin,
       }));
     } catch (err: any) {
       console.error(
@@ -346,6 +347,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       res.status(502).type('html').send(renderOAuthResultPage({
         ok: false,
         message: String(err && err.message ? err.message : err),
+        openerOrigin,
       }));
     }
   });
@@ -389,15 +391,13 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
 
 }
 
-function getPublicBaseUrl(req: any) {
+function getPublicBaseUrl(_req?: any) {
   const env = process.env.OD_PUBLIC_BASE_URL;
   if (env && /^https?:\/\//i.test(env)) {
     return env.replace(/\/+$/u, '');
   }
-  const proto = req.protocol || 'http';
-  const host = req.get('host');
-  if (!host) return `http://localhost:${process.env.OD_PORT ?? '7456'}`;
-  return `${proto}://${host}`;
+  const port = process.env.OD_PORT ?? '7456';
+  return `http://127.0.0.1:${port}`;
 }
 
 function mcpOAuthCallbackUrl(req: any) {
@@ -415,6 +415,7 @@ function renderOAuthResultPage(opts: any) {
   const payload = ok
     ? { type: 'mcp-oauth', ok: true, serverId: opts.serverId ?? null }
     : { type: 'mcp-oauth', ok: false, message: opts.message ?? null };
+  const targetOrigin = opts.openerOrigin ?? '*';
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -463,7 +464,7 @@ function renderOAuthResultPage(opts: any) {
     try {
       var payload = ${JSON.stringify(payload)};
       if (window.opener && !window.opener.closed) {
-        window.opener.postMessage(payload, '*');
+        window.opener.postMessage(payload, ${JSON.stringify(targetOrigin)});
       }
       if (window.BroadcastChannel) {
         var bc = new BroadcastChannel('open-design-mcp-oauth');

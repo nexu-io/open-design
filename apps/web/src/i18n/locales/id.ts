@@ -381,6 +381,7 @@ export const id: Dict = {
   'settings.mcpServerHint': 'Ekspos Open Design sebagai server MCP untuk agen koding Anda.',
   'settings.mcpTabLocal': 'Lokal',
   'settings.mcpTabRemote': 'Remote',
+  'settings.mcpInstallTypeAria': 'MCP install type',
   'settings.mcpRemoteDisabled':
     'Akses remote memerlukan daemon terikat ke alamat non-loopback. Mulai dengan --host 0.0.0.0 atau atur OD_BIND_HOST untuk mengekspos daemon di jaringan.',
   'settings.mcpKeysTitle': 'Kunci MCP',

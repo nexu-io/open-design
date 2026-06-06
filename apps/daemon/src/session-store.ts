@@ -53,6 +53,10 @@ export function revokeSession(token: string): void {
   sessions.delete(token);
 }
 
+export function clearAllSessions(): void {
+  sessions.clear();
+}
+
 export function startCleanupInterval(): NodeJS.Timeout {
   return setInterval(() => {
     const now = Date.now();

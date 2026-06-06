@@ -11,12 +11,14 @@ import {
   revokeMcpKey,
   allMcpKeyHashes,
   verifyMcpKey,
+  resetEncKeyCache,
 } from '../src/mcp-key-store.js';
 
 describe('mcp-key-store', () => {
   let dataDir: string;
 
   beforeEach(async () => {
+    resetEncKeyCache();
     dataDir = mkdtempSync(path.join(os.tmpdir(), 'mcp-keys-'));
     await initMcpKeyStore(dataDir);
   });

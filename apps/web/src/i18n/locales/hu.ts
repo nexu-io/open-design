@@ -381,6 +381,7 @@ export const hu: Dict = {
   'settings.mcpServerHint': 'Tedd elérhetővé az Open Designt MCP-szerverként a kódügynököd számára.',
   'settings.mcpTabLocal': 'Helyi',
   'settings.mcpTabRemote': 'Távoli',
+  'settings.mcpInstallTypeAria': 'MCP install type',
   'settings.mcpRemoteDisabled':
     'A távoli hozzáféréshez a daemonnak nem loopback címhez kell kötve lennie. Indítsa --host 0.0.0.0 paraméterrel, vagy állítsa be az OD_BIND_HOST értéket a daemon hálózati közzétételéhez.',
   'settings.mcpKeysTitle': 'MCP-kulcsok',

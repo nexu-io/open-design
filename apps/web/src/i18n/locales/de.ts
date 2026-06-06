@@ -381,6 +381,7 @@ export const de: Dict = {
   'settings.mcpServerHint': 'Stelle Open Design als MCP-Server für deinen Coding-Agent bereit.',
   'settings.mcpTabLocal': 'Lokal',
   'settings.mcpTabRemote': 'Remote',
+  'settings.mcpInstallTypeAria': 'MCP install type',
   'settings.mcpRemoteDisabled':
     'Für den Remote-Zugriff muss der Daemon an eine Nicht-Loopback-Adresse gebunden sein. Starten Sie mit --host 0.0.0.0 oder setzen Sie OD_BIND_HOST, um den Daemon im Netzwerk freizugeben.',
   'settings.mcpKeysTitle': 'MCP-Schlüssel',

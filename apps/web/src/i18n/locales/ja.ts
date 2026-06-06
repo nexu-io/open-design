@@ -381,6 +381,7 @@ export const ja: Dict = {
   'settings.mcpServerHint': 'Open Design を MCP サーバーとしてコーディングエージェントに公開します。',
   'settings.mcpTabLocal': 'ローカル',
   'settings.mcpTabRemote': 'リモート',
+  'settings.mcpInstallTypeAria': 'MCP install type',
   'settings.mcpRemoteDisabled':
     'リモートアクセスには、デーモンをループバック以外のアドレスにバインドする必要があります。--host 0.0.0.0 で起動するか、OD_BIND_HOST を設定してデーモンをネットワークに公開してください。',
   'settings.mcpKeysTitle': 'MCPキー',

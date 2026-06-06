@@ -381,6 +381,7 @@ export const fr: Dict = {
   'settings.mcpServerHint': 'Exposez Open Design comme serveur MCP pour votre agent de code.',
   'settings.mcpTabLocal': 'Local',
   'settings.mcpTabRemote': 'Distant',
+  'settings.mcpInstallTypeAria': 'MCP install type',
   'settings.mcpRemoteDisabled':
     'L\'accès distant nécessite que le démon soit lié à une adresse non-loopback. Démarrez avec --host 0.0.0.0 ou définissez OD_BIND_HOST pour exposer le démon sur le réseau.',
   'settings.mcpKeysTitle': 'Clés MCP',

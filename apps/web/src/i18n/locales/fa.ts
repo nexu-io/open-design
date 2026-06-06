@@ -381,6 +381,7 @@ export const fa: Dict = {
   'settings.mcpServerHint': 'Open Design را به‌عنوان سرور MCP برای عامل برنامه‌نویسی خود در دسترس قرار دهید.',
   'settings.mcpTabLocal': 'محلی',
   'settings.mcpTabRemote': 'راه دور',
+  'settings.mcpInstallTypeAria': 'MCP install type',
   'settings.mcpRemoteDisabled':
     'دسترسی از راه دور نیازمند آن است که دیمون به آدرس غیر loopback متصل باشد. با --host 0.0.0.0 شروع کنید یا OD_BIND_HOST را تنظیم کنید تا دیمون در شبکه نمایش داده شود.',
   'settings.mcpKeysTitle': 'کلیدهای MCP',

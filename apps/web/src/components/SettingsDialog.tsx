@@ -6704,11 +6704,9 @@ function IntegrationsSection() {
       buildSnippet: (info) => `[mcp_servers.open-design]\ncommand = ${JSON.stringify(info.command)}\nargs = ${JSON.stringify(info.args)}${buildCodexEnvToml(info)}`,
       buildSnippetLang: () => 'toml',
       buildRemoteSnippet: (info) => {
-        const headers = buildRemoteHeaders(info);
         const lines = [`[mcp_servers.open-design]`, `url = ${JSON.stringify(info.remoteUrl ?? '')}`];
-        if (Object.keys(headers).length > 0) {
-          lines.push(`[mcp_servers.open-design.headers]`);
-          for (const [k, v] of Object.entries(headers)) lines.push(`${k} = ${JSON.stringify(v)}`);
+        if (info.remoteMcpKey) {
+          lines.push(`bearer_token_env_var = "OD_MCP_TOKEN"`);
         }
         return lines.join('\n');
       },
@@ -6935,6 +6933,7 @@ function IntegrationsSection() {
         <div className="settings-about-list" style={{ display: 'block' }}>
         <div
           role="tablist"
+          aria-label={t('settings.mcpInstallTypeAria')}
           style={{
             display: 'flex',
             gap: 0,
@@ -7695,7 +7694,7 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
 
       <div className="settings-subsection">
         <div className="section-head"><div><h4>{t('settings.bindHost')}</h4><p className="hint">{t('settings.bindHostHint')}</p></div></div>
-        <select value={bindHost} onChange={(e) => { setBindHost(e.target.value); saveConfig({ bindHost: e.target.value }); }} disabled={!loaded}>
+        <select aria-label={t('settings.bindHost')} value={bindHost} onChange={(e) => { setBindHost(e.target.value); saveConfig({ bindHost: e.target.value }); }} disabled={!loaded}>
           <option value="127.0.0.1">127.0.0.1 (localhost only)</option>
           <option value="0.0.0.0">0.0.0.0 (all interfaces)</option>
         </select>
@@ -7703,14 +7702,14 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
 
       <div className="settings-subsection">
         <div className="section-head"><div><h4>{t('settings.port')}</h4><p className="hint">{t('settings.portHint')}</p></div></div>
-        <input type="number" value={port} min={1} max={65535} onChange={(e) => { const v = Number(e.target.value); setPort(v); if (portTimer.current) clearTimeout(portTimer.current); portTimer.current = setTimeout(() => saveConfig({ port: v }), 800); }} disabled={!loaded} />
+        <input aria-label={t('settings.port')} type="number" value={port} min={1} max={65535} onChange={(e) => { const v = Number(e.target.value); setPort(v); if (portTimer.current) clearTimeout(portTimer.current); portTimer.current = setTimeout(() => saveConfig({ port: v }), 800); }} disabled={!loaded} />
       </div>
 
       {networkExposed && (
         <>
           <div className="settings-subsection">
             <div className="section-head"><div><h4>{t('settings.allowedHosts')}</h4><p className="hint">{t('settings.allowedHostsHint')}</p></div></div>
-            <input type="text" value={allowedHosts} placeholder="192.168.1.0/24, 10.0.0.5" onChange={(e) => setAllowedHosts(e.target.value)} onBlur={() => saveConfig({ allowedHosts: allowedHosts })} disabled={!loaded} />
+            <input aria-label={t('settings.allowedHosts')} type="text" value={allowedHosts} placeholder="192.168.1.0/24, 10.0.0.5" onChange={(e) => setAllowedHosts(e.target.value)} onBlur={() => saveConfig({ allowedHosts: allowedHosts })} disabled={!loaded} />
           </div>
 
           <div className="settings-subsection">
@@ -7733,7 +7732,7 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
               </div>
             )}
             <div style={{ display: 'flex', gap: '8px' }}>
-              <input type="text" value={label} placeholder={t('settings.keyLabel')} onChange={(e) => setLabel(e.target.value)} />
+              <input aria-label={t('settings.keyLabel')} type="text" value={label} placeholder={t('settings.keyLabel')} onChange={(e) => setLabel(e.target.value)} />
               <button type="button" className="seg-btn active" onClick={generateNewKey}>{t('settings.generateKey')}</button>
             </div>
           </div>

@@ -32,6 +32,10 @@ function hashKey(raw: string): string {
 
 let cachedEncKey: Buffer | null = null;
 
+export function resetEncKeyCache(): void {
+  cachedEncKey = null;
+}
+
 async function loadEncKey(dataDir: string): Promise<Buffer> {
   if (cachedEncKey) return cachedEncKey;
   const file = encKeyFile(dataDir);
@@ -191,6 +195,10 @@ export async function revokeMcpKey(
     return filtered;
   });
   return removed;
+}
+
+export async function clearAllMcpKeys(dataDir: string): Promise<void> {
+  await lockedWrite(dataDir, async () => []);
 }
 
 export async function allMcpKeyHashes(

@@ -381,6 +381,7 @@ export const ar: Dict = {
   'settings.mcpServerHint': 'كشف Open Design كخادم MCP لوكيل البرمجة الخاص بك.',
   'settings.mcpTabLocal': 'محلي',
   'settings.mcpTabRemote': 'بعيد',
+  'settings.mcpInstallTypeAria': 'MCP install type',
   'settings.mcpRemoteDisabled':
     'يتطلب الوصول البعيد أن يكون البرنامج الخفي مرتبطًا بعنوان غير حلقي. ابدأ بـ --host 0.0.0.0 أو اضبط OD_BIND_HOST لعرض البرنامج الخفي على الشبكة.',
   'settings.mcpKeysTitle': 'مفاتيح MCP',

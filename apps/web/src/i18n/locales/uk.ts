@@ -381,6 +381,7 @@ export const uk: Dict = {
   'settings.mcpServerHint': 'Відкрийте Open Design як MCP-сервер для вашого кодинг-агента.',
   'settings.mcpTabLocal': 'Локальний',
   'settings.mcpTabRemote': 'Віддалений',
+  'settings.mcpInstallTypeAria': 'MCP install type',
   'settings.mcpRemoteDisabled':
     'Для віддаленого доступу демон має бути прив\'язаний до адреси, відмінної від loopback. Запустіть з --host 0.0.0.0 або встановіть OD_BIND_HOST, щоб відкрити демон у мережі.',
   'settings.mcpKeysTitle': 'Ключі MCP',

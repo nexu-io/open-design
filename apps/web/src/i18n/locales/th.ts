@@ -381,6 +381,7 @@ export const th: Dict = {
   'settings.mcpServerHint': 'เปิดให้ Open Design เป็นเซิร์ฟเวอร์ MCP สำหรับเอเจนต์โค้ด',
   'settings.mcpTabLocal': 'ภายใน',
   'settings.mcpTabRemote': 'ระยะไกล',
+  'settings.mcpInstallTypeAria': 'MCP install type',
   'settings.mcpRemoteDisabled':
     'การเข้าถึงระยะไกลต้องการให้ daemon ผูกกับที่อยู่ที่ไม่ใช่ loopback เริ่มด้วย --host 0.0.0.0 หรือตั้งค่า OD_BIND_HOST เพื่อเปิดเผย daemon บนเครือข่าย',
   'settings.mcpKeysTitle': 'คีย์ MCP',

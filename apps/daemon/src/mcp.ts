@@ -1385,7 +1385,7 @@ async function resolveProjectId(baseUrl: string, arg: unknown, getAuthHeaders?: 
 }
 
 function authHeaders(): Record<string, string> {
-  const apiKey = process.env.OD_API_KEY;
+  const apiKey = process.env.OD_MCP_TOKEN;
   return apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
 }
 
