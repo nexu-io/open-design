@@ -1,15 +1,14 @@
+import { detectOpenDesignHostClientType } from '@open-design/host';
+
 export function isDesktopApp(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    (window as unknown as Record<string, unknown>).__odDesktop !== undefined &&
-    ((window as unknown as Record<string, { isDesktop?: boolean }>).__odDesktop?.isDesktop === true)
-  );
+  return typeof window !== 'undefined'
+    && detectOpenDesignHostClientType() === 'desktop';
 }
 
 export function isPackagedDesktop(): boolean {
   if (!isDesktopApp()) return false;
   return (
-    (window as unknown as Record<string, { isPackaged?: boolean }>).__odDesktop?.isPackaged === true
+    (window as unknown as Record<string, { isPackaged?: boolean }>).openDesignDesktop?.isPackaged === true
   );
 }
 
