@@ -630,6 +630,32 @@ test("curl|bash path: refuses to clobber a non-object at the dot-path (heredoc m
   }
 });
 
+test("curl|bash path: malformed JSON in the existing file refuses with exit 2 (heredoc propagates the rc)", () => {
+  // This pins the exact combination the v3 review claimed was broken:
+  // stdin execution + heredoc fallback + exit-code propagation from
+  // the node helper back through bash's `set +e` / `merge_rc=$?` /
+  // `set -e` wrapper. If any future change to the wrapper order or
+  // the heredoc nesting breaks the rc, this test goes red.
+  const home = makeTempHome();
+  try {
+    const cursorDir = join(home, ".cursor");
+    mkdirSync(cursorDir, { recursive: true });
+    const target = join(cursorDir, "mcp.json");
+    writeFileSync(target, "{ this is not valid json");
+
+    const result = runInstallViaStdin(
+      ["cursor", "--write-config", "--daemon-url", "http://daemon.test:7456"],
+      { HOME: home },
+    );
+    assert.equal(result.status, 2, `expected exit 2, got ${result.status}; stderr: ${result.stderr}`);
+    assert.match(combined(result), /failed to parse/);
+    // And the file must be left untouched.
+    assert.equal(readFileSync(target, "utf8"), "{ this is not valid json");
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Network behavior: dry-run must be side-effect-free.
 // ---------------------------------------------------------------------------

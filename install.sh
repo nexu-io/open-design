@@ -298,7 +298,7 @@ merge_json_config() {
   # JSON or a non-object at the dot-path, and writes back atomically
   # with a unique tmp name + preserved file mode.
   local config_path="$1" dot_key_path="$2" server_name="$3" entry_json="$4"
-  local merge_out rc
+  local merge_out merge_rc
 
   if ! command -v node >/dev/null 2>&1; then
     error "node is required for --write-config but was not found on PATH."
@@ -310,8 +310,9 @@ merge_json_config() {
   # non-zero for refused-to-clobber / malformed-JSON conditions, and
   # we want to forward the helper's own stderr to the user (and the
   # exit code back to the caller) rather than have the shell exit
-  # silently. This block is a deliberate, narrow exception to the
-  # script-wide `set -e` policy.
+  # silently. The order matters: `merge_rc=$?` MUST run before
+  # `set -e`, because `set -e` resets $? to 0. This block is a
+  # deliberate, narrow exception to the script-wide `set -e` policy.
   set +e
   if [ -n "$MERGE_SCRIPT" ]; then
     merge_out="$(node "$MERGE_SCRIPT" "$config_path" "$dot_key_path" "$server_name" "$entry_json" 2>&1)"
@@ -416,12 +417,12 @@ renameSync(tmp, configPath);
 NODE_EOF
 )"
   fi
-  rc=$?
+  merge_rc=$?
   set -e
 
-  if [ "$rc" -ne 0 ]; then
+  if [ "$merge_rc" -ne 0 ]; then
     printf '%s\n' "$merge_out" >&2
-    return "$rc"
+    return "$merge_rc"
   fi
   # Forward the helper's own message ("Wrote <path>" / "<path> unchanged")
   # so the user sees what actually happened.
