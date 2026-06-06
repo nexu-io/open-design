@@ -37,7 +37,7 @@ import { setShellEnvVar } from './shell-env.js';
 import { createIpAllowlistMiddleware } from './ip-allowlist.js';
 import { renderLoginPage } from './login-page.js';
 import { isNetworkExposed, parseAllowedHosts } from './network-config.js';
-import { effectivePeerFromReq, isLocalManagementRequest, isLoopbackAddress, isProxyTrusted } from './proxy-trust.js';
+import { effectivePeerFromReq, isLocalManagementRequest, isLoopbackAddress, isProxyTrusted, isRequestHttps } from './proxy-trust.js';
 import { checkRateLimit, startCleanupInterval as startRateLimitCleanup } from './login-rate-limit.js';
 import { clearAllSessions, createSession, extractSessionCookie, isValidSession, revokeSession, startCleanupInterval } from './session-store.js';
 import { createCommandInvocation } from '@open-design/platform';
@@ -4724,7 +4724,7 @@ export async function startServer({
       'Path=/',
       `Max-Age=${24 * 60 * 60}`,
     ];
-    if (isProxyTrusted()) sessionCookie.push('Secure');
+    if (isRequestHttps(req)) sessionCookie.push('Secure');
     res.setHeader('Set-Cookie', sessionCookie.join('; '));
     const next = typeof req.body?.next === 'string' ? req.body.next : '';
     const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '/';
@@ -4750,7 +4750,7 @@ export async function startServer({
       'Path=/',
       'Max-Age=0',
     ];
-    if (isProxyTrusted()) clearCookie.push('Secure');
+    if (isRequestHttps(req)) clearCookie.push('Secure');
     res.setHeader('Set-Cookie', clearCookie.join('; '));
     res.redirect(302, '/login');
   });
@@ -5355,9 +5355,21 @@ export async function startServer({
     res.json({ ok: true });
   });
 
+  // Detect whether the daemon runs under a supervisor that will respawn it
+  // after SIGTERM. Without a supervisor the restart endpoint would kill the
+  // daemon permanently, leaving the user stranded on a timeout spinner.
+  const hasSupervisor = (): boolean =>
+    !!(process.env.OD_TOOLS_DEV_PARENT_PID   // tools-dev
+      || process.env.pm_id                   // PM2
+      || process.env.INVOCATION_ID);         // systemd
+
   app.post('/api/restart', async (req, res) => {
     if (!isLocalManagementRequest(req)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'restart is only available from localhost' });
+      return;
+    }
+    if (!hasSupervisor()) {
+      res.status(503).json({ error: 'NO_SUPERVISOR', reason: 'restart requires a process supervisor (PM2, systemd, or tools-dev) that will respawn the daemon after exit' });
       return;
     }
     const rOrigin = req.headers.origin;
@@ -5412,7 +5424,7 @@ export async function startServer({
       'Path=/',
       `Max-Age=${24 * 60 * 60}`,
     ];
-    if (isProxyTrusted()) sessionCookie.push('Secure');
+    if (isRequestHttps(req)) sessionCookie.push('Secure');
     res.setHeader('Set-Cookie', sessionCookie.join('; '));
     res.json(entry);
   });
@@ -5440,7 +5452,7 @@ export async function startServer({
         'Path=/',
         `Max-Age=${24 * 60 * 60}`,
       ];
-      if (isProxyTrusted()) sessionCookie.push('Secure');
+      if (isRequestHttps(req)) sessionCookie.push('Secure');
       res.setHeader('Set-Cookie', sessionCookie.join('; '));
     }
     res.json({ ok: true });
@@ -5484,7 +5496,7 @@ export async function startServer({
       'Path=/',
       `Max-Age=${24 * 60 * 60}`,
     ];
-    if (isProxyTrusted()) sessionCookie.push('Secure');
+    if (isRequestHttps(req)) sessionCookie.push('Secure');
     res.setHeader('Set-Cookie', sessionCookie.join('; '));
     let shellEnvFile: string | null = null;
     try {
@@ -5533,7 +5545,7 @@ export async function startServer({
         'Path=/',
         `Max-Age=${24 * 60 * 60}`,
       ];
-      if (isProxyTrusted()) sessionCookie.push('Secure');
+      if (isRequestHttps(req)) sessionCookie.push('Secure');
       res.setHeader('Set-Cookie', sessionCookie.join('; '));
     }
     try { await setShellEnvVar('OD_MCP_TOKEN', ''); } catch { /* best-effort */ }
@@ -5617,6 +5629,7 @@ export async function startServer({
         ? { enabled: true, roots: SANDBOX_RUNTIME.roots }
         : { enabled: false },
       pid: process.pid,
+      canRestart: hasSupervisor(),
       shuttingDown: daemonShuttingDown,
       installedPlugins: (() => {
         try {

@@ -26,6 +26,9 @@ export function createIpAllowlistMiddleware(allowedHosts: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     const clientIp = effectivePeerFromReq(req);
 
+    // When OD_TRUST_PROXY is on and no XFF is present, effectivePeerFromReq
+    // returns ''. A direct localhost connection still has a loopback TCP peer.
+    if (clientIp === '' && isLoopbackAddress(req.socket?.remoteAddress)) return next();
     if (isLoopbackAddress(clientIp)) return next();
 
     const allowed = entries.some((entry) => entry.matches(clientIp));

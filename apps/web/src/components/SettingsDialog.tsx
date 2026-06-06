@@ -6851,6 +6851,7 @@ function IntegrationsSection() {
   const [copied, setCopied] = useState(false);
   const [info, setInfo] = useState<McpInstallInfo | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
+  const [canRestart, setCanRestart] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const restartingRef = useRef(false);
   const pickerRef = useRef<HTMLDivElement | null>(null);
@@ -6861,6 +6862,16 @@ function IntegrationsSection() {
     return () => {
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     };
+  }, []);
+
+  // Fetch daemon restart capability once.
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/daemon/status')
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
+      .then((ds) => { if (!cancelled) setCanRestart(!!ds.canRestart); })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   // Close the dropdown on outside click or Escape.
@@ -7233,12 +7244,12 @@ function IntegrationsSection() {
           <div className="settings-actions" style={{ marginTop: 16 }}>
             <p className="hint" style={{ margin: 0 }}>{t('settings.restartingDaemon')}</p>
           </div>
-        ) : (
+        ) : canRestart ? (
           <div className="settings-actions" style={{ marginTop: 16 }}>
             <p className="hint" style={{ margin: 0 }}>{t('settings.networkRestartHint')}</p>
             <button type="button" className="primary" onClick={restartDaemon}>{t('settings.restartDaemon')}</button>
           </div>
-        )}
+        ) : null}
 
         <div style={{ marginTop: 20, lineHeight: 1.55 }}>
           <p
@@ -7537,6 +7548,7 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
   const [port, setPort] = useState(7456);
   const [allowedHosts, setAllowedHosts] = useState('');
   const [keys, setKeys] = useState<Array<{ id: string; label: string; createdAt: number }>>([]);
+  const [canRestart, setCanRestart] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [newKey, setNewKey] = useState<string | null>(null);
   const [newKeyId, setNewKeyId] = useState<string | null>(null);
@@ -7561,13 +7573,18 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
         if (!r.ok) throw new Error('Failed to load API keys');
         return r.json();
       }),
-    ]).then(([nc, ak]) => {
+      fetch('/api/daemon/status').then((r) => {
+        if (!r.ok) throw new Error('Failed to load daemon status');
+        return r.json();
+      }),
+    ]).then(([nc, ak, ds]) => {
       setBindHost(nc.bindHost ?? '127.0.0.1');
       setPort(nc.port ?? 7456);
       if (initialBindHost.current === null) initialBindHost.current = nc.bindHost ?? '127.0.0.1';
       if (initialPort.current === null) initialPort.current = nc.port ?? 7456;
       setAllowedHosts(Array.isArray(nc.allowedHosts) ? nc.allowedHosts.join(', ') : '');
       setKeys(ak.keys ?? []);
+      setCanRestart(!!ds.canRestart);
       setLoaded(true);
     }).catch(() => {
       setError(t('settings.networkLoadError'));
@@ -7781,12 +7798,12 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
         <div className="settings-actions" style={{ marginTop: 16 }}>
           <p className="hint" style={{ margin: 0 }}>{t('settings.restartingDaemon')}</p>
         </div>
-      ) : (
+      ) : canRestart ? (
         <div className="settings-actions" style={{ marginTop: 16 }}>
           <p className="hint" style={{ margin: 0 }}>{t('settings.networkRestartHint')}</p>
           <button type="button" className="primary" onClick={restartDaemon}>{t('settings.restartDaemon')}</button>
         </div>
-      )}
+      ) : null}
     </section>
   );
 }

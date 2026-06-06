@@ -24,6 +24,23 @@ export function isProxyTrusted(): boolean {
 }
 
 /**
+ * Returns true when the current request arrived over HTTPS — either directly
+ * (TLS socket) or through a trusted proxy that set `X-Forwarded-Proto: https`.
+ *
+ * Use this instead of `isProxyTrusted()` when deciding whether to set the
+ * `Secure` cookie flag: plain-HTTP reverse proxies do not satisfy the Secure
+ * constraint, so a `Secure` cookie would be silently dropped by the browser.
+ */
+export function isRequestHttps(req: { socket?: { encrypted?: boolean }; headers: Record<string, string | string[] | undefined> }): boolean {
+  if (req.socket?.encrypted) return true;
+  if (isProxyTrusted()) {
+    const proto = req.headers['x-forwarded-proto'];
+    return typeof proto === 'string' && proto.trim().toLowerCase() === 'https';
+  }
+  return false;
+}
+
+/**
  * Returns true when `address` is a loopback peer (127.x.x.x, ::1, or
  * IPv4-mapped equivalents like ::ffff:127.0.0.1).
  */
