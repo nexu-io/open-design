@@ -182,7 +182,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
   'pending-prompt', 'project', 'conversation', 'message', 'prompt',
   'prompt-file', 'path', 'dir', 'as',
-  'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
+  'agent', 'model', 'reasoning', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
   'title', 'against', 'seed-from', 'fork-after', 'mode',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
@@ -5050,9 +5050,9 @@ async function runRun(args) {
     console.log(`Usage:
   od run start --project <projectId> [--conversation <id>] [--message "<text>"]
                [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
-               [--agent claude|codex|gemini] [--model <id>] [--follow] [--json]
+               [--agent claude|codex|gemini] [--model <id>] [--reasoning <id>] [--follow] [--json]
   od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
-               [--agent claude] [--model <id>] [--follow] [--json]
+               [--agent claude] [--model <id>] [--reasoning <id>] [--follow] [--json]
   od run watch  <runId>                     ND-JSON event stream on stdout.
   od run cancel <runId>                     Request cancellation.
   od run list   [--project <id>]            List recent runs.
@@ -5158,6 +5158,7 @@ Common options:
         designSystemId,
         ...(flags.agent ? { agentId: flags.agent } : {}),
         ...(flags.model ? { model: flags.model } : {}),
+        ...(flags.reasoning ? { reasoning: flags.reasoning } : {}),
       };
       const data = await postJsonToDaemon(base, '/api/runs', body);
       if (flags.json && !flags.follow) {
@@ -5185,6 +5186,7 @@ Common options:
       if (flags['design-system']) body.designSystemId = flags['design-system'];
       if (flags.agent) body.agentId = flags.agent;
       if (flags.model) body.model = flags.model;
+      if (flags.reasoning) body.reasoning = flags.reasoning;
       if (flags.inputs) {
         try { body.pluginInputs = JSON.parse(flags.inputs); } catch (err) {
           console.error(`--inputs must be valid JSON: ${err.message}`);

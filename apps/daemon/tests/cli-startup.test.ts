@@ -205,6 +205,124 @@ describe('CLI startup boundaries', () => {
       },
     ]);
   });
+
+  it('forwards --reasoning from od run start to POST /api/runs', async () => {
+    const seenBodies: unknown[] = [];
+    const server = http.createServer(async (req, res) => {
+      if (req.method === 'POST' && req.url === '/api/runs') {
+        seenBodies.push(JSON.parse(await readRequestBody(req)));
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ runId: 'run-start-reasoning' }));
+        return;
+      }
+      req.resume();
+      res.writeHead(500, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unexpected request' }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const daemonUrl = localServerUrl(server);
+
+    try {
+      await execFileAsync(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          cliEntry,
+          'run',
+          'start',
+          '--project',
+          'project-1',
+          '--message',
+          'Use dynamic workflows',
+          '--agent',
+          'claude',
+          '--model',
+          'claude-sonnet-4-5',
+          '--reasoning',
+          'ultracode',
+          '--daemon-url',
+          daemonUrl,
+          '--json',
+        ],
+        {
+          cwd: daemonRoot,
+          env: { ...process.env },
+        },
+      );
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+
+    expect(seenBodies).toEqual([
+      expect.objectContaining({
+        projectId: 'project-1',
+        message: 'Use dynamic workflows',
+        agentId: 'claude',
+        model: 'claude-sonnet-4-5',
+        reasoning: 'ultracode',
+      }),
+    ]);
+  });
+
+  it('forwards --reasoning from od run redesign to POST /api/runs', async () => {
+    const seenBodies: unknown[] = [];
+    const server = http.createServer(async (req, res) => {
+      if (req.method === 'POST' && req.url === '/api/runs') {
+        seenBodies.push(JSON.parse(await readRequestBody(req)));
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ runId: 'run-redesign-reasoning' }));
+        return;
+      }
+      req.resume();
+      res.writeHead(500, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unexpected request' }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const daemonUrl = localServerUrl(server);
+
+    try {
+      await execFileAsync(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          cliEntry,
+          'run',
+          'redesign',
+          '--project',
+          'project-1',
+          '--message',
+          'Redesign with dynamic workflows',
+          '--agent',
+          'claude',
+          '--model',
+          'claude-sonnet-4-5',
+          '--reasoning',
+          'ultracode',
+          '--daemon-url',
+          daemonUrl,
+          '--json',
+        ],
+        {
+          cwd: daemonRoot,
+          env: { ...process.env },
+        },
+      );
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+
+    expect(seenBodies).toEqual([
+      expect.objectContaining({
+        projectId: 'project-1',
+        message: 'Redesign with dynamic workflows',
+        agentId: 'claude',
+        model: 'claude-sonnet-4-5',
+        reasoning: 'ultracode',
+      }),
+    ]);
+  });
 });
 
 function waitForStdoutLine(
@@ -262,4 +380,22 @@ async function terminateChild(child: ChildProcessWithoutNullStreams): Promise<vo
     timer.unref?.();
   });
   await Promise.race([exited, timeout]);
+}
+
+function localServerUrl(server: http.Server): string {
+  const address = server.address();
+  const port = typeof address === 'object' && address ? address.port : 0;
+  return `http://127.0.0.1:${port}`;
+}
+
+function readRequestBody(req: http.IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', () => resolve(body));
+    req.on('error', reject);
+  });
 }
