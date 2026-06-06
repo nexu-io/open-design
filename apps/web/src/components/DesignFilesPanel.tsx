@@ -1904,7 +1904,7 @@ function DfPreview({
             <iframe
               title={file.name}
               src={renderedPreviewState.url}
-              sandbox="allow-scripts allow-forms allow-popups allow-same-origin"
+              sandbox="allow-scripts allow-forms allow-popups"
             />
           ) : renderedPreviewState?.status === 'unavailable' ? (
             <HtmlPreviewThumbnail projectId={projectId} file={file} />

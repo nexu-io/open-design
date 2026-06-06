@@ -533,7 +533,7 @@ function SurfaceLivePreviewFrame({
         src={src}
         ref={onFrame}
         onLoad={handleLoad}
-        sandbox="allow-scripts allow-forms allow-popups allow-same-origin"
+        sandbox="allow-scripts allow-forms allow-popups"
         style={{
           width: `${SURFACE_PREVIEW_VIEWPORT.width}px`,
           height: `${SURFACE_PREVIEW_VIEWPORT.height}px`,
