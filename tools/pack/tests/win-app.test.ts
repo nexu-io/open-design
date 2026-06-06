@@ -77,9 +77,9 @@ describe("toWinPrebundleImportSpecifier", () => {
   it("uses file URLs when the entrypoint cache and workspace are on different Windows drives", () => {
     expect(
       toWinPrebundleImportSpecifier(
-        "C:\\odtp-wf\\cache\\entries\\win.packaged-app\\entry\\prebundle-entrypoints",
-        "D:\\Project\\ai_project\\open-design\\apps\\daemon\\dist\\cli.js",
+        "C:\\od-pack-cache\\entries\\win.packaged-app\\entry\\prebundle-entrypoints",
+        "Z:\\workspace\\open-design\\apps\\daemon\\dist\\cli.js",
       ),
-    ).toBe("file:///D:/Project/ai_project/open-design/apps/daemon/dist/cli.js");
+    ).toBe("file:///Z:/workspace/open-design/apps/daemon/dist/cli.js");
   });
 });

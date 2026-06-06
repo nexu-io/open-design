@@ -145,10 +145,20 @@ describe("isWinCodeSignSymlinkPrivilegeError", () => {
     expect(
       isWinCodeSignSymlinkPrivilegeError({
         stdout: [
-          "workingDir=C:\\Users\\louis\\AppData\\Local\\electron-builder\\Cache\\winCodeSign",
-          "ERROR: Cannot create symbolic link : user lacks privilege : C:\\Users\\louis\\AppData\\Local\\electron-builder\\Cache\\winCodeSign\\093751595\\darwin\\10.12\\lib\\libcrypto.dylib",
+          "workingDir=<electron-builder-cache>\\winCodeSign",
+          "ERROR: Cannot create symbolic link : user lacks privilege : <electron-builder-cache>\\winCodeSign\\093751595\\darwin\\10.12\\lib\\libcrypto.dylib",
         ].join("\n"),
       }),
+    ).toBe(true);
+  });
+
+  it("matches the same failure when child process output is only in the error message", () => {
+    expect(
+      isWinCodeSignSymlinkPrivilegeError(
+        new Error(
+          "winCodeSign extraction failed: ERROR: Cannot create symbolic link : user lacks privilege",
+        ),
+      ),
     ).toBe(true);
   });
 
