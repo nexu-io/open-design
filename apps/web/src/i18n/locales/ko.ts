@@ -347,7 +347,7 @@ export const ko: Dict = {
   'settings.generateKey': '생성',
   'settings.networkRestartHint': '바인드 주소, 포트 또는 허용 호스트 변경 후 데몬을 재시작해야 합니다.',
   'settings.networkSaveError': '저장에 실패했습니다. 입력값을 확인하고 다시 시도해 주세요.',
-  'settings.networkLoadError': 'Failed to load network settings.',
+  'settings.networkLoadError': '네트워크 설정을 불러오지 못했습니다.',
   'settings.themeSystem': '시스템',
   'settings.themeLight': '라이트',
   'settings.themeDark': '다크',
