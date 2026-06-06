@@ -254,6 +254,35 @@ test("design-system design tokens guard rejects stale derived JSON", async () =>
   }
 });
 
+test("design-system design tokens guard rejects stale token source line references", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "od-design-token-source-guard-"));
+  try {
+    writeDerivedTokenFixture(root);
+    const report = JSON.parse(readFileSync(path.join(root, REPORT_PATH), "utf8")) as {
+      generatedAt: string;
+      summary: unknown;
+      tokens: DerivedDesignTokenBinding[];
+    };
+    report.tokens[0] = {
+      ...report.tokens[0]!,
+      sources: ["tokens.css:1"],
+    };
+    writeFileSync(path.join(root, REPORT_PATH), `${JSON.stringify(report, null, 2)}\n`);
+    writeFileSync(path.join(root, "design-tokens.json"), renderDesignTokensJson({
+      bindings: report.tokens,
+      report,
+    }));
+
+    const violations: string[] = [];
+    await validateDesignTokensJson(violations, "design-systems/test/manifest.json", root, "tokens.css", "design-tokens.json", REPORT_PATH);
+    assert.deepEqual(violations, [
+      "design-systems/test/manifest.json: source/token-contract.report.json token --bg source tokens.css:1 must point to tokens.css:2",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("design-system tailwind v4 guard rejects swapped canonical mappings", async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "od-tailwind-guard-"));
   try {

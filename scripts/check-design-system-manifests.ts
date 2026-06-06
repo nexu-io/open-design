@@ -232,14 +232,15 @@ export async function validateDesignTokensJson(
     );
     return;
   }
-  const tokenDeclarations = parseRootTokenDeclarations(tokensCss);
+  const tokenDeclarations = parseRootTokenDeclarationDetails(tokensCss);
   for (const binding of report.tokens) {
-    const declaredValue = tokenDeclarations.get(binding.name);
-    if (declaredValue === undefined) {
+    const declared = tokenDeclarations.get(binding.name);
+    if (declared === undefined) {
       violations.push(`${repositoryManifestPath}: ${reportPath} token ${binding.name} is missing from ${tokensPath}`);
-    } else if (declaredValue !== normalizeTokenValue(binding.value)) {
+    } else if (declared.value !== normalizeTokenValue(binding.value)) {
       violations.push(`${repositoryManifestPath}: ${reportPath} token ${binding.name} value does not match ${tokensPath}`);
     }
+    validateTokenSourceReferences(violations, repositoryManifestPath, reportPath, tokensPath, tokenDeclarations, binding);
   }
 }
 
@@ -326,20 +327,78 @@ function toDerivedDesignTokenBinding(value: unknown): DerivedDesignTokenBinding 
 }
 
 function parseRootTokenDeclarations(css: string): Map<string, string> {
-  const rootBody = css.replace(/\/\*[\s\S]*?\*\//g, "").match(/:root(?!\[)\s*\{([\s\S]*?)\}/)?.[1];
-  const declarations = new Map<string, string>();
-  if (rootBody === undefined) return declarations;
-  for (const rawDeclaration of rootBody.split(";")) {
-    const declaration = rawDeclaration.trim();
-    if (!declaration.startsWith("--")) continue;
-    const colonIndex = declaration.indexOf(":");
-    if (colonIndex === -1) continue;
-    declarations.set(
-      declaration.slice(0, colonIndex).trim(),
-      normalizeTokenValue(declaration.slice(colonIndex + 1)),
-    );
+  return new Map(
+    Array.from(parseRootTokenDeclarationDetails(css), ([name, declaration]) => [name, declaration.value]),
+  );
+}
+
+type TokenDeclarationDetail = {
+  readonly value: string;
+  readonly line: number;
+};
+
+function parseRootTokenDeclarationDetails(css: string): Map<string, TokenDeclarationDetail> {
+  const declarations = new Map<string, TokenDeclarationDetail>();
+  const rootPattern = /:root(?!\[)\s*\{([\s\S]*?)\}/g;
+  let rootMatch: RegExpExecArray | null;
+  while ((rootMatch = rootPattern.exec(css)) !== null) {
+    const body = rootMatch[1]!;
+    const bodyStart = rootMatch.index + rootMatch[0].indexOf("{") + 1;
+    let segmentStart = 0;
+    for (const rawSegment of body.split(";")) {
+      const declarationStartInSegment = rawSegment.match(/(^|\n)[^\S\n]*--[A-Za-z0-9_-]+\s*:/);
+      if (declarationStartInSegment !== null && declarationStartInSegment.index !== undefined) {
+        const declarationStart = segmentStart + declarationStartInSegment.index + declarationStartInSegment[1]!.length;
+        const declaration = body.slice(declarationStart, segmentStart + rawSegment.length).trim();
+        const colonIndex = declaration.indexOf(":");
+        if (colonIndex !== -1) {
+          declarations.set(declaration.slice(0, colonIndex).trim(), {
+            value: normalizeTokenValue(declaration.slice(colonIndex + 1)),
+            line: lineNumberAtOffset(css, bodyStart + declarationStart),
+          });
+        }
+      }
+      segmentStart += rawSegment.length + 1;
+    }
   }
   return declarations;
+}
+
+function lineNumberAtOffset(text: string, offset: number): number {
+  let line = 1;
+  for (let index = 0; index < offset; index += 1) {
+    if (text.charCodeAt(index) === 10) line += 1;
+  }
+  return line;
+}
+
+function validateTokenSourceReferences(
+  violations: string[],
+  repositoryManifestPath: string,
+  reportPath: string,
+  tokensPath: string,
+  tokenDeclarations: ReadonlyMap<string, TokenDeclarationDetail>,
+  binding: DerivedDesignTokenBinding,
+): void {
+  const sourceName = binding.sourceName ?? binding.name;
+  const declared = tokenDeclarations.get(sourceName);
+  if (declared === undefined) return;
+  for (const source of binding.sources) {
+    const line = parseTokenSourceLine(source, tokensPath);
+    if (line === undefined) continue;
+    if (line !== declared.line) {
+      violations.push(
+        `${repositoryManifestPath}: ${reportPath} token ${binding.name} source ${source} must point to ${tokensPath}:${declared.line}`,
+      );
+    }
+  }
+}
+
+function parseTokenSourceLine(source: string, tokensPath: string): number | undefined {
+  const prefix = `${tokensPath}:`;
+  if (!source.startsWith(prefix)) return undefined;
+  const line = Number(source.slice(prefix.length));
+  return Number.isInteger(line) && line > 0 ? line : undefined;
 }
 
 function normalizeTokenValue(value: string): string {
