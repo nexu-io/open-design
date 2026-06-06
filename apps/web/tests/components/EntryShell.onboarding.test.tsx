@@ -768,11 +768,77 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       source: 'client',
     });
 
-    expect(findTrackedEvent('ui_click', (payload) => payload.element === 'newsletter_email')).toMatchObject({
+    await waitFor(() => {
+      expect(findTrackedEvent('ui_click', (payload) => payload.element === 'newsletter_email')).toMatchObject({
+        page_name: 'onboarding',
+        element: 'newsletter_email',
+        action: 'subscribe',
+        newsletter_opt_in: true,
+      });
+    });
+  });
+
+  it('tracks newsletter failures without reporting a subscription', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      if (url.endsWith('/subscribe')) {
+        return jsonResponse({ ok: false }, 500);
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const props = renderOnboarding();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
+    });
+
+    const emailInput = document.querySelector('.onboarding-view__email-input');
+    expect(emailInput).toBeInstanceOf(HTMLInputElement);
+    fireEvent.change(emailInput as HTMLInputElement, {
+      target: { value: '  Tester@Studio.com  ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
+
+    await waitFor(() => {
+      expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
+    });
+
+    const subscribeCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/subscribe'));
+    expect(subscribeCall).toBeTruthy();
+    expect(JSON.parse(String(subscribeCall?.[1]?.body))).toEqual({
+      email: 'tester@studio.com',
+      source: 'client',
+    });
+
+    const newsletterClickEvents = trackedEvents('ui_click')
+      .map(([, eventPayload]) => eventPayload as Record<string, unknown>)
+      .filter((payload) => payload.element === 'newsletter_email');
+    expect(newsletterClickEvents).toHaveLength(1);
+    expect(newsletterClickEvents[0]).toMatchObject({
       page_name: 'onboarding',
       element: 'newsletter_email',
-      action: 'subscribe',
+      action: 'subscribe_failed',
       newsletter_opt_in: true,
+      error_code: 'http_500',
+    });
+    expect(latestTrackedEvent('onboarding_complete_result')).toMatchObject({
+      result: 'completed',
     });
   });
 

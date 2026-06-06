@@ -1492,25 +1492,37 @@ function OnboardingView({
   }
 
   // Optional newsletter signup captured on the About-you step. The last-step
-  // button shows loading while this settles; failures are swallowed so
-  // onboarding completion never depends on the marketing site. A blank or
+  // button shows loading while this settles; failures are tracked separately
+  // so onboarding completion never depends on the marketing site. A blank or
   // malformed email is simply skipped. Only a boolean opt-in is tracked — the
   // address itself is never sent to analytics.
   async function submitNewsletterEmail(rawEmail: string): Promise<void> {
     const email = rawEmail.trim().toLowerCase();
     if (!email || !NEWSLETTER_EMAIL_RE.test(email)) return;
-    emitOnboardingClick('newsletter_email', 'subscribe', { newsletter_opt_in: true });
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 5000);
     try {
-      await fetch(NEWSLETTER_SUBSCRIBE_URL, {
+      const response = await fetch(NEWSLETTER_SUBSCRIBE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, source: 'client' }),
         signal: controller.signal,
       });
-    } catch {
-      // Swallow — onboarding completion must not depend on the marketing site.
+      if (!response.ok) {
+        emitOnboardingClick('newsletter_email', 'subscribe_failed', {
+          newsletter_opt_in: true,
+          error_code: `http_${response.status}`,
+        });
+        return;
+      }
+      emitOnboardingClick('newsletter_email', 'subscribe', { newsletter_opt_in: true });
+    } catch (error) {
+      emitOnboardingClick('newsletter_email', 'subscribe_failed', {
+        newsletter_opt_in: true,
+        error_code: error instanceof Error && error.name === 'AbortError'
+          ? 'timeout'
+          : 'network_error',
+      });
     } finally {
       window.clearTimeout(timeout);
     }

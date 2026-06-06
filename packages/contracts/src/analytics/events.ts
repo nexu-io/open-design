@@ -541,7 +541,8 @@ export type TrackingOnboardingClickAction =
   | 'add_source'
   | 'upload_source'
   | 'show_access_methods'
-  | 'subscribe';
+  | 'subscribe'
+  | 'subscribe_failed';
 
 // All optional except the discriminators (area/element/action/step/
 // session id). `role`/`organization_size`/`use_case`/`discovery_source`
@@ -575,6 +576,9 @@ export interface OnboardingClickProps {
   // True when the user left a (valid) newsletter email on the About-you
   // step. Boolean only — the email address itself is never sent here.
   newsletter_opt_in?: boolean;
+  // Failure classifier for optional newsletter signup attempts. Never includes
+  // the submitted email address.
+  error_code?: string;
 }
 
 // ---- Onboarding lifecycle result events ---------------------------------
