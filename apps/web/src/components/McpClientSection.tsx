@@ -1251,7 +1251,7 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
   const connected = Boolean(status?.connected);
   const expiresLabel =
     status?.expiresAt && status.expiresAt > 0
-      ? new Date(status.expiresAt).toLocaleString()
+      ? new Date(status.expiresAt).toLocaleString(locale)
       : null;
   const isAwaiting = busy === 'awaiting' || (Boolean(pendingAuthUrl) && !connected);
 
