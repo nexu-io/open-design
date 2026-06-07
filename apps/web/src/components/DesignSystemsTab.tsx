@@ -526,7 +526,7 @@ export function DesignSystemsTab({
                         date: formatShortDate(
                           system.updatedAt,
                           locale,
-                          locale === 'zh-CN' ? '刚刚' : 'just now',
+                          t('common.justNow'),
                         ),
                       })}
                     </span>

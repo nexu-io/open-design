@@ -153,6 +153,24 @@ describe('DesignSystemsTab', () => {
     );
   });
 
+  it('uses the shared just-now label for missing user-system dates in other locales', () => {
+    render(
+      <I18nProvider initial="es-ES">
+        <DesignSystemsTab
+          systems={[{ ...systems[0]!, updatedAt: undefined }]}
+          selectedId={null}
+          onSelect={() => {}}
+          onPreview={() => {}}
+          onCreate={() => {}}
+          onOpenSystem={() => {}}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText('Tú · actualizado justo ahora')).toBeTruthy();
+    expect(screen.queryByText(/just now/)).toBeNull();
+  });
+
   it('shows the official library when there are no user-created design systems', () => {
     render(
         <DesignSystemsTab
