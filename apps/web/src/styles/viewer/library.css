@@ -4,7 +4,7 @@
   margin-top: 14px;
   padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
   display: grid;
   gap: 12px;
@@ -31,7 +31,7 @@
   background-position: center;
   background-size: contain;
   background-color: var(--surface-2, #f6f4ee);
-  border-radius: 8px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   image-rendering: pixelated;
 }
@@ -49,12 +49,12 @@
   gap: 2px;
   padding: 8px 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg);
   cursor: pointer;
   font: inherit;
   text-align: left;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition: border-color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
 
 .pet-atlas-row:hover {
@@ -94,7 +94,7 @@
   margin-top: 14px;
   padding: 14px;
   border: 1px dashed var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--accent) 4%, transparent);
   display: grid;
   gap: 10px;
@@ -111,7 +111,7 @@
   padding: 10px 12px;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px;
   line-height: 1.5;
@@ -137,7 +137,7 @@
   margin-top: 14px;
   padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
   display: grid;
   gap: 10px;
@@ -178,7 +178,7 @@
 .pet-codex-sync-status {
   margin: 6px 0 8px 0;
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   font-size: 12px;
@@ -205,7 +205,7 @@
   gap: 10px;
   padding: 10px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg);
 }
 
@@ -213,7 +213,7 @@
   position: relative;
   width: 56px;
   height: 56px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   background-color: var(--surface-2, #f6f4ee);
   background-image: var(--pet-codex-src);
@@ -239,7 +239,7 @@
   width: 128px;
   /* 128 * (208/192) ≈ 138.7 — matches a single atlas cell aspect. */
   height: 139px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background-color: var(--surface-2, #f6f4ee);
   background-image: var(--pet-codex-src);
@@ -253,8 +253,8 @@
   transform: translate(-50%, 6px) scale(0.82);
   transform-origin: 50% 100%;
   transition:
-    opacity 140ms ease,
-    transform 160ms ease;
+    opacity 140ms var(--ease-out),
+    transform 160ms var(--ease-out);
   z-index: 20;
 }
 
@@ -345,7 +345,7 @@
 .pet-codex-adopt-btn:not(.active) {
   opacity: 0;
   pointer-events: none;
-  transition: opacity 120ms ease;
+  transition: opacity 120ms var(--ease-out);
 }
 .pet-codex-card:hover .pet-codex-adopt-btn:not(.active),
 .pet-codex-card:focus-within .pet-codex-adopt-btn:not(.active) {
@@ -418,7 +418,7 @@
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
   flex-shrink: 0;
@@ -647,14 +647,14 @@
   width: 100%;
   padding: 9px 12px;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   background: var(--bg-panel);
   color: var(--text);
   outline: none;
   box-shadow: var(--shadow-xs);
   cursor: text;
-  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out), background 120ms var(--ease-out);
 }
 
 .library-search:hover {
@@ -781,7 +781,7 @@
   gap: 10px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   flex-wrap: wrap;
 }
 
@@ -826,7 +826,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--accent-tint);
   color: var(--accent);
   font-weight: 500;
@@ -854,7 +854,7 @@
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .library-card-expand:hover {
@@ -873,7 +873,7 @@
   cursor: pointer;
   padding: 4px;
   color: var(--text-muted);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .library-card-delete:hover {
   background: color-mix(in oklab, #ef4444 18%, transparent);
@@ -890,7 +890,7 @@
   margin: 12px 0;
   padding: 14px 16px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--bg-subtle);
   display: grid;
   gap: 10px;
@@ -914,7 +914,7 @@
   color: var(--text);
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 7px 9px;
   font-family: inherit;
   resize: vertical;
@@ -940,7 +940,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: stretch;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   padding: 10px;
   gap: 10px;
@@ -963,7 +963,7 @@
 .library-ds-card-content {
   min-width: 0;
   padding: 2px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition:
     background 120ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -996,7 +996,7 @@
   border: none;
   background: transparent;
   color: var(--text-muted);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   opacity: 0;
   transition:
@@ -1022,7 +1022,7 @@
 .library-ds-swatch {
   width: 18px;
   height: 18px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   border: 1px solid rgba(128, 128, 128, 0.2);
 }
 
@@ -1105,7 +1105,7 @@
   font-size: 11.5px;
   padding: 1px 6px;
   background: var(--bg-subtle);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 /* Memory section: warning banner shown when the memory feature is
@@ -1113,7 +1113,7 @@
    and tinted with the same warning hue used elsewhere in settings. */
 .memory-disabled-banner {
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: rgba(255, 159, 64, 0.12);
   color: var(--text-muted, #b06a00);
   border: 1px solid rgba(255, 159, 64, 0.32);
@@ -1127,7 +1127,7 @@
    "something is wrong" rather than "FYI". */
 .memory-noprovider-banner {
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: rgba(220, 53, 69, 0.10);
   color: var(--text-danger, #b02a37);
   border: 1px solid rgba(220, 53, 69, 0.32);
@@ -1397,7 +1397,7 @@
   height: 30px;
   flex-basis: 30px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-panel);
 }
 
@@ -1412,7 +1412,7 @@
   margin: 2px 0 0;
   padding: 10px 12px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-subtle);
 }
 
@@ -1539,7 +1539,7 @@
   width: fit-content;
   min-height: 26px;
   padding: 4px 9px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 11px;
@@ -1554,7 +1554,7 @@
   min-height: 28px;
   padding: 4px 8px 4px 10px;
   border: 1px solid var(--border-soft);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 11px;
@@ -1690,7 +1690,7 @@
 .memory-connector-brand .connector-logo {
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: var(--radius);
 }
 
 .memory-connector-brand .connector-logo-img {
@@ -1713,7 +1713,7 @@
   width: 16px;
   height: 16px;
   border: 2px solid var(--bg-panel);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
   color: white;
   box-shadow: var(--shadow-xs);
@@ -1736,7 +1736,7 @@
   min-height: 28px;
   padding: 4px 9px;
   border: 1px solid var(--border-soft);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 11px;
@@ -1762,7 +1762,7 @@
   width: 14px;
   height: 14px;
   border: 1px solid currentColor;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .memory-connector-picker.is-selected .memory-connector-picker-box {
@@ -1778,7 +1778,7 @@
   min-height: 28px;
   padding: 4px 10px;
   border: 1px solid color-mix(in oklab, var(--accent) 28%, var(--border-soft));
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in oklab, var(--accent) 8%, var(--bg-panel));
   color: var(--accent);
   font-size: 11px;
@@ -1823,7 +1823,7 @@
   width: 22px;
   height: 22px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-panel);
   color: var(--accent);
 }
@@ -1862,7 +1862,7 @@
   align-items: center;
   min-height: 24px;
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 11px;
@@ -1979,7 +1979,7 @@
   align-items: flex-start;
   min-height: 32px;
   padding: 7px 9px;
-  border-radius: 9px;
+  border-radius: var(--radius);
   background: var(--bg-panel);
 }
 
@@ -1987,7 +1987,7 @@
   width: 8px;
   height: 8px;
   margin-top: 5px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--text-muted);
 }
 
@@ -2082,7 +2082,7 @@
   align-items: center;
   min-height: 22px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 11px;
@@ -2143,7 +2143,7 @@
   align-items: center;
   min-height: 20px;
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 10px;
