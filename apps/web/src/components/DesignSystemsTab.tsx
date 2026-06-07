@@ -161,15 +161,16 @@ export function DesignSystemsTab({
     [librarySystems, surfaceFilter],
   );
 
+  const allUserSystems = useMemo(() => systems.filter(isUserSystem), [systems]);
+
   const userSystems = useMemo(() => {
-    const editable = systems.filter(isUserSystem);
-    if (userFilter === 'all') return editable;
-    return editable.filter((system) => (system.status ?? 'draft') === userFilter);
-  }, [systems, userFilter]);
+    if (userFilter === 'all') return allUserSystems;
+    return allUserSystems.filter((system) => (system.status ?? 'draft') === userFilter);
+  }, [allUserSystems, userFilter]);
   const showOfficialLibrary =
     primaryCollection === 'design-system' &&
     (designSystemCollection === 'official' ||
-      (designSystemCollection === 'mine' && userSystems.length === 0 && librarySystems.length > 0));
+      (designSystemCollection === 'mine' && allUserSystems.length === 0 && librarySystems.length > 0));
 
   // Total systems per surface, ignoring every active filter. Drives the
   // "this surface is now empty" fallback below — that guard must react to

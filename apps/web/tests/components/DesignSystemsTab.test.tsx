@@ -168,6 +168,29 @@ describe('DesignSystemsTab', () => {
     expect(screen.getByText('Linear')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Official presets' })).toBeTruthy();
   });
+
+  it('does not show the official library when a status filter hides personal systems', () => {
+    render(
+      <DesignSystemsTab
+        systems={systems}
+        selectedId={null}
+        onSelect={() => {}}
+        onPreview={() => {}}
+        onCreate={() => {}}
+        onOpenSystem={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filter design systems' }), {
+      target: { value: 'published' },
+    });
+
+    expect(screen.getByText(
+      'No design systems yet. Create one from real product context, review the draft, then publish it for future projects.',
+    )).toBeTruthy();
+    expect(screen.queryByText('Linear')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Official presets' })).toBeNull();
+  });
 });
 
 // --- #2062: built-in library surface-chip filtering -----------------------
