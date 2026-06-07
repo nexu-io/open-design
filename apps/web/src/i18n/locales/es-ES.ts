@@ -1531,6 +1531,8 @@ export const esES: Dict = {
   'chat.attachTitle': 'Adjuntar archivos (o pegar / soltar)',
   'chat.addContextTitle': 'Add context',
   'chat.attachAria': 'Adjuntar archivos',
+  'chat.attachFolderAria': 'Subir carpeta',
+  'chat.uploadNoProject': 'Inicia una conversación primero y luego adjunta archivos.',
   'chat.importTitle': 'Importar fuentes (próximamente)',
   'chat.importLabel': 'Importar',
   'chat.importComingSoon': 'Próximamente',

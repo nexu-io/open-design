@@ -1531,6 +1531,8 @@ export const hu: Dict = {
   'chat.attachTitle': 'Fájlok csatolása (vagy beillesztés / húzás)',
   'chat.addContextTitle': 'Add context',
   'chat.attachAria': 'Fájlok csatolása',
+  'chat.attachFolderAria': 'Mappa feltöltése',
+  'chat.uploadNoProject': 'Először indíts el egy beszélgetést, majd csatolj fájlokat.',
   'chat.importTitle': 'Források importálása (hamarosan)',
   'chat.importLabel': 'Importálás',
   'chat.importComingSoon': 'Hamarosan',

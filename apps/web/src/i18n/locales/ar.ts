@@ -1531,6 +1531,8 @@ export const ar: Dict = {
   'chat.attachTitle': 'إرفاق ملفات (أو الصق / اسحب)',
   'chat.addContextTitle': 'Add context',
   'chat.attachAria': 'إرفاق ملفات',
+  'chat.attachFolderAria': 'تحميل مجلد',
+  'chat.uploadNoProject': 'ابدأ محادثة أولاً، ثم أرفق الملفات.',
   'chat.importTitle': 'استيراد المصادر (قريباً)',
   'chat.importLabel': 'استيراد',
   'chat.importComingSoon': 'قريباً',

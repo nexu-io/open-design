@@ -1531,6 +1531,8 @@ export const de: Dict = {
   'chat.attachTitle': 'Dateien anhängen (oder einfügen / ablegen)',
   'chat.addContextTitle': 'Add context',
   'chat.attachAria': 'Dateien anhängen',
+  'chat.attachFolderAria': 'Ordner hochladen',
+  'chat.uploadNoProject': 'Starte zuerst eine Unterhaltung und hänge dann Dateien an.',
   'chat.importTitle': 'Quellen importieren (demnächst)',
   'chat.importLabel': 'Importieren',
   'chat.importComingSoon': 'Demnächst',

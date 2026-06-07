@@ -1531,6 +1531,8 @@ export const fa: Dict = {
   'chat.attachTitle': 'ضمیمه کردن فایل‌ها (یا چسباندن / رها کردن)',
   'chat.addContextTitle': 'Add context',
   'chat.attachAria': 'ضمیمه کردن فایل‌ها',
+  'chat.attachFolderAria': 'بارگذاری پوشه',
+  'chat.uploadNoProject': 'ابتدا یک گفتگو را شروع کنید، سپس فایل‌ها را پیوست کنید.',
   'chat.importTitle': 'وارد کردن منابع (به زودی)',
   'chat.importLabel': 'وارد کردن',
   'chat.importComingSoon': 'به زودی',

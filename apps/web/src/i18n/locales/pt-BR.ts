@@ -1531,6 +1531,8 @@ export const ptBR: Dict = {
   'chat.attachTitle': 'Anexar arquivos (ou colar / arrastar)',
   'chat.addContextTitle': 'Add context',
   'chat.attachAria': 'Anexar arquivos',
+  'chat.attachFolderAria': 'Enviar pasta',
+  'chat.uploadNoProject': 'Inicie uma conversa primeiro e depois anexe arquivos.',
   'chat.importTitle': 'Importar fontes (em breve)',
   'chat.importLabel': 'Importar',
   'chat.importComingSoon': 'Em breve',

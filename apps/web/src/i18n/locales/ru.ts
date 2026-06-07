@@ -1531,6 +1531,8 @@ export const ru: Dict = {
   'chat.attachTitle': 'Прикрепить файлы (или вставить / перетащить)',
   'chat.addContextTitle': 'Add context',
   'chat.attachAria': 'Прикрепить файлы',
+  'chat.attachFolderAria': 'Загрузить папку',
+  'chat.uploadNoProject': 'Сначала начните разговор, затем прикрепите файлы.',
   'chat.importTitle': 'Импортировать источники (скоро)',
   'chat.importLabel': 'Импорт',
   'chat.importComingSoon': 'Скоро',

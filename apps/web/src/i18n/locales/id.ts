@@ -1531,6 +1531,8 @@ export const id: Dict = {
   'chat.attachTitle': 'Lampirkan',
   'chat.addContextTitle': 'Add context',
   'chat.attachAria': 'Lampirkan file atau konteks',
+  'chat.attachFolderAria': 'Unggah folder',
+  'chat.uploadNoProject': 'Mulai percakapan dulu, lalu lampirkan file.',
   'chat.importTitle': 'Impor',
   'chat.importLabel': 'Impor konteks',
   'chat.importComingSoon': 'Segera hadir',

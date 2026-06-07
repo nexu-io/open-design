@@ -1531,6 +1531,8 @@ export const uk: Dict = {
   'chat.attachTitle': 'Прикріпити файли (або вставити / перенести)',
   'chat.addContextTitle': 'Add context',
   'chat.attachAria': 'Прикріпити файли',
+  'chat.attachFolderAria': 'Завантажити папку',
+  'chat.uploadNoProject': 'Спочатку розпочніть розмову, потім прикріпіть файли.',
   'chat.importTitle': 'Імпортувати джерела (скоро)',
   'chat.importLabel': 'Імпортувати',
   'chat.importComingSoon': 'Скоро',

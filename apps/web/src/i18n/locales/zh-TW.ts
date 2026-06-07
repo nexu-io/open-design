@@ -1531,6 +1531,8 @@ export const zhTW: Dict = {
   'chat.attachTitle': '附加檔案（也可以貼上/拖入）',
   'chat.addContextTitle': '新增內容',
   'chat.attachAria': '附加檔案',
+  'chat.attachFolderAria': '上傳資料夾',
+  'chat.uploadNoProject': '請先開始對話，再附加檔案。',
   'chat.importTitle': '匯入素材（即將上線）',
   'chat.importLabel': '匯入',
   'chat.importComingSoon': '即將上線',

@@ -1531,6 +1531,8 @@ export const th: Dict = {
   'chat.attachTitle': 'แนบไฟล์ (วาง / ลาก)',
   'chat.addContextTitle': 'Add context',
   'chat.attachAria': 'แนบไฟล์',
+  'chat.attachFolderAria': 'อัปโหลดโฟลเดอร์',
+  'chat.uploadNoProject': 'เริ่มการสนทนาก่อน แล้วจึงแนบไฟล์',
   'chat.importTitle': 'นำเข้าจากที่อื่น (เร็วๆ นี้)',
   'chat.importLabel': 'นำเข้า',
   'chat.importComingSoon': 'เร็วๆ นี้',

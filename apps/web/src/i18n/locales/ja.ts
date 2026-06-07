@@ -1531,6 +1531,8 @@ export const ja: Dict = {
   'chat.attachTitle': 'ファイルを添付（または貼り付け / ドロップ）',
   'chat.addContextTitle': 'Add context',
   'chat.attachAria': 'ファイルを添付',
+  'chat.attachFolderAria': 'フォルダをアップロード',
+  'chat.uploadNoProject': '先に会話を開始してから、ファイルを添付してください。',
   'chat.importTitle': 'ソースをインポート（近日公開）',
   'chat.importLabel': 'インポート',
   'chat.importComingSoon': '近日公開',

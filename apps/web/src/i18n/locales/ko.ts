@@ -1531,6 +1531,8 @@ export const ko: Dict = {
   'chat.attachTitle': '파일 첨부 (또는 붙여넣기 / 끌어놓기)',
   'chat.addContextTitle': 'Add context',
   'chat.attachAria': '파일 첨부',
+  'chat.attachFolderAria': '폴더 업로드',
+  'chat.uploadNoProject': '먼저 대화를 시작한 후 파일을 첨부하세요.',
   'chat.importTitle': '소스 가져오기 (곧 지원 예정)',
   'chat.importLabel': '가져오기',
   'chat.importComingSoon': '곧 지원될 예정입니다',

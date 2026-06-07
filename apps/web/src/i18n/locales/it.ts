@@ -1531,6 +1531,8 @@ export const it: Dict = {
   'chat.attachTitle': 'Allega file (o incolla / trascina)',
   'chat.addContextTitle': 'Add context',
   'chat.attachAria': 'Allega file',
+  'chat.attachFolderAria': 'Carica cartella',
+  'chat.uploadNoProject': 'Avvia prima una conversazione, poi allega i file.',
   'chat.importTitle': 'Importa fonti (presto disponibile)',
   'chat.importLabel': 'Importa',
   'chat.importComingSoon': 'Presto disponibile',

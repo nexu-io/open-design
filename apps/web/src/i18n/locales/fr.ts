@@ -1531,6 +1531,8 @@ export const fr: Dict = {
   'chat.attachTitle': 'Attacher des fichiers (ou coller / déposer)',
   'chat.addContextTitle': 'Add context',
   'chat.attachAria': 'Attacher des fichiers',
+  'chat.attachFolderAria': 'Téléverser un dossier',
+  'chat.uploadNoProject': 'Démarrez d’abord une conversation, puis joignez des fichiers.',
   'chat.importTitle': 'Importer des sources (bientôt disponible)',
   'chat.importLabel': 'Importer',
   'chat.importComingSoon': 'Bientôt disponible',

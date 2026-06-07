@@ -1531,6 +1531,8 @@ export const pl: Dict = {
   'chat.attachTitle': 'Załącz pliki (lub wklej / przeciągnij)',
   'chat.addContextTitle': 'Add context',
   'chat.attachAria': 'Załącz pliki',
+  'chat.attachFolderAria': 'Prześlij folder',
+  'chat.uploadNoProject': 'Najpierw rozpocznij rozmowę, a następnie załącz pliki.',
   'chat.importTitle': 'Importuj źródła (wkrótce)',
   'chat.importLabel': 'Importuj',
   'chat.importComingSoon': 'Wkrótce',
