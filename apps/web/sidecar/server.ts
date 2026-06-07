@@ -10,7 +10,7 @@ import { request as createHttpsRequest } from "node:https";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { createServer as createTcpServer, type AddressInfo, type Server as TcpServer } from "node:net";
+import { createConnection, createServer as createTcpServer, type AddressInfo, type Server as TcpServer } from "node:net";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -510,6 +510,8 @@ async function stopStandaloneChild(child: ChildProcess): Promise<void> {
 }
 
 async function probeStandaloneBackend(origin: string): Promise<boolean> {
+  if (await probeStandaloneBackendPort(origin)) return true;
+
   return await new Promise<boolean>((resolveProbe) => {
     const request = createHttpRequest(new URL("/", origin), { method: "HEAD", timeout: 800 }, (response) => {
       response.resume();
@@ -521,6 +523,32 @@ async function probeStandaloneBackend(origin: string): Promise<boolean> {
     });
     request.on("error", () => resolveProbe(false));
     request.end();
+  });
+}
+
+async function probeStandaloneBackendPort(origin: string): Promise<boolean> {
+  let parsed: URL;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    return false;
+  }
+  const port = Number(parsed.port || defaultPortForProtocol(parsed.protocol));
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) return false;
+  const host = parsed.hostname.replace(/^\[(.*)\]$/, "$1");
+
+  return await new Promise<boolean>((resolveProbe) => {
+    const socket = createConnection({ host, port });
+    let settled = false;
+    const settle = (ready: boolean) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolveProbe(ready);
+    };
+    socket.setTimeout(800, () => settle(false));
+    socket.once("connect", () => settle(true));
+    socket.once("error", () => settle(false));
   });
 }
 

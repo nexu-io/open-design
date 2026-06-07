@@ -12,6 +12,7 @@ import {
   resolveDaemonProxyTarget,
   resolveStandaloneBackendOrigin,
   resolveStandaloneServerEntry,
+  startWebSidecar,
 } from '../sidecar/server';
 
 describe('resolveDaemonProxyTarget', () => {
@@ -136,6 +137,62 @@ describe('standalone backend binding', () => {
     expect(env.PORT).toBe('5876');
     expect(env.NODE_ENV).toBe('production');
     expect(env.OD_STANDALONE_PARENT_PID).toBe('1234');
+  });
+
+  it('accepts a listening standalone backend before the app root responds to HTTP', async () => {
+    const previousOutputMode = process.env.OD_WEB_OUTPUT_MODE;
+    const previousStandaloneRoot = process.env.OD_WEB_STANDALONE_ROOT;
+    const previousStartupTimeout = process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS;
+    const standaloneRoot = await mkdtemp(join(tmpdir(), 'open-design-web-slow-http-'));
+    const runtimeRoot = await mkdtemp(join(tmpdir(), 'open-design-web-runtime-'));
+    const fakeWebRoot = join(standaloneRoot, 'apps', 'web');
+
+    try {
+      await mkdir(fakeWebRoot, { recursive: true });
+      await writeFile(
+        join(fakeWebRoot, 'server.js'),
+        `
+import { createServer } from 'node:net';
+
+const server = createServer(() => {
+  // Keep accepted sockets open. A TCP readiness probe should pass, but an
+  // HTTP HEAD/GET probe against "/" will hang until its client timeout.
+});
+
+server.listen(Number(process.env.PORT), process.env.HOSTNAME || '127.0.0.1');
+process.on('SIGTERM', () => server.close(() => process.exit(0)));
+`,
+        'utf8',
+      );
+
+      process.env.OD_WEB_OUTPUT_MODE = 'standalone';
+      process.env.OD_WEB_STANDALONE_ROOT = standaloneRoot;
+      process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS = '500';
+
+      const handle = await startWebSidecar({
+        app: 'web',
+        base: runtimeRoot,
+        ipc: join(runtimeRoot, 'web.sock'),
+        mode: 'runtime',
+        namespace: 'slow-http',
+        source: 'tools-pack',
+      });
+
+      try {
+        await expect(handle.status()).resolves.toMatchObject({ state: 'running' });
+      } finally {
+        await handle.stop();
+      }
+    } finally {
+      if (previousOutputMode == null) delete process.env.OD_WEB_OUTPUT_MODE;
+      else process.env.OD_WEB_OUTPUT_MODE = previousOutputMode;
+      if (previousStandaloneRoot == null) delete process.env.OD_WEB_STANDALONE_ROOT;
+      else process.env.OD_WEB_STANDALONE_ROOT = previousStandaloneRoot;
+      if (previousStartupTimeout == null) delete process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS;
+      else process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS = previousStartupTimeout;
+      await rm(standaloneRoot, { force: true, recursive: true });
+      await rm(runtimeRoot, { force: true, recursive: true });
+    }
   });
 });
 
