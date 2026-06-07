@@ -542,6 +542,7 @@ export const hu: Dict = {
   'workingDirPicker.showInFileManager': 'Megjelenítés a fájlkezelőben',
   'workingDirPicker.replace': 'Könyvtár cseréje…',
   'workingDirPicker.recent': 'Legutóbbi könyvtárak',
+  'workingDirPicker.defaultLabel': 'Helyi tárhely',
   'handoff.toTarget': 'Átadás ide: {target}',
   'handoff.openInTarget': 'Megnyitás itt: {target}',
   'handoff.openAction': 'Megnyitás',
