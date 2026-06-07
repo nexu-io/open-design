@@ -89,11 +89,15 @@ function mapStatusToTracking(
   }
 }
 
-function formatShortDate(value: number | string | undefined): string {
-  if (!value) return 'just now';
+function formatShortDate(
+  value: number | string | undefined,
+  locale?: string,
+  emptyLabel = 'just now',
+): string {
+  if (!value) return emptyLabel;
   const time = typeof value === 'number' ? value : Date.parse(value);
   if (!Number.isFinite(time)) return String(value);
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(locale, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -162,6 +166,10 @@ export function DesignSystemsTab({
     if (userFilter === 'all') return editable;
     return editable.filter((system) => (system.status ?? 'draft') === userFilter);
   }, [systems, userFilter]);
+  const showOfficialLibrary =
+    primaryCollection === 'design-system' &&
+    (designSystemCollection === 'official' ||
+      (designSystemCollection === 'mine' && userSystems.length === 0 && librarySystems.length > 0));
 
   // Total systems per surface, ignoring every active filter. Drives the
   // "this surface is now empty" fallback below — that guard must react to
@@ -299,7 +307,11 @@ export function DesignSystemsTab({
   }
 
   async function deleteSystem(system: DesignSystemSummary) {
-    const ok = window.confirm(`Delete "${system.title}"? This removes the draft design system from this device.`);
+    const ok = window.confirm(
+      locale === 'zh-CN'
+        ? `删除“${system.title}”？这会从此设备移除该设计体系草稿。`
+        : `Delete "${system.title}"? This removes the draft design system from this device.`,
+    );
     if (!ok) {
       trackDesignSystemStatusResult(analytics.track, {
         page_name: 'design_systems',
@@ -509,7 +521,13 @@ export function DesignSystemsTab({
                       {selected ? <span className="ds-card-badge">{t('dsManager.badgeDefault')}</span> : null}
                     </span>
                     <span className="ds-user-row__meta">
-                      {t('dsManager.rowMetaUpdated', { date: formatShortDate(system.updatedAt) })}
+                      {t('dsManager.rowMetaUpdated', {
+                        date: formatShortDate(
+                          system.updatedAt,
+                          locale,
+                          locale === 'zh-CN' ? '刚刚' : 'just now',
+                        ),
+                      })}
                     </span>
                   </button>
                   <div className="ds-user-row__actions">
@@ -570,7 +588,7 @@ export function DesignSystemsTab({
         </section>
       ) : null}
 
-      {primaryCollection === 'design-system' && designSystemCollection === 'official' ? (
+      {showOfficialLibrary ? (
         <section className="ds-settings-card" aria-label={t('dsManager.presetsAria')}>
         <div className="ds-settings-card__head">
           <div>

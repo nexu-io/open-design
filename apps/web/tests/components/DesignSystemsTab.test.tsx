@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DesignSystemSummary } from '@open-design/contracts';
 
 import { DesignSystemsTab } from '../../src/components/DesignSystemsTab';
+import { I18nProvider } from '../../src/i18n';
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -127,6 +128,45 @@ describe('DesignSystemsTab', () => {
 
     expect(onPreview).toHaveBeenCalledWith('linear');
     expect(onOpenSystem).not.toHaveBeenCalledWith('linear');
+  });
+
+  it('localizes user-system dates and delete confirmation in Simplified Chinese', () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(
+      <I18nProvider initial="zh-CN">
+        <DesignSystemsTab
+          systems={[{ ...systems[0]!, updatedAt: undefined }]}
+          selectedId={null}
+          onSelect={() => {}}
+          onPreview={() => {}}
+          onCreate={() => {}}
+          onOpenSystem={() => {}}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText('你 · 更新于 刚刚')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '删除 Acme Design System' }));
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      '删除“Acme Design System”？这会从此设备移除该设计体系草稿。',
+    );
+  });
+
+  it('shows the official library when there are no user-created design systems', () => {
+    render(
+        <DesignSystemsTab
+        systems={[systems[1]!]}
+        selectedId={null}
+        onSelect={() => {}}
+        onPreview={() => {}}
+        onCreate={() => {}}
+        onOpenSystem={() => {}}
+      />,
+    );
+
+    expect(screen.getByText('Linear')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Official presets' })).toBeTruthy();
   });
 });
 
