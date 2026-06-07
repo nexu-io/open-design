@@ -542,6 +542,7 @@ export const tr: Dict = {
   'workingDirPicker.showInFileManager': 'Dosya yöneticisinde göster',
   'workingDirPicker.replace': 'Dizini değiştir…',
   'workingDirPicker.recent': 'Son dizinler',
+  'workingDirPicker.defaultLabel': 'Yerel depolama',
   'handoff.toTarget': '{target} öğesine devret',
   'handoff.openInTarget': '{target} içinde aç',
   'handoff.openAction': 'Aç',

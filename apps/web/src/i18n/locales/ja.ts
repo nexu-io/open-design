@@ -542,6 +542,7 @@ export const ja: Dict = {
   'workingDirPicker.showInFileManager': 'ファイルマネージャーで表示',
   'workingDirPicker.replace': 'ディレクトリを置き換え…',
   'workingDirPicker.recent': '最近使用したディレクトリ',
+  'workingDirPicker.defaultLabel': 'ローカルストレージ',
   'handoff.toTarget': '{target}に引き継ぐ',
   'handoff.openInTarget': '{target}で開く',
   'handoff.openAction': '開く',

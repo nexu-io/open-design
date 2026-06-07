@@ -542,6 +542,7 @@ export const id: Dict = {
   'workingDirPicker.showInFileManager': 'Tampilkan di pengelola berkas',
   'workingDirPicker.replace': 'Ganti direktori…',
   'workingDirPicker.recent': 'Direktori terbaru',
+  'workingDirPicker.defaultLabel': 'Penyimpanan lokal',
   'handoff.toTarget': 'Serahkan ke {target}',
   'handoff.openInTarget': 'Buka di {target}',
   'handoff.openAction': 'Buka',

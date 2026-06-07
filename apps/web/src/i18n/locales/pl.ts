@@ -542,6 +542,7 @@ export const pl: Dict = {
   'workingDirPicker.showInFileManager': 'Pokaż w menedżerze plików',
   'workingDirPicker.replace': 'Zamień katalog…',
   'workingDirPicker.recent': 'Ostatnie katalogi',
+  'workingDirPicker.defaultLabel': 'Pamięć lokalna',
   'handoff.toTarget': 'Przekaż do {target}',
   'handoff.openInTarget': 'Otwórz w {target}',
   'handoff.openAction': 'Otwórz',

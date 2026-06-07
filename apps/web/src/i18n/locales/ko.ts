@@ -542,6 +542,7 @@ export const ko: Dict = {
   'workingDirPicker.showInFileManager': '파일 관리자에서 표시',
   'workingDirPicker.replace': '디렉터리 교체…',
   'workingDirPicker.recent': '최근 디렉터리',
+  'workingDirPicker.defaultLabel': '로컬 저장소',
   'handoff.toTarget': '{target}(으)로 넘기기',
   'handoff.openInTarget': '{target}에서 열기',
   'handoff.openAction': '열기',

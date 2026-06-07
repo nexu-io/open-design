@@ -900,6 +900,7 @@ export interface Dict {
   'workingDirPicker.showInFileManager': string;
   'workingDirPicker.replace': string;
   'workingDirPicker.recent': string;
+  'workingDirPicker.defaultLabel': string;
   'handoff.toTarget': string;
   'handoff.openInTarget': string;
   'handoff.openAction': string;

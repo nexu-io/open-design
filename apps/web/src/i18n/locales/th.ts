@@ -542,6 +542,7 @@ export const th: Dict = {
   'workingDirPicker.showInFileManager': 'แสดงในตัวจัดการไฟล์',
   'workingDirPicker.replace': 'แทนที่ไดเรกทอรี…',
   'workingDirPicker.recent': 'ไดเรกทอรีล่าสุด',
+  'workingDirPicker.defaultLabel': 'พื้นที่จัดเก็บในเครื่อง',
   'handoff.toTarget': 'ส่งต่อไปยัง {target}',
   'handoff.openInTarget': 'เปิดใน {target}',
   'handoff.openAction': 'เปิด',

@@ -1588,13 +1588,13 @@
   color: var(--text-faint);
   cursor: default;
 }
-.app .working-dir-pill {
+:is(.app, .chat-composer-fixed-layer) .working-dir-pill {
   position: relative;
   display: inline-flex;
   margin-top: 0;
   font-size: 11.5px;
 }
-.app .working-dir-pill-trigger {
+:is(.app, .chat-composer-fixed-layer) .working-dir-pill-trigger {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1607,20 +1607,20 @@
   color: var(--text-muted);
   cursor: pointer;
 }
-.app .working-dir-pill-trigger:hover {
+:is(.app, .chat-composer-fixed-layer) .working-dir-pill-trigger:hover {
   background: color-mix(in srgb, var(--text-muted) 6%, var(--bg-panel));
   border-color: var(--border-strong, var(--border));
 }
-.app .working-dir-pill-trigger:disabled {
+:is(.app, .chat-composer-fixed-layer) .working-dir-pill-trigger:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
-.app .working-dir-pill-label {
+:is(.app, .chat-composer-fixed-layer) .working-dir-pill-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.app .working-dir-pill-menu {
+:is(.app, .chat-composer-fixed-layer) .working-dir-pill-menu {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
@@ -1633,13 +1633,13 @@
   background: var(--bg-panel);
   box-shadow: var(--shadow-md, 0 12px 32px rgba(0, 0, 0, 0.12));
 }
-.app .working-dir-pill-menu-path {
+:is(.app, .chat-composer-fixed-layer) .working-dir-pill-menu-path {
   padding: 4px 10px;
   color: var(--text-muted);
   font-size: 10.5px;
   word-break: break-all;
 }
-.app .working-dir-pill-menu-item {
+:is(.app, .chat-composer-fixed-layer) .working-dir-pill-menu-item {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1654,25 +1654,25 @@
   font-size: 12px;
   text-align: left;
 }
-.app .working-dir-pill-menu-item.small {
+:is(.app, .chat-composer-fixed-layer) .working-dir-pill-menu-item.small {
   font-size: 11.5px;
 }
-.app .working-dir-pill-menu-item:hover {
+:is(.app, .chat-composer-fixed-layer) .working-dir-pill-menu-item:hover {
   background: color-mix(in srgb, var(--text-muted) 8%, transparent);
 }
-.app .working-dir-pill-menu-item:disabled {
+:is(.app, .chat-composer-fixed-layer) .working-dir-pill-menu-item:disabled {
   color: var(--text-faint);
   cursor: not-allowed;
 }
-.app .working-dir-pill-menu-item:disabled:hover {
+:is(.app, .chat-composer-fixed-layer) .working-dir-pill-menu-item:disabled:hover {
   background: transparent;
 }
-.app .working-dir-pill-menu-divider {
+:is(.app, .chat-composer-fixed-layer) .working-dir-pill-menu-divider {
   height: 1px;
   margin: 4px 0;
   background: var(--border);
 }
-.app .working-dir-pill-menu-section {
+:is(.app, .chat-composer-fixed-layer) .working-dir-pill-menu-section {
   padding: 4px 10px;
   color: var(--text-muted);
   font-size: 10.5px;
@@ -1680,16 +1680,33 @@
   letter-spacing: 0;
   text-transform: uppercase;
 }
-.app .working-dir-pill-menu-recent {
+:is(.app, .chat-composer-fixed-layer) .working-dir-pill-menu-recent {
   max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.app .working-dir-pill-menu-error {
+:is(.app, .chat-composer-fixed-layer) .working-dir-pill-menu-error {
   padding: 4px 10px 6px;
   color: var(--red, #c0392b);
   font-size: 11.5px;
+}
+/* Hosted in the composer's bottom toolbar (left of the spacer): flip the menu
+   to open upward and anchor it left so it neither drops below the viewport nor
+   overflows the composer's left edge. */
+:is(.app, .chat-composer-fixed-layer) .composer-row .working-dir-pill-menu {
+  top: auto;
+  right: auto;
+  bottom: calc(100% + 6px);
+  left: 0;
+}
+/* The toolbar is a flex row; without this the pill gets squeezed below its
+   content width and the trailing chevron wraps to a second line. */
+:is(.app, .chat-composer-fixed-layer) .composer-row .working-dir-pill {
+  flex: 0 0 auto;
+}
+:is(.app, .chat-composer-fixed-layer) .composer-row .working-dir-pill-trigger {
+  flex-wrap: nowrap;
 }
 .app .composer-hint {
   margin: 4px 8px 0;

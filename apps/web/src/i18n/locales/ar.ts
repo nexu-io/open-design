@@ -542,6 +542,7 @@ export const ar: Dict = {
   'workingDirPicker.showInFileManager': 'إظهار في مدير الملفات',
   'workingDirPicker.replace': 'استبدال الدليل…',
   'workingDirPicker.recent': 'الأدلّة الأخيرة',
+  'workingDirPicker.defaultLabel': 'التخزين المحلي',
   'handoff.toTarget': 'التسليم إلى {target}',
   'handoff.openInTarget': 'فتح في {target}',
   'handoff.openAction': 'فتح',

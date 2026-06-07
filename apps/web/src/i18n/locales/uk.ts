@@ -542,6 +542,7 @@ export const uk: Dict = {
   'workingDirPicker.showInFileManager': 'Показати у файловому менеджері',
   'workingDirPicker.replace': 'Замінити каталог…',
   'workingDirPicker.recent': 'Нещодавні каталоги',
+  'workingDirPicker.defaultLabel': 'Локальне сховище',
   'handoff.toTarget': 'Передати в {target}',
   'handoff.openInTarget': 'Відкрити в {target}',
   'handoff.openAction': 'Відкрити',

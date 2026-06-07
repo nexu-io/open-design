@@ -542,6 +542,7 @@ export const fa: Dict = {
   'workingDirPicker.showInFileManager': 'نمایش در مدیر فایل',
   'workingDirPicker.replace': 'جایگزینی دایرکتوری…',
   'workingDirPicker.recent': 'دایرکتوری‌های اخیر',
+  'workingDirPicker.defaultLabel': 'حافظهٔ محلی',
   'handoff.toTarget': 'واگذاری به {target}',
   'handoff.openInTarget': 'باز کردن در {target}',
   'handoff.openAction': 'باز کردن',

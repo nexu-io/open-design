@@ -542,6 +542,7 @@ export const ptBR: Dict = {
   'workingDirPicker.showInFileManager': 'Mostrar no gerenciador de arquivos',
   'workingDirPicker.replace': 'Substituir diretório…',
   'workingDirPicker.recent': 'Diretórios recentes',
+  'workingDirPicker.defaultLabel': 'Armazenamento local',
   'handoff.toTarget': 'Transferir para {target}',
   'handoff.openInTarget': 'Abrir em {target}',
   'handoff.openAction': 'Abrir',

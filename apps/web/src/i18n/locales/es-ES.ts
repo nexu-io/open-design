@@ -542,6 +542,7 @@ export const esES: Dict = {
   'workingDirPicker.showInFileManager': 'Mostrar en el explorador de archivos',
   'workingDirPicker.replace': 'Reemplazar directorio…',
   'workingDirPicker.recent': 'Directorios recientes',
+  'workingDirPicker.defaultLabel': 'Almacenamiento local',
   'handoff.toTarget': 'Transferir a {target}',
   'handoff.openInTarget': 'Abrir en {target}',
   'handoff.openAction': 'Abrir',

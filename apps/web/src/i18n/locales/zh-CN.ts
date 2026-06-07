@@ -542,6 +542,7 @@ export const zhCN: Dict = {
   'workingDirPicker.showInFileManager': '在文件管理器中显示',
   'workingDirPicker.replace': '替换目录…',
   'workingDirPicker.recent': '最近使用的目录',
+  'workingDirPicker.defaultLabel': '本地存储',
   'handoff.toTarget': '交付给 {target}',
   'handoff.openInTarget': '在 {target} 中打开',
   'handoff.openAction': '打开',

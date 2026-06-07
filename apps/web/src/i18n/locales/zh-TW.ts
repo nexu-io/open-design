@@ -542,6 +542,7 @@ export const zhTW: Dict = {
   'workingDirPicker.showInFileManager': '在檔案管理器中顯示',
   'workingDirPicker.replace': '替換目錄…',
   'workingDirPicker.recent': '最近使用的目錄',
+  'workingDirPicker.defaultLabel': '本機儲存',
   'handoff.toTarget': '交付給 {target}',
   'handoff.openInTarget': '在 {target} 中開啟',
   'handoff.openAction': '開啟',

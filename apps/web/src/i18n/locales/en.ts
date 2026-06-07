@@ -542,6 +542,7 @@ export const en: Dict = {
   'workingDirPicker.showInFileManager': 'Show in file manager',
   'workingDirPicker.replace': 'Replace directory…',
   'workingDirPicker.recent': 'Recent directories',
+  'workingDirPicker.defaultLabel': 'Local storage',
   'handoff.toTarget': 'Hand off to {target}',
   'handoff.openInTarget': 'Open in {target}',
   'handoff.openAction': 'Open',
