@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
+import { I18nProvider } from '../../src/i18n';
 import { TrustBadge } from '../../src/components/TrustBadge';
 
 describe('TrustBadge', () => {
@@ -37,5 +38,17 @@ describe('TrustBadge', () => {
     expect(html).toContain('Action plugin');
     expect(html).toContain('plugin-trust-badge--official');
     expect(html).toContain('aria-label="Open Design official: Action plugin"');
+  });
+
+  it('renders trust labels and descriptions in Simplified Chinese', () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider initial="zh-CN">
+        <TrustBadge trust="trusted" />
+      </I18nProvider>,
+    );
+
+    expect(html).toContain('可信');
+    expect(html).toContain('title="社区可信"');
+    expect(html).toContain('aria-label="社区可信: 可信"');
   });
 });

@@ -2,6 +2,8 @@ import type {
   MarketplaceTrust,
   TrustTier,
 } from '@open-design/contracts';
+import { useI18n } from '../i18n';
+import type { Dict } from '../i18n/types';
 
 type TrustBadgeTrust = TrustTier | MarketplaceTrust;
 type NormalizedTrustTier = 'official' | 'trusted' | 'restricted';
@@ -15,19 +17,22 @@ interface Props {
 
 const TRUST_META: Record<
   NormalizedTrustTier,
-  { label: string; description: string }
+  { labelKey: keyof Dict; description: string; zhDescription: string }
 > = {
   official: {
-    label: 'Official',
+    labelKey: 'pluginsView.trust.official',
     description: 'Open Design official',
+    zhDescription: 'Open Design 官方',
   },
   trusted: {
-    label: 'Trusted',
+    labelKey: 'pluginsView.trust.trusted',
     description: 'Community trusted',
+    zhDescription: '社区可信',
   },
   restricted: {
-    label: 'Restricted',
+    labelKey: 'pluginsView.trust.restricted',
     description: 'Restricted source',
+    zhDescription: '受限来源',
   },
 };
 
@@ -37,9 +42,11 @@ export function TrustBadge({
   className,
   variant = 'default',
 }: Props) {
+  const { locale, t } = useI18n();
   const tier = normalizeTrustTier(trust);
   const meta = TRUST_META[tier];
-  const text = label ?? meta.label;
+  const description = locale === 'zh-CN' ? meta.zhDescription : meta.description;
+  const text = label ?? t(meta.labelKey);
   const classes = [
     'plugin-trust-badge',
     `plugin-trust-badge--${tier}`,
@@ -54,8 +61,8 @@ export function TrustBadge({
       className={classes}
       data-trust-tier={tier}
       data-trust-source={trust}
-      title={meta.description}
-      aria-label={`${meta.description}: ${text}`}
+      title={description}
+      aria-label={`${description}: ${text}`}
     >
       <span className="plugin-trust-badge__dot" aria-hidden />
       <span>{text}</span>
