@@ -205,7 +205,11 @@ export function PluginsView({
     if (!result) {
       setNotice({
         ok: false,
-        message: `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
+        message: localizedPluginMessage(
+          locale,
+          `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
+          `应用 ${record.title} 失败。请确认守护进程可访问。`,
+        ),
       });
       return;
     }
@@ -213,7 +217,11 @@ export function PluginsView({
     setDetailsRecord(null);
     setNotice({
       ok: true,
-      message: `${record.title} is ready. Use it from Home with @ search or pick it from the gallery.`,
+      message: localizedPluginMessage(
+        locale,
+        `${record.title} is ready. Use it from Home with @ search or pick it from the gallery.`,
+        `${record.title} 已准备好。你可以在主页用 @ 搜索使用，也可以从插件库中选择。`,
+      ),
     });
   }
 
@@ -224,7 +232,11 @@ export function PluginsView({
     if (!onCreatePluginShareProject) {
       setNotice({
         ok: false,
-        message: 'Plugin sharing is not available in this shell.',
+        message: localizedPluginMessage(
+          locale,
+          'Plugin sharing is not available in this shell.',
+          '当前外壳不支持插件分享。',
+        ),
       });
       setShareConfirm(null);
       return;
@@ -589,6 +601,10 @@ export function PluginsView({
       ) : null}
     </section>
   );
+}
+
+function localizedPluginMessage(locale: string, english: string, simplifiedChinese: string): string {
+  return locale === 'zh-CN' ? simplifiedChinese : english;
 }
 
 function PluginShareConfirmModal({

@@ -11,6 +11,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { InlinePluginsRail } from '../../src/components/InlinePluginsRail';
+import { I18nProvider } from '../../src/i18n';
 
 const PLUGIN_ROW = {
   id: 'sample-plugin',
@@ -95,6 +96,37 @@ describe('InlinePluginsRail', () => {
     const [record, result] = onApplied.mock.calls[0]!;
     expect(record.id).toBe('sample-plugin');
     expect(result.appliedPlugin.snapshotId).toBe('snap-1');
+  });
+
+  it('localizes apply failures in Simplified Chinese', async () => {
+    fetchMock.mockImplementation(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [PLUGIN_ROW] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/apply')) {
+        return new Response(JSON.stringify({ ok: false }), {
+          status: 500,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+
+    render(
+      <I18nProvider initial="zh-CN">
+        <InlinePluginsRail onApplied={() => undefined} />
+      </I18nProvider>,
+    );
+    fireEvent.click(await waitFor(() => screen.getByTitle('A fixture')));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain(
+        '应用 Sample Plugin 失败。请确认守护进程可访问。',
+      );
+    });
   });
 
   it('filters by taskKind when supplied', async () => {

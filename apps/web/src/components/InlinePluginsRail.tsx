@@ -76,7 +76,9 @@ export function InlinePluginsRail(props: Props) {
     setPendingId(null);
     if (!result) {
       setError(
-        `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
+        locale === 'zh-CN'
+          ? `应用 ${record.title} 失败。请确认守护进程可访问。`
+          : `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
       );
       return;
     }
