@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AutomationEvolutionProposal,
   AutomationEvolutionProposalListResponse,
+  AutomationReviewPolicy,
   AutomationTemplate as ContractAutomationTemplate,
   AutomationTemplateListResponse,
   ConnectorDetail,
@@ -16,10 +17,11 @@ import type {
 
 import { Icon, type IconName } from './Icon';
 import { navigate } from '../router';
-import { useT } from '../i18n';
+import { useI18n } from '../i18n';
+import type { Locale } from '../i18n/types';
 import type { SkillSummary } from '../types';
 
-type TranslateFn = ReturnType<typeof useT>;
+type TranslateFn = ReturnType<typeof useI18n>['t'];
 import { useAnalytics } from '../analytics/provider';
 import { trackAutomationsClick, trackPageView } from '../analytics/events';
 import {
@@ -357,8 +359,15 @@ function proposalActionLabel(action: AutomationEvolutionProposal['action'], t: T
   return t('automations.proposalActionPromote');
 }
 
+function proposalReviewPolicyLabel(policy: AutomationReviewPolicy, locale: Locale): string {
+  if (policy === 'always') return locale === 'zh-CN' ? '总是审核' : 'Always review';
+  if (policy === 'trusted-source') return locale === 'zh-CN' ? '可信来源' : 'Trusted source';
+  if (policy === 'auto-apply') return locale === 'zh-CN' ? '自动应用' : 'Auto-apply';
+  return policy;
+}
+
 export function TasksView({ skills = [], designTemplates = [], connectors = [] }: Props) {
-  const t = useT();
+  const { locale, t } = useI18n();
   const analytics = useAnalytics();
   // P2 page_view page_name=automations. Ref-keyed so re-renders don't
   // double-fire while the user is on the page.
@@ -784,7 +793,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
                         <span aria-hidden="true">·</span>
                         <span>{proposalActionLabel(proposal.action, t)}</span>
                         <span aria-hidden="true">·</span>
-                        <span>{proposal.reviewPolicy}</span>
+                        <span>{proposalReviewPolicyLabel(proposal.reviewPolicy, locale)}</span>
                       </span>
                       <span className="automation-row__prompt">{proposal.summary}</span>
                       {proposal.patch.diffSummary ? (

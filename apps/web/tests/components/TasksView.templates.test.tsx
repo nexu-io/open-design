@@ -8,6 +8,7 @@ import type {
 } from '@open-design/contracts';
 
 import { TasksView } from '../../src/components/TasksView';
+import { I18nProvider } from '../../src/i18n';
 
 const originalFetch = globalThis.fetch;
 
@@ -160,6 +161,64 @@ describe('TasksView automation templates', () => {
       expect(applyCalls).toEqual(['/api/automation-proposals/proposal-memory-1/apply']);
       expect(screen.queryByText('Project memory from connector digest')).toBeNull();
     });
+  });
+
+  it('localizes zh-CN proposal review policy labels for contract values', async () => {
+    const proposals: AutomationEvolutionProposal[] = [
+      {
+        ...memoryProposal,
+        id: 'proposal-trusted-source-1',
+        title: 'Trusted connector update',
+        reviewPolicy: 'trusted-source',
+      },
+      {
+        ...memoryProposal,
+        id: 'proposal-auto-apply-1',
+        title: 'Auto-apply release note',
+        reviewPolicy: 'auto-apply',
+      },
+    ];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/routines' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ routines: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/projects' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ projects: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/automation-templates' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ templates: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/automation-proposals?status=pending-review' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ proposals }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    render(
+      <I18nProvider initial="zh-CN">
+        <TasksView />
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByText('Trusted connector update')).toBeTruthy();
+    expect(screen.getByText('Auto-apply release note')).toBeTruthy();
+    expect(screen.getByText('可信来源')).toBeTruthy();
+    expect(screen.getByText('自动应用')).toBeTruthy();
+    expect(screen.queryByText('trusted-source')).toBeNull();
+    expect(screen.queryByText('auto-apply')).toBeNull();
   });
 
   it('crystallizes a successful automation run into reviewable proposals', async () => {
