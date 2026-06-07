@@ -4757,7 +4757,11 @@ function htmlArtifactLineageTokenlessFallbackMatches(
   const wrapperTitleMatches = currentTitle !== '' && currentTitle === lineage.title;
   const documentTitleMatches =
     currentDocumentTitle !== '' && currentDocumentTitle === lineage.documentTitle;
-  return wrapperTitleMatches || documentTitleMatches;
+  const lineageHadIndependentWrapperTitle =
+    lineage.title !== '' &&
+    lineage.documentTitle !== '' &&
+    lineage.title !== lineage.documentTitle;
+  return wrapperTitleMatches || (documentTitleMatches && lineageHadIndependentWrapperTitle);
 }
 
 function matchingHtmlArtifactLineage(
