@@ -97,6 +97,25 @@ function zhCN(locale: Locale, english: string, simplifiedChinese: string): strin
   return locale === 'zh-CN' ? simplifiedChinese : english;
 }
 
+function fallbackTimezoneLabel(timezone: string): string {
+  return timezone.replace(/_/g, ' ');
+}
+
+function localizedTimezoneName(timezone: string, locale: Locale): string | null {
+  try {
+    const parts = new Intl.DateTimeFormat(locale, {
+      timeZone: timezone,
+      timeZoneName: 'longGeneric',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }).formatToParts(new Date(Date.UTC(2026, 0, 15, 12)));
+    return parts.find((part) => part.type === 'timeZoneName')?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function tzCityLabel(timezone: string, locale: Locale = 'en'): string {
   if (timezone === 'UTC') return 'UTC';
   if (locale === 'zh-CN') {
@@ -110,6 +129,7 @@ function tzCityLabel(timezone: string, locale: Locale = 'en'): string {
       'America/Los_Angeles': '洛杉矶',
     };
     if (zhTimezoneLabels[timezone]) return zhTimezoneLabels[timezone];
+    return localizedTimezoneName(timezone, locale) ?? fallbackTimezoneLabel(timezone);
   }
   const last = timezone.split('/').pop() ?? timezone;
   return last.replace(/_/g, ' ');

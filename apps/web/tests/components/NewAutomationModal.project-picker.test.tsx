@@ -130,5 +130,7 @@ describe('NewAutomationModal project picker', () => {
     expect(screen.getByText('时间')).toBeTruthy();
     expect(screen.getByText('时区')).toBeTruthy();
     expect(screen.getByRole('option', { name: '上海' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: '香港标准时间' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: 'Hong Kong' })).toBeNull();
   });
 });
