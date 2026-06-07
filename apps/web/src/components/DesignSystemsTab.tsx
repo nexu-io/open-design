@@ -736,7 +736,7 @@ export function DesignSystemsTab({
                     <strong>{template.name}</strong>
                     <span>{template.description?.trim() || t('dsManager.templateDescFallback')}</span>
                   </div>
-                  <small>{formatShortDate(template.createdAt)}</small>
+                  <small>{formatShortDate(template.createdAt, locale)}</small>
                 </div>
               ))}
             </div>
