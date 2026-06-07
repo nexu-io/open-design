@@ -4320,6 +4320,13 @@ export function resolveActiveInactivityTimeoutMs(params: {
 //     an external `kill -9` after the artifact write must still report
 //     `failed`, only the watchdog-initiated SIGTERM/SIGKILL escalation
 //     is allowed to flip the status to `succeeded`.
+//   - the artifact-produced carve-out is EXIT-CODE ONLY (code != null &&
+//     code !== 0): a non-zero *normal* exit that nonetheless wrote a
+//     confirmed artifact this run is teardown noise, not a generation
+//     failure. It deliberately never overrides a signal kill (code ===
+//     null) — an OOM / external `kill` / container shutdown after an
+//     artifact write stays `failed`, same guard as the quiet-period
+//     branch above.
 export function classifyChatRunCloseStatus(params: {
   cancelRequested: boolean;
   code: number | null;
@@ -4327,6 +4334,7 @@ export function classifyChatRunCloseStatus(params: {
   acpCleanCompletion: boolean;
   artifactQuietShutdownRequested: boolean;
   turnCompletedCleanly: boolean;
+  artifactProducedThisRun: boolean;
 }): 'canceled' | 'succeeded' | 'failed' {
   if (params.cancelRequested) return 'canceled';
   if (params.code === 0) return 'succeeded';
@@ -4338,6 +4346,17 @@ export function classifyChatRunCloseStatus(params: {
     params.code === null &&
     (params.signal === 'SIGTERM' || params.signal === 'SIGKILL');
   if (artifactQuietShutdown) return 'succeeded';
+  // Artifact-aware NORMAL-exit carve-out. A non-zero exit that still
+  // produced a confirmed artifact this run (a SessionEnd hook or a late
+  // stdin/stream error dragging the CLI to exit 1 *after* the deliverable
+  // landed) is teardown noise, not a generation failure — reproduced by
+  // project c92897e1: a 31KB HTML + .artifact.json on disk, status='failed'.
+  // CRITICAL: gated on `code != null && code !== 0` so a signal kill
+  // (code === null, SIGKILL/SIGTERM) is NEVER flipped by an artifact,
+  // preserving the OOM / external-kill / container-shutdown guard.
+  if (params.code != null && params.code !== 0 && params.artifactProducedThisRun) {
+    return 'succeeded';
+  }
   // Post-completion teardown carve-out (#3372). When the model already
   // emitted a clean terminal turn (a `turn_end`/`usage` event with no
   // outstanding host answer, the same condition that closes the child's
@@ -13340,6 +13359,7 @@ export async function startServer({
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
+      const runArtifactSideEffects = scanRunEventsForRetrySideEffects(run.events);
       const status = classifyChatRunCloseStatus({
         cancelRequested: !!run.cancelRequested,
         code,
@@ -13347,6 +13367,9 @@ export async function startServer({
         acpCleanCompletion,
         artifactQuietShutdownRequested,
         turnCompletedCleanly: !!run.turnCompletedCleanly,
+        artifactProducedThisRun:
+          runArtifactSideEffects.artifactWriteSeen ||
+          runArtifactSideEffects.liveArtifactSeen,
       });
       // Skip the close-handler failure emit when the run is already
       // terminal: the inactivity watchdog (failForInactivity) finishes the
