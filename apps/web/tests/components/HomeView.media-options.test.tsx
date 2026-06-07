@@ -53,6 +53,17 @@ afterEach(() => {
 });
 
 describe('HomeView media composer options', () => {
+  it('opens the New Project panel from the folder shortcut', async () => {
+    stubFetch();
+    const onOpenNewProject = vi.fn();
+    renderHome({ onOpenNewProject });
+
+    fireEvent.click(await screen.findByTestId('home-hero-shortcuts-trigger'));
+    fireEvent.click(screen.getByTestId('home-hero-rail-folder'));
+
+    expect(onOpenNewProject).toHaveBeenCalledWith('prototype');
+  });
+
   it('renders the design-system popover outside the prompt editor (not clipped by it)', async () => {
     stubFetch();
     renderHome();

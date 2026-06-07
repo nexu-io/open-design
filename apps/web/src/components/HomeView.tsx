@@ -204,7 +204,7 @@ interface Props {
   // Stage B: optional callbacks the rail's migration chips need.
   // HomeView itself never imports them; EntryShell threads them
   // through so the dispatcher can stay declarative.
-  onOpenNewProject?: (tab: 'template') => void;
+  onOpenNewProject?: (tab: 'prototype' | 'template') => void;
   promptHandoff?: HomePromptHandoff | null;
   skills?: SkillSummary[];
   skillsLoading?: boolean;
@@ -1324,6 +1324,14 @@ export function HomeView({
       }
       case 'create-plugin': {
         queuePluginAuthoring(chip.id);
+        return;
+      }
+      case 'import-folder': {
+        if (!onOpenNewProject) {
+          setError('Folder import is not available in this shell.');
+          return;
+        }
+        onOpenNewProject('prototype');
         return;
       }
       case 'open-template-picker': {

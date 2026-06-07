@@ -17,6 +17,7 @@ import {
   HOME_HERO_CHIPS,
   findChip,
 } from '../../src/components/home-hero/chips';
+import { I18nProvider, type Locale } from '../../src/i18n';
 
 afterEach(() => {
   cleanup();
@@ -67,31 +68,36 @@ function makePlugin(
   };
 }
 
-function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = {}) {
+function renderHero(
+  overrides: Partial<React.ComponentProps<typeof HomeHero>> = {},
+  locale: Locale = 'en',
+) {
   const onPickChip = vi.fn();
   const onPickPlugin = vi.fn();
   const onPickExamplePlugin = vi.fn();
   const onClearActiveChip = vi.fn();
   render(
-    <HomeHero
-      prompt=""
-      onPromptChange={() => undefined}
-      onSubmit={() => undefined}
-      activePluginTitle={null}
-      activeChipId={null}
-      onClearActivePlugin={() => undefined}
-      pluginOptions={[]}
-      pluginsLoading={false}
-      pendingPluginId={null}
-      pendingChipId={null}
-      onPickPlugin={onPickPlugin}
-      onPickExamplePlugin={onPickExamplePlugin}
-      onPickChip={onPickChip}
-      onClearActiveChip={onClearActiveChip}
-      contextItemCount={0}
-      error={null}
-      {...overrides}
-    />,
+    <I18nProvider initial={locale}>
+      <HomeHero
+        prompt=""
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+        activePluginTitle={null}
+        activeChipId={null}
+        onClearActivePlugin={() => undefined}
+        pluginOptions={[]}
+        pluginsLoading={false}
+        pendingPluginId={null}
+        pendingChipId={null}
+        onPickPlugin={onPickPlugin}
+        onPickExamplePlugin={onPickExamplePlugin}
+        onPickChip={onPickChip}
+        onClearActiveChip={onClearActiveChip}
+        contextItemCount={0}
+        error={null}
+        {...overrides}
+      />
+    </I18nProvider>,
   );
   return { onPickChip, onPickPlugin, onPickExamplePlugin, onClearActiveChip };
 }
@@ -374,11 +380,20 @@ describe('HomeHero intent rail', () => {
       .closest('[data-rail-group]');
 
     expect(createPluginGroup?.getAttribute('data-rail-group')).toBe('migrate');
-    for (const id of ['figma', 'template']) {
+    for (const id of ['figma', 'folder', 'template']) {
       expect(screen.getByTestId(`home-hero-rail-${id}`).closest('[data-rail-group]'))
         .toBe(createPluginGroup);
     }
-    expect(screen.queryByTestId('home-hero-rail-folder')).toBeNull();
+  });
+
+  it('localizes the folder shortcut label and hint in Simplified Chinese', () => {
+    renderHero({ activeChipId: 'folder' }, 'zh-CN');
+    fireEvent.click(screen.getByTestId('home-hero-shortcuts-trigger'));
+
+    const folder = screen.getByTestId('home-hero-rail-folder');
+    expect(folder.textContent).toContain('来自文件夹');
+    expect(folder.getAttribute('title')).toBe('导入本地文件夹并继续编辑。');
+    expect(folder.className).toContain('is-active');
   });
 
   it('keeps the generic fallback in the free-form prompt instead of an Other chip', () => {
@@ -391,7 +406,7 @@ describe('HomeHero intent rail', () => {
   it('migration chips carry the right action discriminator', () => {
     expect(findChip('create-plugin')?.action).toMatchObject({ kind: 'create-plugin' });
     expect(findChip('figma')?.action).toMatchObject({ kind: 'apply-figma-migration' });
-    expect(findChip('folder')).toBeUndefined();
+    expect(findChip('folder')?.action).toMatchObject({ kind: 'import-folder' });
     expect(findChip('template')?.action).toMatchObject({ kind: 'open-template-picker' });
   });
 

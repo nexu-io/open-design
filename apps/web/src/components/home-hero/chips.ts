@@ -11,16 +11,15 @@
 //
 // The catalog stays a pure data table:
 //   - `id` — stable React key + test selector.
-//   - `label` — English copy. Localisation can layer on later by
-//     swapping this for a Dict lookup; keeping it inline lets the
-//     rail ship without burning through 17 locale files for two
-//     new strings (see plan §B / open questions).
+//   - `label` — English fallback for tests and non-UI consumers.
+//   - `labelKey` — localized UI label used by the Home rail.
 //   - `icon` — name from the shared Icon registry.
 //   - `action` — discriminated union the HomeView dispatcher matches
 //     on. The rail component itself stays presentational.
 
 import type { ProjectKind, ProjectMetadata } from '@open-design/contracts';
 import type { DefaultScenarioPluginId } from '@open-design/contracts';
+import type { Dict } from '../../i18n/types';
 import type { IconName } from '../Icon';
 
 // Plugin ids the chip rail can dispatch to. Most chips route to a
@@ -51,6 +50,7 @@ export type ChipAction =
       projectMetadata?: ProjectMetadata;
     }
   | { kind: 'create-plugin' }
+  | { kind: 'import-folder' }
   | { kind: 'open-template-picker' };
 
 // Two intent groups: "create" = produce a design artifact, "migrate" =
@@ -63,9 +63,11 @@ export type ChipGroup = 'create' | 'migrate';
 export interface HomeHeroChip {
   id: string;
   label: string;
+  labelKey: keyof Dict;
   icon: IconName;
   group: ChipGroup;
   hint?: string;
+  hintKey?: keyof Dict;
   action: ChipAction;
 }
 
@@ -73,6 +75,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
     id: 'prototype',
     label: 'Prototype',
+    labelKey: 'homeHero.chip.prototype',
     icon: 'palette',
     group: 'create',
     // Prototype now binds to the bundled `example-web-prototype` plugin,
@@ -93,6 +96,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
     id: 'deck',
     label: 'Slide deck',
+    labelKey: 'homeHero.chip.deck',
     icon: 'present',
     group: 'create',
     // Slide deck binds to `example-simple-deck`, which ships a 353-line
@@ -114,9 +118,11 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
     id: 'hyperframes',
     label: 'HyperFrames',
+    labelKey: 'homeHero.chip.hyperframes',
     icon: 'orbit',
     group: 'create',
     hint: 'Author HTML-based motion: captions, audio-reactive visuals, scene transitions.',
+    hintKey: 'homeHero.chip.hyperframesHint',
     // HyperFrames is its own bundled scenario (motion-graphics
     // specialisation of Video). It surfaces in PluginsHomeSection's
     // primary category list, so the rail picks it up too rather than
@@ -126,9 +132,11 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
     id: 'live-artifact',
     label: 'Live artifact',
+    labelKey: 'homeHero.chip.liveArtifact',
     icon: 'refresh',
     group: 'create',
     hint: 'Build a refreshable artifact backed by connector or local data.',
+    hintKey: 'homeHero.chip.liveArtifactHint',
     action: {
       kind: 'apply-scenario',
       pluginId: 'example-live-artifact',
@@ -143,6 +151,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
     id: 'image',
     label: 'Image',
+    labelKey: 'homeHero.chip.image',
     icon: 'image',
     group: 'create',
     action: {
@@ -160,6 +169,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
     id: 'video',
     label: 'Video',
+    labelKey: 'homeHero.chip.video',
     icon: 'play',
     group: 'create',
     action: {
@@ -177,6 +187,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
     id: 'audio',
     label: 'Audio',
+    labelKey: 'homeHero.chip.audio',
     icon: 'mic',
     group: 'create',
     action: {
@@ -194,17 +205,21 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
     id: 'create-plugin',
     label: 'Create plugin',
+    labelKey: 'homeHero.chip.createPlugin',
     icon: 'edit',
     group: 'migrate',
     hint: 'Author a reusable Open Design plugin and add it to My plugins.',
+    hintKey: 'homeHero.chip.createPluginHint',
     action: { kind: 'create-plugin' },
   },
   {
     id: 'figma',
     label: 'From Figma',
+    labelKey: 'homeHero.chip.figma',
     icon: 'import',
     group: 'migrate',
     hint: 'Migrate a Figma frame into the active design system.',
+    hintKey: 'homeHero.chip.figmaHint',
     action: {
       kind: 'apply-figma-migration',
       pluginId: 'od-figma-migration',
@@ -216,11 +231,23 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     },
   },
   {
+    id: 'folder',
+    label: 'From folder',
+    labelKey: 'homeHero.chip.folder',
+    icon: 'folder',
+    group: 'migrate',
+    hint: 'Import an existing local folder and continue editing.',
+    hintKey: 'homeHero.chip.folderHint',
+    action: { kind: 'import-folder' },
+  },
+  {
     id: 'template',
     label: 'From template',
+    labelKey: 'homeHero.chip.template',
     icon: 'file-code',
     group: 'migrate',
     hint: 'Start from a bundled template.',
+    hintKey: 'homeHero.chip.templateHint',
     action: { kind: 'open-template-picker' },
   },
 ];
