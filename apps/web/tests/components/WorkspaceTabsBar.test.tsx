@@ -10,11 +10,37 @@ import {
 import { navigate, type Route } from '../../src/router';
 import type { Project } from '../../src/types';
 
+const i18nMock = vi.hoisted(() => ({
+  locale: 'en' as 'en' | 'zh-CN',
+}));
+
 vi.mock('../../src/i18n', () => ({
   useI18n: () => ({
-    locale: 'en',
-    setLocale: () => undefined,
-    t: (key: string) => key,
+    locale: i18nMock.locale,
+    setLocale: (next: 'en' | 'zh-CN') => {
+      i18nMock.locale = next;
+    },
+    t: (key: string, vars?: Record<string, string | number>) => {
+      const labels: Record<string, string> = {
+        'app.brand': 'Open Design',
+        'common.close': 'Close',
+        'common.untitled': 'Untitled',
+        'entry.navDesignSystems': 'Design systems',
+        'entry.navHome': 'Home',
+        'entry.navProjects': 'Projects',
+        'entry.navTasks': 'Automations',
+        'entry.navPlugins': 'Plugins',
+        'entry.navIntegrations': 'Integrations',
+        'settings.welcomeTitle': 'Welcome',
+        'workspaceTabs.project': 'Project',
+        'workspaceTabs.pluginDetails': 'Plugin details',
+        'workspaceTabs.marketplace': 'Marketplace',
+      };
+      const raw = labels[key] ?? key;
+      return vars
+        ? raw.replace(/\{(\w+)\}/g, (_, name: string) => String(vars[name] ?? `{${name}}`))
+        : raw;
+    },
   }),
   useT: () => (key: string) => {
     const labels: Record<string, string> = {
@@ -27,6 +53,10 @@ vi.mock('../../src/i18n', () => ({
       'entry.navTasks': 'Automations',
       'entry.navPlugins': 'Plugins',
       'entry.navIntegrations': 'Integrations',
+      'settings.welcomeTitle': 'Welcome',
+      'workspaceTabs.project': 'Project',
+      'workspaceTabs.pluginDetails': 'Plugin details',
+      'workspaceTabs.marketplace': 'Marketplace',
     };
     return labels[key] ?? key;
   },
@@ -113,6 +143,7 @@ function dispatchDragEvent(
 describe('WorkspaceTabsBar navigation semantics', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    i18nMock.locale = 'en';
     vi.clearAllMocks();
   });
 
@@ -548,6 +579,19 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'Search tabs' })).toBeNull();
     });
+  });
+
+  it('localizes the tab search chrome in Simplified Chinese', async () => {
+    i18nMock.locale = 'zh-CN';
+    render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '搜索标签页' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: '搜索标签页' })).toBeTruthy();
+    });
+    expect(screen.getByPlaceholderText('搜索标签页')).toBeTruthy();
+    expect(screen.getByText('打开的标签页')).toBeTruthy();
   });
 
   it('sizes the hover preview to the hovered tab width', async () => {

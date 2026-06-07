@@ -1,6 +1,6 @@
 import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useT } from '../i18n';
+import { useI18n, type Locale } from '../i18n';
 import { navigate, type EntryHomeView, type Route } from '../router';
 import type { Project } from '../types';
 import { Icon, type IconName } from './Icon';
@@ -402,7 +402,7 @@ interface HoverPreviewState {
 const HOVER_PREVIEW_DELAY_MS = 380;
 
 export function WorkspaceTabsBar({ route, projects }: Props) {
-  const t = useT();
+  const { locale, t } = useI18n();
   const [state, setState] = useState<WorkspaceTabsState>(() => initialTabsState(route));
   const [tabsMenuOpen, setTabsMenuOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -453,8 +453,8 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   );
 
   const displayTabs = useMemo(
-    () => state.tabs.map((tab) => displayTabFor(tab, projectById, t)),
-    [state.tabs, projectById, t],
+    () => state.tabs.map((tab) => displayTabFor(tab, projectById, t, locale)),
+    [state.tabs, projectById, t, locale],
   );
   const displayTabById = useMemo(
     () => new Map(displayTabs.map((tab) => [tab.id, tab])),
@@ -859,12 +859,15 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   }
 
   return (
-    <header className="app-chrome-header workspace-tabs-chrome" aria-label="Workspace tabs">
+    <header
+      className="app-chrome-header workspace-tabs-chrome"
+      aria-label={localizedWorkspaceLabel(locale, 'Workspace tabs', '工作区标签页')}
+    >
       <div className="app-chrome-traffic-space workspace-tabs-traffic" aria-hidden />
       <div
         className={`workspace-tabs-strip${tabsOverflowing ? ' is-overflowing' : ''}`}
         role="tablist"
-        aria-label="Open workspaces"
+        aria-label={localizedWorkspaceLabel(locale, 'Open workspaces', '打开的工作区')}
         ref={stripRef}
         onDragOver={handleStripDragOver}
         onDrop={handleStripDrop}
@@ -878,7 +881,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
             a keyboard surface for finding a tab that's scrolled out of
             view. */}
         {state.tabs.map((tab) => {
-          const display = displayTabById.get(tab.id) ?? displayTabFor(tab, projectById, t);
+          const display = displayTabById.get(tab.id) ?? displayTabFor(tab, projectById, t, locale);
           const active = tab.id === state.activeTabId;
           // The single entry tab is permanent and pinned leftmost: it cannot be
           // closed or dragged out of the first slot, whatever section it shows.
@@ -936,10 +939,10 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
           type="button"
           className="workspace-tabs-new-btn od-tooltip"
           onClick={createNewTab}
-          title="New tab"
-          data-tooltip="New tab"
+          title={localizedWorkspaceLabel(locale, 'New tab', '新建标签页')}
+          data-tooltip={localizedWorkspaceLabel(locale, 'New tab', '新建标签页')}
           data-tooltip-placement="bottom"
-          aria-label="New tab"
+          aria-label={localizedWorkspaceLabel(locale, 'New tab', '新建标签页')}
         >
           <Icon name="plus" size={14} />
         </button>
@@ -949,10 +952,10 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
           type="button"
           className={`workspace-tabs-icon-btn od-tooltip${tabsMenuOpen ? ' is-active' : ''}`}
           onClick={() => setTabsMenuOpen((open) => !open)}
-          title="Search tabs"
-          data-tooltip="Search tabs"
+          title={localizedWorkspaceLabel(locale, 'Search tabs', '搜索标签页')}
+          data-tooltip={localizedWorkspaceLabel(locale, 'Search tabs', '搜索标签页')}
           data-tooltip-placement="bottom"
-          aria-label="Search tabs"
+          aria-label={localizedWorkspaceLabel(locale, 'Search tabs', '搜索标签页')}
           aria-haspopup="dialog"
           aria-expanded={tabsMenuOpen}
         >
@@ -963,7 +966,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
               <div
                 className="workspace-tabs-popover"
                 role="dialog"
-                aria-label="Search tabs"
+                aria-label={localizedWorkspaceLabel(locale, 'Search tabs', '搜索标签页')}
                 ref={popoverRef}
               >
                 <div className="workspace-tabs-search">
@@ -972,15 +975,19 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                     ref={searchInputRef}
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search tabs"
-                    aria-label="Search tabs"
+                    placeholder={localizedWorkspaceLabel(locale, 'Search tabs', '搜索标签页')}
+                    aria-label={localizedWorkspaceLabel(locale, 'Search tabs', '搜索标签页')}
                   />
                 </div>
                 <div className="workspace-tabs-popover__section">
-                  <span>Open tabs</span>
+                  <span>{localizedWorkspaceLabel(locale, 'Open tabs', '打开的标签页')}</span>
                   <span>{state.tabs.length}</span>
                 </div>
-                <div className="workspace-tabs-list" role="listbox" aria-label="Open tabs">
+                <div
+                  className="workspace-tabs-list"
+                  role="listbox"
+                  aria-label={localizedWorkspaceLabel(locale, 'Open tabs', '打开的标签页')}
+                >
                   {filteredTabs.length > 0 ? (
                     filteredTabs.map((display) => {
                       const active = display.id === state.activeTabId;
@@ -1024,7 +1031,9 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                       );
                     })
                   ) : (
-                    <div className="workspace-tabs-empty">No tabs found</div>
+                    <div className="workspace-tabs-empty">
+                      {localizedWorkspaceLabel(locale, 'No tabs found', '没有找到标签页')}
+                    </div>
                   )}
                 </div>
               </div>,
@@ -1038,7 +1047,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
               const previewTab = state.tabs.find((tab) => tab.id === hoverPreview.tabId);
               if (!previewTab) return null;
               const previewDisplay = displayTabById.get(previewTab.id)
-                ?? displayTabFor(previewTab, projectById, t);
+                ?? displayTabFor(previewTab, projectById, t, locale);
               const previewDetail = describePreviewDetail(previewTab, projectById);
               const previewWidth = Math.max(1, Math.round(hoverPreview.anchorWidth));
               const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
@@ -1095,7 +1104,8 @@ function describePreviewDetail(
 function displayTabFor(
   tab: WorkspaceChromeTab,
   projectById: Map<string, Project>,
-  t: ReturnType<typeof useT>,
+  t: ReturnType<typeof useI18n>['t'],
+  locale: Locale,
 ): DisplayTab {
   if (tab.kind === 'project') {
     const project = projectById.get(tab.projectId);
@@ -1137,8 +1147,14 @@ function displayTabFor(
   return {
     id: tab.id,
     title: entryTitle[tab.view],
-    meta: tab.view === 'home' ? 'Start a new project' : 'Workspace',
+    meta: tab.view === 'home'
+      ? localizedWorkspaceLabel(locale, 'Start a new project', '开始新项目')
+      : localizedWorkspaceLabel(locale, 'Workspace', '工作区'),
     icon: entryIcon[tab.view],
     tab,
   };
+}
+
+function localizedWorkspaceLabel(locale: Locale, english: string, simplifiedChinese: string): string {
+  return locale === 'zh-CN' ? simplifiedChinese : english;
 }
