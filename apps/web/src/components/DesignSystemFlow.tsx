@@ -105,6 +105,7 @@ import type {
   TrackingDesignSystemsEntryFrom,
 } from '@open-design/contracts/analytics';
 import { useI18n } from '../i18n';
+import type { Locale } from '../i18n/types';
 
 // Source counts the embedded DS creation flow can report back to its
 // wrapper at Generate-click time. OnboardingView uses this to emit the
@@ -218,6 +219,10 @@ const MAX_FIGMA_PARSE_BYTES = 512 * 1024;
 const MAX_ASSET_UPLOAD_FILES = 80;
 const MAX_ASSET_FILE_BYTES = 12 * 1024 * 1024;
 
+function zhCN(locale: Locale, english: string, simplifiedChinese: string): string {
+  return locale === 'zh-CN' ? simplifiedChinese : english;
+}
+
 const UI_KIT_ENTRY_CONTRACT = [
   'Claude-style UI-kit entry contract:',
   '- When `ui_kits/app/components/*.jsx` or `*.tsx` files exist, `ui_kits/app/index.html` must behave like a runnable browser entry, not a static mock.',
@@ -303,6 +308,7 @@ export function DesignSystemCreationFlow({
   onBeforeGenerate,
   onGenerateSettled,
 }: CreationProps) {
+  const { locale } = useI18n();
   const [step, setStep] = useState<SetupStep>('setup');
   const [state, setState] = useState<SetupState>(EMPTY_SETUP);
   const [error, setError] = useState<string | null>(null);
@@ -403,13 +409,13 @@ export function DesignSystemCreationFlow({
       }
       if (timedOut) {
         setGithubConnectorError(
-          'Could not finish checking GitHub connector. You can still add repository URLs or connect GitHub manually.',
+          zhCN(locale, 'Could not finish checking GitHub connector. You can still add repository URLs or connect GitHub manually.', '无法完成 GitHub 连接器检查。你仍然可以添加仓库 URL，或手动连接 GitHub。'),
         );
       }
     } catch (err) {
       if (githubConnectorRefreshId.current !== refreshId) return;
       setGithubConnector(null);
-      setGithubConnectorError(err instanceof Error ? err.message : 'Could not check the GitHub connector.');
+      setGithubConnectorError(err instanceof Error ? err.message : zhCN(locale, 'Could not check the GitHub connector.', '无法检查 GitHub 连接器。'));
     } finally {
       if (githubConnectorRefreshId.current === refreshId) {
         githubConnectorRequestInFlight.current = false;
@@ -418,7 +424,7 @@ export function DesignSystemCreationFlow({
         setGithubConnectorLoading(false);
       }
     }
-  }, [composioConfigured]);
+  }, [composioConfigured, locale]);
 
   useEffect(() => {
     void refreshGithubConnector();
@@ -465,7 +471,7 @@ export function DesignSystemCreationFlow({
         setGithubAuthorizationUrl(null);
       }
     } catch (err) {
-      setGithubConnectorError(err instanceof Error ? err.message : 'Could not start GitHub authorization.');
+      setGithubConnectorError(err instanceof Error ? err.message : zhCN(locale, 'Could not start GitHub authorization.', '无法启动 GitHub 授权。'));
     } finally {
       setGithubConnectorAction(null);
     }
@@ -485,7 +491,7 @@ export function DesignSystemCreationFlow({
       setGithubAuthorizationPending(false);
       setGithubAuthorizationUrl(null);
     } catch (err) {
-      setGithubConnectorError(err instanceof Error ? err.message : 'Could not disconnect GitHub.');
+      setGithubConnectorError(err instanceof Error ? err.message : zhCN(locale, 'Could not disconnect GitHub.', '无法断开 GitHub 连接。'));
     } finally {
       setGithubConnectorAction(null);
     }
@@ -617,7 +623,7 @@ export function DesignSystemCreationFlow({
         provenance: buildProvenance(state),
       });
       if (!created) {
-        setError('Could not generate this design system.');
+        setError(zhCN(locale, 'Could not generate this design system.', '无法生成这个设计体系。'));
         setStep('setup');
         emitCreateResult('failed', undefined, 'DS_DRAFT_CREATE_FAILED', undefined);
         onGenerateSettled?.(snapshot, {
@@ -628,7 +634,7 @@ export function DesignSystemCreationFlow({
       }
       const workspace = await ensureDesignSystemWorkspace(created.id);
       if (!workspace) {
-        setError('Could not open the design system workspace.');
+        setError(zhCN(locale, 'Could not open the design system workspace.', '无法打开设计体系工作区。'));
         setStep('setup');
         emitCreateResult('failed', created.id, 'DS_WORKSPACE_OPEN_FAILED', undefined);
         onGenerateSettled?.(snapshot, {
@@ -657,7 +663,7 @@ export function DesignSystemCreationFlow({
         });
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not prepare the design system project.');
+      setError(err instanceof Error ? err.message : zhCN(locale, 'Could not prepare the design system project.', '无法准备设计体系项目。'));
       setStep('setup');
       const errorCode = err instanceof Error
         ? `DS_GENERATE_THREW:${err.message.slice(0, 80)}`
@@ -673,12 +679,12 @@ export function DesignSystemCreationFlow({
     return (
       <div className="ds-setup-shell ds-setup-shell--center">
         <div className="ds-setup-center-card">
-          <h1>It will take about 5 minutes to generate your design system.</h1>
-          <p>You can step away. Keep the tab open in the background.</p>
+          <h1>{zhCN(locale, 'It will take about 5 minutes to generate your design system.', '生成设计体系大约需要 5 分钟。')}</h1>
+          <p>{zhCN(locale, 'You can step away. Keep the tab open in the background.', '你可以先离开一下，请让这个标签页在后台保持打开。')}</p>
           <div className="ds-setup-actions">
             <Button variant="ghost" onClick={() => setStep('setup')}>
               <Icon name="arrow-left" />
-              Back
+              {zhCN(locale, 'Back', '返回')}
             </Button>
             <Button
               variant="primary"
@@ -686,7 +692,7 @@ export function DesignSystemCreationFlow({
               onClick={() => void generate()}
             >
               <Icon name="sparkles" />
-              {generationStarting ? 'Opening project...' : 'Generate'}
+              {generationStarting ? zhCN(locale, 'Opening project...', '正在打开项目...') : zhCN(locale, 'Generate', '生成')}
             </Button>
           </div>
         </div>
@@ -713,7 +719,7 @@ export function DesignSystemCreationFlow({
         <header className="ds-setup-topbar">
           <Button variant="ghost" onClick={onBack}>
             <Icon name="arrow-left" />
-            Back
+            {zhCN(locale, 'Back', '返回')}
           </Button>
           <span className="ds-setup-mark">
             <Icon name="blocks" />
@@ -723,38 +729,38 @@ export function DesignSystemCreationFlow({
             disabled={!state.company.trim()}
             onClick={() => {
               if (!state.company.trim()) {
-                setError('Tell Open Design about the company or design system first.');
+                setError(zhCN(locale, 'Tell Open Design about the company or design system first.', '请先告诉 Open Design 这家公司或设计体系的信息。'));
                 return;
               }
               setStep('confirm');
             }}
           >
-            Continue to generation
+            {zhCN(locale, 'Continue to generation', '继续生成')}
             <Icon name="chevron-right" />
           </Button>
         </header>
       )}
 
       <main className="ds-setup-form">
-        <h1>Generate from your material</h1>
-        <p>Start with a short description, then add any source files you already have.</p>
+        <h1>{zhCN(locale, 'Generate from your material', '根据你的素材生成')}</h1>
+        <p>{zhCN(locale, 'Start with a short description, then add any source files you already have.', '先写一段简短描述，再添加你已有的来源文件。')}</p>
 
         <label className="ds-setup-field">
-          <span>Describe your brand or product</span>
+          <span>{zhCN(locale, 'Describe your brand or product', '描述你的品牌或产品')}</span>
           <textarea
             rows={4}
             value={state.company}
             onChange={(event) => setState((curr) => ({ ...curr, company: event.target.value }))}
-            placeholder="e.g. Mission Impastabowl: fast-casual pasta restaurant with in-store touchscreen kiosk, mobile app and website"
+            placeholder={zhCN(locale, 'e.g. Mission Impastabowl: fast-casual pasta restaurant with in-store touchscreen kiosk, mobile app and website', '例如：Mission Impastabowl，一家快休闲意面餐厅，包含店内触屏点餐机、移动 App 和网站')}
           />
         </label>
 
         <section className="ds-resource-section">
-          <h2>Add source material <span>(optional)</span></h2>
-          <p>Use anything that shows your current style.</p>
+          <h2>{zhCN(locale, 'Add source material', '添加来源素材')} <span>{zhCN(locale, '(optional)', '（可选）')}</span></h2>
+          <p>{zhCN(locale, 'Use anything that shows your current style.', '可以使用任何能体现当前风格的材料。')}</p>
           <div className="ds-resource-card">
             <div className="ds-resource-row">
-              <strong>GitHub repo</strong>
+              <strong>{zhCN(locale, 'GitHub repo', 'GitHub 仓库')}</strong>
               <div className="ds-resource-inline">
                 <input
                   value={state.githubUrl}
@@ -767,18 +773,18 @@ export function DesignSystemCreationFlow({
                   disabled={!state.githubUrl.trim()}
                   onClick={handleAddGithubUrl}
                 >
-                  Add
+                  {zhCN(locale, 'Add', '添加')}
                 </button>
               </div>
               {state.githubUrls.length > 0 ? (
-                <div className="ds-github-url-list" aria-label="Added GitHub repositories">
+                <div className="ds-github-url-list" aria-label={zhCN(locale, 'Added GitHub repositories', '已添加的 GitHub 仓库')}>
                   {state.githubUrls.map((url) => (
                     <span key={url}>
                       <Icon name="github" />
                       {githubRepoLabel(url)}
                       <button
                         type="button"
-                        aria-label={`Remove ${githubRepoLabel(url)}`}
+                        aria-label={zhCN(locale, `Remove ${githubRepoLabel(url)}`, `移除 ${githubRepoLabel(url)}`)}
                         onClick={() => handleRemoveGithubUrl(url)}
                       >
                         x
@@ -802,9 +808,9 @@ export function DesignSystemCreationFlow({
               />
             </div>
             <DropZone
-              label="Link local code"
-              helper="Use a folder or selected files from this computer."
-              prompt="Drag a folder here or browse"
+              label={zhCN(locale, 'Link local code', '关联本地代码')}
+              helper={zhCN(locale, 'Use a folder or selected files from this computer.', '使用这台电脑上的文件夹或所选文件。')}
+              prompt={zhCN(locale, 'Drag a folder here or browse', '将文件夹拖到这里，或浏览选择')}
               names={localCodeSourceLabels(state)}
               directory
               onBrowseFolder={() => void handlePickCodeFolder()}
@@ -823,9 +829,9 @@ export function DesignSystemCreationFlow({
               }}
             />
             <DropZone
-              label="Upload .fig"
-              helper="Parsed locally; only a summary is added."
-              prompt="Drop .fig here or browse"
+              label={zhCN(locale, 'Upload .fig', '上传 .fig')}
+              helper={zhCN(locale, 'Parsed locally; only a summary is added.', '会在本地解析；只会添加摘要。')}
+              prompt={zhCN(locale, 'Drop .fig here or browse', '将 .fig 拖到这里，或浏览选择')}
               accept=".fig"
               names={state.figFiles}
               onError={setError}
@@ -842,8 +848,8 @@ export function DesignSystemCreationFlow({
               }}
             />
             <DropZone
-              label="Add assets"
-              prompt="Drag files here or browse"
+              label={zhCN(locale, 'Add assets', '添加资产')}
+              prompt={zhCN(locale, 'Drag files here or browse', '将文件拖到这里，或浏览选择')}
               names={state.assetFiles}
               onRemoveName={handleRemoveAssetFile}
               onError={setError}
@@ -864,12 +870,12 @@ export function DesignSystemCreationFlow({
 
         {embedded ? null : (
           <label className="ds-setup-field">
-            <span>Notes</span>
+            <span>{zhCN(locale, 'Notes', '备注')}</span>
             <Textarea
               rows={4}
               value={state.notes}
               onChange={(event) => setState((curr) => ({ ...curr, notes: event.target.value }))}
-              placeholder="e.g. We use a warm, earthy color palette with rounded corners. Our brand voice is playful but professional..."
+              placeholder={zhCN(locale, 'e.g. We use a warm, earthy color palette with rounded corners. Our brand voice is playful but professional...', '例如：我们使用温暖的大地色系和圆角。品牌语气轻松但专业...')}
             />
           </label>
         )}
@@ -878,20 +884,20 @@ export function DesignSystemCreationFlow({
           <div className="ds-setup-actions ds-setup-actions--embedded">
             <Button variant="ghost" onClick={onBack}>
               <Icon name="arrow-left" />
-              Back
+              {zhCN(locale, 'Back', '返回')}
             </Button>
             <Button
               variant="primary"
               disabled={!state.company.trim()}
               onClick={() => {
                 if (!state.company.trim()) {
-                  setError('Tell Open Design about the company or design system first.');
+                  setError(zhCN(locale, 'Tell Open Design about the company or design system first.', '请先告诉 Open Design 这家公司或设计体系的信息。'));
                   return;
                 }
                 setStep('confirm');
               }}
             >
-              Generate
+              {zhCN(locale, 'Generate', '生成')}
               <Icon name="chevron-right" />
             </Button>
           </div>
@@ -3021,62 +3027,91 @@ function GitHubRepositoryAccessPanel({
   onOpenAuthorization: () => void;
   onDisconnect: () => void;
 }) {
+  const { locale } = useI18n();
   const [methodsExpanded, setMethodsExpanded] = useState(false);
   const connected = isGithubConnectorConnected(connector);
   const account = getDisplayableGithubAccountLabel(connector);
   const busy = action !== null;
-  let composioBadge = 'Optional';
+  let composioBadge = zhCN(locale, 'Optional', '可选');
   let composioTone: AccessBadgeTone = 'muted';
-  let composioDescription = 'Composio GitHub connector access for agent tools; repo URLs still work with local git or GitHub CLI.';
+  let composioDescription = zhCN(
+    locale,
+    'Composio GitHub connector access for agent tools; repo URLs still work with local git or GitHub CLI.',
+    'Composio GitHub 连接器可供智能体工具访问；仓库 URL 仍可通过本地 git 或 GitHub CLI 使用。',
+  );
   let composioIcon: IconName = 'settings';
 
   if (!composioConfigured) {
-    composioBadge = 'Not configured';
-    composioDescription = 'Add a Composio API key only if this project needs connector-backed GitHub tools.';
+    composioBadge = zhCN(locale, 'Not configured', '未配置');
+    composioDescription = zhCN(
+      locale,
+      'Add a Composio API key only if this project needs connector-backed GitHub tools.',
+      '仅当这个项目需要连接器支持的 GitHub 工具时，才需要添加 Composio API key。',
+    );
   } else if (connected) {
-    composioBadge = 'Connected';
+    composioBadge = zhCN(locale, 'Connected', '已连接');
     composioTone = 'success';
     composioIcon = 'github';
     composioDescription = account
-      ? `Composio GitHub connector connected as ${account}; it is available as fallback when this device cannot read the repository.`
-      : 'Composio GitHub connector is available as fallback when this device cannot read the repository.';
+      ? zhCN(
+        locale,
+        `Composio GitHub connector connected as ${account}; it is available as fallback when this device cannot read the repository.`,
+        `Composio GitHub 连接器已连接为 ${account}；当这台设备无法读取仓库时可作为备用方式。`,
+      )
+      : zhCN(
+        locale,
+        'Composio GitHub connector is available as fallback when this device cannot read the repository.',
+        '当这台设备无法读取仓库时，Composio GitHub 连接器可作为备用方式。',
+      );
   } else if (authorizationPending) {
-    composioBadge = 'Pending';
+    composioBadge = zhCN(locale, 'Pending', '待完成');
     composioTone = 'warning';
     composioIcon = 'external-link';
-    composioDescription = 'Finish the Composio authorization window; local GitHub intake remains available.';
+    composioDescription = zhCN(
+      locale,
+      'Finish the Composio authorization window; local GitHub intake remains available.',
+      '请完成 Composio 授权窗口；本地 GitHub 导入仍可使用。',
+    );
   } else if (loading) {
-    composioBadge = 'Checking';
+    composioBadge = zhCN(locale, 'Checking', '检查中');
     composioTone = 'loading';
     composioIcon = 'spinner';
-    composioDescription = 'Checking connector status in the background; URL intake is not blocked.';
+    composioDescription = zhCN(
+      locale,
+      'Checking connector status in the background; URL intake is not blocked.',
+      '正在后台检查连接器状态；URL 导入不会被阻塞。',
+    );
   } else if (error) {
-    composioBadge = 'Needs attention';
+    composioBadge = zhCN(locale, 'Needs attention', '需要处理');
     composioTone = 'warning';
   } else if (connector?.status === 'error') {
-    composioBadge = 'Needs attention';
+    composioBadge = zhCN(locale, 'Needs attention', '需要处理');
     composioTone = 'danger';
-    composioDescription = 'Reconnect the Composio GitHub connector, or continue with local git/GitHub CLI.';
+    composioDescription = zhCN(
+      locale,
+      'Reconnect the Composio GitHub connector, or continue with local git/GitHub CLI.',
+      '重新连接 Composio GitHub 连接器，或继续使用本地 git/GitHub CLI。',
+    );
   }
 
   const composioAction = !composioConfigured ? (
     <Button variant="ghost" onClick={onOpenConnectorsTab}>
-      Configure Composio
+      {zhCN(locale, 'Configure Composio', '配置 Composio')}
     </Button>
   ) : connected || authorizationPending ? (
     <>
       {authorizationPending && authorizationUrl ? (
         <Button variant="ghost" disabled={busy} onClick={onOpenAuthorization}>
-          Open authorization
+          {zhCN(locale, 'Open authorization', '打开授权')}
         </Button>
       ) : null}
       <Button variant="ghost" disabled={busy} onClick={onDisconnect}>
-        {action === 'disconnect' ? 'Disconnecting...' : 'Disconnect'}
+        {action === 'disconnect' ? zhCN(locale, 'Disconnecting...', '正在断开...') : zhCN(locale, 'Disconnect', '断开连接')}
       </Button>
     </>
   ) : (
     <Button variant="ghost" disabled={busy} onClick={onConnect}>
-      {action === 'connect' ? 'Connecting...' : 'Connect via Composio'}
+      {action === 'connect' ? zhCN(locale, 'Connecting...', '正在连接...') : zhCN(locale, 'Connect via Composio', '通过 Composio 连接')}
     </Button>
   );
 
@@ -3084,23 +3119,31 @@ function GitHubRepositoryAccessPanel({
     {
       id: 'local',
       icon: 'github',
-      title: 'This device',
-      badge: 'Automatic',
+      title: zhCN(locale, 'This device', '本机'),
+      badge: zhCN(locale, 'Automatic', '自动'),
       tone: 'success',
-      description: 'Uses public git clone, local git credentials, or GitHub CLI auth available on this machine.',
+      description: zhCN(
+        locale,
+        'Uses public git clone, local git credentials, or GitHub CLI auth available on this machine.',
+        '使用公开 git clone、本地 git 凭据，或这台机器上可用的 GitHub CLI 授权。',
+      ),
     },
     {
       id: 'native-oauth',
       icon: 'link',
-      title: 'Open Design account',
-      badge: 'Coming soon',
+      title: zhCN(locale, 'Open Design account', 'Open Design 账号'),
+      badge: zhCN(locale, 'Coming soon', '即将推出'),
       tone: 'muted',
-      description: 'Native GitHub sign-in managed by Open Design; this build does not use an OD-managed GitHub token yet.',
+      description: zhCN(
+        locale,
+        'Native GitHub sign-in managed by Open Design; this build does not use an OD-managed GitHub token yet.',
+        '由 Open Design 管理的原生 GitHub 登录；此构建尚未使用 OD 管理的 GitHub token。',
+      ),
     },
     {
       id: 'composio',
       icon: composioIcon,
-      title: 'Connector platform',
+      title: zhCN(locale, 'Connector platform', '连接器平台'),
       badge: composioBadge,
       tone: composioTone,
       description: composioDescription,
@@ -3118,8 +3161,8 @@ function GitHubRepositoryAccessPanel({
     >
       <div className="ds-github-access-header">
         <span>
-          <strong>Repository access: Auto</strong>
-          <p>Paste a GitHub URL. Open Design will use the first working access method.</p>
+          <strong>{zhCN(locale, 'Repository access: Auto', '仓库访问：自动')}</strong>
+          <p>{zhCN(locale, 'Paste a GitHub URL. Open Design will use the first working access method.', '粘贴 GitHub URL。Open Design 会使用第一个可用的访问方式。')}</p>
         </span>
         <button
           type="button"
@@ -3129,7 +3172,7 @@ function GitHubRepositoryAccessPanel({
           onClick={() => setMethodsExpanded((current) => !current)}
         >
           <Icon name={methodsExpanded ? 'chevron-down' : 'chevron-right'} />
-          {methodsExpanded ? 'Hide access methods' : 'Show access methods'}
+          {methodsExpanded ? zhCN(locale, 'Hide access methods', '隐藏访问方式') : zhCN(locale, 'Show access methods', '显示访问方式')}
         </button>
       </div>
       <div
@@ -3139,7 +3182,7 @@ function GitHubRepositoryAccessPanel({
         aria-hidden={!methodsExpanded}
       >
         <div className="accordion-collapsible-inner">
-          <div className="ds-github-access-methods" aria-label="GitHub repository access methods">
+          <div className="ds-github-access-methods" aria-label={zhCN(locale, 'GitHub repository access methods', 'GitHub 仓库访问方式')}>
             {methods.map((method) => (
               <div key={method.id} className="ds-github-access-method">
                 <Icon name={method.icon} />
