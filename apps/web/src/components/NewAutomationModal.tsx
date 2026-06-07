@@ -129,7 +129,9 @@ function tzCityLabel(timezone: string, locale: Locale = 'en'): string {
       'America/Los_Angeles': '洛杉矶',
     };
     if (zhTimezoneLabels[timezone]) return zhTimezoneLabels[timezone];
-    return localizedTimezoneName(timezone, locale) ?? fallbackTimezoneLabel(timezone);
+    const localizedName = localizedTimezoneName(timezone, locale);
+    const locationLabel = fallbackTimezoneLabel(timezone);
+    return localizedName ? `${localizedName} · ${locationLabel}` : locationLabel;
   }
   const last = timezone.split('/').pop() ?? timezone;
   return last.replace(/_/g, ' ');
