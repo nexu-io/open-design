@@ -176,7 +176,7 @@ describe('DesignSystemsTab', () => {
     const expectedTemplateDate = new Intl.DateTimeFormat('es-ES', {
       month: 'short',
       day: 'numeric',
-      hour: 'numeric',
+      hour: '2-digit',
       minute: '2-digit',
     }).format(new Date(templateCreatedAt));
 
