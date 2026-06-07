@@ -35,10 +35,21 @@ const description = page.description;
 // queries.
 const limitsFaq = page.limitsFaq.map(({ name, text }) => ({ q: name, a: text }));
 
-const comparisons = page.comparisons.map((comparison, idx) => ({
-  ...comparison,
-  href: idx === 0 ? href('/alternatives/claude-design/') : 'https://github.com/nexu-io/open-design',
-}));
+// Per-competitor link target: a real internal spoke page where one exists,
+// otherwise the GitHub repo as a placeholder until that spoke ships. Keyed on
+// the competitor name so adding a spoke is a one-line change here (no brittle
+// index math).
+const SPOKE_BY_COMPETITOR: Record<string, string> = {
+  'Claude Design': '/alternatives/claude-design/',
+  'Figma Make': '/alternatives/figma/',
+};
+const comparisons = page.comparisons.map((comparison) => {
+  const spoke = SPOKE_BY_COMPETITOR[comparison.competitor];
+  return {
+    ...comparison,
+    href: spoke ? href(spoke) : 'https://github.com/nexu-io/open-design',
+  };
+});
 
 const jsonLd = [
   {

@@ -178,6 +178,37 @@ export interface InfoPageCopy {
     ctaTitle: string;
     ctaBody: string;
   };
+  figmaAlternative: {
+    title: string;
+    description: string;
+    breadcrumb: string;
+    label: string;
+    heading: string;
+    lead: string;
+    tldrTitle: string;
+    tldrBody: string;
+    toc: string[];
+    whyTitle: string;
+    whyLead: string;
+    reasons: LinkText[];
+    openSourceTitle: string;
+    openSourceBody: string[];
+    featureTitle: string;
+    features: FeatureCopy[];
+    whoTitle: string;
+    pickFigmaTitle: string;
+    pickFigma: string[];
+    pickOpenTitle: string;
+    pickOpen: string[];
+    migrateTitle: string;
+    migrateLead: string;
+    migrateSteps: string[];
+    migrateClosing: string;
+    faqTitle: string;
+    faq: NamedText[];
+    ctaTitle: string;
+    ctaBody: string;
+  };
   download: {
     title: string;
     description: string;
@@ -534,6 +565,84 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
       ctaTitle: 'Switch in three commands.',
       ctaBody:
         'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
+    },
+    figmaAlternative: {
+      title: 'Open-source Figma alternative — Open Design (agent-native, self-host)',
+      description:
+        'Open Design is an open-source, agent-native alternative to Figma for AI design workflows. Apache-2.0, local-first, self-hostable, free forever — BYOK with Claude Code, Codex, Cursor, Gemini, and more.',
+      breadcrumb: 'Open-source Figma alternative',
+      label: 'Alternative · Nº 04',
+      heading: 'Open Design — the open-source, agent-native Figma alternative.',
+      lead:
+        'Open Design is not a Figma clone — it is a Self-Evolving Design Agent for Claude Code. But if you are looking for an open-source, self-hostable design tool that an AI agent drives end to end, this is the page for you: free forever, Apache-2.0, and your work lives as files in your repo.',
+      tldrTitle: 'TL;DR',
+      tldrBody:
+        'Figma is the best collaborative design canvas there is. Open Design is the open-source, agent-native option: an AI agent generates and edits real artifacts, your brand is one portable DESIGN.md, and the whole thing is free and self-hostable.',
+      toc: ['Why people leave Figma', 'Open source + self-host', 'Feature comparison', 'Who should pick which', 'Migrating from Figma', 'FAQ'],
+      whyTitle: 'Why people look for a Figma alternative',
+      whyLead: 'Figma is excellent at what it does. The searches for an alternative usually come down to five recurring reasons:',
+      reasons: [
+        { label: 'Open source.', body: 'You want to read, modify, fork, and self-host the tool — not depend on a closed SaaS roadmap.' },
+        { label: 'Agent-native workflow.', body: 'You want an AI agent (Claude Code, Codex, Cursor…) to produce and revise the design, not to nudge vectors by hand.' },
+        { label: 'Free forever.', body: 'No per-editor seats, no paywalled features, no subscription — you only pay your own model API costs.' },
+        { label: 'Files, not a vendor canvas.', body: 'Designs should live as code and Markdown in your repo, versioned with everything else.' },
+        { label: 'Self-host / data control.', body: 'Run it on your own machine or infra; nothing is forced through a vendor cloud.' },
+      ],
+      openSourceTitle: 'Open source + self-host, explained',
+      openSourceBody: [
+        'Open Design is Apache-2.0 with full source on GitHub. You can fork it, rebrand it for your studio, embed it in CI, or run it entirely on your own machine — none of which a closed canvas allows.',
+        'If open source is the only thing you need, Penpot is also a great open-source design canvas and a fellow traveler here — it mirrors Figma’s editor model. Open Design is a different shape: an agent generates the artifacts for you, rather than you drawing them on a canvas.',
+      ],
+      featureTitle: 'Feature comparison',
+      features: [
+        { name: 'License', od: 'Apache-2.0, full source on GitHub', cd: 'Closed-source, hosted product' },
+        { name: 'Core model', od: 'AI agent generates & edits artifacts', cd: 'Manual canvas + vector editing' },
+        { name: 'Pricing', od: 'Free product; you pay your own model API', cd: 'Free tier + paid per-editor seats' },
+        { name: 'Runtime', od: 'Local-first desktop + daemon, self-hostable', cd: 'Vendor cloud' },
+        { name: 'Agent', od: 'BYOK: Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', cd: 'AI features bundled into the product' },
+        { name: 'Output', od: 'Real files (code, Markdown) in your repo', cd: 'Editable design files in the vendor canvas' },
+        { name: 'Design system', od: 'Portable DESIGN.md in your repo', cd: 'Shared libraries in the vendor workspace' },
+        { name: 'Collaboration', od: 'Git: branches, reviews, history', cd: 'Best-in-class realtime multiplayer canvas' },
+        { name: 'CLI / CI', od: 'Yes via od CLI + HTTP daemon', cd: 'Plugin API; primarily a GUI tool' },
+        { name: 'Self-host', od: 'Yes, anywhere Node 24 runs', cd: 'No' },
+      ],
+      whoTitle: 'Who should pick which',
+      pickFigmaTitle: 'Pick Figma if',
+      pickFigma: [
+        'You need best-in-class realtime multiplayer canvas editing.',
+        'Your team’s workflow is hand-crafted UI in a visual editor.',
+        'You rely on Figma’s mature plugin and community ecosystem.',
+      ],
+      pickOpenTitle: 'Pick Open Design if',
+      pickOpen: [
+        'You want an AI agent to generate and iterate the design for you.',
+        'You want an open-source, Apache-2.0 tool you can fork and self-host.',
+        'You want artifacts as version-controlled files, not vendor-hosted documents.',
+        'You want BYOK with the coding agent you already use.',
+      ],
+      migrateTitle: 'Migrating from Figma',
+      migrateLead: 'There is no automatic Figma import today; the move is a one-time brand-extraction, not a file conversion:',
+      migrateSteps: [
+        'Install Open Design from the quickstart.',
+        'Point your agent at a Figma frame or exported screenshot you like.',
+        'Ask the agent to extract the brand into a DESIGN.md file.',
+        'Pick a skill and render it against your new brand — as real, shippable files.',
+      ],
+      migrateClosing:
+        'From then on, every skill renders in your brand without re-prompting. Keep Figma for canvas work; use Open Design where an agent should do the building.',
+      faqTitle: 'FAQ',
+      faq: [
+        { name: 'Is Open Design free?', text: 'Yes — the product is free and Apache-2.0. You only pay your own model API costs (BYOK).' },
+        { name: 'Is Open Design open source?', text: 'Yes, Apache-2.0 with full source at github.com/nexu-io/open-design. You can fork, rebrand, and self-host it.' },
+        { name: 'Is Open Design a drop-in replacement for Figma?', text: 'No. Figma is a manual collaborative canvas; Open Design is an agent that generates real artifacts. They solve overlapping problems differently — many teams use both.' },
+        { name: 'What about Penpot — isn’t that the open-source Figma alternative?', text: 'Penpot is an excellent open-source Figma-style canvas. Open Design is a different model: an AI agent builds the output for you instead of you drawing it.' },
+        { name: 'Can I self-host Open Design?', text: 'Yes. It runs anywhere Node 24 runs — your own machine, a server, or CI.' },
+        { name: 'Does it run on Linux?', text: 'Yes — macOS, Windows, and Linux (AppImage, or Docker / Podman Compose).' },
+        { name: 'Does it connect to Claude Code?', text: 'Yes. Open Design is built for the Claude Code ecosystem and also supports Codex, Cursor, Gemini, OpenCode, and Qwen via BYOK.' },
+      ],
+      ctaTitle: 'Design with an agent, in three commands.',
+      ctaBody:
+        'Star the repo, grab the desktop build, or run the install in your terminal. Your brand stays a portable DESIGN.md in your repo from the first render onward.',
     },
     download: {
       title: 'Download Open Design — desktop app for macOS, Windows & Linux',
@@ -1367,6 +1476,83 @@ INFO_PAGE_COPY.zh = {
     ctaTitle: '三条命令切换。',
     ctaBody: '给仓库点 Star、下载桌面版，或直接在终端安装。你的 DESIGN.md 系统从第一次渲染开始就留在自己的 repo。',
   },
+  figmaAlternative: {
+    title: '开源的 Figma 替代方案 —— Open Design（Agent 原生、可自托管）',
+    description:
+      'Open Design 是面向 AI 设计工作流的开源、Agent 原生 Figma 替代方案。Apache-2.0、本地优先、可自托管、永久免费——支持 Claude Code、Codex、Cursor、Gemini 等 BYOK。',
+    breadcrumb: '开源 Figma 替代方案',
+    label: 'Alternative · Nº 04',
+    heading: 'Open Design —— 开源、Agent 原生的 Figma 替代方案。',
+    lead:
+      'Open Design 不是 Figma 的克隆——它是面向 Claude Code 的自进化设计 Agent。但如果你要找的是一个开源、可自托管、由 AI Agent 端到端驱动的设计工具，这个页面就是为你准备的：永久免费、Apache-2.0，你的成果以文件形式留在 repo 里。',
+    tldrTitle: '一句话总结',
+    tldrBody:
+      'Figma 是最好的协作设计画布，这点无可争议。Open Design 走的是另一条路：开源、Agent 原生——AI Agent 帮你生成并修改真实 artifact，品牌沉淀为一份可移植的 DESIGN.md，而且整个工具免费、可自托管。',
+    toc: ['为什么离开 Figma', '开源 + 自托管', '功能对比', '该选哪一个', '从 Figma 迁移', '常见问题'],
+    whyTitle: '人们为什么找 Figma 替代方案',
+    whyLead: 'Figma 本身很优秀。会去搜替代方案，通常是这五个反复出现的原因：',
+    reasons: [
+      { label: '开源。', body: '你希望能读、能改、能 fork、能自托管，而不是被一个闭源 SaaS 的路线图绑住。' },
+      { label: 'Agent 原生工作流。', body: '你想让 AI Agent（Claude Code、Codex、Cursor……）来产出和修改设计，而不是手动拉锚点。' },
+      { label: '永久免费。', body: '没有按席位收费、没有付费墙功能、没有订阅——你只付自己的模型 API 成本。' },
+      { label: '要文件，不要厂商画布。', body: '设计应该作为代码和 Markdown 留在 repo 里，和其它东西一起做版本管理。' },
+      { label: '自托管 / 数据自主。', body: '在自己的机器或基础设施上运行，没有任何东西被强制走厂商云。' },
+    ],
+    openSourceTitle: '开源 + 自托管，详解',
+    openSourceBody: [
+      'Open Design 是 Apache-2.0，全部源码在 GitHub。你可以 fork、为自己的工作室换皮、嵌进 CI，或完全跑在自己机器上——这些闭源画布都做不到。',
+      '如果你唯一需要的就是开源，Penpot 也是很好的开源设计画布、是这条路上的同道——它沿用了 Figma 的编辑器模型。Open Design 是另一种形态：由 Agent 帮你生成 artifact，而不是你在画布上一笔笔画。',
+    ],
+    featureTitle: '功能对比',
+    features: [
+      { name: '许可证', od: 'Apache-2.0，全部源码在 GitHub', cd: '闭源、托管产品' },
+      { name: '核心模式', od: 'AI Agent 生成并修改 artifact', cd: '手动画布 + 矢量编辑' },
+      { name: '定价', od: '产品免费；只付自己的模型 API', cd: '免费档 + 按编辑者席位付费' },
+      { name: '运行方式', od: '本地优先桌面 + daemon，可自托管', cd: '厂商云' },
+      { name: 'Agent', od: 'BYOK：Claude Code、Codex、Cursor、Gemini、OpenCode、Qwen', cd: 'AI 功能内置在产品里' },
+      { name: '产出', od: 'repo 里的真实文件（代码、Markdown）', cd: '厂商画布里的可编辑设计文件' },
+      { name: '设计系统', od: 'repo 里可移植的 DESIGN.md', cd: '厂商工作区里的共享库' },
+      { name: '协作', od: 'Git：分支、评审、历史', cd: '一流的实时多人画布' },
+      { name: 'CLI / CI', od: '支持，经 od CLI + HTTP daemon', cd: '插件 API；主要是 GUI 工具' },
+      { name: '自托管', od: '支持，凡能跑 Node 24 即可', cd: '不支持' },
+    ],
+    whoTitle: '该选哪一个',
+    pickFigmaTitle: '选 Figma，如果你',
+    pickFigma: [
+      '需要一流的实时多人画布编辑。',
+      '团队的工作方式是在可视化编辑器里手工做 UI。',
+      '依赖 Figma 成熟的插件与社区生态。',
+    ],
+    pickOpenTitle: '选 Open Design，如果你',
+    pickOpen: [
+      '想让 AI Agent 帮你生成并迭代设计。',
+      '想要一个开源、Apache-2.0、可 fork 可自托管的工具。',
+      '想要把 artifact 作为版本管理的文件，而不是厂商托管的文档。',
+      '想用你已经在用的 coding agent 做 BYOK。',
+    ],
+    migrateTitle: '从 Figma 迁移',
+    migrateLead: '目前没有自动的 Figma 导入；这是一次性的品牌提取，而不是文件转换：',
+    migrateSteps: [
+      '按 quickstart 安装 Open Design。',
+      '把你的 Agent 指向一个你喜欢的 Figma frame 或导出截图。',
+      '让 Agent 把品牌提取成一份 DESIGN.md 文件。',
+      '选一个 skill，用你的新品牌渲染它——产出真实、可交付的文件。',
+    ],
+    migrateClosing:
+      '从此每个 skill 都会以你的品牌渲染，无需重复 prompt。画布工作留给 Figma；该让 Agent 来"造"的地方用 Open Design。',
+    faqTitle: '常见问题',
+    faq: [
+      { name: 'Open Design 免费吗？', text: '免费，且 Apache-2.0。你只付自己的模型 API 成本（BYOK）。' },
+      { name: 'Open Design 开源吗？', text: '开源，Apache-2.0，全部源码在 github.com/nexu-io/open-design。可 fork、换皮、自托管。' },
+      { name: 'Open Design 是 Figma 的直接替代吗？', text: '不是。Figma 是手动协作画布，Open Design 是生成真实 artifact 的 Agent。二者用不同方式解决相互重叠的问题——很多团队两个都用。' },
+      { name: 'Penpot 不才是开源 Figma 替代吗？', text: 'Penpot 是很优秀的开源 Figma 式画布。Open Design 是另一种模式：AI Agent 帮你产出，而不是你来画。' },
+      { name: '可以自托管 Open Design 吗？', text: '可以。凡能跑 Node 24 的地方都能跑——自己的机器、服务器或 CI。' },
+      { name: '支持 Linux 吗？', text: '支持——macOS、Windows、Linux（AppImage，或 Docker / Podman Compose）。' },
+      { name: '能接 Claude Code 吗？', text: '能。Open Design 为 Claude Code 生态而建，也经 BYOK 支持 Codex、Cursor、Gemini、OpenCode、Qwen。' },
+    ],
+    ctaTitle: '用 Agent 做设计，三条命令。',
+    ctaBody: '给仓库点 Star、下载桌面版，或直接在终端安装。你的品牌从第一次渲染开始就作为可移植的 DESIGN.md 留在 repo 里。',
+  },
   download: {
     ...INFO_PAGE_COPY.en!.download,
     title: '下载 Open Design —— macOS / Windows / Linux 桌面客户端',
@@ -1569,6 +1755,39 @@ INFO_PAGE_COPY['zh-tw'] = {
     ctaTitle: '三條命令切換。',
     ctaBody: '給 repo 按 Star、下載桌面版，或直接在終端安裝。你的 DESIGN.md 系統從第一次渲染開始就留在自己的 repo。',
   },
+  figmaAlternative: {
+    ...INFO_PAGE_COPY.zh!.figmaAlternative,
+    title: '開源的 Figma 替代方案 —— Open Design（Agent 原生、可自架）',
+    description:
+      'Open Design 是面向 AI 設計工作流的開源、Agent 原生 Figma 替代方案。Apache-2.0、本地優先、可自架、永久免費——支援 Claude Code、Codex、Cursor、Gemini 等 BYOK。',
+    breadcrumb: '開源 Figma 替代方案',
+    heading: 'Open Design —— 開源、Agent 原生的 Figma 替代方案。',
+    lead:
+      'Open Design 不是 Figma 的複製品——它是面向 Claude Code 的自我進化設計 Agent。但如果你要找的是一個開源、可自架、由 AI Agent 端到端驅動的設計工具，這個頁面就是為你準備的：永久免費、Apache-2.0，你的成果以檔案形式留在 repo 裡。',
+    tldrTitle: '一句話總結',
+    tldrBody:
+      'Figma 是最好的協作設計畫布，這點無可爭議。Open Design 走的是另一條路：開源、Agent 原生——AI Agent 幫你生成並修改真實 artifact，品牌沉澱為一份可移植的 DESIGN.md，而且整個工具免費、可自架。',
+    toc: ['為什麼離開 Figma', '開源 + 自架', '功能比較', '該選哪一個', '從 Figma 遷移', '常見問題'],
+    whyTitle: '人們為什麼找 Figma 替代方案',
+    openSourceTitle: '開源 + 自架，詳解',
+    featureTitle: '功能比較',
+    whoTitle: '該選哪一個',
+    pickFigmaTitle: '選 Figma，如果你',
+    pickOpenTitle: '選 Open Design，如果你',
+    migrateTitle: '從 Figma 遷移',
+    faqTitle: '常見問題',
+    faq: [
+      { name: 'Open Design 免費嗎？', text: '免費，且 Apache-2.0。你只付自己的模型 API 成本（BYOK）。' },
+      { name: 'Open Design 開源嗎？', text: '開源，Apache-2.0，全部原始碼在 github.com/nexu-io/open-design。可 fork、換皮、自架。' },
+      { name: 'Open Design 是 Figma 的直接替代嗎？', text: '不是。Figma 是手動協作畫布，Open Design 是生成真實 artifact 的 Agent。二者用不同方式解決相互重疊的問題——很多團隊兩個都用。' },
+      { name: 'Penpot 不才是開源 Figma 替代嗎？', text: 'Penpot 是很優秀的開源 Figma 式畫布。Open Design 是另一種模式：AI Agent 幫你產出，而不是你來畫。' },
+      { name: '可以自架 Open Design 嗎？', text: '可以。凡能跑 Node 24 的地方都能跑——自己的機器、伺服器或 CI。' },
+      { name: '支援 Linux 嗎？', text: '支援——macOS、Windows、Linux（AppImage，或 Docker / Podman Compose）。' },
+      { name: '能接 Claude Code 嗎？', text: '能。Open Design 為 Claude Code 生態而建，也經 BYOK 支援 Codex、Cursor、Gemini、OpenCode、Qwen。' },
+    ],
+    ctaTitle: '用 Agent 做設計，三條命令。',
+    ctaBody: '給 repo 按 Star、下載桌面版，或直接在終端安裝。你的品牌從第一次渲染開始就作為可移植的 DESIGN.md 留在 repo 裡。',
+  },
   // Inherit the zh download copy, but use Traditional script for the recommended badge.
   download: {
     ...INFO_PAGE_COPY.zh!.download,
@@ -1661,6 +1880,15 @@ type CompactInfoPageText = {
     lead: string;
   };
   claudeAlternative: {
+    title: string;
+    description: string;
+    breadcrumb: string;
+    label: string;
+    heading: string;
+    lead: string;
+    ctaTitle: string;
+  };
+  figmaAlternative: {
     title: string;
     description: string;
     breadcrumb: string;
@@ -1921,6 +2149,72 @@ function compactInfoPageCopy(
       ],
       ctaBody: text.reusable.ctaBody,
     },
+    figmaAlternative: {
+      ...text.figmaAlternative,
+      tldrTitle: text.section.summary,
+      tldrBody: text.figmaAlternative.description,
+      toc: [
+        text.section.why,
+        text.terms.openChoice,
+        text.section.features,
+        text.section.decision,
+        text.section.migrate,
+        text.section.faq,
+      ],
+      whyTitle: text.section.why,
+      whyLead: text.figmaAlternative.lead,
+      reasons: [
+        { label: text.terms.openChoice, body: text.reusable.sourceBody },
+        { label: text.terms.agent, body: text.reusable.byokBody },
+        { label: text.section.byok, body: text.reusable.itemBody },
+        { label: text.section.runtime, body: text.reusable.localBody },
+        { label: text.section.details, body: text.reusable.localBody },
+      ],
+      openSourceTitle: text.terms.openChoice,
+      openSourceBody: [text.reusable.sourceBody, text.reusable.localBody],
+      featureTitle: text.section.features,
+      features: [
+        { name: text.section.details, od: text.terms.openChoice, cd: text.terms.closedChoice },
+        { name: text.section.runtime, od: text.reusable.localBody, cd: text.terms.closedChoice },
+        { name: text.section.byok, od: text.reusable.byokBody, cd: text.terms.closedChoice },
+        { name: text.terms.agent, od: text.reusable.byokBody, cd: text.terms.closedChoice },
+        { name: text.terms.skillsSystems, od: text.reusable.itemBody, cd: text.terms.closedChoice },
+        { name: text.section.commands, od: text.reusable.installBody, cd: text.terms.closedChoice },
+        { name: text.section.next, od: text.reusable.nextBody, cd: text.terms.closedChoice },
+        { name: text.section.features, od: text.terms.openChoice, cd: text.terms.closedChoice },
+        { name: text.section.runtime, od: text.terms.openChoice, cd: text.terms.closedChoice },
+        { name: text.section.details, od: text.terms.openChoice, cd: text.terms.closedChoice },
+      ],
+      whoTitle: text.section.decision,
+      pickFigmaTitle: 'Figma',
+      pickFigma: [text.terms.closedChoice, text.reusable.nextBody, text.reusable.itemBody],
+      pickOpenTitle: 'Open Design',
+      pickOpen: [
+        text.terms.openChoice,
+        text.reusable.byokBody,
+        text.reusable.localBody,
+        text.reusable.itemBody,
+      ],
+      migrateTitle: text.section.migrate,
+      migrateLead: text.reusable.installBody,
+      migrateSteps: [
+        text.reusable.installBody,
+        text.reusable.localBody,
+        text.reusable.itemBody,
+        text.reusable.nextBody,
+      ],
+      migrateClosing: text.reusable.ctaBody,
+      faqTitle: text.section.faq,
+      faq: [
+        { name: text.section.summary, text: text.figmaAlternative.description },
+        { name: text.terms.openChoice, text: text.reusable.sourceBody },
+        { name: text.section.byok, text: text.reusable.byokBody },
+        { name: text.section.runtime, text: text.reusable.localBody },
+        { name: text.section.features, text: text.reusable.itemBody },
+        { name: text.section.next, text: text.reusable.nextBody },
+      ],
+      ctaBody: text.reusable.ctaBody,
+    },
     // Localized /download copy per compact locale; English is the fallback
     // for any locale not yet in COMPACT_DOWNLOAD_COPY.
     download: COMPACT_DOWNLOAD_COPY[locale] ?? INFO_PAGE_COPY.en!.download,
@@ -2026,6 +2320,15 @@ const COMPACT_INFO_PAGE_TEXT: Partial<
       lead: '既存のエージェント、ローカルファイル、ポータブルな DESIGN.md で同じ設計ループを自分の環境に置けます。',
       ctaTitle: '三つの手順で切り替え。',
     },
+    figmaAlternative: {
+      title: 'オープンソースの Figma 代替 — Open Design',
+      description: 'Open Design は AI 設計ワークフロー向けの、オープンソースで Agent ネイティブな Figma 代替です。',
+      breadcrumb: 'Figma 代替',
+      label: '代替 · Nº 04',
+      heading: 'オープンソースで Agent ネイティブな Figma 代替。',
+      lead: 'AI エージェントが artifact を生成・編集し、ブランドは可搬な DESIGN.md として残ります。無料・Apache-2.0・自己ホスト可能。',
+      ctaTitle: 'Agent で設計、三つの手順で。',
+    },
   },
 };
 
@@ -2037,6 +2340,7 @@ const INFO_PAGE_LABELS: Record<
     agents: string;
     compare: string;
     alternative: string;
+    figmaAlternative: string;
     source: string;
     details: string;
     next: string;
@@ -2049,6 +2353,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'Agents',
     compare: 'Compare',
     alternative: 'Claude Design alternative',
+    figmaAlternative: 'Figma alternative',
     source: 'Source',
     details: 'Details',
     next: 'Next steps',
@@ -2060,6 +2365,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'Agent',
     compare: '对比',
     alternative: 'Claude Design 替代方案',
+    figmaAlternative: 'Figma 替代方案',
     source: '来源',
     details: '详情',
     next: '下一步',
@@ -2071,6 +2377,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'Agent',
     compare: '比較',
     alternative: 'Claude Design 替代方案',
+    figmaAlternative: 'Figma 替代方案',
     source: '來源',
     details: '詳情',
     next: '下一步',
@@ -2082,6 +2389,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'エージェント',
     compare: '比較',
     alternative: 'Claude Design 代替',
+    figmaAlternative: 'Figma 代替',
     source: '出典',
     details: '詳細',
     next: '次のステップ',
@@ -2093,6 +2401,7 @@ const INFO_PAGE_LABELS: Record<
     agents: '에이전트',
     compare: '비교',
     alternative: 'Claude Design 대안',
+    figmaAlternative: 'Figma 대안',
     source: '출처',
     details: '세부 정보',
     next: '다음 단계',
@@ -2104,6 +2413,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'Agenten',
     compare: 'Vergleich',
     alternative: 'Claude-Design-Alternative',
+    figmaAlternative: 'Figma-Alternative',
     source: 'Quelle',
     details: 'Details',
     next: 'Nächste Schritte',
@@ -2115,6 +2425,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'Agents',
     compare: 'Comparaison',
     alternative: 'Alternative à Claude Design',
+    figmaAlternative: 'Alternative à Figma',
     source: 'Source',
     details: 'Détails',
     next: 'Étapes suivantes',
@@ -2126,6 +2437,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'Агенты',
     compare: 'Сравнение',
     alternative: 'Альтернатива Claude Design',
+    figmaAlternative: 'Альтернатива Figma',
     source: 'Источник',
     details: 'Подробности',
     next: 'Следующие шаги',
@@ -2137,6 +2449,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'Agentes',
     compare: 'Comparación',
     alternative: 'Alternativa a Claude Design',
+    figmaAlternative: 'Alternativa a Figma',
     source: 'Fuente',
     details: 'Detalles',
     next: 'Siguientes pasos',
@@ -2148,6 +2461,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'Agentes',
     compare: 'Comparação',
     alternative: 'Alternativa ao Claude Design',
+    figmaAlternative: 'Alternativa ao Figma',
     source: 'Fonte',
     details: 'Detalhes',
     next: 'Próximos passos',
@@ -2159,6 +2473,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'Agenti',
     compare: 'Confronto',
     alternative: 'Alternativa a Claude Design',
+    figmaAlternative: 'Alternativa a Figma',
     source: 'Fonte',
     details: 'Dettagli',
     next: 'Passi successivi',
@@ -2170,6 +2485,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'Tác nhân',
     compare: 'So sánh',
     alternative: 'Phương án thay thế Claude Design',
+    figmaAlternative: 'Phương án thay thế Figma',
     source: 'Nguồn',
     details: 'Chi tiết',
     next: 'Bước tiếp theo',
@@ -2181,6 +2497,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'Agenci',
     compare: 'Porównanie',
     alternative: 'Alternatywa dla Claude Design',
+    figmaAlternative: 'Alternatywa dla Figma',
     source: 'Źródło',
     details: 'Szczegóły',
     next: 'Następne kroki',
@@ -2192,6 +2509,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'Agen',
     compare: 'Perbandingan',
     alternative: 'Alternatif Claude Design',
+    figmaAlternative: 'Alternatif Figma',
     source: 'Sumber',
     details: 'Detail',
     next: 'Langkah berikutnya',
@@ -2203,6 +2521,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'Agents',
     compare: 'Vergelijking',
     alternative: 'Alternatief voor Claude Design',
+    figmaAlternative: 'Alternatief voor Figma',
     source: 'Bron',
     details: 'Details',
     next: 'Volgende stappen',
@@ -2214,6 +2533,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'الوكلاء',
     compare: 'المقارنة',
     alternative: 'بديل Claude Design',
+    figmaAlternative: 'بديل Figma',
     source: 'المصدر',
     details: 'التفاصيل',
     next: 'الخطوات التالية',
@@ -2225,6 +2545,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'Ajanlar',
     compare: 'Karşılaştırma',
     alternative: 'Claude Design alternatifi',
+    figmaAlternative: 'Figma alternatifi',
     source: 'Kaynak',
     details: 'Ayrıntılar',
     next: 'Sonraki adımlar',
@@ -2236,6 +2557,7 @@ const INFO_PAGE_LABELS: Record<
     agents: 'Агенти',
     compare: 'Порівняння',
     alternative: 'Альтернатива Claude Design',
+    figmaAlternative: 'Альтернатива Figma',
     source: 'Джерело',
     details: 'Деталі',
     next: 'Наступні кроки',
@@ -2366,6 +2688,15 @@ function compactInfoTextFromHome(locale: LandingLocaleCode): CompactInfoPageText
       breadcrumb: labels.alternative,
       label: labels.alternative,
       heading: `${labels.alternative} · Open Design`,
+      lead: heroTitle ? `${heroTitle}. ${lead}` : lead,
+      ctaTitle: labels.next,
+    },
+    figmaAlternative: {
+      title: `${labels.figmaAlternative} · Open Design`,
+      description: summary,
+      breadcrumb: labels.figmaAlternative,
+      label: labels.figmaAlternative,
+      heading: `${labels.figmaAlternative} · Open Design`,
       lead: heroTitle ? `${heroTitle}. ${lead}` : lead,
       ctaTitle: labels.next,
     },
