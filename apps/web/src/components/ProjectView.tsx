@@ -4748,6 +4748,18 @@ function htmlArtifactLineageTitleFallbackMatches(art: Artifact, lineage: HtmlArt
   );
 }
 
+function htmlArtifactLineageTokenlessFallbackMatches(
+  art: Artifact,
+  lineage: HtmlArtifactLineage,
+): boolean {
+  const currentTitle = art.title ?? '';
+  const currentDocumentTitle = htmlDocumentTitle(art.html ?? '');
+  const wrapperTitleMatches = currentTitle !== '' && currentTitle === lineage.title;
+  const documentTitleMatches =
+    currentDocumentTitle !== '' && currentDocumentTitle === lineage.documentTitle;
+  return wrapperTitleMatches || documentTitleMatches;
+}
+
 function matchingHtmlArtifactLineage(
   art: Artifact,
   lineage: HtmlArtifactLineage | null,
@@ -4778,7 +4790,11 @@ function matchingHtmlArtifactLineage(
   }
   const tokenMatches =
     currentToken !== '' && lineage.lineageToken !== '' && currentToken === lineage.lineageToken;
-  if (!tokenMatches && !htmlArtifactLineageTitleFallbackMatches(art, lineage)) return null;
+  const titleFallbackMatches =
+    currentToken === '' && lineage.lineageToken !== ''
+      ? htmlArtifactLineageTokenlessFallbackMatches(art, lineage)
+      : htmlArtifactLineageTitleFallbackMatches(art, lineage);
+  if (!tokenMatches && !titleFallbackMatches) return null;
 
   return { fileName: lineage.fileName, lineageToken: lineage.lineageToken };
 }

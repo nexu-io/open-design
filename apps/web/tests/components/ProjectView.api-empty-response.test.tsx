@@ -847,7 +847,7 @@ describe('ProjectView API empty response handling', () => {
     );
   });
 
-  it('reuses the relocated group when the artifact wrapper title changes', async () => {
+  it('reuses the relocated group when the artifact wrapper title changes without a returned lineage token', async () => {
     const lineageToken = 'lineage-wrapper-title-change';
     let currentFiles = [
       htmlProjectFile('index.html', 10, {
@@ -882,7 +882,7 @@ describe('ProjectView API empty response handling', () => {
       '</body></html>' +
       '</artifact>';
     const secondArtifact =
-      `<artifact identifier="index" type="text/html" title="Different Site" lineageToken="${lineageToken}">` +
+      '<artifact identifier="index" type="text/html" title="Different Site">' +
       '<!doctype html><html><head><title>Home</title></head><body>' +
       '<main><h1>Home</h1><a href="about.html">About</a></main>' +
       '</body></html>' +
@@ -923,7 +923,7 @@ describe('ProjectView API empty response handling', () => {
     );
   });
 
-  it('reuses the relocated group when the document title changes', async () => {
+  it('reuses the relocated group when the document title changes without a returned lineage token', async () => {
     const lineageToken = 'lineage-document-title-change';
     let currentFiles = [
       htmlProjectFile('index.html', 10, {
@@ -958,7 +958,7 @@ describe('ProjectView API empty response handling', () => {
       '</body></html>' +
       '</artifact>';
     const secondArtifact =
-      `<artifact identifier="index" type="text/html" title="Home" lineageToken="${lineageToken}">` +
+      '<artifact identifier="index" type="text/html" title="Home">' +
       '<!doctype html><html><head><title>Pricing</title></head><body>' +
       '<main><h1>Pricing</h1><a href="about.html">About</a></main>' +
       '</body></html>' +
