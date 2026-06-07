@@ -383,14 +383,21 @@ function validateTokenSourceReferences(
   const sourceName = binding.sourceName ?? binding.name;
   const declared = tokenDeclarations.get(sourceName);
   if (declared === undefined) return;
+  let hasTokensCssSource = false;
   for (const source of binding.sources) {
     const line = parseTokenSourceLine(source, tokensPath);
     if (line === undefined) continue;
+    hasTokensCssSource = true;
     if (line !== declared.line) {
       violations.push(
         `${repositoryManifestPath}: ${reportPath} token ${binding.name} source ${source} must point to ${tokensPath}:${declared.line}`,
       );
     }
+  }
+  if (!hasTokensCssSource) {
+    violations.push(
+      `${repositoryManifestPath}: ${reportPath} token ${binding.name} must cite a ${tokensPath}:<line> source`,
+    );
   }
 }
 

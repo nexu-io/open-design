@@ -283,6 +283,34 @@ test("design-system design tokens guard rejects stale token source line referenc
   }
 });
 
+test("design-system design tokens guard rejects prefix token source line references", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "od-design-tokens-prefix-guard-"));
+  try {
+    writeDerivedTokenFixture(root);
+    const report = JSON.parse(readFileSync(path.join(root, REPORT_PATH), "utf8")) as {
+      generatedAt: string;
+      summary: unknown;
+      tokens: DerivedDesignTokenBinding[];
+    };
+    const fgBinding = report.tokens.find((token) => token.name === "--fg");
+    assert.ok(fgBinding);
+    fgBinding.sources = ["tokens.css:6"];
+    writeFileSync(path.join(root, REPORT_PATH), `${JSON.stringify(report, null, 2)}\n`);
+    writeFileSync(path.join(root, "design-tokens.json"), renderDesignTokensJson({
+      bindings: report.tokens,
+      report,
+    }));
+
+    const violations: string[] = [];
+    await validateDesignTokensJson(violations, "design-systems/test/manifest.json", root, "tokens.css", "design-tokens.json", REPORT_PATH);
+    assert.deepEqual(violations, [
+      "design-systems/test/manifest.json: source/token-contract.report.json token --fg source tokens.css:6 must point to tokens.css:5",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("design-system tailwind v4 guard rejects swapped canonical mappings", async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "od-tailwind-guard-"));
   try {
