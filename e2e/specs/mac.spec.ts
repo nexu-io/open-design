@@ -1,9 +1,8 @@
 // @vitest-environment node
 
-import { execFile, spawn, type ChildProcessByStdio } from 'node:child_process';
-import { access, mkdir, stat, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { access, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
-import type { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
@@ -11,10 +10,10 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import { releaseAppVersionArgs } from '@/vitest/packaged-release-version';
+import { startPackagedPayloadUpdateFixture, type PackagedPayloadUpdateFixture } from '@/vitest/packaged-payload-update-fixture';
 import {
   applyPackagedUpdateEnv,
   resolvePackagedUpdateScenario,
-  type PackagedUpdateScenario,
 } from '@/vitest/packaged-update-scenario';
 import { createDesktopHarness, STORAGE_KEY, waitFor } from '../lib/desktop/desktop-test-helpers.ts';
 
@@ -31,6 +30,9 @@ const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
 const screenshotPath = join(toolsPackDir, 'screenshots', `${namespace}.png`);
 const smokeProfile = process.env.OD_PACKAGED_E2E_MAC_SMOKE_PROFILE ?? 'core';
 const verifyCoreOnly = smokeProfile === 'core';
+const updateMetadataUrl = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL);
+const updateVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_VERSION);
+const updateBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH);
 
 const outputNamespaceRoot = join(toolsPackDir, 'out', 'mac', 'namespaces', namespace);
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'mac', 'namespaces', namespace);
@@ -77,6 +79,7 @@ const clickUpdaterRailExpression = `
 `;
 
 type DesktopStatus = {
+  pid?: number;
   state?: string;
   title?: string | null;
   url?: string | null;
@@ -125,6 +128,17 @@ type MacInspectResult = {
   };
   status: DesktopStatus | null;
   update?: {
+    active?: {
+      artifact?: {
+        type?: string;
+      };
+      path?: string;
+      version?: string;
+    };
+    artifact?: {
+      type?: string;
+      url?: string;
+    };
     availableVersion?: string;
     channel?: string;
     currentVersion?: string;
@@ -139,19 +153,33 @@ type MacInspectResult = {
     };
     state: string;
   };
+  launcher: LauncherSnapshot;
+};
+
+type LauncherSnapshot = {
+  active: LauncherPointer | null;
+  attempt: (LauncherPointer & { channel?: string; namespace?: string }) | null;
+  attemptsPath: string;
+  channel: string;
+  error?: string;
+  exists: boolean;
+  lastSuccessful: LauncherPointer | null;
+  namespace: string;
+  root: string;
+  runtimePath: string;
+  stateRoot: string;
+  versionRoots: string[];
+  versionsRoot: string;
+};
+
+type LauncherPointer = {
+  generation: number;
+  version: string;
 };
 
 type LogsResult = {
   logs: Record<string, { lines: string[]; logPath: string }>;
   namespace: string;
-};
-
-type UpdaterFixtureProcess = {
-  close: () => Promise<void>;
-  info: {
-    metadataUrl: string;
-    version: string;
-  };
 };
 
 type HealthEvalValue = {
@@ -189,7 +217,7 @@ macDescribe('packaged mac runtime smoke', () => {
   test('installs, starts, inspects, stops, and uninstalls the built mac artifact', async () => {
     const report = await createPackagedSmokeReport('mac');
     const updateEnv = captureUpdateEnv();
-    let updaterFixture: UpdaterFixtureProcess | null = null;
+    let payloadFixture: PackagedPayloadUpdateFixture | null = null;
     let logs: LogsResult | { skipped: true } = { skipped: true };
     let popup: UpdaterPopupEvalValue | { skipped: true } = { skipped: true };
     let updateInstall: NonNullable<MacInspectResult['update']> | { skipped: true } = { skipped: true };
@@ -205,6 +233,23 @@ macDescribe('packaged mac runtime smoke', () => {
       expectPathInside(install.installedAppPath, join(outputNamespaceRoot, 'install', 'Applications'));
 
       await seedPackagedOnboardingComplete();
+
+      let expectedPayloadUpdateVersion: string | null = updateVersion;
+      if (!verifyCoreOnly) {
+        if (updateMetadataUrl != null && updateMetadataUrl !== '') {
+          applyPackagedUpdateEnv(process.env, updateScenario, updateMetadataUrl, { openDryRun: false });
+        } else {
+          const localPayload = await resolveLocalPayloadUpdateFixture();
+          expectedPayloadUpdateVersion = localPayload.targetVersion;
+          payloadFixture = await startPackagedPayloadUpdateFixture({
+            channel: updateScenario.channel,
+            payloadPath: localPayload.payloadPath,
+            platform: 'mac',
+            version: localPayload.targetVersion,
+          });
+          applyPackagedUpdateEnv(process.env, updateScenario, payloadFixture.info.metadataUrl, { openDryRun: false });
+        }
+      }
 
       const start = await runToolsPackJson<MacStartResult>('start');
       started = true;
@@ -236,33 +281,39 @@ macDescribe('packaged mac runtime smoke', () => {
       } else {
         expect(value.health.version).toEqual(expect.any(String));
       }
+      assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
+      assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
 
       if (!verifyCoreOnly) {
-        updaterFixture = await startUpdaterFixtureProcess(updateScenario);
-        applyPackagedUpdateEnv(process.env, updateScenario, updaterFixture.info.metadataUrl);
-
-        const updaterVersion = updaterFixture.info.version;
+        const updaterVersion = expectedPayloadUpdateVersion;
+        if (updaterVersion == null || updaterVersion.length === 0) {
+          throw new Error('full packaged mac payload smoke requires an update target version');
+        }
         const readyUpdate = await waitForUpdaterStatus(
           (status) =>
             status.update?.state === 'downloaded' &&
             status.update.availableVersion === updaterVersion &&
+            status.update.artifact?.type === 'payload' &&
             typeof status.update.downloadPath === 'string',
           'ready updater prompt update downloaded',
         );
         expect(readyUpdate.update?.downloadPath).toEqual(expect.any(String));
+        expectPathInside(readyUpdate.update?.downloadPath ?? '', join(runtimeNamespaceRoot, 'updates'));
 
         popup = await openReadyUpdaterPrompt(updaterVersion);
         expect(popup.visible).toBe(true);
         expect(popup.title).toEqual(expect.any(String));
         expect(popup.title?.trim().length).toBeGreaterThan(0);
         expect(popup.installButtonVisible).toBe(true);
-        expect(popup.text ?? '').toContain(updaterFixture.info.version);
+        expect(popup.text ?? '').toContain(updaterVersion);
+        expect(popup.text ?? '').not.toMatch(/installer|安装器/i);
 
         const updateInspect = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'status']);
         expect(updateInspect.update?.state).toBe('downloaded');
+        expect(updateInspect.update?.artifact?.type).toBe('payload');
         expect(updateInspect.update?.channel).toBe(updateScenario.channel);
         expect(updateInspect.update?.currentVersion).toBe(updateScenario.expectedCurrentVersion);
-        expect(updateInspect.update?.availableVersion).toBe(updaterFixture.info.version);
+        expect(updateInspect.update?.availableVersion).toBe(updaterVersion);
         expectPathInside(updateInspect.update?.downloadPath ?? '', join(runtimeNamespaceRoot, 'updates'));
         if (updateInspect.update == null) throw new Error('mac update status is missing');
         updateStatus = updateInspect.update;
@@ -270,12 +321,20 @@ macDescribe('packaged mac runtime smoke', () => {
         const clickInstall = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickUpdaterInstallExpression]);
         const clickValue = assertUpdaterClickEvalValue(clickInstall.eval?.value);
         expect(clickValue.clicked).toBe(true);
-        const updateInstallInspect = await waitForUpdaterInstallerOpened();
-        expect(updateInstallInspect.update?.state).toBe('downloaded');
-        expect(updateInstallInspect.update?.installResult?.dryRun).toBe(true);
-        expectPathInside(updateInstallInspect.update?.installResult?.path ?? '', join(runtimeNamespaceRoot, 'updates'));
-        if (updateInstallInspect.update == null) throw new Error('mac update install status is missing');
-        updateInstall = updateInstallInspect.update;
+        const postUpdateInspect = await waitForHealthyDesktopVersion(updaterVersion, start.pid);
+        started = true;
+        const postUpdateHealth = assertHealthEvalValue(postUpdateInspect.eval?.value);
+        expect(postUpdateHealth.status).toBe(200);
+        expect(postUpdateHealth.health.ok).toBe(true);
+        expect(postUpdateHealth.health.version).toBe(updaterVersion);
+        assertLauncherPointer(postUpdateInspect.launcher.active, updaterVersion, 1, 'post-relaunch active');
+        assertLauncherPointer(postUpdateInspect.launcher.lastSuccessful, updaterVersion, 1, 'post-relaunch lastSuccessful');
+        const terminalUpdate = await waitForUpdaterStatus(
+          (status) => status.update?.state === 'not-available' && status.update.currentVersion === updaterVersion,
+          'post-relaunch updater terminal state',
+        );
+        if (terminalUpdate.update == null) throw new Error('mac terminal update status is missing');
+        updateInstall = terminalUpdate.update;
       }
 
       await mkdir(dirname(screenshotPath), { recursive: true });
@@ -331,8 +390,8 @@ macDescribe('packaged mac runtime smoke', () => {
       passed = true;
     } finally {
       restoreUpdateEnv(updateEnv);
-      await updaterFixture?.close().catch((error: unknown) => {
-        console.error('failed to close updater fixture', error);
+      await payloadFixture?.close().catch((error: unknown) => {
+        console.error('failed to close payload update fixture', error);
       });
       if (!passed) {
         await printPackagedLogs().catch((error: unknown) => {
@@ -1186,6 +1245,52 @@ async function runToolsPackJson<T>(action: string, extraArgs: string[] = []): Pr
   }
 }
 
+async function resolveLocalPayloadUpdateFixture(): Promise<{ payloadPath: string; targetVersion: string }> {
+  const fallbackBuildJsonPath = resolveFallbackUpdateBuildJsonPath();
+  if (fallbackBuildJsonPath == null) {
+    throw new Error(
+      'full packaged mac payload smoke requires update payload metadata; set OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL or provide mac-tools-pack-update-build.json next to OD_PACKAGED_E2E_BUILD_JSON_PATH',
+    );
+  }
+  const updateBuild = JSON.parse(stripUtf8Bom(await readFile(fallbackBuildJsonPath, 'utf8'))) as {
+    latestMacYmlPath?: unknown;
+    payloadPath?: unknown;
+  };
+  if (typeof updateBuild.payloadPath !== 'string' || updateBuild.payloadPath.length === 0) {
+    throw new Error(`upgrade build metadata missing payloadPath: ${fallbackBuildJsonPath}`);
+  }
+  const targetVersion =
+    updateVersion ??
+    (typeof updateBuild.latestMacYmlPath === 'string' && updateBuild.latestMacYmlPath.length > 0
+      ? await readLatestMacYmlVersion(updateBuild.latestMacYmlPath)
+      : null);
+  if (targetVersion == null || targetVersion.length === 0) {
+    throw new Error(`upgrade build metadata missing version: ${fallbackBuildJsonPath}`);
+  }
+  return {
+    payloadPath: resolveFromWorkspace(updateBuild.payloadPath),
+    targetVersion,
+  };
+}
+
+function resolveFallbackUpdateBuildJsonPath(): string | null {
+  if (updateBuildJsonPath != null && updateBuildJsonPath !== '') return resolveFromWorkspace(updateBuildJsonPath);
+  const mainBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_BUILD_JSON_PATH);
+  if (mainBuildJsonPath == null || mainBuildJsonPath === '') return null;
+  return join(dirname(resolveFromWorkspace(mainBuildJsonPath)), 'mac-tools-pack-update-build.json');
+}
+
+async function readLatestMacYmlVersion(latestMacYmlPath: string): Promise<string | null> {
+  const latestMacYml = await readFile(resolveFromWorkspace(latestMacYmlPath), 'utf8').catch(() => null);
+  if (latestMacYml == null) return null;
+  const match = /^version:\s+"?([^\r\n"]+)"?/m.exec(stripUtf8Bom(latestMacYml));
+  return match?.[1] ?? null;
+}
+
+function stripUtf8Bom(value: string): string {
+  return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value;
+}
+
 const UPDATE_ENV_KEYS = [
   'OD_UPDATE_AUTO_CHECK',
   'OD_UPDATE_ENABLED',
@@ -1207,68 +1312,6 @@ function restoreUpdateEnv(previous: Partial<Record<(typeof UPDATE_ENV_KEYS)[numb
     if (previous[key] == null) delete process.env[key];
     else process.env[key] = previous[key];
   }
-}
-
-async function startUpdaterFixtureProcess(scenario: PackagedUpdateScenario): Promise<UpdaterFixtureProcess> {
-  const child = spawn(pnpmCommand, [
-    'tools-serve',
-    'start',
-    'updater',
-    '--json',
-    '--channel',
-    scenario.channel,
-    '--version',
-    scenario.fixtureVersion,
-  ], {
-    cwd: workspaceRoot,
-    env: process.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  const info = await readUpdaterFixtureInfo(child);
-  return {
-    async close() {
-      if (child.exitCode != null) return;
-      child.kill('SIGTERM');
-      await new Promise<void>((resolve) => {
-        child.once('exit', () => resolve());
-        setTimeout(resolve, 2000).unref();
-      });
-    },
-    info,
-  };
-}
-
-async function readUpdaterFixtureInfo(child: ChildProcessByStdio<null, Readable, Readable>): Promise<UpdaterFixtureProcess['info']> {
-  let stdout = '';
-  let stderr = '';
-  return await new Promise<UpdaterFixtureProcess['info']>((resolveInfo, rejectInfo) => {
-    const timeout = setTimeout(() => {
-      rejectInfo(new Error(`tools-serve updater did not report metadata in time\nstdout:\n${stdout}\nstderr:\n${stderr}`));
-    }, 10_000);
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk.toString();
-      const line = stdout.split('\n').find((entry) => entry.trim().startsWith('{'));
-      if (line == null) return;
-      clearTimeout(timeout);
-      try {
-        const parsed = JSON.parse(line) as UpdaterFixtureProcess['info'];
-        resolveInfo(parsed);
-      } catch (error) {
-        rejectInfo(error);
-      }
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.once('exit', (code, signal) => {
-      clearTimeout(timeout);
-      rejectInfo(new Error(`tools-serve updater exited before ready (code=${code}, signal=${signal ?? 'none'})\nstderr:\n${stderr}`));
-    });
-    child.once('error', (error) => {
-      clearTimeout(timeout);
-      rejectInfo(error);
-    });
-  });
 }
 
 type DesktopHarness = ReturnType<typeof createDesktopHarness>;
@@ -1697,6 +1740,35 @@ async function waitForHealthyDesktop(): Promise<MacInspectResult> {
   throw new Error(`packaged mac runtime did not become healthy: ${formatUnknown(lastResult)}`);
 }
 
+async function waitForHealthyDesktopVersion(expectedVersion: string, previousPid: number | null | undefined): Promise<MacInspectResult> {
+  const timeoutMs = 120_000;
+  const startedAt = Date.now();
+  let lastResult: unknown = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', healthExpression]);
+      lastResult = inspect;
+      if (inspect.status?.state === 'running' && inspect.eval?.ok === true) {
+        const value = asHealthEvalValue(inspect.eval.value);
+        if (
+          value?.status === 200 &&
+          value.health.ok === true &&
+          value.health.version === expectedVersion &&
+          (previousPid == null || inspect.status.pid !== previousPid)
+        ) {
+          return inspect;
+        }
+      }
+    } catch (error) {
+      lastResult = error;
+    }
+    await delay(1000);
+  }
+
+  throw new Error(`packaged mac runtime did not relaunch healthy on ${expectedVersion}: ${formatUnknown(lastResult)}`);
+}
+
 async function waitForUpdaterStatus(
   predicate: (inspect: MacInspectResult) => boolean,
   label: string,
@@ -1767,23 +1839,16 @@ async function waitForUpdaterPopupMatching(
   throw new Error(`${label}: updater popup timed out: ${formatUnknown(lastResult)}`);
 }
 
-async function waitForUpdaterInstallerOpened(): Promise<MacInspectResult> {
-  const timeoutMs = 60_000;
-  const startedAt = Date.now();
-  let lastResult: unknown = null;
-
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'status']);
-      lastResult = inspect;
-      if (inspect.update?.installResult?.path != null) return inspect;
-    } catch (error) {
-      lastResult = error;
-    }
-    await delay(1000);
-  }
-
-  throw new Error(`packaged mac updater did not observe installer open: ${formatUnknown(lastResult)}`);
+function assertLauncherPointer(
+  pointer: LauncherPointer | null,
+  expectedVersion: string,
+  expectedGeneration: number,
+  label: string,
+): void {
+  expect(pointer, `${label} pointer`).toEqual({
+    generation: expectedGeneration,
+    version: expectedVersion,
+  });
 }
 
 function assertLogPathsAndContent(result: LogsResult): void {
@@ -1892,6 +1957,11 @@ async function seedPackagedOnboardingComplete(): Promise<void> {
 
 function resolveFromWorkspace(filePath: string): string {
   return isAbsolute(filePath) ? filePath : resolve(workspaceRoot, filePath);
+}
+
+function normalizeOptionalEnv(value: string | undefined): string | null {
+  const normalized = value?.trim();
+  return normalized == null || normalized.length === 0 ? null : normalized;
 }
 
 function delay(ms: number): Promise<void> {

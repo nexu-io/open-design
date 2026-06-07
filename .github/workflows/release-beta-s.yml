@@ -76,6 +76,16 @@ on:
           - dmg
           - all
         default: dmg
+      mac_arm64_update_metadata_url:
+        description: "Optional external updater metadata URL for full macOS arm64 payload smoke."
+        required: false
+        type: string
+        default: ""
+      mac_arm64_update_target_version:
+        description: "Optional external updater target version expected by full macOS arm64 payload smoke."
+        required: false
+        type: string
+        default: ""
       mac_x64_sign_mode:
         description: "macOS x64 signing mode."
         required: true
@@ -198,6 +208,14 @@ on:
         required: false
         type: string
         default: dmg
+      mac_arm64_update_metadata_url:
+        required: false
+        type: string
+        default: ""
+      mac_arm64_update_target_version:
+        required: false
+        type: string
+        default: ""
       mac_x64_sign_mode:
         required: false
         type: string
@@ -516,6 +534,8 @@ jobs:
           BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
           BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.log
           CSC_KEYCHAIN: /Library/Keychains/open-design-release-signing.keychain
+          OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}
+          OD_PACKAGED_E2E_MAC_UPDATE_VERSION: ${{ inputs.mac_arm64_update_target_version }}
           RELEASE_BUILD_TARGET: ${{ inputs.mac_arm64_target }}
           RELEASE_NAMESPACE: release-beta
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-build/mac_arm64/outputs.json
@@ -584,7 +604,7 @@ jobs:
         if: ${{ inputs.publish }}
         working-directory: _release-build
         env:
-          RELEASE_ARTIFACT_MODE: dmg-only
+          RELEASE_ARTIFACT_MODE: dmg-and-payload
           RELEASE_ASSET_SUFFIX: ${{ inputs.mac_arm64_sign_mode != 'no' && '.signed' || '.unsigned' }}
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
           RELEASE_CHANNEL: beta
@@ -602,7 +622,7 @@ jobs:
         env:
           RELEASE_ASSET_SUFFIX: ${{ inputs.mac_arm64_sign_mode != 'no' && '.signed' || '.unsigned' }}
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
-          RELEASE_ARTIFACT_MODE: dmg-only
+          RELEASE_ARTIFACT_MODE: dmg-and-payload
           RELEASE_CHANNEL: beta
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/mac_arm64.json

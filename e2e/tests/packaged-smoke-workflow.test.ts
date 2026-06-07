@@ -38,6 +38,14 @@ const releaseBetaPlatformPublishScriptPath = join(
   "publish-platform.ts",
 );
 
+function sectionBetween(content: string, start: string, end: string): string {
+  const startIndex = content.indexOf(start);
+  expect(startIndex).toBeGreaterThanOrEqual(0);
+  const endIndex = content.indexOf(end, startIndex + start.length);
+  expect(endIndex).toBeGreaterThan(startIndex);
+  return content.slice(startIndex, endIndex);
+}
+
 describe("packaged smoke workflow", () => {
   it("[P2] keeps packaged smoke outside the main CI gate", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
@@ -50,6 +58,26 @@ describe("packaged smoke workflow", () => {
     expect(workflow).not.toContain("Smoke PR linux headless packaged runtime");
     expect(workflow).not.toContain("OD_PACKAGED_E2E_");
     expect(workflow).not.toContain("actions/cache/save");
+  });
+
+  it("[P2] runs Windows launcher payload archive validation when tools-pack is touched", async () => {
+    const workflow = await readFile(ciWorkflowPath, "utf8");
+    const job = sectionBetween(workflow, "  windows_tools_pack_payload_tests:", "  daemon_workspace_tests:");
+    const validate = sectionBetween(workflow, "  validate:", "          if [ -n \"$failures\" ]; then");
+
+    expect(job).toContain("runs-on: windows-latest");
+    expect(job).toContain("needs.change_scopes.outputs.tools_pack_tests_required == 'true'");
+    expect(job).toContain("pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts");
+    expect(validate).toContain("windows_tools_pack_payload_tests");
+  });
+
+  it("[P2] limits manual blob guard checks to changed files against main", async () => {
+    const workflow = await readFile(ciWorkflowPath, "utf8");
+    const blobGuard = sectionBetween(workflow, "  blob_guard:", "  nix_validation:");
+
+    expect(blobGuard).toContain('${{ github.event_name }}" = "workflow_dispatch"');
+    expect(blobGuard).toContain("git merge-base origin/main HEAD");
+    expect(blobGuard).toContain('git diff --name-only --diff-filter=AMR "$base" HEAD');
   });
 
   it("[P2] preserves beta linux AppImage smoke reports for platform publication", async () => {
@@ -132,6 +160,40 @@ describe("packaged smoke workflow", () => {
     const betaBuildScript = await readFile(releaseBetaPosixBuildScriptPath, "utf8");
     expect(betaBuildScript).toContain("OD_PACKAGED_E2E_RELEASE_CHANNEL=beta");
     expect(betaBuildScript).toContain('OD_PACKAGED_E2E_RELEASE_VERSION="$RELEASE_VERSION"');
+  });
+
+  it("keeps both beta release lanes on the shared payload-aware metadata surface", async () => {
+    const [releaseBetaWorkflow, releaseBetaSelfHostedWorkflow, platformPublishScript, publishBetaMetadataScript] = await Promise.all([
+      readFile(releaseBetaWorkflowPath, "utf8"),
+      readFile(releaseBetaSelfHostedWorkflowPath, "utf8"),
+      readFile(releaseBetaPlatformPublishScriptPath, "utf8"),
+      readFile(releasePublishBetaMetadataScriptPath, "utf8"),
+    ]);
+
+    for (const workflow of [releaseBetaWorkflow, releaseBetaSelfHostedWorkflow]) {
+      expect(workflow).toContain("RELEASE_ARTIFACT_MODE: dmg-and-payload");
+      expect(workflow).toContain(".github/workflow/scripts/release/storage/publish-platform.ts");
+      expect(workflow).toContain(".github/workflow/scripts/release/storage/publish-beta-metadata.ts");
+      expect(workflow).toContain("RELEASE_MANIFEST_DIR:");
+    }
+    expect(releaseBetaWorkflow).toContain("RELEASE_ASSET_SUFFIX: ${{ needs.metadata.outputs.asset_version_suffix }}");
+    expect(releaseBetaSelfHostedWorkflow).toContain("RELEASE_ASSET_SUFFIX: auto");
+    expect(platformPublishScript).toContain("artifacts.payload");
+    expect(platformPublishScript).toContain("open-design-${releaseVersion}${assetSuffix}-mac-${arch}-payload.zip");
+    expect(platformPublishScript).toContain("open-design-${releaseVersion}${assetSuffix}-win-x64-payload.7z");
+    expect(publishBetaMetadataScript).toContain("for (const [artifactName, artifact] of Object.entries(manifest.artifacts ?? {}))");
+    expect(publishBetaMetadataScript).toContain("outputs[`${target}_${artifactName}_url`] = artifact.url");
+  });
+
+  it("publishes release-beta mac_x64 payloads while preserving the zip feed", async () => {
+    const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
+    const macX64Job = sectionBetween(workflow, "  build_mac_x64:", "  build_win_x64:");
+    const prepareStep = sectionBetween(macX64Job, "      - name: Prepare mac_x64 assets", "      - name: Publish mac_x64 platform");
+    const publishStep = sectionBetween(macX64Job, "      - name: Publish mac_x64 platform", "      - name: Upload mac_x64 publish manifest");
+    const artifactMode = "RELEASE_ARTIFACT_MODE: ${{ inputs.mac_x64_target == 'all' && 'all' || 'dmg-and-payload' }}";
+
+    expect(prepareStep).toContain(artifactMode);
+    expect(publishStep).toContain(artifactMode);
   });
 
   it("keeps the self-hosted beta lane metadata-driven with reusable platform publish scripts", async () => {
@@ -593,6 +655,153 @@ describe("packaged smoke workflow", () => {
       expect(fixture.uploadedObjectKeys()).toEqual([
         "beta/versions/1.2.3-beta.4.unsigned/metadata.json",
         "beta/latest/metadata.json",
+        "beta/latest/platforms/win_x64.json",
+        "beta/latest/latest.yml",
+      ]);
+    } finally {
+      await fixture.close();
+      await rm(runnerTemp, { force: true, recursive: true });
+    }
+  });
+
+  it("preserves launcher payload artifacts in beta latest metadata and action outputs", async () => {
+    const fixture = await startReleaseMetadataObjectStore({
+      "beta/versions/1.2.3-beta.4.unsigned/latest.yml": "versioned updater feed",
+    });
+    const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-beta-payload-metadata-"));
+    const platformManifestRoot = join(runnerTemp, "release-platform-manifests");
+
+    try {
+      await mkdir(platformManifestRoot, { recursive: true });
+      await writeFile(
+        join(platformManifestRoot, "mac_arm64.json"),
+        `${JSON.stringify(
+          {
+            artifacts: {
+              dmg: {
+                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64.dmg",
+              },
+              payload: {
+                sha256Url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64-payload.zip.sha256",
+                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64-payload.zip",
+              },
+            },
+            channel: "beta",
+            github: {
+              commit: "current-sha",
+              runAttempt: 2,
+              runId: 222222222,
+            },
+            legacyPlatformKey: "mac",
+            platform: "mac",
+            platformKey: "mac_arm64",
+            releaseTarget: "mac_arm64",
+            releaseVersion: "1.2.3-beta.4",
+            r2: {
+              versionPrefix: "beta/versions/1.2.3-beta.4.unsigned",
+            },
+            signed: false,
+            status: "published",
+          },
+          null,
+          2,
+        )}\n`,
+      );
+      await writeFile(
+        join(platformManifestRoot, "win_x64.json"),
+        `${JSON.stringify(
+          {
+            artifacts: {
+              installer: {
+                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-setup.exe",
+              },
+              payload: {
+                sha256Url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-payload.7z.sha256",
+                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-payload.7z",
+              },
+            },
+            channel: "beta",
+            feed: {
+              name: "latest.yml",
+              url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/latest.yml",
+            },
+            github: {
+              commit: "current-sha",
+              runAttempt: 2,
+              runId: 222222222,
+            },
+            legacyPlatformKey: "win",
+            platform: "win",
+            platformKey: "win_x64",
+            releaseTarget: "win_x64",
+            releaseVersion: "1.2.3-beta.4",
+            r2: {
+              versionPrefix: "beta/versions/1.2.3-beta.4.unsigned",
+            },
+            signed: false,
+            status: "published",
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      await execFileAsync(process.execPath, ["--experimental-strip-types", releasePublishBetaMetadataScriptPath], {
+        cwd: workspaceRoot,
+        env: {
+          ...process.env,
+          BASE_VERSION: "1.2.3",
+          ENABLE_LINUX_X64: "false",
+          ENABLE_MAC_ARM64: "true",
+          ENABLE_MAC_X64: "false",
+          ENABLE_WIN_X64: "true",
+          RELEASE_RUN_ATTEMPT: "2",
+          RELEASE_RUN_ID: "222222222",
+          RELEASE_COMMIT: "current-sha",
+          RELEASE_ASSET_SUFFIX: "auto",
+          RELEASE_CHANNEL: "beta",
+          RELEASE_MANIFEST_DIR: platformManifestRoot,
+          RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
+          RELEASE_OUTPUTS_PATH: join(runnerTemp, "release-metadata", "outputs.json"),
+          RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.ai",
+          RELEASE_SIGNED: "false",
+          RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
+          RELEASE_STORAGE_BUCKET: fixture.bucket,
+          RELEASE_STORAGE_ENDPOINT: fixture.endpointUrl,
+          RELEASE_STORAGE_REGION: "auto",
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: "test-secret-key",
+          RELEASE_VERSION: "1.2.3-beta.4",
+          STATE_SOURCE: "test",
+          MAC_ARM64_RESULT: "success",
+          WIN_X64_RESULT: "success",
+        },
+        maxBuffer: 1024 * 1024,
+      });
+
+      const metadata = JSON.parse(await readFile(join(runnerTemp, "release-metadata", "metadata.json"), "utf8")) as {
+        platforms: {
+          mac: { artifacts?: { payload?: { sha256Url?: string; url?: string } } };
+          win: { artifacts?: { payload?: { sha256Url?: string; url?: string } } };
+        };
+        releaseTargets: {
+          mac_arm64: { artifacts?: { payload?: { sha256Url?: string; url?: string } } };
+          win_x64: { artifacts?: { payload?: { sha256Url?: string; url?: string } } };
+        };
+      };
+      const outputs = JSON.parse(await readFile(join(runnerTemp, "release-metadata", "outputs.json"), "utf8")) as Record<string, string>;
+
+      expect(metadata.platforms.mac.artifacts?.payload?.url).toContain("mac-arm64-payload.zip");
+      expect(metadata.platforms.mac.artifacts?.payload?.sha256Url).toContain("mac-arm64-payload.zip.sha256");
+      expect(metadata.platforms.win.artifacts?.payload?.url).toContain("win-x64-payload.7z");
+      expect(metadata.platforms.win.artifacts?.payload?.sha256Url).toContain("win-x64-payload.7z.sha256");
+      expect(metadata.releaseTargets.mac_arm64.artifacts?.payload?.url).toBe(metadata.platforms.mac.artifacts?.payload?.url);
+      expect(metadata.releaseTargets.win_x64.artifacts?.payload?.url).toBe(metadata.platforms.win.artifacts?.payload?.url);
+      expect(outputs.mac_arm64_payload_url).toBe(metadata.platforms.mac.artifacts?.payload?.url);
+      expect(outputs.win_x64_payload_url).toBe(metadata.platforms.win.artifacts?.payload?.url);
+      expect(fixture.uploadedObjectKeys()).toEqual([
+        "beta/versions/1.2.3-beta.4.unsigned/metadata.json",
+        "beta/latest/metadata.json",
+        "beta/latest/platforms/mac_arm64.json",
         "beta/latest/platforms/win_x64.json",
         "beta/latest/latest.yml",
       ]);

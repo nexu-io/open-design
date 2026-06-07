@@ -34,7 +34,7 @@ case "$RELEASE_TARGET" in
   mac_arm64 | mac_x64)
     artifact_mode="${RELEASE_ARTIFACT_MODE:-dmg-and-zip}"
     case "$artifact_mode" in
-      dmg-only | dmg-and-zip) ;;
+      dmg-only | dmg-and-zip | dmg-and-payload | all) ;;
       *)
         echo "unsupported RELEASE_ARTIFACT_MODE for $RELEASE_TARGET: $artifact_mode" >&2
         exit 1
@@ -44,8 +44,10 @@ case "$RELEASE_TARGET" in
     arch="${RELEASE_TARGET#mac_}"
     source_dmg="$TOOLS_PACK_DIR/out/mac/namespaces/$RELEASE_NAMESPACE/dmg/Open Design-$RELEASE_NAMESPACE.dmg"
     source_zip="$TOOLS_PACK_DIR/out/mac/namespaces/$RELEASE_NAMESPACE/zip/Open Design-$RELEASE_NAMESPACE.zip"
+    source_payload="$TOOLS_PACK_DIR/out/mac/namespaces/$RELEASE_NAMESPACE/payload/Open Design-$RELEASE_NAMESPACE-payload.zip"
     versioned_dmg="open-design-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-mac-$arch.dmg"
     versioned_zip="open-design-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-mac-$arch.zip"
+    versioned_payload="open-design-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-mac-$arch-payload.zip"
 
     if [ ! -f "$source_dmg" ]; then
       echo "expected dmg not found at $source_dmg" >&2
@@ -54,7 +56,16 @@ case "$RELEASE_TARGET" in
     cp "$source_dmg" "$RELEASE_ASSETS_DIR/$versioned_dmg"
     sha256_file "$RELEASE_ASSETS_DIR/$versioned_dmg"
 
-    if [ "$artifact_mode" = "dmg-only" ]; then
+    if [ "$artifact_mode" = "dmg-and-payload" ] || [ "$artifact_mode" = "all" ]; then
+      if [ ! -f "$source_payload" ]; then
+        echo "expected payload not found at $source_payload" >&2
+        exit 1
+      fi
+      cp "$source_payload" "$RELEASE_ASSETS_DIR/$versioned_payload"
+      sha256_file "$RELEASE_ASSETS_DIR/$versioned_payload"
+    fi
+
+    if [ "$artifact_mode" = "dmg-only" ] || [ "$artifact_mode" = "dmg-and-payload" ]; then
       exit 0
     fi
     if [ ! -f "$source_zip" ]; then

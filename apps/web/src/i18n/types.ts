@@ -771,8 +771,12 @@ export interface Dict {
   'updater.installerOpened': string;
   'updater.later': string;
   'updater.openFailedFallback': string;
+  'updater.installRestart': string;
+  'updater.installingRestart': string;
   'updater.openInstaller': string;
   'updater.opening': string;
+  'updater.payloadReadyGeneric': string;
+  'updater.payloadReadyVersion': string;
   'updater.quitButton': string;
   'updater.quitFailedBody': string;
   'updater.quitFailedTitle': string;

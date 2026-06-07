@@ -62,6 +62,7 @@ const residualAllowedExactPaths = new Set([
   "packages/diagnostics/esbuild.config.mjs",
   "packages/download/esbuild.config.mjs",
   "packages/host/esbuild.config.mjs",
+  "packages/launcher-proto/esbuild.config.mjs",
   "packages/metatool/esbuild.config.mjs",
   "packages/platform/esbuild.config.mjs",
   "packages/plugin-runtime/esbuild.config.mjs",
