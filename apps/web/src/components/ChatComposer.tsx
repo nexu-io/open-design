@@ -2743,7 +2743,7 @@ function ToolsPluginsPanel({
   onApply: (record: InstalledPluginRecord) => void | Promise<void>;
   onShowDetails: (record: InstalledPluginRecord) => void;
 }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [source, setSource] = useState<'community' | 'mine'>('community');
   const [query, setQuery] = useState('');
@@ -2760,20 +2760,31 @@ function ToolsPluginsPanel({
     () => scopedPlugins.filter((p) => pluginMatchesQuery(p, query)),
     [scopedPlugins, query],
   );
+  const officialLabel = t('chat.mentionPluginOfficial');
+  const mineLabel = t('chat.mentionPluginMine');
+  const activeSourceLabel = source === 'community' ? officialLabel : mineLabel;
 
   return (
     <>
       <div className="composer-tools-filter">
-        <div className="composer-tools-segments" role="tablist" aria-label="Plugin source">
+        <div
+          className="composer-tools-segments"
+          role="tablist"
+          aria-label={composerZhCN(locale, 'Plugin source', '插件来源')}
+        >
           <button
             type="button"
             role="tab"
             aria-selected={source === 'community'}
             className={`composer-tools-segment${source === 'community' ? ' active' : ''}`}
             onClick={() => setSource('community')}
-            title={`${communityPlugins.length} installed official plugins`}
+            title={composerZhCN(
+              locale,
+              `${communityPlugins.length} installed official plugins`,
+              `已安装 ${communityPlugins.length} 个官方插件`,
+            )}
           >
-            Official
+            {officialLabel}
           </button>
           <button
             type="button"
@@ -2781,30 +2792,50 @@ function ToolsPluginsPanel({
             aria-selected={source === 'mine'}
             className={`composer-tools-segment${source === 'mine' ? ' active' : ''}`}
             onClick={() => setSource('mine')}
-            title={`${userPlugins.length} installed user plugins`}
+            title={composerZhCN(
+              locale,
+              `${userPlugins.length} installed user plugins`,
+              `已安装 ${userPlugins.length} 个用户插件`,
+            )}
           >
-            My plugins
+            {mineLabel}
           </button>
         </div>
         <input
           className="composer-tools-search"
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
-          placeholder="Search plugins…"
-          aria-label="Search plugins"
+          placeholder={composerZhCN(locale, 'Search plugins…', '搜索插件…')}
+          aria-label={composerZhCN(locale, 'Search plugins', '搜索插件')}
         />
       </div>
       {visiblePlugins.length === 0 ? (
         <div className="composer-tools-empty">
           {plugins.length === 0 ? (
             <>
-              No plugins installed yet. Browse Official or add your own with{' '}
+              {composerZhCN(
+                locale,
+                'No plugins installed yet. Browse Official or add your own with',
+                '还没有安装插件。浏览官方插件，或使用以下命令添加自己的插件：',
+              )}{' '}
               <code>od plugin install &lt;source&gt;</code>.
             </>
           ) : query ? (
-            <>No {source === 'community' ? 'Official' : 'My plugins'} results for “{query}”.</>
+            <>
+              {composerZhCN(
+                locale,
+                `No ${activeSourceLabel} results for “${query}”.`,
+                `${activeSourceLabel}中没有“${query}”的结果。`,
+              )}
+            </>
           ) : (
-            <>No {source === 'community' ? 'Official' : 'My plugins'} plugins available.</>
+            <>
+              {composerZhCN(
+                locale,
+                `No ${activeSourceLabel} plugins available.`,
+                `没有可用的${activeSourceLabel}。`,
+              )}
+            </>
           )}
         </div>
       ) : (
@@ -2847,7 +2878,7 @@ function ToolsPluginsPanel({
                   )}
                 </span>
                 {pendingId === p.id ? (
-                  <span className="composer-tools-row-pending">Applying…</span>
+                  <span className="composer-tools-row-pending">{t('homeHero.applying')}</span>
                 ) : null}
               </button>
               <button
@@ -2855,8 +2886,8 @@ function ToolsPluginsPanel({
                 className="composer-tools-row-side"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onShowDetails(p)}
-                title={`View details for ${pluginTitle}`}
-                aria-label={`View details for ${pluginTitle}`}
+                title={composerZhCN(locale, `View details for ${pluginTitle}`, `查看 ${pluginTitle} 的详情`)}
+                aria-label={composerZhCN(locale, `View details for ${pluginTitle}`, `查看 ${pluginTitle} 的详情`)}
               >
                 <Icon name="eye" size={12} />
               </button>
@@ -3979,6 +4010,10 @@ function mcpTemplateMatchesQuery(tpl: McpTemplate, query: string): boolean {
 
 function pluginSourceLabel(plugin: InstalledPluginRecord, t: TranslateFn): string {
   return plugin.sourceKind === 'bundled' ? t('chat.mentionPluginOfficial') : t('chat.mentionPluginMine');
+}
+
+function composerZhCN(locale: string, english: string, simplifiedChinese: string): string {
+  return locale === 'zh-CN' ? simplifiedChinese : english;
 }
 
 function ToolsImportPanel({
