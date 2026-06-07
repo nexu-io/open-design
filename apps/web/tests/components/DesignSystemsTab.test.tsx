@@ -172,6 +172,14 @@ describe('DesignSystemsTab', () => {
   });
 
   it('formats user template dates with the active app locale', () => {
+    const templateCreatedAt = Date.parse('2026-05-13T03:19:00.000Z');
+    const expectedTemplateDate = new Intl.DateTimeFormat('es-ES', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(new Date(templateCreatedAt));
+
     render(
       <I18nProvider initial="es-ES">
         <DesignSystemsTab
@@ -182,7 +190,7 @@ describe('DesignSystemsTab', () => {
               name: 'Launch Template',
               description: 'Reusable launch plan.',
               files: [],
-              createdAt: Date.parse('2026-05-13T03:19:00.000Z'),
+              createdAt: templateCreatedAt,
             },
           ]}
           selectedId={null}
@@ -197,7 +205,7 @@ describe('DesignSystemsTab', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Plantilla' }));
 
     expect(screen.getByText('Launch Template')).toBeTruthy();
-    expect(screen.getByText('13 may, 11:19')).toBeTruthy();
+    expect(screen.getByText(expectedTemplateDate)).toBeTruthy();
     expect(screen.queryByText(/May 13/)).toBeNull();
   });
 
