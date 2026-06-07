@@ -3,8 +3,9 @@ import type { RuntimeAgentDef } from '../types.js';
 
 export const kimiAgentDef = {
     id: 'kimi',
-    name: 'Kimi CLI',
+    name: 'Kimi Code CLI',
     bin: 'kimi',
+    fallbackBins: ['kimi-code'],
     versionArgs: ['--version'],
     fetchModels: async (resolvedBin, env) =>
       detectAcpModels({
@@ -16,6 +17,10 @@ export const kimiAgentDef = {
       }),
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
+      { id: 'kimi-k2.5', label: 'kimi-k2.5' },
+      { id: 'kimi-k2.6', label: 'kimi-k2.6' },
+      { id: 'kimi-k2-thinking', label: 'kimi-k2-thinking' },
+      { id: 'kimi-latest', label: 'kimi-latest' },
       { id: 'kimi-k2-turbo-preview', label: 'kimi-k2-turbo-preview' },
       { id: 'moonshot-v1-8k', label: 'moonshot-v1-8k' },
       { id: 'moonshot-v1-32k', label: 'moonshot-v1-32k' },

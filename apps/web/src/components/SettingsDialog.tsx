@@ -585,7 +585,7 @@ const AGENT_SHORT_DESCRIPTIONS: Record<string, string> = {
   qwen: 'Qwen coding CLI',
   copilot: 'GitHub coding CLI',
   devin: 'Cognition terminal CLI',
-  kimi: 'Moonshot Kimi CLI',
+  kimi: 'Moonshot Kimi Code CLI',
   qoder: 'Alibaba coding CLI',
   pi: 'Inflection chat CLI',
   kiro: 'Kiro agent CLI',

@@ -92,7 +92,7 @@ const FALLBACK_CLI_TARGETS: CliTarget[] = [
   { id: 'copilot', name: 'GitHub Copilot CLI', bin: 'copilot', available: false },
   { id: 'grok-build', name: 'Grok Build', bin: 'grok', available: false },
   { id: 'deepseek', name: 'DeepSeek TUI', bin: 'deepseek', available: false },
-  { id: 'kimi', name: 'Kimi CLI', bin: 'kimi', available: false },
+  { id: 'kimi', name: 'Kimi Code CLI', bin: 'kimi', available: false },
   { id: 'hermes', name: 'Hermes', bin: 'hermes', available: false },
   { id: 'devin', name: 'Devin for Terminal', bin: 'devin', available: false },
   { id: 'kiro', name: 'Kiro CLI', bin: 'kiro-cli', available: false },

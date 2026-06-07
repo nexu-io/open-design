@@ -5,7 +5,7 @@ import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as platform from '@open-design/platform';
 import {
-  assert, chmodSync, detectAgents, inspectAgentExecutableResolution, join, minimalAgentDef, mkdirSync, mkdtempSync, opencode, resolveAgentExecutable, rmSync, spawnEnvForAgent, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
+  assert, chmodSync, detectAgents, inspectAgentExecutableResolution, join, kimi, minimalAgentDef, mkdirSync, mkdtempSync, opencode, resolveAgentExecutable, rmSync, spawnEnvForAgent, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 import { isCursorAuthFailureText } from '../../src/runtimes/auth.js';
 import { getRememberedLiveModels } from '../../src/runtimes/models.js';
@@ -421,6 +421,27 @@ test('resolveAgentExecutable supports configured binary overrides for non-Codex 
 
         assert.equal(resolved, configured, `expected ${id} to use ${envKey}`);
       }
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveAgentExecutable resolves kimi via kimi-code fallback bin when kimi is not on PATH', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-kimi-code-fallback-'));
+  try {
+    return withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], () => {
+      const fallback = join(dir, 'kimi-code');
+      writeFileSync(fallback, '#!/bin/sh\necho "kimi-code 1.0.0"\n');
+      chmodSync(fallback, 0o755);
+      process.env.PATH = dir;
+      process.env.OD_AGENT_HOME = dir;
+
+      const resolution = inspectAgentExecutableResolution(kimi);
+
+      assert.equal(resolution.configuredOverridePath, null);
+      assert.equal(resolution.pathResolvedPath, fallback);
+      assert.equal(resolution.selectedPath, fallback);
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });

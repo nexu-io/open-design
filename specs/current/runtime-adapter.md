@@ -23,7 +23,7 @@ The current implementation is concentrated in:
 | `gemini` | Gemini CLI | `gemini` | `json-event-stream` | Static fallback |
 | `opencode` | OpenCode | `opencode` | `json-event-stream` | `opencode models` + fallback |
 | `hermes` | Hermes | `hermes` | `acp-json-rpc` | `session/new` from `hermes acp` + fallback |
-| `kimi` | Kimi CLI | `kimi` | `acp-json-rpc` | `session/new` from `kimi acp` + fallback |
+| `kimi` | Kimi Code CLI | `kimi` | `acp-json-rpc` | `session/new` from `kimi acp` + fallback |
 | `cursor-agent` | Cursor Agent | `cursor-agent` | `json-event-stream` | `cursor-agent models` + fallback |
 | `qwen` | Qwen Code | `qwen` | `plain` | Static fallback |
 
