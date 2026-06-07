@@ -190,8 +190,16 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'Google Gemini',
     protocol: 'google',
     baseUrl: 'https://generativelanguage.googleapis.com',
-    model: 'gemini-2.0-flash',
-    models: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    model: 'gemini-3.5-flash',
+    models: [
+      'gemini-3.5-flash',
+      'gemini-3.1-pro-preview',
+      'gemini-3-flash-preview',
+      'gemini-3.1-flash-lite',
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
+    ],
   },
   {
     label: 'DeepSeek — OpenAI',
