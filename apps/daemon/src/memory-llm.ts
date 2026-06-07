@@ -60,6 +60,7 @@ import {
   markFailed,
 } from './memory-extractions.js';
 import { resolveProviderConfig } from './media-config.js';
+import { AIHUBMIX_APP_CODE } from './aihubmix.js';
 import { spawn } from 'node:child_process';
 import { createCommandInvocation } from '@open-design/platform';
 import {
@@ -148,6 +149,13 @@ const PROVIDER_DEFAULTS = {
     model: 'senseaudio-s2-flash',
     baseUrl: 'https://api.senseaudio.cn',
   },
+  // AIHubMix is OpenAI-wire-compatible, so the extractor falls through to
+  // callOpenAI with this base URL and the user's AIHubMix key (plus the fixed
+  // APP-Code header callOpenAI injects). Default to a small/fast model.
+  aihubmix: {
+    model: 'gpt-4o-mini',
+    baseUrl: 'https://aihubmix.com/v1',
+  },
 };
 
 // Map an explicit override provider to the env var the daemon should
@@ -179,6 +187,13 @@ function envKeyFor(provider) {
     return (
       process.env.OD_SENSEAUDIO_API_KEY?.trim()
       || process.env.SENSEAUDIO_API_KEY?.trim()
+      || ''
+    );
+  }
+  if (provider === 'aihubmix') {
+    return (
+      process.env.OD_AIHUBMIX_API_KEY?.trim()
+      || process.env.AIHUBMIX_API_KEY?.trim()
       || ''
     );
   }
@@ -666,6 +681,11 @@ async function callOpenAI(provider, system, user) {
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${provider.apiKey}`,
+          // AIHubMix routes through this same OpenAI-compatible path but wants
+          // the fixed APP-Code attribution header on every request.
+          ...(provider.kind === 'aihubmix' && AIHUBMIX_APP_CODE
+            ? { 'APP-Code': AIHUBMIX_APP_CODE }
+            : {}),
         },
         body: JSON.stringify({
           model: provider.model,

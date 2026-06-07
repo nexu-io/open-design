@@ -6,12 +6,13 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl, projectRawUrl } from '../providers/registry';
 import { buildSrcdoc } from '../runtime/srcdoc';
-import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind } from '../types';
+import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind, ProjectFolder } from '../types';
 import {
   createFileSystemReadError,
   FILE_SYSTEM_READ_ERROR_MESSAGE,
   isFileSystemReadError,
 } from '../utils/fileSystemErrors';
+import { selectInitialDesignPreviewFile } from './design-files/designArtifacts';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { getPluginFolderCandidates } from './design-files/pluginFolders';
 import { Icon } from './Icon';
@@ -19,6 +20,13 @@ import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
+
+export interface DesignFilesNavState {
+  kindFilter: Set<ProjectFileKind>;
+  currentDir: string;
+  page: number;
+  pageSize: number | 'all';
+}
 
 interface Props {
   projectId: string;
@@ -30,6 +38,11 @@ interface Props {
   // a loading overlay so the panel doesn't sit silently on the stale tree.
   reloading?: boolean;
   files: ProjectFile[];
+  // Persisted folders from `/api/projects/:id/folders`, including empty ones
+  // that no file lives under. Without these, a folder only appears once a file
+  // with a matching path prefix exists, so empty (user-created or imported)
+  // folders would vanish from the tree.
+  folders?: ProjectFolder[];
   liveArtifacts: LiveArtifactWorkspaceEntry[];
   onRefreshFiles: () => Promise<void> | void;
   onOpenFile: (name: string) => void;
@@ -41,14 +54,22 @@ interface Props {
   onUploadFiles: (files: File[]) => void;
   onPaste: () => void;
   onNewSketch: () => void;
+  // Reports the folder the panel is currently viewing so the parent can create
+  // new files (upload / paste / new sketch / dropped files) under it instead
+  // of the project root. Fires whenever the user navigates folders.
+  onCurrentDirChange?: (dir: string) => void;
   uploadError?: string | null;
   onClearUploadError?: () => void;
+  preferredPreviewFile?: string | null;
+  autoPreviewDesignArtifacts?: boolean;
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
+  navState?: DesignFilesNavState;
+  onNavStateChange?: (state: DesignFilesNavState) => void;
 }
 
 interface ActionNotice {
@@ -144,6 +165,7 @@ export function DesignFilesPanel({
   rootDirName,
   reloading,
   files,
+  folders,
   liveArtifacts,
   onOpenFile,
   onOpenLiveArtifact,
@@ -156,9 +178,14 @@ export function DesignFilesPanel({
   onNewSketch,
   uploadError = null,
   onClearUploadError,
+  preferredPreviewFile = null,
+  autoPreviewDesignArtifacts = false,
+  onCurrentDirChange,
   onPluginFolderAgentAction,
   activePluginActionPaths = new Set(),
   hiddenPluginActionPaths = new Set(),
+  navState,
+  onNavStateChange,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -170,6 +197,7 @@ export function DesignFilesPanel({
   const MENU_ESTIMATED_HEIGHT = 145;
   const MENU_SAFE_PADDING = 8;
   const [preview, setPreview] = useState<string | null>(null);
+  const autoPreviewAppliedRef = useRef(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const lastKeyPress = useRef<Map<string, number>>(new Map());
   const [deleting, setDeleting] = useState(false);
@@ -177,7 +205,23 @@ export function DesignFilesPanel({
   const [sharingFolder, setSharingFolder] = useState<string | null>(null);
   const [installNotice, setInstallNotice] = useState<ActionNotice | null>(null);
   const [renaming, setRenaming] = useState<{ name: string; draft: string; saving: boolean } | null>(null);
-  const [currentDir, setCurrentDir] = useState<string>('');
+  const [currentDir, setCurrentDir] = useState<string>(() => navState?.currentDir ?? '');
+
+  // Keep the parent's create-target in sync with the folder being viewed, so
+  // uploads / pastes / new sketches / dropped files land in the open folder
+  // rather than the project root.
+  useEffect(() => {
+    onCurrentDirChange?.(currentDir);
+  }, [currentDir, onCurrentDirChange]);
+
+  useEffect(() => {
+    onNavStateChange?.({
+      kindFilter: navState?.kindFilter ?? new Set(),
+      currentDir,
+      page: 0,
+      pageSize: 30,
+    });
+  }, [currentDir, navState?.kindFilter, onNavStateChange]);
 
   // Derive immediate subdirectories and files at the current directory level
   // from the flat files list. Files with names like "a/b/c.html" contribute
@@ -194,13 +238,23 @@ export function DesignFilesPanel({
         localFiles.push(f);
       } else {
         dirs.add(remainder.slice(0, slashIdx));
+        if (currentDir === '') localFiles.push(f);
       }
+    }
+    // Also surface persisted folders (including empty ones with no files under
+    // them) as immediate children of the current directory.
+    for (const folder of folders ?? []) {
+      if (!folder.path.startsWith(prefix)) continue;
+      const remainder = folder.path.slice(prefix.length);
+      if (!remainder) continue; // the current directory itself
+      const slashIdx = remainder.indexOf('/');
+      dirs.add(slashIdx === -1 ? remainder : remainder.slice(0, slashIdx));
     }
     return {
       dirsAtCurrentDir: [...dirs].sort((a, b) => a.localeCompare(b)),
       filesAtCurrentDir: localFiles,
     };
-  }, [files, currentDir]);
+  }, [files, folders, currentDir]);
 
   // Group files at the current level into semantic sections, ordered by
   // SECTION_ORDER. Files within a section sort most-recently-modified first.
@@ -227,22 +281,27 @@ export function DesignFilesPanel({
     setRenaming(null);
   }, [currentDir]);
 
-  // Navigate up to the nearest ancestor that still exists when files under
-  // currentDir disappear (e.g. after deleting the last file in a subfolder).
+  // Navigate up to the nearest ancestor that still exists when the current
+  // directory disappears (e.g. after deleting the last file in a subfolder).
+  // A directory "exists" if it has files under it OR is a persisted folder
+  // (possibly empty) — otherwise navigating into an empty folder would bounce
+  // straight back to the root.
   useEffect(() => {
     if (currentDir === '') return;
-    const prefix = `${currentDir}/`;
-    if (files.some((f) => f.name.startsWith(prefix))) return;
+    const dirExists = (dir: string) =>
+      files.some((f) => f.name.startsWith(`${dir}/`)) ||
+      (folders ?? []).some((fo) => fo.path === dir || fo.path.startsWith(`${dir}/`));
+    if (dirExists(currentDir)) return;
     const parts = currentDir.split('/');
     for (let i = parts.length - 1; i > 0; i--) {
       const ancestor = parts.slice(0, i).join('/');
-      if (files.some((f) => f.name.startsWith(`${ancestor}/`))) {
+      if (dirExists(ancestor)) {
         setCurrentDir(ancestor);
         return;
       }
     }
     setCurrentDir('');
-  }, [files, currentDir]);
+  }, [files, folders, currentDir]);
 
   const pluginFolders = useMemo(() => getPluginFolderCandidates(files), [files]);
 
@@ -270,6 +329,27 @@ export function DesignFilesPanel({
     () => files.find((f) => f.name === preview) ?? null,
     [preview, files],
   );
+
+  const initialPreviewFile = useMemo(
+    () =>
+      autoPreviewDesignArtifacts
+        ? selectInitialDesignPreviewFile(files, preferredPreviewFile)
+        : null,
+    [autoPreviewDesignArtifacts, files, preferredPreviewFile],
+  );
+
+  useEffect(() => {
+    if (autoPreviewAppliedRef.current) return;
+    if (!initialPreviewFile) return;
+    autoPreviewAppliedRef.current = true;
+    setPreview(initialPreviewFile.name);
+  }, [initialPreviewFile]);
+
+  useEffect(() => {
+    if (!preview) return;
+    if (files.some((f) => f.name === preview)) return;
+    setPreview(null);
+  }, [files, preview]);
 
   useEffect(() => {
     if (!menuPos) return;
@@ -748,7 +828,7 @@ export function DesignFilesPanel({
               </div>
             </div>
           ) : null}
-          {files.length === 0 && liveArtifacts.length === 0 ? (
+          {files.length === 0 && liveArtifacts.length === 0 && (folders?.length ?? 0) === 0 ? (
             <div className="df-empty" data-testid="design-files-empty">
               <div className="df-empty-pill">
                 <span className="df-empty-title">

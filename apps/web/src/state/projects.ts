@@ -94,6 +94,37 @@ export async function createProject(input: {
   }
 }
 
+export async function pickLocalFolderPath(): Promise<string | null> {
+  const resp = await fetch('/api/dialog/open-folder', {
+    method: 'POST',
+  });
+  if (!resp.ok) {
+    let message = 'Could not open folder picker';
+    try {
+      const body = await resp.json() as { error?: unknown };
+      if (typeof body.error === 'string' && body.error.trim()) {
+        message = body.error;
+      } else if (
+        body.error
+        && typeof body.error === 'object'
+        && 'message' in body.error
+        && typeof body.error.message === 'string'
+        && body.error.message.trim()
+      ) {
+        message = body.error.message;
+      }
+    } catch { /* use default message */ }
+    throw new Error(message);
+  }
+
+  const body = await resp.json() as { path?: unknown };
+  if (body.path == null) return null;
+  if (typeof body.path !== 'string') {
+    throw new Error('Could not open folder picker');
+  }
+  return body.path.length > 0 ? body.path : null;
+}
+
 export async function importFolderProject(
   input: ImportFolderRequest,
 ): Promise<ImportFolderResponse> {
@@ -254,6 +285,11 @@ export async function createConversation(
     seedFromConversationId?: string | null;
     forkAfterMessageId?: string | null;
     sessionMode?: ChatSessionMode;
+    // Fork snapshot: the exact in-memory messages to copy (up to the fork
+    // point). Lets the daemon fork from what the user sees even when the fork
+    // point was never persisted (e.g. a run that errored before its assistant
+    // message reached the database).
+    seedMessages?: ChatMessage[];
   },
 ): Promise<Conversation | null> {
   try {
@@ -266,6 +302,9 @@ export async function createConversation(
     }
     if (opts?.forkAfterMessageId) {
       body.forkAfterMessageId = opts.forkAfterMessageId;
+    }
+    if (opts?.seedMessages && opts.seedMessages.length > 0) {
+      body.seedMessages = opts.seedMessages;
     }
     const resp = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations`,
@@ -1120,7 +1159,9 @@ export interface PluginMarketplaceEntry {
   yankReason?: string;
   tags?: string[];
   title?: string;
+  title_i18n?: Record<string, string>;
   description?: string;
+  description_i18n?: Record<string, string>;
   icon?: string;
 }
 

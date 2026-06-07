@@ -4,8 +4,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 
-import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
-import type { ProjectFile, ProjectFileKind } from '../../src/types';
+import { DesignFilesPanel, type DesignFilesNavState } from '../../src/components/DesignFilesPanel';
+import type { ProjectFile, ProjectFileKind, ProjectFolder } from '../../src/types';
+
+function folder(path: string): ProjectFolder {
+  return { name: path.split('/').pop() ?? path, path, type: 'dir', size: 0, mtime: 1700000000 };
+}
 
 // Stub localStorage so the component's view-state persistence writes to an
 // in-memory store. Cleared in beforeEach so no test bleeds state into the next.
@@ -362,6 +366,57 @@ describe('DesignFilesPanel directory navigation', () => {
     expect(document.querySelectorAll('.df-dir-row').length).toBe(1);
   });
 
+  it('includes subdirectory files in the flat root-level list', () => {
+    renderPanel([
+      file({ name: 'assets/logo.png', kind: 'image' }),
+      file({ name: 'top.html', kind: 'html' }),
+    ]);
+
+    expect(document.querySelectorAll('.df-dir-row').length).toBe(1);
+    expect(screen.getByTestId('design-file-row-assets/logo.png')).toBeTruthy();
+    expect(screen.getByTestId('design-file-row-top.html')).toBeTruthy();
+  });
+
+  it('preserves the current directory when remounted with navState from a previous render', () => {
+    let saved: DesignFilesNavState | undefined;
+
+    function makePanel(nav?: DesignFilesNavState) {
+      return (
+        <DesignFilesPanel
+          projectId="test-project"
+          files={[
+            file({ name: 'assets/logo.png', kind: 'image' }),
+            file({ name: 'top.html', kind: 'html' }),
+          ]}
+          liveArtifacts={[]}
+          navState={nav}
+          onNavStateChange={(state) => { saved = state; }}
+          onRefreshFiles={vi.fn()}
+          onOpenFile={vi.fn()}
+          onOpenLiveArtifact={vi.fn()}
+          onRenameFile={vi.fn()}
+          onDeleteFile={vi.fn()}
+          onDeleteFiles={vi.fn()}
+          onUpload={vi.fn()}
+          onUploadFiles={vi.fn()}
+          onPaste={vi.fn()}
+          onNewSketch={vi.fn()}
+        />
+      );
+    }
+
+    const { unmount } = render(makePanel());
+
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
+
+    unmount();
+    render(makePanel(saved));
+
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
+    expect(screen.getByTestId('design-file-row-assets/logo.png')).toBeTruthy();
+  });
+
   it('navigates up one level via the parent breadcrumb', () => {
     renderPanel([file({ name: 'assets/icons/star.svg', kind: 'image' })]);
 
@@ -426,5 +481,49 @@ describe('DesignFilesPanel directory navigation', () => {
 
     expect(document.querySelector('.df-breadcrumb-current')?.textContent).not.toBe('assets');
     expect(screen.getByTestId('design-file-row-top.html')).toBeTruthy();
+  });
+});
+
+describe('DesignFilesPanel current-directory sync', () => {
+  afterEach(() => cleanup());
+
+  it('reports the active folder so new files are created under it, not the root', () => {
+    const onCurrentDirChange = vi.fn();
+    renderPanel(
+      [
+        file({ name: 'top.html', kind: 'html' }),
+        file({ name: 'assets/logo.png', kind: 'image' }),
+      ],
+      { onCurrentDirChange },
+    );
+    // Mounts at the root.
+    expect(onCurrentDirChange).toHaveBeenLastCalledWith('');
+    // Navigate into the folder — the parent must learn the new target dir, or
+    // upload / paste / new-sketch would create at the project root (#3358 regression).
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(onCurrentDirChange).toHaveBeenLastCalledWith('assets');
+  });
+});
+
+describe('DesignFilesPanel persisted (empty) folders', () => {
+  afterEach(() => cleanup());
+
+  it('shows an empty persisted folder that has no files under it', () => {
+    // Only a root file + an empty persisted folder; the folder must still
+    // appear (it would vanish if we derived dirs from file paths alone).
+    renderPanel([file({ name: 'top.html', kind: 'html' })], { folders: [folder('assets')] });
+    const dirRows = [...document.querySelectorAll('.df-dir-row')];
+    expect(dirRows.some((r) => r.textContent?.includes('assets'))).toBe(true);
+  });
+
+  it('surfaces a nested empty persisted folder after navigating into its parent', () => {
+    renderPanel([], { folders: [folder('assets'), folder('assets/icons')] });
+    // Zero files, but the persisted folder still renders the tree (not the
+    // empty state), so 'assets' is navigable at the root.
+    const rootDirs = [...document.querySelectorAll('.df-dir-row .df-row-name')].map((e) => e.textContent);
+    expect(rootDirs).toContain('assets');
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    const nestedDirs = [...document.querySelectorAll('.df-dir-row .df-row-name')].map((e) => e.textContent);
+    expect(nestedDirs).toContain('icons');
   });
 });

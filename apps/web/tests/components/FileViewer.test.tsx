@@ -627,7 +627,7 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Shell />);
 
     const firstFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
 
     fireEvent.click(screen.getByRole('button', { name: 'Leave project' }));
 
@@ -635,7 +635,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByTestId('home-view')).toBeTruthy();
     const parkedFrame = container.querySelector<HTMLIFrameElement>('.iframe-keep-alive-pool iframe');
     expect(parkedFrame).toBe(firstFrame);
-    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
 
     fireEvent.click(screen.getByRole('button', { name: 'Return project' }));
 
@@ -782,7 +782,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-od-render-mode="url-load"');
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
     expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
-    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll&amp;odPreviewBridge=selection"');
+    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll&amp;odPreviewBridge=selection&amp;odPreviewBridge=snapshot"');
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
   });
 
@@ -812,13 +812,13 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(frame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(frame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
 
     fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
 
     const reloadedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     expect(reloadedFrame).toBe(frame);
-    expect(reloadedFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=1&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(reloadedFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
   });
 
   it('remounts the srcDoc HTML preview when reload is requested', () => {
@@ -1168,7 +1168,7 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Switcher />);
     const getFrame = () => container.querySelector<HTMLIFrameElement>('[data-testid="artifact-preview-frame"]');
     const initialFrame = getFrame();
-    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
 
     const observationsBeforeSwitch = observedCommittedSrcs.length;
     fireEvent.click(screen.getByRole('button', { name: 'Switch file' }));
@@ -1176,9 +1176,9 @@ describe('FileViewer SVG artifacts', () => {
     const nextFrame = getFrame();
     expect(nextFrame).toBeTruthy();
     expect(observedCommittedSrcs[observationsBeforeSwitch]).toBe(
-      '/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection',
+      '/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot',
     );
-    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
   });
 
   it('allows downloads in the in-tab HTML presentation iframe', async () => {
@@ -1196,19 +1196,48 @@ describe('FileViewer SVG artifacts', () => {
         exports: ['html'],
       },
     });
+    const css = readExpandedIndexCss();
+    const style = document.createElement('style');
+    style.textContent = css;
+    document.head.appendChild(style);
+    const workspaceShell = document.createElement('div');
+    workspaceShell.className = 'workspace-shell';
+    const chrome = document.createElement('div');
+    chrome.className = 'workspace-tabs-chrome app-chrome-header';
+    vi.spyOn(chrome, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 100, 34));
+    const workspaceBody = document.createElement('div');
+    workspaceBody.className = 'workspace-shell__body';
+    workspaceShell.append(chrome, workspaceBody);
+    document.body.appendChild(workspaceShell);
 
     const { container } = render(
       <FileViewer projectId="project-1" projectKind="prototype" file={file} liveHtml="<html><body>hi</body></html>" />,
+      { container: workspaceBody },
     );
 
     fireEvent.click(screen.getByRole('button', { name: /present/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /in this tab/i }));
 
     await waitFor(() => {
-      const frame = container.querySelector('.present-overlay iframe');
+      const frame = document.body.querySelector('.present-overlay iframe');
       expect(frame?.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
       expect(frame?.getAttribute('data-od-render-mode')).toBe('url-load');
     });
+    expect(container.querySelector('.html-viewer.is-tab-present')).toBeTruthy();
+    const overlay = document.body.querySelector<HTMLElement>('.present-overlay');
+    expect(overlay?.parentElement).toBe(document.body);
+    expect(document.body.style.getPropertyValue('--workspace-tabs-chrome-height')).toBe('34px');
+    expect(overlay?.style.getPropertyValue('--workspace-tabs-chrome-height')).toBe('');
+    const bodyChromeHeight = window
+      .getComputedStyle(document.body)
+      .getPropertyValue('--workspace-tabs-chrome-height')
+      .trim();
+    const resolvedTop = window
+      .getComputedStyle(overlay!)
+      .top.replace(/var\(--workspace-tabs-chrome-height,\s*38px\)/, bodyChromeHeight || '38px');
+    expect(resolvedTop).toBe('34px');
+    style.remove();
+    workspaceShell.remove();
   });
 
   it('allows downloads in React component preview iframes', async () => {
@@ -1426,7 +1455,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
 
-    render(
+    const view = render(
       <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
@@ -1438,6 +1467,10 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     expect(await screen.findByRole('dialog')).toBeTruthy();
+    const backdrop = document.body.querySelector('.viewer-modal-backdrop.deploy-flow-backdrop');
+    expect(backdrop).toBeTruthy();
+    expect(backdrop?.parentElement).toBe(document.body);
+    expect(view.container.querySelector('.viewer-modal-backdrop')).toBeNull();
     expect(screen.getByText('Account ID')).toBeTruthy();
     expect(screen.getByText(/Select Pages Edit when creating the API token/i)).toBeTruthy();
     expect(screen.getByText(/Zone Read/i)).toBeTruthy();
@@ -2637,7 +2670,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
 
-    render(
+    const view = render(
       <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
@@ -2647,6 +2680,10 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /save as template/i }));
 
     expect(screen.getByRole('dialog')).toBeTruthy();
+    const backdrop = document.body.querySelector('.viewer-modal-backdrop');
+    expect(backdrop).toBeTruthy();
+    expect(backdrop?.parentElement).toBe(document.body);
+    expect(view.container.querySelector('.viewer-modal-backdrop')).toBeNull();
     const nameInput = screen.getByLabelText(/template name/i) as HTMLInputElement;
     expect(nameInput.value).toBe('landing-page');
     fireEvent.change(nameInput, { target: { value: 'Landing Page' } });
@@ -3298,6 +3335,164 @@ describe('FileViewer tweaks toolbar', () => {
     });
     expect(screen.getByTestId('comment-active-pin').textContent).toBe('2');
     expect(document.querySelector('[data-comment-id="comment-older"]')?.className).not.toContain('active');
+  });
+
+  it('uses the next comment number when adding another comment on the same element', async () => {
+    const savedComment: PreviewComment = {
+      id: 'comment-saved',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'hero',
+      selector: '[data-od-id="hero"]',
+      label: 'Hero',
+      text: 'Hero',
+      htmlHint: '<main data-od-id="hero">Hero</main>',
+      position: { x: 8, y: 12, width: 120, height: 48 },
+      note: 'Existing note',
+      status: 'open',
+      createdAt: 10,
+      updatedAt: 10,
+    };
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[savedComment]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-targets',
+        targets: [{
+          elementId: 'hero',
+          selector: '[data-od-id="hero"]',
+          label: 'Hero',
+          text: 'Hero',
+          position: { x: 8, y: 12, width: 120, height: 48 },
+          htmlHint: '<main data-od-id="hero">Hero</main>',
+        }],
+      },
+    }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('comment-saved-marker-hero').textContent).toBe('1');
+    });
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-target',
+        elementId: 'hero',
+        selector: '[data-od-id="hero"]',
+        label: 'Hero',
+        text: 'Hero',
+        position: { x: 8, y: 12, width: 120, height: 48 },
+        hoverPoint: { x: 12, y: 16 },
+        htmlHint: '<main data-od-id="hero">Hero</main>',
+      },
+    }));
+
+    expect((await screen.findByTestId('comment-active-pin')).textContent).toBe('2');
+
+    fireEvent.click(screen.getByTestId('comment-saved-marker-hero'));
+    await waitFor(() => {
+      expect(document.querySelector('[data-comment-id="comment-saved"]')?.className).toContain('active');
+    });
+    expect(screen.getByTestId('comment-active-pin').textContent).toBe('1');
+  });
+
+  it('keeps comment marker numbers global across deck slides', async () => {
+    const slideOneComment: PreviewComment = {
+      id: 'comment-slide-one',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'deck.html',
+      elementId: 'slide-one-title',
+      selector: '[data-od-id="slide-one-title"]',
+      label: 'Slide one title',
+      text: 'Slide one',
+      htmlHint: '<h1 data-od-id="slide-one-title">Slide one</h1>',
+      position: { x: 8, y: 12, width: 120, height: 48 },
+      note: 'First slide note',
+      status: 'open',
+      createdAt: 10,
+      updatedAt: 10,
+      slideIndex: 0,
+    };
+    const slideFourComment: PreviewComment = {
+      ...slideOneComment,
+      id: 'comment-slide-four',
+      elementId: 'slide-four-title',
+      selector: '[data-od-id="slide-four-title"]',
+      label: 'Slide four title',
+      text: 'Slide four',
+      htmlHint: '<h1 data-od-id="slide-four-title">Slide four</h1>',
+      position: { x: 24, y: 32, width: 140, height: 52 },
+      note: 'Fourth slide note',
+      createdAt: 20,
+      updatedAt: 20,
+      slideIndex: 3,
+    };
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({
+          name: 'deck.html',
+          path: 'deck.html',
+          mime: 'text/html',
+          kind: 'html',
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Deck',
+            entry: 'deck.html',
+            renderer: 'html',
+            exports: ['html'],
+          },
+        })}
+        isDeck
+        liveHtml={'<html><body><section class="slide">one</section><section class="slide">two</section></body></html>'}
+        previewComments={[slideOneComment, slideFourComment]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od:slide-state', active: 3, count: 18 },
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-targets',
+        targets: [{
+          elementId: 'slide-four-title',
+          selector: '[data-od-id="slide-four-title"]',
+          label: 'Slide four title',
+          text: 'Slide four',
+          position: { x: 24, y: 32, width: 140, height: 52 },
+          htmlHint: '<h1 data-od-id="slide-four-title">Slide four</h1>',
+          slideIndex: 3,
+        }],
+      },
+    }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('comment-saved-marker-slide-four-title').textContent).toBe('2');
+    });
+    expect(screen.queryByTestId('comment-saved-marker-slide-one-title')).toBeNull();
   });
 
   it('orders side comments by creation time while keeping activity timestamps', () => {
@@ -4946,6 +5141,17 @@ describe('LiveArtifactViewer', () => {
     expect(rule).toContain('right: calc(env(safe-area-inset-right, 0px) + 20px);');
     expect(rule).toContain('display: inline-flex;');
     expect(rule).toContain('align-items: center;');
+  });
+
+  it('keeps in-tab presentation overlays anchored to the inherited workspace tab height', () => {
+    const css = readExpandedIndexCss();
+    const overlayRule = css.match(/\.present-overlay\s*\{[^}]+\}/)?.[0] ?? '';
+
+    expect(overlayRule).toContain('position: fixed;');
+    expect(overlayRule).toContain('top: var(--workspace-tabs-chrome-height, 38px);');
+    expect(overlayRule).toContain('right: 0;');
+    expect(overlayRule).toContain('bottom: 0;');
+    expect(overlayRule).toContain('left: 0;');
   });
 
   it('uses the shared zoom dropdown for live artifact previews', async () => {

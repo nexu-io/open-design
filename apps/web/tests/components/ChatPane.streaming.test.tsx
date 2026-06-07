@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { forwardRef, useImperativeHandle } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ChatPane, retryableAssistantMessage } from '../../src/components/ChatPane';
+import { ChatPane, buildRunErrorDiagnosticText, retryableAssistantMessage } from '../../src/components/ChatPane';
 import { DESIGN_SYSTEM_WORKSPACE_PROMPT_PREFIX } from '../../src/design-system-auto-prompt';
 import { readExpandedIndexCss } from '../helpers/read-expanded-css';
 import type { ChatMessage, Conversation, ProjectMetadata } from '../../src/types';
@@ -15,8 +15,12 @@ const composerMocks = vi.hoisted(() => ({
   setDraft: vi.fn(),
 }));
 
+const clipboardMocks = vi.hoisted(() => ({
+  copyToClipboard: vi.fn(async (_text: string) => true),
+}));
+
 const translations: Record<string, string> = {
-  'chat.mode.chat.label': 'Chat',
+  'chat.mode.chat.label': 'Ask',
   'chat.mode.design.label': 'Design Agent',
   'chat.queuedHeader': 'Queued',
   'chat.queuedToSend': 'to Send',
@@ -27,6 +31,9 @@ const translations: Record<string, string> = {
   'chat.queuedEdit': 'Edit',
   'chat.queuedMore': 'more queued',
   'chat.queuedFollowUpFallback': 'Queued follow-up',
+  'avatar.useLocal': 'Use Local CLI',
+  'chat.copyErrorDiagnostic': 'Copy error diagnostics',
+  'chat.copyDone': 'Copied!',
 };
 
 vi.mock('../../src/i18n', () => ({
@@ -42,6 +49,10 @@ vi.mock('../../src/components/AssistantMessage', () => ({
   AssistantMessage: ({ streaming, message }: { streaming: boolean; message: ChatMessage }) => (
     <output data-testid={`assistant-streaming-${message.id}`}>{streaming ? 'streaming' : 'idle'}</output>
   ),
+}));
+
+vi.mock('../../src/lib/copy-to-clipboard', () => ({
+  copyToClipboard: clipboardMocks.copyToClipboard,
 }));
 
 vi.mock('../../src/components/ChatComposer', () => ({
@@ -106,6 +117,12 @@ class MockResizeObserver {
   trigger(target: Element) {
     this.callback([{ target } as ResizeObserverEntry], this as unknown as ResizeObserver);
   }
+
+  static triggerObserved(target: Element) {
+    for (const instance of MockResizeObserver.instances) {
+      if (instance.observed.has(target)) instance.trigger(target);
+    }
+  }
 }
 
 function mockDataTransfer(): DataTransfer {
@@ -158,7 +175,14 @@ describe('ChatPane streaming state', () => {
     expect(css).toContain('.chat-queued-send-title');
     expect(css).toContain('text-overflow: ellipsis;');
     expect(css).toContain('.chat-queued-send-drag-handle');
-    expect(css).toContain('max-width: min(calc(100% - 20px), 520px);');
+    expect(css).toContain('align-self: auto;');
+    expect(css).toContain('.pane {');
+    expect(css).toContain('--chat-composer-inline-inset: 12px;');
+    expect(css).toContain('.app .split-chat-slot > .pane');
+    expect(css).toContain('--chat-composer-inline-inset: 10px;');
+    expect(css).toContain('width: calc(100% - (var(--chat-composer-inline-inset, 12px) * 2));');
+    expect(css).toContain('margin: 0 var(--chat-composer-inline-inset, 12px) 2px;');
+    expect(css).toContain('max-width: none;');
     expect(css).toContain('.chat-queued-send-action');
     expect(css).toContain('width: 24px;');
     expect(css).toContain('height: 24px;');
@@ -195,6 +219,72 @@ describe('ChatPane streaming state', () => {
       .toBeNull();
   });
 
+  it('copies failed-run diagnostics with the trace id from the error card', async () => {
+    const messages: ChatMessage[] = [
+      { id: 'user-1', role: 'user', content: 'Create a login page', createdAt: 0 },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Generation failed',
+        agentId: 'amr',
+        createdAt: 1,
+        runId: 'run-trace-123',
+        runStatus: 'failed',
+        events: [
+          {
+            kind: 'status',
+            label: 'error',
+            detail: 'json-rpc id 4: Connection reset by server',
+            code: 'AGENT_EXECUTION_FAILED',
+          },
+        ],
+      },
+    ];
+
+    render(
+      <ChatPane
+        projectKindForTracking="prototype"
+        messages={messages}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy error diagnostics' }));
+
+    await waitFor(() => expect(clipboardMocks.copyToClipboard).toHaveBeenCalledTimes(1));
+    const copied = clipboardMocks.copyToClipboard.mock.calls[0]?.[0] ?? '';
+    expect(copied).toContain('trace_id: run-trace-123');
+    expect(copied).toContain('run_id: run-trace-123');
+    expect(copied).toContain('error_code: AGENT_EXECUTION_FAILED');
+    expect(copied).toContain('project_id: project-1');
+    expect(copied).toContain('conversation_id: conv-1');
+    expect(copied).toContain('json-rpc id 4: Connection reset by server');
+  });
+
+  it('formats run error diagnostics with a raw error when guidance copy differs', () => {
+    expect(buildRunErrorDiagnosticText({
+      message: 'Service unavailable. Try again.',
+      rawMessage: 'json-rpc id 4: Connection reset by server',
+      errorCode: 'UPSTREAM_UNAVAILABLE',
+      traceId: 'run-abc',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      agentId: 'amr',
+    })).toContain('raw_error:\njson-rpc id 4: Connection reset by server');
+  });
+
   it('renders user turns with the chat bubble styling hook', () => {
     const messages: ChatMessage[] = [
       {
@@ -227,6 +317,57 @@ describe('ChatPane streaming state', () => {
     const bubble = screen.getByText('Generate a simple sign-in page');
     expect(bubble.classList.contains('user-bubble')).toBe(true);
     expect(bubble.closest('.msg.user')).not.toBeNull();
+  });
+
+  it('offers a Local CLI recovery action on BYOK error states', () => {
+    const onSwitchToLocalCli = vi.fn();
+    const messages: ChatMessage[] = [
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Create a login page',
+        createdAt: 1,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '',
+        createdAt: 2,
+        runStatus: 'failed',
+        events: [
+          {
+            kind: 'status',
+            label: 'error',
+            detail: 'Missing API key — open Settings and paste one in.',
+          },
+        ],
+      },
+    ];
+
+    render(
+      <ChatPane
+        messages={messages}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        showByokRecoveryAction
+        onSwitchToLocalCli={onSwitchToLocalCli}
+        projectMetadata={projectMetadata}
+      />,
+    );
+
+    const action = screen.getByRole('button', { name: 'Use Local CLI' });
+    fireEvent.click(action);
+
+    expect(onSwitchToLocalCli).toHaveBeenCalledTimes(1);
   });
 
   it('shows the sent mode and applied plugin context on user turns', () => {
@@ -446,6 +587,40 @@ Expected output:
 
     expect(screen.getByTestId('composer-streaming').textContent).toBe('idle');
     expect(screen.getByTestId('assistant-streaming-assistant-1').textContent).toBe('streaming');
+  });
+
+  it('clears stale anchor spacer before sending another local turn', () => {
+    const onSend = vi.fn();
+    const { container } = render(
+      <ChatPane
+        projectKindForTracking="prototype"
+        messages={[
+          { id: 'user-1', role: 'user', content: 'Make the landing page', createdAt: 1 },
+          { id: 'assistant-1', role: 'assistant', content: 'Done', createdAt: 2 },
+        ]}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={onSend}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+      />,
+    );
+
+    const spacer = container.querySelector<HTMLElement>('.chat-log-tail-spacer');
+    expect(spacer).not.toBeNull();
+    spacer!.style.height = '320px';
+
+    fireEvent.click(screen.getByTestId('composer-submit'));
+
+    expect(onSend).toHaveBeenCalledOnce();
+    expect(spacer!.style.height).toBe('0px');
   });
 
   it('renders a stopped pinned todo after a terminal run without a final TodoWrite', () => {
@@ -725,7 +900,7 @@ Expected output:
       },
     });
 
-    MockResizeObserver.instances[0]?.trigger(strip);
+    MockResizeObserver.triggerObserved(strip);
 
     expect(log!.scrollTop).toBe(600);
   });

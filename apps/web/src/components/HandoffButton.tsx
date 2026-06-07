@@ -456,6 +456,17 @@ export function HandoffButton({
     }
   }
 
+  function chooseFramework(id: FrameworkId) {
+    setFrameworkId(id);
+    writePreferredFramework(id);
+    setError(null);
+    setCopiedCliId(null);
+    if (copiedTimerRef.current !== null) {
+      window.clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = null;
+    }
+  }
+
   if (!loaded) {
     return null;
   }
@@ -614,11 +625,7 @@ export function HandoffButton({
                     <button
                       key={editor.id}
                       type="button"
-                      className={[
-                        'handoff-menu-item',
-                        'handoff-target-card',
-                        editor.id === preferred ? 'active' : '',
-                      ].filter(Boolean).join(' ')}
+                      className="handoff-menu-item handoff-target-card"
                       data-testid={`handoff-menu-item-${editor.id}`}
                       onClick={() => void launch(editor)}
                       disabled={busy === editor.id}
@@ -626,10 +633,7 @@ export function HandoffButton({
                     >
                       <EditorIcon editorId={editor.id} size={24} />
                       <span className="handoff-target-label">{editor.label}</span>
-                      <span className="handoff-target-meta">{t('handoff.clickOpen')}</span>
-                      {editor.id === preferred ? (
-                        <Icon name="check" size={12} />
-                      ) : null}
+                      <Icon className="handoff-target-arrow" name="chevron-right" size={12} />
                     </button>
                   ))}
                 </div>
@@ -650,7 +654,6 @@ export function HandoffButton({
                       >
                         <EditorIcon editorId={editor.id} size={24} />
                         <span className="handoff-target-label">{editor.label}</span>
-                        <span className="handoff-target-meta">{t('handoff.notInstalled')}</span>
                       </button>
                     ))}
                   </div>
@@ -677,10 +680,7 @@ export function HandoffButton({
                     type="button"
                     className={`handoff-framework-chip${framework.id === selectedFramework.id ? ' active' : ''}`}
                     aria-pressed={framework.id === selectedFramework.id}
-                    onClick={() => {
-                      setFrameworkId(framework.id);
-                      writePreferredFramework(framework.id);
-                    }}
+                    onClick={() => chooseFramework(framework.id)}
                   >
                     {frameworkLabel(framework.id, t)}
                   </button>
@@ -708,9 +708,11 @@ export function HandoffButton({
                           title={t('handoff.copyPromptForTarget', { target: cliDisplayName(cli) })}
                         >
                           <AgentIcon id={cli.id} size={24} />
-                          <span className="handoff-target-label">{cliDisplayName(cli)}</span>
-                          <span className="handoff-target-meta">
-                            {copied ? t('handoff.copied') : t('handoff.copyPrompt')}
+                          <span className="handoff-target-copy">
+                            <span className="handoff-target-label">{cliDisplayName(cli)}</span>
+                            <span className="handoff-target-meta">
+                              {copied ? t('handoff.copied') : t('handoff.copyPrompt')}
+                            </span>
                           </span>
                         </button>
                       );
@@ -741,9 +743,6 @@ export function HandoffButton({
                       >
                         <AgentIcon id={cli.id} size={24} />
                         <span className="handoff-target-label">{cliDisplayName(cli)}</span>
-                        <span className="handoff-target-meta">
-                          {copied ? t('handoff.copied') : t('handoff.notInstalled')}
-                        </span>
                       </button>
                     );
                   })}

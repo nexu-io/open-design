@@ -10,7 +10,7 @@ import {
   createSidecarLaunchEnv,
   resolveAppIpcPath,
 } from "@open-design/sidecar";
-import { applyOsLocaleSwitch } from "@open-design/desktop/main";
+import { applyOsLocaleSwitch, createSplashWindow } from "@open-design/desktop/main";
 import { readProcessStamp } from "@open-design/platform";
 import { join } from "node:path";
 import { app, dialog } from "electron";
@@ -18,6 +18,7 @@ import { app, dialog } from "electron";
 import { readPackagedConfig } from "./config.js";
 import { writePackagedDesktopIdentity } from "./identity.js";
 import { PackagedPathAccessError } from "./errors.js";
+import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "./launcher-runtime.js";
 import {
   applyPackagedElectronPathOverrides,
   claimPackagedSingleInstanceLock,
@@ -73,7 +74,11 @@ async function main(): Promise<void> {
   const config = await readPackagedConfig();
   const argvStamp = readProcessStamp(process.argv.slice(1), OPEN_DESIGN_SIDECAR_CONTRACT);
   const namespace = argvStamp?.namespace ?? config.namespace;
-  const paths = resolvePackagedNamespacePaths(config, namespace, process.env);
+  const namespaceConfig = namespace === config.namespace ? config : { ...config, namespace };
+  const initialPaths = resolvePackagedNamespacePaths(namespaceConfig, namespace, process.env);
+  const launcherRuntime = await resolvePackagedLauncherRuntime(namespaceConfig, initialPaths);
+  const activeConfig = launcherRuntime.config;
+  const paths = launcherRuntime.paths;
   const stamp = argvStamp ?? createPackagedDesktopStamp(namespace);
 
   await ensurePackagedNamespacePaths(paths);
@@ -92,6 +97,15 @@ async function main(): Promise<void> {
   const identity = await writePackagedDesktopIdentity({ paths, stamp });
   await app.whenReady();
 
+  // Show the brand splash IMMEDIATELY, before we await the daemon/web sidecars
+  // below. Cold boot otherwise leaves the user staring at no window at all for
+  // the few seconds the sidecars take to come up; putting the animation on
+  // screen in parallel masks that gap, and the runtime keeps it up until the
+  // real app has mounted (see createDesktopRuntime). The handle carries the
+  // creation timestamp so the runtime's minimum-hold timer counts from here —
+  // BEFORE the sidecar boot below — rather than re-adding the delay afterwards.
+  const splash = createSplashWindow();
+
   applyLaunchEnv(paths.runtimeRoot, stamp);
 
   const runtime = bootstrapSidecarRuntime(stamp, process.env, {
@@ -101,27 +115,29 @@ async function main(): Promise<void> {
   });
 
   const sidecars = await startPackagedSidecars(runtime, paths, {
-    appVersion: config.appVersion,
-    amrProfile: config.amrProfile,
-    daemonCliEntry: config.daemonCliEntry,
-    daemonSidecarEntry: config.daemonSidecarEntry,
-    nodeCommand: config.nodeCommand,
-    telemetryRelayUrl: config.telemetryRelayUrl,
-    posthogKey: config.posthogKey,
-    posthogHost: config.posthogHost,
+    appVersion: activeConfig.appVersion,
+    amrProfile: activeConfig.amrProfile,
+    daemonCliEntry: activeConfig.daemonCliEntry,
+    daemonSidecarEntry: activeConfig.daemonSidecarEntry,
+    nodeCommand: activeConfig.nodeCommand,
+    telemetryRelayUrl: activeConfig.telemetryRelayUrl,
+    posthogKey: activeConfig.posthogKey,
+    posthogHost: activeConfig.posthogHost,
     // PR #974 round-5 (lefarcen P2): the Electron entry runs desktop
     // main alongside the daemon, so the import-folder gate must be
     // pinned ON from request 0. See `apps/packaged/src/headless.ts` for
     // the daemon+web-only counterpart that passes `false`.
     requireDesktopAuth: true,
-    webSidecarEntry: config.webSidecarEntry,
-    webStandaloneRoot: config.webStandaloneRoot,
-    webOutputMode: config.webOutputMode,
+    webSidecarEntry: activeConfig.webSidecarEntry,
+    webStandaloneRoot: activeConfig.webStandaloneRoot,
+    webOutputMode: activeConfig.webOutputMode,
   });
   registerOdProtocol(sidecars.web.url ?? "http://127.0.0.1:0");
 
   const { runDesktopMain } = await import("@open-design/desktop/main");
   await runDesktopMain(runtime, {
+    splashWindow: splash.window,
+    splashStartedAt: splash.startedAt,
     async beforeShutdown() {
       try {
         await sidecars.close();
@@ -140,6 +156,9 @@ async function main(): Promise<void> {
       return sidecars.daemon.url;
     },
     onDesktopReady(controls) {
+      void confirmPackagedLauncherRuntime(launcherRuntime).catch((error: unknown) => {
+        packagedLogger?.warn("failed to confirm packaged launcher runtime", { error });
+      });
       showExistingDesktop = controls.show;
       if (!pendingSecondInstanceFocus) return;
       pendingSecondInstanceFocus = false;
@@ -147,9 +166,13 @@ async function main(): Promise<void> {
     },
     preloadPath: join(app.getAppPath(), "preload.cjs"),
     update: {
-      currentVersion: config.appVersion,
+      currentVersion: activeConfig.appVersion,
       downloadRoot: paths.updateRoot,
       installerObservationRoot: paths.installerObservationRoot,
+      launcherLaunchPath: launcherRuntime.installedLaunchPath,
+      launcherRoot: launcherRuntime.launcherPaths.root,
+      launcherPayloadExtractorPath: activeConfig.resourceRoot == null ? null : join(activeConfig.resourceRoot, "bin", "7z.exe"),
+      launcherRuntimePath: launcherRuntime.launcherPaths.runtimePath,
     },
   });
 }

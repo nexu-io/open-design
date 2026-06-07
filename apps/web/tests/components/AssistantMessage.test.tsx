@@ -7,6 +7,7 @@
  */
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
@@ -118,6 +119,38 @@ describe('AssistantMessage feedback gate', () => {
     expect(onForkFromMessage).toHaveBeenCalledTimes(1);
   });
 
+  it('disables the Share to Open Design button before a duplicate click can reuse stale props', () => {
+    const onShare = vi.fn();
+
+    function Harness() {
+      const [busy, setBusy] = useState(false);
+      return (
+        <AssistantMessage
+          message={baseMessage()}
+          streaming={false}
+          projectId="proj-1"
+          isLast
+          onFeedback={vi.fn()}
+          onShareToOpenDesign={() => {
+            if (busy) return;
+            onShare();
+            setBusy(true);
+          }}
+          shareToOpenDesignBusy={busy}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    fireEvent.click(screen.getByTestId('assistant-share-to-od'));
+    expect(screen.getByTestId<HTMLButtonElement>('assistant-share-to-od').disabled).toBe(true);
+    fireEvent.click(screen.getByTestId('assistant-share-to-od'));
+
+    expect(onShare).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Sharing…' })).toBeTruthy();
+  });
+
   it('does not show the fork action while the assistant is streaming', () => {
     render(
       <AssistantMessage
@@ -206,6 +239,35 @@ describe('AssistantMessage feedback gate', () => {
       />,
     );
     expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
+  });
+});
+
+describe('AssistantMessage re-renders on live tool input changes', () => {
+  it('updates the streaming card when only liveToolInput changes (memo includes it)', () => {
+    // Same message object across renders — only liveToolInput differs, the way
+    // a burst of tool_input_delta arrives. The memo comparator must compare
+    // liveToolInput or the card freezes at its first frame.
+    const message = baseMessage({ content: '', runStatus: 'running', endedAt: undefined, events: [] });
+    const { container, rerender } = render(
+      <AssistantMessage
+        message={message}
+        streaming
+        projectId="proj-1"
+        liveToolInput={{ t1: { name: 'AskUserQuestion', text: '{"questions":[{"question":"Which databa","options":[]}]}', seq: 0 } }}
+      />,
+    );
+    expect(container.querySelector('.op-ask-question-prompt')?.textContent).toBe('Which databa');
+
+    rerender(
+      <AssistantMessage
+        message={message}
+        streaming
+        projectId="proj-1"
+        liveToolInput={{ t1: { name: 'AskUserQuestion', text: '{"questions":[{"question":"Which database?","options":[]}]}', seq: 0 } }}
+      />,
+    );
+    // Re-rendered to the grown prompt rather than frozen at "Which databa".
+    expect(container.querySelector('.op-ask-question-prompt')?.textContent).toBe('Which database?');
   });
 });
 
@@ -332,7 +394,7 @@ describe('AssistantMessage thinking blocks', () => {
 });
 
 describe('AssistantMessage question forms', () => {
-  it('renders only the first question form for a repeated form id in one assistant turn', () => {
+  it('renders repeated question forms as one compact Questions banner in chat', () => {
     const firstForm = [
       '<question-form id="discovery" title="Quick brief — tailored">',
       JSON.stringify({
@@ -361,12 +423,8 @@ describe('AssistantMessage question forms', () => {
       }),
       '</question-form>',
     ].join('\n');
+    const onOpenQuestions = vi.fn();
 
-    // A historical (non-last) assistant turn renders its question forms
-    // inline in the scrollback. The live, still-unanswered form on the most
-    // recent turn lives in the right-hand Questions tab (chat shows only a
-    // focus banner), so the dedup behavior is asserted on a historical turn
-    // where the form markup is rendered in place.
     render(
       <AssistantMessage
         message={baseMessage({
@@ -379,13 +437,62 @@ describe('AssistantMessage question forms', () => {
         })}
         streaming={false}
         projectId="proj-1"
+        onOpenQuestions={onOpenQuestions}
       />,
     );
 
-    expect(screen.getByText('Quick brief — tailored')).toBeTruthy();
-    expect(screen.getByText('Who is this for?')).toBeTruthy();
+    const banners = screen.getAllByTestId('questions-banner');
+    expect(banners).toHaveLength(1);
+    fireEvent.click(banners[0]!);
+    expect(onOpenQuestions).toHaveBeenCalledWith(expect.objectContaining({
+      form: expect.objectContaining({ id: 'discovery', title: 'Quick brief — tailored' }),
+    }));
+    expect(screen.queryByText('Quick brief — tailored')).toBeNull();
+    expect(screen.queryByText('Who is this for?')).toBeNull();
     expect(screen.queryByText('Quick brief — 30 seconds')).toBeNull();
     expect(screen.queryByText('What are we making?')).toBeNull();
+  });
+
+  it('keeps answered question forms collapsed in chat', () => {
+    const form = [
+      '<question-form id="discovery" title="Quick brief — tailored">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'audience',
+            label: 'Who is this for?',
+            type: 'text',
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+
+    const onOpenQuestions = vi.fn();
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          events: [
+            {
+              kind: 'text',
+              text: form,
+            } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        nextUserContent="[form answers for discovery]\n- Who is this for?: Product evaluators"
+        onOpenQuestions={onOpenQuestions}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('questions-banner'));
+    expect(onOpenQuestions).toHaveBeenCalledWith(expect.objectContaining({
+      form: expect.objectContaining({ id: 'discovery', title: 'Quick brief — tailored' }),
+    }));
+    expect(screen.queryByText('Quick brief — tailored')).toBeNull();
+    expect(screen.queryByText('Who is this for?')).toBeNull();
+    expect(screen.queryByText('Product evaluators')).toBeNull();
   });
 });
 
@@ -507,5 +614,55 @@ describe('AssistantMessage recovered produced files', () => {
     );
 
     expect(screen.getByText('agent-sketch.sketch.json')).toBeTruthy();
+  });
+});
+
+describe('AssistantMessage live AskUserQuestion fallback suppression', () => {
+  it('keeps preamble before a live AskUserQuestion but drops hedging after it', () => {
+    const message = baseMessage({
+      content: '',
+      runStatus: 'running',
+      endedAt: undefined,
+      // event[0] = preamble (before the tool call), event[1] = duplicate
+      // hedging the model emitted after starting the tool call.
+      events: [
+        { kind: 'text', text: 'INTROPREAMBLEXYZ' } as ChatMessage['events'][number],
+        { kind: 'text', text: 'HEDGINGDUPEXYZ' } as ChatMessage['events'][number],
+      ],
+    });
+    const { container } = render(
+      <AssistantMessage
+        message={message}
+        streaming
+        projectId="proj-1"
+        // seq=1 → the tool call started after event[0], so it sits between the
+        // preamble and the hedging.
+        liveToolInput={{
+          t1: {
+            name: 'AskUserQuestion',
+            text: '{"questions":[{"question":"Which database?","options":[{"label":"Postgres"}]}]}',
+            seq: 1,
+          },
+        }}
+      />,
+    );
+    expect(container.querySelector('[data-testid="ask-user-question"]')).not.toBeNull();
+    // Preamble before the card is preserved…
+    expect(container.textContent).toContain('INTROPREAMBLEXYZ');
+    // …hedging after the card is suppressed.
+    expect(container.textContent).not.toContain('HEDGINGDUPEXYZ');
+  });
+
+  it('keeps assistant prose when no live AskUserQuestion is present', () => {
+    const message = baseMessage({
+      content: '',
+      runStatus: 'running',
+      endedAt: undefined,
+      events: [{ kind: 'text', text: 'UNIQUENORMALPROSEXYZ' } as ChatMessage['events'][number]],
+    });
+    const { container } = render(
+      <AssistantMessage message={message} streaming projectId="proj-1" />,
+    );
+    expect(container.textContent).toContain('UNIQUENORMALPROSEXYZ');
   });
 });

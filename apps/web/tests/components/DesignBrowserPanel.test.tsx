@@ -138,6 +138,14 @@ describe('inspiration action prompts', () => {
         actions: [browserUseActionById('audit_accessibility')!],
       },
     ]);
+    expect(
+      filterBrowserUseCategories(
+        BROWSER_USE_CATEGORIES,
+        '字体',
+        categoryTitle,
+        (action) => (action.id === 'extract_fonts' ? ['字体家族、字号、字重和 @font-face'] : []),
+      )[0]?.actions,
+    ).toEqual([browserUseActionById('extract_fonts')!]);
     expect(filterBrowserUseCategories(BROWSER_USE_CATEGORIES, '通用操作', categoryTitle)[0]?.id).toBe('general');
     expect(filterBrowserUseCategories(BROWSER_USE_CATEGORIES, 'no-such-action', categoryTitle)).toEqual([]);
   });

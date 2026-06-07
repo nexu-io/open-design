@@ -33,6 +33,10 @@ import { AgentIcon } from './AgentIcon';
 import { AgentDiagnosticRow } from './AgentDiagnosticRow';
 import { AmrLoginPill } from './AmrLoginPill';
 import {
+  AMR_LOGIN_STATUS_EVENT,
+  amrLoginStatusEventReason,
+} from './amrLoginPolling';
+import {
   fetchVelaLoginStatus,
   type VelaLoginStatus,
 } from '../providers/daemon';
@@ -59,6 +63,8 @@ import { navigate as navigateRoute, useRoute } from '../router';
 import {
   API_PROTOCOL_LABELS,
   API_PROTOCOL_TABS,
+  isFixedOriginGateway,
+  resolveFixedOriginBaseUrl,
   SUGGESTED_MODELS_BY_PROTOCOL,
 } from '../state/apiProtocols';
 import {
@@ -83,6 +89,7 @@ import type {
   AppTheme,
   AppVersionInfo,
   ConnectionTestResponse,
+  DesignSystemGenerationJob,
   OrbitRunSummary,
   OrbitStatusResponse,
   ExecMode,
@@ -98,7 +105,8 @@ import {
   fetchLatestGithubReleaseInfo,
   openExternalUrl,
 } from '../providers/registry';
-import { IMAGE_MODELS, MEDIA_PROVIDERS } from '../media/models';
+import { MEDIA_PROVIDERS } from '../media/models';
+import { useByokImageModelOptions, useByokVideoModelOptions, useByokSpeechModelOptions } from '../media/aihubmix-image-models';
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
@@ -237,6 +245,7 @@ interface Props {
   onSkillsChanged?: (affectedSkillId?: string) => void;
   /** Same channel for design-system registry mutations. */
   onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
+  onDesignSystemImportRebuildJob?: (designSystemId: string, job: DesignSystemGenerationJob) => void;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
 }
 
@@ -278,6 +287,18 @@ function codexPathStrings(locale: Locale) {
         `已設定的 Codex 路徑啟動失敗：${configuredPath}。本次測試改用 PATH 中的 Codex CLI：${detectedPath}。建議更新 CODEX_BIN 或清除自訂路徑。`,
     };
   }
+  if (locale === 'ja') {
+    return {
+      repairHint: '保存されている Codex のパスは、このテストで使用すべきバイナリではありません。',
+      useDetected: '検出された Codex を使用',
+      clearCustom: 'カスタムパスをクリア',
+      configuredSuccess: (path: string) => `このテストでは設定済みの Codex パスを使用しました：${path}。`,
+      invalidFallback: (configuredPath: string, detectedPath: string) =>
+        `設定された Codex パスが無効か実行できません：${configuredPath}。このテストでは PATH 上の Codex CLI（${detectedPath}）を使用しました。CODEX_BIN を更新するか、カスタムパスをクリアしてください。`,
+      failedFallback: (configuredPath: string, detectedPath: string) =>
+        `設定された Codex パスの起動に失敗しました：${configuredPath}。このテストは PATH 上の Codex CLI（${detectedPath}）で成功しました。CODEX_BIN を更新するか、カスタムパスをクリアしてください。`,
+    };
+  }
   return {
     repairHint: 'The saved Codex path is not the binary this test should keep using.',
     useDetected: 'Use detected Codex',
@@ -313,7 +334,25 @@ type TestState =
 const GATEWAY_API_PROTOCOLS = new Set<ApiProtocol>([
   'ollama',
   'senseaudio',
+  'aihubmix',
 ]);
+
+// Providers whose live model fetch IS their full account catalogue, so the
+// per-option "from your account" badge and the "Loaded N from your account"
+// hint are noise — every option carries the same badge and distinguishes
+// nothing. For these we drop the source label and show a plain count instead.
+// Add a protocol here when the same applies to another provider.
+const ACCOUNT_MODEL_SOURCE_LABEL_HIDDEN = new Set<ApiProtocol>([
+  'aihubmix',
+]);
+
+function hidesAccountModelSourceLabel(protocol: ApiProtocol): boolean {
+  return ACCOUNT_MODEL_SOURCE_LABEL_HIDDEN.has(protocol);
+}
+
+// Fixed-origin gateway helpers (isFixedOriginGateway / resolveFixedOriginBaseUrl)
+// live in ../state/apiProtocols so config loading and the top-bar switcher share
+// the same single source of truth.
 
 type ProviderModelsState =
   | { status: 'idle' }
@@ -410,9 +449,13 @@ function missingByokConnectionFields(
 
 function missingByokModelFetchFields(
   config: Pick<AppConfig, 'apiKey' | 'baseUrl'>,
+  protocol?: ApiProtocol,
 ): ByokRequiredField[] {
   const missing: ByokRequiredField[] = [];
-  if (!config.apiKey.trim()) missing.push('api_key');
+  // AIHubMix publishes its catalogue on a public endpoint, so its model list
+  // loads without a key (the user shouldn't need to paste a key just to browse
+  // models). Every other protocol fetches /v1/models behind the key.
+  if (protocol !== 'aihubmix' && !config.apiKey.trim()) missing.push('api_key');
   if (!config.baseUrl.trim()) missing.push('base_url');
   return missing;
 }
@@ -523,6 +566,10 @@ const API_KEY_CONSOLE_LINKS: Record<ApiProtocol, { host: string; url: string }> 
   senseaudio: {
     host: 'docs.senseaudio.cn',
     url: 'https://docs.senseaudio.cn',
+  },
+  aihubmix: {
+    host: 'aihubmix.com',
+    url: 'https://aihubmix.com/?aff=JA1e',
   },
 };
 
@@ -695,6 +742,9 @@ function currentApiProtocolConfig(config: AppConfig): ApiProtocolConfig {
     apiVersion: config.apiVersion ?? '',
     apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
     byokImageModel: config.byokImageModel ?? '',
+    byokVideoModel: config.byokVideoModel ?? '',
+    byokSpeechModel: config.byokSpeechModel ?? '',
+    byokSpeechVoice: config.byokSpeechVoice ?? '',
   };
 }
 
@@ -707,15 +757,27 @@ function applyApiProtocolConfig(
     ...config,
     apiProtocol: protocol,
     apiKey: apiConfig.apiKey,
-    baseUrl: apiConfig.baseUrl,
+    baseUrl: resolveFixedOriginBaseUrl(protocol, apiConfig.baseUrl),
     model: apiConfig.model,
     apiProviderBaseUrl: apiConfig.apiProviderBaseUrl ?? null,
     apiVersion: protocol === 'azure' ? (apiConfig.apiVersion ?? '') : '',
-    // byokImageModel is SenseAudio-only — flipping to another BYOK tab
-    // shouldn't carry a SenseAudio image-model choice into, say, the
-    // OpenAI form. Mirrors the apiVersion guarding above.
+    // byokImageModel applies to the protocols that inject the daemon-side
+    // generate_image tool (SenseAudio, AIHubMix) — flipping to another BYOK
+    // tab shouldn't carry an image-model choice into, say, the OpenAI form.
+    // Mirrors the apiVersion guarding above.
     byokImageModel:
-      protocol === 'senseaudio' ? (apiConfig.byokImageModel ?? '') : '',
+      protocol === 'senseaudio' || protocol === 'aihubmix'
+        ? (apiConfig.byokImageModel ?? '')
+        : '',
+    // byokVideoModel only applies to AIHubMix today (the only BYOK chat with a
+    // video-model picker; SenseAudio's video tool uses a fixed model).
+    byokVideoModel:
+      protocol === 'aihubmix' ? (apiConfig.byokVideoModel ?? '') : '',
+    // Speech model + voice also AIHubMix-only today.
+    byokSpeechModel:
+      protocol === 'aihubmix' ? (apiConfig.byokSpeechModel ?? '') : '',
+    byokSpeechVoice:
+      protocol === 'aihubmix' ? (apiConfig.byokSpeechVoice ?? '') : '',
   };
 }
 
@@ -932,12 +994,19 @@ export function SettingsDialog({
   onProjectsRefresh,
   onSkillsChanged,
   onDesignSystemsChanged,
+  onDesignSystemImportRebuildJob,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const analytics = useAnalytics();
-  const [cfg, setCfg] = useState<AppConfig>(initial);
+  // Backfill the fixed-origin base URL on mount too, so a config persisted with
+  // an empty baseUrl (e.g. selected AIHubMix before this resolution existed)
+  // isn't stuck blocking the live model fetch until the user re-selects the tab.
+  const [cfg, setCfg] = useState<AppConfig>(() => ({
+    ...initial,
+    baseUrl: resolveFixedOriginBaseUrl(initial.apiProtocol ?? 'anthropic', initial.baseUrl),
+  }));
   const [maxTokensInput, setMaxTokensInput] = useState(
     initial.maxTokens == null ? '' : String(initial.maxTokens),
   );
@@ -1064,6 +1133,26 @@ export function SettingsDialog({
       document.removeEventListener('visibilitychange', resyncAmrStatus);
     };
   }, [agents]);
+
+  useEffect(() => {
+    const hasAmrAgent = agents.some((agent) => agent.id === 'amr' && agent.available);
+    if (!hasAmrAgent) return;
+    let cancelled = false;
+    const resyncAmrStatus = (event: Event) => {
+      const reason = amrLoginStatusEventReason(event);
+      if (reason === 'login-canceled') return;
+      void fetchVelaLoginStatus().then((next) => {
+        if (cancelled || !next) return;
+        setAmrCardStatus(next);
+        setAmrCardStatusReady(true);
+      });
+    };
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, resyncAmrStatus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(AMR_LOGIN_STATUS_EVENT, resyncAmrStatus);
+    };
+  }, [agents]);
   const [byokPreconditionNotice, setByokPreconditionNotice] = useState<{
     action: ByokPreconditionAction;
     field?: ByokRequiredField;
@@ -1090,7 +1179,7 @@ export function SettingsDialog({
         initial.mode !== 'api' ||
         protocol === 'azure' ||
         protocol === 'ollama' ||
-        missingByokModelFetchFields(initial).length > 0 ||
+        missingByokModelFetchFields(initial, protocol).length > 0 ||
         !isValidApiBaseUrl(initial.baseUrl)
       ) {
         return null;
@@ -2228,7 +2317,10 @@ export function SettingsDialog({
         );
   const selectedProvider = selectedProviderIndex >= 0 ? protocolProviders[selectedProviderIndex] : undefined;
   const showProviderPreset =
-    protocolProviders.length > 0;
+    protocolProviders.length > 0 && !isFixedOriginGateway(apiProtocol);
+  // Fixed-origin gateways resolve their Base URL automatically; nothing for the
+  // user to edit, so hide the field entirely.
+  const showBaseUrlField = !isFixedOriginGateway(apiProtocol);
   const byokRequiresApiKey = byokProviderRequiresApiKey(
     apiProtocol,
     selectedProvider,
@@ -2387,7 +2479,11 @@ export function SettingsDialog({
     if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
     if (byokFirstPartyBaseUrl?.hostTypo) return;
     if (blockingByokDraftIssues(byokModelFetchDraftValidation).length > 0) return;
-    if (providerModelsCommittedKey !== providerModelsKey) return;
+    // AIHubMix needs no key and prefills its base URL, so there's nothing to
+    // debounce-commit — fetch as soon as the tab is selected. Every other
+    // protocol waits until the key/baseUrl inputs are committed (on blur) so we
+    // don't fire on each keystroke.
+    if (apiProtocol !== 'aihubmix' && providerModelsCommittedKey !== providerModelsKey) return;
     const timer = window.setTimeout(() => {
       void handleFetchProviderModels({ silent: true });
     }, 300);
@@ -2454,6 +2550,11 @@ export function SettingsDialog({
     ),
     [fetchedApiModelOptions, suggestedApiModelIds],
   );
+  // Shared hook: live AIHubMix catalogue for aihubmix, static registry for
+  // other providers (same list the chat composer's image picker uses).
+  const byokImageModelOptions = useByokImageModelOptions(apiProtocol);
+  const byokVideoModelOptions = useByokVideoModelOptions(apiProtocol);
+  const byokSpeechModelOptions = useByokSpeechModelOptions(apiProtocol);
   const fetchedApiModelIds = useMemo(
     () => new Set(fetchedApiModelOptions.map((model) => model.id.trim())),
     [fetchedApiModelOptions],
@@ -2527,8 +2628,8 @@ export function SettingsDialog({
   const sectionHeader: Record<SettingsSection, { title: string; subtitle: string }> = {
     execution: { title: t('settings.title'), subtitle: t('settings.subtitle') },
     instructions: {
-      title: 'Instructions / Rules',
-      subtitle: 'Fixed behavior the assistant should follow',
+      title: t('settings.instructionsTitle'),
+      subtitle: t('settings.instructionsSubtitle'),
     },
     media: { title: t('settings.mediaProviders'), subtitle: t('settings.mediaProvidersHint') },
     composio: { title: t('connectors.title'), subtitle: t('connectors.subtitle') },
@@ -2891,8 +2992,8 @@ export function SettingsDialog({
             >
               <Icon name="edit" size={18} />
               <span>
-                <strong>Instructions / Rules</strong>
-                <small>Fixed assistant behavior</small>
+                <strong>{t('settings.instructionsTitle')}</strong>
+                <small>{t('settings.instructionsNavSub')}</small>
               </span>
             </button>
             <button
@@ -3938,41 +4039,43 @@ export function SettingsDialog({
                 }}
                 onToggleShowApiKey={() => setShowApiKey((v) => !v)}
               />
-              <ByokProviderBaseUrl
-                apiProtocol={apiProtocol}
-                inputRef={baseUrlInputRef}
-                baseUrl={cfg.baseUrl}
-                baseUrlError={baseUrlErrorMessage}
-                baseUrlInvalid={Boolean(baseUrlErrorMessage)}
-                baseUrlPlaceholder={baseUrlPlaceholder}
-                baseUrlReadOnly={baseUrlReadOnly}
-                labels={{
-                  baseUrl: t('settings.baseUrl'),
-                  required: t('settings.required'),
-                  customize: t('settings.baseUrlCustomize'),
-                  invalid: t('settings.baseUrlInvalid'),
-                  defaultHint: t('settings.baseUrlDefaultHint'),
-                  azureHint: t('settings.azureBaseUrlHint'),
-                }}
-                onBlur={commitProviderModelsInputs}
-                onChange={(value) => updateApiConfig({ baseUrl: value, apiProviderBaseUrl: null })}
-                onCustomize={() => {
-                  updateApiConfig({ apiProviderBaseUrl: null });
-                  window.setTimeout(() => baseUrlInputRef.current?.focus(), 0);
-                }}
-                onFocus={() => {
-                  const byokProviderId = byokProtocolToTracking(apiProtocol);
-                  if (byokProviderId) {
-                    trackSettingsByokFieldClick(analytics.track, {
-                      page_name: 'settings',
-                      area: 'configure_execution_mode_byok',
-                      element: 'base_url',
-                      provider_id: byokProviderId,
-                      has_value: Boolean(cfg.baseUrl?.trim()),
-                    });
-                  }
-                }}
-              />
+              {showBaseUrlField ? (
+                <ByokProviderBaseUrl
+                  apiProtocol={apiProtocol}
+                  inputRef={baseUrlInputRef}
+                  baseUrl={cfg.baseUrl}
+                  baseUrlError={baseUrlErrorMessage}
+                  baseUrlInvalid={Boolean(baseUrlErrorMessage)}
+                  baseUrlPlaceholder={baseUrlPlaceholder}
+                  baseUrlReadOnly={baseUrlReadOnly}
+                  labels={{
+                    baseUrl: t('settings.baseUrl'),
+                    required: t('settings.required'),
+                    customize: t('settings.baseUrlCustomize'),
+                    invalid: t('settings.baseUrlInvalid'),
+                    defaultHint: t('settings.baseUrlDefaultHint'),
+                    azureHint: t('settings.azureBaseUrlHint'),
+                  }}
+                  onBlur={commitProviderModelsInputs}
+                  onChange={(value) => updateApiConfig({ baseUrl: value, apiProviderBaseUrl: null })}
+                  onCustomize={() => {
+                    updateApiConfig({ apiProviderBaseUrl: null });
+                    window.setTimeout(() => baseUrlInputRef.current?.focus(), 0);
+                  }}
+                  onFocus={() => {
+                    const byokProviderId = byokProtocolToTracking(apiProtocol);
+                    if (byokProviderId) {
+                      trackSettingsByokFieldClick(analytics.track, {
+                        page_name: 'settings',
+                        area: 'configure_execution_mode_byok',
+                        element: 'base_url',
+                        provider_id: byokProviderId,
+                        has_value: Boolean(cfg.baseUrl?.trim()),
+                      });
+                    }
+                  }}
+                />
+              ) : null}
               <label className="field">
                 <span className="field-label">{t('settings.maxTokens')}</span>
                 <input
@@ -4012,6 +4115,7 @@ export function SettingsDialog({
                   id: m.id,
                   label: apiModelOptionLabel(
                     m,
+                    !hidesAccountModelSourceLabel(apiProtocol) &&
                     loadedAccountModelCount > 0
                       ? fetchedApiModelIds.has(m.id)
                         ? t('settings.modelSourceAccount')
@@ -4021,9 +4125,12 @@ export function SettingsDialog({
                 }))}
                 modelsLoadedFromAccountMessage={
                   loadedAccountModelCount > 0
-                    ? t('settings.modelsLoadedFromAccount', {
-                        count: loadedAccountModelCount,
-                      })
+                    ? t(
+                        hidesAccountModelSourceLabel(apiProtocol)
+                          ? 'settings.modelsLoadedCount'
+                          : 'settings.modelsLoadedFromAccount',
+                        { count: loadedAccountModelCount },
+                      )
                     : null
                 }
                 providerModelsFailureMessage={providerModelsFailureMessage}
@@ -4076,6 +4183,7 @@ export function SettingsDialog({
                     chatBaseUrl={cfg.baseUrl}
                     chatApiVersion={cfg.apiVersion ?? ''}
                     chatModel={cfg.model}
+                    apiModelOptions={apiModelOptions}
                   />
                 </div>
               </details>
@@ -4091,7 +4199,7 @@ export function SettingsDialog({
                   />
                 </label>
               ) : null}
-              {apiProtocol === 'senseaudio' ? (
+              {apiProtocol === 'senseaudio' || apiProtocol === 'aihubmix' ? (
                 <label className="field">
                   <span className="field-label">{t('settings.byokImageModel')}</span>
                   <SearchableModelSelect
@@ -4100,24 +4208,85 @@ export function SettingsDialog({
                     searchPlaceholder={t('designs.searchPlaceholder')}
                     popoverClassName="settings-byok-select-popover"
                     minSearchableOptions={Number.POSITIVE_INFINITY}
+                    // Live catalogue from the shared hook: AIHubMix's image
+                    // models for aihubmix, the static SenseAudio registry
+                    // otherwise. The default-empty option (first entry) resolves
+                    // to the registry default on the daemon side.
                     models={[
                       {
                         id: '',
-                        label: `${IMAGE_MODELS.find((m) => m.provider === 'senseaudio')?.label
-                          ?? 'senseaudio-image-2.0'} (default)`,
+                        label: byokImageModelOptions[0]?.label
+                          ? `${byokImageModelOptions[0].label} (${t('settings.byokModelDefaultOption')})`
+                          : t('settings.byokModelDefaultOption'),
                       },
-                      ...IMAGE_MODELS.filter((m) => m.provider === 'senseaudio').map(
-                        (m) => ({
-                          id: m.id,
-                          label: m.label,
-                        }),
-                      ),
+                      ...byokImageModelOptions.map((m) => ({ id: m.id, label: m.label })),
                     ]}
                     value={cfg.byokImageModel ?? ''}
                     onChange={(value) =>
                       updateApiConfig({ byokImageModel: value })
                     }
                   />
+                </label>
+              ) : null}
+              {apiProtocol === 'aihubmix' ? (
+                <label className="field">
+                  <span className="field-label">{t('settings.byokVideoModel')}</span>
+                  <select
+                    value={cfg.byokVideoModel ?? ''}
+                    onChange={(e) =>
+                      updateApiConfig({ byokVideoModel: e.target.value })
+                    }
+                  >
+                    {/* Empty resolves to the default video model on the daemon
+                        side. The LLM can still override per-call via the tool's
+                        `model` arg. */}
+                    <option value="">
+                      {byokVideoModelOptions[0]?.label
+                        ? `${byokVideoModelOptions[0].label} (${t('settings.byokModelDefaultOption')})`
+                        : t('settings.byokModelDefaultOption')}
+                    </option>
+                    {byokVideoModelOptions.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              {apiProtocol === 'aihubmix' ? (
+                <label className="field">
+                  <span className="field-label">{t('settings.byokSpeechModel')}</span>
+                  <select
+                    value={cfg.byokSpeechModel ?? ''}
+                    onChange={(e) => updateApiConfig({ byokSpeechModel: e.target.value })}
+                  >
+                    <option value="">
+                      {byokSpeechModelOptions[0]?.label
+                        ? `${byokSpeechModelOptions[0].label} (${t('settings.byokModelDefaultOption')})`
+                        : t('settings.byokModelDefaultOption')}
+                    </option>
+                    {byokSpeechModelOptions.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              {apiProtocol === 'aihubmix' ? (
+                <label className="field">
+                  <span className="field-label">{t('settings.byokSpeechVoice')}</span>
+                  <select
+                    value={cfg.byokSpeechVoice ?? ''}
+                    onChange={(e) => updateApiConfig({ byokSpeechVoice: e.target.value })}
+                  >
+                    <option value="">alloy (default)</option>
+                    {['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].map((v) => (
+                      <option key={v} value={v}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
                 </label>
               ) : null}
             </section>
@@ -4259,6 +4428,7 @@ export function SettingsDialog({
               cfg={cfg}
               setCfg={setCfg}
               onDesignSystemsChanged={onDesignSystemsChanged}
+              onDesignSystemImportRebuildJob={onDesignSystemImportRebuildJob}
             />
           ) : null}
 
@@ -4273,9 +4443,7 @@ export function SettingsDialog({
                   <div>
                     <h4>{t('settings.customInstructionsTitle')}</h4>
                     <p className="hint">
-                      Fixed instructions OpenDesign follows in every chat. These are
-                      not saved memories; use Memory for facts, preferences, and
-                      project context.
+                      {t('settings.customInstructionsDesc')}
                     </p>
                   </div>
                 </div>

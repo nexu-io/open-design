@@ -40,6 +40,7 @@ import {
   detectAgents,
   getAgentDef,
   isKnownModel,
+  openDesignAmrTraceEnv,
   applyAgentLaunchEnv,
   resolveAgentLaunch,
   sanitizeCustomModel,
@@ -126,6 +127,7 @@ import {
   updateUserDesignSystemRevisionStatus,
 } from './design-systems.js';
 import { createDesignSystemGenerationJobStore } from './design-system-generation-jobs.js';
+import { prepareDesignTokenContractRebuild } from './design-token-contract-rebuild.js';
 import {
   applyDiffReviewDecisionToCwd,
   applyPlugin,
@@ -171,32 +173,7 @@ import {
   respondSurface as respondSurfaceRow,
   revokeProjectSurface,
 } from './genui/index.js';
-import {
-  buildMemoryTree,
-  composeMemoryBody,
-  deleteMemoryEntry,
-  extractFromMessage,
-  listMemoryEntries,
-  maskMemoryExtractionConfig,
-  memoryDir,
-  memoryEvents,
-  readMemoryConfig,
-  readMemoryEntry,
-  readMemoryIndex,
-  updateMemoryTreeNode,
-  upsertMemoryEntry,
-  writeMemoryConfig,
-  writeMemoryIndex,
-} from './memory.js';
-import {
-  clearExtractions as clearMemoryExtractions,
-  listExtractions as listMemoryExtractions,
-  removeExtraction as removeMemoryExtraction,
-} from './memory-extractions.js';
-import {
-  extractMemoryFromConnectors,
-  suggestMemoryFromConnectors,
-} from './memory-connectors.js';
+import { composeMemoryBody, extractFromMessage } from './memory.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { stageAmrImagePaths } from './amr-image-staging.js';
@@ -445,10 +422,20 @@ import {
   updateProject,
   updateRoutine,
   updateRoutineRun,
+  clearAgentSession,
+  updateAgentSessionStableHash,
+  upsertAgentSession,
   upsertDeployment,
   upsertMessage,
   upsertPreviewComment,
 } from './db.js';
+import {
+  computeIncludeStable,
+  hashStableInstructions,
+  isClaudeResumeFailure,
+  persistCapturedAgentSession,
+  resolveAgentResumeContext,
+} from './agent-session-resume.js';
 import {
   createLiveArtifact,
   deleteLiveArtifact,
@@ -465,25 +452,26 @@ import {
 import { LiveArtifactRefreshUnavailableError, refreshLiveArtifact } from './live-artifacts/refresh-service.js';
 import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
 import { registerConnectorRoutes } from './connectors/routes.js';
-import { registerActiveContextRoutes } from './active-context-routes.js';
-import { registerHostToolsRoutes } from './host-tools-routes.js';
+import { registerActiveContextRoutes } from './routes/active-context.js';
+import { registerHostToolsRoutes } from './routes/host-tools.js';
 import { registerMcpRoutes } from './mcp-routes.js';
-import { registerXaiRoutes } from './xai-routes.js';
-import { registerLiveArtifactRoutes } from './live-artifact-routes.js';
-import { registerDesignSystemToolRoutes } from './design-system-tool-routes.js';
-import { registerDeployRoutes, registerDeploymentCheckRoutes } from './deploy-routes.js';
+import { registerXaiRoutes } from './routes/xai.js';
+import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
+import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
+import { registerDeployRoutes, registerDeploymentCheckRoutes } from './routes/deploy.js';
 import { registerMediaRoutes } from './media-routes.js';
 import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes } from './project-routes.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
-import { registerHandoffRoutes } from './handoff-routes.js';
+import { registerHandoffRoutes } from './routes/handoff.js';
 import { EmptyTranscriptError, synthesizeHandoffPrompt } from './handoff-design.js';
 import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './chat-routes.js';
 import { registerTerminalRoutes } from './terminal-routes.js';
 import { createTerminalService } from './terminals.js';
-import { registerStaticResourceRoutes } from './static-resource-routes.js';
 import { registerSocialShareRoutes } from './social-share-routes.js';
-import { registerRoutineRoutes, routineDbRowToContract } from './routine-routes.js';
+import { registerMemoryRoutes } from './routes/memory.js';
+import { registerStaticResourceRoutes } from './routes/static-resource.js';
+import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
 import { installRouteRegistrationGuard } from './route-registration-guard.js';
 import { submitToolResultToRunState } from './run-tool-results.js';
 import { assertServerContextSatisfiesRoutes } from './route-context-contract.js';
@@ -1317,7 +1305,11 @@ function resolveProcessResourcesPath() {
 
 export function resolveDaemonResourceRoot({
   configured = process.env[RESOURCE_ROOT_ENV],
-  safeBases = [PROJECT_ROOT, resolveProcessResourcesPath()],
+  safeBases = [
+    PROJECT_ROOT,
+    resolveProcessResourcesPath(),
+    process.env.OD_INSTALLATION_DIR,
+  ],
 } = {}) {
   if (!configured || configured.length === 0) return null;
 
@@ -2564,6 +2556,78 @@ async function hasGeneratedPluginArtifacts(projectRoot) {
   } catch {
     return false;
   }
+}
+
+// Canonical open tag is `<question-form>`; `<ask-question>` is an accepted
+// alias models drift to. Mirrors the open-tag set in the web parser.
+const QUESTION_FORM_OPEN_RE = /<(question-form|ask-question)\b[^>]*>/i;
+
+// True when `body` is a renderable question-form body: JSON (optionally
+// fenced) parsing to an object with a non-empty `questions` array. This is
+// the minimal contract `tryParseForm` enforces in
+// `apps/web/src/artifacts/question-form.ts`; a body that fails it is kept as
+// raw prose by the UI (no form card renders).
+function questionFormBodyIsRenderable(body) {
+  const trimmed = typeof body === 'string' ? body.trim() : '';
+  if (!trimmed) return false;
+  const stripped = trimmed
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim();
+  let data;
+  try {
+    data = JSON.parse(stripped);
+  } catch {
+    return false;
+  }
+  if (!data || typeof data !== 'object') return false;
+  const questions = data.questions;
+  return Array.isArray(questions) && questions.some((q) => q && typeof q === 'object');
+}
+
+// Locate `closeTag` (case-insensitively) at or after `from`, returning an
+// index in the ORIGINAL `text` coordinate space. Mirrors the web parser's
+// `findCloseTag`: scanning char-by-char and lowercasing each fixed-length
+// candidate slice keeps the result aligned with `openEnd`. Lowercasing the
+// whole string up front instead would desync the index, because some code
+// points expand under `toLowerCase()` (e.g. `"İ" -> "i̇"`) and shift every
+// offset after them — corrupting the body slice and failing a valid form.
+function findQuestionFormCloseTag(text, from, closeTag) {
+  const closeLower = closeTag.toLowerCase();
+  const tagLen = closeTag.length;
+  const maxStart = text.length - tagLen;
+  for (let i = from; i <= maxStart; i++) {
+    if (text.slice(i, i + tagLen).toLowerCase() === closeLower) return i;
+  }
+  return -1;
+}
+
+// Whether the agent's visible text contains a *renderable* clarifying form —
+// a closed `<question-form>`/`<ask-question>` block whose body satisfies the
+// parser contract above. The plugin-authoring missing-artifacts guard treats
+// this as a legitimate "paused to ask the user" turn rather than a failure.
+//
+// We deliberately mirror (not import) the web parser: the app boundary
+// forbids `apps/daemon` importing `apps/web/src`. Matching only the open tag
+// would let a malformed, non-renderable body suppress the failure — a false
+// success with no usable brief card. Keep this in sync with
+// `apps/web/src/artifacts/question-form.ts`, or promote a shared parser into
+// `packages/contracts` if the two drift.
+function emittedRenderableQuestionForm(text) {
+  if (typeof text !== 'string' || !text) return false;
+  let cursor = 0;
+  while (cursor < text.length) {
+    const m = QUESTION_FORM_OPEN_RE.exec(text.slice(cursor));
+    if (!m) return false;
+    const tagName = (m[1] ?? 'question-form').toLowerCase();
+    const closeTag = `</${tagName}>`;
+    const openEnd = cursor + m.index + m[0].length;
+    const closeIdx = findQuestionFormCloseTag(text, openEnd, closeTag);
+    if (closeIdx === -1) return false;
+    if (questionFormBodyIsRenderable(text.slice(openEnd, closeIdx))) return true;
+    cursor = closeIdx + closeTag.length;
+  }
+  return false;
 }
 
 function detectSkillPluginCandidateOnRunSuccess(db, runs, run, input, projectRoot) {
@@ -4262,6 +4326,7 @@ export function classifyChatRunCloseStatus(params: {
   signal: NodeJS.Signals | string | null;
   acpCleanCompletion: boolean;
   artifactQuietShutdownRequested: boolean;
+  turnCompletedCleanly: boolean;
 }): 'canceled' | 'succeeded' | 'failed' {
   if (params.cancelRequested) return 'canceled';
   if (params.code === 0) return 'succeeded';
@@ -4273,7 +4338,80 @@ export function classifyChatRunCloseStatus(params: {
     params.code === null &&
     (params.signal === 'SIGTERM' || params.signal === 'SIGKILL');
   if (artifactQuietShutdown) return 'succeeded';
+  // Post-completion teardown carve-out (#3372). When the model already
+  // emitted a clean terminal turn (a `turn_end`/`usage` event with no
+  // outstanding host answer, the same condition that closes the child's
+  // stdin), a later non-zero exit or kill signal is a teardown artifact,
+  // not a generation failure: a SessionEnd hook the agent runs on its way
+  // out (e.g. the Honcho memory plugin) can exit non-zero and drag the
+  // whole `claude` process to `exit 1` long after the deliverable was
+  // produced. Treating that as `failed` surfaces a red banner and halts
+  // the flow for work that already succeeded. Same family as the ACP and
+  // artifact-quiet-shutdown carve-outs above: the work completed; the odd
+  // exit is teardown noise. This deliberately does NOT cover non-zero
+  // exits *before* a clean turn — those stay `failed` (real CLI bug,
+  // model error, mid-turn crash), and the agent-specific auth/quota/AMR
+  // guards in the close handler run before this classifier so a genuine
+  // post-turn auth failure is still surfaced with its specific code.
+  if (params.turnCompletedCleanly) return 'succeeded';
   return 'failed';
+}
+
+type ClaudeStreamJsonBookkeepingRun = {
+  stdinOpen?: boolean;
+  pendingHostAnswers?: Set<string>;
+  turnCompletedCleanly?: boolean;
+  child?: {
+    stdin?: {
+      destroyed?: boolean;
+      end: () => void;
+    } | null;
+  } | null;
+};
+
+export function applyClaudeStreamJsonRunBookkeeping(
+  run: ClaudeStreamJsonBookkeepingRun,
+  ev: unknown,
+) {
+  if (!ev || typeof ev !== 'object') return;
+  const event = ev as {
+    type?: unknown;
+    name?: unknown;
+    id?: unknown;
+    stopReason?: unknown;
+  };
+
+  if (
+    run.stdinOpen &&
+    event.type === 'tool_use' &&
+    (event.name === 'AskUserQuestion' || event.name === 'ask_user_question') &&
+    typeof event.id === 'string'
+  ) {
+    if (!run.pendingHostAnswers) run.pendingHostAnswers = new Set();
+    run.pendingHostAnswers.add(event.id);
+    return;
+  }
+
+  const cleanTerminalTurn =
+    ((event.type === 'turn_end' &&
+      // `stop_reason: tool_use` means the model paused to wait for tool
+      // execution (claude-code is about to run an internal tool, or we owe a
+      // host tool_result). Either way the conversation is still in flight.
+      event.stopReason !== 'tool_use') ||
+      event.type === 'usage') &&
+    (!run.pendingHostAnswers || run.pendingHostAnswers.size === 0);
+  if (!cleanTerminalTurn) return;
+
+  // Record clean completion even if stdin was already closed by the
+  // host-answer path. The close-status classifier reads this to ignore late
+  // SessionEnd hook failures after the final assistant turn completed.
+  run.turnCompletedCleanly = true;
+  if (run.stdinOpen) {
+    if (run.child?.stdin && !run.child.stdin.destroyed) {
+      try { run.child.stdin.end(); } catch {}
+    }
+    run.stdinOpen = false;
+  }
 }
 
 function resolveChatRunShutdownGraceMs() {
@@ -5223,409 +5361,10 @@ export async function startServer({
   // ---- Projects (DB-backed) -------------------------------------------------
 
 
-  // ----- Memory store -----------------------------------------------------
-  // Markdown-on-disk memory under <dataDir>/memory/. The daemon folds these
-  // into every system prompt (gated by `enabled`) and the chat run loop
-  // calls `/api/memory/extract` after each turn to sediment new facts.
-  app.get('/api/memory', async (_req, res) => {
-    try {
-      const [config, index, entries] = await Promise.all([
-        readMemoryConfig(RUNTIME_DATA_DIR),
-        readMemoryIndex(RUNTIME_DATA_DIR),
-        listMemoryEntries(RUNTIME_DATA_DIR),
-      ]);
-      res.json({
-        enabled: config.enabled,
-        chatExtractionEnabled: config.chatExtractionEnabled,
-        rootDir: memoryDir(RUNTIME_DATA_DIR),
-        index,
-        entries,
-        extraction: maskMemoryExtractionConfig(config.extraction),
-      });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Static sub-resources (`/index`, `/config`, `/extract`) registered
-  // BEFORE the `:id` catch-alls so an `index` / `config` / `extract` slug
-  // can't shadow the real handlers.
-  app.get('/api/memory/tree', async (_req, res) => {
-    try {
-      const [config, tree] = await Promise.all([
-        readMemoryConfig(RUNTIME_DATA_DIR),
-        buildMemoryTree(RUNTIME_DATA_DIR),
-      ]);
-      res.json({
-        enabled: config.enabled,
-        rootDir: memoryDir(RUNTIME_DATA_DIR),
-        tree,
-      });
-    } catch (err) {
-      res.status(500).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.patch('/api/memory/tree/:id', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const entry = await updateMemoryTreeNode(
-        RUNTIME_DATA_DIR,
-        req.params.id,
-        body,
-      );
-      const tree = await buildMemoryTree(RUNTIME_DATA_DIR);
-      res.json({ entry, tree });
-    } catch (err) {
-      const message = String((err && err.message) || err);
-      res.status(message === 'memory not found' ? 404 : 400).json({ error: message });
-    }
-  });
-
-  app.put('/api/memory/index', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const index = typeof body.index === 'string' ? body.index : '';
-      await writeMemoryIndex(RUNTIME_DATA_DIR, index);
-      res.json({ index });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.patch('/api/memory/config', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const patch = {};
-      if (typeof body.enabled === 'boolean') patch.enabled = body.enabled;
-      if (typeof body.chatExtractionEnabled === 'boolean') {
-        patch.chatExtractionEnabled = body.chatExtractionEnabled;
-      }
-      // Three-state extraction handling so the UI can: (a) leave the
-      // override alone (omit `extraction`), (b) clear it back to
-      // auto-pick (`extraction: null`), or (c) commit a custom override
-      // (`extraction: { provider, ... }`). For the apiKey field we
-      // need *four* states because the masked GET surfaces only an
-      // `apiKeyTail` (the secret never round-trips):
-      //   - field absent      → preserve the stored key (UI re-saves
-      //                          a settings form without re-typing
-      //                          the secret).
-      //   - field === ''      → CLEAR the stored key (the picker's
-      //                          drift-resync effect fires this when
-      //                          the user clears their BYOK chat
-      //                          API key — keeping the old daemon-
-      //                          side credential would silently keep
-      //                          calling the provider after the user
-      //                          intentionally removed it from the
-      //                          chat picker, which the reviewer
-      //                          flagged as a credential-sync bug).
-      //   - field === 'sk-…'  → replace with the new key.
-      //   - provider differs  → ignore stored key entirely.
-      if (Object.prototype.hasOwnProperty.call(body, 'extraction')) {
-        if (body.extraction === null) {
-          patch.extraction = null;
-        } else if (body.extraction && typeof body.extraction === 'object') {
-          const incoming = body.extraction;
-          const current = await readMemoryConfig(RUNTIME_DATA_DIR);
-          const apiKeyOmitted = !Object.prototype.hasOwnProperty.call(
-            incoming,
-            'apiKey',
-          );
-          const sameProvider =
-            !!current.extraction
-            && current.extraction.provider === incoming.provider;
-          let nextApiKey = '';
-          if (typeof incoming.apiKey === 'string' && incoming.apiKey) {
-            nextApiKey = incoming.apiKey;
-          } else if (apiKeyOmitted && sameProvider) {
-            nextApiKey = current.extraction.apiKey ?? '';
-          }
-          patch.extraction = {
-            provider: incoming.provider,
-            model:
-              typeof incoming.model === 'string' ? incoming.model : undefined,
-            baseUrl:
-              typeof incoming.baseUrl === 'string'
-                ? incoming.baseUrl
-                : undefined,
-            apiKey: nextApiKey,
-            // Azure-only; ignored by the validator for the other providers.
-            // We forward whatever the UI sent (or the previously-stored
-            // value when the UI omits the field) so re-saving an azure
-            // override without re-typing the api-version doesn't blank it.
-            apiVersion:
-              typeof incoming.apiVersion === 'string'
-                ? incoming.apiVersion
-                : current.extraction?.apiVersion,
-          };
-        }
-      }
-      const next = await writeMemoryConfig(RUNTIME_DATA_DIR, patch);
-      res.json({
-        enabled: next.enabled,
-        chatExtractionEnabled: next.chatExtractionEnabled,
-        extraction: maskMemoryExtractionConfig(next.extraction),
-      });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  // SSE feed of memory mutations. The web settings panel subscribes to
-  // this and re-fetches on every event; toast UIs can listen for
-  // `kind === 'extract'` and surface a small "Memory updated (N new)"
-  // notification. Payload shape: MemoryChangeEvent (see ./memory.ts).
-  //
-  // The same connection also forwards `extraction` events — one per LLM
-  // extraction phase transition — so the settings panel can render a
-  // live "recent extractions" list. We multiplex on a single SSE stream
-  // so the browser opens one connection instead of two.
-  app.get('/api/memory/events', async (_req, res) => {
-    const sse = createSseResponse(res);
-    sse.send('connected', { at: Date.now() });
-    const onChange = (event) => {
-      sse.send('change', event);
-    };
-    const onExtraction = (event) => {
-      sse.send('extraction', event);
-    };
-    memoryEvents.on('change', onChange);
-    memoryEvents.on('extraction', onExtraction);
-    res.on('close', () => {
-      memoryEvents.off('change', onChange);
-      memoryEvents.off('extraction', onExtraction);
-    });
-  });
-
-  // Recent LLM-extraction attempts (newest first; capped server-side).
-  // Surfaces skip reasons, in-flight calls, success counts, and errors
-  // so the settings panel can show "why didn't memory update?" at a
-  // glance instead of leaving the user to guess.
-  app.get('/api/memory/extractions', async (_req, res) => {
-    try {
-      res.json({ extractions: listMemoryExtractions() });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Drop the entire extraction history. Registered BEFORE the `:id`
-  // catch-all so a literal "/api/memory/extractions" can still be
-  // cleared with `curl -X DELETE`.
-  app.delete('/api/memory/extractions', async (_req, res) => {
-    try {
-      const removed = clearMemoryExtractions();
-      res.json({ removed });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-	  app.delete('/api/memory/extractions/:id', async (req, res) => {
-	    try {
-	      const removed = removeMemoryExtraction(req.params.id);
-	      res.json({ removed });
-	    } catch (err) {
-	      res.status(400).json({ error: String((err && err.message) || err) });
-	    }
-	  });
-
-	  app.post('/api/memory/connectors/suggest', requireLocalDaemonRequest, async (req, res) => {
-	    try {
-	      const body = req.body && typeof req.body === 'object' ? req.body : {};
-	      const connectorIds = Array.isArray(body.connectorIds)
-	        ? body.connectorIds
-	          .filter((id) => typeof id === 'string')
-	          .map((id) => id.trim())
-	          .filter(Boolean)
-	          .slice(0, 12)
-	        : undefined;
-	      const query =
-	        typeof body.query === 'string' ? body.query.trim().slice(0, 240) : '';
-	      const projectId =
-	        typeof body.projectId === 'string' && body.projectId.trim()
-	          ? body.projectId.trim()
-	          : null;
-	      const appConfig = await readAppConfig(RUNTIME_DATA_DIR).catch(() => ({}));
-	      const chatAgentId =
-	        typeof body.chatAgentId === 'string' && body.chatAgentId.trim()
-	          ? body.chatAgentId.trim()
-	          : typeof appConfig.agentId === 'string' && appConfig.agentId.trim()
-	            ? appConfig.agentId.trim()
-	            : null;
-	      const requestChatModel =
-	        typeof body.chatModel === 'string' && body.chatModel.trim()
-	          ? body.chatModel.trim()
-	          : null;
-	      const chatModel =
-	        requestChatModel
-	        || (chatAgentId && appConfig.agentModels?.[chatAgentId]?.model
-	          ? appConfig.agentModels[chatAgentId].model
-	          : null);
-	      const result = await suggestMemoryFromConnectors(RUNTIME_DATA_DIR, {
-	        projectsRoot: PROJECTS_DIR,
-	        projectRoot: PROJECT_ROOT,
-	        projectId,
-	        connectorIds,
-	        query,
-	        chatAgentId,
-	        chatModel,
-	      });
-	      res.json(result);
-	    } catch (err) {
-	      res.status(400).json({ error: String((err && err.message) || err) });
-	    }
-	  });
-
-	  app.post('/api/memory/connectors/extract', requireLocalDaemonRequest, async (req, res) => {
-	    try {
-	      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const connectorIds = Array.isArray(body.connectorIds)
-        ? body.connectorIds
-          .filter((id) => typeof id === 'string')
-          .map((id) => id.trim())
-          .filter(Boolean)
-          .slice(0, 12)
-        : undefined;
-      const query =
-        typeof body.query === 'string' ? body.query.trim().slice(0, 240) : '';
-      const projectId =
-        typeof body.projectId === 'string' && body.projectId.trim()
-          ? body.projectId.trim()
-          : null;
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR).catch(() => ({}));
-      const chatAgentId =
-        typeof body.chatAgentId === 'string' && body.chatAgentId.trim()
-          ? body.chatAgentId.trim()
-          : typeof appConfig.agentId === 'string' && appConfig.agentId.trim()
-            ? appConfig.agentId.trim()
-            : null;
-      const requestChatModel =
-        typeof body.chatModel === 'string' && body.chatModel.trim()
-          ? body.chatModel.trim()
-          : null;
-      const chatModel =
-        requestChatModel
-        || (chatAgentId && appConfig.agentModels?.[chatAgentId]?.model
-          ? appConfig.agentModels[chatAgentId].model
-          : null);
-      const result = await extractMemoryFromConnectors(RUNTIME_DATA_DIR, {
-        projectsRoot: PROJECTS_DIR,
-        projectRoot: PROJECT_ROOT,
-        projectId,
-        connectorIds,
-        query,
-        chatAgentId,
-        chatModel,
-      });
-      res.json(result);
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  // Imperative extract — used by CLI chats internally and by BYOK /
-  // API-mode chats from the web app, which never reach the chat-run
-  // path on the daemon. Mirrors the two-phase hook the daemon's chat
-  // route applies inline:
-  //
-  //   - Pre-turn (only `userMessage` supplied): run the synchronous
-  //     heuristic regex pack so explicit "remember: X" / "我是 X"
-  //     markers land in memory before the prompt is composed, and the
-  //     same turn's assistant reply already reflects them.
-  //   - Post-turn (`userMessage` + `assistantMessage` supplied): queue
-  //     the LLM extractor in the background — it speaks SSE /
-  //     extraction-history on its own and may take several seconds, so
-  //     we don't block the HTTP response on it. The heuristic is
-  //     skipped on this branch because the caller already ran it
-  //     pre-turn; running it twice would double the
-  //     `recordHeuristic({...})` rows in the extraction history for
-  //     every turn.
-  //
-  // External callers (curl, replay tools) that pass only
-  // `userMessage` keep the legacy behaviour: heuristic-only.
-  app.post('/api/memory/extract', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const userMessage =
-        typeof body.userMessage === 'string' ? body.userMessage : '';
-      const assistantMessage =
-        typeof body.assistantMessage === 'string' ? body.assistantMessage : '';
-      const hasAssistant = assistantMessage.trim().length > 0;
-      const memoryConfig = await readMemoryConfig(RUNTIME_DATA_DIR);
-      if (memoryConfig.chatExtractionEnabled === false) {
-        return res.json({ changed: [], attemptedLLM: false });
-      }
-      const changed = hasAssistant
-        ? []
-        : await extractFromMessage(RUNTIME_DATA_DIR, userMessage);
-      // BYOK chat config — only forwarded by the web app for API-mode
-      // chats. We strip the surface to the five fields pickProvider()
-      // actually consumes and validate the provider against the four
-      // shapes the extractor speaks; an unknown / missing provider
-      // means "let the legacy chain decide" so a malformed payload
-      // can't override the env / media-config fallbacks.
-      const rawChat = body.chatProvider;
-      let chatProvider = null;
-      if (rawChat && typeof rawChat === 'object') {
-        const provider = rawChat.provider;
-        if (
-          provider === 'anthropic'
-          || provider === 'openai'
-          || provider === 'azure'
-          || provider === 'google'
-          || provider === 'ollama'
-        ) {
-          chatProvider = {
-            provider,
-            apiKey: typeof rawChat.apiKey === 'string' ? rawChat.apiKey : '',
-            baseUrl: typeof rawChat.baseUrl === 'string' ? rawChat.baseUrl : '',
-            apiVersion:
-              typeof rawChat.apiVersion === 'string' ? rawChat.apiVersion : '',
-            model: typeof rawChat.model === 'string' ? rawChat.model : '',
-          };
-        }
-      }
-      let attemptedLLM = false;
-      if (userMessage.trim().length > 0 && hasAssistant) {
-        attemptedLLM = true;
-        void import('./memory-llm.js')
-          .then(({ extractWithLLM }) =>
-            extractWithLLM(
-              RUNTIME_DATA_DIR,
-              { userMessage, assistantMessage },
-              {
-                projectRoot: PROJECT_ROOT,
-                chatAgentId: null,
-                chatProvider,
-              },
-            ),
-          )
-          .catch((err) =>
-            console.warn('[memory-llm] background failed (http extract)', err),
-          );
-      }
-      res.json({ changed, attemptedLLM });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  // Composed memory body for the system prompt. Daemon-side chat runs
-  // call `composeMemoryBody()` directly; the web app (BYOK / API mode)
-  // can't import daemon internals, so this endpoint exposes the same
-  // string the daemon would have folded into the system prompt for a
-  // CLI run. `ProjectView.composedSystemPrompt()` calls it before each
-  // BYOK turn and passes the result into `composeSystemPrompt`'s
-  // `memoryBody` field — without this, the Memory tab is a no-op for
-  // BYOK users even though the UI saves model/index/entries for them.
-  app.get('/api/memory/system-prompt', async (_req, res) => {
-    try {
-      const body = await composeMemoryBody(RUNTIME_DATA_DIR);
-      res.json({ body });
-    } catch (err) {
-      res.status(500).json({ error: String((err && err.message) || err) });
-    }
+  registerMemoryRoutes(app, {
+    http: { createSseResponse, requireLocalDaemonRequest },
+    paths: { RUNTIME_DATA_DIR, PROJECT_ROOT, PROJECTS_DIR },
+    appConfig: { readAppConfig },
   });
 
   app.get('/api/automation-source-packets', async (req, res) => {
@@ -5714,48 +5453,6 @@ export async function startServer({
       const message = String((err && err.message) || err);
       const status = message.includes('not found') ? 404 : 400;
       res.status(status).json({ error: message });
-    }
-  });
-
-  app.post('/api/memory', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const entry = await upsertMemoryEntry(RUNTIME_DATA_DIR, body);
-      res.json({ entry });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.get('/api/memory/:id', async (req, res) => {
-    try {
-      const entry = await readMemoryEntry(RUNTIME_DATA_DIR, req.params.id);
-      if (!entry) return res.status(404).json({ error: 'memory not found' });
-      res.json({ entry });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.put('/api/memory/:id', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const entry = await upsertMemoryEntry(RUNTIME_DATA_DIR, {
-        ...body,
-        id: req.params.id,
-      });
-      res.json({ entry });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.delete('/api/memory/:id', async (req, res) => {
-    try {
-      await deleteMemoryEntry(RUNTIME_DATA_DIR, req.params.id);
-      res.json({ ok: true });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
     }
   });
 
@@ -6274,6 +5971,21 @@ export async function startServer({
       listAllSkillLikeEntries,
       listAllDesignSystems,
       mimeFor,
+    },
+    tokenContractRebuild: {
+      maybeStartForImportedDesignSystem: async (designSystemId) => {
+        const preparation = await prepareDesignTokenContractRebuild(
+          USER_DESIGN_SYSTEMS_DIR,
+          designSystemId,
+        );
+        if (!preparation.revision) return { decision: preparation.decision };
+        const job = designSystemGenerationJobs.rebuildTokenContract({
+          designSystemId,
+          decision: preparation.decision,
+          ...preparation.revision,
+        });
+        return { decision: preparation.decision, job };
+      },
     },
   });
   registerProjectArtifactRoutes(app, {
@@ -7018,6 +6730,30 @@ export async function startServer({
         body: typeof req.body?.body === 'string' ? req.body.body : undefined,
       });
       res.status(202).json({ job });
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/design-systems/:id/token-contract/rebuild-jobs', async (req, res) => {
+    try {
+      const preparation = await prepareDesignTokenContractRebuild(
+        USER_DESIGN_SYSTEMS_DIR,
+        req.params.id,
+        { force: req.body?.force === true },
+      );
+      if (!preparation.decision.available) {
+        return res.status(200).json({ decision: preparation.decision });
+      }
+      if (!preparation.revision) {
+        return res.status(200).json({ decision: preparation.decision });
+      }
+      const job = designSystemGenerationJobs.rebuildTokenContract({
+        designSystemId: req.params.id,
+        decision: preparation.decision,
+        ...preparation.revision,
+      });
+      res.status(202).json({ decision: preparation.decision, job });
     } catch (err) {
       res.status(400).json({ error: String(err) });
     }
@@ -11273,6 +11009,10 @@ export async function startServer({
       research,
       context,
     } = chatBody;
+    run.analyticsTelemetry = {
+      ...(run.analyticsTelemetry ?? {}),
+      promptBuildStartAt: Date.now(),
+    };
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
     if (typeof conversationId === 'string' && conversationId)
       run.conversationId = conversationId;
@@ -11644,18 +11384,58 @@ export async function startServer({
       research,
       message,
     );
+    // Resume-capable adapters continue their own upstream session so they
+    // keep working memory across turns. Decide once per run; reuse for the
+    // prompt-composition skipTranscript choice, the buildArgs flags, and the
+    // create-turn persistence below.
+    const agentSupportsSessionResume =
+      def.resumesSessionViaCli === true || def.streamFormat === 'pi-rpc';
+    const agentResumeCtx =
+      agentSupportsSessionResume && run.conversationId
+        ? resolveAgentResumeContext(db, {
+            conversationId: run.conversationId,
+            agentId: def.id,
+          })
+        : { resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null };
     const userRequestPrompt = composeChatUserRequestForAgent(
       message,
       currentPrompt,
-      { skipTranscript: def.resumesSessionViaCli === true },
+      // Only trim to the latest turn when we are actually resuming an
+      // existing session. A create turn still sends the full transcript so
+      // a brand-new session (incl. first turn after another agent)
+      // is seeded with prior context.
+      { skipTranscript: agentResumeCtx.isResuming },
     );
-    const clientInstructionPrompt = [researchCommandContract, runContextPrompt, systemPrompt]
+    // The stable instruction slice (daemon prompt + tool contract + system
+    // prompt = design system / skills / memory) is identical across turns of
+    // a conversation in the common case. A resumed Claude session already
+    // holds it, so on resume turns we skip it unless it changed since the
+    // session was seeded — keyed by a hash stored on agent_sessions. Create
+    // turns and changed-hash turns send the full block (byte-identical to the
+    // previous behavior); non-resume agents have isResuming === false and so
+    // always send the full block.
+    const stableInstructionFingerprint = [daemonSystemPrompt, runtimeToolPrompt, systemPrompt]
+      .map((part) => (typeof part === 'string' ? part.trim() : ''))
+      .join('\n\n---\n\n');
+    const currentStableHash = hashStableInstructions(stableInstructionFingerprint);
+    // `runtimeToolPrompt` is part of the fingerprint and varies only when the
+    // tool-token grant's presence flips between turns (rare cwd/projectId edge
+    // cases); any such change correctly forces a full re-send that turn.
+    const includeStableInstructions = computeIncludeStable(
+      agentResumeCtx.isResuming,
+      agentResumeCtx.storedStablePromptHash,
+      currentStableHash,
+    );
+    const clientInstructionParts = includeStableInstructions
+      ? [researchCommandContract, runContextPrompt, systemPrompt]
+      : [researchCommandContract, runContextPrompt];
+    const clientInstructionPrompt = clientInstructionParts
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
       .join('\n\n---\n\n');
     const instructionPrompt = composeLiveInstructionPrompt({
-      daemonSystemPrompt,
-      runtimeToolPrompt,
+      daemonSystemPrompt: includeStableInstructions ? daemonSystemPrompt : '',
+      runtimeToolPrompt: includeStableInstructions ? runtimeToolPrompt : '',
       clientSystemPrompt: clientInstructionPrompt,
       finalPromptOverride: codexImagegenOverride,
     });
@@ -11746,6 +11526,10 @@ export async function startServer({
         },
       ],
     });
+    run.analyticsTelemetry = {
+      ...(run.analyticsTelemetry ?? {}),
+      promptBuildEndAt: Date.now(),
+    };
     // Per-agent model + reasoning the user picked in the model menu.
     // Trust the value when it matches the most recent /api/agents listing
     // (live or fallback). Otherwise allow it through if it passes a
@@ -11764,7 +11548,34 @@ export async function startServer({
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
         : null;
     const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    // Accumulates the agent's visible text this run so the close handler can
+    // tell whether the turn ended on a clarifying question form. The
+    // `od-plugin-authoring` plugin's turn-1 flow is to emit a
+    // `<question-form>` collecting the plugin brief, then STOP and wait for
+    // the user to answer (see the `discovery-question-form` atom in
+    // `plugins/scaffold.ts`). That turn legitimately closes with `code === 0`
+    // and no `generated-plugin/` artifacts yet, so the missing-artifacts
+    // guard must not treat it as a failure. We buffer the streamed text
+    // rather than read the persisted message because the assistant message
+    // row may not be wired up at close time. The buffer is capped because a
+    // discovery form streams near the top of the turn; we only need enough to
+    // validate the first complete form block (see
+    // `emittedRenderableQuestionForm`).
+    const CLARIFYING_QUESTION_BUFFER_CAP = 256 * 1024;
+    let clarifyingQuestionText = '';
     const send = (event, data) => {
+      if (
+        event === 'agent' &&
+        data &&
+        data.type === 'text_delta' &&
+        typeof data.delta === 'string' &&
+        clarifyingQuestionText.length < CLARIFYING_QUESTION_BUFFER_CAP
+      ) {
+        clarifyingQuestionText = (clarifyingQuestionText + data.delta).slice(
+          0,
+          CLARIFYING_QUESTION_BUFFER_CAP,
+        );
+      }
       persistRunEventToAssistantMessage(db, run, event, data);
       design.runs.emit(run, event, data);
     };
@@ -11863,6 +11674,10 @@ export async function startServer({
       });
     };
     const finishWithRetryDecision = (status, code = null, signal = null) => {
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        finalizeStartAt: run.analyticsTelemetry?.finalizeStartAt ?? Date.now(),
+      };
       const result = runResultFromStatus(status);
       const errorCode = deriveRunErrorCode({
         status,
@@ -12235,9 +12050,14 @@ export async function startServer({
       safeImages,
       extraAllowedDirs,
       agentOptions,
-      { cwd: effectiveCwd, hasPriorAssistantTurn, agentLogFilePath },
+      {
+        cwd: effectiveCwd,
+        hasPriorAssistantTurn,
+        agentLogFilePath,
+        resumeSessionId: agentResumeCtx.resumeSessionId,
+        newSessionId: agentResumeCtx.newSessionId,
+      },
     );
-
     // Second-pass budget check that knows about the Windows `.cmd` shim
     // wrap. The pre-buildArgs `checkPromptArgvBudget` only looks at the
     // raw composed prompt; on Windows an npm-installed adapter resolves
@@ -12291,6 +12111,27 @@ export async function startServer({
         ),
       );
       return design.runs.finish(run, 'failed', 1, null);
+    }
+
+    let persistDeliveredAgentSessionState = () => {};
+    if (def.resumesSessionViaCli === true && run.conversationId) {
+      let persisted = false;
+      persistDeliveredAgentSessionState = () => {
+        if (persisted) return;
+        persisted = true;
+        if (!agentResumeCtx.isResuming && agentResumeCtx.newSessionId) {
+          upsertAgentSession(db, {
+            conversationId: run.conversationId,
+            agentId: def.id,
+            sessionId: agentResumeCtx.newSessionId,
+            stablePromptHash: currentStableHash,
+          });
+          return;
+        }
+        if (agentResumeCtx.isResuming && includeStableInstructions) {
+          updateAgentSessionStableHash(db, run.conversationId, def.id, currentStableHash);
+        }
+      };
     }
 
     // `runStartTimeMs` is consumed by the run-end artifact-manifest
@@ -12567,6 +12408,12 @@ export async function startServer({
         ...agentSpawnEnv,
         ...(mmdRouteLaunchEnv || {}),
         ...odMediaEnv,
+        ...openDesignAmrTraceEnv({
+          agentId: def.id,
+          runId: run.id,
+          conversationId: run.conversationId,
+          runAttempt: run.retryAttemptCount ?? 0,
+        }),
         // OpenCode external-MCP injection (issue #2142). Layered AFTER
         // spawnEnvForAgent / odMediaEnv / configuredAgentEnv so the
         // daemon-built MCP config wins over a stale value the user
@@ -13115,40 +12962,7 @@ export async function startServer({
         //     means the model paused mid-tool, not "turn complete".
         //   - usage (session result at EOF in single-shot mode).
         try {
-          if (run.stdinOpen) {
-            if (
-              ev &&
-              typeof ev === 'object' &&
-              ev.type === 'tool_use' &&
-              (ev.name === 'AskUserQuestion' || ev.name === 'ask_user_question') &&
-              typeof ev.id === 'string'
-            ) {
-              if (!run.pendingHostAnswers) run.pendingHostAnswers = new Set();
-              run.pendingHostAnswers.add(ev.id);
-            } else if (
-              ev &&
-              typeof ev === 'object' &&
-              ((ev.type === 'turn_end' &&
-                // `stop_reason: tool_use` means the model paused to wait
-                // for tool execution (claude-code is about to run an
-                // internal tool, or we owe a host tool_result). Either
-                // way the conversation is still in flight — do not close.
-                ev.stopReason !== 'tool_use') ||
-                ev.type === 'usage') &&
-              (!run.pendingHostAnswers || run.pendingHostAnswers.size === 0)
-            ) {
-              // Per-turn `turn_end` (synthesized from
-              // `assistant.message.stop_reason` in `claude-stream`) is the
-              // primary close signal; `usage` is the session-level result
-              // that fires at EOF in single-shot mode. Either is a valid
-              // "this turn is done" cue, but only when there's no host
-              // answer outstanding AND the model isn't paused mid-tool.
-              if (run.child && run.child.stdin && !run.child.stdin.destroyed) {
-                try { run.child.stdin.end(); } catch {}
-              }
-              run.stdinOpen = false;
-            }
-          }
+          applyClaudeStreamJsonRunBookkeeping(run, ev);
         } catch {}
       });
       child.stdout.on('data', (chunk) => claude.feed(chunk));
@@ -13193,12 +13007,22 @@ export async function startServer({
         prompt: composed,
         cwd: effectiveCwd,
         model: safeModel,
+        parentSession: agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId
+          ? agentResumeCtx.resumeSessionId
+          : undefined,
         send: (channel, payload) => {
           if (channel === 'agent') {
             sendAgentEvent(payload);
           } else if (channel === 'error') {
             if (agentStreamError) return;
             agentStreamError = String(payload?.message || 'Pi session error');
+            const piErrorCode = typeof payload?.code === 'string' ? payload.code : null;
+            if (piErrorCode) {
+              run.errorCode = piErrorCode;
+            }
+            if (piErrorCode === 'PI_PARENT_SESSION_FAILED' && run.conversationId) {
+              clearAgentSession(db, run.conversationId, def.id);
+            }
             clearInactivityWatchdog();
             send('error', createSseErrorPayload(
               'AGENT_EXECUTION_FAILED',
@@ -13360,6 +13184,26 @@ export async function startServer({
           return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
         }
       }
+      if (
+        code !== 0 &&
+        !run.cancelRequested &&
+        def.resumesSessionViaCli === true &&
+        agentResumeCtx.isResuming &&
+        run.conversationId &&
+        isClaudeResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
+      ) {
+        // The stored session id no longer resolves (pruned / machine moved
+        // / ~/.claude cleared). Drop it so the next turn starts a fresh
+        // session seeded with the full transcript, and surface a retryable
+        // error rather than a confusing hard failure.
+        clearAgentSession(db, run.conversationId, def.id);
+        send('error', createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          'The previous Claude session could not be resumed (it may have expired). Resend your message to continue with a fresh session.',
+          { retryable: true },
+        ));
+        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+      }
       // Empty-output guard: a clean `code === 0` exit with no visible
       // output means the run silently finished without producing anything.
       // Surface an explicit failure so the chat shows a clear reason.
@@ -13380,7 +13224,8 @@ export async function startServer({
         code === 0 &&
         !run.cancelRequested &&
         isPluginAuthoringRun(db, run) &&
-        !(await hasGeneratedPluginArtifacts(cwd))
+        !(await hasGeneratedPluginArtifacts(cwd)) &&
+        !emittedRenderableQuestionForm(clarifyingQuestionText)
       ) {
         send('error', createSseErrorPayload(
           'AGENT_EXECUTION_FAILED',
@@ -13501,6 +13346,7 @@ export async function startServer({
         signal,
         acpCleanCompletion,
         artifactQuietShutdownRequested,
+        turnCompletedCleanly: !!run.turnCompletedCleanly,
       });
       // Skip the close-handler failure emit when the run is already
       // terminal: the inactivity watchdog (failForInactivity) finishes the
@@ -13618,6 +13464,24 @@ export async function startServer({
       for (const chunk of plaintextStdoutBuffer) {
         send('stdout', { chunk });
       }
+      // Capture the pi session file path for conversational continuity.
+      // The session path is discovered by attachPiRpcSession when it
+      // processes agent_end; persist it under (conversationId, agentId) so
+      // another conversation in the same cwd cannot inherit this history.
+      if (acpSession && typeof acpSession.getLastSessionPath === 'function') {
+        const sessionPath = acpSession.getLastSessionPath();
+        if (status === 'succeeded' && def.streamFormat === 'pi-rpc') {
+          persistCapturedAgentSession(db, {
+            conversationId: run.conversationId,
+            agentId: def.id,
+            sessionId: sessionPath,
+            stablePromptHash: currentStableHash,
+          });
+        }
+      }
+      if (status === 'succeeded') {
+        persistDeliveredAgentSessionState();
+      }
       finishWithRetryDecision(status, code, signal);
       } finally {
         // Best-effort cleanup of the per-run agy log file on every close
@@ -13632,6 +13496,10 @@ export async function startServer({
     });
     if (writePromptToChildStdin && child.stdin) {
       const promptInputFormat = def.promptInputFormat ?? 'text';
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        modelCallStartAt: Date.now(),
+      };
       if (promptInputFormat === 'stream-json') {
         // Wrap the prompt as an Anthropic user message and write it as one
         // JSONL line. Do NOT close stdin: claude-code keeps reading further

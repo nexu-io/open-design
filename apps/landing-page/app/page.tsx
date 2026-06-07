@@ -9,12 +9,13 @@
  * islands only when behavior is needed.
  */
 
-import { Header, type HeaderProps } from './_components/header';
+import { AMR_URL, Header, type HeaderProps } from './_components/header';
 import { Wire } from './_components/wire';
 import {
   DEFAULT_LOCALE,
   getCommonCopy,
   getHomePageCopy,
+  getLandingUiCopy,
   localizedHref,
   type LandingLocaleCode,
 } from './i18n';
@@ -206,6 +207,7 @@ export default function Page({
   const systems = fmt(counts.systems);
   const commonCopy = getCommonCopy(locale);
   const home = getHomePageCopy(locale);
+  const ui = getLandingUiCopy(locale);
   const pcopy = getPluginsCopy(locale);
   // Labs pills mirror the live `/plugins/templates/` category strip: an
   // "All" chip plus the top categories by count, labelled and counted
@@ -220,6 +222,30 @@ export default function Page({
       }))
     : [];
   const href = (path: string) => localizedHref(path, locale);
+
+  /*
+   * Frontier model brands AMR routes to, shown as a monochrome logo strip
+   * (mirrors opencode's Zen band). Names are display-only and not part of
+   * the localized copy — they are product/brand marks. The SVGs in
+   * /public/agents/ use fill="currentColor"; rendered through <img> they
+   * resolve against the SVG's own default ink (near-black), so the strip
+   * reads as one dark monochrome row. (An <img>-loaded SVG renders in an
+   * isolated context and cannot inherit the page's `color`, so recoloring
+   * the strip would require inlining the SVGs or a CSS mask — not a one-
+   * line `color:` change.)
+   */
+  const amrModelLogos: ReadonlyArray<{ slug: string; name: string }> = [
+    { slug: 'openai', name: 'OpenAI' },
+    { slug: 'anthropic', name: 'Anthropic' },
+    { slug: 'gemini', name: 'Google Gemini' },
+    { slug: 'deepseek', name: 'DeepSeek' },
+    { slug: 'zhipu', name: 'Zhipu GLM' },
+    { slug: 'moonshot', name: 'Moonshot Kimi' },
+    { slug: 'qwen', name: 'Qwen' },
+    { slug: 'minimax', name: 'MiniMax' },
+    { slug: 'xiaomi', name: 'Xiaomi MiMo' },
+    { slug: 'xai', name: 'xAI' },
+  ];
 
   return (
     <>
@@ -1077,12 +1103,62 @@ export default function Page({
                     <small>{home.testimonial.partnerLabels[4]}</small>
                   </a>
                 </div>
-                <a className='read-more' href={REPO} {...ext}>
+                <a className='read-more' href={href('/solutions/')}>
                   {home.testimonial.readMore}
                 </a>
               </div>
               <div className='testimonial-art' data-reveal='right'>
                 <LazyImg src={imageAsset('testimonial.png', { width: 1024, quality: 82 })} />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ====== AMR band ======
+          The "Open Design AMR" model band: AMR is the built-in design Agent
+          that ships SOTA frontier models out of the box (zero provider setup,
+          real token-metered billing). Sits directly under the testimonial,
+          outside the roman-numbered main sequence. A static monochrome row of
+          vendor logos, trailing with an ellipsis to signal "and more". */}
+        <section className='amr-band' data-od-id='amr-band' data-reveal>
+          <div className='container'>
+            <div className='amr-band-inner'>
+              <span className='amr-band-kicker'>{home.amrBand.kicker}</span>
+              <h2 className='amr-band-title'>{home.amrBand.title}</h2>
+              <p className='amr-band-lead'>{home.amrBand.lead}</p>
+              <ul className='amr-band-chips' aria-label={home.amrBand.kicker}>
+                {home.amrBand.chips.map((chip) => (
+                  <li className='amr-band-chip' key={chip}>
+                    <span className='amr-band-chip-dot' aria-hidden='true' />
+                    {chip}
+                  </li>
+                ))}
+              </ul>
+              <ul
+                className='amr-band-logos'
+                aria-label={home.amrBand.logosAriaLabel}
+              >
+                {amrModelLogos.map((m) => (
+                  <li key={m.slug}>
+                    <img
+                      className='amr-band-logo'
+                      src={`/agents/${m.slug}.svg`}
+                      alt={m.name}
+                      title={m.name}
+                      width={26}
+                      height={26}
+                      loading='lazy'
+                    />
+                  </li>
+                ))}
+                <li className='amr-band-more' aria-label={home.amrBand.moreAriaLabel}>
+                  …
+                </li>
+              </ul>
+              <div className='amr-band-actions'>
+                <a className='nav-cta amr-band-cta' href={AMR_URL}>
+                  {home.amrBand.cta}
+                </a>
               </div>
             </div>
           </div>
@@ -1193,6 +1269,84 @@ export default function Page({
           </div>
         </section>
 
+        {/* ====== NEWSLETTER ====== */}
+        <section className='newsletter' id='newsletter' data-od-id='newsletter'>
+          <div className='container'>
+            <div className='newsletter-card' data-reveal>
+              <div className='newsletter-copy'>
+                <span className='label'>{home.newsletter.label}</span>
+                <h2 className='newsletter-title'>{home.newsletter.title}</h2>
+                <p className='lead'>{home.newsletter.lead}</p>
+              </div>
+              <form
+            className='newsletter-form'
+            data-newsletter-form
+            data-source='landing'
+            data-success={home.newsletter.success}
+            data-error={home.newsletter.error}
+          >
+                <input
+                  className='newsletter-input'
+                  type='email'
+                  name='email'
+                  required
+                  autoComplete='email'
+                  placeholder={home.newsletter.placeholder}
+                  aria-label={home.newsletter.placeholder}
+                  data-newsletter-email
+                />
+                <button className='btn btn-primary newsletter-submit' type='submit'>
+                  {home.newsletter.button}
+                </button>
+                <p className='newsletter-msg' data-newsletter-msg aria-live='polite'></p>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        {/* ====== NEWSLETTER POPUP (hidden until JS shows it) ====== */}
+        <aside
+          className='newsletter-popup'
+          data-newsletter-popup
+          hidden
+          role='dialog'
+          aria-label={home.newsletter.title}
+        >
+          <button
+            className='newsletter-popup__close'
+            type='button'
+            data-newsletter-dismiss
+            aria-label={home.newsletter.dismiss}
+          >
+            ×
+          </button>
+          <span className='label'>{home.newsletter.label}</span>
+          <h3 className='newsletter-popup__title'>{home.newsletter.title}</h3>
+          <p className='newsletter-popup__lead'>{home.newsletter.lead}</p>
+          <form
+            className='newsletter-form'
+            data-newsletter-form
+            data-source='landing'
+            data-success={home.newsletter.success}
+            data-error={home.newsletter.error}
+          >
+            <input
+              className='newsletter-input'
+              type='email'
+              name='email'
+              required
+              autoComplete='email'
+              placeholder={home.newsletter.placeholder}
+              aria-label={home.newsletter.placeholder}
+              data-newsletter-email
+            />
+            <button className='btn btn-primary newsletter-submit' type='submit'>
+              {home.newsletter.button}
+            </button>
+            <p className='newsletter-msg' data-newsletter-msg aria-live='polite'></p>
+          </form>
+        </aside>
+
         {/* ====== FOOTER ====== */}
         <footer data-od-id='footer'>
           <div className='container'>
@@ -1223,6 +1377,20 @@ export default function Page({
                     <span data-github-version>{github.versionLabel}</span>
                   </span>
                 </a>
+              </div>
+              <div className='foot-col'>
+                <h5>{ui.footer.products}</h5>
+                <ul>
+                  <li>
+                    <a href={href('/')}>Open Design</a>
+                  </li>
+                  <li>
+                    <a href={href('/html-anything/')}>{ui.footer.htmlAnything}</a>
+                  </li>
+                  <li>
+                    <a href={href('/html-video/')}>{ui.footer.htmlVideo}</a>
+                  </li>
+                </ul>
               </div>
               <div className='foot-col'>
                 <h5>{home.footer.columns.studio}</h5>

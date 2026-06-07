@@ -29,6 +29,7 @@ export type ToolPackCliOptions = {
   headless?: boolean;
   json?: boolean;
   macCompression?: string;
+  notarize?: boolean;
   namespace?: string;
   path?: string;
   portable?: boolean;
@@ -65,6 +66,7 @@ export type ToolPackConfig = {
   electronDistPath: string;
   electronVersion: string;
   macCompression: ToolPackMacCompression;
+  macNotarize?: boolean;
   namespace: string;
   platform: ToolPackPlatform;
   portable: boolean;
@@ -309,6 +311,7 @@ export function resolveToolPackConfig(
     electronDistPath: resolveElectronDistPath(WORKSPACE_ROOT),
     electronVersion: resolveElectronVersion(WORKSPACE_ROOT),
     macCompression: resolveToolPackMacCompression(options.macCompression),
+    macNotarize: options.notarize === true,
     namespace,
     platform,
     portable: options.portable === true,

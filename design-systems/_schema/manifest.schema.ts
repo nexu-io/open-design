@@ -65,6 +65,10 @@ export type DesignSystemProjectFiles = {
    * it; legacy folders without a manifest may still be DESIGN.md-only.
    */
   readonly tokens: "tokens.css";
+  /** Optional Design Tokens JSON derived from the final TOKEN_SCHEMA contract. */
+  readonly designTokens?: "design-tokens.json";
+  /** Optional Tailwind v4 @theme CSS derived from the final TOKEN_SCHEMA contract. */
+  readonly tailwind?: "tailwind-v4.css";
   /**
    * Optional standalone component fixture. First-class in the contract,
    * but optional for MVP imports and prose-only brands.
@@ -102,6 +106,7 @@ export type DesignSystemProjectSourceFiles = {
   readonly scanned?: string;
   readonly evidence?: string;
   readonly tokens?: string;
+  readonly report?: string;
   readonly snippets?: string;
 };
 
@@ -164,12 +169,12 @@ const ALLOWED_SOURCE_KEYS: Record<DesignSystemProjectSource["type"], ReadonlySet
   shadcn: new Set(["type", "reference", "registryUrl", "item", "homepage", "importedAt"]),
 };
 
-const ALLOWED_FILES_KEYS = new Set(["design", "tokens", "components"]);
+const ALLOWED_FILES_KEYS = new Set(["design", "tokens", "designTokens", "tailwind", "components"]);
 const ALLOWED_CRAFT_KEYS = new Set(["applies", "suggested", "exemptions"]);
 const ALLOWED_FONT_KEYS = new Set(["family", "file", "weight", "style"]);
 const ALLOWED_PREVIEW_KEYS = new Set(["dir", "pages"]);
 const ALLOWED_PREVIEW_PAGE_KEYS = new Set(["path", "role", "title"]);
-const ALLOWED_SOURCE_FILES_KEYS = new Set(["scanned", "evidence", "tokens", "snippets"]);
+const ALLOWED_SOURCE_FILES_KEYS = new Set(["scanned", "evidence", "tokens", "report", "snippets"]);
 
 export function parseDesignSystemProjectManifest(
   raw: string,
@@ -273,6 +278,12 @@ function validateFiles(errors: string[], value: unknown): void {
   rejectUnknownKeys(errors, "$.files", value, ALLOWED_FILES_KEYS);
   expectLiteral(errors, "$.files.design", value.design, "DESIGN.md");
   expectLiteral(errors, "$.files.tokens", value.tokens, "tokens.css");
+  if (value.designTokens !== undefined) {
+    expectLiteral(errors, "$.files.designTokens", value.designTokens, "design-tokens.json");
+  }
+  if (value.tailwind !== undefined) {
+    expectLiteral(errors, "$.files.tailwind", value.tailwind, "tailwind-v4.css");
+  }
   if (value.components !== undefined) {
     expectLiteral(errors, "$.files.components", value.components, "components.html");
   }

@@ -6,15 +6,20 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { FileWorkspace, scrollWorkspaceTabsWithWheel } from '../../src/components/FileWorkspace';
+import {
+  DESIGN_FILES_TAB,
+  FileWorkspace,
+  scrollWorkspaceTabsWithWheel,
+} from '../../src/components/FileWorkspace';
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
 import { projectSplitClassName, projectSplitStyle } from '../../src/components/ProjectView';
 import {
   fetchProjectFileText,
   uploadProjectFiles,
   writeProjectTextFile,
+  fetchProjectFolders,
 } from '../../src/providers/registry';
-import type { ChatMessage, ProjectFile } from '../../src/types';
+import type { ChatMessage, ProjectFile, ProjectFolder } from '../../src/types';
 
 vi.mock('../../src/components/AmrGuidance', () => ({
   AmrGuidance: ({
@@ -59,6 +64,7 @@ vi.mock('../../src/providers/registry', async () => {
     fetchProjectFileText: vi.fn(),
     uploadProjectFiles: vi.fn(),
     writeProjectTextFile: vi.fn(),
+    fetchProjectFolders: vi.fn().mockResolvedValue([]),
   };
 });
 
@@ -86,6 +92,30 @@ vi.mock('../../src/components/workspace/TerminalViewer', () => ({
     <div data-testid="terminal-viewer">{terminalId}</div>
   ),
 }));
+
+// Records the `folders` prop DesignFilesPanel receives on EVERY render (still
+// renders the real component). Lets a test observe the first render after a
+// project switch — the pre-paint frame RTL's post-rerender DOM assertion can't
+// see — to prove no stale folders ever reach the new panel.
+const { designFilesPanelRenders } = vi.hoisted(() => ({
+  designFilesPanelRenders: [] as { projectId: string; folderCount: number }[],
+}));
+vi.mock('../../src/components/DesignFilesPanel', async () => {
+  const actual = await vi.importActual<typeof import('../../src/components/DesignFilesPanel')>(
+    '../../src/components/DesignFilesPanel',
+  );
+  const Real = actual.DesignFilesPanel;
+  return {
+    ...actual,
+    DesignFilesPanel: (props: Parameters<typeof Real>[0]) => {
+      designFilesPanelRenders.push({
+        projectId: props.projectId,
+        folderCount: props.folders?.length ?? 0,
+      });
+      return <Real {...props} />;
+    },
+  };
+});
 
 const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
 const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
@@ -160,6 +190,21 @@ function failedAssistantMessage(
     agentId,
     preTurnFileNames: [],
     events: [{ kind: 'status', label: 'error', detail, code }],
+  };
+}
+
+function generatingAssistantMessage(): ChatMessage {
+  return {
+    id: 'msg-generating',
+    role: 'assistant',
+    content: '',
+    createdAt: 1700000000,
+    startedAt: 1700000000,
+    runId: 'run-generating',
+    runStatus: 'running',
+    agentId: 'claude',
+    preTurnFileNames: [],
+    events: [{ kind: 'status', label: 'thinking' }],
   };
 }
 
@@ -380,6 +425,97 @@ describe('FileWorkspace upload input', () => {
     });
   });
 
+  it('starts Design Files navigation fresh when switching projects', () => {
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-a',
+      projectKind: 'prototype',
+      files: [
+        workspaceFile('assets/logo.png'),
+        workspaceFile('top.html'),
+      ],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+    };
+
+    const { container, rerender } = render(<FileWorkspace {...baseProps} />);
+
+    fireEvent.click(container.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
+
+    rerender(
+      <FileWorkspace
+        {...baseProps}
+        projectId="project-b"
+        files={[
+          workspaceFile('beta-assets/logo.png'),
+          workspaceFile('home.html'),
+        ]}
+      />,
+    );
+
+    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('project');
+    expect(screen.getByTestId('design-file-row-home.html')).toBeTruthy();
+  });
+
+  it('drops the previous project folders when switching, before the new fetch resolves', async () => {
+    const folder = (path: string): ProjectFolder => ({
+      name: path.split('/').pop() ?? path,
+      path,
+      type: 'dir',
+      size: 0,
+      mtime: 1700000000,
+    });
+    const mockedFolders = vi.mocked(fetchProjectFolders);
+    // project-a has an empty persisted folder; project-b's fetch stays pending.
+    // (One-time values take precedence over the factory default `[]`; no reset,
+    // so later tests keep that default.)
+    mockedFolders.mockResolvedValueOnce([folder('assets')]);
+    mockedFolders.mockReturnValueOnce(new Promise<ProjectFolder[]>(() => {}));
+
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-a',
+      projectKind: 'prototype',
+      files: [],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+    };
+    const { container, rerender } = render(<FileWorkspace {...baseProps} />);
+    // project-a's empty folder shows once its fetch resolves.
+    await waitFor(() => {
+      expect(
+        [...container.querySelectorAll('.df-dir-row .df-row-name')].some(
+          (e) => e.textContent === 'assets',
+        ),
+      ).toBe(true);
+    });
+
+    // Switch to project-b; its folder fetch is still pending. The previous
+    // project's 'assets' folder must be gone immediately (reset synchronously),
+    // not linger and suppress the new project's empty state.
+    designFilesPanelRenders.length = 0;
+    rerender(<FileWorkspace {...baseProps} projectId="project-b" files={[]} />);
+    expect(
+      [...container.querySelectorAll('.df-dir-row .df-row-name')].some(
+        (e) => e.textContent === 'assets',
+      ),
+    ).toBe(false);
+
+    // The reset happens during render, not in an effect — so the new panel's
+    // FIRST render (and every render thereafter) already sees zero folders.
+    // An effect-based reset would let project-b's first render observe the
+    // stale 'assets' folder before the effect cleared it; RTL's post-rerender
+    // DOM check above can't catch that frame, this can.
+    const projectBRenders = designFilesPanelRenders.filter((r) => r.projectId === 'project-b');
+    expect(projectBRenders.length).toBeGreaterThan(0);
+    expect(projectBRenders.every((r) => r.folderCount === 0)).toBe(true);
+  });
+
   it('clears a prior upload failure after a later successful upload', async () => {
     mockedUploadProjectFiles
       .mockRejectedValueOnce(new Error('storage offline'))
@@ -592,41 +728,6 @@ describe('FileWorkspace launcher tab creation', () => {
     });
   });
 
-  it('appends a new side chat to the latest tab list after parent tabs change', async () => {
-    mockedFetchProjectFileText.mockResolvedValue('');
-    const onTabsStateChange = vi.fn();
-    const onCreateSideChat = vi.fn(async () => 'conversation-2');
-    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
-      projectId: 'project-1',
-      projectKind: 'prototype',
-      files: [],
-      liveArtifacts: [],
-      onRefreshFiles: vi.fn(),
-      isDeck: false,
-      tabsState: { tabs: [], active: null },
-      onTabsStateChange,
-      onCreateSideChat,
-    };
-
-    const { rerender } = render(<FileWorkspace {...baseProps} />);
-    rerender(
-      <FileWorkspace
-        {...baseProps}
-        tabsState={{ tabs: ['terminal:existing'], active: null }}
-      />,
-    );
-
-    fireEvent.click(screen.getByTestId('workspace-add-tab'));
-    fireEvent.click(await screen.findByRole('button', { name: /New Side Chat/i }));
-
-    await waitFor(() => {
-      expect(onTabsStateChange).toHaveBeenCalledWith({
-        tabs: ['terminal:existing', 'chat:conversation-2'],
-        active: 'chat:conversation-2',
-      });
-    });
-  });
-
   it('renders terminal and side chat tabs after a Design Files-anchored browser tab', () => {
     render(
       <FileWorkspace
@@ -706,6 +807,143 @@ describe('FileWorkspace launcher tab creation', () => {
             id: '__browser__:2',
             insertAfter: 'terminal:term-1',
             label: 'Browser 2',
+          },
+        ],
+      });
+    });
+  });
+
+  it('appends a new browser after stale-anchor browser tabs', async () => {
+    const onTabsStateChange = vi.fn();
+    const staleBrowserTab = {
+      id: '__browser__:1',
+      insertAfter: 'deleted.html',
+      label: 'Browser',
+    };
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['cover.html'],
+          active: 'cover.html',
+          browserTabs: [staleBrowserTab],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(await screen.findByRole('button', { name: /New Browser/i }));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html'],
+        active: '__browser__:2',
+        browserTabs: [
+          staleBrowserTab,
+          {
+            id: '__browser__:2',
+            insertAfter: '__browser__:1',
+            label: 'Browser 2',
+          },
+        ],
+      });
+    });
+  });
+
+  it('reanchors stale browser tabs before appending a new terminal', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ terminal: { id: 'term-2' } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+    const onTabsStateChange = vi.fn();
+    const staleBrowserTab = {
+      id: '__browser__:1',
+      insertAfter: 'deleted.html',
+      label: 'Browser',
+    };
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['cover.html'],
+          active: 'cover.html',
+          browserTabs: [staleBrowserTab],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(await screen.findByRole('button', { name: /New Terminal/i }));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html', 'terminal:term-2'],
+        active: 'terminal:term-2',
+        browserTabs: [
+          {
+            ...staleBrowserTab,
+            insertAfter: 'cover.html',
+          },
+        ],
+      });
+    });
+  });
+
+  it('reanchors stale browser tabs before appending a file from the launcher', async () => {
+    const onTabsStateChange = vi.fn();
+    const staleBrowserTab = {
+      id: '__browser__:1',
+      insertAfter: 'deleted.html',
+      label: 'Browser',
+    };
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html'), workspaceFile('notes.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['cover.html'],
+          active: 'cover.html',
+          browserTabs: [staleBrowserTab],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(await screen.findByRole('button', { name: /notes\.html/i }));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html', 'notes.html'],
+        active: 'notes.html',
+        browserTabs: [
+          {
+            ...staleBrowserTab,
+            insertAfter: 'cover.html',
           },
         ],
       });
@@ -911,6 +1149,34 @@ describe('FileWorkspace launcher tab creation', () => {
       expect(onTabsStateChange).toHaveBeenCalledWith({
         tabs: ['cover.html'],
         active: '__design_system__',
+      });
+    });
+  });
+
+  it('focuses an already-open file tab without adding a duplicate tab', async () => {
+    const onTabsStateChange = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('Web Prototype mutuals-v2.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['Web Prototype mutuals-v2.html'],
+          active: 'notes.html',
+        }}
+        openRequest={{ name: 'Web Prototype mutuals-v2.html', nonce: 1 }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['Web Prototype mutuals-v2.html'],
+        active: 'Web Prototype mutuals-v2.html',
       });
     });
   });
@@ -1131,6 +1397,55 @@ describe('FileWorkspace generation failure recovery', () => {
     expect(onRetry).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'msg-rate_limited', agentId: 'antigravity' }),
     );
+  });
+
+  // Regression guard for #3516: the giant Lexical-composer merge added an
+  // `activeTab !== DESIGN_FILES_TAB` clause to `showGenerationPreview`, which
+  // suppressed the generation progress card on the design-files tab — the
+  // default landing tab. While a run is in flight and no previewable artifact
+  // exists yet, the progress card must take priority over the empty
+  // "Creations will appear here" file list instead of being hidden behind it.
+  it('keeps the generation preview on the design-files tab while generating with no artifacts yet', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        streaming
+        tabsState={{ tabs: [], active: DESIGN_FILES_TAB }}
+        onTabsStateChange={vi.fn()}
+        messages={[generatingAssistantMessage()]}
+      />,
+    );
+
+    expect(screen.getByTestId('generation-preview-stage')).toBeTruthy();
+  });
+
+  // The override above is scoped to the *empty* design-files tab. A populated
+  // project must keep its file browser while a run is in flight instead of
+  // having the generation card hijack the tab — otherwise the fresh-project fix
+  // would regress browsing for everyone with existing files.
+  it('keeps the file browser on a populated design-files tab while a run is active', async () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('index.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        streaming
+        tabsState={{ tabs: [], active: DESIGN_FILES_TAB }}
+        onTabsStateChange={vi.fn()}
+        messages={[generatingAssistantMessage()]}
+      />,
+    );
+
+    expect(await screen.findByText('index.html')).toBeTruthy();
+    expect(screen.queryByTestId('generation-preview-stage')).toBeNull();
   });
 });
 
@@ -1377,25 +1692,40 @@ describe('FileWorkspace Questions tab', () => {
     expect(screen.getByTestId('questions-tab')).toBeTruthy();
   });
 
-  it('removes the Questions tab once the form has been answered', () => {
-    // Regression for #3355: answering a question moved the answered copy back
-    // into chat but left a locked duplicate mounted in the Questions tab.
-    render(
+  it('closes the Questions preview after submit, then lets the answered form reopen', async () => {
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-1',
+      projectKind: 'prototype',
+      files: [],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+      questionForm: discoveryForm,
+      focusQuestionsRequest: { nonce: 1 },
+    };
+    const { rerender } = render(<FileWorkspace {...baseProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Quick brief')).toBeTruthy();
+    });
+
+    rerender(
       <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: [], active: null }}
-        onTabsStateChange={vi.fn()}
-        questionForm={discoveryForm}
+        {...baseProps}
         questionFormSubmittedAnswers={{ platform: 'Mobile' }}
       />,
     );
 
-    expect(screen.queryByTestId('questions-tab')).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByText('Quick brief')).toBeNull();
+    });
+    expect(screen.getByTestId('questions-tab')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('questions-tab'));
+    expect(screen.getByText('Quick brief')).toBeTruthy();
+    expect(screen.getByText('Mobile')).toBeTruthy();
   });
 });
 
@@ -1667,14 +1997,14 @@ describe('FileWorkspace add-module menu', () => {
     expect(menu).not.toBeNull();
 
     // The tab strip is a horizontal scroll container that also clips
-    // vertically, so the "+" button lives OUTSIDE it in `.ws-tabs-actions`
-    // and the launcher menu is portaled to <body> — neither can be clipped
+    // vertically, so the "+" button lives outside it in `.ws-add-tab`
+    // and the launcher menu is portaled to <body> -- neither can be clipped
     // by the scrolling bar.
     const tabsBar = document.querySelector('.ws-tabs-bar');
     expect(tabsBar).not.toBeNull();
     expect(tabsBar!.contains(addButton)).toBe(false);
     expect(tabsBar!.contains(menu)).toBe(false);
-    expect(addButton.closest('.ws-tabs-actions')).not.toBeNull();
+    expect(addButton.closest('.ws-add-tab')).not.toBeNull();
   });
 
   it('orders launcher sections as create new, files, then tabs in one scroll body', () => {

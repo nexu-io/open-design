@@ -6,10 +6,12 @@ import {
   listUserDesignSystemFiles,
   readDesignSystem,
   type DesignSystemRevision,
+  type DesignSystemRevisionFileChange,
   type DesignSystemSummary,
   type UserDesignSystemInput,
   type UserDesignSystemRevisionInput,
 } from './design-systems.js';
+import type { DesignSystemTokenContractRebuildDecision } from '@open-design/contracts';
 import {
   collectDesignSystemSourceContext,
   mergeSourceContextIntoInput,
@@ -39,7 +41,7 @@ export type DesignSystemGenerationStep = {
 
 export type DesignSystemGenerationJob = {
   id: string;
-  kind?: 'generation' | 'revision';
+  kind?: 'generation' | 'revision' | 'token-contract-rebuild';
   status: DesignSystemGenerationJobStatus;
   progress: number;
   steps: DesignSystemGenerationStep[];
@@ -87,11 +89,29 @@ const REVISION_STEP_DEFS = [
   { id: 'prepare-review', title: 'Prepare updated review' },
 ] as const;
 
+const TOKEN_CONTRACT_REBUILD_STEP_DEFS = [
+  { id: 'read-token-report', title: 'Read token quality report' },
+  { id: 'assess-evidence', title: 'Assess schema evidence' },
+  { id: 'draft-contract-review', title: 'Draft contract rebuild review' },
+  { id: 'create-revision', title: 'Create pending revision' },
+  { id: 'prepare-review', title: 'Prepare token review' },
+] as const;
+
 export type DesignSystemRevisionInput = {
   designSystemId: string;
   feedback: string;
   sectionTitle?: string;
   body?: string;
+};
+
+export type DesignSystemTokenContractRebuildInput = {
+  designSystemId: string;
+  decision: DesignSystemTokenContractRebuildDecision;
+  feedback: string;
+  sectionTitle: string;
+  baseBody: string;
+  proposedBody: string;
+  fileChanges?: DesignSystemRevisionFileChange[];
 };
 
 export function createDesignSystemGenerationJobStore(options: StoreOptions) {
@@ -136,6 +156,24 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
     };
     jobs.set(job.id, job);
     void runRevision(job, input);
+    return snapshot(job);
+  }
+
+  function rebuildTokenContract(input: DesignSystemTokenContractRebuildInput): DesignSystemGenerationJob {
+    const now = new Date().toISOString();
+    const job: MutableJob = {
+      id: idFactory(),
+      kind: 'token-contract-rebuild',
+      status: 'queued',
+      progress: 0,
+      steps: TOKEN_CONTRACT_REBUILD_STEP_DEFS.map((step) => ({ ...step, status: 'pending' })),
+      createdAt: now,
+      updatedAt: now,
+      designSystemId: input.designSystemId,
+      message: 'Queued token contract rebuild',
+    };
+    jobs.set(job.id, job);
+    void runTokenContractRebuild(job, input);
     return snapshot(job);
   }
 
@@ -226,7 +264,58 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
     }
   }
 
-  return { start, revise, get };
+  async function runTokenContractRebuild(
+    job: MutableJob,
+    input: DesignSystemTokenContractRebuildInput,
+  ): Promise<void> {
+    try {
+      markJob(job, 'running', 'Starting token contract rebuild');
+      await runStep(job, 'read-token-report', async () => {
+        await sleep(delayMs);
+        setStepMessage(
+          job,
+          'read-token-report',
+          `${input.decision.reportPath ?? 'source/token-contract.report.json'} (${input.decision.grade ?? 'unknown'} grade)`,
+        );
+      });
+      await runStep(job, 'assess-evidence', async () => {
+        await sleep(delayMs);
+        const triggers = input.decision.triggers.length > 0
+          ? input.decision.triggers.slice(0, 3).join('; ')
+          : input.decision.forced
+            ? 'Forced rebuild'
+            : 'No quality trigger';
+        setStepMessage(job, 'assess-evidence', triggers);
+      });
+      await runStep(job, 'draft-contract-review', async () => {
+        await sleep(delayMs);
+        const weakCount = input.decision.weakTokens?.length ?? 0;
+        setStepMessage(job, 'draft-contract-review', `Prepared TOKEN_SCHEMA rebuild request (${weakCount} weak token(s))`);
+      });
+      await runStep(job, 'create-revision', async () => {
+        const revision = await createRevision(options.root, input.designSystemId, {
+          feedback: input.feedback,
+          baseBody: input.baseBody,
+          proposedBody: input.proposedBody,
+          sectionTitle: input.sectionTitle,
+          jobId: job.id,
+          ...(input.fileChanges?.length ? { fileChanges: input.fileChanges } : {}),
+        });
+        if (!revision) throw new Error('Could not create token contract revision');
+        job.revisionId = revision.id;
+        setStepMessage(job, 'create-revision', `Created pending token revision ${revision.id}`);
+      });
+      await runStep(job, 'prepare-review', async () => {
+        await sleep(delayMs);
+        setStepMessage(job, 'prepare-review', 'Token contract rebuild is ready for review');
+      });
+      completeJob(job, 'succeeded', 'Token contract rebuild ready for review');
+    } catch (err) {
+      failJob(job, err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  return { start, revise, rebuildTokenContract, get };
 }
 
 async function runStep(

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { QuestionsPanel } from '../../src/components/QuestionsPanel';
 import type { QuestionForm } from '../../src/artifacts/question-form';
@@ -20,6 +20,12 @@ function fieldCount() {
   return document.querySelectorAll('.qf-field').length;
 }
 
+function textInputAt(index: number): HTMLInputElement {
+  const input = document.querySelectorAll<HTMLInputElement>('.qf-input')[index];
+  if (!input) throw new Error(`expected text input at index ${index}`);
+  return input;
+}
+
 // Each reveal schedules the next only after its effect re-runs, so the clock
 // must be stepped one interval per question rather than all at once.
 function revealAll() {
@@ -32,6 +38,7 @@ function revealAll() {
 
 afterEach(() => {
   cleanup();
+  window.sessionStorage.clear();
   vi.useRealTimers();
 });
 
@@ -178,5 +185,52 @@ describe('QuestionsPanel staggered reveal', () => {
       );
     });
     expect(fieldCount()).toBe(4);
+  });
+
+  it('restores in-progress answers when the same form occurrence remounts', () => {
+    vi.useFakeTimers();
+    const props = {
+      form,
+      formKey: 'conv-1:assistant-1',
+      interactive: true,
+      generating: false,
+      onSubmit: vi.fn(),
+    } as const;
+
+    const first = render(<QuestionsPanel {...props} />);
+    revealAll();
+    fireEvent.change(textInputAt(0), {
+      target: { value: 'open design' },
+    });
+    first.unmount();
+
+    render(<QuestionsPanel {...props} />);
+
+    expect(textInputAt(0).value).toBe('open design');
+  });
+
+  it('clears restored draft answers after submitting the form', () => {
+    vi.useFakeTimers();
+    const onSubmit = vi.fn();
+    const props = {
+      form,
+      formKey: 'conv-1:assistant-2',
+      interactive: true,
+      generating: false,
+      onSubmit,
+    } as const;
+
+    const first = render(<QuestionsPanel {...props} />);
+    revealAll();
+    fireEvent.change(textInputAt(0), {
+      target: { value: 'open design' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    first.unmount();
+
+    render(<QuestionsPanel {...props} />);
+
+    expect(textInputAt(0).value).toBe('');
   });
 });

@@ -6,6 +6,7 @@ import {
   exportAsImage,
   exportAsPdf,
   exportAsZip,
+  captureHostIframeSnapshot,
   openSandboxedPreviewInNewTab,
   requestPreviewSnapshot,
 } from '../runtime/exports';
@@ -760,7 +761,9 @@ export function PreviewModal({
                               setTemplateShareOpen(false);
                               const iframe = previewIframeRef.current;
                               if (!iframe) return;
-                              const snap = await requestPreviewSnapshot(iframe);
+                              const snap =
+                                (await captureHostIframeSnapshot(iframe)) ??
+                                (await requestPreviewSnapshot(iframe));
                               try {
                                 if (snap) {
                                   exportAsImage(snap.dataUrl, exportTitle);

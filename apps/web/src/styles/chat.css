@@ -105,7 +105,6 @@
   flex: 0 0 auto;
   margin-inline-start: 2px;
   padding-inline-start: 6px;
-  border-inline-start: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 }
 .chat-session-trigger {
   width: 28px;
@@ -220,6 +219,17 @@
   min-width: 0;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--text-muted) 18%, transparent) transparent;
+}
+/* Bottom-anchor the transcript so a short conversation (e.g. a fresh fork)
+   rests against the composer instead of stranding its messages at the top with
+   a large blank area below. The auto top margin absorbs the free space above
+   the first row when the content is shorter than the viewport; once the content
+   outgrows the viewport the auto margin resolves to 0 and the log scrolls
+   normally with the top fully reachable (unlike `justify-content: flex-end`,
+   which clips overflowing content above the scroll range). The empty/loading
+   states own their own vertical layout, so they're excluded. */
+.chat-log > :first-child:not(.chat-empty-wrap):not(.chat-loading-state) {
+  margin-top: auto;
 }
 .chat-log::-webkit-scrollbar {
   width: 8px;
@@ -748,6 +758,14 @@
   align-items: center;
   gap: 8px;
 }
+.chat-error-copy {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .chat-error-retry {
   flex: 0 0 auto;
   padding: 4px 10px;
@@ -850,9 +868,12 @@
 }
 
 /* -------- Composer -------------------------------------------------- */
+.pane {
+  --chat-composer-inline-inset: 12px;
+}
+
 .composer {
-  border-top: none;
-  padding: 10px 12px 12px;
+  padding: 10px 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -875,6 +896,19 @@
 .composer:has(.composer-design-toolbox-menu),
 .composer:has(.composer-import-menu) {
   z-index: 80;
+}
+.chat-composer-slot {
+  flex: 0 0 auto;
+}
+.chat-composer-fixed-layer {
+  position: fixed;
+  z-index: 45;
+  pointer-events: none;
+  contain: layout style paint;
+  transform: translateZ(0);
+}
+.chat-composer-fixed-layer .composer {
+  pointer-events: auto;
 }
 /* Elevation kicks in only when a pinned todo card is sitting directly
  * above the composer. Without the card the chat scroll already provides
@@ -904,8 +938,10 @@
   transition: border-color 120ms ease, background 120ms ease;
 }
 .composer-shell:focus-within {
-  border-color: var(--bg-fill);
-  background: var(--bg-fill-secondary);
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border-strong));
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--text) 6%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--accent) 6%, transparent);
 }
 /* Design-system picker row at the top of the composer card (moved out of
    the former chrome header). A full-bleed hairline divider separates it
@@ -922,6 +958,35 @@
 .composer.drag-active .composer-shell {
   border-color: var(--accent);
   background: var(--accent-tint);
+}
+.composer-active-file {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  width: fit-content;
+  max-width: calc(100% - 24px);
+  margin: 0 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-panel));
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.25;
+}
+.composer-active-file__label {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-weight: 650;
+}
+.composer-active-file__name {
+  min-width: 0;
+  max-width: min(100%, 260px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
 }
 /* -------- Lexical contenteditable input ---------------------------- */
 .composer-input-wrap {
@@ -943,14 +1008,18 @@
    the inner [contenteditable] element). */
 .composer-input-editor {
   position: relative;
-  min-height: 88px;
+  min-height: 72px;
   max-height: min(184px, 34vh);
   overflow-y: auto;
+}
+.composer.composer-active-file-mode .composer-input-editor {
+  min-height: clamp(150px, 20vh, 210px);
+  max-height: min(300px, 32vh);
 }
 .composer-input-editor [contenteditable='true'],
 .composer-input-editor .composer-editable {
   outline: none;
-  min-height: 88px;
+  min-height: 72px;
   padding: 8px 9px;
   font: inherit;
   font-size: 13.5px;
@@ -961,6 +1030,10 @@
   word-break: break-word;
   caret-color: var(--accent);
   -webkit-user-modify: read-write-plaintext-only; /* paste-as-plain-text guard */
+}
+.composer.composer-active-file-mode .composer-input-editor [contenteditable='true'],
+.composer.composer-active-file-mode .composer-input-editor .composer-editable {
+  min-height: clamp(150px, 20vh, 210px);
 }
 /* Lexical placeholder — absolutely positioned over the empty editor. The
    editor adds/removes its sibling automatically; we style by class. */
@@ -1072,7 +1145,11 @@
   border-top: 1px solid var(--border-soft);
 }
 .composer-row .icon-btn {
-  width: 32px; height: 32px;
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
   padding: 0;
   background: transparent;
   border: 1px solid transparent;
@@ -1099,7 +1176,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  height: 28px;
+  height: 32px;
   min-width: 0;
 }
 .session-mode-toggle__trigger,
@@ -1125,8 +1202,9 @@
     box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .session-mode-toggle__trigger {
-  height: 28px;
-  padding: 0 8px;
+  height: 32px;
+  max-width: 132px;
+  padding: 0 9px;
   border-radius: 7px;
   box-shadow: var(--shadow-xs);
 }
@@ -1371,13 +1449,13 @@
 .chat-queued-send-strip {
   display: flex;
   flex-direction: column;
-  align-self: center;
-  width: fit-content;
-  min-width: min(320px, calc(100% - 20px));
-  max-width: min(calc(100% - 20px), 520px);
+  align-self: auto;
+  width: calc(100% - (var(--chat-composer-inline-inset, 12px) * 2));
+  min-width: 0;
+  max-width: none;
   gap: 3px;
   box-sizing: border-box;
-  margin: 0 auto 2px;
+  margin: 0 var(--chat-composer-inline-inset, 12px) 2px;
   padding: 7px;
   overflow: visible;
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
@@ -1645,8 +1723,9 @@
 .staged-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: 3px 3px 0;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 4px 1px;
   max-height: min(108px, 18vh);
   overflow-y: auto;
   overflow-x: hidden;
@@ -1654,13 +1733,20 @@
 .staged-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px 4px 4px;
-  background: var(--bg-fill-tertiary);
-  border: none;
-  border-radius: 8px;
-  max-width: 220px;
-  font-size: 11.5px;
+  gap: 4px;
+  box-sizing: border-box;
+  height: 22px;
+  min-width: 0;
+  min-height: 22px;
+  padding: 2px 5px 2px 3px;
+  background: color-mix(in srgb, var(--bg-panel) 96%, var(--bg-subtle));
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  max-width: min(190px, 100%);
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 10.5px;
+  line-height: 14px;
   box-shadow: none;
   transition:
     background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -1674,51 +1760,67 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 12px;
-  height: 12px;
-  flex: 0 0 12px;
-  border-radius: 3px;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border-radius: 4px;
   background: color-mix(in srgb, var(--text) 7%, var(--bg-subtle));
   color: var(--text-muted);
-  font-size: 7.5px;
+  font-size: 8px;
   font-weight: 650;
   line-height: 1;
 }
 .staged-context-row {
-  padding-top: 1px;
+  padding-top: 2px;
+}
+.staged-context-picker {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  height: 22px;
+}
+.staged-context-picker--design-system .project-ds-picker-trigger {
+  height: 22px;
+  min-height: 22px;
+  max-width: 232px;
+  padding: 0 7px;
+  gap: 5px;
+  border-radius: 7px;
+  font-size: 11px;
+  box-shadow: none;
 }
 .staged-context {
-  gap: 3px;
-  height: 18px;
-  min-height: 18px;
+  gap: 4px;
+  height: 22px;
+  min-height: 22px;
   max-width: min(190px, 100%);
-  padding: 1px 4px 1px 2px;
-  border-radius: 5px;
-  font-size: 9px;
+  padding: 2px 5px 2px 3px;
+  border-radius: 6px;
+  font-size: 10.5px;
   background: color-mix(in srgb, var(--accent-tint) 30%, var(--bg-panel));
   border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
 }
 .staged-context .staged-icon {
-  width: 12px;
-  height: 12px;
-  flex-basis: 12px;
-  border-radius: 3px;
+  width: 14px;
+  height: 14px;
+  flex-basis: 14px;
+  border-radius: 4px;
   background: color-mix(in srgb, var(--accent) 9%, var(--bg-subtle));
   color: var(--accent);
 }
 .staged-context .staged-icon svg {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
 }
 .staged-context .staged-name {
   max-width: 106px;
-  line-height: 12px;
+  line-height: 14px;
 }
 .staged-context .staged-remove {
-  width: 14px;
-  height: 14px;
-  flex-basis: 14px;
-  border-radius: 3px;
+  width: 16px;
+  height: 16px;
+  flex-basis: 16px;
+  border-radius: 4px;
 }
 .staged-context .staged-remove svg {
   width: 8px;

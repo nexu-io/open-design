@@ -170,4 +170,65 @@ describe('MentionNode', () => {
     editor.setRootElement(null);
     root.remove();
   });
+
+  it('re-stamps a mounted connector pill hue when the live theme flips', async () => {
+    // Regression: applyBrandHue only ran from createDOM / node mutation, so a
+    // connector pill inserted in light mode kept its near-black light hue after
+    // a live theme switch — dark-on-dark, unreadable text in dark mode. The
+    // theme observer must recompute --m-hue when <html data-theme> changes.
+    const parseHex = (hex: string): { r: number; g: number; b: number } => {
+      const int = parseInt(hex.replace('#', ''), 16);
+      return { r: (int >> 16) & 0xff, g: (int >> 8) & 0xff, b: int & 0xff };
+    };
+    const luminance = (hex: string): number => {
+      const { r, g, b } = parseHex(hex);
+      return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    };
+
+    const prevTheme = document.documentElement.getAttribute('data-theme');
+    document.documentElement.setAttribute('data-theme', 'light');
+
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const editor = makeEditor();
+    editor.setRootElement(root);
+    editor.update(
+      () => {
+        const p = $createParagraphNode();
+        p.append(
+          $createMentionNode({
+            // Notion's curated brand is near-black (#0B0B0B) in light mode.
+            mentionId: 'notion',
+            mentionKind: 'connector',
+            token: '@Notion',
+            label: 'Notion',
+          }),
+        );
+        $getRoot().clear();
+        $getRoot().append(p);
+      },
+      { discrete: true },
+    );
+
+    const pill = root.querySelector<HTMLElement>('.composer-inline-mention--connector');
+    expect(pill).not.toBeNull();
+    expect(pill?.getAttribute('data-mention-label')).toBe('Notion');
+    const lightHue = pill!.style.getPropertyValue('--m-hue').trim();
+    expect(lightHue).toMatch(/^#[0-9a-fA-F]{6}$/i);
+    const lightLum = luminance(lightHue);
+
+    // Flip to dark mode. jsdom delivers MutationObserver callbacks on a
+    // microtask, so let the queue drain before reading the re-stamped hue.
+    document.documentElement.setAttribute('data-theme', 'dark');
+    await Promise.resolve();
+    const darkHue = pill!.style.getPropertyValue('--m-hue').trim();
+    expect(darkHue).toMatch(/^#[0-9a-fA-F]{6}$/i);
+    expect(darkHue).not.toBe(lightHue);
+    expect(luminance(darkHue)).toBeGreaterThan(lightLum);
+
+    editor.setRootElement(null);
+    root.remove();
+    if (prevTheme === null) document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', prevTheme);
+  });
 });

@@ -26,6 +26,9 @@ import { isAnthropicSupportedImagePath } from '../utils/apiProtocol';
 export interface ProxyContext {
   projectId?: string;
   byokImageModel?: string;
+  byokVideoModel?: string;
+  byokSpeechModel?: string;
+  byokSpeechVoice?: string;
 }
 
 export async function streamProxyEndpoint(
@@ -60,6 +63,15 @@ export async function streamProxyEndpoint(
         ...(context?.projectId ? { projectId: context.projectId } : {}),
         ...(context?.byokImageModel
           ? { byokImageModel: context.byokImageModel }
+          : {}),
+        ...(context?.byokVideoModel
+          ? { byokVideoModel: context.byokVideoModel }
+          : {}),
+        ...(context?.byokSpeechModel
+          ? { byokSpeechModel: context.byokSpeechModel }
+          : {}),
+        ...(context?.byokSpeechVoice
+          ? { byokSpeechVoice: context.byokSpeechVoice }
           : {}),
       }),
       signal,

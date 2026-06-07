@@ -12,6 +12,7 @@
 // for Codex). Those values are local-only and should not be logged or
 // returned outside this machine.
 
+import { readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -19,6 +20,7 @@ import { expandHomePrefix } from './home-expansion.js';
 
 import {
   readInstallationFile,
+  readInstallationFileSync,
   resolveInstallationDir,
   writeInstallationFile,
   type InstallationFilePatch,
@@ -461,6 +463,46 @@ export async function readAppConfig(dataDir: string): Promise<AppConfigPrefs> {
     }
   }
   return applyTelemetryDefaults(base);
+}
+
+// Synchronous mirror of readAppConfig for callers that cannot await — e.g.
+// building the spawn env for the vela CLI inside the synchronous
+// spawnEnvForAgent. It reuses the exact same parsing, validation and telemetry
+// defaulting as the async path, so the consent decision and installationId can
+// never drift from what the rest of the daemon (and the web analytics config)
+// sees. The only intentional difference is that it skips the best-effort
+// legacy→channel-root migration *write*, which is a side effect rather than
+// part of the read result.
+export function readAppConfigSync(dataDir: string): AppConfigPrefs {
+  const base = readAppConfigFileOnlySync(dataDir);
+  const installation = readInstallationFileSync(resolveInstallationDir(dataDir));
+  if (
+    typeof installation.installationId === 'string' &&
+    installation.installationId.length > 0
+  ) {
+    return applyTelemetryDefaults({
+      ...base,
+      installationId: installation.installationId,
+    });
+  }
+  return applyTelemetryDefaults(base);
+}
+
+function readAppConfigFileOnlySync(dataDir: string): AppConfigPrefs {
+  try {
+    const parsed: unknown = JSON.parse(
+      readFileSync(configFile(dataDir), 'utf8'),
+    );
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return filterAllowedKeys(parsed as Record<string, unknown>);
+    }
+    return {};
+  } catch (err: unknown) {
+    const e = err as { code?: string; name?: string };
+    if (e.code === 'ENOENT') return {};
+    if (e.name === 'SyntaxError') return {};
+    throw err;
+  }
 }
 
 async function readAppConfigFileOnly(dataDir: string): Promise<AppConfigPrefs> {
