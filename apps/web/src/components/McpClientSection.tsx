@@ -32,7 +32,7 @@ import type {
 import { fetchAgents } from '../providers/registry';
 import type { AgentInfo } from '../types';
 import { Icon } from './Icon';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
 
 interface Props {
   // Receive a notification when servers list changes so the parent can
@@ -209,6 +209,10 @@ function rowFromBlank(taken: ReadonlySet<string>): DraftRow {
 }
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
+
+function zhCN(locale: string, english: string, simplifiedChinese: string): string {
+  return locale === 'zh-CN' ? simplifiedChinese : english;
+}
 
 // Picker grouping. Mirrors `McpTemplateCategory` in `packages/contracts`.
 // The order here is the *display* order in the picker — keep it intentional
@@ -1092,6 +1096,7 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
  * reach back via postMessage (cross-origin tab opener edge cases).
  */
 function McpOAuthControl({ serverId }: { serverId: string }) {
+  const { locale } = useI18n();
   const [status, setStatus] = useState<McpOAuthStatusResponse | null>(null);
   const [busy, setBusy] = useState<'idle' | 'starting' | 'awaiting' | 'disconnecting' | 'refreshing'>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -1239,7 +1244,7 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
       setPendingAuthUrl(null);
       setStatus({ connected: false });
     } else {
-      setError('Disconnect failed. Check daemon logs.');
+      setError(zhCN(locale, 'Disconnect failed. Check daemon logs.', '断开连接失败。请检查守护进程日志。'));
     }
   };
 
@@ -1257,11 +1262,13 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
           <>
             <span className="mcp-oauth-dot mcp-oauth-dot-ok" aria-hidden />
             <span>
-              <strong>Connected.</strong>{' '}
+              <strong>{zhCN(locale, 'Connected.', '已连接。')}</strong>{' '}
               {expiresLabel ? (
-                <span className="hint">Token expires {expiresLabel}.</span>
+                <span className="hint">
+                  {zhCN(locale, `Token expires ${expiresLabel}.`, `令牌将于 ${expiresLabel} 过期。`)}
+                </span>
               ) : (
-                <span className="hint">Non-expiring token.</span>
+                <span className="hint">{zhCN(locale, 'Non-expiring token.', '令牌不会过期。')}</span>
               )}
             </span>
           </>
@@ -1269,11 +1276,13 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
           <>
             <span className="mcp-oauth-dot mcp-oauth-dot-pending" aria-hidden />
             <span>
-              <strong>Waiting for authorization…</strong>{' '}
+              <strong>{zhCN(locale, 'Waiting for authorization…', '等待授权中…')}</strong>{' '}
               <span className="hint">
-                Approve in the browser tab that opened. We'll catch the callback
-                automatically — or click Refresh below if you completed it
-                already.
+                {zhCN(
+                  locale,
+                  "Approve in the browser tab that opened. We'll catch the callback automatically — or click Refresh below if you completed it already.",
+                  '请在已打开的浏览器标签页中批准授权。我们会自动捕获回调；如果你已经完成，也可以点击下方刷新。',
+                )}
               </span>
             </span>
           </>
@@ -1281,9 +1290,13 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
           <>
             <span className="mcp-oauth-dot" aria-hidden />
             <span>
-              <strong>Not connected.</strong>{' '}
+              <strong>{zhCN(locale, 'Not connected.', '未连接。')}</strong>{' '}
               <span className="hint">
-                Click Connect to grant Open Design access via the provider's OAuth flow.
+                {zhCN(
+                  locale,
+                  "Click Connect to grant Open Design access via the provider's OAuth flow.",
+                  '点击连接，通过提供商的 OAuth 流程授予 Open Design 访问权限。',
+                )}
               </span>
             </span>
           </>
@@ -1298,24 +1311,28 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
               className="primary"
               onClick={onConnect}
               disabled={busy !== 'idle' && busy !== 'refreshing'}
-              title="Reauthenticate (replaces the existing token)"
+              title={zhCN(locale, 'Reauthenticate (replaces the existing token)', '重新认证（替换现有令牌）')}
             >
-              {busy === 'starting' || busy === 'awaiting' ? 'Connecting…' : 'Reconnect'}
+              {busy === 'starting' || busy === 'awaiting'
+                ? zhCN(locale, 'Connecting…', '连接中…')
+                : zhCN(locale, 'Reconnect', '重新连接')}
             </button>
             <button
               type="button"
               onClick={onRefreshStatus}
               disabled={busy !== 'idle' && busy !== 'refreshing'}
-              title="Re-check token status against the daemon"
+              title={zhCN(locale, 'Re-check token status against the daemon', '向守护进程重新检查令牌状态')}
             >
-              {busy === 'refreshing' ? 'Checking…' : 'Refresh'}
+              {busy === 'refreshing' ? zhCN(locale, 'Checking…', '检查中…') : zhCN(locale, 'Refresh', '刷新')}
             </button>
             <button
               type="button"
               onClick={onDisconnect}
               disabled={busy !== 'idle' && busy !== 'refreshing'}
             >
-              {busy === 'disconnecting' ? 'Disconnecting…' : 'Disconnect'}
+              {busy === 'disconnecting'
+                ? zhCN(locale, 'Disconnecting…', '断开中…')
+                : zhCN(locale, 'Disconnect', '断开连接')}
             </button>
           </>
         ) : isAwaiting ? (
@@ -1325,12 +1342,14 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
               className="primary"
               onClick={onRefreshStatus}
               disabled={busy === 'refreshing'}
-              title="I've completed authorization — check connection status now"
+              title={zhCN(locale, "I've completed authorization — check connection status now", '我已完成授权，现在检查连接状态')}
             >
-              {busy === 'refreshing' ? 'Checking…' : 'I\u2019ve approved — Refresh'}
+              {busy === 'refreshing'
+                ? zhCN(locale, 'Checking…', '检查中…')
+                : zhCN(locale, 'I\u2019ve approved — Refresh', '我已批准，刷新')}
             </button>
             <button type="button" onClick={onCancelPending}>
-              Cancel
+              {zhCN(locale, 'Cancel', '取消')}
             </button>
           </>
         ) : (
@@ -1340,7 +1359,7 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
             onClick={onConnect}
             disabled={busy !== 'idle'}
           >
-            {busy === 'starting' ? 'Starting…' : 'Connect'}
+            {busy === 'starting' ? zhCN(locale, 'Starting…', '启动中…') : zhCN(locale, 'Connect', '连接')}
           </button>
         )}
       </div>
@@ -1348,14 +1367,14 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
       {pendingAuthUrl && !connected ? (
         <div className="mcp-oauth-fallback">
           <span className="hint">
-            Browser didn't open?{' '}
+            {zhCN(locale, "Browser didn't open?", '浏览器没有打开？')}{' '}
             <a
               href={pendingAuthUrl}
               target="_blank"
               rel="noreferrer noopener"
               className="md-link"
             >
-              Open authorization page
+              {zhCN(locale, 'Open authorization page', '打开授权页面')}
             </a>
             .
           </span>
