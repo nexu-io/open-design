@@ -9,8 +9,8 @@
     "title": "Airtable — reference components",
     "description": "Reference fixture for design-systems/airtable. White canvas, Deep Navy text, Airtable Blue accent, Haas typography, blue-tinted multi-layer card shadow.",
     "styleBlockCount": 1,
-    "selectorCount": 58,
-    "classCount": 31,
+    "selectorCount": 62,
+    "classCount": 35,
     "elementCount": 27
   },
   "tokens": {
@@ -80,7 +80,6 @@
       "--bg",
       "--border",
       "--border-soft",
-      "--chip-color",
       "--container-gutter-desktop",
       "--container-gutter-phone",
       "--container-gutter-tablet",
@@ -133,9 +132,7 @@
       "--text-2xl",
       "--warn"
     ],
-    "undeclaredReferenced": [
-      "--chip-color"
-    ]
+    "undeclaredReferenced": []
   },
   "selectors": [
     ".badge",
@@ -143,6 +140,10 @@
     ".badge-muted",
     ".badge-success",
     ".base-chip",
+    ".base-chip-design::before",
+    ".base-chip-marketing::before",
+    ".base-chip-product::before",
+    ".base-chip-sales::before",
     ".base-chip::before",
     ".base-chips",
     ".body-muted",
@@ -202,6 +203,10 @@
     "badge-dot",
     "badge-success",
     "base-chip",
+    "base-chip-design",
+    "base-chip-marketing",
+    "base-chip-product",
+    "base-chip-sales",
     "base-chips",
     "body-muted",
     "body-sm",
@@ -493,7 +498,7 @@
     }
   ],
   "literals": {
-    "colorExpressions": 4,
+    "colorExpressions": 8,
     "pixelValues": 47,
     "hardcodedFontFamilies": 5
   }

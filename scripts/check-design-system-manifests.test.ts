@@ -15,7 +15,13 @@ import {
   renderTailwindV4Css,
   type DerivedDesignTokenBinding,
 } from "../packages/contracts/src/design-systems/derived-token-outputs.ts";
-import { validateDesignTokensJson, validateManifestSemantics, validateTailwindV4Css } from "./check-design-system-manifests.ts";
+import { extractComponentsManifest } from "../packages/contracts/src/design-systems/components-manifest.ts";
+import {
+  validateComponentsManifestCache,
+  validateDesignTokensJson,
+  validateManifestSemantics,
+  validateTailwindV4Css,
+} from "./check-design-system-manifests.ts";
 
 const REPORT_PATH = "source/token-contract.report.json";
 
@@ -329,6 +335,40 @@ test("design-system tailwind v4 guard rejects swapped canonical mappings", async
     assert.deepEqual(violations, [
       "design-systems/test/manifest.json: tailwind-v4.css is stale; regenerate it from tokens.css",
     ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("design-system components manifest guard rejects undeclared token references", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "od-components-manifest-guard-"));
+  try {
+    const fixtureHtml = [
+      "<!doctype html>",
+      "<style>",
+      ".btn { color: var(--accent); border-color: var(--missing-token); }",
+      "</style>",
+      '<button class="btn">Continue</button>',
+    ].join("\n");
+    const tokensCss = ":root {\n  --accent: #111111;\n}\n";
+    writeFileSync(path.join(root, "components.html"), fixtureHtml);
+    writeFileSync(path.join(root, "tokens.css"), tokensCss);
+    writeFileSync(
+      path.join(root, "components.manifest.json"),
+      `${JSON.stringify(extractComponentsManifest({ brandId: "test", fixtureHtml, tokensCss }), null, 2)}\n`,
+    );
+
+    const violations: string[] = [];
+    await validateComponentsManifestCache(
+      violations,
+      "design-systems/test/manifest.json",
+      root,
+      "test",
+      "components.manifest.json",
+    );
+
+    assert.equal(violations.length, 1);
+    assert.match(violations[0]!, /references undeclared component token\(s\): --missing-token$/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

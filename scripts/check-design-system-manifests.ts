@@ -503,7 +503,7 @@ async function validateDeclaredJsonFiles(
   }
 }
 
-async function validateComponentsManifestCache(
+export async function validateComponentsManifestCache(
   violations: string[],
   repositoryManifestPath: string,
   brandRoot: string,
@@ -527,6 +527,11 @@ async function validateComponentsManifestCache(
     if (!isDeepStrictEqual(cachedManifest, derivedManifest)) {
       violations.push(
         `${repositoryManifestPath}: ${toRepositoryPath(cachePath)} is stale; regenerate it from components.html + tokens.css`,
+      );
+    }
+    if (derivedManifest.tokens.undeclaredReferenced.length > 0) {
+      violations.push(
+        `${repositoryManifestPath}: ${toRepositoryPath(cachePath)} references undeclared component token(s): ${derivedManifest.tokens.undeclaredReferenced.join(", ")}`,
       );
     }
   } catch (error) {

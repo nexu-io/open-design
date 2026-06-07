@@ -91,7 +91,6 @@
       "--font-body",
       "--font-display",
       "--font-mono",
-      "--lavender",
       "--leading-body",
       "--leading-tight",
       "--motion-fast",
@@ -133,9 +132,7 @@
       "--text-xl",
       "--warn"
     ],
-    "undeclaredReferenced": [
-      "--lavender"
-    ]
+    "undeclaredReferenced": []
   },
   "selectors": [
     ".badge",
@@ -273,7 +270,6 @@
         "--ease-standard",
         "--focus-ring",
         "--font-body",
-        "--lavender",
         "--motion-fast",
         "--radius-sm",
         "--space-2",
@@ -458,13 +454,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--lavender",
         "--space-4"
       ]
     }
   ],
   "literals": {
-    "colorExpressions": 13,
+    "colorExpressions": 15,
     "pixelValues": 25,
     "hardcodedFontFamilies": 9
   }
