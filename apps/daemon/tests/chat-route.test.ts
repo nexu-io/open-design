@@ -218,6 +218,117 @@ process.exit(0);
     );
   });
 
+  it('passes OPENCODE_CONFIG_CONTENT external_directory rules for the managed project cwd', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for OpenCode cwd permission tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-opencode-config-'));
+    tempDirs.push(markerDir);
+    const envFile = join(markerDir, 'opencode-config-content.json');
+    const cwdFile = join(markerDir, 'cwd.txt');
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'OpenCode cwd permission fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(envFile)}, process.env.OPENCODE_CONFIG_CONTENT || '');
+  fs.writeFileSync(${JSON.stringify(cwdFile)}, process.cwd());
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'cwd-permission-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            message: 'hello',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('cwd-permission-ok');
+
+        const effectiveCwd = (await fsp.readFile(cwdFile, 'utf8')).trim();
+        const raw = await fsp.readFile(envFile, 'utf8');
+        const parsed = JSON.parse(raw) as {
+          permission?: {
+            external_directory?: Record<string, string>;
+          };
+        };
+
+        expect(parsed.permission?.external_directory).toMatchObject({
+          [effectiveCwd]: 'allow',
+          [`${effectiveCwd}/*`]: 'allow',
+          [`${effectiveCwd}/**`]: 'allow',
+        });
+      },
+    );
+  });
+
+  it('strips inherited OpenCode server auth env before spawning the opencode CLI', async () => {
+    const inheritedPassword = process.env.OPENCODE_SERVER_PASSWORD;
+    process.env.OPENCODE_SERVER_PASSWORD = 'test-parent-server-password';
+
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-opencode-env-'));
+    tempDirs.push(markerDir);
+    const envFile = join(markerDir, 'opencode-server-password.txt');
+
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(envFile)}, process.env.OPENCODE_SERVER_PASSWORD || '');
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'opencode-env-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              message: 'hello',
+            }),
+          });
+          const body = await response.text();
+
+          expect(response.ok).toBe(true);
+          expect(body).toContain('opencode-env-ok');
+          expect(await fsp.readFile(envFile, 'utf8')).toBe('');
+        },
+      );
+    } finally {
+      if (inheritedPassword == null) {
+        delete process.env.OPENCODE_SERVER_PASSWORD;
+      } else {
+        process.env.OPENCODE_SERVER_PASSWORD = inheritedPassword;
+      }
+    }
+  });
+
 
   it('reuses an existing assistant message row instead of creating a duplicate when assistantMessageId is supplied', async () => {
     if (!process.env.OD_DATA_DIR) {
