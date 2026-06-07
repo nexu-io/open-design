@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
-import { useI18n } from '../i18n';
+import { useI18n, type Locale } from '../i18n';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import type {
   CreateRoutineRequest,
@@ -93,8 +93,24 @@ function listSupportedTimezones(): string[] {
   return FALLBACK_TIMEZONES;
 }
 
-function tzCityLabel(timezone: string): string {
+function zhCN(locale: Locale, english: string, simplifiedChinese: string): string {
+  return locale === 'zh-CN' ? simplifiedChinese : english;
+}
+
+function tzCityLabel(timezone: string, locale: Locale = 'en'): string {
   if (timezone === 'UTC') return 'UTC';
+  if (locale === 'zh-CN') {
+    const zhTimezoneLabels: Record<string, string> = {
+      'Asia/Shanghai': '上海',
+      'Asia/Tokyo': '东京',
+      'Asia/Singapore': '新加坡',
+      'Europe/London': '伦敦',
+      'Europe/Berlin': '柏林',
+      'America/New_York': '纽约',
+      'America/Los_Angeles': '洛杉矶',
+    };
+    if (zhTimezoneLabels[timezone]) return zhTimezoneLabels[timezone];
+  }
   const last = timezone.split('/').pop() ?? timezone;
   return last.replace(/_/g, ' ');
 }
@@ -116,37 +132,66 @@ function formatTime12h(time: string): string {
  * weekday names only needs to happen here.
  */
 type ScheduleParts =
-  | { kind: 'hourly'; minute: string }
+  | { kind: 'hourly'; minute: string; freq: string }
   | { kind: 'timed'; freq: string; time: string; tz: string };
 
-function decomposeSchedule(schedule: RoutineSchedule): ScheduleParts {
+function formatScheduleTime(time: string, locale: Locale): string {
+  return locale === 'zh-CN' ? time : formatTime12h(time);
+}
+
+function weekdayLongLabel(locale: Locale, weekday: Weekday): string {
+  const fallback = WEEKDAY_LABELS.find((w) => w.value === weekday)?.long ?? 'Sunday';
+  if (locale !== 'zh-CN') return fallback;
+  return ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][weekday] ?? fallback;
+}
+
+function weekdayShortLabel(locale: Locale, weekday: Weekday): string {
+  const fallback = WEEKDAY_LABELS.find((w) => w.value === weekday)?.short ?? 'Sun';
+  if (locale !== 'zh-CN') return fallback;
+  return ['日', '一', '二', '三', '四', '五', '六'][weekday] ?? fallback;
+}
+
+function scheduleKindLabel(locale: Locale, kind: ScheduleKind, fallback: string): string {
+  if (kind === 'hourly') return zhCN(locale, fallback, '每小时');
+  if (kind === 'daily') return zhCN(locale, fallback, '每天');
+  if (kind === 'weekdays') return zhCN(locale, fallback, '工作日');
+  return zhCN(locale, fallback, '每周');
+}
+
+function decomposeSchedule(schedule: RoutineSchedule, locale: Locale = 'en'): ScheduleParts {
   if (schedule.kind === 'hourly') {
-    return { kind: 'hourly', minute: String(schedule.minute).padStart(2, '0') };
+    return {
+      kind: 'hourly',
+      minute: String(schedule.minute).padStart(2, '0'),
+      freq: scheduleKindLabel(locale, 'hourly', 'Hourly'),
+    };
   }
-  const tz = tzCityLabel(schedule.timezone);
-  const time = formatTime12h(schedule.time);
+  const tz = tzCityLabel(schedule.timezone, locale);
+  const time = formatScheduleTime(schedule.time, locale);
   const freq =
     schedule.kind === 'daily'
-      ? 'Daily'
+      ? scheduleKindLabel(locale, 'daily', 'Daily')
       : schedule.kind === 'weekdays'
-        ? 'Weekdays'
-        : WEEKDAY_LABELS.find((w) => w.value === schedule.weekday)?.long ?? 'Sunday';
+        ? scheduleKindLabel(locale, 'weekdays', 'Weekdays')
+        : weekdayLongLabel(locale, schedule.weekday);
   return { kind: 'timed', freq, time, tz };
 }
 
-export function describeScheduleSummary(schedule: RoutineSchedule): string {
-  const parts = decomposeSchedule(schedule);
-  if (parts.kind === 'hourly') return `Hourly at :${parts.minute}`;
-  return `${parts.freq} at ${parts.time} · ${parts.tz}`;
+export function describeScheduleSummary(schedule: RoutineSchedule, locale: Locale = 'en'): string {
+  const parts = decomposeSchedule(schedule, locale);
+  if (parts.kind === 'hourly') {
+    return zhCN(locale, `Hourly at :${parts.minute}`, `每小时 :${parts.minute}`);
+  }
+  return zhCN(locale, `${parts.freq} at ${parts.time} · ${parts.tz}`, `${parts.freq} ${parts.time} · ${parts.tz}`);
 }
 
 /** Renders the schedule summary as structured pill segments for better visual hierarchy. */
-function buildScheduleSummaryNode(schedule: RoutineSchedule): ReactNode {
-  const parts = decomposeSchedule(schedule);
+function buildScheduleSummaryNode(schedule: RoutineSchedule, locale: Locale = 'en'): ReactNode {
+  const parts = decomposeSchedule(schedule, locale);
   if (parts.kind === 'hourly') {
     return (
       <span className="automation-pill__segments">
-        <span className="automation-pill__freq">Hourly</span>
+        <span className="automation-pill__freq">{parts.freq}</span>
         <span className="automation-pill__sep">·</span>
         <span className="automation-pill__time">:{parts.minute}</span>
       </span>
@@ -512,10 +557,11 @@ export function NewAutomationModal({
   };
 
   const projectName = projects.find((p) => p.id === form.projectId)?.name ?? null;
+  const currentSchedule = buildSchedule(form);
   const projectLabel =
-    form.mode === 'reuse' && projectName ? projectName : 'New project each run';
-  const scheduleLabel = describeScheduleSummary(buildSchedule(form));
-  const scheduleLabelNode = buildScheduleSummaryNode(buildSchedule(form));
+    form.mode === 'reuse' && projectName ? projectName : zhCN(locale, 'New project each run', '每次运行新建项目');
+  const scheduleLabel = describeScheduleSummary(currentSchedule, locale);
+  const scheduleLabelNode = buildScheduleSummaryNode(currentSchedule, locale);
   const mentionQueryNorm = (mention?.query ?? '').trim().toLowerCase();
   const filteredSkills = filterCapabilities(
     skills,
@@ -806,12 +852,14 @@ export function NewAutomationModal({
                       setForm({ ...form, mode: 'create_each_run', projectId: '' });
                       setPopover(null);
                     }}
-                    label="New project each run"
-                    hint="Each run starts a fresh project and conversation."
+                    label={zhCN(locale, 'New project each run', '每次运行新建项目')}
+                    hint={zhCN(locale, 'Each run starts a fresh project and conversation.', '每次运行都会启动一个全新的项目和对话。')}
                   />
                   {projects.length > 0 ? (
                     <>
-                      <div className="automation-popover__section-label">Existing projects</div>
+                      <div className="automation-popover__section-label">
+                        {zhCN(locale, 'Existing projects', '已有项目')}
+                      </div>
                       {projects.map((p) => (
                         <PopoverItem
                           key={p.id}
@@ -844,6 +892,7 @@ export function NewAutomationModal({
                   form={form}
                   setForm={setForm}
                   timezones={timezones}
+                  locale={locale}
                   onDone={() => setPopover(null)}
                 />
               ) : null}
@@ -1056,11 +1105,13 @@ function SchedulePopover({
   form,
   setForm,
   timezones,
+  locale,
   onDone,
 }: {
   form: FormState;
   setForm: (next: FormState) => void;
   timezones: string[];
+  locale: Locale;
   onDone: () => void;
 }) {
   return (
@@ -1075,14 +1126,14 @@ function SchedulePopover({
             className={`automation-popover__kind${form.kind === k.kind ? ' is-active' : ''}`}
             onClick={() => setForm({ ...form, kind: k.kind })}
           >
-            {k.label}
+            {scheduleKindLabel(locale, k.kind, k.label)}
           </button>
         ))}
       </div>
 
       {form.kind === 'hourly' ? (
         <label className="automation-popover__field">
-          <span>Minute of every hour</span>
+          <span>{zhCN(locale, 'Minute of every hour', '每小时的第几分钟')}</span>
           <input
             type="number"
             min={0}
@@ -1100,23 +1151,26 @@ function SchedulePopover({
       ) : (
         <>
           {form.kind === 'weekly' ? (
-            <div className="automation-popover__weekdays" aria-label="Weekday">
+            <div
+              className="automation-popover__weekdays"
+              aria-label={zhCN(locale, 'Weekday', '星期')}
+            >
               {WEEKDAY_LABELS.map((d) => (
                 <button
                   key={d.value}
                   type="button"
                   className={`automation-popover__weekday${form.weekday === d.value ? ' is-active' : ''}`}
                   onClick={() => setForm({ ...form, weekday: d.value })}
-                  title={d.long}
+                  title={weekdayLongLabel(locale, d.value)}
                 >
-                  {d.short}
+                  {weekdayShortLabel(locale, d.value)}
                 </button>
               ))}
             </div>
           ) : null}
           <div className="automation-popover__row">
             <label className="automation-popover__field">
-              <span>Time</span>
+              <span>{zhCN(locale, 'Time', '时间')}</span>
               <input
                 type="time"
                 value={form.time}
@@ -1124,14 +1178,14 @@ function SchedulePopover({
               />
             </label>
             <label className="automation-popover__field">
-              <span>Timezone</span>
+              <span>{zhCN(locale, 'Timezone', '时区')}</span>
               <select
                 value={form.timezone}
                 onChange={(e) => setForm({ ...form, timezone: e.target.value })}
               >
                 {timezones.map((tz) => (
                   <option key={tz} value={tz}>
-                    {tzCityLabel(tz)}
+                    {tzCityLabel(tz, locale)}
                   </option>
                 ))}
               </select>
@@ -1146,7 +1200,7 @@ function SchedulePopover({
           className="automation-popover__done-btn"
           onClick={onDone}
         >
-          Done
+          {zhCN(locale, 'Done', '完成')}
         </button>
       </div>
     </div>

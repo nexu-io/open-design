@@ -12,19 +12,26 @@
 // is clipped.
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Routine } from '@open-design/contracts';
 
 import { NewAutomationModal } from '../../src/components/NewAutomationModal';
+import { I18nProvider } from '../../src/i18n';
 import { listPlugins } from '../../src/state/projects';
 import { fetchMcpServers } from '../../src/state/mcp';
 
 vi.mock('../../src/state/projects', () => ({
-  listPlugins: vi.fn().mockResolvedValue([]),
+  listPlugins: vi.fn(),
 }));
 
 vi.mock('../../src/state/mcp', () => ({
-  fetchMcpServers: vi.fn().mockResolvedValue({ servers: [], templates: [] }),
+  fetchMcpServers: vi.fn(),
 }));
+
+beforeEach(() => {
+  vi.mocked(listPlugins).mockResolvedValue([]);
+  vi.mocked(fetchMcpServers).mockResolvedValue({ servers: [], templates: [] });
+});
 
 afterEach(() => {
   cleanup();
@@ -76,5 +83,52 @@ describe('NewAutomationModal project picker', () => {
     expect(fixedRows.length).toBeGreaterThanOrEqual(2);
     const popoverFixedRow = fixedRows.at(-1);
     expect(popoverFixedRow?.getAttribute('title')).toBeNull();
+  });
+
+  it('localizes the project picker and schedule summary in Simplified Chinese', () => {
+    const routine: Routine = {
+      id: 'routine-1',
+      name: 'Review weekly',
+      prompt: 'Run scheduled work.',
+      schedule: {
+        kind: 'weekly',
+        weekday: 2,
+        time: '13:30',
+        timezone: 'Asia/Shanghai',
+      },
+      target: { mode: 'create_each_run' },
+      skillId: null,
+      agentId: null,
+      enabled: true,
+      nextRunAt: null,
+      lastRun: null,
+      createdAt: 1000,
+      updatedAt: 1000,
+    };
+
+    render(
+      <I18nProvider initial="zh-CN">
+        <NewAutomationModal
+          open
+          initial={{ routine }}
+          templates={[]}
+          projects={[{ id: 'p-1', name: '增长项目' }]}
+          skills={[]}
+          connectors={[]}
+          onClose={() => undefined}
+          onSaved={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '每次运行新建项目' }));
+    expect(screen.getByText('每次运行都会启动一个全新的项目和对话。')).toBeTruthy();
+    expect(screen.getByText('已有项目')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '星期二 13:30 · 上海' }));
+    expect(screen.getByRole('tab', { name: '每周' })).toBeTruthy();
+    expect(screen.getByText('时间')).toBeTruthy();
+    expect(screen.getByText('时区')).toBeTruthy();
+    expect(screen.getByRole('option', { name: '上海' })).toBeTruthy();
   });
 });
