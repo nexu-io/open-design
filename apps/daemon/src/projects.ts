@@ -145,29 +145,11 @@ async function collectFolders(dir, relDir, out, shouldSkipDir?: (name: string) =
       type: 'dir',
       size: 0,
       mtime: st.mtimeMs,
+      kind: 'binary',
+      mime: 'inode/directory',
     });
     await collectFolders(full, rel, out, shouldSkipDir);
   }
-}
-
-export async function createProjectFolder(projectsRoot, projectId, name, metadata?) {
-  const dir = await ensureProject(projectsRoot, projectId, metadata);
-  const safeName = sanitizePath(name);
-  const target = await resolveSafeReal(dir, safeName);
-  await mkdir(target, { recursive: true });
-  const st = await stat(target);
-  if (!st.isDirectory()) {
-    const err = new Error('target path is not a folder');
-    err.code = 'ENOTDIR';
-    throw err;
-  }
-  return {
-    name: safeName,
-    path: safeName,
-    type: 'dir',
-    size: 0,
-    mtime: st.mtimeMs,
-  };
 }
 
 // Resolve (and create) a subdirectory under a project root, confined to the
@@ -920,6 +902,28 @@ export async function deleteProjectFile(projectsRoot, projectId, name, metadata?
   await unlink(file);
 }
 
+export async function createProjectFolder(projectsRoot, projectId, folderPath, metadata?) {
+  const dir = await ensureProject(projectsRoot, projectId, metadata);
+  const safePath = validateProjectPath(folderPath);
+  const target = await resolveSafeReal(dir, safePath);
+  await mkdir(target, { recursive: true });
+  const st = await stat(target);
+  if (!st.isDirectory()) {
+    const err = new Error('target is not a directory');
+    err.code = 'ENOTDIR';
+    throw err;
+  }
+  return {
+    name: safePath,
+    path: safePath,
+    type: 'dir',
+    size: 0,
+    mtime: st.mtimeMs,
+    kind: 'binary',
+    mime: 'inode/directory',
+  };
+}
+
 export async function renameProjectFile(projectsRoot, projectId, fromName, toName, metadata?) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const oldName = validateProjectPath(fromName);
@@ -998,6 +1002,22 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
     oldName,
     newName,
   };
+}
+
+export async function moveProjectFile(projectsRoot, projectId, fromName, toFolder, metadata?) {
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const oldName = validateProjectPath(fromName);
+  const folder = validateProjectPath(toFolder);
+  const targetFolder = await resolveSafeReal(dir, folder);
+  const folderStat = await stat(targetFolder);
+  if (!folderStat.isDirectory()) {
+    const err = new Error('target folder not found');
+    err.code = 'ENOTDIR';
+    throw err;
+  }
+  const newName = `${folder}/${path.posix.basename(oldName)}`;
+  const result = await renameProjectFile(projectsRoot, projectId, oldName, newName, metadata);
+  return { ...result, folder };
 }
 
 async function renameFilePath(source, target, opts = {}) {

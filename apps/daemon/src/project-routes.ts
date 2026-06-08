@@ -1878,7 +1878,7 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
 
 }
 
-export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts' | 'projectPreviewScopes'> {}
+export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'conversations' | 'documents' | 'artifacts' | 'projectPreviewScopes'> {}
 
 export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFileRoutesDeps) {
   const { db } = ctx;
@@ -1887,7 +1887,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   const { upload } = ctx.uploads;
   const { fs } = ctx.node;
   const { getProject } = ctx.projectStore;
-  const { listFiles, listProjectFolders, createProjectFolder, deleteProjectFolder, searchProjectFiles, readProjectFile, resolveProjectDir, resolveProjectFilePath, parseByteRange, renameProjectFile, deleteProjectFile, writeProjectFile, sanitizeName, ensureProject } = ctx.projectFiles;
+  const { listFiles, listProjectFolders, searchProjectFiles, readProjectFile, resolveProjectDir, resolveProjectFilePath, parseByteRange, createProjectFolder, deleteProjectFolder, moveProjectFile, renameProjectFile, deleteProjectFile, writeProjectFile, sanitizeName, ensureProject, listTabs, setTabs } = ctx.projectFiles;
+  const { migratePreviewCommentFilePath } = ctx.conversations;
   const { buildDocumentPreview } = ctx.documents;
   const { validateArtifactManifestInput } = ctx.artifacts;
   const { projectPreviewScopes } = ctx;
@@ -1988,6 +1989,27 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
   function encodeProjectPathForUrl(filePath: string): string {
     return filePath.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+  }
+
+  function migrateTabsAfterMove(projectId: string, oldName: string, newName: string) {
+    const state = listTabs(db, projectId);
+    const seen = new Set<string>();
+    const nextTabs: string[] = [];
+    for (const name of state.tabs) {
+      const nextName = name === oldName ? newName : name;
+      if (!seen.has(nextName)) {
+        seen.add(nextName);
+        nextTabs.push(nextName);
+      }
+    }
+    const nextActive = state.active === oldName ? newName : state.active;
+    if (
+      nextActive !== state.active ||
+      nextTabs.length !== state.tabs.length ||
+      nextTabs.some((name, index) => name !== state.tabs[index])
+    ) {
+      setTabs(db, projectId, nextTabs, nextActive);
+    }
   }
 
   // Project files. Each project owns a flat folder under .od/projects/<id>/
@@ -2463,6 +2485,64 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       }
       const message = String(err?.message || err);
       if (err?.code === 'ENOENT' || message.includes('ENOENT') || message.includes('no such file or directory')) {
+        return sendApiError(res, 404, 'FILE_NOT_FOUND', message);
+      }
+      sendApiError(res, 400, 'BAD_REQUEST', message);
+    }
+  });
+
+  app.post('/api/projects/:id/files/folders', async (req, res) => {
+    try {
+      const { path: folderPath } = req.body || {};
+      if (typeof folderPath !== 'string') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'path required');
+      }
+      const project = getProject(db, req.params.id);
+      const folder = await createProjectFolder(
+        PROJECTS_DIR,
+        req.params.id,
+        folderPath,
+        project?.metadata,
+      );
+      /** @type {import('@open-design/contracts').CreateProjectFolderResponse} */
+      const body = { folder };
+      res.json(body);
+    } catch (err: any) {
+      const message = String(err?.message || err);
+      sendApiError(res, 400, 'BAD_REQUEST', message);
+    }
+  });
+
+  app.post('/api/projects/:id/files/move', async (req, res) => {
+    try {
+      const { from, toFolder } = req.body || {};
+      if (typeof from !== 'string' || typeof toFolder !== 'string') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'from and toFolder required');
+      }
+      const project = getProject(db, req.params.id);
+      const result = await moveProjectFile(
+        PROJECTS_DIR,
+        req.params.id,
+        from,
+        toFolder,
+        project?.metadata,
+      );
+      migrateTabsAfterMove(req.params.id, result.oldName, result.newName);
+      migratePreviewCommentFilePath(db, req.params.id, result.oldName, result.newName);
+      /** @type {import('@open-design/contracts').MoveProjectFileResponse} */
+      const body = result;
+      res.json(body);
+    } catch (err: any) {
+      if (err?.code === 'EEXIST') {
+        return sendApiError(res, 409, 'CONFLICT', String(err?.message || err));
+      }
+      const message = String(err?.message || err);
+      if (
+        err?.code === 'ENOENT' ||
+        err?.code === 'ENOTDIR' ||
+        message.includes('ENOENT') ||
+        message.includes('no such file or directory')
+      ) {
         return sendApiError(res, 404, 'FILE_NOT_FOUND', message);
       }
       sendApiError(res, 400, 'BAD_REQUEST', message);

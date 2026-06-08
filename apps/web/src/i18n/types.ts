@@ -2404,6 +2404,9 @@ export interface Dict {
   'designFiles.title': string;
   'designFiles.upload': string;
   'designFiles.pasteText': string;
+  'designFiles.newFolder': string;
+  'designFiles.folderPathPrompt': string;
+  'designFiles.moveToFolder': string;
   'designFiles.newSketch': string;
   'designFiles.empty': string;
   'designFiles.refresh': string;

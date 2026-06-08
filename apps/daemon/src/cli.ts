@@ -5400,6 +5400,9 @@ async function runFiles(args) {
                                                Write content from stdin.
   od files upload <projectId> <localpath> [--as <relpath>]
                                                Upload a local file.
+  od files mkdir  <projectId> <folderPath>     Create a folder.
+  od files move   <projectId> <relpath> <folderPath>
+                                               Move a file into a folder.
   od files delete <projectId> <name>           Delete a project file.
   od files diff   <projectId> <relpathA> [<relpathB> | --against -]
                                                Print a unified diff.
@@ -5501,6 +5504,43 @@ Common options:
       const data = await resp.json();
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       console.log(`[files] wrote ${data?.file?.name ?? rel}`);
+      return;
+    }
+    case 'mkdir':
+    case 'folder': {
+      const positional = projectPositionalArgs(rest);
+      const [id, folderPath] = positional;
+      if (!id || !folderPath) {
+        console.error('Usage: od files mkdir <projectId> <folderPath>');
+        process.exit(2);
+      }
+      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files/folders`, {
+        method:  'POST',
+        headers: { 'content-type': 'application/json' },
+        body:    JSON.stringify({ path: folderPath }),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[files] created folder ${data?.folder?.path ?? folderPath}`);
+      return;
+    }
+    case 'move': {
+      const positional = projectPositionalArgs(rest);
+      const [id, from, toFolder] = positional;
+      if (!id || !from || !toFolder) {
+        console.error('Usage: od files move <projectId> <relpath> <folderPath>');
+        process.exit(2);
+      }
+      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files/move`, {
+        method:  'POST',
+        headers: { 'content-type': 'application/json' },
+        body:    JSON.stringify({ from, toFolder }),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[files] moved ${data?.oldName ?? from} -> ${data?.newName ?? `${toFolder}/${from.split('/').pop()}`}`);
       return;
     }
     case 'delete': {
@@ -5680,6 +5720,22 @@ function diffLine(prefix, line) {
 
 function renderDiffLineContent(value) {
   return String(value).replace(/\r/g, '\\r');
+}
+
+function projectPositionalArgs(values) {
+  const out = [];
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i];
+    if (!value) continue;
+    if (value.startsWith('--')) {
+      const eq = value.indexOf('=');
+      const key = eq >= 0 ? value.slice(2, eq) : value.slice(2);
+      if (eq < 0 && PROJECT_STRING_FLAGS.has(key)) i++;
+      continue;
+    }
+    out.push(value);
+  }
+  return out;
 }
 
 // `od templates …` is the headless face of NewProjectPanel /

@@ -1481,6 +1481,39 @@ export function deletePreviewComment(db: SqliteDb, projectId: string, conversati
   return result.changes > 0;
 }
 
+export function migratePreviewCommentFilePath(
+  db: SqliteDb,
+  projectId: string,
+  oldPath: string,
+  newPath: string,
+) {
+  if (oldPath === newPath) return 0;
+  const now = Date.now();
+  const tx = db.transaction(() => {
+    const deleted = db.prepare(
+      `DELETE FROM preview_comments
+        WHERE project_id = ?
+          AND file_path = ?
+          AND EXISTS (
+            SELECT 1
+              FROM preview_comments AS target
+             WHERE target.project_id = preview_comments.project_id
+               AND target.conversation_id = preview_comments.conversation_id
+               AND target.file_path = ?
+               AND target.element_id = preview_comments.element_id
+               AND target.slide_key = preview_comments.slide_key
+          )`,
+    ).run(projectId, oldPath, newPath);
+    const updated = db.prepare(
+      `UPDATE preview_comments
+          SET file_path = ?, updated_at = ?
+        WHERE project_id = ? AND file_path = ?`,
+    ).run(newPath, now, projectId, oldPath);
+    return Number(deleted.changes ?? 0) + Number(updated.changes ?? 0);
+  });
+  return tx();
+}
+
 function getPreviewComment(db: SqliteDb, projectId: string, conversationId: string, id: string) {
   const row = db
     .prepare(

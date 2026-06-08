@@ -14,7 +14,9 @@ import {
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
 import { projectSplitClassName, projectSplitStyle } from '../../src/components/ProjectView';
 import {
+  createProjectFolder,
   fetchProjectFileText,
+  moveProjectFile,
   uploadProjectFiles,
   writeProjectTextFile,
   fetchProjectFolders,
@@ -64,6 +66,8 @@ vi.mock('../../src/providers/registry', async () => {
     fetchProjectFileText: vi.fn(),
     uploadProjectFiles: vi.fn(),
     writeProjectTextFile: vi.fn(),
+    createProjectFolder: vi.fn(),
+    moveProjectFile: vi.fn(),
     fetchProjectFolders: vi.fn().mockResolvedValue([]),
   };
 });
@@ -120,6 +124,9 @@ vi.mock('../../src/components/DesignFilesPanel', async () => {
 const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
 const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
 const mockedWriteProjectTextFile = vi.mocked(writeProjectTextFile);
+const mockedCreateProjectFolder = vi.mocked(createProjectFolder);
+const mockedMoveProjectFile = vi.mocked(moveProjectFile);
+const mockedFetchProjectFolders = vi.mocked(fetchProjectFolders);
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
@@ -467,6 +474,8 @@ describe('FileWorkspace upload input', () => {
       type: 'dir',
       size: 0,
       mtime: 1700000000,
+      kind: 'binary',
+      mime: 'inode/directory',
     });
     const mockedFolders = vi.mocked(fetchProjectFolders);
     // project-a has an empty persisted folder; project-b's fetch stays pending.
@@ -1504,6 +1513,106 @@ describe('DesignFilesPanel plugin folders', () => {
     expect(container.textContent).not.toContain(
       'Sent to the agent. The CLI run will continue in chat.',
     );
+  });
+});
+
+describe('FileWorkspace folder creation', () => {
+  it('keeps the first newly created empty folder visible in an empty project', async () => {
+    mockedCreateProjectFolder.mockResolvedValueOnce({
+      folder: {
+        name: 'assets',
+        path: 'assets',
+        type: 'dir',
+        size: 0,
+        mtime: Date.now(),
+        kind: 'binary',
+        mime: 'inode/directory',
+      },
+    });
+    vi.stubGlobal('prompt', vi.fn(() => 'assets'));
+
+    const onRefreshFiles = vi.fn(async () => undefined);
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={onRefreshFiles}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'New folder' }));
+
+    await waitFor(() => {
+      expect(mockedCreateProjectFolder).toHaveBeenCalledWith('project-1', 'assets');
+    });
+
+    // The daemon's flat file list returned no entry for the empty folder, so
+    // without ephemeral folder tracking the row would disappear. Confirm the
+    // panel still shows it.
+    await waitFor(() => {
+      const dirRows = document.querySelectorAll('.df-dir-row');
+      const hasAssets = Array.from(dirRows).some((row) =>
+        row.textContent?.includes('assets'),
+      );
+      expect(hasAssets).toBe(true);
+    });
+  });
+});
+
+describe('FileWorkspace file moves', () => {
+  it('refreshes and remaps successful file moves before surfacing a later failure', async () => {
+    mockedMoveProjectFile
+      .mockResolvedValueOnce({
+        oldName: 'analysis.html',
+        newName: 'archive/analysis.html',
+        folder: 'archive',
+        file: workspaceFile('archive/analysis.html'),
+      })
+      .mockRejectedValueOnce(new Error('A file named notes.html already exists in archive.'));
+    vi.stubGlobal('prompt', vi.fn(() => 'archive'));
+    vi.stubGlobal('alert', vi.fn());
+    mockedFetchProjectFileText.mockResolvedValue('<main>Analysis</main>');
+
+    const onRefreshFiles = vi.fn(async () => undefined);
+    const onTabsStateChange = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('analysis.html'), workspaceFile('notes.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={onRefreshFiles}
+        isDeck={false}
+        tabsState={{ tabs: ['analysis.html', 'notes.html'], active: null }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    for (const name of ['analysis.html', 'notes.html']) {
+      const row = screen.getByTestId(`design-file-row-${name}`);
+      fireEvent.click(row.querySelector('.df-row-check')!);
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Move to folder' }));
+
+    await waitFor(() => {
+      expect(mockedMoveProjectFile).toHaveBeenCalledTimes(2);
+    });
+    expect(mockedMoveProjectFile).toHaveBeenNthCalledWith(1, 'project-1', 'analysis.html', 'archive');
+    expect(mockedMoveProjectFile).toHaveBeenNthCalledWith(2, 'project-1', 'notes.html', 'archive');
+    await waitFor(() => expect(onRefreshFiles).toHaveBeenCalledTimes(1));
+    expect(mockedFetchProjectFolders).toHaveBeenCalledWith('project-1');
+    expect(onTabsStateChange).toHaveBeenLastCalledWith({
+      tabs: ['archive/analysis.html', 'notes.html'],
+      active: null,
+    });
+    expect(window.alert).toHaveBeenCalledWith('A file named notes.html already exists in archive.');
   });
 });
 

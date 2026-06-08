@@ -19,12 +19,13 @@ import { deriveUploadCohort } from '../analytics/upload-tracking';
 import { useT } from '../i18n';
 import { isMacPlatform } from '../utils/platform';
 import {
+  createProjectFolder,
   deleteProjectFile,
   fetchProjectFileText,
   fetchProjectFolders,
   projectFileUrl,
-  createProjectFolder,
   deleteProjectFolder,
+  moveProjectFile,
   renameProjectFile,
   updateDesignSystemDraft,
   type UploadProjectFilesResult,
@@ -49,6 +50,7 @@ import {
   type LiveArtifactSummary,
   type LiveArtifactEventItem,
   type LiveArtifactWorkspaceEntry,
+  type MoveProjectFileResponse,
   type OpenTabsState,
   type ProjectBrowserWorkspaceTab,
   type PreviewComment,
@@ -467,6 +469,12 @@ export function FileWorkspace({
   // are created under this folder instead of the project root.
   const [uploadDir, setUploadDir] = useState<string>('');
   const [sketches, setSketches] = useState<Record<string, SketchState>>({});
+  // Folders created via "New folder" exist on disk but produce no entries in
+  // the daemon's flat file list until something is dropped into them. Keep
+  // their paths here so DesignFilesPanel can still surface them; pruned
+  // whenever the live `files` listing already accounts for the folder via a
+  // child file path prefix.
+  const [pendingEmptyFolders, setPendingEmptyFolders] = useState<string[]>([]);
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [projectFolders, setProjectFolders] = useState<ProjectFolder[]>(EMPTY_PROJECT_FOLDERS);
   // Reset the folder list during render — NOT in an effect — when the project
@@ -535,6 +543,26 @@ export function FileWorkspace({
     () => files.filter((file) => !isLiveArtifactImplementationPath(file.name)),
     [files],
   );
+
+  // Drop any tracked empty folders that the latest file listing already
+  // accounts for via a child path. Without this, the panel would keep an
+  // ephemeral row alive forever once a real file lands inside the folder.
+  useEffect(() => {
+    setPendingEmptyFolders((curr) => {
+      if (curr.length === 0) return curr;
+      const next = curr.filter((folder) => {
+        const prefix = `${folder}/`;
+        return !visibleFiles.some((f) => f.name.startsWith(prefix));
+      });
+      return next.length === curr.length ? curr : next;
+    });
+  }, [visibleFiles]);
+
+  // Clear ephemeral folder state when switching projects so a folder
+  // created in project A does not appear in project B's Design Files panel.
+  useEffect(() => {
+    setPendingEmptyFolders([]);
+  }, [projectId]);
 
   const liveArtifactEntries = useMemo(
     () => liveArtifacts.map(liveArtifactSummaryToWorkspaceEntry),
@@ -1289,6 +1317,78 @@ export function FileWorkspace({
     });
 
     return renamed;
+  }
+
+  async function handleCreateFolder(folderPath: string) {
+    const response = await createProjectFolder(projectId, folderPath);
+    // The folder is empty, so the refreshed flat file listing won't include
+    // it. Track the created path locally so DesignFilesPanel still renders a
+    // row for it; the pruning effect below drops the entry as soon as a
+    // real file appears under that prefix.
+    const created = response.folder?.path ?? folderPath;
+    setPendingEmptyFolders((curr) => (curr.includes(created) ? curr : [...curr, created]));
+    await onRefreshFiles();
+    await refreshProjectFolders();
+  }
+
+  async function handleMoveFilesToFolder(
+    names: string[],
+    folderPath: string,
+  ): Promise<MoveProjectFileResponse[]> {
+    const results: MoveProjectFileResponse[] = [];
+    let moveFailed = false;
+    let moveFailure: unknown;
+
+    for (const name of names) {
+      try {
+        results.push(await moveProjectFile(projectId, name, folderPath));
+      } catch (err) {
+        moveFailed = true;
+        moveFailure = err;
+        break;
+      }
+    }
+
+    if (results.length > 0) {
+      await onRefreshFiles();
+      await refreshProjectFolders();
+
+      const moveMap = new Map(results.map((result) => [result.oldName, result.newName]));
+      if (moveMap.size > 0) {
+        const nextTabs: string[] = [];
+        const seen = new Set<string>();
+        for (const name of persistedTabs) {
+          const nextName = moveMap.get(name) ?? name;
+          if (!seen.has(nextName)) {
+            seen.add(nextName);
+            nextTabs.push(nextName);
+          }
+        }
+        const nextActive = tabsState.active
+          ? moveMap.get(tabsState.active) ?? tabsState.active
+          : tabsState.active;
+        onTabsStateChange({ tabs: nextTabs, active: nextActive });
+        setActiveTab((current) => moveMap.get(current) ?? current);
+        setSketches((curr) => {
+          let changed = false;
+          const next = { ...curr };
+          for (const [oldName, newName] of moveMap) {
+            const entry = next[oldName];
+            if (!entry) continue;
+            delete next[oldName];
+            next[newName] = entry;
+            changed = true;
+          }
+          return changed ? next : curr;
+        });
+      }
+    }
+
+    if (moveFailed) {
+      throw moveFailure;
+    }
+
+    return results;
   }
 
   function startNewSketch() {
@@ -2179,6 +2279,9 @@ export function FileWorkspace({
               });
               fileInputRef.current?.click();
             }}
+            onCreateFolder={handleCreateFolder}
+            ephemeralFolders={pendingEmptyFolders}
+            onMoveFilesToFolder={handleMoveFilesToFolder}
             onUploadFiles={(picked) => void uploadFiles(picked)}
             onPaste={() => {
               trackFileManagerClick(analytics.track, {

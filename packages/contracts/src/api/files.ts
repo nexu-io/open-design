@@ -48,6 +48,8 @@ export interface ProjectFolder {
   type: 'dir';
   size: 0;
   mtime: number;
+  kind: 'binary';
+  mime: 'inode/directory';
 }
 
 export interface ProjectFilesResponse {
@@ -124,4 +126,24 @@ export interface RenameProjectFileResponse {
   file: ProjectFile;
   oldName: string;
   newName: string;
+}
+
+export interface CreateProjectFolderRequest {
+  path: string;
+}
+
+export interface CreateProjectFolderResponse {
+  folder: ProjectFolder;
+}
+
+export interface MoveProjectFileRequest {
+  from: string;
+  toFolder: string;
+}
+
+export interface MoveProjectFileResponse {
+  file: ProjectFile;
+  oldName: string;
+  newName: string;
+  folder: string;
 }

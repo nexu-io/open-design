@@ -6,7 +6,13 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl, projectRawUrl } from '../providers/registry';
 import { buildSrcdoc } from '../runtime/srcdoc';
-import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind, ProjectFolder } from '../types';
+import type {
+  LiveArtifactWorkspaceEntry,
+  MoveProjectFileResponse,
+  ProjectFile,
+  ProjectFileKind,
+  ProjectFolder,
+} from '../types';
 import {
   createFileSystemReadError,
   FILE_SYSTEM_READ_ERROR_MESSAGE,
@@ -48,6 +54,16 @@ interface Props {
   onOpenFile: (name: string) => void;
   onOpenLiveArtifact: (tabId: LiveArtifactWorkspaceEntry['tabId']) => void;
   onRenameFile: (from: string, to: string) => Promise<ProjectFile | null> | ProjectFile | null;
+  onCreateFolder?: (path: string) => Promise<void> | void;
+  // Project-relative folder paths that exist on disk but have no files yet.
+  // Without this, `New folder` would appear to no-op: the panel derives
+  // subdirectory rows from the prefixes of `files[].name`, so an empty
+  // folder has nothing to contribute.
+  ephemeralFolders?: string[];
+  onMoveFilesToFolder?: (
+    names: string[],
+    toFolder: string,
+  ) => Promise<MoveProjectFileResponse[]> | MoveProjectFileResponse[];
   onDeleteFile: (name: string) => void;
   onDeleteFiles: (names: string[]) => Promise<void> | void;
   onUpload: () => void;
@@ -170,6 +186,9 @@ export function DesignFilesPanel({
   onOpenFile,
   onOpenLiveArtifact,
   onRenameFile,
+  onCreateFolder,
+  ephemeralFolders,
+  onMoveFilesToFolder,
   onDeleteFile,
   onDeleteFiles,
   onUpload,
@@ -205,6 +224,8 @@ export function DesignFilesPanel({
   const [sharingFolder, setSharingFolder] = useState<string | null>(null);
   const [installNotice, setInstallNotice] = useState<ActionNotice | null>(null);
   const [renaming, setRenaming] = useState<{ name: string; draft: string; saving: boolean } | null>(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [moving, setMoving] = useState(false);
   const [currentDir, setCurrentDir] = useState<string>(() => navState?.currentDir ?? '');
 
   // Keep the parent's create-target in sync with the folder being viewed, so
@@ -226,6 +247,8 @@ export function DesignFilesPanel({
   // Derive immediate subdirectories and files at the current directory level
   // from the flat files list. Files with names like "a/b/c.html" contribute
   // "a" as a directory when currentDir is '' and "b" when currentDir is "a".
+  // `ephemeralFolders` (e.g. just-created empty folders) is merged in so the
+  // panel surfaces folders that have no files contributing prefixes yet.
   const { dirsAtCurrentDir, filesAtCurrentDir } = useMemo(() => {
     const prefix = currentDir === '' ? '' : `${currentDir}/`;
     const dirs = new Set<string>();
@@ -241,6 +264,15 @@ export function DesignFilesPanel({
         if (currentDir === '') localFiles.push(f);
       }
     }
+    for (const full of ephemeralFolders ?? []) {
+      if (!full || full === currentDir) continue;
+      if (currentDir !== '' && !full.startsWith(prefix)) continue;
+      const remainder = full.slice(prefix.length);
+      if (remainder.length === 0) continue;
+      const slashIdx = remainder.indexOf('/');
+      const immediate = slashIdx === -1 ? remainder : remainder.slice(0, slashIdx);
+      dirs.add(immediate);
+    }
     // Also surface persisted folders (including empty ones with no files under
     // them) as immediate children of the current directory.
     for (const folder of folders ?? []) {
@@ -254,7 +286,7 @@ export function DesignFilesPanel({
       dirsAtCurrentDir: [...dirs].sort((a, b) => a.localeCompare(b)),
       filesAtCurrentDir: localFiles,
     };
-  }, [files, folders, currentDir]);
+  }, [files, folders, currentDir, ephemeralFolders]);
 
   // Group files at the current level into semantic sections, ordered by
   // SECTION_ORDER. Files within a section sort most-recently-modified first.
@@ -283,14 +315,14 @@ export function DesignFilesPanel({
 
   // Navigate up to the nearest ancestor that still exists when the current
   // directory disappears (e.g. after deleting the last file in a subfolder).
-  // A directory "exists" if it has files under it OR is a persisted folder
-  // (possibly empty) — otherwise navigating into an empty folder would bounce
-  // straight back to the root.
+  // A directory "exists" if it has files under it, is persisted, or was just
+  // created locally and has no child files yet.
   useEffect(() => {
     if (currentDir === '') return;
     const dirExists = (dir: string) =>
       files.some((f) => f.name.startsWith(`${dir}/`)) ||
-      (folders ?? []).some((fo) => fo.path === dir || fo.path.startsWith(`${dir}/`));
+      (folders ?? []).some((fo) => fo.path === dir || fo.path.startsWith(`${dir}/`)) ||
+      (ephemeralFolders ?? []).some((ephemeral) => ephemeral === dir || ephemeral.startsWith(`${dir}/`));
     if (dirExists(currentDir)) return;
     const parts = currentDir.split('/');
     for (let i = parts.length - 1; i > 0; i--) {
@@ -301,7 +333,7 @@ export function DesignFilesPanel({
       }
     }
     setCurrentDir('');
-  }, [files, folders, currentDir]);
+  }, [files, folders, currentDir, ephemeralFolders]);
 
   const pluginFolders = useMemo(() => getPluginFolderCandidates(files), [files]);
 
@@ -407,6 +439,14 @@ export function DesignFilesPanel({
     setMenuPos({ name, top, left });
   }
 
+  function openMenuAt(name: string, top: number, left: number) {
+    setMenuPos({
+      name,
+      top: Math.max(MENU_SAFE_PADDING, top),
+      left: Math.max(MENU_SAFE_PADDING, left),
+    });
+  }
+
   function startRename(name: string) {
     setMenuPos(null);
     setPreview(name);
@@ -444,6 +484,51 @@ export function DesignFilesPanel({
     }
   }
 
+  async function handleCreateFolder() {
+    if (!onCreateFolder || creatingFolder) return;
+    const folderPath = window.prompt(t('designFiles.folderPathPrompt'), 'assets')?.trim();
+    if (!folderPath) return;
+    setCreatingFolder(true);
+    try {
+      await onCreateFolder(folderPath);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreatingFolder(false);
+    }
+  }
+
+  async function handleMoveFilesToFolder(names: string[]) {
+    if (!onMoveFilesToFolder || moving || names.length === 0) return;
+    const folderPath = window.prompt(t('designFiles.folderPathPrompt'), 'assets')?.trim();
+    if (!folderPath) return;
+    setMoving(true);
+    try {
+      const results = await onMoveFilesToFolder(names, folderPath);
+      const moved = new Map(results.map((result) => [result.oldName, result.newName]));
+      if (moved.size > 0) {
+        setPreview((curr) => (curr ? moved.get(curr) ?? curr : curr));
+        setSelected((prev) => {
+          if (prev.size === 0) return prev;
+          const next = new Set(prev);
+          let changed = false;
+          for (const [oldName, newName] of moved) {
+            if (next.delete(oldName)) {
+              next.add(newName);
+              changed = true;
+            }
+          }
+          return changed ? next : prev;
+        });
+      }
+      setMenuPos(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMoving(false);
+    }
+  }
+
   async function handleBatchDelete() {
     if (deleting) return;
     const fileList = [...selected];
@@ -472,6 +557,10 @@ export function DesignFilesPanel({
         className={`df-row df-file-row ${active ? 'active' : ''} ${isSelected ? 'selected' : ''}`}
         onMouseEnter={() => setHover(f.name)}
         onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          openMenuAt(f.name, e.clientY, e.clientX);
+        }}
       >
         <span
           className="df-row-check"
@@ -697,6 +786,17 @@ export function DesignFilesPanel({
 
   const fileActions = (
     <div className="df-actions">
+      {onCreateFolder ? (
+        <button
+          type="button"
+          onClick={() => void handleCreateFolder()}
+          disabled={creatingFolder}
+          title={t('designFiles.newFolder')}
+        >
+          <Icon name="folder" size={13} />
+          <span>{t('designFiles.newFolder')}</span>
+        </button>
+      ) : null}
       <button type="button" onClick={onNewSketch} title={t('designFiles.newSketch')}>
         <Icon name="pencil" size={13} />
         <span>{t('designFiles.newSketch')}</span>
@@ -812,6 +912,17 @@ export function DesignFilesPanel({
                   <Icon name="download" size={13} />
                   <span>{t('designFiles.download')}</span>
                 </button>
+                {onMoveFilesToFolder ? (
+                  <button
+                    type="button"
+                    disabled={moving}
+                    onClick={() => void handleMoveFilesToFolder([...selected])}
+                    title={t('designFiles.moveToFolder')}
+                  >
+                    <Icon name="folder" size={13} />
+                    <span>{t('designFiles.moveToFolder')}</span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="danger"
@@ -828,7 +939,7 @@ export function DesignFilesPanel({
               </div>
             </div>
           ) : null}
-          {files.length === 0 && liveArtifacts.length === 0 && (folders?.length ?? 0) === 0 ? (
+          {files.length === 0 && liveArtifacts.length === 0 && dirsAtCurrentDir.length === 0 ? (
             <div className="df-empty" data-testid="design-files-empty">
               <div className="df-empty-pill">
                 <span className="df-empty-title">
@@ -1053,6 +1164,18 @@ export function DesignFilesPanel({
           >
             {t('common.rename')}
           </button>
+          {onMoveFilesToFolder ? (
+            <button
+              type="button"
+              disabled={moving}
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleMoveFilesToFolder([menuPos.name]);
+              }}
+            >
+              {t('designFiles.moveToFolder')}
+            </button>
+          ) : null}
           <a
             href={projectFileUrl(projectId, menuPos.name)}
             download={menuPos.name}

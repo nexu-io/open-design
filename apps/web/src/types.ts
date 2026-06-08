@@ -602,4 +602,6 @@ export type {
   UpdateDeployConfigRequest,
 };
 
+export type CreateProjectFolderResponse = import('@open-design/contracts').CreateProjectFolderResponse;
+export type MoveProjectFileResponse = import('@open-design/contracts').MoveProjectFileResponse;
 export type OpenTabsState = ProjectTabsState;

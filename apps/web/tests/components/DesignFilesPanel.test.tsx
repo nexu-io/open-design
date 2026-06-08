@@ -8,18 +8,16 @@ import { DesignFilesPanel, type DesignFilesNavState } from '../../src/components
 import type { ProjectFile, ProjectFileKind, ProjectFolder } from '../../src/types';
 
 function folder(path: string): ProjectFolder {
-  return { name: path.split('/').pop() ?? path, path, type: 'dir', size: 0, mtime: 1700000000 };
+  return {
+    name: path.split('/').pop() ?? path,
+    path,
+    type: 'dir',
+    size: 0,
+    mtime: 1700000000,
+    kind: 'binary',
+    mime: 'inode/directory',
+  };
 }
-
-// Stub localStorage so the component's view-state persistence writes to an
-// in-memory store. Cleared in beforeEach so no test bleeds state into the next.
-const lsStore = new Map<string, string>();
-vi.stubGlobal('localStorage', {
-  getItem: (key: string) => lsStore.get(key) ?? null,
-  setItem: (key: string, value: string) => { lsStore.set(key, value); },
-  removeItem: (key: string) => { lsStore.delete(key); },
-  clear: () => { lsStore.clear(); },
-});
 
 function extForKind(kind: ProjectFileKind): string {
   if (kind === 'html') return 'html';
@@ -282,6 +280,84 @@ describe('DesignFilesPanel preview', () => {
     expect(container.querySelector('.df-preview-thumb img')).toBeNull();
     expect(fetchMock).toHaveBeenCalledWith('/api/projects/test-project/raw/board.sketch.json', { cache: 'no-store' });
   });
+
+  it('creates a folder from the toolbar prompt', async () => {
+    const onCreateFolder = vi.fn(async () => undefined);
+    const prompt = vi.fn(() => 'assets');
+    vi.stubGlobal('prompt', prompt);
+
+    renderPanel(generateFiles(1), { onCreateFolder });
+
+    fireEvent.click(screen.getByRole('button', { name: 'New folder' }));
+
+    await waitFor(() => {
+      expect(onCreateFolder).toHaveBeenCalledWith('assets');
+    });
+    expect(prompt).toHaveBeenCalledWith('Folder path', 'assets');
+  });
+
+  it('renders ephemeral folder rows even when no files contribute a prefix', () => {
+    renderPanel(generateFiles(1), { ephemeralFolders: ['assets'] });
+
+    const dirRows = document.querySelectorAll('.df-dir-row');
+    expect(dirRows.length).toBe(1);
+    expect(dirRows[0]!.textContent).toContain('assets');
+  });
+
+  it('renders an ephemeral nested folder at its parent level', () => {
+    renderPanel([file({ name: 'assets/logo.png', kind: 'image' })], {
+      ephemeralFolders: ['assets/icons'],
+    });
+
+    // From root, the `assets` folder row appears once even though both a real
+    // file and an ephemeral subfolder point at it.
+    const rootDirRows = document.querySelectorAll('.df-dir-row');
+    expect(rootDirRows.length).toBe(1);
+    expect(rootDirRows[0]!.textContent).toContain('assets');
+
+    fireEvent.click(rootDirRows[0]!.querySelector('.df-row-name-btn')!);
+
+    const nestedDirRows = document.querySelectorAll('.df-dir-row');
+    expect(nestedDirRows.length).toBe(1);
+    expect(nestedDirRows[0]!.textContent).toContain('icons');
+  });
+
+  it('moves selected files into a prompted folder from the toolbar', async () => {
+    const movedFile = file({ name: 'assets/file-1.html', kind: 'html', mime: 'text/html' });
+    const onMoveFilesToFolder = vi.fn(async () => [
+      { oldName: 'file-1.html', newName: 'assets/file-1.html', folder: 'assets', file: movedFile },
+    ]);
+    vi.stubGlobal('prompt', vi.fn(() => 'assets'));
+
+    const { container } = renderPanel(generateFiles(2), { onMoveFilesToFolder });
+    const firstRow = container.querySelector('.df-file-row')!;
+    fireEvent.click(firstRow.querySelector('.df-row-check')!);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Move to folder' }));
+
+    await waitFor(() => {
+      expect(onMoveFilesToFolder).toHaveBeenCalledWith(['file-1.html'], 'assets');
+    });
+  });
+
+  it('opens the move action from the row context menu', async () => {
+    const movedFile = file({ name: 'archive/file-1.html', kind: 'html', mime: 'text/html' });
+    const onMoveFilesToFolder = vi.fn(async () => [
+      { oldName: 'file-1.html', newName: 'archive/file-1.html', folder: 'archive', file: movedFile },
+    ]);
+    vi.stubGlobal('prompt', vi.fn(() => 'archive'));
+
+    const { container } = renderPanel(generateFiles(1), { onMoveFilesToFolder });
+
+    fireEvent.contextMenu(screen.getByTestId('design-file-row-file-1.html'));
+    fireEvent.click(screen.getByRole('button', { name: 'Move to folder' }));
+
+    await waitFor(() => {
+      expect(onMoveFilesToFolder).toHaveBeenCalledWith(['file-1.html'], 'archive');
+    });
+    expect(container.querySelector('[data-testid="design-file-menu-popover"]')).toBeNull();
+  });
+
 });
 
 describe('DesignFilesPanel directory navigation', () => {
