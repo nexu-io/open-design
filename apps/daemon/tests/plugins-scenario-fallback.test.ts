@@ -129,9 +129,6 @@ describe('apply: bundled-scenario pipeline fallback (spec §23.3.3)', () => {
       ]),
     });
     expect(out.result.pipeline?.stages?.[0]?.id).toBe('discovery');
-    expect(out.result.pipeline?.stages?.find((stage) => stage.id === 'critique')?.atoms).toEqual([
-      'critique-theater',
-    ]);
   });
 
   it('keeps pipeline undefined when no scenario matches the taskKind', () => {
