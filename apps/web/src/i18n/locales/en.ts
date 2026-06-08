@@ -2425,6 +2425,13 @@ export const en: Dict = {
     'Saved for this project. New runs in this project will route through Design Jury server-side.',
   'critiqueTheater.settingsEnabledNoProjectHint':
     'Open a project to persist this server-side. Until then, this only changes the in-browser preference.',
+  'critiqueTheater.settingsDesignSystemLabel': 'Design system',
+  'critiqueTheater.settingsDesignSystemHint':
+    'Required. Sets the brand reference the brand panelist scores against. Without this, the 5-agent review silently skips.',
+  'critiqueTheater.settingsSkillLabel': 'Active skill',
+  'critiqueTheater.settingsSkillHint':
+    'Required. Determines which skill the skill panelist evaluates. Without this, the 5-agent review silently skips.',
+  'critiqueTheater.settingsUnsetOption': '(unset)',
 
   'pet.title': 'Pets',
   'pet.subtitle': 'Use Show pet to control whether the companion appears in your workspace. Choose a pet below.',

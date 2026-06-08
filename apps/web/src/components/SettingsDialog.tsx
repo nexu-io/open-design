@@ -54,6 +54,7 @@ import {
   syncMediaProvidersToDaemon,
 } from '../state/config';
 import type { KnownProvider } from '../state/config';
+import { getProject, patchProject } from '../state/projects';
 import { navigate as navigateRoute, useRoute } from '../router';
 import {
   API_PROTOCOL_LABELS,
@@ -82,6 +83,7 @@ import type {
   AppTheme,
   AppVersionInfo,
   ConnectionTestResponse,
+  DesignSystemSummary,
   OrbitRunSummary,
   OrbitStatusResponse,
   ExecMode,
@@ -93,8 +95,10 @@ import { testAgent, testApiProvider } from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
 import {
   fetchConnectors,
+  fetchDesignSystemsResult,
   fetchDesignTemplates,
   fetchLatestGithubReleaseInfo,
+  fetchSkills,
 } from '../providers/registry';
 import { IMAGE_MODELS, MEDIA_PROVIDERS } from '../media/models';
 import { XaiOAuthControl } from './XaiOAuthControl';
@@ -6807,11 +6811,66 @@ function AppearanceSection({
  * the user that per-project persistence requires opening a project
  * first. That matches the actual scope of the wire-up.
  */
-function CritiqueTheaterSection() {
-  const { t } = useI18n();
+// Exported for the colocated test in
+// `apps/web/tests/components/SettingsDialog.critiqueSection.test.tsx`.
+export function CritiqueTheaterSection() {
+  const { t, locale } = useI18n();
   const enabled = useCritiqueTheaterEnabled();
   const route = useRoute();
   const activeProjectId = route.kind === 'project' ? route.projectId : null;
+  const [projectMeta, setProjectMeta] = useState<{
+    designSystemId: string | null;
+    skillId: string | null;
+  } | null>(null);
+  const [designSystems, setDesignSystems] = useState<DesignSystemSummary[]>([]);
+  const [skills, setSkills] = useState<SkillSummary[]>([]);
+  const [loadingPrereqs, setLoadingPrereqs] = useState(false);
+
+  // The M1 Settings toggle silently fails on projects that lack a bound
+  // design system or skill. The spawn-time `critiqueShouldRun` gate is
+  // an AND of multiple conditions; the two project-derived ones
+  // (`critiqueBrand`, `critiqueSkill`) become undefined without a
+  // picker here for the user to set them.
+  useEffect(() => {
+    if (activeProjectId === null) {
+      setProjectMeta(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingPrereqs(true);
+    void (async () => {
+      try {
+        const [project, dsRes, skillsList] = await Promise.all([
+          getProject(activeProjectId),
+          fetchDesignSystemsResult(),
+          fetchSkills(),
+        ]);
+        if (cancelled) return;
+        if (project) {
+          setProjectMeta({
+            designSystemId: project.designSystemId ?? null,
+            skillId: project.skillId ?? null,
+          });
+        }
+        setDesignSystems(dsRes.ok ? dsRes.designSystems : []);
+        setSkills(skillsList);
+      } finally {
+        if (!cancelled) setLoadingPrereqs(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProjectId]);
+
+  // Skills that produce a renderable artifact the 5 panelists can
+  // score. Deck / image / video / audio are intentionally excluded.
+  const REVIEWABLE_SKILL_MODES: ReadonlySet<NonNullable<SkillSummary['mode']>> = new Set([
+    'prototype',
+    'template',
+    'design-system',
+  ]);
+
   return (
     <section className="settings-section">
       <div className="section-head">
@@ -6850,6 +6909,64 @@ function CritiqueTheaterSection() {
           </small>
         )}
       </label>
+      {activeProjectId !== null ? (
+        <>
+          <div className="field">
+            <label className="field-label" htmlFor="critique-design-system">
+              {t('critiqueTheater.settingsDesignSystemLabel')}
+            </label>
+            <select
+              id="critique-design-system"
+              data-testid="critique-design-system"
+              value={projectMeta?.designSystemId ?? ''}
+              disabled={loadingPrereqs}
+              onChange={(e) => {
+                const next = e.target.value || null;
+                setProjectMeta((m) => (m ? { ...m, designSystemId: next } : m));
+                if (activeProjectId !== null) {
+                  void patchProject(activeProjectId, { designSystemId: next });
+                }
+              }}
+            >
+              <option value="">{t('critiqueTheater.settingsUnsetOption')}</option>
+              {designSystems.map((ds) => (
+                <option key={ds.id} value={ds.id}>
+                  {ds.title} ({ds.category})
+                </option>
+              ))}
+            </select>
+            <small className="hint">{t('critiqueTheater.settingsDesignSystemHint')}</small>
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="critique-skill">
+              {t('critiqueTheater.settingsSkillLabel')}
+            </label>
+            <select
+              id="critique-skill"
+              data-testid="critique-skill"
+              value={projectMeta?.skillId ?? ''}
+              disabled={loadingPrereqs}
+              onChange={(e) => {
+                const next = e.target.value || null;
+                setProjectMeta((m) => (m ? { ...m, skillId: next } : m));
+                if (activeProjectId !== null) {
+                  void patchProject(activeProjectId, { skillId: next });
+                }
+              }}
+            >
+              <option value="">{t('critiqueTheater.settingsUnsetOption')}</option>
+              {skills
+                .filter((s) => REVIEWABLE_SKILL_MODES.has(s.mode))
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.displayName?.[locale] ?? s.displayName?.en ?? s.name}
+                  </option>
+                ))}
+            </select>
+            <small className="hint">{t('critiqueTheater.settingsSkillHint')}</small>
+          </div>
+        </>
+      ) : null}
     </section>
   );
 }

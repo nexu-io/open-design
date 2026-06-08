@@ -2373,6 +2373,13 @@ export const zhCN: Dict = {
     '已为该项目保存。该项目的新运行将在服务端经过设计评审团。',
   'critiqueTheater.settingsEnabledNoProjectHint':
     '打开项目后此设置才会服务端持久化；目前仅修改浏览器本地偏好。',
+  'critiqueTheater.settingsDesignSystemLabel': '设计系统',
+  'critiqueTheater.settingsDesignSystemHint':
+    '必填。设置品牌 panelist 评分时参照的 brand 标准。缺这个 5 代理评审会静默跳过。',
+  'critiqueTheater.settingsSkillLabel': '当前 skill',
+  'critiqueTheater.settingsSkillHint':
+    '必填。决定 skill panelist 评审的 skill。缺这个 5 代理评审会静默跳过。',
+  'critiqueTheater.settingsUnsetOption': '（未选择）',
 
   'pet.title': '宠物',
   'pet.tabBuiltIn': '内置',

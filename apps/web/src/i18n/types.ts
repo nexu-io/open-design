@@ -2883,6 +2883,11 @@ export interface Dict {
   'critiqueTheater.settingsEnabledDescription': string;
   'critiqueTheater.settingsEnabledProjectHint': string;
   'critiqueTheater.settingsEnabledNoProjectHint': string;
+  'critiqueTheater.settingsDesignSystemLabel': string;
+  'critiqueTheater.settingsDesignSystemHint': string;
+  'critiqueTheater.settingsSkillLabel': string;
+  'critiqueTheater.settingsSkillHint': string;
+  'critiqueTheater.settingsUnsetOption': string;
 
   // Diagnostics export
   'diagnostics.exportTitle': string;
