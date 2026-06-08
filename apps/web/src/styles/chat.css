@@ -920,6 +920,7 @@
   }
 }
 .composer-shell {
+  container-type: inline-size;
   border: 1px solid var(--bg-fill-secondary);
   border-radius: var(--radius-lg);
   background: var(--bg-fill-tertiary);
@@ -929,6 +930,26 @@
   flex-direction: column;
   gap: 6px;
   transition: border-color 120ms var(--ease-out), background 120ms var(--ease-out);
+}
+/* When the chat pane is narrow, compact the footer cluster: tighten the
+   model chip + mode toggle, collapse the mode label, and make send/stop
+   icon-only — so the action buttons never overflow or deform. */
+@container (max-width: 430px) {
+  .composer-row .inline-switcher__chip { padding: 0 7px 0 5px; gap: 5px; }
+  /* Hide ONLY the trigger's label — the popover options share this class
+     and must keep their labels ("Ask" / "Design") visible. */
+  .composer-row .session-mode-toggle__trigger .session-mode-toggle__label { display: none; }
+  .composer-row .session-mode-toggle__trigger { padding: 0 7px; gap: 3px; }
+  /* Right-align the popover so it grows leftward and stays inside the narrow
+     chat pane instead of overflowing past its right edge (where the scroll
+     container clips it). */
+  .composer-row .session-mode-toggle__popover { left: auto; right: 0; }
+  .composer-row .composer-send {
+    width: 32px;
+    padding: 0;
+    gap: 0;
+  }
+  .composer-row .composer-send span { display: none; }
 }
 .composer-shell:focus-within {
   border-color: color-mix(in srgb, var(--accent) 22%, var(--border-strong));
@@ -1216,6 +1237,7 @@
   align-items: center;
   height: 32px;
   min-width: 0;
+  flex-shrink: 0;
 }
 .session-mode-toggle__trigger,
 .session-mode-toggle__option {
@@ -1242,7 +1264,7 @@
 .session-mode-toggle__trigger {
   height: 32px;
   max-width: 132px;
-  padding: 0 9px;
+  padding: 0 8px;
   border-radius: var(--radius);
   box-shadow: var(--shadow-xs);
 }
@@ -1447,14 +1469,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-width: 64px;
+  gap: 5px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-width: 0;
   height: 32px;
   background: var(--accent);
   border: 1px solid var(--accent);
   color: white;
   font-weight: 650;
-  padding: 0 16px;
+  padding: 0 11px;
   font-size: 12.5px;
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-xs);

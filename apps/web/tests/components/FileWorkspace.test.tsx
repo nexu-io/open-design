@@ -567,7 +567,7 @@ describe('FileWorkspace upload input', () => {
     const onUploadFiles = vi.fn();
     const { container } = renderDesignFilesPanel({ onUploadFiles });
 
-    fireEvent.drop(container.querySelector('.df-drop')!, {
+    fireEvent.drop(container.querySelector('.df-body')!, {
       dataTransfer: unreadableDropDataTransfer([fallbackFile]),
     });
 
@@ -579,7 +579,7 @@ describe('FileWorkspace upload input', () => {
     const onUploadFiles = vi.fn();
     const { container } = renderDesignFilesPanel({ onUploadFiles });
 
-    fireEvent.drop(container.querySelector('.df-drop')!, {
+    fireEvent.drop(container.querySelector('.df-body')!, {
       dataTransfer: unreadableDropDataTransfer(),
     });
 

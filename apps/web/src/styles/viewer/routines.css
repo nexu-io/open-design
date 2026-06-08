@@ -1823,7 +1823,7 @@
   border-right-color: var(--border);
 }
 .app .df-body {
-  padding: 16px 20px 20px;
+  padding: 4px 20px 20px;
   background: var(--bg-panel);
 }
 .app .df-controls-row {
@@ -2018,6 +2018,12 @@
 .app .df-file-row:hover {
   background: color-mix(in srgb, var(--bg-subtle) 62%, transparent);
 }
+/* A selected row must keep its blue fill on hover — otherwise the generic
+   hover background wins (higher specificity) and the white selected text
+   lands on a light fill and "disappears". Darken slightly for feedback. */
+.app .df-file-row.selected:hover {
+  background: color-mix(in srgb, var(--blue) 90%, #000);
+}
 .app .df-row-icon {
   width: 30px;
   height: 30px;
@@ -2043,20 +2049,6 @@
 .app .df-page-info {
   color: var(--text-soft);
 }
-.app .df-drop {
-  margin: 18px 0 0;
-  padding: 18px;
-  border-radius: var(--radius-md);
-  background: var(--bg-panel);
-}
-.app .df-drop .label {
-  font-size: 10.5px;
-}
-.app .df-drop .desc {
-  font-size: 12px;
-  max-width: 48ch;
-}
-
 /* -- Hand-off button in ChatPane header (paseo-style open-in-editor) -- */
 .app .handoff-wrap {
   position: relative;

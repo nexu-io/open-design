@@ -19,6 +19,7 @@
   backdrop-filter: blur(1px);
 }
 .df-main {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -77,7 +78,7 @@
 }
 /* Single-line top toolbar: left = up + refresh + breadcrumbs, right = file actions. */
 .df-topbar {
-  margin: 0 20px 8px;
+  margin: 0 20px 4px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -295,11 +296,11 @@
 
 .df-row {
   display: grid;
-  grid-template-columns: 28px 36px 1fr auto auto;
+  grid-template-columns: 20px 30px 1fr auto auto;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   margin: 0;
-  padding: 11px 20px;
+  padding: 11px 16px;
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--border-soft);
@@ -395,8 +396,8 @@
   font-size: 13px;
   color: var(--text-muted);
   user-select: none;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border-radius: var(--radius-xs);
   opacity: 0;
   transition: opacity 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms var(--ease-out), color 120ms var(--ease-out);
@@ -603,8 +604,27 @@
 }
 
 /* Static useful-info footer pinned above the drop zone. */
-.df-useful-info {
+/* Footer cluster pinned to the bottom: drag hint above the useful-info. */
+.df-footer-info {
   margin: auto 20px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.df-drop-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-faint);
+}
+.df-drop-hint svg {
+  flex: 0 0 auto;
+  opacity: 0.8;
+}
+.df-useful-info {
+  margin: 0;
   padding: 12px 0 0;
   display: flex;
   flex-direction: column;
@@ -624,38 +644,47 @@
   color: var(--text-muted);
 }
 
-.df-drop {
-  margin: 12px 16px 16px;
-  padding: 16px;
-  border: 1px dashed var(--border-strong);
+/* Drag-to-upload: the whole panel is a drop target. While dragging files
+   over the Design Files panel, an accent overlay invites the drop. */
+.df-drop-overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 6;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--accent);
   border-radius: var(--radius);
-  background: var(--bg-panel);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.df-drop-overlay-card {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  text-align: center;
-  color: var(--text-muted);
-}
-.df-drop.dragging {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+  padding: 18px 26px;
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg, 0 14px 36px rgba(0, 0, 0, 0.14));
   color: var(--text);
+  text-align: center;
 }
-.df-drop .label {
+.df-drop-overlay-card svg {
+  color: var(--accent);
+}
+.df-drop-overlay-card .label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--text-faint);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   font-weight: 600;
 }
-.df-drop .desc {
+.df-drop-overlay-card .desc {
   font-size: 12px;
   line-height: 1.5;
-  max-width: 56ch;
+  color: var(--text-muted);
+  max-width: 48ch;
 }
 
 /* Right preview pane in design files */
@@ -689,6 +718,13 @@
 }
 .df-preview-thumb.is-openable {
   cursor: pointer;
+  transition: border-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Hover affordance lives on the container border, NOT a translucent layer
+   over the iframe: painting a semi-transparent fill on top of a sandboxed
+   iframe makes Chromium/Electron repaint the iframe white on hover. */
+.df-preview-thumb.is-openable:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
 }
 .df-preview-thumb-open {
   position: absolute;
@@ -702,9 +738,6 @@
   background: transparent;
   cursor: pointer;
 }
-.df-preview-thumb-open:hover {
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-}
 .df-preview-thumb-open:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -3px;
@@ -713,6 +746,11 @@
 .df-preview-thumb img,
 .df-preview-thumb video {
   width: 100%; height: 100%; border: none; background: white; object-fit: cover; display: block;
+}
+/* The transparent overlay button already captures the click; letting hover
+   fall through to the iframe avoids any compositing repaint flash. */
+.df-preview-thumb iframe {
+  pointer-events: none;
 }
 .df-preview-thumb .sketch-preview,
 .df-preview-thumb .sketch-preview svg {

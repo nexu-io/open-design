@@ -5571,6 +5571,14 @@ export function ProjectView({
           conversationId={activeConversationId}
           headerActions={(
             <>
+              <HandoffButton
+                projectId={project.id}
+                projectName={project.name}
+                projectDir={projectDetail.resolvedDir}
+                agents={agents}
+                artifactId={headerArtifact.artifact_id}
+                artifactKind={headerArtifact.artifact_kind}
+              />
               <EntrySettingsMenu
                 config={config}
                 onThemeChange={handleThemeChange}
@@ -5586,14 +5594,6 @@ export function ProjectView({
                     ...headerArtifact,
                   });
                 }}
-              />
-              <HandoffButton
-                projectId={project.id}
-                projectName={project.name}
-                projectDir={projectDetail.resolvedDir}
-                agents={agents}
-                artifactId={headerArtifact.artifact_id}
-                artifactKind={headerArtifact.artifact_kind}
               />
             </>
           )}
