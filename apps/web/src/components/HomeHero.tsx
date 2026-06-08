@@ -25,10 +25,12 @@ import type {
 import type {
   ChatSessionMode,
   ConnectorDetail,
+  DesignSystemSummary,
   InputFieldSpec,
   InstalledPluginRecord,
   McpServerConfig,
 } from '@open-design/contracts';
+import { DesignSystemPicker } from './DesignSystemPicker';
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
@@ -127,7 +129,7 @@ interface Props {
   onPluginInputValuesChange?: (values: Record<string, unknown>) => void;
   inlineEditableInputNames?: string[];
   footerInputNames?: string[];
-  designSystemOptions?: HomeHeroDesignSystemOption[];
+  designSystems?: DesignSystemSummary[];
   stagedFiles?: File[];
   onAddFiles?: (files: File[]) => void;
   onRemoveFile?: (index: number) => void;
@@ -155,18 +157,6 @@ interface Props {
   onClearWorkingDir?: () => void;
   onExamplePromptStatusChange?: (info: ExamplePromptInfo | null) => void;
   executionSwitcher?: ReactNode;
-}
-
-interface HomeHeroDesignSystemOption {
-  id: string;
-  title: string;
-  isDefault?: boolean;
-  auto?: boolean;
-  group?: string;
-  category?: string;
-  summary?: string;
-  swatches?: string[];
-  logoUrl?: string;
 }
 
 type HomeMentionTab = 'all' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors';
@@ -199,7 +189,7 @@ const EMPTY_CONNECTOR_CONTEXTS: ConnectorDetail[] = [];
 const EMPTY_INPUT_FIELDS: InputFieldSpec[] = [];
 const EMPTY_PLUGIN_INPUT_VALUES: Record<string, unknown> = {};
 const EMPTY_INPUT_NAMES: string[] = [];
-const EMPTY_DESIGN_SYSTEM_OPTIONS: HomeHeroDesignSystemOption[] = [];
+const EMPTY_DESIGN_SYSTEMS: DesignSystemSummary[] = [];
 const EMPTY_STAGED_FILES: File[] = [];
 const EMPTY_SKILLS: SkillSummary[] = [];
 const EMPTY_MCP_OPTIONS: McpServerConfig[] = [];
@@ -235,7 +225,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     pluginInputValues = EMPTY_PLUGIN_INPUT_VALUES,
     onPluginInputValuesChange = () => undefined,
     footerInputNames = EMPTY_INPUT_NAMES,
-    designSystemOptions = EMPTY_DESIGN_SYSTEM_OPTIONS,
+    designSystems = EMPTY_DESIGN_SYSTEMS,
     stagedFiles = EMPTY_STAGED_FILES,
     onAddFiles = () => undefined,
     onRemoveFile = () => undefined,
@@ -1301,7 +1291,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                     key={field.name}
                     field={field}
                     value={pluginInputValues[field.name]}
-                    designSystemOptions={designSystemOptions}
+                    designSystems={designSystems}
                     onChange={(value) => {
                       onPluginInputValuesChange({
                         ...pluginInputValues,
@@ -1719,13 +1709,13 @@ function buildHomeMentionEntities({
 function FooterInputOption({
   field,
   value,
-  designSystemOptions,
+  designSystems,
   onChange,
   t,
 }: {
   field: InputFieldSpec;
   value: unknown;
-  designSystemOptions: HomeHeroDesignSystemOption[];
+  designSystems: DesignSystemSummary[];
   onChange: (value: unknown) => void;
   t: ReturnType<typeof useT>;
 }) {
@@ -1746,36 +1736,26 @@ function FooterInputOption({
       </button>
     );
   }
-  if (field.name === 'designSystem' && designSystemOptions.length > 0) {
-    const selectedValue = value === undefined || value === null ? '' : String(value);
-    const selectedOption = selectedValue.length > 0
-      ? designSystemOptions.find((option) => option.title === selectedValue || option.id === selectedValue)
-      : undefined;
-    const currentValue = selectedOption?.id ?? designSystemOptions[0]?.id ?? '';
+  if (field.name === 'designSystem') {
+    // The composer binds its design-system choice as a TITLE string in the
+    // plugin input (used by the apply query template). The shared picker is
+    // id-based, so adapt: "不指定 / No design system" (or an unset value) maps
+    // to a null id; otherwise resolve the title to its system id.
+    const noneTitle = t('designSystemPicker.noneTitle');
+    const currentTitle = value === undefined || value === null ? '' : String(value).trim();
+    const selectedId =
+      currentTitle && currentTitle !== noneTitle && currentTitle !== 'the active project design system'
+        ? designSystems.find((system) => system.title === currentTitle)?.id ?? null
+        : null;
     return (
-      <FooterSelectOption
-        fieldName={field.name}
+      <DesignSystemPicker
+        variant="footer"
         label={label}
-        value={currentValue}
-        options={designSystemOptions.map((option) => ({
-          value: option.id,
-          submitValue: option.title,
-          label: option.isDefault ? `${option.title} (${t('ds.badgeDefault')})` : option.title,
-          group: option.group,
-          icon: option.auto ? 'sparkles' : undefined,
-          description: option.summary,
-          meta: option.category,
-          preview: option.auto
-            ? undefined
-            : {
-                title: option.title,
-                swatches: option.swatches,
-                logoUrl: option.logoUrl,
-              },
-        }))}
-        searchable
-        searchPlaceholder={t('ds.searchPlaceholder')}
-        onChange={onChange}
+        designSystems={designSystems}
+        selectedId={selectedId}
+        onChange={(id) =>
+          onChange(id == null ? noneTitle : designSystems.find((system) => system.id === id)?.title ?? noneTitle)
+        }
       />
     );
   }

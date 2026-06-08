@@ -591,7 +591,7 @@ export const zhCN: Dict = {
   'designSystemPicker.searchPlaceholder': '搜索设计系统（标题 / 分类 / 摘要）',
   'designSystemPicker.searchCompactPlaceholder': '搜索设计系统',
   'designSystemPicker.noneTitle': '不指定设计系统',
-  'designSystemPicker.noneSummary': '让模型自由发挥',
+  'designSystemPicker.noneSummary': '不指定设计系统，模型会根据你的 Prompt 自由发挥视觉风格。',
   'designSystemPicker.empty': '没有匹配的设计系统',
   'designSystemPicker.openPreview': '打开预览',
   'designSystemPicker.loadingPreview': '正在加载预览…',

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HomeView } from '../../src/components/HomeView';
 import {
@@ -748,6 +748,132 @@ describe('HomeView prompt handoff', () => {
       { pluginInputs?: Record<string, unknown> },
     ];
     expect(protoSubmittedInputs).not.toHaveProperty('fidelity');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('defaults to "No design system" (不指定) when the user has no personal default and submits a null designSystemId', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/apply')) {
+        return new Response(JSON.stringify(WEB_PROTOTYPE_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    // A preset is offered (REFLY) but it is NOT the user's personal default, so
+    // the composer must default to "No design system" rather than a preset.
+    render(
+      <HomeView
+        projects={[]}
+        designSystems={[REFLY_DESIGN_SYSTEM]}
+        defaultDesignSystemId={null}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await clearActiveTypeChip();
+    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Prototype');
+    });
+    expect(
+      screen.getByTestId('home-hero-footer-option-designSystem').textContent,
+    ).toContain('No design system');
+
+    await setPromptAndSettle('Build a pricing-page prototype.');
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-web-prototype/apply',
+      expect.anything(),
+    ));
+    const applyCall = fetchMock.mock.calls.find(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
+    ));
+    const protoApplyInputs = JSON.parse(String((applyCall?.[1] as RequestInit).body)).inputs;
+    expect(protoApplyInputs).toMatchObject({ designSystem: 'No design system' });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-web-prototype',
+      projectKind: 'prototype',
+      designSystemId: null,
+    })));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('lets the user explicitly pick "No design system" to override a personal default and submit a null designSystemId', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/apply')) {
+        return new Response(JSON.stringify(WEB_PROTOTYPE_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        designSystems={[REFLY_DESIGN_SYSTEM]}
+        defaultDesignSystemId="ds-refly"
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await clearActiveTypeChip();
+    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+
+    // The personal default pre-selects, as before.
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('home-hero-footer-option-designSystem').textContent,
+      ).toContain('Refly Design System');
+    });
+
+    // Open the shared design-system picker popover and pick the explicit
+    // "No design system" row.
+    fireEvent.click(screen.getByTestId('home-hero-footer-option-designSystem'));
+    const popover = await screen.findByTestId('project-ds-picker-popover');
+    const noneOption = await within(popover).findByText('No design system');
+    fireEvent.mouseDown(noneOption);
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('home-hero-footer-option-designSystem').textContent,
+      ).toContain('No design system');
+    });
+
+    await setPromptAndSettle('Build a pricing-page prototype.');
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-web-prototype',
+      designSystemId: null,
+    })));
     expect(screen.queryByRole('alert')).toBeNull();
   });
 

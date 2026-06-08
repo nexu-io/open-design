@@ -60,13 +60,11 @@ describe('HomeView media composer options', () => {
     await clickHomeRailChip('image');
     await openOption('designSystem');
 
-    // The old clipped `.home-hero__prompt-highlight` overlay is gone with the
-    // textarea->Lexical migration. The equivalent invariant is that the option
-    // menu is not nested inside the prompt editor contenteditable (where the
-    // editor's own overflow could clip it); it lives in the footer options row.
-    const popover = screen.getByTestId('home-hero-footer-option-designSystem-menu');
+    // The shared DesignSystemPicker portals its popover to document.body, so it
+    // can never be clipped by the prompt editor's (or footer row's) overflow.
+    const popover = screen.getByTestId('project-ds-picker-popover');
     expect(screen.getByTestId('home-hero-input').contains(popover)).toBe(false);
-    expect(popover.closest('[data-testid="home-hero-footer-options"]')).not.toBeNull();
+    expect(document.body.contains(popover)).toBe(true);
   });
 
   it('shows only the design-system pill for Image/Video and no pills for HyperFrames/Audio', async () => {
@@ -125,11 +123,13 @@ describe('HomeView media composer options', () => {
     await clickHomeRailChip('image');
     await openOption('designSystem');
 
-    const menu = screen.getByTestId('home-hero-footer-option-designSystem-menu');
-    expect(within(menu).getByText('Personal')).toBeTruthy();
-    expect(within(menu).getByRole('option', { name: /Acme Published System/i })).toBeTruthy();
-    expect(within(menu).queryByRole('option', { name: /Acme Draft System/i })).toBeNull();
-    expect(within(menu).getByText('Official preset')).toBeTruthy();
+    // The shared picker is a flat searchable list (no group headers). Home still
+    // filters to selectable systems: a published user system shows, a draft one
+    // does not, and built-in presets show.
+    const popover = screen.getByTestId('project-ds-picker-popover');
+    expect(within(popover).getByRole('option', { name: /Acme Published System/i })).toBeTruthy();
+    expect(within(popover).queryByRole('option', { name: /Acme Draft System/i })).toBeNull();
+    expect(within(popover).getByRole('option', { name: /Neutral Modern/i })).toBeTruthy();
   });
 
   it('opens the Home style picker without duplicate group key warnings', async () => {
@@ -469,6 +469,13 @@ async function openOption(name: string) {
   // The inline `{{slot}}` prompt-widget path (home-hero-prompt-slot-*) is gone;
   // media options now always open from the footer options row.
   fireEvent.click(await screen.findByTestId(`home-hero-footer-option-${name}`));
+  // The design-system field now renders the shared DesignSystemPicker, whose
+  // popover is portaled to document.body as `project-ds-picker-popover`. Other
+  // footer fields still use the inline FooterSelectOption `-menu`.
+  if (name === 'designSystem') {
+    await waitFor(() => expect(screen.getByTestId('project-ds-picker-popover')).toBeTruthy());
+    return;
+  }
   await waitFor(() => expect(screen.getByTestId(`home-hero-footer-option-${name}-menu`)).toBeTruthy());
 }
 
@@ -506,6 +513,17 @@ function promptIsEmpty(): boolean {
 
 async function chooseOption(name: string, value: string, label = value) {
   await openOption(name);
+  if (name === 'designSystem') {
+    // The shared DesignSystemPicker selects on mouseDown from its portaled list.
+    const popover = screen.getByTestId('project-ds-picker-popover');
+    const option = within(popover).getAllByRole('option').find((item) => {
+      const text = item.textContent ?? '';
+      return text.includes(label) || text.includes(value);
+    });
+    if (!option) throw new Error(`No option "${label}" for ${name}`);
+    fireEvent.mouseDown(option);
+    return;
+  }
   // The inline `<select>` prompt-widget path (home-hero-prompt-option-*-select)
   // is gone; selection now always happens via the footer options menu.
   const menu = screen.getByTestId(`home-hero-footer-option-${name}-menu`);
