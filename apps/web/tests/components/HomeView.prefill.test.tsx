@@ -972,7 +972,7 @@ describe('HomeView prompt handoff', () => {
     })));
   });
 
-  it('submits live-artifact example presets with chip metadata while keeping them plain-text only', async () => {
+  it('binds the picked preset plugin on submit while preserving the chip metadata', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({
@@ -1028,12 +1028,16 @@ describe('HomeView prompt handoff', () => {
 
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
+    // Picking a preset binds the preset's OWN plugin (so its SKILL.md /
+    // example.html become generation context and the output recreates that
+    // reference), while the live-artifact chip's project kind + metadata are
+    // carried forward. Submit resolves the snapshot for the preset plugin.
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/plugins/example-live-artifact/apply',
+      '/api/plugins/image-template-notion-team-dashboard-live-artifact/apply',
       expect.anything(),
     ));
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
-      pluginId: 'example-live-artifact',
+      pluginId: 'image-template-notion-team-dashboard-live-artifact',
       appliedPluginSnapshotId: 'snap-live-artifact',
       projectKind: 'prototype',
       projectMetadata: expect.objectContaining({
