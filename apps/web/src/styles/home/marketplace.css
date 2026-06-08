@@ -137,6 +137,11 @@
   font-size: 13px;
   color: var(--text-muted);
 }
+/* The empty state renders inside the auto-fill grid, so it must span every
+   column — otherwise it sits in a single 240px track and reads off-center. */
+.marketplace-view__grid > .marketplace-view__empty {
+  grid-column: 1 / -1;
+}
 
 /* ---------- Configured catalogs ---------- */
 .marketplace-view__catalogs {
