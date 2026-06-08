@@ -12190,14 +12190,23 @@ export async function startServer({
         inactivityTimer = null;
       }
     };
+    let forcedChildShutdownTimers = [];
+    const clearForcedChildShutdown = () => {
+      for (const timer of forcedChildShutdownTimers) clearTimeout(timer);
+      forcedChildShutdownTimers = [];
+    };
     const scheduleForcedChildShutdown = () => {
       if (!child) return;
-      setTimeout(() => {
-        if (child && !child.killed) child.kill('SIGTERM');
-      }, inactivityKillGraceMs).unref?.();
-      setTimeout(() => {
-        if (child && !child.killed) child.kill('SIGKILL');
-      }, inactivityKillGraceMs * 2).unref?.();
+      clearForcedChildShutdown();
+      forcedChildShutdownTimers = [
+        setTimeout(() => {
+          if (child) design.runs.signalChild(run, 'SIGTERM', 'watchdog');
+        }, inactivityKillGraceMs),
+        setTimeout(() => {
+          if (child) design.runs.signalChild(run, 'SIGKILL', 'watchdog_force');
+        }, inactivityKillGraceMs * 2),
+      ];
+      for (const timer of forcedChildShutdownTimers) timer.unref?.();
     };
     const failForInactivity = () => {
       if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
@@ -12220,7 +12229,7 @@ export async function startServer({
         if (acpSession?.abort) {
           acpSession.abort();
         }
-        if (child && !child.killed) child.kill('SIGTERM');
+        if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM', 'watchdog_artifact_quiet');
         scheduleForcedChildShutdown();
         return;
       }
@@ -12268,7 +12277,7 @@ export async function startServer({
       if (acpSession?.abort) {
         acpSession.abort();
       }
-      if (child && !child.killed) child.kill('SIGTERM');
+      if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM', 'watchdog_stall');
       scheduleForcedChildShutdown();
     };
     const activeInactivityTimeoutMs = () =>
@@ -12448,6 +12457,7 @@ export async function startServer({
         stdio: [stdinMode, 'pipe', 'pipe'],
         cwd: effectiveCwd,
         shell: false,
+        detached: process.platform !== 'win32',
         // Required when invocation wraps a Windows .cmd/.bat shim through
         // cmd.exe; without this, Node re-escapes the inner command line and
         // breaks paths containing spaces (issue #315).
@@ -12458,6 +12468,11 @@ export async function startServer({
         processSpawnedAt: Date.now(),
       };
       run.child = child;
+      run.childPid = typeof child.pid === 'number' ? child.pid : null;
+      run.processGroupId =
+        process.platform !== 'win32' && typeof child.pid === 'number'
+          ? child.pid
+          : null;
       // Schedule release of the antigravity model lock once agy's
       // --log-file confirms the chosen model was propagated to the
       // backend (the upstream signal that settings.json was read).
@@ -12882,7 +12897,7 @@ export async function startServer({
           // ignore — best-effort
         }
       }
-      if (child && !child.killed) child.kill('SIGTERM');
+      if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM', 'role_marker_abort');
       scheduleForcedChildShutdown();
     }
 
@@ -13157,6 +13172,7 @@ export async function startServer({
     child.on('close', async (code, signal) => {
       try {
       clearInactivityWatchdog();
+      clearForcedChildShutdown();
       if (watchdogRetryRestarted) {
         // The inactivity watchdog already failed this attempt and the same-run
         // retry restarted on a fresh child. Finalization and event-sink / run-
@@ -13170,6 +13186,9 @@ export async function startServer({
       }
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
+      if (run.cancelRequested) {
+        return;
+      }
       if (acpSession?.hasFatalError()) {
         return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
       }
@@ -14415,12 +14434,12 @@ export async function startServer({
     });
   });
 
-  app.post('/api/runs/:id/cancel', (req, res) => {
+  app.post('/api/runs/:id/cancel', async (req, res) => {
     const run = design.runs.get(req.params.id);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    design.runs.cancel(run);
+    const status = await design.runs.cancel(run);
     /** @type {import('@open-design/contracts').ChatRunCancelResponse} */
-    const body = { ok: true };
+    const body = { ok: true, run: status };
     res.json(body);
   });
 

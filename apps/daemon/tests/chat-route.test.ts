@@ -218,6 +218,107 @@ process.exit(0);
     );
   });
 
+  it.each([
+    { agentId: 'opencode', binName: 'opencode' },
+    { agentId: 'gemini', binName: 'gemini' },
+  ])('cancels $agentId runs only after the child process group exits', async ({ agentId, binName }) => {
+    const previousCancelGrace = process.env.OD_CHAT_RUN_CANCEL_GRACE_MS;
+    const previousForceWait = process.env.OD_CHAT_RUN_CANCEL_FORCE_WAIT_MS;
+    process.env.OD_CHAT_RUN_CANCEL_GRACE_MS = '25';
+    process.env.OD_CHAT_RUN_CANCEL_FORCE_WAIT_MS = '500';
+    try {
+      await withFakeAgent(
+        binName,
+        `
+const { spawn } = require('node:child_process');
+const args = process.argv.slice(2);
+if (args.includes('--version')) {
+  console.log('cancel-fixture-1.0.0');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('default');
+  process.exit(0);
+}
+process.on('SIGTERM', () => {
+  console.error('cancel fixture ignored SIGTERM');
+});
+const child = spawn(process.execPath, ['-e', "process.on('SIGTERM',()=>{}); setInterval(()=>{}, 1000);"], {
+  stdio: 'ignore',
+});
+console.log(JSON.stringify({ type: 'init', model: 'cancel-fixture', childPid: child.pid }));
+setInterval(() => {}, 1000);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId,
+              message: 'start a long-running cancellation fixture',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+
+          const runningStatus = await waitForRunDetail(
+            baseUrl,
+            runId,
+            (body) => body.status === 'running' && typeof body.childPid === 'number',
+          );
+          expect(runningStatus.processGroupId).toBe(
+            process.platform === 'win32' ? null : runningStatus.childPid,
+          );
+          const readyController = new AbortController();
+          const readyEventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+            signal: readyController.signal,
+          });
+          const readyEventsBody = await readSseUntil(readyEventsResponse, 'cancel-fixture');
+          readyController.abort();
+          expect(readyEventsBody).toContain('cancel-fixture');
+
+          const cancelResponse = await fetch(`${baseUrl}/api/runs/${runId}/cancel`, {
+            method: 'POST',
+          });
+          expect(cancelResponse.status).toBe(200);
+          const cancelBody = await cancelResponse.json() as {
+            ok: true;
+            run: TestRunStatus;
+          };
+          expect(cancelBody.ok).toBe(true);
+          expect(cancelBody.run).toMatchObject({
+            status: 'canceled',
+            cancelRequested: true,
+            childPid: runningStatus.childPid,
+            childExited: true,
+            signal: process.platform === 'win32' ? 'SIGTERM' : 'SIGKILL',
+          });
+          if (typeof runningStatus.childPid === 'number') {
+            await expectPidGone(runningStatus.childPid);
+          }
+
+          const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+          const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+          expect(eventsBody).toContain('"label":"cancellation"');
+          expect(eventsBody).toContain('"detail":"cancel_requested"');
+          expect(eventsBody).toContain('"detail":"child_signal"');
+          expect(eventsBody).toContain('"detail":"child_terminated"');
+        },
+      );
+    } finally {
+      if (previousCancelGrace == null) {
+        delete process.env.OD_CHAT_RUN_CANCEL_GRACE_MS;
+      } else {
+        process.env.OD_CHAT_RUN_CANCEL_GRACE_MS = previousCancelGrace;
+      }
+      if (previousForceWait == null) {
+        delete process.env.OD_CHAT_RUN_CANCEL_FORCE_WAIT_MS;
+      } else {
+        process.env.OD_CHAT_RUN_CANCEL_FORCE_WAIT_MS = previousForceWait;
+      }
+    }
+  });
+
 
   it('reuses an existing assistant message row instead of creating a duplicate when assistantMessageId is supplied', async () => {
     if (!process.env.OD_DATA_DIR) {
@@ -2194,20 +2295,50 @@ async function readSseUntil(response: Response, marker: string): Promise<string>
   return body;
 }
 
+type TestRunStatus = {
+  status: string;
+  childPid?: number | null;
+  processGroupId?: number | null;
+  childExited?: boolean;
+  childExitObservedAt?: number | null;
+  cancelRequested?: boolean;
+  signal?: string | null;
+};
+
+async function waitForRunDetail(
+  baseUrl: string,
+  runId: string,
+  done: (body: TestRunStatus) => boolean,
+): Promise<TestRunStatus> {
+  let lastStatus = 'unknown';
+  for (let attempt = 0; attempt < 500; attempt += 1) {
+    const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
+    const statusBody = await statusResponse.json() as TestRunStatus;
+    lastStatus = statusBody.status;
+    if (done(statusBody)) return statusBody;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`run did not reach expected detail state; last status: ${lastStatus}`);
+}
+
 async function waitForRunStatus(
   baseUrl: string,
   runId: string,
   done: (status: string) => boolean = (status) => status !== 'queued' && status !== 'running',
-): Promise<{ status: string }> {
-  let lastStatus = 'unknown';
-  for (let attempt = 0; attempt < 500; attempt += 1) {
-    const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
-    const statusBody = await statusResponse.json() as { status: string };
-    lastStatus = statusBody.status;
-    if (done(statusBody.status)) return statusBody;
+): Promise<TestRunStatus> {
+  return waitForRunDetail(baseUrl, runId, (body) => done(body.status));
+}
+
+async function expectPidGone(pid: number): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error(`run did not reach expected status; last status: ${lastStatus}`);
+  throw new Error(`expected pid ${pid} to be gone`);
 }
 
 describe('chat prompt helpers', () => {

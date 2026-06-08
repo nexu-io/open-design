@@ -71,6 +71,9 @@ export function createChatRunService({
       waiters: new Set(),
       child: null,
       acpSession: null,
+      childPid: null,
+      processGroupId: null,
+      childExitObservedAt: null,
       exitCode: null,
       signal: null,
       error: null,
@@ -148,6 +151,11 @@ export function createChatRunService({
     status: run.status,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
+    cancelRequested: !!run.cancelRequested,
+    childPid: typeof run.child?.pid === 'number' ? run.child.pid : run.childPid ?? null,
+    processGroupId: run.processGroupId ?? null,
+    childExited: !run.child || run.child.exitCode !== null || run.child.signalCode !== null,
+    childExitObservedAt: run.childExitObservedAt ?? null,
     exitCode: run.exitCode,
     signal: run.signal,
     error: run.error ?? null,
@@ -227,9 +235,15 @@ export function createChatRunService({
     return true;
   });
 
+  const childHasExited = (child) => !child || child.exitCode !== null || child.signalCode !== null;
+
+  const recordChildExitObserved = (run) => {
+    if (!run.childExitObservedAt) run.childExitObservedAt = Date.now();
+  };
+
   const waitForChildExit = (child, timeoutMs) => {
     if (!child) return Promise.resolve(true);
-    if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
+    if (childHasExited(child)) return Promise.resolve(true);
     return new Promise((resolve) => {
       let settled = false;
       const done = (exited) => {
@@ -248,8 +262,25 @@ export function createChatRunService({
     });
   };
 
+  const forceWaitMs = () => {
+    const raw = Number(process.env.OD_CHAT_RUN_CANCEL_FORCE_WAIT_MS);
+    return Number.isFinite(raw) && raw > 0 ? raw : 500;
+  };
+
   const killChild = (run, signal) => {
-    if (!run.child || run.child.exitCode !== null || run.child.signalCode !== null) return false;
+    if (!run.child || childHasExited(run.child)) return false;
+    if (process.platform !== 'win32' && Number.isInteger(run.processGroupId)) {
+      try {
+        process.kill(-run.processGroupId, signal);
+        return true;
+      } catch (err) {
+        if (err?.code !== 'ESRCH') {
+          // Fall through to the direct child signal path below. This keeps
+          // cancellation working if the child was not spawned as a process
+          // group leader for any reason.
+        }
+      }
+    }
     try {
       return run.child.kill(signal);
     } catch {
@@ -257,26 +288,97 @@ export function createChatRunService({
     }
   };
 
-  const cancel = (run) => {
-    if (!TERMINAL_RUN_STATUSES.has(run.status)) {
-      run.cancelRequested = true;
-      run.updatedAt = Date.now();
-      // Prefer RPC-level abort for agents that support it (pi, ACP adapters).
-      // abort() sends the graceful shutdown signal; cancel() owns the
-      // SIGTERM fallback so that a misbehaving session can't leave the
-      // child alive indefinitely.
-      if (run.acpSession?.abort) {
-        run.acpSession.abort();
-        const graceMs = Number(process.env.PI_ABORT_GRACE_MS) || 3000;
-        setTimeout(() => {
-          if (run.child && !run.child.killed) run.child.kill('SIGTERM');
-        }, graceMs).unref();
-      } else if (run.child && !run.child.killed) {
-        run.child.kill('SIGTERM');
-      } else {
-        finish(run, 'canceled', null, 'SIGTERM');
-      }
+  const cancelGraceMs = () => {
+    const raw = Number(process.env.OD_CHAT_RUN_CANCEL_GRACE_MS || process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS);
+    return Number.isFinite(raw) && raw > 0 ? raw : 3000;
+  };
+
+  const emitCancellationEvidence = (run, phase, detail = {}) => {
+    emit(run, 'agent', {
+      type: 'status',
+      label: 'cancellation',
+      detail: phase,
+      ...detail,
+    });
+  };
+
+  const signalChild = (run, signal, reason = 'cancel') => {
+    const delivered = killChild(run, signal);
+    emitCancellationEvidence(run, 'child_signal', {
+      signal,
+      delivered,
+      reason,
+      childPid: typeof run.child?.pid === 'number' ? run.child.pid : run.childPid ?? null,
+      processGroupId: run.processGroupId ?? null,
+    });
+    return delivered;
+  };
+
+  const finishCanceledFromChildState = (run, fallbackSignal = 'SIGTERM') => {
+    const child = run.child;
+    if (childHasExited(child)) recordChildExitObserved(run);
+    emitCancellationEvidence(run, 'child_terminated', {
+      childPid: typeof child?.pid === 'number' ? child.pid : run.childPid ?? null,
+      processGroupId: run.processGroupId ?? null,
+      exitCode: child?.exitCode ?? null,
+      signal: child?.signalCode ?? fallbackSignal,
+      childExited: childHasExited(child),
+    });
+    finish(
+      run,
+      'canceled',
+      child?.exitCode ?? null,
+      child?.signalCode ?? fallbackSignal,
+    );
+    return statusBody(run);
+  };
+
+  const cancel = async (run) => {
+    if (TERMINAL_RUN_STATUSES.has(run.status)) return statusBody(run);
+    run.cancelRequested = true;
+    run.updatedAt = Date.now();
+    emitCancellationEvidence(run, 'cancel_requested', {
+      status: run.status,
+      childPid: typeof run.child?.pid === 'number' ? run.child.pid : run.childPid ?? null,
+      processGroupId: run.processGroupId ?? null,
+    });
+    if (!run.child) {
+      finish(run, 'canceled', null, 'SIGTERM');
+      return statusBody(run);
     }
+
+    // Prefer RPC-level abort for agents that support it (pi, ACP adapters).
+    // If the adapter does not exit within its grace window, fall back to
+    // process signals and finally SIGKILL the process group.
+    if (run.acpSession?.abort) {
+      try {
+        run.acpSession.abort();
+        emitCancellationEvidence(run, 'session_abort_requested');
+      } catch (err) {
+        emitCancellationEvidence(run, 'session_abort_failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      const graceMs = Number(process.env.PI_ABORT_GRACE_MS) || 3000;
+      if (await waitForChildExit(run.child, graceMs)) {
+        return finishCanceledFromChildState(run, 'SIGTERM');
+      }
+      signalChild(run, 'SIGTERM', 'cancel_abort_fallback');
+      if (await waitForChildExit(run.child, graceMs)) {
+        return finishCanceledFromChildState(run, 'SIGTERM');
+      }
+      signalChild(run, 'SIGKILL', 'cancel_abort_force');
+      await waitForChildExit(run.child, forceWaitMs());
+      return finishCanceledFromChildState(run, 'SIGKILL');
+    }
+
+    signalChild(run, 'SIGTERM', 'cancel');
+    if (await waitForChildExit(run.child, cancelGraceMs())) {
+      return finishCanceledFromChildState(run, 'SIGTERM');
+    }
+    signalChild(run, 'SIGKILL', 'cancel_force');
+    await waitForChildExit(run.child, forceWaitMs());
+    return finishCanceledFromChildState(run, 'SIGKILL');
   };
 
   const shutdownActive = async ({ graceMs = shutdownGraceMs } = {}) => {
@@ -291,10 +393,10 @@ export function createChatRunService({
           // Process signals below are the shutdown fallback.
         }
       }
-      killChild(run, 'SIGTERM');
+      signalChild(run, 'SIGTERM', 'shutdown');
       finish(run, 'canceled', null, 'SIGTERM');
       if (run.child && !(await waitForChildExit(run.child, graceMs))) {
-        killChild(run, 'SIGKILL');
+        signalChild(run, 'SIGKILL', 'shutdown_force');
         await waitForChildExit(run.child, 500);
       }
     }));
@@ -341,6 +443,7 @@ export function createChatRunService({
     finish,
     fail,
     drop,
+    signalChild,
     statusBody,
     isTerminal(status) {
       return TERMINAL_RUN_STATUSES.has(status);
