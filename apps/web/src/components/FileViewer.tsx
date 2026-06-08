@@ -4546,7 +4546,13 @@ function HtmlViewer({
     });
   };
   const fireArtifactHeaderClick = (
-    element: 'back' | 'edit' | 'present_dropdown' | 'share_dropdown' | 'settings',
+    element:
+      | 'back'
+      | 'edit'
+      | 'present_dropdown'
+      | 'download_dropdown'
+      | 'share_dropdown'
+      | 'settings',
   ) => {
     trackArtifactHeaderClick(analytics.track, {
       page_name: 'artifact',
@@ -7205,7 +7211,7 @@ function HtmlViewer({
   }, [slideNavRequest?.nonce, slideNavRequest?.slideIndex, effectiveDeck, previewStateKey, slideState?.count]);
 
   const openDownloadMenu = () => {
-    fireArtifactHeaderClick('share_dropdown');
+    fireArtifactHeaderClick('download_dropdown');
     setExportReadyNudge(false);
     markExportReadyNudgeSeen(projectId, file.name);
     setDeployMenuOpen(false);

@@ -1489,8 +1489,84 @@ export interface ArtifactHeaderClickProps {
     | 'back'
     | 'edit'
     | 'present_dropdown'
+    // `download_dropdown` distinguishes the Download split button from the
+    // Share button; before, both reported `share_dropdown` and were
+    // indistinguishable in the funnel.
+    | 'download_dropdown'
     | 'share_dropdown'
     | 'settings';
+  artifact_id?: string;
+  artifact_kind?: TrackingArtifactKind;
+}
+
+// Canonical, bounded set of hand-off `target_id` values: the editor /
+// file-manager ids (mirrors `HostEditorId` in `../api/host-tools`) plus the
+// tracked code-agent CLI ids. Single source of truth for both the type and
+// the runtime allow-list in `handoffTargetIdToTracking`. Keep in sync with
+// `HostEditorId` and `HandoffButton`'s CLI_ORDER; unknown runtime ids
+// normalize to `'other'` so the schema never leaks an editor label, binary
+// name, or other free-form / PII value.
+export const TRACKING_HANDOFF_TARGET_IDS = [
+  // editors / file managers (HostEditorId)
+  'cursor', 'vscode', 'windsurf', 'zed', 'qoder', 'antigravity', 'webstorm',
+  'idea', 'xcode', 'finder', 'explorer', 'file-manager', 'terminal', 'warp',
+  // code-agent CLIs (HandoffButton CLI_ORDER; qoder / antigravity already above)
+  'amr', 'claude', 'codex', 'opencode', 'cursor-agent', 'gemini', 'qwen',
+  'copilot', 'grok-build', 'deepseek', 'kimi', 'hermes', 'devin', 'kiro',
+  'kilo', 'vibe', 'aider', 'trae-cli', 'pi', 'reasonix',
+] as const;
+
+export type TrackingHandoffTargetId =
+  | (typeof TRACKING_HANDOFF_TARGET_IDS)[number]
+  | 'other';
+
+// Normalize a runtime editor / CLI id to the bounded tracking enum. Unknown
+// ids (e.g. a CLI the daemon adds later) collapse to `'other'` rather than
+// shipping a free-form value, keeping the no-PII guarantee enforced in code.
+export function handoffTargetIdToTracking(
+  id: string | null | undefined,
+): TrackingHandoffTargetId {
+  return (TRACKING_HANDOFF_TARGET_IDS as readonly string[]).includes(id ?? '')
+    ? (id as TrackingHandoffTargetId)
+    : 'other';
+}
+
+// Hand-off button in the workspace header (open the project folder in a local
+// editor, or copy a hand-off prompt for a code-agent CLI). Lives under
+// `page_name=artifact` / `area=handoff` so it sits next to the other header
+// actions (present/share/download/settings) in the funnel.
+export interface HandoffClickProps {
+  page_name: 'artifact';
+  area: 'handoff';
+  element:
+    // Primary split button — launches the preferred editor, or toggles the
+    // picker when there is no preferred target yet.
+    | 'trigger'
+    // Caret next to the primary button — toggles the picker menu.
+    | 'caret'
+    // Switch between the Editor and CLI tabs inside the picker.
+    | 'tab'
+    // Choose a target framework chip for the CLI hand-off prompt.
+    | 'framework'
+    // Copy the absolute project path.
+    | 'copy_path'
+    // Launch a specific editor target (or the Finder/Explorer fallback).
+    | 'open_editor'
+    // Copy the hand-off prompt for a specific CLI agent.
+    | 'copy_cli_prompt'
+    // Open the Open Design AMR website link.
+    | 'amr_website';
+  // Bounded enum id of the editor / CLI target, present for `open_editor`,
+  // `copy_cli_prompt`, and for `trigger` when it directly launches the
+  // preferred editor. Normalized via `handoffTargetIdToTracking` so it is
+  // never a free path or display name (`'other'` for unknown ids).
+  target_id?: TrackingHandoffTargetId;
+  // Whether the chosen editor / CLI target was detected as installed.
+  target_available?: boolean;
+  // Which hand-off tab the click relates to (tab switches and CLI copies).
+  handoff_tab?: 'editor' | 'cli';
+  // Selected framework id for CLI prompt copies / framework chip selection.
+  framework?: 'react' | 'vue' | 'svelte' | 'solid' | 'next' | 'vanilla';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
 }
@@ -1752,6 +1828,7 @@ export type UiClickProps =
   | TweaksPopoverClickProps
   | CommentPopoverClickProps
   | ArtifactHeaderClickProps
+  | HandoffClickProps
   | PresentPopoverClickProps
   | ShareOptionPopoverClickProps
   | AssistantFeedbackButtonClickProps

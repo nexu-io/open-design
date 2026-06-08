@@ -59,14 +59,20 @@ import {
   type MemorySystemPromptResponse,
   type ResearchOptions,
 } from '@open-design/contracts';
-import { projectKindToTracking } from '@open-design/contracts/analytics';
+import {
+  anonymizeArtifactId,
+  artifactKindToTracking,
+  projectKindToTracking,
+} from '@open-design/contracts/analytics';
 import type {
+  TrackingArtifactKind,
   TrackingDesignSystemApplyTargetKind,
   TrackingDesignSystemOrigin,
   TrackingDesignSystemStatusValue,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
+  trackArtifactHeaderClick,
   trackDesignSystemApplyResult,
   trackPageView,
 } from '../analytics/events';
@@ -951,6 +957,25 @@ export function ProjectView({
     tabs: [],
     active: null,
   });
+  // Artifact context for the header actions (settings gear, handoff) that live
+  // in this workspace's header alongside FileViewer's present/share/download.
+  // Mirrors the artifact_id / artifact_kind that FileViewer attaches, derived
+  // from the currently-active file tab, so all artifact_header analytics carry
+  // the same dimensions. Undefined on non-file tabs (e.g. the file list).
+  const headerArtifact = useMemo<{
+    artifact_id?: string;
+    artifact_kind?: TrackingArtifactKind;
+  }>(() => {
+    const activeName = openTabsState.active;
+    const file = activeName
+      ? projectFiles.find((entry) => entry.name === activeName) ?? null
+      : null;
+    if (!file) return {};
+    return {
+      artifact_id: anonymizeArtifactId({ projectId: project.id, fileName: file.name }),
+      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+    };
+  }, [openTabsState.active, projectFiles, project.id]);
   const routeFileNameRef = useRef(routeFileName);
   routeFileNameRef.current = routeFileName;
   const [activeWorkspaceContext, setActiveWorkspaceContext] =
@@ -5522,12 +5547,25 @@ export function ProjectView({
                 config={config}
                 onThemeChange={handleThemeChange}
                 onOpenSettings={onOpenSettings}
+                onTrackTriggerClick={() => {
+                  // Spec row 52: the settings gear in the artifact header.
+                  // Carry the active artifact so settings slices line up with
+                  // the rest of the artifact_header funnel.
+                  trackArtifactHeaderClick(analytics.track, {
+                    page_name: 'artifact',
+                    area: 'artifact_header',
+                    element: 'settings',
+                    ...headerArtifact,
+                  });
+                }}
               />
               <HandoffButton
                 projectId={project.id}
                 projectName={project.name}
                 projectDir={projectDetail.resolvedDir}
                 agents={agents}
+                artifactId={headerArtifact.artifact_id}
+                artifactKind={headerArtifact.artifact_kind}
               />
             </>
           )}
