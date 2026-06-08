@@ -23,6 +23,19 @@ vi.mock('../../src/components/ManualEditPanel', async (importOriginal) => {
 
 import { FileViewer } from '../../src/components/FileViewer';
 
+function srcDocActivationMessages(calls: readonly (readonly unknown[])[]) {
+  return calls
+    .map(([message]) => message)
+    .filter((message): message is {
+      type: 'od:srcdoc-transport-activate';
+      html: string;
+    } => {
+      if (typeof message !== 'object' || message === null) return false;
+      const data = message as { type?: unknown; html?: unknown };
+      return data.type === 'od:srcdoc-transport-activate' && typeof data.html === 'string';
+    });
+}
+
 function openManualTools() {
   // Manual tools now live directly in the primary toolbar.
 }
@@ -259,6 +272,14 @@ describe('FileViewer manual edit history regressions', () => {
       expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
       expect(panelState.props?.draft.fullSource).toContain('Hero');
     });
+    const srcDocFrame = getActivePreviewFrame();
+    const srcDocPostMessageSpy = vi.spyOn(srcDocFrame.contentWindow!, 'postMessage');
+    fireEvent.load(srcDocFrame);
+
+    await waitFor(() => {
+      const activatedHtml = srcDocActivationMessages(srcDocPostMessageSpy.mock.calls).at(-1)?.html ?? '';
+      expect(activatedHtml).toContain('Hero');
+    });
     act(() => {
       panelState.props?.onApplyPatch(
         { id: 'hero', kind: 'set-text', value: 'Updated hero' },
@@ -269,7 +290,8 @@ describe('FileViewer manual edit history regressions', () => {
     await waitFor(() => expect(savedSources).toHaveLength(1));
     await waitFor(() => expect(panelState.props?.draft.fullSource).toContain('Updated hero'));
     await waitFor(() => {
-      expect(getActivePreviewFrame().srcdoc).toContain('Updated hero');
+      const activatedHtml = srcDocActivationMessages(srcDocPostMessageSpy.mock.calls).at(-1)?.html ?? '';
+      expect(activatedHtml).toContain('Updated hero');
     });
   });
 

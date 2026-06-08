@@ -82,7 +82,7 @@ import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { shouldConsumeSlideNav } from '../runtime/slide-nav';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
-import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
+import { buildSrcdoc, canActivateSrcDocTransport, type SrcdocPreviewNavigation } from '../runtime/srcdoc';
 import {
   hasUrlModeBridge,
   htmlNeedsFocusGuard,
@@ -160,6 +160,14 @@ export type ManualEditPendingStyleSave = {
   version: number;
 };
 type PreviewViewportId = 'desktop' | 'tablet' | 'mobile';
+type PreviewNavigationState = SrcdocPreviewNavigation & {
+  capturedAt: number;
+};
+type PreviewNavigationCaptureRequest = {
+  id: string;
+  target: 'url' | 'srcdoc';
+};
+type PreviewNavigationTarget = 'active' | 'url' | 'srcdoc';
 type PreviewCanvasSize = { width: number; height: number; scrollLeft?: number; scrollTop?: number };
 type CommentPreviewCanvasOptions = {
   boardMode: boolean;
@@ -4700,6 +4708,10 @@ function HtmlViewer({
     canvasTop: 0,
   });
   const previewScrollRequestAtRef = useRef(0);
+  const previewNavigationRef = useRef<PreviewNavigationState | null>(null);
+  const previewNavigationRestoreRef = useRef<PreviewNavigationState | null>(null);
+  const previewNavigationRequestSeqRef = useRef(0);
+  const previewNavigationCaptureRequestRef = useRef<PreviewNavigationCaptureRequest | null>(null);
   const dcViewportRef = useRef({
     x: 0,
     y: 0,
@@ -4839,6 +4851,63 @@ function HtmlViewer({
     () => (typeof window === 'undefined' ? false : parseForceInline(window.location.search)),
     [],
   );
+  const requestPreviewNavigationState = useCallback(() => {
+    const frame = iframeRef.current;
+    const source = frame?.contentWindow;
+    const target =
+      frame === urlPreviewIframeRef.current
+        ? 'url'
+        : frame === srcDocPreviewIframeRef.current
+          ? 'srcdoc'
+          : null;
+    if (!source) {
+      previewNavigationCaptureRequestRef.current = null;
+      return;
+    }
+    if (!target) {
+      previewNavigationCaptureRequestRef.current = null;
+      return;
+    }
+    previewNavigationRequestSeqRef.current += 1;
+    const requestId = `nav-${previewNavigationRequestSeqRef.current}`;
+    previewNavigationCaptureRequestRef.current = { id: requestId, target };
+    try {
+      source.postMessage({ type: 'od:preview-navigation-request', requestId }, '*');
+    } catch {
+      if (previewNavigationCaptureRequestRef.current?.id === requestId) {
+        previewNavigationCaptureRequestRef.current = null;
+      }
+    }
+  }, []);
+  const capturePreviewNavigationState = useCallback(() => {
+    requestPreviewNavigationState();
+    previewNavigationRestoreRef.current = previewNavigationRef.current;
+  }, [requestPreviewNavigationState]);
+  const restorePreviewNavigationState = useCallback((navigation: PreviewNavigationState | null) => {
+    if (!navigation) return;
+    const post = (target: PreviewNavigationTarget = 'active') => {
+      if (previewNavigationRestoreRef.current !== navigation) return;
+      const frame =
+        target === 'url'
+          ? urlPreviewIframeRef.current
+          : target === 'srcdoc'
+            ? srcDocPreviewIframeRef.current
+            : iframeRef.current;
+      if (!frame?.contentWindow) return;
+      if (target === 'active') {
+        const active = frame.getAttribute('data-od-active') === 'true' || iframeRef.current === frame;
+        if (!active) return;
+      }
+      frame.contentWindow.postMessage({
+        type: 'od:preview-navigation-restore',
+        ...navigation,
+      }, '*');
+    };
+    post();
+    window.setTimeout(post, 80);
+    window.setTimeout(post, 260);
+    return post;
+  }, []);
   const [activeCommentTarget, setActiveCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
   const [hoveredCommentTarget, setHoveredCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
   // True while the pointer is physically over the floating hover card. The card
@@ -5218,7 +5287,11 @@ function HtmlViewer({
     needsFocusGuard,
   }) && !manualEditRequiresSrcDoc;
   const basePreviewSrcUrl = useMemo(
-    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`,
+    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewNav=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`,
+    [projectId, file.name, file.mtime, reloadKey],
+  );
+  const srcDocTransportSrcUrl = useMemo(
+    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odSrcdocTransport=1`,
     [projectId, file.name, file.mtime, reloadKey],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
@@ -5230,11 +5303,34 @@ function HtmlViewer({
     : basePreviewSrcUrl;
   useEffect(() => {
     setPreviewSrcUrl(basePreviewSrcUrl);
+    previewNavigationRef.current = null;
+    previewNavigationRestoreRef.current = null;
+    previewNavigationCaptureRequestRef.current = null;
     setUrlSelectionBridgeReady(false);
   }, [basePreviewSrcUrl]);
+  const useUrlLoadPreviewCurrentRef = useRef(useUrlLoadPreview);
+  useUrlLoadPreviewCurrentRef.current = useUrlLoadPreview;
+  const alignActivePreviewIframeRef = useCallback(() => {
+    iframeRef.current = useUrlLoadPreviewCurrentRef.current ? urlPreviewIframeRef.current : srcDocPreviewIframeRef.current;
+  }, []);
+  const setUrlPreviewIframeRef = useCallback((frame: HTMLIFrameElement | null) => {
+    urlPreviewIframeRef.current = frame;
+    alignActivePreviewIframeRef();
+  }, [alignActivePreviewIframeRef]);
+  const setSrcDocPreviewIframeRef = useCallback((frame: HTMLIFrameElement | null) => {
+    srcDocPreviewIframeRef.current = frame;
+    alignActivePreviewIframeRef();
+  }, [alignActivePreviewIframeRef]);
   useEffect(() => {
-    iframeRef.current = useUrlLoadPreview ? urlPreviewIframeRef.current : srcDocPreviewIframeRef.current;
-  }, [useUrlLoadPreview]);
+    alignActivePreviewIframeRef();
+  }, [alignActivePreviewIframeRef, useUrlLoadPreview]);
+  useEffect(() => {
+    const navigation = previewNavigationRef.current;
+    if (!navigation) return;
+    previewNavigationRestoreRef.current = navigation;
+    const post = restorePreviewNavigationState(navigation);
+    post?.(useUrlLoadPreview ? 'url' : 'srcdoc');
+  }, [restorePreviewNavigationState, useUrlLoadPreview]);
 
   useEffect(() => {
     if (filesRefreshKey === 0) return;
@@ -5267,24 +5363,38 @@ function HtmlViewer({
       deck: effectiveDeck,
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
+      initialNavigation: previewNavigationRestoreRef.current,
       selectionBridge: true,
       editBridge: manualEditRequiresSrcDoc,
       paletteBridge: false,
       previewFocusGuard: true,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditRequiresSrcDoc],
+    [
+      previewSource,
+      effectiveDeck,
+      projectId,
+      file.name,
+      previewStateKey,
+      previewNavigationRestoreRef.current?.capturedAt,
+      manualEditRequiresSrcDoc,
+    ],
   );
-  const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
-  const [srcDocShellReady, setSrcDocShellReady] = useState(false);
+  const srcDocShellInstanceKey = `${srcDocTransportResetKey}:${srcDocTransportSrcUrl}`;
+  const [srcDocShellReadyKey, setSrcDocShellReadyKey] = useState<string | null>(null);
+  const srcDocShellReady = srcDocShellReadyKey === srcDocShellInstanceKey;
   const wasUrlLoadPreviewRef = useRef(useUrlLoadPreview);
+  const [hasLazySrcDocTransport, setHasLazySrcDocTransport] = useState(useUrlLoadPreview);
   const urlPreviewKeepAliveKey = previewIframeKeepAliveKey(projectId, file.name);
-  // Reset the shell-ready latch whenever the srcDoc iframe re-mounts. The
-  // next shell will post `od:srcdoc-transport-ready` (or fire onLoad) and
-  // flip this back to true. See #2253.
   useEffect(() => {
-    setSrcDocShellReady(false);
-  }, [srcDocTransportResetKey]);
+    if (useUrlLoadPreview) setHasLazySrcDocTransport(true);
+  }, [useUrlLoadPreview]);
+  useEffect(() => {
+    activatedSrcDocTransportHtmlRef.current = null;
+  }, [srcDocTransportSrcUrl]);
+  // Key shell readiness to both the daemon shell URL and forced remount key.
+  // When either changes, srcDocShellReady falls false until the current shell
+  // posts `od:srcdoc-transport-ready` or fires onLoad. See #2253.
   // Listen for the shell's ready handshake. Gating activation on this is
   // what fixes the #2253 race: opening Tweaks right after a key-driven
   // re-mount used to post `activate` before the shell's listener was
@@ -5295,11 +5405,11 @@ function HtmlViewer({
       if (ev.source !== srcDocPreviewIframeRef.current?.contentWindow) return;
       const data = ev.data as { type?: string } | null;
       if (data?.type !== 'od:srcdoc-transport-ready') return;
-      setSrcDocShellReady(true);
+      setSrcDocShellReadyKey(srcDocShellInstanceKey);
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, []);
+  }, [srcDocShellInstanceKey]);
   useEffect(() => {
     function onMessage(ev: MessageEvent) {
       const frame = urlPreviewIframeRef.current;
@@ -5312,14 +5422,7 @@ function HtmlViewer({
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, []);
-  // Lazy transport preloads an empty shell only while URL-load is the active
-  // transport. Once srcdoc becomes active (sandbox shim, Draw, Screenshot,
-  // Tweaks, etc.), mount the real artifact HTML directly so we do not depend on
-  // a postMessage activation that can race (#2253) and strand the iframe blank
-  // (#2361, #2791).
-  const captureModeActive = drawOverlayOpen;
-  const useLazySrcDocTransport = !manualEditRequiresSrcDoc && !captureModeActive && useUrlLoadPreview;
-  const srcDocTransportContent = useLazySrcDocTransport ? lazySrcDocTransport : srcDoc;
+  const useLazySrcDocTransport = useUrlLoadPreview || hasLazySrcDocTransport;
   const urlTransportSrc = useUrlLoadPreview ? activePreviewSrcUrl : 'about:blank';
   const activateSrcDocTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
     if (!canActivateSrcDocTransport({
@@ -5349,7 +5452,11 @@ function HtmlViewer({
     }
     const win = target?.contentWindow;
     if (!win) return false;
-    win.postMessage({ type: 'od:srcdoc-transport-activate', html: srcDoc }, '*');
+    win.postMessage({
+      type: 'od:srcdoc-transport-activate',
+      html: srcDoc,
+      navigation: previewNavigationRestoreRef.current,
+    }, '*');
     activatedSrcDocTransportHtmlRef.current = srcDoc;
     return true;
   }, [srcDoc, useLazySrcDocTransport, useUrlLoadPreview, srcDocShellReady, boardMode]);
@@ -5363,7 +5470,11 @@ function HtmlViewer({
     })) return false;
     const win = target?.contentWindow;
     if (!win) return false;
-    win.postMessage({ type: 'od:srcdoc-transport-activate', html: srcDoc }, '*');
+    win.postMessage({
+      type: 'od:srcdoc-transport-activate',
+      html: srcDoc,
+      navigation: previewNavigationRestoreRef.current,
+    }, '*');
     activatedSrcDocTransportHtmlRef.current = srcDoc;
     return true;
   }, [srcDoc, useLazySrcDocTransport, useUrlLoadPreview]);
@@ -5390,7 +5501,22 @@ function HtmlViewer({
     wasUrlLoadPreviewRef.current = false;
     activateSrcDocTransport();
   }, [activateSrcDocTransport, useUrlLoadPreview]);
-  
+  // Leaving Manual Edit can reuse a shell that just rendered edit HTML.
+  // Remount before the next activation; otherwise posting into the old
+  // document can mark the new HTML as activated before React replaces the
+  // iframe, causing the dedupe check to suppress the real activation.
+  const prevManualEditModeRef = useRef(manualEditMode);
+  useEffect(() => {
+    const wasInEditMode = prevManualEditModeRef.current;
+    const isNowInEditMode = manualEditMode;
+    prevManualEditModeRef.current = isNowInEditMode;
+
+    if (wasInEditMode && !isNowInEditMode && !useUrlLoadPreview) {
+      activatedSrcDocTransportHtmlRef.current = null;
+      setSrcDocTransportResetKey((key) => key + 1);
+    }
+  }, [manualEditMode, useUrlLoadPreview]);
+
   useEffect(() => {
     restorePreviewScrollPosition();
   }, [boardMode, drawOverlayOpen, manualEditMode, srcDoc, restorePreviewScrollPosition]);
@@ -5421,6 +5547,55 @@ function HtmlViewer({
         canvasLeft: Number(data.canvasLeft || 0),
         canvasTop: Number(data.canvasTop || 0),
       };
+    }
+    function onNavigationMessage(ev: MessageEvent) {
+      if (!isOurPreviewIframeSource(ev.source)) return;
+      const data = ev.data as {
+        type?: string;
+        href?: unknown;
+        pathname?: unknown;
+        search?: unknown;
+        hash?: unknown;
+        state?: unknown;
+        requestId?: unknown;
+      } | null;
+      if (!data || data.type !== 'od:preview-navigation') return;
+      const isActiveSource = isActivePreviewIframeSource(ev.source);
+      const pendingRequest = previewNavigationCaptureRequestRef.current;
+      const requestId = typeof data.requestId === 'string' ? data.requestId : '';
+      const isPendingRequestSource =
+        pendingRequest?.target === 'url'
+          ? ev.source === urlPreviewIframeRef.current?.contentWindow
+          : pendingRequest?.target === 'srcdoc'
+            ? ev.source === srcDocPreviewIframeRef.current?.contentWindow
+            : false;
+      const matchesPendingRequest = !!(
+        requestId &&
+        pendingRequest &&
+        pendingRequest.id === requestId &&
+        isPendingRequestSource
+      );
+      const isPendingCaptureReply = !!(
+        !isActiveSource &&
+        matchesPendingRequest
+      );
+      if (!isActiveSource && !isPendingCaptureReply) return;
+      const navigation = {
+        href: typeof data.href === 'string' ? data.href : '',
+        pathname: typeof data.pathname === 'string' ? data.pathname : '',
+        search: typeof data.search === 'string' ? data.search : '',
+        hash: typeof data.hash === 'string' ? data.hash : '',
+        state: data.state,
+        capturedAt: Date.now(),
+      };
+      if (matchesPendingRequest || (isActiveSource && pendingRequest)) {
+        previewNavigationCaptureRequestRef.current = null;
+      }
+      previewNavigationRef.current = navigation;
+      previewNavigationRestoreRef.current = navigation;
+      if (!isActiveSource) {
+        restorePreviewNavigationState(navigation);
+      }
     }
     function onRestoreRequest(ev: MessageEvent) {
       if (!isOurPreviewIframeSource(ev.source)) return;
@@ -5476,14 +5651,16 @@ function HtmlViewer({
       }
     }
     window.addEventListener('message', onMessage);
+    window.addEventListener('message', onNavigationMessage);
     window.addEventListener('message', onRestoreRequest);
     window.addEventListener('message', onDcViewportMessage);
     return () => {
       window.removeEventListener('message', onMessage);
+      window.removeEventListener('message', onNavigationMessage);
       window.removeEventListener('message', onRestoreRequest);
       window.removeEventListener('message', onDcViewportMessage);
     };
-  }, [isActivePreviewIframeSource, isOurPreviewIframeSource]);
+  }, [isActivePreviewIframeSource, isOurPreviewIframeSource, restorePreviewNavigationState]);
 
   useEffect(() => {
     if (!effectiveDeck) {
@@ -6054,11 +6231,18 @@ function HtmlViewer({
     setManualEditError(null);
   }
 
+  function refreshSrcDocPreviewAfterManualEditExit() {
+    activatedSrcDocTransportHtmlRef.current = null;
+    setSrcDocShellReadyKey(null);
+    setSrcDocTransportResetKey((key) => key + 1);
+  }
+
   async function exitManualEditModeAfterFlush(): Promise<boolean> {
     const ok = await flushManualEditStyleSave();
     if (!ok) return false;
     setManualEditPanelPosition(null);
     setManualEditMode(false);
+    refreshSrcDocPreviewAfterManualEditExit();
     return true;
   }
 
@@ -6839,7 +7023,7 @@ function HtmlViewer({
     setReloadKey((key) => key + 1);
     if (!useUrlLoadPreview) {
       activatedSrcDocTransportHtmlRef.current = null;
-      setSrcDocShellReady(false);
+      setSrcDocShellReadyKey(null);
       setSrcDocTransportResetKey((key) => key + 1);
     }
   }
@@ -6850,6 +7034,7 @@ function HtmlViewer({
   }
 
   function activateBoard(nextTool?: BoardTool) {
+    capturePreviewNavigationState();
     setMode('preview');
     setBoardMode(true);
     if (nextTool) setBoardTool(nextTool);
@@ -6901,6 +7086,7 @@ function HtmlViewer({
     }
     capturePreviewScrollPosition();
     const activateDraw = () => {
+      capturePreviewNavigationState();
       setCommentPanelOpen(false);
       setCommentCreateMode(false);
       setBoardMode(false);
@@ -6922,6 +7108,7 @@ function HtmlViewer({
   function activateCommentTool() {
     fireArtifactToolbarClick('comment');
     capturePreviewScrollPosition();
+    capturePreviewNavigationState();
     if (boardMode && !commentCreateMode && boardTool === 'inspect') {
       setBoardMode(false);
       setCommentCreateMode(false);
@@ -6951,6 +7138,7 @@ function HtmlViewer({
   function activateCommentCreateTool() {
     fireArtifactToolbarClick('comment');
     capturePreviewScrollPosition();
+    capturePreviewNavigationState();
     if (boardMode && commentCreateMode) {
       setBoardMode(false);
       setCommentCreateMode(false);
@@ -6982,6 +7170,7 @@ function HtmlViewer({
   function activateManualEditTool() {
     fireArtifactToolbarClick('edit');
     capturePreviewScrollPosition();
+    capturePreviewNavigationState();
     if (!manualEditMode) {
       setCommentPanelOpen(false);
       setCommentCreateMode(false);
@@ -8473,7 +8662,7 @@ function HtmlViewer({
                     <div className="artifact-preview-transport-stack">
                       {OD_PREVIEW_KEEP_ALIVE ? (
                         <PooledIframe
-                          ref={urlPreviewIframeRef}
+                          ref={setUrlPreviewIframeRef}
                           cacheKey={urlPreviewKeepAliveKey}
                           data-testid={useUrlLoadPreview ? 'artifact-preview-frame' : 'artifact-preview-frame-url-load'}
                           data-od-render-mode="url-load"
@@ -8494,12 +8683,20 @@ function HtmlViewer({
                             }, '*');
                             frame?.contentWindow?.postMessage({ type: 'od:url-selection-bridge-probe' }, '*');
                             syncBridgeModes(frame);
-                            if (useUrlLoadPreview) restorePreviewScrollPosition();
+                            if (useUrlLoadPreview) {
+                              restorePreviewScrollPosition();
+                              const navigation = previewNavigationRef.current;
+                              if (navigation) {
+                                previewNavigationRestoreRef.current = navigation;
+                                const post = restorePreviewNavigationState(navigation);
+                                post?.('url');
+                              }
+                            }
                           }}
                         />
                       ) : (
                         <iframe
-                          ref={urlPreviewIframeRef}
+                          ref={setUrlPreviewIframeRef}
                           data-testid={useUrlLoadPreview ? 'artifact-preview-frame' : 'artifact-preview-frame-url-load'}
                           data-od-render-mode="url-load"
                           data-od-active={useUrlLoadPreview ? 'true' : 'false'}
@@ -8519,13 +8716,21 @@ function HtmlViewer({
                             }, '*');
                             frame?.contentWindow?.postMessage({ type: 'od:url-selection-bridge-probe' }, '*');
                             syncBridgeModes(frame);
-                            if (useUrlLoadPreview) restorePreviewScrollPosition();
+                            if (useUrlLoadPreview) {
+                              restorePreviewScrollPosition();
+                              const navigation = previewNavigationRef.current;
+                              if (navigation) {
+                                previewNavigationRestoreRef.current = navigation;
+                                const post = restorePreviewNavigationState(navigation);
+                                post?.('url');
+                              }
+                            }
                           }}
                         />
                       )}
                       <iframe
                         key={srcDocTransportResetKey}
-                        ref={srcDocPreviewIframeRef}
+                        ref={setSrcDocPreviewIframeRef}
                         data-testid={useUrlLoadPreview ? 'artifact-preview-frame-srcdoc' : 'artifact-preview-frame'}
                         data-od-render-mode="srcdoc"
                         data-od-active={useUrlLoadPreview ? 'false' : 'true'}
@@ -8533,7 +8738,8 @@ function HtmlViewer({
                         tabIndex={useUrlLoadPreview ? -1 : 0}
                         title={file.name}
                         sandbox="allow-scripts allow-downloads"
-                        srcDoc={srcDocTransportContent}
+                        src={useLazySrcDocTransport ? srcDocTransportSrcUrl : undefined}
+                        srcDoc={useLazySrcDocTransport ? undefined : srcDoc}
                         onLoad={() => {
                           const frame = srcDocPreviewIframeRef.current;
                           if (!useUrlLoadPreview) iframeRef.current = frame;
@@ -8571,7 +8777,7 @@ function HtmlViewer({
                             srcDocFrameDedupeResetForRef.current = frame;
                             activatedSrcDocTransportHtmlRef.current = null;
                           }
-                          if (useLazySrcDocTransport) setSrcDocShellReady(true);
+                          if (useLazySrcDocTransport) setSrcDocShellReadyKey(srcDocShellInstanceKey);
                           activateLoadedSrcDocTransport(frame);
                           dcViewportRestoreAtRef.current = Date.now();
                           frame?.contentWindow?.postMessage({

@@ -33,6 +33,156 @@ import { auditDesignSystemPackage } from './tools-connectors-cli.js';
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'validation'> {}
 
+function shouldInjectPreviewNavigationBridge(queryValue: unknown): boolean {
+  if (Array.isArray(queryValue)) return queryValue.some(shouldInjectPreviewNavigationBridge);
+  if (queryValue === true) return true;
+  if (typeof queryValue !== 'string') return false;
+  return ['1', 'true', 'yes', 'on'].includes(queryValue.trim().toLowerCase());
+}
+
+function injectPreviewNavigationBridge(html: string): string {
+  const script = `<script data-od-preview-navigation-bridge>(function(){
+  function state(requestId){
+    var message = {
+      type: 'od:preview-navigation',
+      href: location.href,
+      pathname: location.pathname,
+      search: location.search,
+      hash: location.hash,
+      state: history.state
+    };
+    if (typeof requestId === 'string') message.requestId = requestId;
+    return message;
+  }
+  function post(requestId){
+    try { window.parent.postMessage(state(requestId), '*'); } catch (_) {}
+  }
+  function restore(data){
+    var prevHash = location.hash;
+    try {
+      var hash = typeof data.hash === 'string' ? data.hash : location.hash;
+      var pathname = typeof data.pathname === 'string' && data.pathname.charAt(0) === '/' ? data.pathname : location.pathname;
+      var search = typeof data.search === 'string' ? data.search : location.search;
+      history.replaceState('state' in data ? data.state : history.state, '', pathname + search + hash);
+      try { window.dispatchEvent(new PopStateEvent('popstate', { state: history.state })); } catch (__) {}
+      if (location.hash !== prevHash) {
+        try {
+          var hashEv = typeof HashChangeEvent === 'function'
+            ? new HashChangeEvent('hashchange', { oldURL: '', newURL: location.href })
+            : new Event('hashchange');
+          window.dispatchEvent(hashEv);
+        } catch (__) {}
+      }
+    } catch (_) {
+      if (typeof data.hash === 'string' && location.hash !== data.hash) {
+        try { location.hash = data.hash; } catch (__) {}
+      }
+      if ('state' in data) {
+        try { history.replaceState(data.state, '', location.href); } catch (__) {}
+      }
+    }
+    post();
+  }
+  function patch(name){
+    var original = history[name];
+    if (typeof original !== 'function') return;
+    history[name] = function(){
+      var result = original.apply(this, arguments);
+      post();
+      return result;
+    };
+  }
+  patch('pushState');
+  patch('replaceState');
+  window.addEventListener('hashchange', post);
+  window.addEventListener('popstate', post);
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data) return;
+    if (data.type === 'od:preview-navigation-request') {
+      post(typeof data.requestId === 'string' ? data.requestId : undefined);
+      return;
+    }
+    if (data.type === 'od:preview-navigation-restore') {
+      restore(data);
+      return;
+    }
+  });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', post, { once: true });
+  else setTimeout(post, 0);
+})();</script>`;
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/<head[^>]*>/i, (m) => `${m}${script}`);
+  }
+  if (/<body[^>]*>/i.test(html)) {
+    return html.replace(/<body[^>]*>/i, (m) => `${m}${script}`);
+  }
+  return script + html;
+}
+
+function buildSrcdocTransportShell(): string {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script data-od-srcdoc-transport-shell>(function(){
+      function safePath(value){
+        return typeof value === 'string' && value.charAt(0) === '/' ? value : location.pathname;
+      }
+      function safeSearch(value){
+        if (typeof value !== 'string' || value.length === 0) return '';
+        return value.charAt(0) === '?' ? value : '?' + value;
+      }
+      function safeHash(value){
+        if (typeof value !== 'string' || value.length === 0) return '';
+        return value.charAt(0) === '#' ? value : '#' + value;
+      }
+      function restoreNavigation(navigation){
+        if (!navigation || typeof navigation !== 'object') return;
+        var prevHash = location.hash;
+        var nextUrl = safePath(navigation.pathname) + safeSearch(navigation.search) + safeHash(navigation.hash);
+        try {
+          history.replaceState('state' in navigation ? navigation.state : history.state, '', nextUrl);
+          try { window.dispatchEvent(new PopStateEvent('popstate', { state: history.state })); } catch (__) {}
+          if (location.hash !== prevHash) {
+            try {
+              var hashEv = typeof HashChangeEvent === 'function'
+                ? new HashChangeEvent('hashchange', { oldURL: '', newURL: location.href })
+                : new Event('hashchange');
+              window.dispatchEvent(hashEv);
+            } catch (__) {}
+          }
+        }
+        catch (_) {
+          var hash = safeHash(navigation.hash);
+          if (hash && location.hash !== hash) {
+            try { location.hash = hash; } catch (__) {}
+          }
+          if ('state' in navigation) {
+            try { history.replaceState(navigation.state, '', location.href); } catch (__) {}
+          }
+        }
+      }
+      window.addEventListener('message', function(ev){
+        var data = ev && ev.data;
+        if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string') return;
+        restoreNavigation(data.navigation);
+        document.open();
+        document.write(data.html);
+        document.close();
+      });
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'od:srcdoc-transport-ready' }, '*');
+        }
+      } catch (_) {}
+    })();</script>
+  </head>
+  <body></body>
+</html>`;
+}
+
 function projectDetailResolvedDir(
   projectsRoot: string,
   project: any,
@@ -2224,23 +2374,35 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         project?.metadata,
         undefined,
         (file) => {
-          if (
-            (wantsUrlPreviewScrollBridge(req.query.odPreviewBridge) ||
-              wantsUrlPreviewSelectionBridge(req.query.odPreviewBridge) ||
-              wantsUrlPreviewSnapshotBridge(req.query.odPreviewBridge)) &&
-            /^text\/html(?:;|$)/i.test(file.mime)
-          ) {
+          const isHtmlFile = /^text\/html(?:;|$)/i.test(file.mime);
+          if (!isHtmlFile) {
+            return file.buffer;
+          }
+          if (shouldInjectPreviewNavigationBridge(req.query.odSrcdocTransport)) {
+            return buildSrcdocTransportShell();
+          }
+          {
             let html = file.buffer.toString('utf8');
+            let instrumented = false;
+            if (shouldInjectPreviewNavigationBridge(req.query.odPreviewNav)) {
+              html = injectPreviewNavigationBridge(html);
+              instrumented = true;
+            }
             if (wantsUrlPreviewScrollBridge(req.query.odPreviewBridge)) {
               html = injectUrlPreviewBridge(html, 'scroll');
+              instrumented = true;
             }
             if (wantsUrlPreviewSelectionBridge(req.query.odPreviewBridge)) {
               html = injectUrlPreviewBridge(html, 'selection');
+              instrumented = true;
             }
             if (wantsUrlPreviewSnapshotBridge(req.query.odPreviewBridge)) {
               html = injectUrlPreviewBridge(html, 'snapshot');
+              instrumented = true;
             }
-            return html;
+            if (instrumented) {
+              return html;
+            }
           }
           return file.buffer;
         },

@@ -238,13 +238,13 @@ A common pattern: **pin** a section, then as the user scrolls **vertically**, co
 
 1. Pin the section (trigger = the full-viewport panel).
 2. Build a tween that animates the inner content’s **x** or **xPercent** (e.g. to `x: () => (targets.length - 1) * -window.innerWidth` or a negative `xPercent` to move left). Use **ease: "none"** on that tween.
-3. Attach ScrollTrigger to that tween with **pin: true**, **scrub: true** 
-4. To trigger things based on the horizontal movement caused by that tween, set **containerAnimation** to that tween. 
+3. Attach ScrollTrigger to that tween with **pin: true**, **scrub: true**
+4. To trigger things based on the horizontal movement caused by that tween, set **containerAnimation** to that tween.
 
 ```javascript
 const scrollingEl = document.querySelector(".horizontal-el");
 // Panel = pinned viewport-sized section. .horizontal-wrap = inner content that moves left.
-const scrollTween = gsap.to(scrollingEl, { 
+const scrollTween = gsap.to(scrollingEl, {
   x: () => Math.min(0, window.innerWidth - scrollingEl.scrollWidth),
   ease: "none", // ease: "none" is required
   scrollTrigger: {
@@ -255,7 +255,7 @@ const scrollTween = gsap.to(scrollingEl, {
     invalidateOnRefresh: true,
     scrub: true
   }
-}); 
+});
 
 // other tweens that trigger based on horizontal movement should reference the containerAnimation:
 gsap.to(".nested-el-1", {
@@ -288,7 +288,7 @@ In React, use the `useGSAP()` hook (@gsap/react NPM package) to ensure proper cl
 
 - ✅ **gsap.registerPlugin(ScrollTrigger)** once before any ScrollTrigger usage.
 - ✅ Call **ScrollTrigger.refresh()** after DOM/layout changes (new content, images, fonts) that affect trigger positions. Whenever the viewport is resized, `ScrollTrigger.refresh()` is automatically called (debounced 200ms)
-- ✅ In React, use the `useGSAP()` hook to ensure that all ScrollTriggers and GSAP animations are reverted and cleaned up when necessary, or use a `gsap.context()` to do it manually in a useEffect/useLayoutEffect cleanup function. 
+- ✅ In React, use the `useGSAP()` hook to ensure that all ScrollTriggers and GSAP animations are reverted and cleaned up when necessary, or use a `gsap.context()` to do it manually in a useEffect/useLayoutEffect cleanup function.
 - ✅ Use **scrub** for scroll-linked progress or **toggleActions** for discrete play/reverse; do not use both on the same trigger.
 - ✅ For fake horizontal scroll with **containerAnimation**, use **ease: "none"** on the horizontal tween/timeline so scroll and horizontal position stay in sync.
 - ✅ Create ScrollTriggers in the order they appear on the page (top to bottom, scroll 0 → max). When they are created in a different order (e.g. dynamic or async), set **refreshPriority** on each so they are refreshed in that same top-to-bottom order (first section on page = lower number).

@@ -2,7 +2,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -109,11 +109,52 @@ function deferredResponse() {
 function srcDocActivationMessages(calls: readonly (readonly unknown[])[]) {
   return calls
     .map(([message]) => message)
-    .filter((message): message is { type: 'od:srcdoc-transport-activate'; html: string } => {
+    .filter((message): message is {
+      type: 'od:srcdoc-transport-activate';
+      html: string;
+      navigation?: unknown;
+    } => {
       if (typeof message !== 'object' || message === null) return false;
       const data = message as { type?: unknown; html?: unknown };
       return data.type === 'od:srcdoc-transport-activate' && typeof data.html === 'string';
     });
+}
+
+async function currentActiveSrcDocFrame(
+  container: HTMLElement,
+  previousFrame?: HTMLIFrameElement,
+) {
+  const frame = await waitFor(() => {
+    const activeFrame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement | null;
+    expect(activeFrame).not.toBeNull();
+    expect(activeFrame?.getAttribute('data-od-active')).toBe('true');
+    if (previousFrame) expect(activeFrame).not.toBe(previousFrame);
+    return activeFrame!;
+  });
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  return waitFor(() => {
+    const activeFrame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement | null;
+    expect(activeFrame).not.toBeNull();
+    expect(activeFrame?.getAttribute('data-od-active')).toBe('true');
+    if (previousFrame) expect(activeFrame).not.toBe(previousFrame);
+    return activeFrame!;
+  });
+}
+
+function previewNavigationRequestId(calls: readonly (readonly unknown[])[]) {
+  const request = [...calls]
+    .reverse()
+    .map(([message]) => message)
+    .find((message): message is { type: 'od:preview-navigation-request'; requestId: string } => {
+      if (typeof message !== 'object' || message === null) return false;
+      const data = message as { type?: unknown; requestId?: unknown };
+      return data.type === 'od:preview-navigation-request' && typeof data.requestId === 'string';
+    });
+  if (!request) throw new Error('preview navigation request id not found');
+  return request.requestId;
 }
 
 function testRect(left: number, top: number, width: number, height: number): DOMRect {
@@ -627,7 +668,7 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Shell />);
 
     const firstFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewNav=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
 
     fireEvent.click(screen.getByRole('button', { name: 'Leave project' }));
 
@@ -635,7 +676,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByTestId('home-view')).toBeTruthy();
     const parkedFrame = container.querySelector<HTMLIFrameElement>('.iframe-keep-alive-pool iframe');
     expect(parkedFrame).toBe(firstFrame);
-    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewNav=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
 
     fireEvent.click(screen.getByRole('button', { name: 'Return project' }));
 
@@ -782,7 +823,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-od-render-mode="url-load"');
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
     expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
-    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll&amp;odPreviewBridge=selection&amp;odPreviewBridge=snapshot"');
+    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewNav=1&amp;odPreviewBridge=scroll&amp;odPreviewBridge=selection&amp;odPreviewBridge=snapshot"');
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
   });
 
@@ -812,13 +853,13 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(frame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(frame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewNav=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
 
     fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
 
     const reloadedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     expect(reloadedFrame).toBe(frame);
-    expect(reloadedFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(reloadedFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=1&odPreviewNav=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
   });
 
   it('remounts the srcDoc HTML preview when reload is requested', () => {
@@ -921,23 +962,26 @@ describe('FileViewer SVG artifacts', () => {
     expect(srcDocFrame).toBeTruthy();
     expect(urlFrame?.getAttribute('data-od-active')).toBe('true');
     expect(srcDocFrame?.getAttribute('data-od-active')).toBe('false');
-    expect(srcDocFrame?.srcdoc).toContain('data-od-lazy-srcdoc-transport');
+    expect(srcDocFrame?.getAttribute('src')).toContain('odSrcdocTransport=1');
     expect(srcDocFrame?.srcdoc).not.toContain('__odArtifactBootCount');
 
     fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
 
     const urlFrameAfter = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
     const srcDocFrameAfter = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement | null;
+    const srcDocPostMessageSpy = vi.spyOn(srcDocFrameAfter!.contentWindow!, 'postMessage');
+    fireEvent.load(srcDocFrameAfter!);
 
     expect(urlFrameAfter).toBe(urlFrame);
     expect(urlFrameAfter?.getAttribute('data-od-active')).toBe('false');
     expect(urlFrameAfter?.getAttribute('src')).toBe('about:blank');
     expect(srcDocFrameAfter?.getAttribute('data-od-active')).toBe('true');
-    expect(srcDocFrameAfter?.srcdoc).toContain('__odArtifactBootCount');
-    expect(srcDocFrameAfter?.srcdoc).toContain('data-od-edit-bridge');
+    const activatedHtml = srcDocActivationMessages(srcDocPostMessageSpy.mock.calls).at(-1)?.html ?? '';
+    expect(activatedHtml).toContain('__odArtifactBootCount');
+    expect(activatedHtml).toContain('data-od-edit-bridge');
   });
 
-  it('keeps the srcDoc edit transport active after canceling manual edit', async () => {
+  it('remounts the srcDoc transport after canceling manual edit', async () => {
     const file = baseFile({
       name: 'page.html',
       path: 'page.html',
@@ -968,20 +1012,30 @@ describe('FileViewer SVG artifacts', () => {
     const editFrame = await waitFor(() => {
       const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-      expect(frame.srcdoc).toContain('data-od-edit-bridge');
       return frame;
+    });
+    const editPostMessageSpy = vi.spyOn(editFrame.contentWindow!, 'postMessage');
+    fireEvent.load(editFrame);
+    await waitFor(() => {
+      const activatedHtml = srcDocActivationMessages(editPostMessageSpy.mock.calls).at(-1)?.html ?? '';
+      expect(activatedHtml).toContain('data-od-edit-bridge');
     });
 
     fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
 
     await waitFor(() => expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false'));
-    const previewFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const previewFrame = await currentActiveSrcDocFrame(container, editFrame);
     const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
+    const previewPostMessageSpy = vi.spyOn(previewFrame.contentWindow!, 'postMessage');
+    fireEvent.load(previewFrame);
 
-    expect(previewFrame).toBe(editFrame);
-    expect(previewFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-    expect(previewFrame.srcdoc).toContain('data-od-edit-bridge');
+    expect(previewFrame.getAttribute('src')).toContain('odSrcdocTransport=1');
     expect(urlFrame?.getAttribute('data-od-active')).toBe('false');
+    await waitFor(() => {
+      const activatedHtml = srcDocActivationMessages(previewPostMessageSpy.mock.calls).at(-1)?.html ?? '';
+      expect(activatedHtml).toContain('data-od-selection-bridge');
+      expect(activatedHtml).toContain('data-od-edit-bridge');
+    });
   });
 
   it('keeps the manual edit inspector pinned after clicking a target', async () => {
@@ -1110,11 +1164,556 @@ describe('FileViewer SVG artifacts', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Preview' }));
 
+    const activeFrame = await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      return frame;
+    });
+    const postMessageSpy = vi.spyOn(activeFrame.contentWindow!, 'postMessage');
+    fireEvent.load(activeFrame);
+
     await waitFor(() => {
-      const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-      expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-      expect(activeFrame.srcdoc).toContain('data-od-edit-bridge');
-      expect(activeFrame.srcdoc).toContain('Hero');
+      const activatedHtml = srcDocActivationMessages(postMessageSpy.mock.calls).at(-1)?.html ?? '';
+      expect(activatedHtml).toContain('data-od-edit-bridge');
+      expect(activatedHtml).toContain('Hero');
+    });
+  });
+
+  it('restores captured hash navigation when switching a URL-loaded app into bridge mode', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement;
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: urlFrame.contentWindow,
+      data: {
+        type: 'od:preview-navigation',
+        href: 'http://localhost/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewNav=1#/settings',
+        pathname: '/api/projects/project-1/raw/page.html',
+        search: '?v=1710000000&r=0&odPreviewNav=1',
+        hash: '#/settings',
+        state: { tab: 'settings' },
+      },
+    }));
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+
+    const srcDocFrame = await waitFor(() => {
+      const activeFrame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+      expect(activeFrame.getAttribute('data-od-active')).toBe('true');
+      expect(activeFrame.getAttribute('src')).toContain('odSrcdocTransport=1');
+      return activeFrame;
+    });
+    const srcDocPostMessageSpy = vi.spyOn(srcDocFrame.contentWindow!, 'postMessage');
+    fireEvent.load(srcDocFrame);
+    await waitFor(() => {
+      const activatedHtml = srcDocActivationMessages(srcDocPostMessageSpy.mock.calls).at(-1)?.html ?? '';
+      expect(activatedHtml).toContain('data-od-preview-navigation-restore');
+      expect(activatedHtml).toContain('initialHash = "#/settings"');
+      expect(activatedHtml).toContain('"tab":"settings"');
+    });
+  });
+
+  it('loads the bridge iframe from the daemon srcdoc transport shell before restoring non-hash navigation', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement;
+    const srcDocFrame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: urlFrame.contentWindow,
+      data: {
+        type: 'od:preview-navigation',
+        href: 'http://localhost/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewNav=1/dashboard?panel=metrics#daily',
+        pathname: '/api/projects/project-1/raw/page.html/dashboard',
+        search: '?panel=metrics',
+        hash: '#daily',
+        state: { panel: 'metrics' },
+      },
+    }));
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+
+    await waitFor(() => {
+      expect(srcDocFrame.getAttribute('data-od-active')).toBe('true');
+    });
+    expect(srcDocFrame.getAttribute('src')).toContain('/api/projects/project-1/raw/page.html?');
+    expect(srcDocFrame.getAttribute('src')).toContain('odSrcdocTransport=1');
+    expect(srcDocFrame.srcdoc).not.toContain('initialPathname = "/api/projects/project-1/raw/page.html/dashboard"');
+  });
+
+  it('requests and restores navigation when opening a bridge tool switches to bridge mode', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement;
+    const urlPostMessageSpy = vi.spyOn(urlFrame.contentWindow!, 'postMessage');
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+
+    expect(urlPostMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'od:preview-navigation-request',
+      requestId: expect.any(String),
+    }), '*');
+    const requestId = previewNavigationRequestId(urlPostMessageSpy.mock.calls);
+    const srcDocFrame = await waitFor(() => {
+      const activeFrame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+      expect(activeFrame.getAttribute('data-od-active')).toBe('true');
+      return activeFrame;
+    });
+    expect(srcDocFrame.getAttribute('src')).toContain('odSrcdocTransport=1');
+    const srcDocPostMessageSpy = vi.spyOn(srcDocFrame.contentWindow!, 'postMessage');
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: urlFrame.contentWindow,
+      data: {
+        type: 'od:preview-navigation',
+        href: 'http://localhost/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewNav=1/dashboard?panel=metrics#daily',
+        pathname: '/api/projects/project-1/raw/page.html/dashboard',
+        search: '?panel=metrics',
+        hash: '#daily',
+        state: { panel: 'metrics' },
+        requestId,
+      },
+    }));
+
+    await waitFor(() => {
+      expect(srcDocPostMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'od:preview-navigation-restore',
+        pathname: '/api/projects/project-1/raw/page.html/dashboard',
+        search: '?panel=metrics',
+        hash: '#daily',
+        state: { panel: 'metrics' },
+      }), '*');
+    });
+  });
+
+  it('restores a URL iframe navigation reply that arrives before passive ref alignment', () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    let restoreCallsDuringHandoff = 0;
+    let urlPostMessageSpy: ReturnType<typeof vi.spyOn> | null = null;
+    let srcDocPostMessageSpy: ReturnType<typeof vi.spyOn> | null = null;
+
+    function EarlyNavigationReplyProbe({
+      active,
+      hostRef,
+    }: {
+      active: boolean;
+      hostRef: RefObject<HTMLDivElement | null>;
+    }) {
+      const sentRef = useRef(false);
+      useLayoutEffect(() => {
+        if (!active || sentRef.current) return;
+        sentRef.current = true;
+        const root = hostRef.current;
+        const urlFrame = root?.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
+        const srcDocFrame = root?.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement | null;
+        if (!urlFrame?.contentWindow || !srcDocFrame?.contentWindow) return;
+        srcDocPostMessageSpy ??= vi.spyOn(srcDocFrame.contentWindow, 'postMessage');
+        const requestId = urlPostMessageSpy ? previewNavigationRequestId(urlPostMessageSpy.mock.calls) : '';
+
+        window.dispatchEvent(new MessageEvent('message', {
+          source: urlFrame.contentWindow,
+          data: {
+            type: 'od:preview-navigation',
+            href: 'http://localhost/api/projects/project-1/raw/page.html?v=1710000000&r=0/reports#q2',
+            pathname: '/api/projects/project-1/raw/page.html/reports',
+            search: '',
+            hash: '#q2',
+            state: { report: 'q2' },
+            requestId,
+          },
+        }));
+
+        restoreCallsDuringHandoff = srcDocPostMessageSpy.mock.calls.filter((call: unknown[]) => {
+          const message = call[0];
+          return (
+            typeof message === 'object' &&
+            message !== null &&
+            (message as { type?: unknown }).type === 'od:preview-navigation-restore'
+          );
+        }).length;
+      }, [active, hostRef]);
+      return null;
+    }
+
+    function Harness() {
+      const [replyDuringHandoff, setReplyDuringHandoff] = useState(false);
+      const hostRef = useRef<HTMLDivElement | null>(null);
+      return (
+        <div
+          ref={hostRef}
+          onClickCapture={(ev) => {
+            if ((ev.target as Element | null)?.closest('[data-testid="manual-edit-mode-toggle"]')) {
+              setReplyDuringHandoff(true);
+            }
+          }}
+        >
+          <FileViewer
+            projectId="project-1"
+            projectKind="prototype"
+            file={file}
+            liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+          />
+          <EarlyNavigationReplyProbe active={replyDuringHandoff} hostRef={hostRef} />
+        </div>
+      );
+    }
+
+    const { container } = render(<Harness />);
+    const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement;
+    urlPostMessageSpy = vi.spyOn(urlFrame.contentWindow!, 'postMessage');
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+
+    expect(restoreCallsDuringHandoff).toBe(1);
+    expect(srcDocPostMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'od:preview-navigation-restore',
+      pathname: '/api/projects/project-1/raw/page.html/reports',
+      hash: '#q2',
+      state: { report: 'q2' },
+    }), '*');
+  });
+
+  it('does not echo active preview navigation back into the same iframe', () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement;
+    const urlPostMessageSpy = vi.spyOn(urlFrame.contentWindow!, 'postMessage');
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: urlFrame.contentWindow,
+      data: {
+        type: 'od:preview-navigation',
+        href: 'http://localhost/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewNav=1#/settings',
+        pathname: '/api/projects/project-1/raw/page.html',
+        search: '?v=1710000000&r=0&odPreviewNav=1',
+        hash: '#/settings',
+        state: { tab: 'settings' },
+      },
+    }));
+
+    expect(urlPostMessageSpy).not.toHaveBeenCalledWith(expect.objectContaining({
+      type: 'od:preview-navigation-restore',
+      pathname: '/api/projects/project-1/raw/page.html',
+      search: '?v=1710000000&r=0&odPreviewNav=1',
+      hash: '#/settings',
+      state: { tab: 'settings' },
+    }), '*');
+  });
+
+  it('ignores stale navigation reports from an inactive preview iframe', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement;
+    const srcDocFrame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+    const srcDocPostMessageSpy = vi.spyOn(srcDocFrame.contentWindow!, 'postMessage');
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: urlFrame.contentWindow,
+      data: {
+        type: 'od:preview-navigation',
+        href: 'http://localhost/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewNav=1#/settings',
+        pathname: '/api/projects/project-1/raw/page.html',
+        search: '?v=1710000000&r=0&odPreviewNav=1',
+        hash: '#/settings',
+        state: { tab: 'settings' },
+      },
+    }));
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+
+    await waitFor(() => {
+      expect(srcDocFrame.getAttribute('data-od-active')).toBe('true');
+    });
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: srcDocFrame.contentWindow,
+      data: {
+        type: 'od:preview-navigation',
+        href: 'about:srcdoc#/current',
+        pathname: '/',
+        search: '',
+        hash: '#/current',
+        state: { tab: 'current' },
+      },
+    }));
+    srcDocPostMessageSpy.mockClear();
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: urlFrame.contentWindow,
+      data: {
+        type: 'od:preview-navigation',
+        href: 'http://localhost/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewNav=1#/stale',
+        pathname: '/api/projects/project-1/raw/page.html',
+        search: '?v=1710000000&r=0&odPreviewNav=1',
+        hash: '#/stale',
+        state: { tab: 'stale' },
+      },
+    }));
+
+    expect(srcDocPostMessageSpy).not.toHaveBeenCalledWith(expect.objectContaining({
+      type: 'od:preview-navigation-restore',
+      hash: '#/stale',
+      state: { tab: 'stale' },
+    }), '*');
+  });
+
+  it('ignores a delayed capture reply after the active bridge iframe reports newer navigation', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement;
+    const srcDocFrame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+    const urlPostMessageSpy = vi.spyOn(urlFrame.contentWindow!, 'postMessage');
+    const srcDocPostMessageSpy = vi.spyOn(srcDocFrame.contentWindow!, 'postMessage');
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+
+    expect(urlPostMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'od:preview-navigation-request',
+      requestId: expect.any(String),
+    }), '*');
+    const requestId = previewNavigationRequestId(urlPostMessageSpy.mock.calls);
+
+    await waitFor(() => {
+      expect(srcDocFrame.getAttribute('data-od-active')).toBe('true');
+    });
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: srcDocFrame.contentWindow,
+      data: {
+        type: 'od:preview-navigation',
+        href: 'about:srcdoc#/current',
+        pathname: '/',
+        search: '',
+        hash: '#/current',
+        state: { tab: 'current' },
+      },
+    }));
+    srcDocPostMessageSpy.mockClear();
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: urlFrame.contentWindow,
+      data: {
+        type: 'od:preview-navigation',
+        href: 'http://localhost/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewNav=1#/stale-requested',
+        pathname: '/api/projects/project-1/raw/page.html',
+        search: '?v=1710000000&r=0&odPreviewNav=1',
+        hash: '#/stale-requested',
+        state: { tab: 'stale-requested' },
+        requestId,
+      },
+    }));
+
+    expect(srcDocPostMessageSpy).not.toHaveBeenCalledWith(expect.objectContaining({
+      type: 'od:preview-navigation-restore',
+      hash: '#/stale-requested',
+      state: { tab: 'stale-requested' },
+    }), '*');
+  });
+
+  it('restores bridge navigation after remounting the srcDoc transport', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+
+    const srcDocFrame = await waitFor(() => {
+      const activeFrame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+      expect(activeFrame.getAttribute('data-od-active')).toBe('true');
+      return activeFrame;
+    });
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: srcDocFrame.contentWindow,
+      data: {
+        type: 'od:preview-navigation',
+        href: 'http://localhost/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewNav=1/editor?panel=layers#shape-3',
+        pathname: '/api/projects/project-1/raw/page.html/editor',
+        search: '?panel=layers',
+        hash: '#shape-3',
+        state: { panel: 'layers' },
+      },
+    }));
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+
+    const remountedSrcDocFrame = await currentActiveSrcDocFrame(container, srcDocFrame);
+    const srcDocPostMessageSpy = vi.spyOn(remountedSrcDocFrame.contentWindow!, 'postMessage');
+    fireEvent.load(remountedSrcDocFrame);
+
+    await waitFor(() => {
+      expect(srcDocActivationMessages(srcDocPostMessageSpy.mock.calls).at(-1)?.navigation).toEqual(expect.objectContaining({
+        pathname: '/api/projects/project-1/raw/page.html/editor',
+        search: '?panel=layers',
+        hash: '#shape-3',
+        state: { panel: 'layers' },
+      }));
     });
   });
 
@@ -1168,7 +1767,7 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Switcher />);
     const getFrame = () => container.querySelector<HTMLIFrameElement>('[data-testid="artifact-preview-frame"]');
     const initialFrame = getFrame();
-    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0&odPreviewNav=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
 
     const observationsBeforeSwitch = observedCommittedSrcs.length;
     fireEvent.click(screen.getByRole('button', { name: 'Switch file' }));
@@ -1176,9 +1775,9 @@ describe('FileViewer SVG artifacts', () => {
     const nextFrame = getFrame();
     expect(nextFrame).toBeTruthy();
     expect(observedCommittedSrcs[observationsBeforeSwitch]).toBe(
-      '/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot',
+      '/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewNav=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot',
     );
-    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewNav=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
   });
 
   it('allows downloads in the in-tab HTML presentation iframe', async () => {
@@ -2828,7 +3427,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByPlaceholderText('Add a note for this mark')).toBeNull();
   });
 
-  it('uses a materialized srcDoc bridge while the Draw bar is open', async () => {
+  it('activates the srcDoc transport bridge while the Draw bar is open', async () => {
     render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
@@ -2841,18 +3440,20 @@ describe('FileViewer tweaks toolbar', () => {
     const frame = await waitFor(() => {
       const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-      expect(activeFrame.srcdoc).toContain('data-od-selection-bridge');
-      expect(activeFrame.srcdoc).toContain('data-od-snapshot-bridge');
-      expect(activeFrame.srcdoc).not.toContain('data-od-lazy-srcdoc-transport');
+      expect(activeFrame.getAttribute('src')).toContain('odSrcdocTransport=1');
       return activeFrame;
     });
+    const postMessageSpy = vi.spyOn(frame.contentWindow!, 'postMessage');
+    fireEvent.load(frame);
     await waitFor(() => {
-      expect(frame.srcdoc).toContain('data-od-id="hero"');
+      const activatedHtml = srcDocActivationMessages(postMessageSpy.mock.calls).at(-1)?.html ?? '';
+      expect(activatedHtml).toContain('data-od-selection-bridge');
+      expect(activatedHtml).toContain('data-od-id="hero"');
     });
     expect(screen.queryByRole('button', { name: 'Click' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Redo' })).toBeTruthy();
-    expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc).toBe(frame.srcdoc);
+    expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
   });
 
   it('preserves URL-loaded preview scroll when opening Draw', async () => {
@@ -2951,7 +3552,12 @@ describe('FileViewer tweaks toolbar', () => {
       expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
       return frame;
     });
-    expect(srcDocFrame.srcdoc).toContain('data-od-selection-bridge');
+    const postMessageSpy = vi.spyOn(srcDocFrame.contentWindow!, 'postMessage');
+    fireEvent.load(srcDocFrame);
+    await waitFor(() => {
+      const activatedHtml = srcDocActivationMessages(postMessageSpy.mock.calls).at(-1)?.html ?? '';
+      expect(activatedHtml).toContain('data-od-selection-bridge');
+    });
   });
 
   it('lets Draw direct send emit a queued annotation while a task is running', async () => {

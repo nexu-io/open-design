@@ -25,6 +25,7 @@ export type SrcdocOptions = {
   deck?: boolean;
   baseHref?: string;
   initialSlideIndex?: number;
+  initialNavigation?: SrcdocPreviewNavigation | null;
   commentBridge?: boolean;
   inspectBridge?: boolean;
   selectionBridge?: boolean;
@@ -32,6 +33,14 @@ export type SrcdocOptions = {
   paletteBridge?: boolean;
   initialPalette?: string | null;
   previewFocusGuard?: boolean;
+};
+
+export type SrcdocPreviewNavigation = {
+  href?: string;
+  pathname?: string;
+  search?: string;
+  hash?: string;
+  state?: unknown;
 };
 
 export function buildSrcdoc(
@@ -55,7 +64,8 @@ export function buildSrcdoc(
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withShim = injectSandboxShim(withBase);
   const withFocusGuard = options.previewFocusGuard ? injectPreviewFocusGuard(withShim) : withShim;
-  const withDeck = options.deck ? injectDeckBridge(withFocusGuard, options.initialSlideIndex) : withFocusGuard;
+  const withNavigation = injectPreviewNavigationRestore(withFocusGuard, options.initialNavigation ?? null);
+  const withDeck = options.deck ? injectDeckBridge(withNavigation, options.initialSlideIndex) : withNavigation;
   // Comment + Inspect share an element-selection bridge: both pick a
   // [data-od-id] / [data-screen-label] node and route the host's reply
   // to either the comment popover (annotate) or the inspect panel
@@ -821,6 +831,172 @@ function injectPreviewFocusGuard(doc: string): string {
   if (/<body[^>]*>/i.test(doc))
     return doc.replace(/<body[^>]*>/i, (m) => `${m}${script}`);
   return script + doc;
+}
+
+function injectPreviewNavigationRestore(
+  doc: string,
+  navigation: SrcdocPreviewNavigation | null,
+): string {
+  const initialHash = normalizePreviewNavigationHash(navigation?.hash);
+  const initialPathname = normalizePreviewNavigationPath(navigation?.pathname);
+  const initialSearch = normalizePreviewNavigationSearch(navigation?.search);
+  const initialState = safePreviewNavigationState(navigation?.state);
+  const hasInitialNavigation = !!navigation && (
+    initialHash !== '' ||
+    initialPathname !== '' ||
+    initialSearch !== '' ||
+    Object.prototype.hasOwnProperty.call(navigation, 'state')
+  );
+  const script = `<script data-od-preview-navigation-restore>(function(){
+  var initialHash = ${jsonForInlineScript(initialHash)};
+  var initialPathname = ${jsonForInlineScript(initialPathname)};
+  var initialSearch = ${jsonForInlineScript(initialSearch)};
+  var initialState = ${jsonForInlineScript(initialState)};
+  var lastPostedFingerprint = null;
+  function snapshot(){
+    return location.pathname + location.search + location.hash;
+  }
+  function stateFingerprint(value){
+    try {
+      if (value === undefined) return 'u';
+      return JSON.stringify(value);
+    } catch (_) {
+      return String(value);
+    }
+  }
+  function post(force, requestId){
+    try {
+      var href = snapshot();
+      var fingerprint = href + '\\n' + stateFingerprint(history.state);
+      if (force !== true && lastPostedFingerprint === fingerprint) return;
+      lastPostedFingerprint = fingerprint;
+      if (window.parent && window.parent !== window) {
+        var message = {
+          type: 'od:preview-navigation',
+          href: location.href,
+          pathname: location.pathname,
+          search: location.search,
+          hash: location.hash,
+          state: history.state
+        };
+        if (typeof requestId === 'string') message.requestId = requestId;
+        window.parent.postMessage(message, '*');
+      }
+    } catch (_) {}
+  }
+  function isAboutSrcdoc(){
+    try { return String(location.href || '') === 'about:srcdoc' || String(location.protocol || '') === 'about:'; }
+    catch (_) { return false; }
+  }
+  function restore(){
+    var prevHash = location.hash;
+    if (isAboutSrcdoc()) {
+      if (initialHash && location.hash !== initialHash) {
+        try { location.hash = initialHash; } catch (_) {}
+      }
+      post();
+      return;
+    }
+    try {
+      var nextPath = initialPathname || location.pathname;
+      var nextSearch = initialSearch || '';
+      var nextHash = initialHash || '';
+      var nextUrl = nextPath + nextSearch + nextHash;
+      if (initialState !== undefined) history.replaceState(initialState, '', nextUrl);
+      else history.replaceState(history.state, '', nextUrl);
+      try { window.dispatchEvent(new PopStateEvent('popstate', { state: history.state })); } catch (_) {}
+      if (location.hash !== prevHash) {
+        try {
+          var ev = typeof HashChangeEvent === 'function'
+            ? new HashChangeEvent('hashchange', { oldURL: '', newURL: location.href })
+            : new Event('hashchange');
+          window.dispatchEvent(ev);
+        } catch (_) {}
+      }
+    } catch (_) {
+      if (initialHash && location.hash !== initialHash) {
+        try { location.hash = initialHash; } catch (__) {}
+      }
+    }
+    post();
+  }
+  function patch(name){
+    var original = history[name];
+    if (typeof original !== 'function') return;
+    history[name] = function(){
+      var result = original.apply(this, arguments);
+      post();
+      return result;
+    };
+  }
+  patch('pushState');
+  patch('replaceState');
+  window.addEventListener('hashchange', function(){ post(); });
+  window.addEventListener('popstate', function(){ post(); });
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data) return;
+    if (data.type === 'od:preview-navigation-request') {
+      post(true, typeof data.requestId === 'string' ? data.requestId : undefined);
+      return;
+    }
+    if (data.type === 'od:preview-navigation-restore') {
+      if (typeof data.hash === 'string') initialHash = data.hash;
+      if (typeof data.pathname === 'string') initialPathname = data.pathname;
+      if (typeof data.search === 'string') initialSearch = data.search;
+      if ('state' in data) initialState = data.state;
+      restore();
+      return;
+    }
+  });
+  if (${hasInitialNavigation ? 'true' : 'false'}) restore();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ post(); }, { once: true });
+  else setTimeout(function(){ post(); }, 0);
+})();</script>`;
+  if (/<head[^>]*>/i.test(doc)) {
+    return doc.replace(/<head[^>]*>/i, (m) => `${m}${script}`);
+  }
+  if (/<body[^>]*>/i.test(doc)) {
+    return doc.replace(/<body[^>]*>/i, (m) => `${m}${script}`);
+  }
+  return script + doc;
+}
+
+function normalizePreviewNavigationHash(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  if (value.length === 0) return '';
+  return value.startsWith('#') ? value : `#${value}`;
+}
+
+function normalizePreviewNavigationPath(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  if (!value.startsWith('/')) return '';
+  return value;
+}
+
+function normalizePreviewNavigationSearch(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  if (value.length === 0) return '';
+  return value.startsWith('?') ? value : `?${value}`;
+}
+
+function safePreviewNavigationState(value: unknown): unknown {
+  if (value === undefined) return undefined;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return undefined;
+  }
+}
+
+function jsonForInlineScript(value: unknown): string {
+  if (value === undefined) return 'undefined';
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 // Selection bridge: shared substrate for Comment mode and Inspect mode.

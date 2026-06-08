@@ -239,6 +239,34 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(text).toBe('<html/>');
   });
 
+  it('injects the preview navigation reporter only when requested for HTML previews', async () => {
+    const raw = await fetch(rawUrl('page.html'));
+    expect(await raw.text()).toBe('<html/>');
+
+    const instrumented = await fetch(`${rawUrl('page.html')}?odPreviewNav=1`);
+    expect(instrumented.status).toBe(200);
+    const text = await instrumented.text();
+    expect(text).toContain('data-od-preview-navigation-bridge');
+    expect(text).toContain("type: 'od:preview-navigation'");
+    expect(text).toContain("data.type === 'od:preview-navigation-request'");
+    expect(text).toContain('message.requestId = requestId');
+    expect(text).toContain("data.type === 'od:preview-navigation-restore'");
+    expect(text).toContain("window.dispatchEvent(new PopStateEvent('popstate'");
+    expect(text).toContain('new HashChangeEvent');
+  });
+
+  it('serves a same-origin srcdoc transport shell for bridge previews', async () => {
+    const res = await fetch(`${rawUrl('page.html')}?odSrcdocTransport=1`);
+
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain('data-od-srcdoc-transport-shell');
+    expect(text).toContain("data.type !== 'od:srcdoc-transport-activate'");
+    expect(text).toContain("type: 'od:srcdoc-transport-ready'");
+    expect(text).toContain('history.replaceState');
+    expect(text).not.toContain('<html/>');
+  });
+
   it('injects the URL preview scroll bridge only when requested', async () => {
     const plain = await fetch(rawUrl('page.html'));
     expect(await plain.text()).toBe('<html/>');
@@ -300,6 +328,16 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(bridged.status).toBe(200);
     const html = await bridged.text();
     expect(html.match(/data-od-url-scroll-bridge/g)?.length).toBe(1);
+  });
+
+  it('can inject preview navigation, scroll, and selection bridges together', async () => {
+    const res = await fetch(`${rawUrl('body.html')}?odPreviewNav=1&odPreviewBridge=scroll&odPreviewBridge=selection`);
+
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('data-od-preview-navigation-bridge');
+    expect(html).toContain('data-od-url-scroll-bridge');
+    expect(html).toContain('data-od-url-selection-bridge');
   });
 
   it('does not inject the URL preview selection bridge twice', async () => {

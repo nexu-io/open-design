@@ -113,8 +113,8 @@ gsap.to(svgEl, { rotation: 90, svgOrigin: "100 100" });
 
 ## Stagger
 
-Offset the animation of each item by 0.1 second like this: 
-```javascript 
+Offset the animation of each item by 0.1 second like this:
+```javascript
 gsap.to(".item", {
   y: -20,
   stagger: 0.1
@@ -157,7 +157,7 @@ base (out)        .in                .out               .inOut
 
 ### Custom: use CustomEase (plugin)
 
-Simple cubic-bezier values (as used in CSS `cubic-bezier()`): 
+Simple cubic-bezier values (as used in CSS `cubic-bezier()`):
 
 ```javascript
 const myEase = CustomEase.create("my-ease", ".17,.67,.83,.67");
@@ -165,7 +165,7 @@ const myEase = CustomEase.create("my-ease", ".17,.67,.83,.67");
 gsap.to(".item", {x: 100, ease: myEase, duration: 1});
 ```
 
-Complex curve with any number of control points, described as normalized SVG path data: 
+Complex curve with any number of control points, described as normalized SVG path data:
 
 ```javascript
 const myEase = CustomEase.create("hop", "M0,0 C0,0 0.056,0.442 0.175,0.442 0.294,0.442 0.332,0 0.332,0 0.332,0 0.414,1 0.671,1 0.991,1 1,0 1,0");
