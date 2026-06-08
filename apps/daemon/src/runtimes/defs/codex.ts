@@ -32,6 +32,25 @@ function parseCodexServiceTiers(raw: unknown): RuntimeModelOption[] | undefined 
   return out.length > 0 ? out : undefined;
 }
 
+const CODEX_SPEED_TIER_SERVICE_TIER_OPTIONS: Record<string, RuntimeModelOption> = {
+  fast: { id: 'priority', label: 'Fast' },
+};
+
+function parseCodexServiceTiersFromSpeedTiers(
+  speedTiers: readonly string[] | undefined,
+): RuntimeModelOption[] | undefined {
+  if (!speedTiers) return undefined;
+  const out: RuntimeModelOption[] = [];
+  const seen = new Set<string>();
+  for (const raw of speedTiers) {
+    const option = CODEX_SPEED_TIER_SERVICE_TIER_OPTIONS[raw.toLowerCase()];
+    if (!option || seen.has(option.id)) continue;
+    seen.add(option.id);
+    out.push({ ...option });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 export function parseCodexDebugModels(stdout: string): RuntimeModelOption[] | null {
   let parsed: unknown;
   try {
@@ -76,7 +95,9 @@ export function parseCodexDebugModels(stdout: string): RuntimeModelOption[] | nu
       entry.additional_speed_tiers,
     );
     if (additionalSpeedTiers) model.additionalSpeedTiers = additionalSpeedTiers;
-    const serviceTierOptions = parseCodexServiceTiers(entry.service_tiers);
+    const serviceTierOptions =
+      parseCodexServiceTiers(entry.service_tiers) ??
+      parseCodexServiceTiersFromSpeedTiers(additionalSpeedTiers);
     if (serviceTierOptions) model.serviceTierOptions = serviceTierOptions;
     out.push(model);
   }

@@ -417,6 +417,30 @@ test('codex parses live model catalog from debug models JSON', () => {
   ]);
 });
 
+test('codex derives service tier options from speed tiers when service tiers are absent', () => {
+  assert.ok(codex.listModels, 'codex must define live model discovery');
+  const parsed = codex.listModels.parse(JSON.stringify({
+    models: [
+      {
+        slug: 'gpt-5.5',
+        display_name: 'GPT-5.5',
+        visibility: 'list',
+        additional_speed_tiers: ['fast'],
+      },
+    ],
+  }));
+
+  assert.deepEqual(parsed, [
+    { id: 'default', label: 'Default (CLI config)' },
+    {
+      id: 'gpt-5.5',
+      label: 'GPT-5.5',
+      additionalSpeedTiers: ['fast'],
+      serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+    },
+  ]);
+});
+
 test('codex detection surfaces live debug models separately from fallback models', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-live-models-'));
   try {
