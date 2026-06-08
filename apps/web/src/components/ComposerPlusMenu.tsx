@@ -1,4 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
+import { createPortal } from 'react-dom';
 import type {
   ConnectorDetail,
   InstalledPluginRecord,
@@ -6,6 +14,80 @@ import type {
 } from '@open-design/contracts';
 import { useT } from '../i18n';
 import { Icon, type IconName } from './Icon';
+
+const PLUS_MENU_MARGIN = 12;
+const PLUS_MENU_GAP = 8;
+const PLUS_MENU_WIDTH = 190;
+const PLUS_MENU_FLYOUT_WIDTH = 360;
+const PLUS_MENU_PREFERRED_MIN_HEIGHT = 180;
+const PLUS_MENU_FLYOUT_MAX_HEIGHT = 320;
+type PlusMenuFlyoutPlacement = 'right' | 'left' | 'contained';
+type PlusMenuFlyoutVerticalPlacement = 'down' | 'up';
+type PlusMenuPopupStyle = CSSProperties & Record<'--plus-menu-flyout-max-height', string>;
+
+function getFlyoutBoundary(anchor: HTMLElement): Pick<DOMRect, 'left' | 'right'> {
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1024;
+  const viewportBounds = { left: PLUS_MENU_MARGIN, right: viewportWidth - PLUS_MENU_MARGIN };
+  const boundary = anchor.closest('.split-chat-slot, .pane');
+  if (!boundary) return viewportBounds;
+
+  const rect = boundary.getBoundingClientRect();
+  if (!Number.isFinite(rect.left) || !Number.isFinite(rect.right) || rect.right <= rect.left) {
+    return viewportBounds;
+  }
+
+  return {
+    left: Math.max(PLUS_MENU_MARGIN, rect.left),
+    right: Math.min(viewportWidth - PLUS_MENU_MARGIN, rect.right),
+  };
+}
+
+function getPlusMenuStyle(anchor: HTMLElement): CSSProperties {
+  const rect = anchor.getBoundingClientRect();
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || PLUS_MENU_WIDTH;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 640;
+  const width = Math.min(PLUS_MENU_WIDTH, Math.max(0, viewportWidth - PLUS_MENU_MARGIN * 2));
+  const left = Math.min(
+    Math.max(PLUS_MENU_MARGIN, rect.left),
+    Math.max(PLUS_MENU_MARGIN, viewportWidth - PLUS_MENU_MARGIN - width),
+  );
+  const spaceAbove = rect.top - PLUS_MENU_MARGIN - PLUS_MENU_GAP;
+  const spaceBelow = viewportHeight - rect.bottom - PLUS_MENU_MARGIN - PLUS_MENU_GAP;
+
+  if (spaceAbove >= PLUS_MENU_PREFERRED_MIN_HEIGHT || spaceAbove >= spaceBelow) {
+    return {
+      left,
+      top: 'auto',
+      bottom: Math.max(PLUS_MENU_MARGIN, viewportHeight - rect.top + PLUS_MENU_GAP),
+      width,
+      maxHeight: Math.max(0, spaceAbove),
+    };
+  }
+
+  return {
+    left,
+    top: Math.max(PLUS_MENU_MARGIN, rect.bottom + PLUS_MENU_GAP),
+    bottom: 'auto',
+    width,
+    maxHeight: Math.max(0, spaceBelow),
+  };
+}
+
+function getFlyoutPlacement(anchor: HTMLElement): PlusMenuFlyoutPlacement {
+  const rect = anchor.getBoundingClientRect();
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1024;
+  const boundary = getFlyoutBoundary(anchor);
+  const menuWidth = Math.min(PLUS_MENU_WIDTH, Math.max(0, viewportWidth - PLUS_MENU_MARGIN * 2));
+  const menuLeft = Math.min(
+    Math.max(PLUS_MENU_MARGIN, rect.left),
+    Math.max(PLUS_MENU_MARGIN, viewportWidth - PLUS_MENU_MARGIN - menuWidth),
+  );
+  const hasRightSpace = menuLeft + menuWidth + PLUS_MENU_GAP + PLUS_MENU_FLYOUT_WIDTH <= boundary.right;
+  if (hasRightSpace) return 'right';
+  const hasLeftSpace = menuLeft - PLUS_MENU_GAP - PLUS_MENU_FLYOUT_WIDTH >= boundary.left;
+  if (hasLeftSpace) return 'left';
+  return 'contained';
+}
 
 export interface ComposerPlusMenuProps {
   /** Connector context options shown under the "Connectors" submenu. */
@@ -89,7 +171,13 @@ export function ComposerPlusMenu({
     'connectors' | 'plugins' | 'mcp' | 'toolbox' | null
   >(null);
   const [query, setQuery] = useState('');
+  const [menuStyle, setMenuStyle] = useState<CSSProperties | null>(null);
+  const [flyoutPlacement, setFlyoutPlacement] = useState<PlusMenuFlyoutPlacement>('right');
+  const [flyoutVerticalPlacement, setFlyoutVerticalPlacement] = useState<PlusMenuFlyoutVerticalPlacement>('down');
+  const [flyoutMaxHeight, setFlyoutMaxHeight] = useState(PLUS_MENU_FLYOUT_MAX_HEIGHT);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popupRef = useRef<HTMLDivElement | null>(null);
   const submenuCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // The plugin and MCP flyouts share one `query`, but it is scoped to whichever
@@ -104,22 +192,16 @@ export function ComposerPlusMenu({
     if (submenuCloseTimer.current) clearTimeout(submenuCloseTimer.current);
   }, []);
 
-  // Hover intent: a flyout sits to the row's side with a small visual gap, so
-  // moving the cursor diagonally from the parent row toward the flyout briefly
-  // crosses dead space and used to fire mouseleave -> instant close. Open
-  // cancels any pending close; close is DEFERRED so the cursor has time to land
-  // on the flyout (whose own mouseenter cancels it). Same-frame open-after-close
-  // when sliding between sibling rows also resolves cleanly.
+  // Hover intent: side flyouts have a small visual gap from the parent row, so
+  // closing immediately on row mouseleave makes diagonal cursor movement feel
+  // broken. Defer close briefly; entering the flyout cancels the pending close.
   function cancelSubmenuClose() {
     if (submenuCloseTimer.current) {
       clearTimeout(submenuCloseTimer.current);
       submenuCloseTimer.current = null;
     }
   }
-  function openSubmenu(key: 'connectors' | 'plugins' | 'mcp' | 'toolbox') {
-    cancelSubmenuClose();
-    setSubmenu(key);
-  }
+
   function scheduleCloseSubmenu() {
     cancelSubmenuClose();
     submenuCloseTimer.current = setTimeout(() => {
@@ -134,10 +216,45 @@ export function ComposerPlusMenu({
     setSubmenu(null);
   }
 
+  function updateFlyoutGeometry(row: HTMLDivElement | null) {
+    if (!row) {
+      setFlyoutVerticalPlacement('down');
+      setFlyoutMaxHeight(PLUS_MENU_FLYOUT_MAX_HEIGHT);
+      return;
+    }
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 640;
+    const rowRect = row.getBoundingClientRect();
+    const downSpace = viewportHeight - (rowRect.top - 5) - PLUS_MENU_MARGIN;
+    const upSpace = rowRect.bottom + 5 - PLUS_MENU_MARGIN;
+    const verticalPlacement =
+      downSpace >= PLUS_MENU_FLYOUT_MAX_HEIGHT || downSpace >= upSpace ? 'down' : 'up';
+    setFlyoutVerticalPlacement(verticalPlacement);
+    setFlyoutMaxHeight(
+      Math.max(
+        120,
+        Math.min(
+          PLUS_MENU_FLYOUT_MAX_HEIGHT,
+          verticalPlacement === 'up' ? upSpace : downSpace,
+        ),
+      ),
+    );
+  }
+
+  function openSubmenu(
+    next: 'connectors' | 'plugins' | 'mcp' | 'toolbox',
+    row: HTMLDivElement | null,
+  ) {
+    cancelSubmenuClose();
+    updateFlyoutGeometry(row);
+    setSubmenu(next);
+  }
+
   useEffect(() => {
     if (!open) return;
     function onPointer(e: MouseEvent) {
-      if (rootRef.current?.contains(e.target as Node)) return;
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (popupRef.current?.contains(target)) return;
       close();
     }
     function onKey(e: KeyboardEvent) {
@@ -156,6 +273,29 @@ export function ComposerPlusMenu({
     };
   }, [open, submenu]);
 
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuStyle(null);
+      return;
+    }
+    const updateMenuPosition = () => {
+      const anchor = triggerRef.current;
+      if (!anchor) return;
+      setMenuStyle(getPlusMenuStyle(anchor));
+      setFlyoutPlacement(getFlyoutPlacement(anchor));
+      const activeRow = popupRef.current?.querySelector<HTMLDivElement>('.plus-menu__submenu-row.is-open') ?? null;
+      updateFlyoutGeometry(activeRow);
+    };
+
+    updateMenuPosition();
+    window.addEventListener('resize', updateMenuPosition);
+    window.addEventListener('scroll', updateMenuPosition, true);
+    return () => {
+      window.removeEventListener('resize', updateMenuPosition);
+      window.removeEventListener('scroll', updateMenuPosition, true);
+    };
+  }, [open]);
+
   const needle = query.trim().toLowerCase();
   const filteredPlugins = needle
     ? plugins.filter((p) => pluginMatches(p, needle))
@@ -163,10 +303,17 @@ export function ComposerPlusMenu({
   const filteredMcp = needle
     ? mcpServers.filter((s) => mcpMatches(s, needle))
     : mcpServers;
+  const popupStyle = menuStyle
+    ? ({
+        ...menuStyle,
+        '--plus-menu-flyout-max-height': `${flyoutMaxHeight}px`,
+      } satisfies PlusMenuPopupStyle)
+    : undefined;
 
   return (
     <div className="plus-menu" ref={rootRef}>
       <button
+        ref={triggerRef}
         type="button"
         className={`icon-btn plus-menu__trigger od-tooltip${open ? ' is-active' : ''}`}
         data-testid={triggerTestId}
@@ -186,8 +333,13 @@ export function ComposerPlusMenu({
       >
         <Icon name="plus" size={16} />
       </button>
-      {open ? (
-        <div className="plus-menu__popup" role="menu">
+      {open && typeof document !== 'undefined' ? createPortal(
+        <div
+          ref={popupRef}
+          className={`plus-menu__popup plus-menu__popup--flyout-${flyoutPlacement} plus-menu__popup--flyout-y-${flyoutVerticalPlacement}`}
+          role="menu"
+          style={popupStyle}
+        >
           <button
             type="button"
             role="menuitem"
@@ -210,7 +362,7 @@ export function ComposerPlusMenu({
             label={t('connectors.title')}
             icon="link"
             open={submenu === 'connectors'}
-            onOpen={() => openSubmenu('connectors')}
+            onOpen={(row) => openSubmenu('connectors', row)}
             onClose={scheduleCloseSubmenu}
           >
             <div className="plus-menu__list">
@@ -259,7 +411,7 @@ export function ComposerPlusMenu({
             label={t('entry.navPlugins')}
             icon="sparkles"
             open={submenu === 'plugins'}
-            onOpen={() => openSubmenu('plugins')}
+            onOpen={(row) => openSubmenu('plugins', row)}
             onClose={scheduleCloseSubmenu}
           >
             <div className="plus-menu__search">
@@ -315,7 +467,7 @@ export function ComposerPlusMenu({
             label="MCP"
             icon="link"
             open={submenu === 'mcp'}
-            onOpen={() => openSubmenu('mcp')}
+            onOpen={(row) => openSubmenu('mcp', row)}
             onClose={scheduleCloseSubmenu}
           >
             <div className="plus-menu__search">
@@ -372,13 +524,14 @@ export function ComposerPlusMenu({
               label={toolboxLabel ?? t('chat.designToolbox.tooltip')}
               icon="lightbulb"
               open={submenu === 'toolbox'}
-              onOpen={() => openSubmenu('toolbox')}
+              onOpen={(row) => openSubmenu('toolbox', row)}
               onClose={scheduleCloseSubmenu}
             >
               {renderToolbox(close)}
             </PlusSubmenuRow>
           ) : null}
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );
@@ -395,35 +548,16 @@ function PlusSubmenuRow({
   label: string;
   icon: IconName;
   open: boolean;
-  onOpen: () => void;
+  onOpen: (row: HTMLDivElement | null) => void;
   onClose: () => void;
   children: ReactNode;
 }) {
   const rowRef = useRef<HTMLDivElement | null>(null);
-  const flyoutRef = useRef<HTMLDivElement | null>(null);
-  // Flyouts default to dropping DOWN from the row's top. When a row sits low in
-  // the viewport (e.g. the last "Design toolbox" entry, whose panel is tall),
-  // dropping down runs off-screen — so anchor to the row's BOTTOM and grow UP
-  // instead. Measured after open so the decision uses the real flyout height.
-  const [placeUp, setPlaceUp] = useState(false);
-  useLayoutEffect(() => {
-    if (!open) return;
-    const row = rowRef.current;
-    const flyout = flyoutRef.current;
-    if (!row || !flyout) return;
-    const rowRect = row.getBoundingClientRect();
-    const flyoutH = flyout.offsetHeight;
-    const margin = 8;
-    const spaceBelow = window.innerHeight - rowRect.top - margin;
-    const spaceAbove = rowRect.bottom - margin;
-    // Flip up only when down can't fit AND up has more room.
-    setPlaceUp(flyoutH > spaceBelow && spaceAbove > spaceBelow);
-  }, [open, children]);
   return (
     <div
-      className="plus-menu__submenu-row"
       ref={rowRef}
-      onMouseEnter={onOpen}
+      className={`plus-menu__submenu-row${open ? ' is-open' : ''}`}
+      onMouseEnter={() => onOpen(rowRef.current)}
       onMouseLeave={onClose}
     >
       <button
@@ -432,7 +566,7 @@ function PlusSubmenuRow({
         className="plus-menu__item plus-menu__parent"
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => (open ? onClose() : onOpen())}
+        onClick={() => (open ? onClose() : onOpen(rowRef.current))}
       >
         <Icon name={icon} size={15} className="plus-menu__item-icon" />
         <span>{label}</span>
@@ -440,10 +574,9 @@ function PlusSubmenuRow({
       </button>
       {open ? (
         <div
-          className={`plus-menu__flyout${placeUp ? ' plus-menu__flyout--up' : ''}`}
+          className="plus-menu__flyout"
           role="menu"
-          ref={flyoutRef}
-          onMouseEnter={onOpen}
+          onMouseEnter={() => onOpen(rowRef.current)}
           onMouseLeave={onClose}
         >
           {children}
