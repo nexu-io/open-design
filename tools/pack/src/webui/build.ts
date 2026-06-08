@@ -250,8 +250,12 @@ export async function buildPackedWebui(config: ToolPackBuildOnlyConfig): Promise
   const packed = await collectWorkspaceTarballs(config, tarballsRoot);
   await assembleNodeApp({ config, appRoot, tarballsRoot, packed });
 
-  // 3) bundled resources WITHOUT bundling node (webui requires system node)
-  await copyResourceTree(config, resourceRoot, { includeNodeBinary: false });
+  // 3) bundled resources WITHOUT bundling node or Playwright Chromium (webui
+  // requires system node and defers to the host's own Playwright install)
+  await copyResourceTree(config, resourceRoot, {
+    includeNodeBinary: false,
+    includePlaywrightChromium: false,
+  });
 
   // 4) target-platform better-sqlite3 prebuild
   await installPrebuiltSqlite(appRoot, platform, arch);
