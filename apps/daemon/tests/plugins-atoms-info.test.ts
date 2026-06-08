@@ -29,9 +29,15 @@ describe('atoms catalog — Phase 6/7/8 promotion', () => {
     expect(atom?.taskKinds).toContain('code-migration');
   });
 
-  it('the catalog has no remaining planned atoms (after the §3.AA2 promotion)', () => {
+  it("'visual-validation' is implemented with daemon-backed screenshot comparison", () => {
+    const atom = findAtom('visual-validation');
+    expect(atom?.status).toBe('implemented');
+    expect(isImplementedAtom('visual-validation')).toBe(true);
+  });
+
+  it('the catalog no longer contains planned first-party atoms', () => {
     const planned = FIRST_PARTY_ATOMS.filter((a) => a.status === 'planned');
-    expect(planned.map((a) => a.id)).toEqual([]);
+    expect(planned).toEqual([]);
   });
 
   it('every atom in the catalog has a non-empty taskKinds[]', () => {
