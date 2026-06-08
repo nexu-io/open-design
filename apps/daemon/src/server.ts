@@ -2272,7 +2272,10 @@ function resolveRunProjectKindForAnalytics({
 }) {
   if (typeof hintProjectKind === 'string') return hintProjectKind;
   if (projectMetadata?.importedFrom === 'design-system') return 'design_system';
-  return projectKindToTracking(projectMetadata?.kind);
+  // Pass videoModel so a HyperFrames project (kind=video + videoModel=
+  // hyperframes-html) is reported as project_kind=hyperframes, not generic
+  // video. The web-supplied `hintProjectKind` already encodes this when set.
+  return projectKindToTracking(projectMetadata?.kind, projectMetadata?.videoModel);
 }
 
 export function __forTestResolveRunProjectKindForAnalytics(args) {

@@ -97,6 +97,14 @@ export type TrackingProjectKind =
   | 'template'
   | 'image'
   | 'video'
+  // `hyperframes` is a `video` project rendered by the local HyperFrames
+  // HTML→MP4 engine (`videoModel === 'hyperframes-html'`). The product
+  // routes it as its own task type (a peer of Video, with its own Home
+  // chip), and its cost/latency/success profile differs sharply from AI
+  // video providers, so it is surfaced as a first-class project_kind
+  // rather than collapsed into generic `video`. `model_id` still carries
+  // `hyperframes-html` as a secondary anchor.
+  | 'hyperframes'
   | 'audio'
   // `design_system` covers DS-as-project runs (creation + regeneration).
   // The dashboard reads it on run_created / run_finished to split the
@@ -839,6 +847,9 @@ export type TrackingDesignSystemApplyTargetKind =
   | 'slide_deck'
   | 'image'
   | 'video'
+  // HyperFrames projects can be a DS-apply target too; keep this in lockstep
+  // with `TrackingProjectKind` so the picker reports them distinctly.
+  | 'hyperframes'
   | 'audio'
   | 'live_artifact'
   | 'unknown';
@@ -2294,8 +2305,16 @@ export type AnalyticsEventPayload =
 
 // Code `ProjectKind` from packages/contracts/src/api/projects.ts:
 //   'prototype' | 'deck' | 'template' | 'other' | 'image' | 'video' | 'audio'
+// Discriminates HyperFrames from generic AI video. A HyperFrames project is
+// stored as `kind: 'video'` with `metadata.videoModel === 'hyperframes-html'`
+// (the local HTML→MP4 renderer); callers pass that videoModel through so the
+// analytics layer can split it out into its own `project_kind`. See the
+// `'hyperframes'` member docblock on `TrackingProjectKind`.
+const HYPERFRAMES_VIDEO_MODEL = 'hyperframes-html';
+
 export function projectKindToTracking(
   kind: string | null | undefined,
+  videoModel?: string | null,
 ): TrackingProjectKind | null {
   switch (kind) {
     case 'prototype':
@@ -2309,7 +2328,9 @@ export function projectKindToTracking(
     case 'image':
       return 'image';
     case 'video':
-      return 'video';
+      // HyperFrames rides on the `video` kind; the local-render engine is the
+      // only thing that distinguishes it, so route on videoModel here.
+      return videoModel === HYPERFRAMES_VIDEO_MODEL ? 'hyperframes' : 'video';
     case 'audio':
       return 'audio';
     case 'live-artifact':

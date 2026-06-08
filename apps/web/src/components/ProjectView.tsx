@@ -4613,7 +4613,7 @@ export function ProjectView({
       // surfaces. `target_project_kind` derives from
       // `project.metadata.kind`.
       const target =
-        (projectKindToTracking(project.metadata?.kind ?? null) ?? 'unknown') as TrackingDesignSystemApplyTargetKind;
+        (projectKindToTracking(project.metadata?.kind ?? null, project.metadata?.videoModel) ?? 'unknown') as TrackingDesignSystemApplyTargetKind;
       const picked = nextId
         ? designSystems.find((d) => d.id === nextId)
         : null;
@@ -5393,7 +5393,7 @@ export function ProjectView({
               projectId={project.id}
               sessionMode={activeSessionMode}
               onSessionModeChange={handleActiveConversationSessionModeChange}
-              projectKindForTracking={projectKindToTracking(project.metadata?.kind)}
+              projectKindForTracking={projectKindToTracking(project.metadata?.kind, project.metadata?.videoModel)}
               projectFiles={projectFiles}
               activeProjectFileName={activeProjectFileName}
               hasActiveDesignSystem={!!project.designSystemId}
@@ -5613,7 +5613,7 @@ export function ProjectView({
         ) : null}
         <FileWorkspace
           projectId={project.id}
-          projectKind={projectKindToTracking(project.metadata?.kind) ?? 'prototype'}
+          projectKind={projectKindToTracking(project.metadata?.kind, project.metadata?.videoModel) ?? 'prototype'}
           rootDirName={(() => {
             const baseDir =
               projectDetail.project?.metadata?.baseDir ?? project.metadata?.baseDir;
