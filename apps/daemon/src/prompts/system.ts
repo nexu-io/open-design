@@ -1159,7 +1159,7 @@ function renderMetadataBlock(
     ));
     if (metadata.videoModel === 'hyperframes-html') {
       lines.push(
-        'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then dispatch immediately.',
+        'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then create a HyperFrames composition with `npx hyperframes init` under `.hyperframes-cache/`, edit `index.html`, and dispatch via `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>`. Do not run `npx hyperframes render` yourself.',
       );
     }
   }
