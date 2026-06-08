@@ -334,6 +334,8 @@ function readBooleanField(record: Record<string, unknown> | null, key: string): 
 }
 
 interface OpenCodeSessionErrorDetails {
+  source: string | null;
+  code: string | null;
   message: string | null;
   statusCode: number | null;
   retryable: boolean | null;
@@ -350,6 +352,8 @@ function normalizeOpenCodeSessionErrorDetails(value: unknown): OpenCodeSessionEr
   if (!isRecord(value) || value.kind !== 'opencode_session_error') return null;
   const statusCode = readNumberField(value, 'statusCode');
   return {
+    source: readStringField(value, 'source'),
+    code: readStringField(value, 'code'),
     message: readStringField(value, 'message'),
     statusCode,
     retryable: readBooleanField(value, 'retryable') ?? inferOpenCodeRetryable(statusCode),
@@ -388,6 +392,9 @@ function formatOpenCodeSessionError(value: unknown): string | null {
   if (!details) return null;
   const statusCode = details.statusCode;
   const message = details.message;
+  if (details.source === 'opencode' && details.code === 'ROLE_MARKER_HALLUCINATION') {
+    return message;
+  }
   if (statusCode === 404) {
     return 'The model service returned 404 Not Found for the configured runtime endpoint. Check the AMR Link URL or model route.';
   }
@@ -456,6 +463,8 @@ function legacyOpenCodeSessionErrorDetails(text: string): OpenCodeSessionErrorDe
   const statusCode = readNumberField(data, 'statusCode');
   const retryable = readBooleanField(data, 'isRetryable') ?? inferOpenCodeRetryable(statusCode);
   return {
+    source: null,
+    code: null,
     message: readStringField(data, 'message') ?? readStringField(error, 'message'),
     statusCode,
     retryable,
