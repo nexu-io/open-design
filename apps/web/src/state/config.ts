@@ -85,17 +85,15 @@ export const DEFAULT_CONFIG: AppConfig = {
   orbit: DEFAULT_ORBIT,
   projectLocations: [],
   defaultProjectLocationId: 'default',
-  // Telemetry defaults to ON so fresh-install users emit onboarding /
-  // ui_click events from the first frame. The disclosure modal still
-  // appears after `onboardingCompleted` flips, and Settings → Privacy
-  // remains the one-click opt-out. Without these defaults the gate at
-  // `daemon/src/analytics.ts` (`if (telemetry?.metrics !== true) return`)
-  // dropped every event fired during onboarding because no consent
-  // existed yet — observed live on the nightly.10 QA run, which left
-  // zero `page_view pn=onboarding` rows on PostHog despite the user
-  // completing the flow. `artifactManifest` stays off; the existing
-  // PrivacySection lets the user enable it explicitly.
-  telemetry: { metrics: true, content: true, artifactManifest: false },
+  // Telemetry defaults to OFF across the board. A brand-new install
+  // emits nothing until the user makes an explicit opt-in choice
+  // through the first-run banner or Settings → Privacy. We lose the
+  // pre-banner onboarding-funnel events that the previous default-on
+  // posture captured, but a default-on telemetry on fresh installs
+  // is not a defensible opt-in posture under GDPR / ePrivacy / LGPD /
+  // PIPA, and observably lower analytics fidelity is the right
+  // trade-off. Mirrors `daemon/src/app-config.ts#applyTelemetryDefaults`.
+  telemetry: { metrics: false, content: false, artifactManifest: false },
 };
 
 /** Well-known providers with pre-filled base URLs. */
@@ -726,12 +724,21 @@ export function mergeDaemonConfig(
   if (daemonConfig.privacyDecisionAt !== undefined) {
     next.privacyDecisionAt = daemonConfig.privacyDecisionAt;
   } else if (
-    daemonConfig.installationId !== undefined ||
-    daemonConfig.telemetry !== undefined
+    daemonConfig.installationId != null ||
+    (daemonConfig.telemetry &&
+      (daemonConfig.telemetry.metrics === true ||
+        daemonConfig.telemetry.content === true ||
+        daemonConfig.telemetry.artifactManifest === true))
   ) {
     // One-shot migration for configs created before privacyDecisionAt
-    // existed. If the daemon already has an id or telemetry prefs, the user
-    // has resolved the first-run prompt and should not see it again.
+    // existed. We can only infer "user already decided" from a SIGNAL the
+    // user actively produced — a stamped installationId or any telemetry
+    // category turned on. The mere presence of a telemetry block is no
+    // longer a useful signal because `applyTelemetryDefaults` (daemon
+    // side) now writes a default-OFF telemetry block on every read for
+    // fresh installs, so a banner-suppressing "telemetry !== undefined"
+    // check would fire on every brand-new install and the banner would
+    // never appear.
     next.privacyDecisionAt = Date.now();
   }
   if (daemonConfig.customInstructions !== undefined) {

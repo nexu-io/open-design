@@ -5,17 +5,19 @@ import { Icon } from './Icon';
 
 /**
  * Canonical location of the full privacy policy. Kept as a single named
- * constant so it can be repointed (e.g. to a hosted page) without touching
- * markup. `PRIVACY.md` documents the same data handling the modal discloses.
+ * constant so it can be repointed without touching markup. The hosted
+ * page at open-design.ai/amr/privacy is the source of truth covering the
+ * desktop app, AMR cloud service, and marketing site; the in-repo
+ * `PRIVACY.md` is a snapshot of the same disclosures.
  */
-const PRIVACY_POLICY_URL = 'https://github.com/nexu-io/open-design/blob/main/PRIVACY.md';
+const PRIVACY_POLICY_URL = 'https://open-design.ai/amr/privacy';
 
 interface Props {
-  /** Acknowledges the disclosure. Implies default opt-in; the host opts the
-   *  user into the same telemetry surface the previous "Share usage data"
-   *  button enabled. The user can flip the toggle off any time from
-   *  Settings → Privacy, which the banner footer says explicitly. */
+  /** Opt the user IN to telemetry (metrics + content). */
   onAccept: () => void;
+  /** Opt the user OUT of telemetry. The banner closes and a
+   *  `privacyDecisionAt` is recorded so this surface does not reappear. */
+  onDecline: () => void;
 }
 
 /**
@@ -27,27 +29,22 @@ interface Props {
  * it stretches to a bottom-edge bar (see `.privacy-consent-banner` in
  * index.css) so it doesn't crowd content on phones.
  *
- * Single "I get it" action: the product runs with telemetry on by
- * default. The banner is an informed-disclosure surface, not a binary
- * consent picker — the user reads what's collected and dismisses with
- * an acknowledgement. The footer states the default explicitly and
- * points at Settings → Privacy as the off switch, so the user keeps a
- * one-click path to opt out at any time. The matching Settings UI
- * (PrivacySection.tsx) still exposes both Share and Don't share buttons
- * for users who arrive there before this banner has been shown.
+ * Binary opt-in: telemetry stays OFF until the user clicks "Share usage
+ * data". "Not now" closes the banner with telemetry remaining off and
+ * still records `privacyDecisionAt` so the banner does not reappear. A
+ * default-on posture is not defensible under GDPR / ePrivacy / LGPD /
+ * PIPA, so the only legally clean affirmative-action shape is two
+ * symmetric choices with the privacy-preserving option no harder than
+ * the share one.
  *
- * Stays mounted until the user clicks I get it — there is no
- * dismiss-without-acknowledgement button on purpose. The downstream
- * telemetry gate keys off `privacyDecisionAt`, so an "ambiguous
- * not-yet-decided" state would be hard to interpret.
+ * Stays mounted until the user picks an option — there is no neutral
+ * dismiss path on purpose. The downstream telemetry gate keys off
+ * `privacyDecisionAt`, so an "ambiguous not-yet-decided" state would be
+ * hard to interpret.
  */
-export function PrivacyConsentModal({ onAccept }: Props): JSX.Element {
+export function PrivacyConsentModal({ onAccept, onDecline }: Props): JSX.Element {
   const t = useT();
   const analytics = useAnalytics();
-  // P0 — the first-launch privacy banner ships with a single "I get it"
-  // action that implicitly accepts; we map that to `yes` on the contract's
-  // `privacy_modal` ui_click. The contract enum has `yes|no` but no
-  // surface_view counterpart, so this is the only event the surface emits.
   return (
     <div className="privacy-consent-banner" role="region" aria-labelledby="privacy-consent-title">
       <div className="privacy-consent-banner-head">
@@ -92,12 +89,26 @@ export function PrivacyConsentModal({ onAccept }: Props): JSX.Element {
             trackPrivacyModalClick(analytics.track, {
               page_name: 'home',
               area: 'privacy_modal',
+              element: 'no',
+            });
+            onDecline();
+          }}
+        >
+          {t('settings.privacyConsentDecline')}
+        </button>
+        <button
+          type="button"
+          className="privacy-consent-action"
+          onClick={() => {
+            trackPrivacyModalClick(analytics.track, {
+              page_name: 'home',
+              area: 'privacy_modal',
               element: 'yes',
             });
             onAccept();
           }}
         >
-          {t('settings.privacyConsentAccept')}
+          {t('settings.privacyConsentShare')}
         </button>
       </div>
     </div>

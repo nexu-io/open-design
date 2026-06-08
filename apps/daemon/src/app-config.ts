@@ -413,20 +413,20 @@ function filterAllowedKeys(obj: Record<string, unknown>): AppConfigPrefs {
 }
 
 // Fill in telemetry defaults when the saved config has no `telemetry`
-// field at all (fresh install, pre-disclosure). `metrics` / `content`
-// default to true so onboarding-funnel events emit from the first
-// render — without these defaults the gate at
-// `analytics.ts` (`if (cfg.telemetry?.metrics !== true) return`)
-// dropped every event a user fired before the post-onboarding
-// disclosure modal had a chance to set them. An EXPLICIT `false`
-// the user previously saved is preserved (only `undefined` gets
-// the new default), so opt-out users stay opted out across the
-// 0.7.x → 0.8.0 upgrade.
+// field at all (fresh install, pre-disclosure). All three categories
+// default to `false` so a brand-new install emits nothing until the
+// user makes an explicit opt-in choice through the first-run banner
+// or Settings → Privacy. This is a deliberate trade-off: we lose the
+// pre-banner onboarding-funnel events, but a default-on telemetry on
+// fresh installs is not a defensible opt-in posture under GDPR /
+// ePrivacy / LGPD / PIPA. An EXPLICIT `true` the user previously
+// saved is preserved (only `undefined` gets the new default), so
+// existing opt-in users keep emitting telemetry across upgrades.
 function applyTelemetryDefaults(prefs: AppConfigPrefs): AppConfigPrefs {
   if (prefs.telemetry === undefined) {
     return {
       ...prefs,
-      telemetry: { metrics: true, content: true, artifactManifest: false },
+      telemetry: { metrics: false, content: false, artifactManifest: false },
     };
   }
   return prefs;

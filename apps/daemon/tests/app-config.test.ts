@@ -19,12 +19,14 @@ import { isLocalSameOrigin } from '../src/origin-validation.js';
 // Default telemetry preference applied when an existing config has no
 // telemetry block (fresh install, pre-disclosure). See
 // `app-config.ts#applyTelemetryDefaults` and `state/config.ts#DEFAULT_CONFIG`
-// for the matching client default. Tests that previously expected an
-// empty `{}` are now updated to expect this default; tests confirming
-// "user opted out → stays opted out" assert on `metrics: false`.
+// for the matching client default. All categories default to `false`
+// so a brand-new install emits nothing until the user makes an
+// explicit opt-in choice through the first-run banner or
+// Settings → Privacy. Tests confirming "user opted in → stays opted
+// in" assert on `metrics: true` directly.
 const DEFAULT_TELEMETRY = {
-  metrics: true,
-  content: true,
+  metrics: false,
+  content: false,
   artifactManifest: false,
 } as const;
 

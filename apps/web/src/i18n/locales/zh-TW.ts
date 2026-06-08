@@ -421,9 +421,8 @@ export const zhTW: Dict = {
   'settings.privacyConsentFooter': '你可以隨時在 設定 → 隱私 中變更任一項。我們絕不上傳你產生的產出檔案內容。',
   'settings.privacyConsentShare': '分享使用資料',
   'settings.privacyConsentDecline': '不分享',
-  'settings.privacyConsentAccept': '我知道了',
   'settings.privacyConsentBannerFooter':
-    '預設開啟資料分享。你可以隨時在 設定 → 隱私 中關閉。我們絕不上傳你產生的產出檔案內容。',
+    '未開啟分享前我們不會傳送任何資料。你可以隨時在 設定 → 隱私 中更改。我們絕不上傳你產生的產出檔案內容。',
   'settings.privacyConsentPolicyLink': '閱讀隱私政策',
   'settings.privacyMetrics': '匿名指標',
   'settings.privacyMetricsHint': '執行次數、token 用量、錯誤率、時長。不包含 prompt,不包含專案資料。',

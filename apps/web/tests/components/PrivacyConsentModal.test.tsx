@@ -6,41 +6,42 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PrivacyConsentModal } from '../../src/components/PrivacyConsentModal';
 import { I18nProvider } from '../../src/i18n';
 
-const PRIVACY_POLICY_HREF = 'https://github.com/nexu-io/open-design/blob/main/PRIVACY.md';
+const PRIVACY_POLICY_HREF = 'https://open-design.ai/amr/privacy';
 
-function renderModal(overrides?: { onAccept?: () => void }) {
+function renderModal(overrides?: { onAccept?: () => void; onDecline?: () => void }) {
   const onAccept = overrides?.onAccept ?? vi.fn();
+  const onDecline = overrides?.onDecline ?? vi.fn();
   render(
     <I18nProvider initial="en">
-      <PrivacyConsentModal onAccept={onAccept} />
+      <PrivacyConsentModal onAccept={onAccept} onDecline={onDecline} />
     </I18nProvider>,
   );
-  return { onAccept };
+  return { onAccept, onDecline };
 }
 
 describe('PrivacyConsentModal', () => {
   afterEach(cleanup);
 
-  it('renders a single "I get it" acknowledgement button (no decline)', () => {
+  it('renders a binary opt-in choice (Share / Don\'t share) and no acknowledgement button', () => {
     renderModal();
-    expect(screen.getByRole('button', { name: 'I get it' })).toBeTruthy();
-    // Single-button banner: previous double-button labels must be gone so
-    // the surface reads as informed-disclosure-plus-acknowledgement, not a
-    // forced binary choice.
-    expect(screen.queryByRole('button', { name: 'Share usage data' })).toBeNull();
-    expect(screen.queryByRole('button', { name: "Don't share" })).toBeNull();
+    // The new banner is a binary opt-in picker, not a single acknowledgement.
+    // Defaulting telemetry to on and asking the user to "I get it" is not a
+    // defensible posture under GDPR / ePrivacy / LGPD / PIPA.
+    expect(screen.getByRole('button', { name: 'Share usage data' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: "Don't share" })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'I get it' })).toBeNull();
   });
 
-  it('tells the user data sharing is on by default and toggleable in Settings', () => {
+  it('tells the user nothing is shared until they opt in and is toggleable in Settings', () => {
     renderModal();
-    // The single-button banner replaces the binary consent picker, so the
-    // disclosure must say plainly that telemetry defaults on and point the
-    // user at the off switch in Settings. Without this hint the surface
-    // would feel like a dark pattern.
-    const footer = screen.getByText(/Data sharing is on by default/i);
+    // The binary picker must say plainly that telemetry stays off until the
+    // user explicitly opts in, and point the user at Settings → Privacy as
+    // the place to flip their decision later. Without this hint the surface
+    // would feel ambiguous about the default state.
+    const footer = screen.getByText(/We don't share anything until you opt in/i);
     expect(footer.textContent ?? '').toMatch(/Settings/);
     expect(footer.textContent ?? '').toMatch(/Privacy/);
-    expect(footer.textContent ?? '').toMatch(/turn it off any time/i);
+    expect(footer.textContent ?? '').toMatch(/change this any time/i);
   });
 
   it('exposes the privacy policy via an obvious external link', () => {
@@ -51,9 +52,17 @@ describe('PrivacyConsentModal', () => {
     expect(link.getAttribute('rel') ?? '').toContain('noopener');
   });
 
-  it('invokes onAccept when the acknowledgement button is clicked', () => {
-    const { onAccept } = renderModal();
-    fireEvent.click(screen.getByRole('button', { name: 'I get it' }));
+  it('invokes onAccept when "Share usage data" is clicked', () => {
+    const { onAccept, onDecline } = renderModal();
+    fireEvent.click(screen.getByRole('button', { name: 'Share usage data' }));
     expect(onAccept).toHaveBeenCalledTimes(1);
+    expect(onDecline).not.toHaveBeenCalled();
+  });
+
+  it('invokes onDecline when "Don\'t share" is clicked', () => {
+    const { onAccept, onDecline } = renderModal();
+    fireEvent.click(screen.getByRole('button', { name: "Don't share" }));
+    expect(onDecline).toHaveBeenCalledTimes(1);
+    expect(onAccept).not.toHaveBeenCalled();
   });
 });

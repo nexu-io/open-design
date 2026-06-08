@@ -222,6 +222,19 @@ describe('mergeDaemonConfig', () => {
     expect(merged.installationId).toBe('install-1');
     expect(typeof merged.privacyDecisionAt).toBe('number');
   });
+
+  it('does NOT migrate-fill privacyDecisionAt when daemon only carries default-OFF telemetry', () => {
+    // Regression guard for the new default-OFF posture. The daemon's
+    // `applyTelemetryDefaults` writes `{metrics:false, content:false,
+    // artifactManifest:false}` on every read, including fresh installs.
+    // The migration must NOT interpret that as "user already decided" —
+    // doing so would suppress the first-run banner forever.
+    const merged = mergeDaemonConfig(DEFAULT_CONFIG, {
+      telemetry: { metrics: false, content: false, artifactManifest: false },
+    });
+
+    expect(merged.privacyDecisionAt).toBeUndefined();
+  });
 });
 
 describe('mergeDaemonMediaProviders', () => {

@@ -389,9 +389,8 @@ export const zhCN: Dict = {
   'settings.privacyConsentFooter': '你可以随时在 设置 → 隐私 中修改任意一项。我们绝不上传你生成的产物文件内容。',
   'settings.privacyConsentShare': '分享使用数据',
   'settings.privacyConsentDecline': '不分享',
-  'settings.privacyConsentAccept': '我知道了',
   'settings.privacyConsentBannerFooter':
-    '默认开启数据分享。你可以随时在 设置 → 隐私 中关闭。我们绝不上传你生成的产物文件内容。',
+    '未开启分享前我们不会发送任何数据。你可以随时在 设置 → 隐私 中更改。我们绝不上传你生成的产物文件内容。',
   'settings.privacyConsentPolicyLink': '阅读隐私政策',
   'settings.privacyMetrics': '匿名指标',
   'settings.privacyMetricsHint': '运行次数、token 用量、错误率、时长。不包含 prompt,不包含项目数据。',

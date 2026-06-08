@@ -2077,10 +2077,8 @@ function AppInner() {
         >
         <PrivacyConsentModal
           onAccept={() => {
-            // Default opt-in: clicking "I get it" enables the same telemetry
-            // surface the previous two-button "Share usage data" path opted
-            // into. The banner footer + PrivacySection give the user a
-            // one-click path to flip everything off later.
+            // Opt-in: enable metrics + content; mint an installation id so the
+            // anonymous-id reporting surface has a stable token to attach to.
             // The banner owns only the privacy decision; it does not drive
             // navigation. Onboarding is gated by `onboardingCompleted` on
             // its own and runs in parallel.
@@ -2090,6 +2088,17 @@ function AppInner() {
               installationId,
               privacyDecisionAt: Date.now(),
               telemetry: { metrics: true, content: true, artifactManifest: false },
+            });
+          }}
+          onDecline={() => {
+            // Opt-out: telemetry stays off across the board. We still write
+            // `privacyDecisionAt` so the banner does not reappear, and we
+            // null out installationId so no anonymous id is held server-side.
+            void handleConfigPersist({
+              ...latestPersistedConfigRef.current,
+              installationId: null,
+              privacyDecisionAt: Date.now(),
+              telemetry: { metrics: false, content: false, artifactManifest: false },
             });
           }}
         />
