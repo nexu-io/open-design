@@ -67,6 +67,7 @@ import type {
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
+  trackComposerBarClick,
   trackDesignSystemApplyResult,
   trackPageView,
 } from '../analytics/events';
@@ -5252,8 +5253,27 @@ export function ProjectView({
       agents={agents}
       daemonLive={daemonLive}
       onModeChange={onModeChange}
-      onAgentChange={onAgentChange}
-      onAgentModelChange={onAgentModelChange}
+      onAgentChange={(id) => {
+        trackComposerBarClick(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          element: 'agent_select',
+          agent_id: id,
+          ...(project?.id ? { project_id: project.id } : {}),
+        });
+        onAgentChange(id);
+      }}
+      onAgentModelChange={(agentId, choice) => {
+        trackComposerBarClick(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          element: 'agent_model_select',
+          agent_id: agentId,
+          ...(choice?.model ? { model_id: choice.model } : {}),
+          ...(project?.id ? { project_id: project.id } : {}),
+        });
+        onAgentModelChange(agentId, choice);
+      }}
       onOpenSettings={onOpenSettings}
       onRefreshAgents={onRefreshAgents}
       onBack={onBack}

@@ -9,6 +9,8 @@ import {
   replaceProjectWorkingDir,
 } from '../providers/registry';
 import { useT } from '../i18n';
+import { useAnalytics } from '../analytics/provider';
+import { trackComposerBarClick } from '../analytics/events';
 import type { Project } from '../types';
 import { Icon } from './Icon';
 
@@ -28,6 +30,7 @@ function shortPath(dir: string): string {
 
 export function WorkingDirPill({ projectId, resolvedDir: propResolvedDir, onReplaced }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +88,12 @@ export function WorkingDirPill({ projectId, resolvedDir: propResolvedDir, onRepl
     setOpen(false);
     try {
       const result = await replaceProjectWorkingDir(projectId, dir);
+      trackComposerBarClick(analytics.track, {
+        page_name: 'chat_panel',
+        area: 'chat_composer',
+        element: 'working_dir_switch',
+        project_id: projectId,
+      });
       setFetchedDir(result.baseDir);
       onReplaced?.({
         baseDir: result.baseDir,

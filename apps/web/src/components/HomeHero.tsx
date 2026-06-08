@@ -32,7 +32,11 @@ import type {
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
-import { trackHomeChatComposerClick } from '../analytics/events';
+import {
+  trackComposerSessionModeClick,
+  trackHomeChatComposerClick,
+} from '../analytics/events';
+import { sessionModeToTracking } from '@open-design/contracts/analytics';
 import {
   chipsForGroup,
   type ChipGroup,
@@ -735,6 +739,18 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onPickExamplePlugin(record, chipId, promptText);
   }
 
+  // The task-type rail (原型 / 幻灯片 / HyperFrames / 视频 / …). Records which
+  // task type the user picked before delegating to the host's chip handler.
+  function handlePickTaskChip(chip: HomeHeroChip) {
+    trackHomeChatComposerClick(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      element: 'task_chip',
+      chip_id: chip.id,
+    });
+    onPickChip(chip);
+  }
+
   function handleDrop(event: ReactDragEvent<HTMLDivElement>) {
     const files = Array.from(event.dataTransfer.files ?? []);
     if (files.length === 0) return;
@@ -1180,7 +1196,14 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 <button
                   type="button"
                   className={`home-hero__working-dir od-tooltip${workingDir ? ' picked' : ''}`}
-                  onClick={onPickWorkingDir}
+                  onClick={() => {
+                    trackHomeChatComposerClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'working_dir',
+                    });
+                    onPickWorkingDir?.();
+                  }}
                   title={workingDir ?? t('workingDirPicker.homeTitle')}
                   data-tooltip={workingDir ?? t('workingDirPicker.homeTitle')}
                 >
@@ -1193,7 +1216,14 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   <button
                     type="button"
                     className="home-hero__working-dir-clear"
-                    onClick={() => onClearWorkingDir?.()}
+                    onClick={() => {
+                      trackHomeChatComposerClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'chat_composer',
+                        element: 'working_dir_clear',
+                      });
+                      onClearWorkingDir?.();
+                    }}
                     aria-label={t('workingDirPicker.clearAria')}
                   >
                     <Icon name="close" size={10} />
@@ -1227,7 +1257,18 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           <div className="home-hero__foot-right">
             <SessionModeToggle
               mode={sessionMode}
-              onChange={onSessionModeChange}
+              onChange={(next) => {
+                if (next !== sessionMode) {
+                  trackComposerSessionModeClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'chat_composer',
+                    element: 'session_mode_toggle',
+                    mode_before: sessionModeToTracking(sessionMode),
+                    mode_after: sessionModeToTracking(next),
+                  });
+                }
+                onSessionModeChange?.(next);
+              }}
               disabled={Boolean(submitDisabled)}
             />
             {executionSwitcher ? (
@@ -1259,7 +1300,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           pendingChipId={pendingChipId}
           pendingPluginId={pendingPluginId}
           pluginsLoading={pluginsLoading}
-          onPickChip={onPickChip}
+          onPickChip={handlePickTaskChip}
           variant="tabs"
         >
           <ShortcutsMenu
@@ -1272,7 +1313,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             onOpenChange={setShortcutsOpen}
             onPickChip={(chip) => {
               setShortcutsOpen(false);
-              onPickChip(chip);
+              handlePickTaskChip(chip);
             }}
           />
         </RailGroup>
