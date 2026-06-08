@@ -785,6 +785,33 @@ export function composeSystemPrompt({
     );
   }
 
+  // Claude only: iteration rule. When the user asks to modify, redesign, or
+  // otherwise change an HTML artifact file that already exists in the project,
+  // the agent must either overwrite the canonical filename in place OR
+  // create a sibling AND update every cross-reference in OTHER files. The
+  // editor's append-only workflow (no in-place modify, no rename) makes
+  // silent numbered-suffixed siblings (e.g. `detail-2.html`,
+  // `detail-9-2.html`) the path of least resistance; over time the canonical
+  // entry point stays stuck on the oldest filename while every cross-reference
+  // accumulates dead links. The retroactive cleanup story is downstream
+  // (`pnpm tools-link-check --fix --apply`); this rule is the in-line
+  // prevention. See upstream issue nexu-io/open-design#3804 for the
+  // broader gap analysis.
+  if (agentId === 'claude') {
+    parts.push(
+      "\n\n---\n\n## Iteration rule\n\n" +
+      "When the user asks to modify, redesign, or 'change' an HTML artifact file (e.g. `detail.html`, `index.html`) that ALREADY EXISTS in the project, you MUST follow exactly one of these two patterns:\n\n" +
+      "**(a) Overwrite the canonical filename in place.** Use your `Write` or `Edit` tool to update the existing file. Do NOT create a numbered-suffixed sibling like `detail-2.html`, `detail-v2.html`, or `detail-9-2.html`.\n\n" +
+      "**(b) Create a new sibling AND update every cross-reference in OTHER files.** Before you finish, scan the rest of the project for `href=\"<oldname>\"` and `location.href='<oldname>'` references and rewrite each one to the new filename. This is tedious but correct.\n\n" +
+      "**FORBIDDEN — you MUST NOT:**\n" +
+      "- Create a numbered-suffixed sibling (e.g. `detail-2.html`, `detail-v2.html`, `detail-9-2.html`) without updating the cross-references in every other file that points at the original.\n" +
+      "- Leave a `foo.html` / `foo-2.html` / `foo-3.html` family in the project without an explicit decision about which is canonical and which are historical.\n" +
+      "- Treat a numbered-suffix sibling as a 'backup' — that is what version control is for, not filenames.\n\n" +
+      "If the user genuinely wants a parallel variant (e.g. 'A vs B designs', 'dark vs light theme'), use a clearly different basename (e.g. `detail-light.html` and `detail-dark.html`, or a `variants/` subdirectory), not a numbered suffix.\n\n" +
+      "This rule applies to HTML artifacts specifically. Other file types (markdown, images, JSON) follow their own iteration conventions and are not affected by it."
+    );
+  }
+
   // Pinned LAST so recency bias reinforces the role-marker prohibition.
   // This is the canonical anti-roleplay instruction;
   parts.push(

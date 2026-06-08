@@ -576,4 +576,33 @@ describe('composeSystemPrompt', () => {
       expect(prompt).not.toContain('## Reference fixture');
     });
   });
+
+  describe('iteration rule (Claude-only, nexu-io/open-design#3804)', () => {
+    it('includes the iteration rule when agentId is "claude"', () => {
+      const prompt = composeSystemPrompt({ agentId: 'claude' });
+      expect(prompt).toContain('## Iteration rule');
+      expect(prompt).toContain('Overwrite the canonical filename in place');
+      expect(prompt).toContain('Create a new sibling AND update every cross-reference');
+      expect(prompt).toContain('numbered-suffixed sibling');
+      expect(prompt).toContain('detail-2.html');
+    });
+
+    it('omits the iteration rule when agentId is not "claude"', () => {
+      const prompt = composeSystemPrompt({ agentId: 'gpt-5' });
+      expect(prompt).not.toContain('## Iteration rule');
+    });
+
+    it('omits the iteration rule when agentId is undefined', () => {
+      const prompt = composeSystemPrompt({});
+      expect(prompt).not.toContain('## Iteration rule');
+    });
+
+    it('renders the rule after the clarifying-questions block (recency-friendly placement)', () => {
+      const prompt = composeSystemPrompt({ agentId: 'claude' });
+      const questionsAt = prompt.indexOf('## Clarifying questions');
+      const iterationAt = prompt.indexOf('## Iteration rule');
+      expect(questionsAt).toBeGreaterThan(0);
+      expect(iterationAt).toBeGreaterThan(questionsAt);
+    });
+  });
 });
