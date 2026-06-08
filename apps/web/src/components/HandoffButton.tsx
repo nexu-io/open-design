@@ -9,6 +9,7 @@ import type {
   HostEditorId,
   HostEditorsResponse,
 } from '@open-design/contracts';
+import type { TrackingArtifactKind } from '@open-design/contracts/analytics';
 import { fetchHostEditors, openProjectInEditor } from '../providers/registry';
 import { useAnalytics } from '../analytics/provider';
 import { trackHandoffClick } from '../analytics/events';
@@ -106,6 +107,11 @@ interface Props {
   projectName?: string;
   projectDir?: string | null;
   agents?: AgentInfo[];
+  // Active artifact context, so handoff clicks carry the same artifact_id /
+  // artifact_kind dimensions as the rest of the artifact_header funnel.
+  // Undefined when no artifact tab is active.
+  artifactId?: string;
+  artifactKind?: TrackingArtifactKind;
   // Optional fallback "always open in OS file manager" — falls back to the
   // existing shell.openPath bridge in case the daemon catalogue is empty
   // (highly unlikely on macOS / Win / Linux but harmless to support).
@@ -279,18 +285,27 @@ export function HandoffButton({
   projectName,
   projectDir,
   agents,
+  artifactId,
+  artifactKind,
   onRequestRevealInFinder,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
   // One-liner so every hand-off interaction emits the same
-  // `ui_click` / `area=handoff` shape; callers pass only what varies.
+  // `ui_click` / `area=handoff` shape; callers pass only what varies. The
+  // active-artifact context is attached to every event so handoff slices line
+  // up with the rest of the artifact_header funnel.
   const fireHandoff = (
-    props: Omit<Parameters<typeof trackHandoffClick>[1], 'page_name' | 'area'>,
+    props: Omit<
+      Parameters<typeof trackHandoffClick>[1],
+      'page_name' | 'area' | 'artifact_id' | 'artifact_kind'
+    >,
   ) => {
     trackHandoffClick(analytics.track, {
       page_name: 'artifact',
       area: 'handoff',
+      artifact_id: artifactId,
+      artifact_kind: artifactKind,
       ...props,
     });
   };
