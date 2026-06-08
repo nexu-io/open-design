@@ -176,7 +176,6 @@ describe('xai-routes', () => {
   it('starting twice replaces the in-flight listener', async () => {
     await fetch(`${app.baseUrl}/api/xai/oauth/start`, { method: 'POST' });
     await fetch(`${app.baseUrl}/api/xai/oauth/start`, { method: 'POST' });
-    // Second call must have stopped the first listener before opening a new one.
     expect(stopMock).toHaveBeenCalled();
     expect(startMock).toHaveBeenCalledTimes(2);
   });
@@ -504,16 +503,12 @@ describe('xai-routes', () => {
       return realFetch(input, init);
     }) as typeof fetch;
 
-    // Stage a real connected state via the paste-back path so we have a
-    // token on disk, then start a *second* OAuth flow (which opens a
-    // new listener) and Cancel it.
     await onCallbackHolder.current!({ kind: 'ok', code: 'c', state });
     let status = await fetch(`${app.baseUrl}/api/xai/auth/status`).then((r) =>
       jsonOf(r),
     );
     expect(status.connected).toBe(true);
 
-    // Open another OAuth flow — that opens a new listener.
     await fetch(`${app.baseUrl}/api/xai/oauth/start`, { method: 'POST' });
     stopMock.mockClear();
 
@@ -524,7 +519,6 @@ describe('xai-routes', () => {
     expect((await jsonOf(cancelResp)).ok).toBe(true);
     expect(stopMock).toHaveBeenCalled();
 
-    // Token survives — Cancel is non-destructive.
     status = await fetch(`${app.baseUrl}/api/xai/auth/status`).then((r) =>
       jsonOf(r),
     );
@@ -651,7 +645,7 @@ describe('xai-routes — cross-origin guard', () => {
     const resolvedPortRef = { current: 0 };
     const httpDeps = {
       createSseResponse: () => undefined,
-      isLocalSameOrigin: () => false, // simulate cross-origin
+      isLocalSameOrigin: () => false,  
       requireLocalDaemonRequest: () => false,
       resolvedPortRef,
       sendApiError: () => undefined,

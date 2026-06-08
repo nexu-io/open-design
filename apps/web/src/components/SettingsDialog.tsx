@@ -93,6 +93,7 @@ import { PetSettings } from './pet/PetSettings';
 import { McpClientSection } from './McpClientSection';
 import { SkillsSection } from './SkillsSection';
 import { DesignSystemsSection } from './DesignSystemsSection';
+import { useProjectDetail } from '../hooks/useProjectDetail';
 import { PrivacySection } from './PrivacySection';
 import { ProjectLocationsSection } from './ProjectLocationsSection';
 import { RoutinesSection } from './RoutinesSection';
@@ -6311,6 +6312,14 @@ function CritiqueTheaterSection() {
   const enabled = useCritiqueTheaterEnabled();
   const route = useRoute();
   const activeProjectId = route.kind === 'project' ? route.projectId : null;
+  const { project } = activeProjectId !== null
+    ? useProjectDetail(activeProjectId)
+    : { project: null };
+
+  const missingDesignSystem = enabled && activeProjectId !== null && !project?.designSystemId;
+  const missingSkill = enabled && activeProjectId !== null && !project?.skillId;
+  const isBlocked = missingDesignSystem || missingSkill;
+
   return (
     <section className="settings-section">
       <div className="section-head">
@@ -6349,6 +6358,18 @@ function CritiqueTheaterSection() {
           </small>
         )}
       </label>
+
+      {isBlocked && (
+        <div className="hint" style={{ color: 'var(--color-warning, #f59e0b)', marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          <strong>⚠️ Critique Theater will not run:</strong>
+          {missingDesignSystem && (
+            <span>• No Design System bound to this project. Open the Design System picker to fix this.</span>
+          )}
+          {missingSkill && (
+            <span>• No Skill bound to this project. Set an active skill to fix this.</span>
+          )}
+        </div>
+      )}
     </section>
   );
 }

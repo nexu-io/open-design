@@ -118,6 +118,8 @@ describe('http adapter', () => {
         throw new Error('boom');
       },
     });
+
+
     const app = makeApp();
     mountJsonRoute(app as any, route, {}, adapter);
     const res = makeRes();
