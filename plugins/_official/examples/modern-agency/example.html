@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Axion Studio — Modern Agency</title>
+  <style>
+    /*
+     * Modern Agency — "Axion Studio" landing page.
+     * Vanilla HTML/CSS/JS seed. The premium spec asks for React + Vite + Tailwind
+     * with the `shaders` WebGL package for the hero. Here the shader stack
+     * (Swirl + ChromaFlow + FlutedGlass + FilmGrain) is approximated with layered
+     * CSS animated gradients + an SVG turbulence grain so the seed opens with no
+     * build step and no WebGL dependency. Font: system default (per spec).
+     */
+    :root {
+      --orange: #F26522;
+      --orange-hover: #e05a1a;
+      --chroma: #ff5f03;
+      --gray-900: #111827;
+      --gray-600: #4b5563;
+      --gray-500: #6b7280;
+      --gray-300: #d1d5db;
+      --gray-200: #e5e7eb;
+      --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+      --max: 1440px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: var(--gray-900);
+      background: #fff;
+      -webkit-font-smoothing: antialiased;
+    }
+    img, video, svg { display: block; }
+    button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+    a { text-decoration: none; color: inherit; }
+    .wrap { max-width: var(--max); margin: 0 auto; width: 100%; }
+
+    /* ─────────────── SECTION 1: HERO ─────────────── */
+    .hero {
+      position: relative; min-height: 100vh; width: 100%;
+      background: #EFEFEF; display: flex; flex-direction: column; overflow: hidden;
+    }
+    /* Shader-stack approximation (Swirl/ChromaFlow/FlutedGlass/FilmGrain) */
+    .shader {
+      position: absolute; inset: 0; z-index: 10; pointer-events: none;
+    }
+    .shader .swirl {
+      position: absolute; inset: -25%;
+      background:
+        radial-gradient(40% 55% at 30% 35%, #ffffff 0%, rgba(240,240,240,0.0) 60%),
+        radial-gradient(45% 50% at 72% 68%, #f0f0f0 0%, rgba(255,255,255,0.0) 65%),
+        conic-gradient(from 0deg at 50% 50%, #ffffff, #f4f4f4, #ffffff, #efefef, #ffffff);
+      filter: blur(30px);
+      animation: swirl 26s linear infinite;
+    }
+    .shader .chroma {
+      position: absolute; inset: 0; mix-blend-mode: multiply; opacity: 0.55;
+      background:
+        radial-gradient(35% 35% at 22% 78%, rgba(255,95,3,0.55), rgba(255,95,3,0) 70%),
+        radial-gradient(30% 30% at 82% 22%, rgba(255,95,3,0.40), rgba(255,95,3,0) 70%),
+        radial-gradient(45% 45% at 60% 60%, rgba(255,95,3,0.18), rgba(255,95,3,0) 72%);
+      animation: chroma 13s ease-in-out infinite alternate;
+    }
+    .shader .fluted {
+      position: absolute; inset: 0; opacity: 0.12; mix-blend-mode: overlay;
+      background: repeating-linear-gradient(31deg,
+        rgba(255,255,255,0.0) 0px, rgba(255,255,255,0.0) 10px,
+        rgba(255,255,255,0.9) 11px, rgba(0,0,0,0.06) 14px, rgba(255,255,255,0.0) 22px);
+      animation: fluted 18s linear infinite;
+    }
+    .shader .grain { position: absolute; inset: 0; opacity: 0.05; mix-blend-mode: overlay; }
+    @keyframes swirl { to { transform: rotate(360deg); } }
+    @keyframes chroma {
+      0%   { transform: translate(0,0) scale(1); }
+      100% { transform: translate(-3%, 2%) scale(1.06); }
+    }
+    @keyframes fluted { to { background-position: 220px 0; } }
+    @media (prefers-reduced-motion: reduce) {
+      .shader .swirl, .shader .chroma, .shader .fluted { animation: none; }
+    }
+
+    /* NAV */
+    .nav-outer { position: relative; z-index: 20; padding: 8px; }
+    @media (min-width: 640px) { .nav-outer { padding: 12px; } }
+    .navbar {
+      background: #fff; border-radius: 9999px; padding: 5px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .nav-left { display: flex; align-items: center; gap: 24px; padding-left: 4px; }
+    .logo {
+      width: 36px; height: 36px; border-radius: 50%; background: var(--gray-900);
+      color: #fff; display: grid; place-items: center;
+      font-size: 10px; font-weight: 700; letter-spacing: -0.03em; flex: none;
+    }
+    @media (min-width: 768px) { .logo { width: 40px; height: 40px; font-size: 11px; } }
+    .nav-links { display: none; gap: 24px; }
+    .nav-links a { font-size: 14px; color: var(--gray-900); transition: color 0.3s ease; }
+    .nav-links a:hover { color: var(--gray-500); }
+    @media (min-width: 768px) { .nav-links { display: flex; } }
+
+    .nav-right { display: none; align-items: center; gap: 16px; padding-right: 4px; }
+    @media (min-width: 768px) { .nav-right { display: flex; } }
+    .nav-status { font-size: 13px; color: var(--gray-600); }
+    @media (max-width: 1023px) { .nav-status.lg-only { display: none; } }
+    .nav-clock { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--gray-600); }
+
+    /* text-roll button */
+    .roll-btn {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: var(--gray-900); color: #fff; font-size: 13px; font-weight: 500;
+      border-radius: 9999px; padding: 8px 8px 8px 20px; transition: background 0.3s ease;
+    }
+    .roll {
+      position: relative; height: 20px; overflow: hidden; display: inline-block;
+    }
+    .roll-inner {
+      display: flex; flex-direction: column;
+      transition: transform 0.5s var(--ease);
+    }
+    .roll span { height: 20px; line-height: 20px; display: block; white-space: nowrap; }
+    .roll-btn:hover .roll-inner { transform: translateY(-50%); }
+    .roll-circle {
+      width: 24px; height: 24px; border-radius: 50%; background: #fff;
+      display: grid; place-items: center; flex: none;
+      transition: transform 0.5s var(--ease);
+    }
+    .roll-btn:hover .roll-circle { transform: rotate(-45deg); }
+    .roll-circle svg { color: var(--gray-900); }
+
+    .menu-toggle {
+      display: inline-grid; place-items: center; width: 40px; height: 40px;
+      background: var(--gray-900); color: #fff; border-radius: 50%;
+    }
+    @media (min-width: 768px) { .menu-toggle { display: none; } }
+
+    /* HERO CONTENT */
+    .hero-spacer { flex: 1; }
+    .hero-content {
+      position: relative; z-index: 20; width: 100%;
+      padding: 0 20px 56px;
+    }
+    @media (min-width: 640px) { .hero-content { padding: 0 32px 64px; } }
+    @media (min-width: 1024px) { .hero-content { padding: 0 48px 80px; } }
+    .hero-label {
+      font-size: 13px; color: var(--gray-900); letter-spacing: 0.03em; margin-bottom: 20px;
+    }
+    @media (min-width: 640px) { .hero-label { font-size: 14px; margin-bottom: 32px; } }
+    .hero-h1 {
+      font-size: clamp(1.75rem, 7vw, 4.2rem); font-weight: 500; line-height: 1.08;
+      letter-spacing: -0.03em; color: var(--gray-900); max-width: 1100px;
+    }
+    @media (min-width: 640px) { .hero-h1 { font-size: clamp(2.5rem, 5vw, 4.2rem); } }
+    .hero-h1 br { display: none; }
+    @media (min-width: 640px) { .hero-h1 br { display: block; } }
+
+    .hero-cta { display: flex; flex-direction: column; gap: 16px; margin-top: 32px; align-items: flex-start; }
+    @media (min-width: 640px) { .hero-cta { flex-direction: row; align-items: center; gap: 20px; margin-top: 48px; } }
+    .btn-orange { background: var(--orange); transition: background 0.3s ease; }
+    .btn-orange:hover { background: var(--orange-hover); }
+    .btn-orange .roll-circle svg { color: var(--orange); }
+    .partner-badge {
+      display: inline-flex; align-items: center; gap: 10px; background: #fff;
+      border-radius: 4px; padding: 8px 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08); transition: box-shadow 0.3s ease;
+      font-size: 13px; font-weight: 500;
+    }
+    @media (min-width: 640px) { .partner-badge { font-size: 14px; } }
+    .partner-badge:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+    .partner-badge .star { width: 20px; height: 20px; color: #E8704E; flex: none; }
+    @media (min-width: 640px) { .partner-badge .star { width: 24px; height: 24px; } }
+    .partner-badge .feat {
+      font-size: 10px; background: var(--gray-900); color: #fff;
+      padding: 2px 6px; border-radius: 4px; font-weight: 600;
+    }
+    @media (min-width: 640px) { .partner-badge .feat { font-size: 11px; padding: 2px 8px; } }
+
+    /* MOBILE MENU OVERLAY */
+    .menu-overlay {
+      position: fixed; inset: 0; z-index: 50; display: none;
+    }
+    .menu-overlay.open { display: block; }
+    .menu-backdrop {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.6); opacity: 0;
+      transition: opacity 0.5s var(--ease);
+    }
+    .menu-overlay.open .menu-backdrop { opacity: 1; }
+    .menu-sheet {
+      position: absolute; left: 0; right: 0; bottom: 0; margin: 0 12px 12px;
+      background: #fff; border-radius: 16px; padding: 28px 24px 24px;
+      transform: translateY(110%); transition: transform 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .menu-overlay.open .menu-sheet { transform: translateY(0); }
+    .menu-time {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
+      color: var(--gray-600); border: 1px solid var(--gray-200);
+      border-radius: 9999px; padding: 6px 12px; margin-bottom: 24px;
+    }
+    .menu-links { display: flex; flex-direction: column; gap: 4px; margin-bottom: 24px; }
+    .menu-links a { font-size: 28px; font-weight: 500; line-height: 32px; padding: 6px 0; }
+    .menu-start {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--gray-900); color: #fff; border-radius: 9999px;
+      padding: 10px 10px 10px 22px; font-size: 15px; font-weight: 500; width: 100%;
+    }
+    .menu-start .roll-circle { background: #fff; }
+    .menu-start .roll-circle svg { color: var(--gray-900); }
+
+    /* ─────────────── SECTION 2: ABOUT ─────────────── */
+    .about { background: #fff; padding: 64px 0 48px; overflow: hidden; }
+    @media (min-width: 640px) { .about { padding: 80px 0 64px; } }
+    @media (min-width: 1024px) { .about { padding: 128px 0 96px; } }
+    .section-pad { padding: 0 20px; }
+    @media (min-width: 640px) { .section-pad { padding: 0 32px; } }
+    @media (min-width: 1024px) { .section-pad { padding: 0 48px; } }
+
+    .badge-row { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+    @media (min-width: 640px) { .badge-row { margin-bottom: 32px; } }
+    .num-circle {
+      width: 24px; height: 24px; border-radius: 50%; background: var(--gray-900);
+      color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 600; flex: none;
+    }
+    @media (min-width: 640px) { .num-circle { width: 28px; height: 28px; font-size: 12px; } }
+    .pill-label {
+      font-size: 12px; font-weight: 500; border: 1px solid var(--gray-200);
+      border-radius: 9999px; padding: 4px 12px;
+    }
+    @media (min-width: 640px) { .pill-label { font-size: 13px; padding: 6px 16px; } }
+
+    .about-h2 {
+      font-size: clamp(1.5rem, 4vw, 3.2rem); font-weight: 500; line-height: 1.12;
+      letter-spacing: -0.02em; margin-bottom: 48px;
+    }
+    @media (min-width: 640px) { .about-h2 { margin-bottom: 64px; } }
+    @media (min-width: 1024px) { .about-h2 { margin-bottom: 112px; } }
+
+    /* mobile/tablet stacked layout */
+    .about-stack { display: block; }
+    @media (min-width: 1024px) { .about-stack { display: none; } }
+    .about-para {
+      font-size: 15px; line-height: 1.6; font-weight: 500; color: var(--gray-900);
+      margin-bottom: 20px;
+    }
+    @media (min-width: 640px) { .about-para { font-size: 17px; } }
+    .about-imgs { display: flex; flex-direction: column; gap: 16px; margin-top: 32px; }
+    @media (min-width: 640px) { .about-imgs { flex-direction: row; gap: 20px; } }
+    .about-imgs .img-sm { width: 100%; }
+    .about-imgs .img-lg { width: 100%; }
+    @media (min-width: 640px) {
+      .about-imgs .img-sm { width: 45%; }
+      .about-imgs .img-lg { width: 55%; }
+    }
+    .about-img { width: 100%; object-fit: cover; border-radius: 12px; background: #e8e8e8; }
+    @media (min-width: 640px) { .about-img { border-radius: 16px; } }
+    .ar-sm { aspect-ratio: 438 / 346; }
+    .ar-lg { aspect-ratio: 900 / 600; }
+    .ar-3-2 { aspect-ratio: 3 / 2; }
+
+    /* desktop grid layout */
+    .about-grid { display: none; }
+    @media (min-width: 1024px) {
+      .about-grid {
+        display: grid; grid-template-columns: 26% 1fr 48%;
+        align-items: end; gap: 24px;
+      }
+    }
+    @media (min-width: 1280px) { .about-grid { gap: 32px; } }
+    .about-grid .col-left { align-self: end; }
+    .about-grid .col-center { align-self: start; display: flex; flex-direction: column; align-items: flex-end; }
+    .about-grid .col-right { align-self: end; }
+    .about-grid .about-para { font-size: 16px; line-height: 1.65; white-space: nowrap; text-align: right; }
+
+    /* ─────────────── SECTION 3: CASE STUDIES ─────────────── */
+    .cases { background: #F5F5F5; padding: 64px 0; }
+    @media (min-width: 640px) { .cases { padding: 80px 0; } }
+    @media (min-width: 1024px) { .cases { padding: 112px 0 112px; } }
+    .cases-h2 {
+      font-size: clamp(1.75rem, 7vw, 4.2rem); font-weight: 500; line-height: 1.08;
+      letter-spacing: -0.03em; margin-bottom: 40px;
+    }
+    @media (min-width: 640px) { .cases-h2 { font-size: clamp(2.5rem, 5vw, 4.2rem); margin-bottom: 56px; } }
+    @media (min-width: 1024px) { .cases-h2 { margin-bottom: 64px; } }
+
+    .cards-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+    @media (min-width: 640px) { .cards-grid { gap: 24px; } }
+    @media (min-width: 768px) { .cards-grid { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 1024px) { .cards-grid { gap: 28px; } }
+
+    .case-video {
+      position: relative; border-radius: 16px; overflow: hidden; cursor: pointer;
+    }
+    .case-video.ar1 { aspect-ratio: 329 / 246; background: #1a1d2e; }
+    .case-video.ar2 { aspect-ratio: 1 / 1; background: #6b6b6b; }
+    .case-video video, .case-video .video-fallback {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+    .video-fallback {
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, #2a2f45 0%, #1a1d2e 100%);
+    }
+    .case-video.ar2 .video-fallback { background: linear-gradient(135deg, #888 0%, #5c5c5c 100%); }
+
+    .hover-pill {
+      position: absolute; bottom: 16px; left: 16px;
+      height: 36px; width: 36px; border-radius: 9999px;
+      display: flex; align-items: center; gap: 8px; padding: 0 11px;
+      overflow: hidden; transition: width 0.3s ease-in-out;
+      background: #fff;
+    }
+    .case-video.ar2 .hover-pill { background: var(--gray-900); }
+    .case-video.ar1:hover .hover-pill { width: 148px; }
+    .case-video.ar2:hover .hover-pill { width: 168px; }
+    .hover-pill .pill-text {
+      font-size: 13px; font-weight: 500; white-space: nowrap;
+      opacity: 0; transition: opacity 0.3s ease 0.1s;
+    }
+    .case-video.ar2 .hover-pill .pill-text { color: #fff; }
+    .case-video:hover .hover-pill .pill-text { opacity: 1; }
+    .hover-pill .pill-icon {
+      flex: none; width: 14px; height: 14px; display: grid; place-items: center;
+      transform: rotate(-45deg); transition: transform 0.3s ease-in-out;
+    }
+    .case-video.ar2 .hover-pill .pill-icon { color: #fff; }
+    .case-video:hover .hover-pill .pill-icon { transform: rotate(0deg); }
+
+    .case-desc { font-size: 13px; color: var(--gray-600); margin-top: 16px; line-height: 1.6; }
+    @media (min-width: 640px) { .case-desc { font-size: 14px; } }
+    .case-title { font-size: 14px; font-weight: 600; color: var(--gray-900); margin-top: 4px; }
+    @media (min-width: 640px) { .case-title { font-size: 15px; } }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════════ SECTION 1: HERO ═══════════ -->
+  <section class="hero">
+    <!-- Shader stack approximation -->
+    <div class="shader" aria-hidden="true">
+      <div class="swirl"></div>
+      <div class="chroma"></div>
+      <div class="fluted"></div>
+      <svg class="grain" xmlns="http://www.w3.org/2000/svg">
+        <filter id="grain-filter">
+          <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/>
+        </filter>
+        <rect width="100%" height="100%" filter="url(#grain-filter)"/>
+      </svg>
+    </div>
+
+    <!-- NAV -->
+    <nav class="nav-outer">
+      <div class="wrap navbar">
+        <div class="nav-left">
+          <div class="logo">AX</div>
+          <div class="nav-links">
+            <a href="#">Projects</a>
+            <a href="#">Studio</a>
+            <a href="#">Journal</a>
+            <a href="#">Connect</a>
+          </div>
+        </div>
+
+        <div class="nav-right">
+          <span class="nav-status lg-only">Taking on projects for Q1 2026</span>
+          <span class="nav-clock">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span id="nav-clock-time">--:-- in London</span>
+          </span>
+          <button class="roll-btn" type="button">
+            <span class="roll"><span class="roll-inner">
+              <span>Book a strategy call</span>
+              <span>Book a strategy call</span>
+            </span></span>
+            <span class="roll-circle">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </span>
+          </button>
+        </div>
+
+        <button class="menu-toggle" id="menu-open" type="button" aria-label="Open menu">
+          <svg id="menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+        </button>
+      </div>
+    </nav>
+
+    <div class="hero-spacer"></div>
+
+    <!-- HERO CONTENT -->
+    <div class="wrap hero-content">
+      <div class="hero-label">Axion Studio</div>
+      <h1 class="hero-h1">We craft digital experiences<br><span class="sm-space"> </span>for brands ready to dominate<br><span class="sm-space"> </span>their category online.</h1>
+
+      <div class="hero-cta">
+        <button class="roll-btn btn-orange" type="button">
+          <span class="roll"><span class="roll-inner">
+            <span>Start a project</span>
+            <span>Start a project</span>
+          </span></span>
+          <span class="roll-circle">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </span>
+        </button>
+
+        <div class="partner-badge">
+          <svg class="star" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="currentColor"><path d="m19.6 66.5 19.7-11 .3-1-.3-.5h-1l-3.3-.2-11.2-.3L14 53l-9.5-.5-2.4-.5L0 49l.2-1.5 2-1.3 2.9.2 6.3.5 9.5.6 6.9.4L38 49.1h1.6l.2-.7-.5-.4-.4-.4L29 41l-10.6-7-5.6-4.1-3-2-1.5-2-.6-4.2 2.7-3 3.7.3.9.2 3.7 2.9 8 6.1L37 36l1.5 1.2.6-.4.1-.3-.7-1.1L33 25l-6-10.4-2.7-4.3-.7-2.6c-.3-1-.4-2-.4-3l3-4.2L28 0l4.2.6L33.8 2l2.6 6 4.1 9.3L47 29.9l2 3.8 1 3.4.3 1h.7v-.5l.5-7.2 1-8.7 1-11.2.3-3.2 1.6-3.8 3-2L61 2.6l2 2.9-.3 1.8-1.1 7.7L59 27.1l-1.5 8.2h.9l1-1.1 4.1-5.4 6.9-8.6 3-3.5L77 13l2.3-1.8h4.3l3.1 4.7-1.4 4.9-4.4 5.6-3.7 4.7-5.3 7.1-3.2 5.7.3.4h.7l12-2.6 6.4-1.1 7.6-1.3 3.5 1.6.4 1.6-1.4 3.4-8.2 2-9.6 2-14.3 3.3-.2.1.2.3 6.4.6 2.8.2h6.8l12.6 1 3.3 2 1.9 2.7-.3 2-5.1 2.6-6.8-1.6-16-3.8-5.4-1.3h-.8v.4l4.6 4.5 8.3 7.5L89 80.1l.5 2.4-1.3 2-1.4-.2-9.2-7-3.6-3-8-6.8h-.5v.7l1.8 2.7 9.8 14.7.5 4.5-.7 1.4-2.6 1-2.7-.6-5.8-8-6-9-4.7-8.2-.5.4-2.9 30.2-1.3 1.5-3 1.2-2.5-2-1.4-3 1.4-6.2 1.6-8 1.3-6.4 1.2-7.9.7-2.6v-.2H49L43 72l-9 12.3-7.2 7.6-1.7.7-3-1.5.3-2.8L24 86l10-12.8 6-7.9 4-4.6-.1-.5h-.3L17.2 77.4l-4.7.6-2-2 .2-3 1-1 8-5.5Z"/></svg>
+          <span>Certified Partner</span>
+          <span class="feat">Featured</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MOBILE MENU OVERLAY -->
+  <div class="menu-overlay" id="menu-overlay">
+    <div class="menu-backdrop" id="menu-backdrop"></div>
+    <div class="menu-sheet">
+      <span class="menu-time">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span id="menu-clock-time">--:-- in London</span>
+      </span>
+      <div class="menu-links">
+        <a href="#">Projects</a>
+        <a href="#">Studio</a>
+        <a href="#">Journal</a>
+        <a href="#">Connect</a>
+      </div>
+      <button class="menu-start" type="button">
+        <span>Start a project</span>
+        <span class="roll-circle">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════ SECTION 2: ABOUT ═══════════ -->
+  <section class="about">
+    <div class="wrap">
+      <div class="section-pad">
+        <div class="badge-row">
+          <div class="num-circle">1</div>
+          <span class="pill-label">Introducing Axion</span>
+        </div>
+        <h2 class="about-h2">Strategy-led creatives, delivering<br>results in digital and beyond.</h2>
+      </div>
+
+      <!-- mobile / tablet -->
+      <div class="about-stack section-pad">
+        <p class="about-para">Through research, creative thinking and iteration we help growing brands realize their digital full potential.</p>
+        <button class="roll-btn btn-orange" type="button">
+          <span class="roll"><span class="roll-inner">
+            <span>About our studio</span>
+            <span>About our studio</span>
+          </span></span>
+          <span class="roll-circle">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </span>
+        </button>
+        <div class="about-imgs">
+          <img class="about-img ar-sm img-sm" alt="Studio detail" src="https://plugin-assets.open-design.ai/plugins/modern-agency/hf_20260516_090123_74be96d4-9c1b-40cf-932a-96f4f4babed3-b47601.webp&w=1280&q=85" />
+          <img class="about-img ar-lg img-lg" alt="Studio work" src="https://plugin-assets.open-design.ai/plugins/modern-agency/hf_20260516_090133_c157d30b-a99a-4477-bec1-a446149ec3f2-156e2f.webp&w=1280&q=85" />
+        </div>
+      </div>
+
+      <!-- desktop -->
+      <div class="about-grid section-pad">
+        <div class="col-left">
+          <img class="about-img ar-sm" alt="Studio detail" src="https://plugin-assets.open-design.ai/plugins/modern-agency/hf_20260516_090123_74be96d4-9c1b-40cf-932a-96f4f4babed3-b47601.webp&w=1280&q=85" />
+        </div>
+        <div class="col-center">
+          <p class="about-para">Through research, creative thinking and iteration<br>we help growing brands realize their digital<br>full potential.</p>
+          <button class="roll-btn btn-orange" type="button">
+            <span class="roll"><span class="roll-inner">
+              <span>About our studio</span>
+              <span>About our studio</span>
+            </span></span>
+            <span class="roll-circle">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </span>
+          </button>
+        </div>
+        <div class="col-right">
+          <img class="about-img ar-3-2" alt="Studio work" src="https://plugin-assets.open-design.ai/plugins/modern-agency/hf_20260516_090133_c157d30b-a99a-4477-bec1-a446149ec3f2-156e2f.webp&w=1280&q=85" />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ SECTION 3: CASE STUDIES ═══════════ -->
+  <section class="cases">
+    <div class="wrap section-pad">
+      <div class="badge-row">
+        <div class="num-circle">2</div>
+        <span class="pill-label" style="border-color: var(--gray-300);">Featured client work</span>
+      </div>
+      <h2 class="cases-h2">Our projects</h2>
+
+      <div class="cards-grid">
+        <!-- Card 1: Narrativ -->
+        <div>
+          <div class="case-video ar1">
+            <div class="video-fallback"></div>
+            <video autoplay muted loop playsinline poster="" src="https://plugin-assets.open-design.ai/plugins/modern-agency/hf_20260516_122702_390f5305-8719-41d5-ae80-d23ab3796c28-4355cd.mp4"></video>
+            <div class="hover-pill">
+              <span class="pill-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              </span>
+              <span class="pill-text">Learn more</span>
+            </div>
+          </div>
+          <p class="case-desc">Winner of Site of the Month 2025 — an interactive 3D showcase driving record engagement</p>
+          <div class="case-title">Narrativ</div>
+        </div>
+
+        <!-- Card 2: Luminar -->
+        <div>
+          <div class="case-video ar2">
+            <div class="video-fallback"></div>
+            <video autoplay muted loop playsinline poster="" src="https://plugin-assets.open-design.ai/plugins/modern-agency/hf_20260516_123323_f909c2b8-ff6c-4edf-882b-8ebcdbe389b5-2e3db9.mp4"></video>
+            <div class="hover-pill">
+              <span class="pill-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              </span>
+              <span class="pill-text">View case study</span>
+            </div>
+          </div>
+          <p class="case-desc">Transforming a dated platform into a conversion-focused brand experience</p>
+          <div class="case-title">Luminar</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    (function () {
+      // Live London clock — updates every second, HH:MM format.
+      function londonHHMM() {
+        var parts = new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hour12: false
+        }).formatToParts(new Date());
+        var h = '00', m = '00';
+        for (var i = 0; i < parts.length; i++) {
+          if (parts[i].type === 'hour') h = parts[i].value;
+          if (parts[i].type === 'minute') m = parts[i].value;
+        }
+        return h + ':' + m;
+      }
+      function tick() {
+        var t = londonHHMM() + ' in London';
+        var nav = document.getElementById('nav-clock-time');
+        var menu = document.getElementById('menu-clock-time');
+        if (nav) nav.textContent = t;
+        if (menu) menu.textContent = t;
+      }
+      tick();
+      setInterval(tick, 1000);
+
+      // Mobile menu open/close with Menu <-> X icon swap.
+      var overlay = document.getElementById('menu-overlay');
+      var openBtn = document.getElementById('menu-open');
+      var backdrop = document.getElementById('menu-backdrop');
+      var icon = document.getElementById('menu-icon');
+      var MENU_SVG = '<line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/>';
+      var X_SVG = '<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>';
+      var isOpen = false;
+      function setMenu(open) {
+        isOpen = open;
+        if (open) overlay.classList.add('open');
+        else overlay.classList.remove('open');
+        if (icon) icon.innerHTML = open ? X_SVG : MENU_SVG;
+        openBtn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+      }
+      if (openBtn) openBtn.addEventListener('click', function () { setMenu(!isOpen); });
+      if (backdrop) backdrop.addEventListener('click', function () { setMenu(false); });
+
+      // If case-study videos fail to load (offline sandbox), keep the gradient fallback.
+      var vids = document.querySelectorAll('.case-video video');
+      vids.forEach(function (v) {
+        v.addEventListener('error', function () { v.style.display = 'none'; });
+        var p = v.play && v.play();
+        if (p && p.catch) p.catch(function () {});
+      });
+    })();
+  </script>
+</body>
+</html>

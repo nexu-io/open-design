@@ -1,0 +1,90 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-evergreen-finance",
+  "title": "Evergreen Finance — Kova Fintech Landing",
+  "title_i18n": {
+    "zh-CN": "Evergreen Finance — Kova 金融科技落地页",
+    "en": "Evergreen Finance — Kova Fintech Landing"
+  },
+  "version": "0.1.0",
+  "description": "Premium Kova fintech landing: full-screen hero with a forward/reverse boomerang video background, FadeUp blur reveals, floating dashboard cards (savings line + spend bar charts), a split testimonial with a square autoplay video, and a 4-up features grid with image cards and a donut spend chart.",
+  "description_i18n": {
+    "zh-CN": "高端 Kova 金融科技落地页：全屏正反向 boomerang 视频背景的 Hero、FadeUp 模糊上浮动画、悬浮仪表盘卡片（储蓄折线 + 支出柱状图）、左右分栏的方形自动播放视频证言区，以及含图片卡与甜甜圈支出图的四宫格功能区。",
+    "en": "Premium Kova fintech landing: full-screen hero with a forward/reverse boomerang video background, FadeUp blur reveals, floating dashboard cards (savings line + spend bar charts), a split testimonial with a square autoplay video, and a 4-up features grid with image cards and a donut spend chart."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Eli"
+  },
+  "homepage": "https://motionsites.ai/sections",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "fintech",
+    "landing-page",
+    "finance",
+    "video"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a \"Kova\" fintech landing page in React + Vite + Tailwind CSS + Framer Motion + Lucide React. The page has 3 sections: a full-screen Hero with a boomerang video background, a Testimonial section, and a Features section. Use the exact specifications below. Do NOT use purple/indigo colors anywhere.\n\n---\n\n## FONTS\n\nLoad these two web fonts in `index.html` via `<link>` tags:\n- `https://db.onlinewebfonts.com/c/53077f9a3eee9c479d37d6af20394ded?family=Cooper+BT+W01+Light`\n- `https://db.onlinewebfonts.com/c/5ade3423145f3b9f7031574333ca0b73?family=Cooper+BT+W01+Medium`\n\nDefine two utility classes in your CSS:\n- `.font-cooper` — `font-family: 'Cooper BT W01 Light', 'Georgia', serif;`\n- `.font-cooper-medium` — `font-family: 'Cooper BT W01 Medium', 'Cooper BT W01 Light', 'Georgia', serif; font-weight: 500;`\n\n---\n\n## COLOR PALETTE\n\n- Primary dark green: `#08150C`\n- Hover dark green: `#1a2e1f`\n- Warm cream background: `#FDF5EB`\n- Light beige card: `#EBE4DC`\n- Inner card beige: `#F4F1EC`\n- Donut chart colors: `#C46B2D`, `#7A8C3E`, `#A8B87A`, `#B8AFA4`\n- Body/text: stone-600, stone-700, stone-800 (Tailwind)\n- Accent greens: emerald-400, emerald-500 (Tailwind)\n\n---\n\n## ANIMATIONS (FadeUp Component)\n\nCreate a reusable `<FadeUp>` component using Framer Motion with two modes:\n- `immediate` (prop): Animates on mount using `animate=\"visible\"` — used for Hero elements.\n- Default (scroll-triggered): Uses `whileInView=\"visible\"` with `viewport={{ once: true, margin: '-60px' }}` — used for Testimonial and Features sections.\n\nVariants:\n- `hidden`: `{ opacity: 0, y: 24, filter: 'blur(8px)' }`\n- `visible`: `{ opacity: 1, y: 0, filter: 'blur(0px)' }`\n- Transition: `{ duration: 0.7, delay: [configurable], ease: [0.25, 0.1, 0.25, 1] }`\n\nProps: `children`, `delay` (default 0), `className`, `immediate` (default false).\n\n---\n\n## SECTION 1: HERO (full viewport height)\n\n## Background — Boomerang Video\n\nCreate a `<BoomerangVideoBg>` component that:\n- Loads this video (muted, playsInline, crossOrigin=\"anonymous\"): `https://plugin-assets.open-design.ai/plugins/evergreen-finance/hf_20260517_070729_32a7eb4e-d6e2-4571-badc-91b4dab1ecbe-2db9b1.mp4`\n- Captures every frame into offscreen canvas elements (max width 960px) as the video plays through once using `requestVideoFrameCallback` (with a `requestAnimationFrame` fallback).\n- After the video ends, plays back captured frames in a forward/reverse boomerang loop on a visible `<canvas>` at 30fps.\n- Wraps everything in `absolute inset-0 w-full h-full scale-[1.08] origin-center`.\n- Shows the `<video>` while capturing, then swaps to the `<canvas>` once frames are ready.\n\n## Navbar (FadeUp delay=0, immediate)\n\n- Flex row, `justify-between`, padding `px-5 sm:px-10 lg:px-16 py-5`\n- Left: Brand name \"Kova\" in `font-cooper text-xl sm:text-2xl text-[#08150C] tracking-tight`\n- Center (hidden on mobile, `hidden md:flex`): Links \"Explore\", \"Pricing\" (active with underline bar), \"Perks\", \"Reach\" — `text-sm text-stone-700`, hover to `text-[#08150C]`. Active link has `font-medium text-[#08150C]` with `absolute -bottom-1 left-0 right-0 h-0.5 bg-[#08150C] rounded-full` underline span.\n- Right desktop: \"Get Started\" button — `bg-[#08150C] text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-[#1a2e1f]`\n- Right mobile: Hamburger (Menu/X icons from Lucide, size 22), toggles a dropdown menu with same links + button, styled `bg-white/95 backdrop-blur-md shadow-lg`\n\n## Hero Content (centered, flex-col items-center text-center)\n\n- `px-5 sm:px-10 pt-8 sm:pt-14 pb-8 sm:pb-14`\n- Heading (FadeUp delay=0.1, immediate): `font-cooper text-[2.2rem] sm:text-5xl md:text-6xl lg:text-7xl text-[#08150C] leading-tight max-w-5xl tracking-tight` — Text: \"Own your money and build the wealth you deserve\"\n- Subtext (FadeUp delay=0.25, immediate): `mt-4 sm:mt-5 text-sm sm:text-base text-stone-600 max-w-sm sm:max-w-md leading-relaxed` — Text: \"Step into a smarter way to bank, right from your pocket. Kova gives you instant control over your money, wherever you are.\"\n- CTA Buttons (FadeUp delay=0.4, immediate): Two buttons in `flex-col sm:flex-row gap-3`:\n- \"Watch 30s Demo\" — white/80 backdrop-blur, border stone-200, Play icon (size 14, fill-stone-800), rounded-xl\n- \"Get the App\" — bg-[#08150C] text-white, Download icon (size 14), rounded-xl\n\n## Dashboard Cards (bottom of hero, FadeUp immediate)\n\nThree cards in a flex row (`items-end justify-center gap-2 sm:gap-4`), outer two hidden on mobile (`hidden sm:block`):\n\n- SavingsCard (delay=0.55, w-44 sm:w-64): White/95 backdrop-blur rounded-2xl, shows \"Savings\" label, \"+25%\" badge, \"+12%\" badge, an SVG line chart (green polyline with gradient fill), month labels Jan-Apr.\n- OthersCard (delay=0.65, w-44 sm:w-72): \"Others\" header with \"Monthly\" dropdown pill, three percentage stats (78% Groceries, 43% Entertain., 23% Transport), bar chart (12 bars, 5th bar orange `#f97316`, rest gray `#d1d5db`).\n- BillPayCard (delay=0.75, w-44 sm:w-64): \"Bill Pay\" header with \"Monthly\" dropdown pill, \"-8%\" red badge, bar chart (12 bars, 7th bar dark `#08150C`, rest light gray `#e5e7eb`), month labels.\n\n---\n\n## SECTION 2: TESTIMONIAL\n\nBackground: `bg-[#FDF5EB] py-14 sm:py-20 px-5 sm:px-10 lg:px-20`\nLayout: `max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-10 md:gap-16 items-center`\n\n## Left Column (scroll-animated FadeUp, staggered delays 0 through 0.4):\n\n- Heading (delay=0): `font-cooper-medium text-2xl sm:text-3xl text-[#08150C] leading-snug mb-6 sm:mb-8` — \"Trusted by ambitious, fast-moving teams\"\n- Company badge (delay=0.1): Dark square icon \"A\" (`w-7 h-7 rounded-md bg-[#08150C]`) + \"Arcvex\" text\n- Quote (delay=0.2): `font-cooper text-stone-700 text-lg sm:text-xl md:text-2xl leading-relaxed mb-5 sm:mb-6` — \"With Kova, I have full visibility into our team's spending in real time. It feels like having a sharp financial advisor available at every hour, helping us stay on budget and make wiser calls.\"\n- Attribution (delay=0.3): \"Maya Reeves\" (text-sm font-semibold) + \"Director, Arcvex\" (text-xs text-stone-500)\n- Button (delay=0.4): \"All Stories\" with arrow SVG icon, same dark button style\n\n## Right Column (FadeUp delay=0.15, scroll-triggered):\n\n- A looping muted autoplay video: `https://plugin-assets.open-design.ai/plugins/evergreen-finance/hf_20260517_074029_c7a854bd-2d6e-4b62-96b3-ae8c16311e44-59f9be.mp4`\n- Styling: `w-full rounded-2xl object-cover aspect-square`, wrapped in `max-w-xs sm:max-w-sm`\n\n---\n\n## SECTION 3: FEATURES\n\nBackground: `bg-[#FDF5EB] py-14 sm:py-20 px-5 sm:px-10 lg:px-20`\nLayout: `max-w-7xl mx-auto`\n\n## Header Row (scroll-animated):\n\n- Heading (FadeUp delay=0): `font-cooper-medium text-2xl sm:text-3xl md:text-4xl text-[#08150C] leading-snug` — \"Designed to sharpen every decision\"\n- Button (FadeUp delay=0.1): \"Watch Demo\" with Play icon (size 13, fill-white), same dark button style\n\n## Cards Grid: `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4`\n\nEach card is `aspect-[3/4] rounded-2xl overflow-hidden`, scroll-animated with staggered delays (0.05, 0.15, 0.25, 0.35):\n\nCard 1 — Smart Budgeting (delay=0.05):\n- Background image (absolute, object-cover): `https://plugin-assets.open-design.ai/plugins/evergreen-finance/hf_20260517_061249_f20dfeda-1033-45ce-a3ee-070965599cbf-6c6b7e.webp&w=1280&q=85`\n- Gradient overlay: `bg-gradient-to-t from-[#08150C]/80 via-[#08150C]/20 to-transparent`\n- Top label: Sparkles icon (Lucide, size 16, white) + \"Smart Budgeting\" in white text-sm font-medium\n- Bottom text: \"Let AI reshape how you plan your spending. Kova adapts to your...\" in `text-white/80 text-sm sm:text-base`\n\nCard 2 — Bank-Grade Security (delay=0.15):\n- Background image: `https://plugin-assets.open-design.ai/plugins/evergreen-finance/hf_20260517_061305_db631f5f-185f-4fda-a7a8-1dd7359ef2ea-4b7cdd.webp&w=1280&q=85`\n- Same gradient overlay\n- Top label: ShieldCheck icon (Lucide, size 16, white) + \"Bank-Grade Security\"\n- Bottom text: \"Keep your money safe with end-to-end encryption, live fraud alerts, and two-factor auth...\"\n\nCard 3 — Spend Insights (delay=0.25):\n- NO background image. Solid background `#EBE4DC`, with `p-5`\n- Top label: PieChart icon (Lucide, size 16, text-stone-700) + \"Spend Insights\" in `text-stone-700 text-sm font-medium`\n- Inner container: `rounded-2xl p-4` with background `#F4F1EC`, centered content:\n- \"Monthly Spend\" title (text-sm sm:text-base font-semibold text-stone-800)\n- \"1 Apr – 30 May 2026\" subtitle (text-xs sm:text-sm text-stone-500)\n- Donut chart (SVG, viewBox=\"0 0 36 36\", `-rotate-90`): 4 colored arcs using strokeDasharray/strokeDashoffset on circles (r=14, strokeWidth=5). Colors: `#C46B2D` (26.4/61.56), `#7A8C3E` (22/65.96, offset -26.4), `#A8B87A` (17.6/70.36, offset -48.4), `#B8AFA4` (22/65.96, offset -66)\n- Center overlay: \"50%\" bold + \"of budget\" small text\n\nCard 4 — Wealth Building (delay=0.35):\n- Background image: `https://plugin-assets.open-design.ai/plugins/evergreen-finance/hf_20260517_061316_50e651f8-02d0-4add-9ddb-7d81d15ac02e-24edde.webp&w=1280&q=85`\n- Same gradient overlay\n- Top label: TrendingUp icon (Lucide, size 16, white) + \"Wealth Building\"\n- Bottom text: \"Grow your net worth with tools that help you set targets, monitor gains, and act...\"\n\n---\n\n## DEPENDENCIES\n\n`{  \"framer-motion\": \"^12.38.0\",  \"lucide-react\": \"^0.344.0\",  \"react\": \"^18.3.1\",  \"react-dom\": \"^18.3.1\"}`\n\nDev: Vite, Tailwind CSS 3, TypeScript, PostCSS, Autoprefixer.\n\n---\n\n## GLOBAL CSS (`index.css`)\n\n`@tailwind base;@tailwind components;@tailwind utilities;@layer base {  * { box-sizing: border-box; }  html, body { margin: 0; padding: 0; overflow-x: hidden; }}.font-cooper {  font-family: 'Cooper BT W01 Light', 'Georgia', serif;}.font-cooper-medium {  font-family: 'Cooper BT W01 Medium', 'Cooper BT W01 Light', 'Georgia', serif;  font-weight: 500;}`\n\n---\n\n## RESPONSIVE BEHAVIOR\n\n- Mobile-first. Cards stack on small screens (1 col), 2 cols at `sm`, 4 cols at `lg`.\n- Hero dashboard cards: outer two hidden below `sm`.\n- Nav links/CTA hidden below `md`, replaced by hamburger menu.\n- All text sizes step up at `sm` and `md` breakpoints.\n- Testimonial grid is single column on mobile, `3fr 2fr` at `md`.\n\n---\n\n## KEY IMPLEMENTATION NOTES\n\n- The entire page background is white for the hero (video fills it) and `#FDF5EB` for the lower two sections.\n- All buttons use `rounded-xl` (not full pill).\n- The BoomerangVideoBg uses `scale-[1.08]` to prevent edge gaps during playback.\n- No page scroll on the hero (`min-h-screen overflow-hidden`).\n- The hero content uses `flex-1 flex flex-col justify-between` to push cards to the bottom.\n",
+        "zh-CN": "构建 Kova 金融科技落地页（含 boomerang 视频 Hero、证言区、功能区）。完整规格以 en 字段为准，请严格遵循其中锁定的字体、配色、动画与三大区块布局。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Evergreen Finance — Kova Fintech Landing"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "network"
+    ]
+  }
+}

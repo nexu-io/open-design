@@ -1,0 +1,90 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-prisma-creative-studio",
+  "title": "Prisma Creative Studio",
+  "title_i18n": {
+    "zh-CN": "Prisma 创意工作室 — 电影感落地页",
+    "en": "Prisma Creative Studio"
+  },
+  "version": "0.1.0",
+  "description": "Dark, cinematic creative-studio landing page in warm cream: full-bleed hero video with a giant word-pull-up wordmark, an italic-serif About statement with scroll-linked character reveal, and a 4-column Features grid (one video card + three checklist cards).",
+  "description_i18n": {
+    "zh-CN": "暗调电影感创意工作室落地页，暖奶油色调：全屏 Hero 视频配巨型逐词上滑标题、衬线斜体 About 文案配滚动逐字显影，以及四列 Features 网格（一个视频卡 + 三个清单卡）。",
+    "en": "Dark, cinematic creative-studio landing page in warm cream: full-bleed hero video with a giant word-pull-up wordmark, an italic-serif About statement with scroll-linked character reveal, and a 4-column Features grid (one video card + three checklist cards)."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Eli"
+  },
+  "homepage": "https://motionsites.ai/sections",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "landing-page",
+    "cinematic",
+    "creative-studio",
+    "dark"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a React + Vite + TypeScript + Tailwind CSS landing page for a creative studio called \"Prisma\". The page has 3 sections: Hero, About, and Features. Use framer-motion for animations and lucide-react for icons. The design is dark, moody, and cinematic with a warm cream color palette.\n\nFONTS\n\nLoad two Google Fonts in index.html:\n\nAlmarai (weights: 300, 400, 700, 800) -- used as the global default font\nInstrument Serif (italic only) -- used for italic accent text in the About section\nIn index.css, set the global font family:\n\n- { font-family: 'Almarai', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif; }\nIn tailwind.config.js, extend:\n\ncolors.primary: #DEDBC8 (warm cream, used for all primary text and accents)\nfontFamily.serif: ['\"Instrument Serif\"', 'serif']\nCOLOR SYSTEM\n\nBackground: black (#000000) globally, #101010 for the About card, #212121 for Features cards\nPrimary text color: #E1E0CC (applied via inline style, slightly different from Tailwind primary)\nTailwind primary: #DEDBC8 (used for utility classes like text-primary, text-primary/70)\nGray text: text-gray-400, text-gray-500\nNavbar link color: rgba(225, 224, 204, 0.8) with hover: #E1E0CC\nCUSTOM CSS UTILITIES (index.css)\n\nTwo SVG noise texture utilities:\n\n.noise-overlay: fractal noise (baseFrequency: 0.85, numOctaves: 3) used as overlay on hero video\n.bg-noise: fractal noise (baseFrequency: 0.9, numOctaves: 4) used as subtle background in Features section\nBoth use inline SVG data URIs with feTurbulence filter.\n\nSECTION 1: HERO\n\nFull viewport height (h-screen). The entire section has p-4 md:p-6 padding creating an inset effect. Inside is a container with rounded-2xl md:rounded-[2rem] and overflow-hidden.\n\nBackground video:\n\nURL: https://plugin-assets.open-design.ai/plugins/prisma-creative-studio/hf_20260405_170732_8a9ccda6-5cff-4628-b164-059c500a2b41-ee5471.mp4\nautoPlay loop muted playsInline, object-cover, fills entire container\nNoise overlay on top: .noise-overlay with opacity-[0.7] mix-blend-overlay pointer-events-none\nGradient overlay: bg-gradient-to-b from-black/30 via-transparent to-black/60\nNavbar:\n\nAbsolutely positioned at top center\nBlack background pill that hangs from top edge: bg-black rounded-b-2xl md:rounded-b-3xl px-4 py-2 md:px-8\n5 nav items: \"Our story\", \"Collective\", \"Workshops\", \"Programs\", \"Inquiries\"\nText size: text-[10px] sm:text-xs md:text-sm\nGap between items: gap-3 sm:gap-6 md:gap-12 lg:gap-14\nLink color: rgba(225, 224, 204, 0.8), hover: #E1E0CC (inline styles)\nHero Content (bottom-aligned):\n\nAbsolutely positioned at bottom: absolute bottom-0 left-0 right-0\n12-column grid: left 8 columns for heading, right 4 columns for text + button\nGiant heading \"Prisma\" using WordsPullUp component:\nResponsive sizes: text-[26vw] sm:text-[24vw] md:text-[22vw] lg:text-[20vw] xl:text-[19vw] 2xl:text-[20vw]\nfont-medium leading-[0.85] tracking-[-0.07em]\nColor: #E1E0CC\nHas a superscript asterisk (*) on the final \"a\" of \"Prisma\": positioned with absolute top-[0.65em] -right-[0.3em] text-[0.31em]\nPull-up animation: each word slides up from y:20 with staggered delay of 0.08s, triggered by useInView\nDescription paragraph (right column):\n\"Prisma is a worldwide network of visual artists, filmmakers and storytellers bound not by place, status or labels but by passion and hunger to unlock potential through our unique perspectives.\"\ntext-primary/70 text-xs sm:text-sm md:text-base, line-height: 1.2\nFramer motion: fade up from y:20, delay 0.5s, custom ease [0.16, 1, 0.3, 1]\nCTA Button \"Join the lab\":\nPill shape: bg-primary rounded-full\nBlack text, font-medium, text-sm sm:text-base\nRight side has a black circle (bg-black rounded-full w-9 h-9 sm:w-10 sm:h-10) containing a white/cream ArrowRight icon\nHover: gap increases (hover:gap-3), circle scales up (group-hover:scale-110)\nFramer motion: fade up from y:20, delay 0.7s, same custom ease\nSECTION 2: ABOUT\n\nbg-black, padded section with centered content\nInner card: bg-[#101010], centered text, max-w-6xl\nTop: small label \"Visual arts\" in text-primary, text-[10px] sm:text-xs\nMain heading uses WordsPullUpMultiStyle component with 3 segments:\n\"I am Marcus Chen,\" -- font-normal (Almarai)\n\"a self-taught director.\" -- italic font-serif (Instrument Serif italic)\n\"I have skills in color grading, visual effects, and narrative design.\" -- font-normal\nContainer: text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl max-w-3xl mx-auto leading-[0.95] sm:leading-[0.9]\nEach word animates in with pull-up effect (y:20 to y:0), staggered at 0.08s delay\nBody paragraph below with scroll-linked character opacity animation:\nText: \"Over the last seven years, I have worked with Parallax, a Berlin-based production house that crafts cinema, series, and Noir Studio in Paris. Together, we have created work that has earned international acclaim at several major festivals.\"\ntext-[#DEDBC8], text-xs sm:text-sm md:text-base\nEach character is individually wrapped in an AnimatedLetter component\nUses useScroll with target offset ['start 0.8', 'end 0.2']\nEach character's opacity transitions from 0.2 to 1 based on scroll position, creating a progressive text reveal effect\nCharacter staggering: charProgress = index / totalChars, range [charProgress - 0.1, charProgress + 0.05]\nSECTION 3: FEATURES\n\nmin-h-screen bg-black, with subtle .bg-noise overlay at opacity-[0.15]\nHeader text uses WordsPullUpMultiStyle:\nLine 1: \"Studio-grade workflows for visionary creators.\" in cream\nLine 2: \"Built for pure vision. Powered by art.\" in text-gray-500\nBoth: text-xl sm:text-2xl md:text-3xl lg:text-4xl font-normal\n4-column card grid (lg:h-[480px], gap-3 sm:gap-2 md:gap-1):\n\nEach card has staggered entrance animation: scale from 0.95 + fade in, triggered by useInView (once, margin \"-100px\"), staggered at 0.15s intervals with ease [0.22, 1, 0.36, 1].\n\nCard 1 - Video card: Full video background (URL: https://plugin-assets.open-design.ai/plugins/prisma-creative-studio/hf_20260406_133058_0504132a-0cf3-4450-a370-8ea3b05c95d4-4401cf.mp4), autoPlay loop muted playsInline, object-cover. Bottom text: \"Your creative canvas.\" in #E1E0CC.\n\nCard 2 - \"Project Storyboard.\" (01): bg-[#212121], small image icon at top (https://plugin-assets.open-design.ai/plugins/prisma-creative-studio/hf_20260405_171918_4a5edc79-d78f-4637-ac8b-53c43c220606-ba6cc6.webp&w=1280&q=85, 10x10 sm:12x12 rounded), title with number, 4 checklist items with green Check icons, \"Learn more\" link with rotated arrow (-45deg).\n\nCard 3 - \"Smart Critiques.\" (02): Same layout as Card 2. Icon: https://plugin-assets.open-design.ai/plugins/prisma-creative-studio/hf_20260405_171741_ed9845ab-f5b2-4018-8ce7-07cc01823522-2e2011.webp&w=1280&q=85. 3 checklist items about AI analysis, creative notes, tool integrations.\n\nCard 4 - \"Immersion Capsule.\" (03): Same layout. Icon: https://plugin-assets.open-design.ai/plugins/prisma-creative-studio/hf_20260405_171809_f56666dc-c099-4778-ad82-9ad4f209567b-1a966e.webp&w=1280&q=85. 3 checklist items about notification silencing, ambient soundscapes, schedule syncing.\n\nAll feature card checklist items use Check icon from lucide-react in text-primary color, with text-gray-400 description text. \"Learn more\" buttons use ArrowRight rotated -45deg.\n\nSHARED ANIMATION COMPONENTS\n\nWordsPullUp: Splits text by spaces, each word is a motion.span that slides up (y:20 to 0) with staggered delay. Uses useInView (once: true). Supports showAsterisk prop that adds a superscript * after the last character \"a\" of the final word.\n\nWordsPullUpMultiStyle: Takes an array of {text, className} segments, splits all into individual words preserving per-word className. Same pull-up animation. Words are wrapped in inline-flex flex-wrap justify-center.\n\nRESPONSIVE BREAKPOINTS\n\nThe page is fully responsive across mobile, tablet, and desktop. Cards in Features switch from 1-col (mobile) to 2-col (md) to 4-col (lg). Hero text scales from 26vw down to 19vw. Navbar items compress with smaller gaps on mobile. All padding, font sizes, and spacing use Tailwind responsive prefixes (sm/md/lg/xl/2xl).\n\nTECH STACK\n\nVite + React 18 + TypeScript\nTailwind CSS 3\nframer-motion (for all animations: pull-up text, fade-in, scroll-linked opacity, card entrances)\nlucide-react (ArrowRight, Check icons)",
+        "zh-CN": "构建 Prisma 创意工作室电影感落地页（Hero / About / Features 三段）。完整规格见 en 字段，以 en 为准。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Prisma Creative Studio"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "network"
+    ]
+  }
+}
