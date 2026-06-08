@@ -1179,9 +1179,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               <div className="home-hero__working-dir-wrap">
                 <button
                   type="button"
-                  className={`home-hero__working-dir${workingDir ? ' picked' : ''}`}
+                  className={`home-hero__working-dir od-tooltip${workingDir ? ' picked' : ''}`}
                   onClick={onPickWorkingDir}
-                  title={workingDir ?? t('workingDirPicker.select')}
+                  title={workingDir ?? t('workingDirPicker.homeTitle')}
+                  data-tooltip={workingDir ?? t('workingDirPicker.homeTitle')}
                 >
                   <Icon name="folder" size={13} />
                   <span>
