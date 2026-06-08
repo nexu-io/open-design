@@ -8,6 +8,7 @@ const RELAY_MARKER_VALUE = 'langfuse-ingestion-v1';
 const OBJECT_RELAY_MARKER_VALUE = 'object-ingestion-v1';
 const OBJECT_UPLOAD_TOKEN_TTL_SECONDS = 5 * 60;
 const OBJECT_AUTHORIZE_MAX_OBJECTS = 1000;
+const OBJECT_SCOPE_TTL_SECONDS = 10 * 60;
 const ALLOWED_EVENT_TYPES = new Set([
   'trace-create',
   'span-create',
@@ -33,6 +34,15 @@ interface R2BucketBinding {
   ): Promise<unknown>;
 }
 
+interface ObjectScopeBinding {
+  get(key: string): Promise<string | null>;
+  put(
+    key: string,
+    value: string,
+    options?: { expirationTtl?: number },
+  ): Promise<unknown>;
+}
+
 export interface Env {
   LANGFUSE_PUBLIC_KEY?: string;
   LANGFUSE_SECRET_KEY?: string;
@@ -42,7 +52,7 @@ export interface Env {
   TRACE_OBJECT_MAX_BYTES?: string;
   TRACE_OBJECT_BATCH_MAX_BYTES?: string;
   TRACE_OBJECT_UPLOAD_SECRET?: string;
-  TRACE_OBJECT_AUTHORIZE_TEST_ONLY?: string;
+  TRACE_OBJECT_SCOPE_KV?: ObjectScopeBinding;
   TELEMETRY_CLIENT_RATE_LIMITER?: RateLimitBinding;
   TELEMETRY_IP_RATE_LIMITER?: RateLimitBinding;
 }
@@ -140,6 +150,11 @@ function isAllowedObjectClass(value: unknown): value is 'attachment' | 'artifact
 
 function objectScopeKey(object: Pick<ObjectUploadScopeObject, 'storage_ref' | 'object_class'>): string {
   return `${object.object_class}\n${object.storage_ref}`;
+}
+
+function objectAuthorityRegistryKey(clientId: string, projectId: string, runId: string): string {
+  const raw = JSON.stringify({ clientId, projectId, runId });
+  return `trace-object-scope:${base64UrlEncode(raw)}`;
 }
 
 function validateObjectScopeBody(value: unknown, maxObjects: number): string | null {
@@ -364,8 +379,8 @@ function hasObjectRelayConfig(env: Env): boolean {
   return Boolean(env.TRACE_OBJECT_BUCKET && env.TRACE_OBJECT_UPLOAD_SECRET?.trim());
 }
 
-function allowTestObjectAuthorize(env: Env): boolean {
-  return env.TRACE_OBJECT_AUTHORIZE_TEST_ONLY === '1';
+function hasObjectAuthorizeConfig(env: Env): boolean {
+  return hasObjectRelayConfig(env) && Boolean(env.TRACE_OBJECT_SCOPE_KV);
 }
 
 function isHealthPath(request: Request): boolean {
@@ -426,6 +441,56 @@ function decodeBase64(input: string): Uint8Array | null {
   }
 }
 
+function traceCreateEventIds(value: unknown): Set<string> {
+  const ids = new Set<string>();
+  if (!isRecord(value) || !Array.isArray(value.batch)) return ids;
+  for (const event of value.batch) {
+    if (
+      isRecord(event) &&
+      event.type === 'trace-create' &&
+      typeof event.id === 'string' &&
+      event.id.length > 0
+    ) {
+      ids.add(event.id);
+    }
+  }
+  return ids;
+}
+
+function eventResultIds(value: unknown): Set<string> {
+  const ids = new Set<string>();
+  if (!Array.isArray(value)) return ids;
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.id !== 'string' || item.id.length === 0) continue;
+    ids.add(item.id);
+  }
+  return ids;
+}
+
+function acceptedTraceCreateEventIds(responseBody: string, requestBody: unknown): Set<string> {
+  const traceIds = traceCreateEventIds(requestBody);
+  if (traceIds.size === 0 || !responseBody) return traceIds;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(responseBody);
+  } catch {
+    return traceIds;
+  }
+  if (!isRecord(parsed)) return traceIds;
+
+  const successes = eventResultIds(parsed.successes);
+  if (successes.size > 0) {
+    return new Set([...traceIds].filter((id) => successes.has(id)));
+  }
+
+  const errors = eventResultIds(parsed.errors);
+  if (errors.size > 0) {
+    return new Set([...traceIds].filter((id) => !errors.has(id)));
+  }
+
+  return traceIds;
+}
+
 function validateObjectBody(value: unknown): string | null {
   if (!isRecord(value)) return 'body must be a JSON object';
   if (typeof value.client_id !== 'string' || value.client_id.length === 0) {
@@ -470,15 +535,100 @@ function validateObjectBody(value: unknown): string | null {
   return null;
 }
 
+function manifestObjectsFromMetadata(metadata: unknown): ObjectUploadScopeObject[] {
+  if (!isRecord(metadata)) return [];
+  const out: ObjectUploadScopeObject[] = [];
+  for (const key of [
+    'attachment_manifest',
+    'artifact_manifest',
+    'input_text_snapshot_manifest',
+  ]) {
+    const entries = metadata[key];
+    if (!Array.isArray(entries)) continue;
+    for (const entry of entries) {
+      if (!isRecord(entry)) continue;
+      if (
+        typeof entry.storage_ref !== 'string' ||
+        !isAllowedObjectClass(entry.object_class) ||
+        typeof entry.size_bytes !== 'number' ||
+        !Number.isFinite(entry.size_bytes) ||
+        entry.size_bytes < 0 ||
+        typeof entry.sha256 !== 'string' ||
+        !/^sha256:[a-f0-9]{64}$/i.test(entry.sha256)
+      ) {
+        continue;
+      }
+      out.push({
+        storage_ref: entry.storage_ref,
+        object_class: entry.object_class,
+        size_bytes: Math.floor(entry.size_bytes),
+        sha256: entry.sha256.toLowerCase(),
+      });
+    }
+  }
+  return out;
+}
+
+async function registerObjectUploadScopes(
+  env: Env,
+  parsed: unknown,
+  acceptedTraceEventIds: Set<string>,
+): Promise<void> {
+  if (!env.TRACE_OBJECT_SCOPE_KV || !isRecord(parsed) || !Array.isArray(parsed.batch)) return;
+  for (const event of parsed.batch) {
+    if (!isRecord(event) || event.type !== 'trace-create' || !isRecord(event.body)) continue;
+    if (typeof event.id !== 'string' || !acceptedTraceEventIds.has(event.id)) continue;
+    const body = event.body;
+    const metadata = body.metadata;
+    if (!isRecord(metadata)) continue;
+    const clientId = typeof body.userId === 'string' && body.userId.length > 0
+      ? body.userId
+      : null;
+    const projectId = typeof metadata.projectId === 'string' && metadata.projectId.length > 0
+      ? metadata.projectId
+      : null;
+    const runId = typeof body.id === 'string' && body.id.length > 0
+      ? body.id
+      : null;
+    if (!clientId || !projectId || !runId) continue;
+    const objects = manifestObjectsFromMetadata(metadata);
+    if (objects.length === 0) continue;
+    await env.TRACE_OBJECT_SCOPE_KV.put(
+      objectAuthorityRegistryKey(clientId, projectId, runId),
+      JSON.stringify({ version: 1, client_id: clientId, project_id: projectId, run_id: runId, objects }),
+      { expirationTtl: OBJECT_SCOPE_TTL_SECONDS },
+    );
+  }
+}
+
+async function loadRegisteredObjectScopes(
+  env: Env,
+  clientId: string,
+  projectId: string,
+  runId: string,
+): Promise<ObjectUploadScopeObject[] | null> {
+  const raw = await env.TRACE_OBJECT_SCOPE_KV?.get(
+    objectAuthorityRegistryKey(clientId, projectId, runId),
+  );
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed) || !Array.isArray(parsed.objects)) return null;
+  const validationError = validateObjectScopeBody(parsed, OBJECT_AUTHORIZE_MAX_OBJECTS);
+  if (validationError != null) return null;
+  return (parsed as unknown as ObjectUploadTokenPayload).objects;
+}
+
 async function handleObjectAuthorizeRequest(request: Request, env: Env): Promise<Response> {
   if (request.headers.get(RELAY_MARKER_HEADER) !== OBJECT_RELAY_MARKER_VALUE) {
     return jsonResponse(403, { error: 'missing object client marker' });
   }
-  if (!hasObjectRelayConfig(env)) {
+  if (!hasObjectAuthorizeConfig(env)) {
     return jsonResponse(503, { error: 'object relay upload authority is not configured' });
-  }
-  if (!allowTestObjectAuthorize(env)) {
-    return jsonResponse(403, { error: 'object upload authorization is disabled' });
   }
   const contentType = request.headers.get('content-type') ?? '';
   if (!contentType.toLowerCase().includes('application/json')) {
@@ -509,13 +659,38 @@ async function handleObjectAuthorizeRequest(request: Request, env: Env): Promise
     run_id: string;
     objects: ObjectUploadScopeObject[];
   };
+  const registeredObjects = await loadRegisteredObjectScopes(
+    env,
+    payload.client_id,
+    payload.project_id,
+    payload.run_id,
+  );
+  if (!registeredObjects) {
+    return jsonResponse(403, { error: 'object upload authority is not registered' });
+  }
+  const registeredByKey = new Map(
+    registeredObjects.map((object) => [objectScopeKey(object), object]),
+  );
+  for (const object of payload.objects) {
+    const registered = registeredByKey.get(objectScopeKey(object));
+    if (
+      !registered ||
+      registered.size_bytes !== object.size_bytes ||
+      registered.sha256.toLowerCase() !== object.sha256.toLowerCase()
+    ) {
+      return jsonResponse(403, { error: 'object upload authority scope mismatch' });
+    }
+  }
   const token = await signUploadToken(env, {
     version: 1,
     client_id: payload.client_id,
     project_id: payload.project_id,
     run_id: payload.run_id,
     exp: now + OBJECT_UPLOAD_TOKEN_TTL_SECONDS,
-    objects: payload.objects,
+    objects: payload.objects.map((object) => ({
+      ...object,
+      sha256: object.sha256.toLowerCase(),
+    })),
   });
   if (!token) return jsonResponse(503, { error: 'object relay upload authority is not configured' });
   return jsonResponse(200, {
@@ -659,7 +834,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
       ok: true,
       service: 'open-design-telemetry-relay',
       configured: hasLangfuseCredentials(env),
-      objectRelayConfigured: hasObjectRelayConfig(env),
+      objectRelayConfigured: hasObjectAuthorizeConfig(env),
       upstream: resolveLangfuseUrl(env),
     });
   }
@@ -718,6 +893,9 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     body: rawBody,
   });
   const upstreamBody = await upstream.text();
+  if (upstream.ok) {
+    await registerObjectUploadScopes(env, parsed, acceptedTraceCreateEventIds(upstreamBody, parsed));
+  }
   return new Response(upstreamBody, {
     status: upstream.status,
     headers: {

@@ -32,6 +32,7 @@ import {
   type MessageSummary,
   type ReportContext,
   type RuntimeInfo,
+  type TelemetrySinkConfig,
   type ToolCallSummary,
   type TurnInfo,
 } from './langfuse-trace.js';
@@ -165,6 +166,46 @@ function mergeTraceSafeManifests(
     artifactManifest,
     ...(inputTextSnapshotManifest ? { inputTextSnapshotManifest } : {}),
     completeness: deriveManifestCompleteness(entries, selectedFallbackUnavailable),
+  };
+}
+
+function inferObjectRegistrationRelayUrl(env: NodeJS.ProcessEnv = process.env): string | null {
+  const objectRelayUrl = env.OPEN_DESIGN_OBJECT_RELAY_URL?.trim();
+  if (!objectRelayUrl) return null;
+  try {
+    const url = new URL(objectRelayUrl);
+    url.pathname = url.pathname.replace(/\/api\/objects\/batch\/?$/, '/api/langfuse');
+    return url.toString().replace(/\/+$/, '');
+  } catch {
+    return objectRelayUrl.replace(/\/api\/objects\/batch\/?$/, '/api/langfuse').replace(/\/+$/, '');
+  }
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseNonNegativeInt(value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function objectRegistrationTelemetryConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): Extract<TelemetrySinkConfig, { kind: 'relay' }> | null {
+  const relayUrl = inferObjectRegistrationRelayUrl(env);
+  if (!relayUrl) return null;
+  return {
+    kind: 'relay',
+    relayUrl,
+    timeoutMs: parsePositiveInt(
+      env.OPEN_DESIGN_OBJECT_RELAY_TIMEOUT_MS ?? env.OPEN_DESIGN_TELEMETRY_TIMEOUT_MS,
+      20_000,
+    ),
+    retries: parseNonNegativeInt(env.OPEN_DESIGN_TELEMETRY_RETRIES, 1),
   };
 }
 
@@ -874,7 +915,7 @@ export async function reportRunCompletedFromDaemon(
       attachmentsRaw,
       producedFilesRaw,
     });
-    const uploadedManifests = await buildTraceObjectManifests({
+    const objectManifestOptions = {
       installationId,
       projectId: run.projectId ?? '',
       runId: run.id,
@@ -885,9 +926,8 @@ export async function reportRunCompletedFromDaemon(
       prompt: telemetryPrompt,
       prefs,
       ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
-    });
-    const finalManifests = mergeTraceSafeManifests(manifests, uploadedManifests);
-    const ctx: ReportContext = {
+    } satisfies Parameters<typeof buildTraceObjectManifests>[0];
+    const buildContext = (finalManifests: FinalTraceSafeManifests): ReportContext => ({
       installationId,
       projectId: run.projectId ?? '',
       conversationId: run.conversationId ?? '',
@@ -928,10 +968,26 @@ export async function reportRunCompletedFromDaemon(
       ...(turn ? { turn } : {}),
       runtime,
       ...(run.promptTelemetry ? { promptTelemetry: run.promptTelemetry } : {}),
-    };
+    });
 
+    const registrationManifests = await buildTraceObjectManifests({
+      ...objectManifestOptions,
+      uploadMode: 'manifest-only',
+    });
+    if (registrationManifests) {
+      await reportRunCompleted(
+        buildContext(mergeTraceSafeManifests(manifests, registrationManifests)),
+        {
+          config: objectRegistrationTelemetryConfig(),
+          ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+        },
+      );
+    }
+
+    const uploadedManifests = await buildTraceObjectManifests(objectManifestOptions);
+    const finalManifests = mergeTraceSafeManifests(manifests, uploadedManifests);
     await reportRunCompleted(
-      ctx,
+      buildContext(finalManifests),
       opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {},
     );
   } catch (err) {
