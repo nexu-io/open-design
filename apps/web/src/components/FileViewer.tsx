@@ -34,6 +34,7 @@ import {
   fetchLiveArtifactRefreshes,
   checkDeploymentLink,
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  createPublicArtifactShareLink,
   createSocialSharePayload,
   DEFAULT_DEPLOY_PROVIDER_ID,
   deployProjectFile,
@@ -4607,6 +4608,11 @@ function HtmlViewer({
   useEffect(() => {
     setPreviewViewportState(htmlPreviewViewportState.get(fileViewportKey) ?? 'desktop');
   }, [fileViewportKey]);
+  useEffect(() => {
+    setPublicShareUrl('');
+    setPublicShareFeedback(null);
+    setPublicShareCreating(false);
+  }, [projectId, file.name]);
   const [templateDescription, setTemplateDescription] = useState('');
   const [templateSaveError, setTemplateSaveError] = useState<string | null>(null);
   const [deployment, setDeployment] = useState<WebDeploymentInfo | null>(null);
@@ -4624,6 +4630,9 @@ function HtmlViewer({
   const [copiedDeployLink, setCopiedDeployLink] = useState<string | null>(null);
   const [deployProviderId, setDeployProviderId] = useState<WebDeployProviderId>(DEFAULT_DEPLOY_PROVIDER_ID);
   const [projectSocialShare, setProjectSocialShare] = useState<SocialShareResponse | null>(null);
+  const [publicShareCreating, setPublicShareCreating] = useState(false);
+  const [publicShareUrl, setPublicShareUrl] = useState('');
+  const [publicShareFeedback, setPublicShareFeedback] = useState<'copied' | 'failed' | null>(null);
   const [deployToken, setDeployToken] = useState('');
   const [teamId, setTeamId] = useState('');
   const [teamSlug, setTeamSlug] = useState('');
@@ -6810,6 +6819,42 @@ function HtmlViewer({
     return ok;
   }
 
+  async function createAndCopyPublicShareLink() {
+    if (streaming || publicShareCreating) return;
+    if (publicShareUrl) {
+      const ok = await copyToClipboard(publicShareUrl);
+      setPublicShareFeedback(ok ? 'copied' : 'failed');
+      if (!ok) setExportToast({ message: t('useEverywhere.copyFailed'), tone: 'error' });
+      window.setTimeout(() => {
+        setPublicShareFeedback((current) => (current === (ok ? 'copied' : 'failed') ? null : current));
+      }, 1800);
+      return;
+    }
+    setPublicShareCreating(true);
+    setPublicShareFeedback(null);
+    try {
+      const share = await createPublicArtifactShareLink(projectId, file.name, exportTitle);
+      setPublicShareUrl(share.url);
+      const ok = await copyToClipboard(share.url);
+      setPublicShareFeedback(ok ? 'copied' : 'failed');
+      setExportToast({
+        message: ok ? 'Public link copied' : t('useEverywhere.copyFailed'),
+        tone: ok ? 'default' : 'error',
+      });
+      window.setTimeout(() => {
+        setPublicShareFeedback((current) => (current === (ok ? 'copied' : 'failed') ? null : current));
+      }, 1800);
+    } catch (err) {
+      setPublicShareFeedback('failed');
+      setExportToast({
+        message: err instanceof Error ? err.message : 'Public share failed',
+        tone: 'error',
+      });
+    } finally {
+      setPublicShareCreating(false);
+    }
+  }
+
   function presentInThisTab() {
     setPresentMenuOpen(false);
     setMode('preview');
@@ -7617,6 +7662,16 @@ function HtmlViewer({
       : shareLinkFeedback === 'failed'
         ? t('useEverywhere.copyFailed')
         : t('fileViewer.copyShareLink');
+  const copyPublicShareLinkLabel =
+    publicShareCreating
+      ? 'Creating public link…'
+      : publicShareFeedback === 'copied'
+        ? t('fileViewer.copied')
+        : publicShareFeedback === 'failed'
+          ? t('useEverywhere.copyFailed')
+          : publicShareUrl
+            ? 'Copy 24h public link'
+            : 'Create 24h public link';
   const shareMenuLabel = t('fileViewer.shareLabel');
   const deployMenuLabel = t('fileViewer.deployModalTitle') || 'Deploy';
   const deployButtonLabel =
@@ -8174,6 +8229,24 @@ function HtmlViewer({
                       <div className="share-menu-section-label" role="presentation">
                         {t('fileViewer.shareMenuShareLink')}
                       </div>
+                      <button
+                        type="button"
+                        className="share-menu-item"
+                        role="menuitem"
+                        disabled={streaming || publicShareCreating}
+                        title={streaming ? t('fileViewer.shareAfterGenerationComplete') : 'Uploads this artifact only when clicked. Link expires in 24 hours.'}
+                        onClick={() => {
+                          fireShareExport('share_link', createAndCopyPublicShareLink);
+                        }}
+                      >
+                        <span className="share-menu-icon">
+                          <RemixIcon name={publicShareUrl ? 'file-copy-line' : 'links-line'} size={15} />
+                        </span>
+                        <span className="share-menu-text">
+                          <span>{copyPublicShareLinkLabel}</span>
+                          <small>{publicShareUrl ? 'Expires after 24h' : 'Public URL, 24h expiry'}</small>
+                        </span>
+                      </button>
                       {sharePageUrl ? (
                         <>
                           <button

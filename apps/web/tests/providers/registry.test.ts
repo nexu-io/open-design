@@ -7,6 +7,7 @@ import {
   connectConnector,
   DEFAULT_DEPLOY_PROVIDER_ID,
   deployProjectFile,
+  createPublicArtifactShareLink,
   fetchAgentsStream,
   fetchCloudflarePagesZones,
   fetchDeployConfig,
@@ -927,6 +928,32 @@ describe('deploy provider registry helpers', () => {
           zoneName: 'example.com',
           domainPrefix: 'demo',
         },
+      }),
+    });
+  });
+
+  it('creates an explicit 24h public artifact share link', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      url: 'https://og.open-design.ai/s/share_123',
+      id: 'share_123',
+      expiresAt: '2026-06-09T00:00:00.000Z',
+      expiresInSeconds: 86400,
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      createPublicArtifactShareLink('project-1', 'index.html', 'Launch demo'),
+    ).resolves.toMatchObject({
+      url: 'https://og.open-design.ai/s/share_123',
+      expiresInSeconds: 86400,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/project-1/public-share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileName: 'index.html',
+        title: 'Launch demo',
       }),
     });
   });

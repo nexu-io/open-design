@@ -9,7 +9,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   const { PROJECTS_DIR } = ctx.paths;
   const { randomUUID } = ctx.ids;
   const { getProject } = ctx.projectStore;
-  const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToVercel, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
+  const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, createPublicArtifactShare, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToVercel, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
   // ---- Deploy --------------------------------------------------------------
 
   app.get('/api/deploy/config', async (req, res) => {
@@ -135,6 +135,42 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         updatedAt: now,
       });
       res.json(publicDeployment(body));
+    } catch (err: any) {
+      const status = err instanceof DeployError ? err.status : 400;
+      const init =
+        err instanceof DeployError && err.details
+          ? { details: err.details }
+          : {};
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+        init,
+      );
+    }
+  });
+
+  app.post('/api/projects/:id/public-share', async (req, res) => {
+    try {
+      const { fileName, title } = req.body || {};
+      if (typeof fileName !== 'string' || !fileName.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
+      }
+      const project = getProject(db, req.params.id);
+      const files = await buildDeployFileSet(
+        PROJECTS_DIR,
+        req.params.id,
+        fileName,
+        { metadata: project?.metadata },
+      );
+      const body = await createPublicArtifactShare({
+        files,
+        projectId: req.params.id,
+        sourceFileName: fileName,
+        title: typeof title === 'string' ? title : project?.name,
+      });
+      res.json(body);
     } catch (err: any) {
       const status = err instanceof DeployError ? err.status : 400;
       const init =
