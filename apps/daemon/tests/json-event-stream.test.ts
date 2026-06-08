@@ -471,6 +471,50 @@ test('cursor stream recovers dropped chunk via model_call_id after fallback-term
   ]);
 });
 
+test('cursor stream does not duplicate output across two fallback-terminated turns', () => {
+  const { events, handler } = collectEvents('cursor-agent');
+
+  // Both turns end via the non-model_call_id fallback replay path. The
+  // terminal replay must reconcile against the CURRENT turn's emitted text
+  // (cursorTextSoFar.slice(cursorTurnStart)), not the whole cross-turn
+  // buffer. Otherwise turn 2's replay "second turn" is compared against
+  // "hello worldsecond", misses the current-turn prefix, and re-appends the
+  // whole replay — yielding duplicated output "secondsecond turn".
+  handler.feed(
+    // Turn 1: streamed "hello", fallback replay "hello world"
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
+    }) +
+    '\n' +
+    // Turn 2: streamed "second", fallback replay "second turn"
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 2,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second turn' }] },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'hello' },
+    { type: 'text_delta', delta: ' world' },
+    { type: 'text_delta', delta: 'second' },
+    { type: 'text_delta', delta: ' turn' },
+  ]);
+});
+
 test('cursor stream recovers a dropped middle chunk from a later cumulative snapshot', () => {
   const { events, handler } = collectEvents('cursor-agent');
 

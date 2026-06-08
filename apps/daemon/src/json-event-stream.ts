@@ -223,6 +223,31 @@ function emitCursorTextDelta(text: string, onEvent: StreamEventHandler, state: P
   onEvent({ type: 'text_delta', delta: text });
 }
 
+/**
+ * Reconcile a Cursor terminal replay against the text already emitted for the
+ * CURRENT turn. A terminal replay (either a `model_call_id` message or a
+ * non-timestamped final assistant message) carries the full text for the
+ * current turn only, so it must be compared against
+ * `cursorTextSoFar.slice(cursorTurnStart)` — NOT the whole cross-turn buffer,
+ * which would miss the current-turn prefix on later turns and re-append the
+ * whole replay (duplicate output like "secondsecond turn").
+ *
+ * Only a verified prefix permits suffix recovery: if the emitted turn text is
+ * a prefix of the replay (including the empty case where no chunk arrived),
+ * emit the missing suffix. On divergence (a non-final chunk was dropped, so
+ * the emitted text is not a prefix) leave the append-only stream untouched
+ * rather than duplicate already-shown text. Always advances the turn boundary.
+ */
+function reconcileCursorTurnReplay(text: string, onEvent: StreamEventHandler, state: ParserState): void {
+  const emittedTurn = state.cursorTextSoFar.slice(state.cursorTurnStart);
+  if (text && text !== emittedTurn && text.startsWith(emittedTurn)) {
+    const suffix = text.slice(emittedTurn.length);
+    if (suffix) onEvent({ type: 'text_delta', delta: suffix });
+    state.cursorTextSoFar += suffix;
+  }
+  state.cursorTurnStart = state.cursorTextSoFar.length;
+}
+
 function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
   if (!isRecord(obj)) return false;
 
@@ -236,45 +261,27 @@ function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: Par
   }
 
   if (obj.type === 'assistant' && obj.message) {
-    // Cursor sends a final assistant message with `model_call_id` that
-    // replays the full accumulated text for the current turn. Reconcile
-    // it against the text we have actually emitted for this turn
-    // (`cursorTextSoFar` from `cursorTurnStart` onward) — NOT against the
-    // emitted length. Length-only slicing wrongly assumes the emitted
-    // text is always a complete prefix of the replay; that breaks when a
-    // middle chunk was dropped (e.g. emitted "hello world" but the replay
-    // is "hello brave world"), re-emitting an already-shown suffix while
-    // still losing the gap. Only a verified prefix permits suffix
-    // recovery.
+    // Cursor sends a final assistant message that replays the full text for
+    // the current turn — either tagged with `model_call_id`, or (fallback)
+    // as a non-timestamped terminal assistant message. Both are reconciled
+    // against the current turn's emitted text via reconcileCursorTurnReplay.
     if (typeof obj.model_call_id === 'string') {
       const text = extractCursorText(obj.message);
-      const emittedTurn = state.cursorTextSoFar.slice(state.cursorTurnStart);
-      if (text && text !== emittedTurn && text.startsWith(emittedTurn)) {
-        // Verified prefix: a trailing chunk was dropped. Emit only the
-        // missing suffix so the turn ends with the full replay text.
-        const suffix = text.slice(emittedTurn.length);
-        if (suffix) onEvent({ type: 'text_delta', delta: suffix });
-        state.cursorTextSoFar += suffix;
-      }
-      // When the emitted text is NOT a prefix of the replay the live
-      // stream already diverged from the authoritative text (a non-final
-      // chunk was dropped). Re-emitting any part of the replay here would
-      // duplicate already-shown text in an append-only delta stream, so we
-      // leave the stream as-is rather than corrupt it with length slicing.
-      // Mark the next turn's start after processing the replay.
-      state.cursorTurnStart = state.cursorTextSoFar.length;
+      reconcileCursorTurnReplay(text, onEvent, state);
       return true;
     }
     const text = extractCursorText(obj.message);
     if (!text) return false;
-    emitCursorTextDelta(text, onEvent, state);
-    // Non-timestamped assistant events are final replays that mark a turn
-    // boundary. Advance cursorTurnStart so the next model_call_id replay
-    // measures turnLength from the right offset. Timestamped events are
-    // incremental streaming chunks within a turn and must not advance it.
-    if (typeof obj.timestamp_ms !== 'number') {
-      state.cursorTurnStart = state.cursorTextSoFar.length;
+    if (typeof obj.timestamp_ms === 'number') {
+      // Incremental streaming chunk within a turn — accumulate as usual.
+      emitCursorTextDelta(text, onEvent, state);
+      return true;
     }
+    // Non-timestamped final assistant message: a terminal replay that marks a
+    // turn boundary. Reconcile against the current turn (not the whole
+    // cross-turn buffer) so later fallback-terminated turns do not duplicate
+    // output, then advance the turn boundary.
+    reconcileCursorTurnReplay(text, onEvent, state);
     return true;
   }
 
