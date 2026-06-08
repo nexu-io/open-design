@@ -92,7 +92,7 @@ export async function runElectronBuilder(
     appId: identity.appId,
     artifactName: `${PRODUCT_NAME}-${namespaceToken}.\${ext}`,
     afterPack: webStandaloneHookConfigPath == null ? undefined : macResources.webStandaloneAfterPackHook,
-    afterSign: config.signed ? macResources.notarizeHook : undefined,
+    afterSign: config.signed && config.macNotarize ? macResources.notarizeHook : undefined,
     asar: ELECTRON_BUILDER_ASAR,
     buildDependenciesFromSource: false,
     compression: config.macCompression,

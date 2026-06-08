@@ -25,11 +25,15 @@ import {
   isTrustedConnectorCallbackOrigin,
   sortConnectorsForSearch,
 } from './EntryView';
+import {
+  CONNECTOR_CALLBACK_MESSAGE_TYPE,
+  notifyConnectorsChanged,
+} from './connectors-events';
+import { hasConnectorStatusChanges } from './connectors-state';
 import { ConnectorLogo, useResolvedTheme } from './ConnectorLogo';
 import { Icon } from './Icon';
 import { CenteredLoader } from './Loading';
 
-const CONNECTOR_CALLBACK_MESSAGE_TYPE = 'open-design:connector-connected';
 const CONNECTOR_AUTH_PENDING_STORAGE_KEY = 'od-connectors-authorization-pending';
 const CONNECTOR_AUTH_PENDING_POLL_MS = 2_000;
 const CONNECTOR_TOOL_PREVIEW_LIMIT = 50;
@@ -450,15 +454,22 @@ export function ConnectorsBrowser({
   const [selectedProvider, setSelectedProvider] = useState<string>(DEFAULT_PROVIDER_TAB_ID);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchTrackedRef = useRef(false);
+  const connectorsRef = useRef(connectors);
   const logoTheme = useResolvedTheme();
   const toolPreviewRetryToken = `${composioConfigured ? 'configured' : 'unconfigured'}:${String(catalogRefreshKey)}`;
 
+  useEffect(() => {
+    connectorsRef.current = connectors;
+  }, [connectors]);
+
   const reloadConnectorStatuses = useCallback(async () => {
     const statuses = await fetchConnectorStatuses();
+    const statusChanged = hasConnectorStatusChanges(connectorsRef.current, statuses);
     setConnectors((curr) => applyConnectorStatuses(curr, statuses));
     setConnectorAuthorizationPending((curr) => updateConnectorAuthorizationPendingFromStatuses(curr, statuses));
     setConnectorAuthorizationError((curr) => clearConnectorAuthorizationErrorsForConnected(curr, statuses));
     setConnectorAuthorizationCancelFailed((curr) => clearConnectorAuthorizationCancelFailuresForConnected(curr, statuses));
+    if (statusChanged) notifyConnectorsChanged();
     return statuses;
   }, []);
 
@@ -590,13 +601,23 @@ export function ConnectorsBrowser({
   // user closed the auth flow without completing it — auto-cancel so the
   // card recovers to its default state instead of staying stuck loading.
   useEffect(() => {
-    async function onFocus() {
+    async function refreshAfterReturn() {
       const pendingBeforeReload = connectorAuthorizationPendingRef.current;
       const statuses = await reloadConnectorStatuses();
       await cancelStaleAuthorizations(pendingBeforeReload, statuses);
     }
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
+    function onVisibilityChange() {
+      if (document.visibilityState !== 'visible') return;
+      void refreshAfterReturn();
+    }
+    window.addEventListener('focus', refreshAfterReturn);
+    window.addEventListener('pageshow', refreshAfterReturn);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', refreshAfterReturn);
+      window.removeEventListener('pageshow', refreshAfterReturn);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [reloadConnectorStatuses, cancelStaleAuthorizations]);
 
   // The local Composio API-key state is authoritative for masking. Cached
@@ -669,6 +690,7 @@ export function ConnectorsBrowser({
           const result = await connectConnector(connectorId);
           updateConnector(result.connector);
           if (result.connector && !result.error) {
+            if (result.connector.status === 'connected') notifyConnectorsChanged();
             setConnectorAuthorizationPending((curr) => updateConnectorAuthorizationPendingFromConnectResponse(curr, {
               connector: result.connector!,
               ...(result.auth === undefined ? {} : { auth: result.auth }),
@@ -709,6 +731,7 @@ export function ConnectorsBrowser({
         });
         try {
           updateConnector(await disconnectConnector(connectorId));
+          notifyConnectorsChanged();
           onConnectorAuthResult?.({
             connectorId,
             action: 'disconnect',

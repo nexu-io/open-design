@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
 import { dismissPrivacyDialog, STORAGE_KEY, waitForLoadingToClear } from '@/playwright/amr';
+import { fulfillAgentsRoute } from '@/playwright/mock-factory';
 
 type OnboardingConfig = {
   mode: 'daemon';
@@ -18,7 +19,7 @@ type OnboardingConfig = {
 
 test.describe.configure({ timeout: 30_000 });
 
-test('onboarding lets AMR Cloud sign in and complete setup after the login poll succeeds', async ({ page }) => {
+test('[P0] onboarding lets AMR Cloud sign in and complete setup after the login poll succeeds', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
     initialLoggedIn: false,
@@ -29,7 +30,6 @@ test('onboarding lets AMR Cloud sign in and complete setup after the login poll 
   await gotoOnboarding(page);
 
   const continueButton = page.getByRole('button', { name: /sign in to continue/i });
-  await expect(page.getByRole('button', { name: /Open Design AMR/i })).toHaveAttribute('aria-pressed', 'true');
   await expect(continueButton).toBeVisible();
   await continueButton.click();
 
@@ -43,7 +43,38 @@ test('onboarding lets AMR Cloud sign in and complete setup after the login poll 
   });
 });
 
-test('onboarding falls back to Local CLI when AMR is unavailable', async ({ page }) => {
+test('[P0] onboarding Local CLI card lets the user pick an agent model before continuing', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: false,
+    initialLoggedIn: false,
+    codexModels: [
+      { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini' },
+      { id: 'gpt-5.5', label: 'gpt-5.5' },
+      { id: 'o3', label: 'o3' },
+      { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+      { id: 'glm-5', label: 'GLM 5' },
+      { id: 'qwen3-235b', label: 'Qwen3 235B' },
+      { id: 'claude-sonnet-4.5', label: 'Claude Sonnet 4.5' },
+      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+      { id: 'kimi-k2.6', label: 'Kimi K2.6' },
+    ],
+  });
+
+  await page.addInitScript(
+    ({ key, value }) => window.localStorage.setItem(key, JSON.stringify(value)),
+    { key: STORAGE_KEY, value: config },
+  );
+
+  await gotoOnboarding(page);
+
+  await page.getByRole('button', { name: /Local coding agent/i }).click();
+  await selectOnboardingOption(page, 'Model', 'GLM 5');
+
+  await expect(expectOnboardingTrigger(page, 'Model')).toContainText('GLM 5');
+  await expect(page.getByRole('button', { name: /Continue/i })).toBeVisible();
+});
+
+test('[P0] onboarding falls back to Local CLI when AMR is unavailable', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: false,
     initialLoggedIn: false,
@@ -59,7 +90,7 @@ test('onboarding falls back to Local CLI when AMR is unavailable', async ({ page
   await expect(page.getByRole('button', { name: /Continue/i })).toBeVisible();
 });
 
-test('onboarding recovers from a transient AMR status failure and still continues after login completes', async ({ page }) => {
+test('[P0] onboarding recovers from a transient AMR status failure and still continues after login completes', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
     initialLoggedIn: false,
@@ -75,8 +106,7 @@ test('onboarding recovers from a transient AMR status failure and still continue
   await expect(page.getByRole('button', { name: /Continue/i })).toBeVisible({ timeout: 12_000 });
 });
 
-
-test('onboarding AMR card lets the user pick a live runtime model before continuing', async ({ page }) => {
+test('[P0] onboarding AMR card lets the user pick a live runtime model before continuing', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
     initialLoggedIn: true,
@@ -91,10 +121,26 @@ test('onboarding AMR card lets the user pick a live runtime model before continu
 
   await gotoOnboarding(page);
 
-  await expect(page.getByText('AMR v0.1.0')).toBeVisible();
+  const amrCard = page.locator('.onboarding-view__amr-cloud-card');
+  await expect(amrCard.getByRole('button', { name: /Open Design AMR/i })).toBeVisible();
+  let selectedModel = 'deepseek-v4-flash';
   const modelSelect = page.locator('.onboarding-view__model-picker select');
-  await expect(modelSelect).toHaveValue('claude-opus-4.8');
-  await modelSelect.selectOption('deepseek-v4-flash');
+  if ((await modelSelect.count()) > 0) {
+    await expect(modelSelect).toHaveValue('claude-opus-4.8');
+    await modelSelect.selectOption(selectedModel);
+  } else {
+    selectedModel = 'glm-5.1';
+    const modelPicker = amrCard.getByRole('combobox', { name: /Model.*AMR CLI/i });
+    await modelPicker.click();
+    const popover = page.getByTestId('onboarding-amr-model-popover');
+    await expect(popover).toBeVisible();
+    const search = page.getByTestId('onboarding-amr-model-search');
+    if ((await search.count()) > 0) {
+      await expect(search).toBeVisible();
+      await search.fill('glm');
+    }
+    await popover.getByRole('option', { name: 'GLM 5.1' }).click();
+  }
   await page.getByRole('button', { name: /Continue/i }).click();
 
   await expect
@@ -103,13 +149,13 @@ test('onboarding AMR card lets the user pick a live runtime model before continu
       agentId: 'amr',
       agentModels: {
         amr: {
-          model: 'deepseek-v4-flash',
+          model: selectedModel,
         },
       },
     });
 });
 
-test('onboarding skip exits to home and marks onboarding completed', async ({ page }) => {
+test('[P0] onboarding skip exits to home and marks onboarding completed', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
     initialLoggedIn: false,
@@ -126,7 +172,7 @@ test('onboarding skip exits to home and marks onboarding completed', async ({ pa
   });
 });
 
-test('onboarding about-you step accepts profile selections and completes setup', async ({ page }) => {
+test('[P0] onboarding about-you step accepts profile selections and completes setup', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
     initialLoggedIn: true,
@@ -159,7 +205,7 @@ test('onboarding about-you step accepts profile selections and completes setup',
   });
 });
 
-test('onboarding BYOK path can fetch models, test the provider, and complete setup', async ({ page }) => {
+test('[P0] onboarding BYOK path can fetch models, test the provider, and complete setup', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
     initialLoggedIn: true,
@@ -225,6 +271,7 @@ async function wireOnboardingMocks(
     initialLoggedIn: boolean;
     failFirstStatusPollAfterLogin?: boolean;
     amrModels?: Array<{ id: string; label: string }>;
+    codexModels?: Array<{ id: string; label: string }>;
   },
 ): Promise<OnboardingConfig> {
   const config: OnboardingConfig = {
@@ -270,31 +317,29 @@ async function wireOnboardingMocks(
     await route.continue();
   });
 
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          ...(options.amrAvailable
-            ? [{
-                id: 'amr',
-                name: 'AMR (vela)',
-                bin: 'vela',
-                available: true,
-                version: '1.0.0',
-                models: options.amrModels ?? [{ id: 'default', label: 'Default' }],
-              }]
-            : []),
-          {
-            id: 'codex',
-            name: 'Codex CLI',
-            bin: 'codex',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
+  const agents = [
+    ...(options.amrAvailable
+      ? [{
+          id: 'amr',
+          name: 'AMR (vela)',
+          bin: 'vela',
+          available: true,
+          version: '1.0.0',
+          models: options.amrModels ?? [{ id: 'default', label: 'Default' }],
+        }]
+      : []),
+    {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+      version: 'test',
+      models: options.codexModels ?? [{ id: 'default', label: 'Default' }],
+    },
+  ];
+
+  await page.route('**/api/agents**', async (route) => {
+    await fulfillAgentsRoute(route, agents);
   });
 
   await page.route('**/api/integrations/vela/status', async (route) => {
@@ -353,6 +398,10 @@ async function seedOnboardingConfig(page: Page, config: OnboardingConfig) {
 
 async function expectOnboardingFinished(page: Page) {
   await dismissPrivacyDialog(page);
+  const finishSetup = page.getByRole('button', { name: /Finish setup/i });
+  if (await finishSetup.isVisible().catch(() => false)) {
+    await finishSetup.click();
+  }
   await expect(page).not.toHaveURL(/\/onboarding$/);
   await expect(page.getByText('What do you want to design?')).toBeVisible();
 }

@@ -13,6 +13,7 @@ import {
   type ReportContext,
   type TelemetrySinkConfig,
 } from '../src/langfuse-trace.js';
+import { buildPromptStackTelemetry } from '../src/prompt-telemetry.js';
 
 function makeCtx(overrides: Partial<ReportContext> = {}): ReportContext {
   const base: ReportContext = {
@@ -304,6 +305,84 @@ describe('buildTracePayload', () => {
     expect(trace.output).toMatch(/landing page draft/);
     expect(tool.input).toMatch(/ls -la/);
     expect(tool.output).toBe('total 0');
+  });
+
+  it('adds prompt-stack metadata to trace and generation without replacing user prompt input', () => {
+    const promptTelemetry = buildPromptStackTelemetry({
+      composedPrompt:
+        '# Instructions\n\nWork in /Users/alice/project\n\n---\n# User request\n\nBuild a card',
+      sections: [
+        { kind: 'daemonSystemPrompt', content: 'Work in /Users/alice/project' },
+        { kind: 'userRequest', content: 'Build a card' },
+        { kind: 'attachments', metadata: ['src/App.tsx'] },
+      ],
+    });
+    const batch = buildTracePayload(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+        promptTelemetry,
+      }),
+    );
+
+    const trace = bodyOf(batch, 'trace-create');
+    const generation = bodyOf(batch, 'generation-create', 'llm');
+    expect(trace.input).toBe('Make a landing page for a coffee shop.');
+    expect(generation.input).toMatchObject({
+      type: 'open-design.prompt-stack',
+      redactionVersion: 'prompt-stack-redaction-v1',
+      sectionCount: 3,
+      sections: [
+        expect.objectContaining({
+          kind: 'daemonSystemPrompt',
+          redactedContent: expect.stringContaining('[REDACTED:path]'),
+        }),
+        expect.objectContaining({
+          kind: 'userRequest',
+          redactedContent: 'Build a card',
+        }),
+        expect.objectContaining({
+          kind: 'attachments',
+          contentMode: 'metadata-only',
+        }),
+      ],
+    });
+    expect(trace.metadata.promptStack).toMatchObject({
+      redactionVersion: 'prompt-stack-redaction-v1',
+      sectionCount: 3,
+    });
+    expect(generation.metadata.promptStack).toEqual(trace.metadata.promptStack);
+    expect(trace.metadata.promptStack.sections[0].redactedContent).toContain(
+      '[REDACTED:path]',
+    );
+    expect(trace.metadata.promptStack.sections[2].redactedContent).toBeUndefined();
+    expect(trace.metadata.promptStack_section_daemonSystemPrompt_present).toBeUndefined();
+    expect(trace.metadata.promptStack_section_attachments_present).toBeUndefined();
+    expect(trace.metadata.promptStack_section_daemonSystemPrompt_rawBytes).toBeUndefined();
+    expect(trace.metadata.promptStack_promptFingerprint).toMatch(/^sha256:/);
+  });
+
+  it('omits prompt-stack redactedContent when metrics or content consent is off', () => {
+    const promptTelemetry = buildPromptStackTelemetry({
+      composedPrompt: '# User request\n\nBuild a card',
+      sections: [{ kind: 'userRequest', content: 'Build a card' }],
+    });
+
+    for (const prefs of [
+      { metrics: true, content: false, artifactManifest: false },
+      { metrics: false, content: true, artifactManifest: false },
+    ]) {
+      const batch = buildTracePayload(makeCtx({ prefs, promptTelemetry }));
+      const trace = bodyOf(batch, 'trace-create');
+      const generation = bodyOf(batch, 'generation-create', 'llm');
+      expect(trace.input).toBeUndefined();
+      expect(trace.metadata.promptStack.sections[0].redactedContent).toBeUndefined();
+      expect(trace.metadata.promptStack.redactedContentBytes).toBe(0);
+      expect(generation.input).toMatchObject({
+        type: 'open-design.prompt-stack',
+        redactedContentBytes: 0,
+        sections: [expect.not.objectContaining({ redactedContent: expect.any(String) })],
+      });
+    }
   });
 
   it('truncates ASCII prompt at 8 KB and output at 16 KB (bytes == chars)', () => {
@@ -604,6 +683,54 @@ describe('buildTracePayload', () => {
     expect(metadata.time_to_first_token_ms).toBe(40);
     expect(metadata.tool_call_count).toBe(2);
     expect(metadata.total_duration_ms).toBe(100);
+  });
+
+  it('adds duration spans for run timing marks', () => {
+    const batch = buildTracePayload(
+      makeCtx({
+        run: {
+          runId: 'run-spans',
+          status: 'succeeded',
+          startedAt: 1_700_000_000_000,
+          endedAt: 1_700_000_004_500,
+          timingMarks: {
+            startChatRunStartedAt: 1_700_000_000_100,
+            promptBuildStartAt: 1_700_000_000_200,
+            promptBuildEndAt: 1_700_000_000_260,
+            processSpawnStartedAt: 1_700_000_000_300,
+            processSpawnedAt: 1_700_000_000_380,
+            modelCallStartAt: 1_700_000_000_420,
+            firstTokenAt: 1_700_000_001_000,
+            finalizeStartAt: 1_700_000_004_200,
+          },
+        },
+      }),
+    );
+
+    const spans = (batch as any[])
+      .filter((item) => item.type === 'span-create')
+      .map((item) => item.body);
+    expect(spans.map((span) => span.name)).toEqual(
+      expect.arrayContaining([
+        'queue',
+        'prompt-build',
+        'spawn',
+        'model-call',
+        'stream-output',
+        'finalize',
+      ]),
+    );
+    expect(bodyOf(batch, 'span-create', 'spawn')).toMatchObject({
+      id: 'run-spans-phase-spawn',
+      parentObservationId: 'run-spans-gen',
+      metadata: {
+        durationMs: 80,
+        boundary: 'processSpawnStartedAt -> processSpawnedAt',
+      },
+    });
+    expect(bodyOf(batch, 'span-create', 'tool:Bash').parentObservationId).toBe(
+      'run-spans-phase-model-call',
+    );
   });
 
   it('passes through anonymous installationId as userId', () => {

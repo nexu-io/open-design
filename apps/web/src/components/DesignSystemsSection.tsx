@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import { useT } from '../i18n';
-import type { AppConfig, DesignSystemSummary } from '../types';
+import type { AppConfig, DesignSystemGenerationJob, DesignSystemSummary } from '../types';
 import {
   fetchDesignSystems,
   importGitHubDesignSystem,
   importLocalDesignSystem,
+  importShadcnDesignSystem,
   updateDesignSystemDraft,
 } from '../providers/registry';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { Icon } from './Icon';
 import { orderDesignSystemGroups } from './design-system-group-order';
+import { AnimatePresence } from 'motion/react';
 
 // Sibling Settings section that hosts the design-systems registry.
 // Lifted out of the previous LibrarySection so each surface (functional
@@ -27,6 +29,7 @@ interface Props {
    * flow through here.
    */
   onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
+  onDesignSystemImportRebuildJob?: (designSystemId: string, job: DesignSystemGenerationJob) => void;
 }
 
 function toggleCraftSlug(current: string[], slug: string, enabled: boolean): string[] {
@@ -36,7 +39,12 @@ function toggleCraftSlug(current: string[], slug: string, enabled: boolean): str
   return Array.from(next);
 }
 
-export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Props) {
+export function DesignSystemsSection({
+  cfg,
+  setCfg,
+  onDesignSystemsChanged,
+  onDesignSystemImportRebuildJob,
+}: Props) {
   const t = useT();
   const cardRefs = useRef(new Map<string, HTMLDivElement>());
   const [designSystems, setDesignSystems] = useState<DesignSystemSummary[]>([]);
@@ -52,7 +60,7 @@ export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Pr
   // moved on cannot clobber a newer session's modal state.
   const renameSessionRef = useRef(0);
   const [importPath, setImportPath] = useState('');
-  const [importSource, setImportSource] = useState<'local' | 'github'>('local');
+  const [importSource, setImportSource] = useState<'local' | 'github' | 'shadcn'>('local');
   const [packageImportMode, setPackageImportMode] = useState<'normalized' | 'hybrid' | 'verbatim'>('hybrid');
   const [craftApplies, setCraftApplies] = useState<string[]>([]);
   const [addOpen, setAddOpen] = useState(false);
@@ -224,7 +232,9 @@ export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Pr
     const result =
       importSource === 'github'
         ? await importGitHubDesignSystem({ githubUrl: importTarget, ...importOptions })
-        : await importLocalDesignSystem({ baseDir: importTarget, ...importOptions });
+        : importSource === 'shadcn'
+          ? await importShadcnDesignSystem({ reference: importTarget, ...importOptions })
+          : await importLocalDesignSystem({ baseDir: importTarget, ...importOptions });
     setImporting(false);
     if ('error' in result) {
       setImportError(result.error.message);
@@ -238,6 +248,9 @@ export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Pr
     setImportPath('');
     setImportedDesignSystem(result.designSystem);
     setImportMessage(result.designSystem.title);
+    if (result.tokenContractRebuild?.job) {
+      onDesignSystemImportRebuildJob?.(result.designSystem.id, result.tokenContractRebuild.job);
+    }
     onDesignSystemsChanged?.(result.designSystem.id);
   }
 
@@ -324,6 +337,16 @@ export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Pr
                   >
                     {t('settings.designSystemsSourceGithub')}
                   </button>
+                  <button
+                    type="button"
+                    className={importSource === 'shadcn' ? 'active' : ''}
+                    onClick={() => {
+                      setImportSource('shadcn');
+                      clearImportFeedback();
+                    }}
+                  >
+                    {t('settings.designSystemsSourceShadcn')}
+                  </button>
                 </div>
               </div>
               <div className="library-import-row">
@@ -389,13 +412,21 @@ export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Pr
                 <span className="library-import-option-label">
                   {importSource === 'github'
                     ? t('settings.designSystemsGithubUrl')
-                    : t('settings.designSystemsProjectPath')}
+                    : importSource === 'shadcn'
+                      ? t('settings.designSystemsShadcnReference')
+                      : t('settings.designSystemsProjectPath')}
                 </span>
                 <div className="library-install-row">
                   <input
                     type="text"
                     className="library-import-input"
-                    placeholder={importSource === 'github' ? 'https://github.com/owner/repo' : '/path/to/project'}
+                    placeholder={
+                      importSource === 'github'
+                        ? 'https://github.com/owner/repo'
+                        : importSource === 'shadcn'
+                          ? 'shadcn/ui/theme-zinc'
+                          : '/path/to/project'
+                    }
                     value={importPath}
                     onChange={(e) => {
                       setImportPath(e.target.value);
@@ -411,7 +442,9 @@ export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Pr
                       ? t('settings.libraryLoading')
                       : importSource === 'github'
                         ? t('settings.designSystemsImportGithub')
-                        : t('settings.designSystemsImportProject')}
+                        : importSource === 'shadcn'
+                          ? t('settings.designSystemsImportShadcn')
+                          : t('settings.designSystemsImportProject')}
                   </button>
                 </div>
               </div>
@@ -562,12 +595,14 @@ export function DesignSystemsSection({ cfg, setCfg, onDesignSystemsChanged }: Pr
           </>
         )}
       </div>
-      {previewSystem ? (
-        <DesignSystemPreviewModal
-          system={previewSystem}
-          onClose={() => setPreviewSystem(null)}
-        />
-      ) : null}
+      <AnimatePresence>
+        {previewSystem ? (
+          <DesignSystemPreviewModal
+            system={previewSystem}
+            onClose={() => setPreviewSystem(null)}
+          />
+        ) : null}
+      </AnimatePresence>
       {renameTarget ? (
         <div className="modal-backdrop" onClick={cancelRename}>
           <form

@@ -7,6 +7,7 @@
 // `/api/runs` — see providers/daemon.ts).
 //
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { DesignSystemSummary } from '@open-design/contracts';
 import { useI18n } from '../i18n';
@@ -18,9 +19,14 @@ import { fetchDesignSystemPreview } from '../providers/registry';
 import { Icon } from './Icon';
 
 interface PopoverAnchor {
-  top: number;
   left: number;
   width: number;
+  maxHeight: number;
+  // Vertical placement: when the trigger sits near the bottom of the
+  // viewport (e.g. the composer-top picker) the popover opens upward,
+  // anchored by `bottom`; otherwise it opens downward, anchored by `top`.
+  top?: number;
+  bottom?: number;
 }
 
 interface Props {
@@ -81,10 +87,31 @@ export function ProjectDesignSystemPicker({
       const trigger = triggerRef.current;
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
-      const popoverWidth = Math.min(640, Math.max(300, window.innerWidth * 0.86));
       const viewport = window.innerWidth;
+      const popoverWidth = Math.min(440, Math.max(280, viewport - 24));
       const left = Math.max(8, Math.min(viewport - popoverWidth - 8, rect.left));
-      setAnchor({ top: rect.bottom + 6, left, width: popoverWidth });
+      const gap = 6;
+      const margin = 12;
+      const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
+      const spaceAbove = rect.top - gap - margin;
+      // Open upward when there isn't enough room below (the composer-top
+      // picker is near the viewport bottom) but there is more room above.
+      const openUp = spaceBelow < 320 && spaceAbove > spaceBelow;
+      if (openUp) {
+        setAnchor({
+          bottom: window.innerHeight - rect.top + gap,
+          left,
+          width: popoverWidth,
+          maxHeight: Math.max(220, Math.min(420, spaceAbove)),
+        });
+      } else {
+        setAnchor({
+          top: rect.bottom + gap,
+          left,
+          width: popoverWidth,
+          maxHeight: Math.max(220, Math.min(420, spaceBelow)),
+        });
+      }
     }
     updateAnchor();
     window.addEventListener('resize', updateAnchor);
@@ -153,6 +180,17 @@ export function ProjectDesignSystemPicker({
     });
   }, [query, designSystems, locale]);
 
+  const selectDesignSystem = (id: string | null) => {
+    onChange(id);
+    setOpen(false);
+  };
+
+  const selectDesignSystemOnKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, id: string | null) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    selectDesignSystem(id);
+  };
+
   return (
     <div
       ref={wrapRef}
@@ -194,7 +232,14 @@ export function ProjectDesignSystemPicker({
               ref={popoverRef}
               className="project-ds-picker-popover"
               data-testid="project-ds-picker-popover"
-              style={{ top: anchor.top, left: anchor.left, width: anchor.width }}
+              data-placement={anchor.bottom !== undefined ? 'up' : 'down'}
+              style={{
+                top: anchor.top,
+                bottom: anchor.bottom,
+                left: anchor.left,
+                width: anchor.width,
+                maxHeight: anchor.maxHeight,
+              }}
             >
               <div className="project-ds-picker-search">
                 <Icon name="search" size={12} />
@@ -216,10 +261,11 @@ export function ProjectDesignSystemPicker({
                     aria-selected={selectedId == null}
                     onMouseEnter={() => setHovered(null)}
                     onFocus={() => setHovered(null)}
-                    onClick={() => {
-                      onChange(null);
-                      setOpen(false);
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      selectDesignSystem(null);
                     }}
+                    onKeyDown={(event) => selectDesignSystemOnKeyDown(event, null)}
                   >
                     <div className="project-ds-picker-option-head">
                       <span className="project-ds-picker-option-title">{t('designSystemPicker.noneTitle')}</span>
@@ -232,14 +278,9 @@ export function ProjectDesignSystemPicker({
                         </span>
                       ) : null}
                     </div>
-                    <span className="project-ds-picker-option-summary">
-                      {t('designSystemPicker.noneSummary')}
-                    </span>
                   </button>
                   {filtered.map((d) => {
                     const active = d.id === selectedId;
-                    const localizedCategory = localizeDesignSystemCategory(locale, d.category);
-                    const localizedSummary = localizeDesignSystemSummary(locale, d);
                     return (
                       <button
                         key={d.id}
@@ -249,17 +290,15 @@ export function ProjectDesignSystemPicker({
                         aria-selected={active}
                         onMouseEnter={() => setHovered(d)}
                         onFocus={() => setHovered(d)}
-                        onClick={() => {
-                          onChange(d.id);
-                          setOpen(false);
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          selectDesignSystem(d.id);
                         }}
+                        onKeyDown={(event) => selectDesignSystemOnKeyDown(event, d.id)}
                         data-testid={`project-ds-picker-option-${d.id}`}
                       >
                         <div className="project-ds-picker-option-head">
                           <span className="project-ds-picker-option-title">{d.title}</span>
-                          {d.category ? (
-                            <span className="project-ds-picker-option-cat">{localizedCategory}</span>
-                          ) : null}
                           {active ? (
                             <span
                               className="project-ds-picker-option-check"
@@ -269,20 +308,6 @@ export function ProjectDesignSystemPicker({
                             </span>
                           ) : null}
                         </div>
-                        {d.swatches && d.swatches.length > 0 ? (
-                          <div className="project-ds-picker-option-swatches">
-                            {d.swatches.slice(0, 6).map((sw, i) => (
-                              <span
-                                key={`${d.id}-sw-${i}`}
-                                className="project-ds-picker-option-swatch"
-                                style={{ background: sw }}
-                              />
-                            ))}
-                          </div>
-                        ) : null}
-                        {localizedSummary ? (
-                          <span className="project-ds-picker-option-summary">{localizedSummary}</span>
-                        ) : null}
                       </button>
                     );
                   })}
@@ -295,23 +320,6 @@ export function ProjectDesignSystemPicker({
                     <>
                       <div className="project-ds-picker-preview-head">
                         <strong>{previewTarget.title}</strong>
-                        {previewTarget.category ? (
-                          <span className="project-ds-picker-preview-cat">
-                            {localizeDesignSystemCategory(locale, previewTarget.category)}
-                          </span>
-                        ) : null}
-                        {previewHtml ? (
-                          <button
-                            type="button"
-                            className="project-ds-picker-preview-expand"
-                            data-testid="project-ds-picker-preview-expand"
-                            onClick={() => setFullscreenPreview(true)}
-                            title={t('designSystemPicker.openPreview')}
-                            aria-label={t('designSystemPicker.openPreview')}
-                          >
-                            <Icon name="eye" size={16} strokeWidth={1.9} />
-                          </button>
-                        ) : null}
                       </div>
                       {previewTarget.summary ? (
                         <p className="project-ds-picker-preview-summary">
@@ -331,26 +339,46 @@ export function ProjectDesignSystemPicker({
                         </div>
                       ) : null}
                       {previewLoading ? (
-                        <div className="project-ds-picker-preview-loading">
-                          {t('designSystemPicker.loadingPreview')}
+                        <div className="project-ds-picker-preview-stage">
+                          <div className="project-ds-picker-preview-loading">
+                            {t('designSystemPicker.loadingPreview')}
+                          </div>
                         </div>
                       ) : previewHtml ? (
-                        <iframe
-                          className="project-ds-picker-preview-frame"
-                          data-testid="project-ds-picker-preview-frame"
-                          srcDoc={previewHtml}
-                          sandbox="allow-same-origin"
-                          title={t('designSystemPicker.previewFrameTitle', { title: previewTarget.title })}
-                        />
+                        <div className="project-ds-picker-preview-stage">
+                          <iframe
+                            className="project-ds-picker-preview-frame"
+                            data-testid="project-ds-picker-preview-frame"
+                            srcDoc={previewHtml}
+                            sandbox="allow-scripts"
+                            scrolling="no"
+                            title={t('designSystemPicker.previewFrameTitle', { title: previewTarget.title })}
+                          />
+                          <button
+                            type="button"
+                            className="project-ds-picker-preview-expand"
+                            data-testid="project-ds-picker-preview-expand"
+                            onClick={() => setFullscreenPreview(true)}
+                            title={t('designSystemPicker.openPreview')}
+                            aria-label={t('designSystemPicker.openPreview')}
+                          >
+                            <Icon name="eye" size={13} strokeWidth={1.9} />
+                            <span>{t('designSystemPicker.openPreview')}</span>
+                          </button>
+                        </div>
                       ) : (
-                        <div className="project-ds-picker-preview-empty">
-                          {t('designSystemPicker.noPreview')}
+                        <div className="project-ds-picker-preview-stage">
+                          <div className="project-ds-picker-preview-empty">
+                            {t('designSystemPicker.noPreview')}
+                          </div>
                         </div>
                       )}
                     </>
                   ) : (
-                    <div className="project-ds-picker-preview-empty">
-                      {t('designSystemPicker.previewHint')}
+                    <div className="project-ds-picker-preview-stage">
+                      <div className="project-ds-picker-preview-empty">
+                        {t('designSystemPicker.previewHint')}
+                      </div>
                     </div>
                   )}
                 </div>

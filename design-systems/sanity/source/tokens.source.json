@@ -1,0 +1,349 @@
+{
+  "schemaVersion": 1,
+  "sourceScope": "open-design-bundled-fixture",
+  "brandId": "sanity",
+  "files": [
+    "DESIGN.md",
+    "tokens.css",
+    "components.html"
+  ],
+  "generatedAt": "2026-06-06T00:00:00.000Z",
+  "tokens": [
+    {
+      "name": "--bg",
+      "value": "#f8f8f7",
+      "layer": "A1-identity",
+      "source": "tokens.css:8"
+    },
+    {
+      "name": "--surface",
+      "value": "#ffffff",
+      "layer": "A1-identity",
+      "source": "tokens.css:9"
+    },
+    {
+      "name": "--surface-warm",
+      "value": "#fff1ef",
+      "layer": "B-slot",
+      "source": "tokens.css:10"
+    },
+    {
+      "name": "--fg",
+      "value": "#171717",
+      "layer": "A1-identity",
+      "source": "tokens.css:11"
+    },
+    {
+      "name": "--fg-2",
+      "value": "#3f3f46",
+      "layer": "B-slot",
+      "source": "tokens.css:12"
+    },
+    {
+      "name": "--muted",
+      "value": "#71717a",
+      "layer": "A1-identity",
+      "source": "tokens.css:13"
+    },
+    {
+      "name": "--meta",
+      "value": "#f03e2f",
+      "layer": "B-slot",
+      "source": "tokens.css:14"
+    },
+    {
+      "name": "--border",
+      "value": "#e4e4e7",
+      "layer": "A1-identity",
+      "source": "tokens.css:15"
+    },
+    {
+      "name": "--border-soft",
+      "value": "#f1f1f2",
+      "layer": "B-slot",
+      "source": "tokens.css:16"
+    },
+    {
+      "name": "--accent",
+      "value": "#f03e2f",
+      "layer": "A1-identity",
+      "source": "tokens.css:17"
+    },
+    {
+      "name": "--accent-on",
+      "value": "#ffffff",
+      "layer": "A2",
+      "source": "tokens.css:18"
+    },
+    {
+      "name": "--accent-hover",
+      "value": "color-mix(in oklab, var(--accent), black 8%)",
+      "layer": "A2",
+      "source": "tokens.css:19"
+    },
+    {
+      "name": "--accent-active",
+      "value": "color-mix(in oklab, var(--accent), black 14%)",
+      "layer": "A2",
+      "source": "tokens.css:20"
+    },
+    {
+      "name": "--success",
+      "value": "#16a34a",
+      "layer": "A2",
+      "source": "tokens.css:21"
+    },
+    {
+      "name": "--warn",
+      "value": "#f59e0b",
+      "layer": "A2",
+      "source": "tokens.css:22"
+    },
+    {
+      "name": "--danger",
+      "value": "#dc2626",
+      "layer": "A2",
+      "source": "tokens.css:23"
+    },
+    {
+      "name": "--font-display",
+      "value": "\"Inter\", system-ui, sans-serif",
+      "layer": "A1-identity",
+      "source": "tokens.css:24"
+    },
+    {
+      "name": "--font-body",
+      "value": "\"Inter\", system-ui, sans-serif",
+      "layer": "A1-identity",
+      "source": "tokens.css:25"
+    },
+    {
+      "name": "--font-mono",
+      "value": "\"Roboto Mono\", ui-monospace, Menlo, monospace",
+      "layer": "A2",
+      "source": "tokens.css:26"
+    },
+    {
+      "name": "--text-xs",
+      "value": "12px",
+      "layer": "A1-structure",
+      "source": "tokens.css:27"
+    },
+    {
+      "name": "--text-sm",
+      "value": "14px",
+      "layer": "A1-structure",
+      "source": "tokens.css:28"
+    },
+    {
+      "name": "--text-base",
+      "value": "16px",
+      "layer": "A1-structure",
+      "source": "tokens.css:29"
+    },
+    {
+      "name": "--text-lg",
+      "value": "18px",
+      "layer": "A1-structure",
+      "source": "tokens.css:30"
+    },
+    {
+      "name": "--text-xl",
+      "value": "22px",
+      "layer": "A1-structure",
+      "source": "tokens.css:31"
+    },
+    {
+      "name": "--text-2xl",
+      "value": "32px",
+      "layer": "A1-structure",
+      "source": "tokens.css:32"
+    },
+    {
+      "name": "--text-3xl",
+      "value": "46px",
+      "layer": "A1-structure",
+      "source": "tokens.css:33"
+    },
+    {
+      "name": "--text-4xl",
+      "value": "64px",
+      "layer": "A1-structure",
+      "source": "tokens.css:34"
+    },
+    {
+      "name": "--leading-body",
+      "value": "1.55",
+      "layer": "A1-structure",
+      "source": "tokens.css:35"
+    },
+    {
+      "name": "--leading-tight",
+      "value": "1.08",
+      "layer": "A1-structure",
+      "source": "tokens.css:36"
+    },
+    {
+      "name": "--tracking-display",
+      "value": "-0.02em",
+      "layer": "A1-structure",
+      "source": "tokens.css:37"
+    },
+    {
+      "name": "--space-1",
+      "value": "4px",
+      "layer": "A2",
+      "source": "tokens.css:38"
+    },
+    {
+      "name": "--space-2",
+      "value": "8px",
+      "layer": "A2",
+      "source": "tokens.css:39"
+    },
+    {
+      "name": "--space-3",
+      "value": "12px",
+      "layer": "A2",
+      "source": "tokens.css:40"
+    },
+    {
+      "name": "--space-4",
+      "value": "16px",
+      "layer": "A2",
+      "source": "tokens.css:41"
+    },
+    {
+      "name": "--space-5",
+      "value": "20px",
+      "layer": "A2",
+      "source": "tokens.css:42"
+    },
+    {
+      "name": "--space-6",
+      "value": "24px",
+      "layer": "A2",
+      "source": "tokens.css:43"
+    },
+    {
+      "name": "--space-8",
+      "value": "32px",
+      "layer": "A2",
+      "source": "tokens.css:44"
+    },
+    {
+      "name": "--space-12",
+      "value": "48px",
+      "layer": "A2",
+      "source": "tokens.css:45"
+    },
+    {
+      "name": "--section-y-desktop",
+      "value": "96px",
+      "layer": "A1-structure",
+      "source": "tokens.css:46"
+    },
+    {
+      "name": "--section-y-tablet",
+      "value": "68px",
+      "layer": "A1-structure",
+      "source": "tokens.css:47"
+    },
+    {
+      "name": "--section-y-phone",
+      "value": "48px",
+      "layer": "A1-structure",
+      "source": "tokens.css:48"
+    },
+    {
+      "name": "--radius-sm",
+      "value": "6px",
+      "layer": "A2",
+      "source": "tokens.css:49"
+    },
+    {
+      "name": "--radius-md",
+      "value": "10px",
+      "layer": "A2",
+      "source": "tokens.css:50"
+    },
+    {
+      "name": "--radius-lg",
+      "value": "16px",
+      "layer": "A2",
+      "source": "tokens.css:51"
+    },
+    {
+      "name": "--radius-pill",
+      "value": "9999px",
+      "layer": "A2",
+      "source": "tokens.css:52"
+    },
+    {
+      "name": "--elev-flat",
+      "value": "none",
+      "layer": "A2",
+      "source": "tokens.css:53"
+    },
+    {
+      "name": "--elev-ring",
+      "value": "0 0 0 1px var(--border)",
+      "layer": "A2",
+      "source": "tokens.css:54"
+    },
+    {
+      "name": "--elev-raised",
+      "value": "0 18px 42px rgba(23, 23, 23, 0.10)",
+      "layer": "A2",
+      "source": "tokens.css:55"
+    },
+    {
+      "name": "--focus-ring",
+      "value": "0 0 0 4px rgba(240, 62, 47, 0.24)",
+      "layer": "A2",
+      "source": "tokens.css:56"
+    },
+    {
+      "name": "--motion-fast",
+      "value": "140ms",
+      "layer": "A2",
+      "source": "tokens.css:57"
+    },
+    {
+      "name": "--motion-base",
+      "value": "210ms",
+      "layer": "A2",
+      "source": "tokens.css:58"
+    },
+    {
+      "name": "--ease-standard",
+      "value": "cubic-bezier(0.2, 0, 0, 1)",
+      "layer": "A2",
+      "source": "tokens.css:59"
+    },
+    {
+      "name": "--container-max",
+      "value": "1180px",
+      "layer": "A1-structure",
+      "source": "tokens.css:60"
+    },
+    {
+      "name": "--container-gutter-desktop",
+      "value": "32px",
+      "layer": "A1-structure",
+      "source": "tokens.css:61"
+    },
+    {
+      "name": "--container-gutter-tablet",
+      "value": "24px",
+      "layer": "A1-structure",
+      "source": "tokens.css:62"
+    },
+    {
+      "name": "--container-gutter-phone",
+      "value": "16px",
+      "layer": "A1-structure",
+      "source": "tokens.css:63"
+    }
+  ]
+}

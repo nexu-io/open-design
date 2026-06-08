@@ -13,7 +13,7 @@
  */
 import type http from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { mkdir, readdir, readFile, realpath, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, realpath, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -157,6 +157,200 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(body.project.metadata?.skipDiscoveryBrief).toBe(true);
   });
 
+  it('forks a seeded conversation through a selected message', async () => {
+    const projectId = `proj-conv-fork-${Date.now()}`;
+    const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Conversation fork fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResp.status).toBe(200);
+
+    const sourceResp = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Source', sessionMode: 'chat' }),
+    });
+    expect(sourceResp.status).toBe(200);
+    const sourceBody = (await sourceResp.json()) as { conversation: { id: string } };
+    const sourceId = sourceBody.conversation.id;
+    const seedMessages = [
+      { id: 'fork-user-1', role: 'user', content: 'first ask' },
+      {
+        id: 'fork-assistant-1',
+        role: 'assistant',
+        content: 'first answer',
+        runId: 'source-run-1',
+        runStatus: 'succeeded',
+        lastRunEventId: 'evt-1',
+      },
+      { id: 'fork-user-2', role: 'user', content: 'second ask' },
+      { id: 'fork-assistant-2', role: 'assistant', content: 'second answer' },
+    ];
+    for (const message of seedMessages) {
+      const saveResp = await fetch(
+        `${baseUrl}/api/projects/${projectId}/conversations/${sourceId}/messages/${message.id}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(message),
+        },
+      );
+      expect(saveResp.status).toBe(200);
+    }
+
+    const forkResp = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Fork',
+        seedFromConversationId: sourceId,
+        forkAfterMessageId: 'fork-assistant-1',
+      }),
+    });
+    expect(forkResp.status).toBe(200);
+    const forkBody = (await forkResp.json()) as {
+      conversation: { id: string; title: string; sessionMode: string };
+    };
+    expect(forkBody.conversation.title).toBe('Fork');
+    expect(forkBody.conversation.sessionMode).toBe('chat');
+
+    const forkMessagesResp = await fetch(
+      `${baseUrl}/api/projects/${projectId}/conversations/${forkBody.conversation.id}/messages`,
+    );
+    expect(forkMessagesResp.status).toBe(200);
+    const forkMessagesBody = (await forkMessagesResp.json()) as {
+      messages: Array<{
+        id: string;
+        role: string;
+        content: string;
+        runId?: string;
+        runStatus?: string;
+        lastRunEventId?: string;
+      }>;
+    };
+    expect(forkMessagesBody.messages.map((message) => message.content)).toEqual([
+      'first ask',
+      'first answer',
+    ]);
+    expect(forkMessagesBody.messages.map((message) => message.id)).not.toContain(
+      'fork-assistant-1',
+    );
+    expect(forkMessagesBody.messages[1]).toMatchObject({
+      role: 'assistant',
+      content: 'first answer',
+    });
+    expect(forkMessagesBody.messages[1]?.runId).toBeUndefined();
+    expect(forkMessagesBody.messages[1]?.runStatus).toBeUndefined();
+    expect(forkMessagesBody.messages[1]?.lastRunEventId).toBeUndefined();
+  });
+
+  it('forks from a client-supplied snapshot when the fork point was never persisted', async () => {
+    // Regression: forking an assistant turn whose run errored / had its
+    // connection reset before the message reached the database used to 404 on
+    // `forkAfterMessageId` (the message is only in the browser), so the fork
+    // silently failed and the user never switched into the new conversation.
+    // The "Fork" action now sends the in-memory snapshot, which the daemon
+    // copies even though the fork point is absent from the source DB.
+    const projectId = `proj-conv-fork-snapshot-${Date.now()}`;
+    const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Fork snapshot fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResp.status).toBe(200);
+
+    const sourceResp = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Source', sessionMode: 'chat' }),
+    });
+    expect(sourceResp.status).toBe(200);
+    const sourceId = (
+      (await sourceResp.json()) as { conversation: { id: string } }
+    ).conversation.id;
+
+    // Persist only the user turn. The assistant turn errored before it was
+    // ever written, so it exists solely in the client's snapshot below.
+    const saveUserResp = await fetch(
+      `${baseUrl}/api/projects/${projectId}/conversations/${sourceId}/messages/ghost-user-1`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'ghost-user-1', role: 'user', content: 'enrich it' }),
+      },
+    );
+    expect(saveUserResp.status).toBe(200);
+
+    const forkResp = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Fork',
+        sessionMode: 'chat',
+        seedFromConversationId: sourceId,
+        forkAfterMessageId: 'ghost-assistant-1',
+        seedMessages: [
+          { id: 'ghost-user-1', role: 'user', content: 'enrich it' },
+          {
+            id: 'ghost-assistant-1',
+            role: 'assistant',
+            content: 'partial answer before reset',
+            runId: 'dead-run-1',
+            runStatus: 'failed',
+            lastRunEventId: 'evt-dead',
+            events: [{ kind: 'status', label: 'error', detail: 'Connection reset by server' }],
+          },
+          // Anything after the fork point must be dropped.
+          { id: 'ghost-user-2', role: 'user', content: 'should not be copied' },
+        ],
+      }),
+    });
+    expect(forkResp.status).toBe(200);
+    const forkId = (
+      (await forkResp.json()) as { conversation: { id: string } }
+    ).conversation.id;
+
+    const forkMessagesResp = await fetch(
+      `${baseUrl}/api/projects/${projectId}/conversations/${forkId}/messages`,
+    );
+    expect(forkMessagesResp.status).toBe(200);
+    const forkMessages = (
+      (await forkMessagesResp.json()) as {
+        messages: Array<{
+          id: string;
+          role: string;
+          content: string;
+          runId?: string;
+          runStatus?: string;
+          lastRunEventId?: string;
+        }>;
+      }
+    ).messages;
+
+    // Cut at the (unpersisted) fork point — the trailing user turn is dropped.
+    expect(forkMessages.map((m) => m.content)).toEqual([
+      'enrich it',
+      'partial answer before reset',
+    ]);
+    // Fresh ids, and the dead run pointers are not inherited.
+    expect(forkMessages.map((m) => m.id)).not.toContain('ghost-assistant-1');
+    expect(forkMessages[1]).toMatchObject({ role: 'assistant', content: 'partial answer before reset' });
+    expect(forkMessages[1]?.runId).toBeUndefined();
+    expect(forkMessages[1]?.runStatus).toBeUndefined();
+    expect(forkMessages[1]?.lastRunEventId).toBeUndefined();
+  });
+
   it('serves project files through raw and files path routes', async () => {
     const projectId = `proj-raw-route-${Date.now()}`;
     const createResp = await fetch(`${baseUrl}/api/projects`, {
@@ -241,6 +435,78 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(resp.status).toBe(404);
     const body = (await resp.json()) as { error?: { code?: string } };
     expect(body.error?.code).toBe('PROJECT_NOT_FOUND');
+  });
+
+  // Folder routes (#3516) must refuse to touch the filesystem for an unknown
+  // project id. Without the guard, POST reaches createProjectFolder ->
+  // ensureProject and would materialize a `.od/projects/<id>/...` directory
+  // with no DB row, leaving orphaned state and breaking the invariant the
+  // neighboring project-file routes rely on.
+  it('returns 404 for unknown project folder routes without creating project files', async () => {
+    const missingProjectId = `missing-folder-routes-${Date.now()}`;
+    const requests = [
+      fetch(`${baseUrl}/api/projects/${missingProjectId}/folders`),
+      fetch(`${baseUrl}/api/projects/${missingProjectId}/folders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'orphan' }),
+      }),
+      fetch(`${baseUrl}/api/projects/${missingProjectId}/folders`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: 'orphan' }),
+      }),
+    ];
+
+    for (const response of await Promise.all(requests)) {
+      expect(response.status).toBe(404);
+      const body = (await response.json()) as { error?: { code?: string } };
+      expect(body.error?.code).toBe('PROJECT_NOT_FOUND');
+    }
+
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    await expect(stat(path.join(dataDir, 'projects', missingProjectId))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
+  it('creates, lists, and deletes a folder for a real project', async () => {
+    const projectId = `proj-folders-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Folder fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const postResp = await fetch(`${baseUrl}/api/projects/${projectId}/folders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'references' }),
+    });
+    expect(postResp.status).toBe(200);
+    const created = (await postResp.json()) as { folder: { path: string } };
+    expect(created.folder.path).toContain('references');
+
+    const listResp = await fetch(`${baseUrl}/api/projects/${projectId}/folders`);
+    expect(listResp.status).toBe(200);
+    const listed = (await listResp.json()) as { folders: Array<{ path: string }> };
+    expect(listed.folders.some((f) => f.path.includes('references'))).toBe(true);
+
+    const deleteResp = await fetch(`${baseUrl}/api/projects/${projectId}/folders`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: created.folder.path }),
+    });
+    expect(deleteResp.status).toBe(200);
+    const deleted = (await deleteResp.json()) as { ok: boolean };
+    expect(deleted.ok).toBe(true);
   });
 
   // PR #974: `fromTrustedPicker` is privileged the same way `baseDir`

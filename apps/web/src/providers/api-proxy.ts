@@ -26,6 +26,9 @@ import { isAnthropicSupportedImagePath } from '../utils/apiProtocol';
 export interface ProxyContext {
   projectId?: string;
   byokImageModel?: string;
+  byokVideoModel?: string;
+  byokSpeechModel?: string;
+  byokSpeechVoice?: string;
 }
 
 export async function streamProxyEndpoint(
@@ -60,6 +63,15 @@ export async function streamProxyEndpoint(
         ...(context?.projectId ? { projectId: context.projectId } : {}),
         ...(context?.byokImageModel
           ? { byokImageModel: context.byokImageModel }
+          : {}),
+        ...(context?.byokVideoModel
+          ? { byokVideoModel: context.byokVideoModel }
+          : {}),
+        ...(context?.byokSpeechModel
+          ? { byokSpeechModel: context.byokSpeechModel }
+          : {}),
+        ...(context?.byokSpeechVoice
+          ? { byokSpeechVoice: context.byokSpeechVoice }
           : {}),
       }),
       signal,
@@ -144,8 +156,8 @@ async function buildAnthropicMessageContent(
   message: ChatMessage,
   projectId: string,
 ): Promise<ProxyMessageContent> {
-  const imageAttachments = (message.attachments ?? []).filter(
-    (attachment) => attachment.kind === 'image',
+  const imageAttachments = sortAttachmentsByUserOrder(
+    (message.attachments ?? []).filter((attachment) => attachment.kind === 'image'),
   );
   if (message.role !== 'user' || imageAttachments.length === 0) {
     return message.content;
@@ -169,6 +181,22 @@ async function buildAnthropicMessageContent(
   }
 
   return blocks.length > 0 ? blocks : message.content;
+}
+
+function sortAttachmentsByUserOrder<T extends { order?: number }>(attachments: T[]): T[] {
+  return attachments
+    .map((attachment, index) => ({ attachment, index }))
+    .sort((a, b) => {
+      const aOrder = typeof a.attachment.order === 'number' && Number.isFinite(a.attachment.order)
+        ? a.attachment.order
+        : a.index;
+      const bOrder = typeof b.attachment.order === 'number' && Number.isFinite(b.attachment.order)
+        ? b.attachment.order
+        : b.index;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return a.index - b.index;
+    })
+    .map((entry) => entry.attachment);
 }
 
 async function readAnthropicImageBlock(

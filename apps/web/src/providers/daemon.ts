@@ -10,6 +10,7 @@
  *                 non-zero (tail appended to the error message).
  */
 import type { AgentEvent, ChatCommentAttachment, ChatMessage } from '../types';
+import type { AmrEntryAttribution } from '../analytics/amr-attribution';
 import type {
   ChatAnalyticsHints,
   ChatRunCreateResponse,
@@ -17,9 +18,11 @@ import type {
   ChatRunStatus,
   ChatRunStatusResponse,
   ChatRequest,
+  ChatSessionMode,
   ChatSseEvent,
   ChatSseStartPayload,
   DaemonAgentPayload,
+  AmrModelsResponse,
   MediaExecutionPolicy,
   ResearchOptions,
   RunContextSelection,
@@ -187,6 +190,14 @@ export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: st
 
 export interface DaemonStreamHandlers extends StreamHandlers {
   onAgentEvent: (ev: AgentEvent) => void;
+  /**
+   * Live-only incremental tool-input fragment (Claude `input_json_delta`).
+   * Kept off `AgentEvent`/`PersistedAgentEvent` because it is ephemeral and
+   * never persisted — consumers accumulate by tool-use `id` for real-time
+   * display and discard once the full `tool_use` event arrives. `name` is the
+   * tool name so the UI can gate the live preview to code-writing tools.
+   */
+  onToolInputDelta?: (id: string, name: string, delta: string) => void;
 }
 
 export interface DaemonStreamOptions {
@@ -204,6 +215,7 @@ export interface DaemonStreamOptions {
   // workspace.
   projectId?: string | null;
   conversationId?: string | null;
+  sessionMode?: ChatSessionMode;
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
@@ -224,6 +236,7 @@ export interface DaemonStreamOptions {
   reasoning?: string | null;
   research?: ResearchOptions;
   context?: RunContextSelection;
+  appliedPluginSnapshotId?: string | null;
   mediaExecution?: MediaExecutionPolicy;
   locale?: string;
   initialLastEventId?: string | null;
@@ -255,7 +268,13 @@ function notifyRunsChanged() {
 }
 
 function daemonSseErrorMessage(data: SseErrorPayload): string {
+  const formattedOpenCodeError = formatOpenCodeSessionError(data.error?.details);
+  if (formattedOpenCodeError) return formattedOpenCodeError;
+
   const message = String(data.error?.message ?? data.message ?? 'daemon error');
+  const legacyOpenCodeError = formatLegacyOpenCodeSessionError(message);
+  if (legacyOpenCodeError) return legacyOpenCodeError;
+
   const detail =
     data.error?.details &&
     typeof data.error.details === 'object' &&
@@ -292,6 +311,195 @@ function shouldSuppressLifecycleExitFallback(
   );
 }
 
+const AMR_OPENCODE_INCOMPLETE_MESSAGE =
+  'AMR/OpenCode started, but the run did not complete. Please retry or check the run details for the session stream error.';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readStringField(record: Record<string, unknown> | null, key: string): string | null {
+  const value = record?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function readNumberField(record: Record<string, unknown> | null, key: string): number | null {
+  const value = record?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function readBooleanField(record: Record<string, unknown> | null, key: string): boolean | null {
+  const value = record?.[key];
+  return typeof value === 'boolean' ? value : null;
+}
+
+interface OpenCodeSessionErrorDetails {
+  message: string | null;
+  statusCode: number | null;
+  retryable: boolean | null;
+  suggestion: string | null;
+  responseBodyPreview: string | null;
+}
+
+function inferOpenCodeRetryable(statusCode: number | null): boolean | null {
+  if (statusCode === null) return null;
+  return statusCode === 429 || statusCode >= 500;
+}
+
+function normalizeOpenCodeSessionErrorDetails(value: unknown): OpenCodeSessionErrorDetails | null {
+  if (!isRecord(value) || value.kind !== 'opencode_session_error') return null;
+  const statusCode = readNumberField(value, 'statusCode');
+  return {
+    message: readStringField(value, 'message'),
+    statusCode,
+    retryable: readBooleanField(value, 'retryable') ?? inferOpenCodeRetryable(statusCode),
+    suggestion: readStringField(value, 'suggestion'),
+    responseBodyPreview: readStringField(value, 'responseBodyPreview'),
+  };
+}
+
+function linkErrorMessageFromResponseBodyPreview(preview: string | null): string | null {
+  if (!preview) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(preview);
+  } catch {
+    return null;
+  }
+  const error = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : null;
+  return readStringField(error, 'message');
+}
+
+function retryExhaustedMessage(details: OpenCodeSessionErrorDetails): string | null {
+  const linkMessage = linkErrorMessageFromResponseBodyPreview(details.responseBodyPreview);
+  if (!linkMessage) return null;
+  const retryMatch = linkMessage.match(/\bRetried the upstream request\s+(\d+)\s+times\b/i);
+  if (!retryMatch) return null;
+  const retryCount = retryMatch[1];
+  return [
+    'The upstream model service is temporarily unavailable.',
+    '',
+    `We already retried ${retryCount} times, but the request still failed. Please retry later or switch to another model.`,
+  ].join('\n');
+}
+
+function formatOpenCodeSessionError(value: unknown): string | null {
+  const details = normalizeOpenCodeSessionErrorDetails(value);
+  if (!details) return null;
+  const statusCode = details.statusCode;
+  const message = details.message;
+  if (statusCode === 404) {
+    return 'The model service returned 404 Not Found for the configured runtime endpoint. Check the AMR Link URL or model route.';
+  }
+  if (statusCode === 401 || statusCode === 403) {
+    return 'AMR authentication failed. Please sign in again or refresh the runtime key.';
+  }
+  if (statusCode === 429) {
+    return 'The model service rejected the request due to quota or rate limits. Retry later or check quota and rate limits.';
+  }
+  if (typeof statusCode === 'number' && statusCode >= 500) {
+    const exhaustedMessage = retryExhaustedMessage(details);
+    if (exhaustedMessage) return exhaustedMessage;
+    return 'The upstream model provider returned a temporary error. Please retry or switch models.';
+  }
+  const base = message ? `OpenCode session failed: ${message}` : 'OpenCode session failed.';
+  return details.suggestion ? `${base}\n${details.suggestion}` : base;
+}
+
+function extractBalancedJsonObject(text: string, startIndex: number): string | null {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = startIndex; i < text.length; i += 1) {
+    const char = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+    if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) return text.slice(startIndex, i + 1);
+    }
+  }
+  return null;
+}
+
+function legacyOpenCodeSessionErrorDetails(text: string): OpenCodeSessionErrorDetails | null {
+  const marker = 'opencode session error:';
+  const markerIndex = text.toLowerCase().indexOf(marker);
+  if (markerIndex === -1) return null;
+  const jsonStart = text.indexOf('{', markerIndex + marker.length);
+  if (jsonStart === -1) return null;
+  const jsonText = extractBalancedJsonObject(text, jsonStart);
+  if (!jsonText) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed)) return null;
+  const error = isRecord(parsed.error) ? parsed.error : null;
+  const data = isRecord(error?.data) ? error.data : null;
+  const statusCode = readNumberField(data, 'statusCode');
+  const retryable = readBooleanField(data, 'isRetryable') ?? inferOpenCodeRetryable(statusCode);
+  return {
+    message: readStringField(data, 'message') ?? readStringField(error, 'message'),
+    statusCode,
+    retryable,
+    suggestion: null,
+    responseBodyPreview: readStringField(data, 'responseBodyPreview') ?? readStringField(data, 'responseBody'),
+  };
+}
+
+function formatLegacyOpenCodeSessionError(text: string): string | null {
+  const details = legacyOpenCodeSessionErrorDetails(text);
+  if (!details) return null;
+  return formatOpenCodeSessionError({
+    kind: 'opencode_session_error',
+    ...details,
+  });
+}
+
+function isAmrOpenCodeExitFallback(agentId: string | undefined, stderr: string): boolean {
+  if (agentId === 'amr' || agentId === 'opencode') return true;
+  const normalized = stderr.toLowerCase();
+  return normalized.includes('opencode server listening') || normalized.includes('opencode session error:');
+}
+
+function isAmrOpenCodeBootstrapLine(line: string): boolean {
+  const trimmed = line.trim();
+  return (
+    /^AMR run id:\s*\S+/i.test(trimmed) ||
+    /^Performing one time database migration/i.test(trimmed) ||
+    /^sqlite-migration:done$/i.test(trimmed) ||
+    /^Database migration complete\.?$/i.test(trimmed) ||
+    /^Warning:\s*OPENCODE_SERVER_PASSWORD is not set/i.test(trimmed) ||
+    /^opencode server listening on http:\/\/127\.0\.0\.1:\d+/i.test(trimmed)
+  );
+}
+
+function cleanAmrOpenCodeStderrFallback(agentId: string | undefined, stderr: string): string {
+  if (!isAmrOpenCodeExitFallback(agentId, stderr)) return stderr.trim();
+  return stderr
+    .split(/\r?\n/)
+    .filter((line) => line.trim() && !isAmrOpenCodeBootstrapLine(line))
+    .join('\n')
+    .trim();
+}
+
 export async function streamViaDaemon({
   agentId,
   history,
@@ -300,6 +508,7 @@ export async function streamViaDaemon({
   handlers,
   projectId,
   conversationId,
+  sessionMode,
   assistantMessageId,
   clientRequestId,
   skillId,
@@ -311,6 +520,7 @@ export async function streamViaDaemon({
   reasoning,
   research,
   context,
+  appliedPluginSnapshotId,
   mediaExecution,
   locale,
   initialLastEventId,
@@ -333,6 +543,7 @@ export async function streamViaDaemon({
     currentPrompt: latestUserPromptFromHistory(history),
     projectId: projectId ?? null,
     conversationId: conversationId ?? null,
+    sessionMode,
     assistantMessageId: assistantMessageId ?? null,
     clientRequestId: clientRequestId ?? null,
     skillId: skillId ?? null,
@@ -343,6 +554,7 @@ export async function streamViaDaemon({
     model: model ?? null,
     reasoning: reasoning ?? null,
     locale,
+    ...(appliedPluginSnapshotId ? { appliedPluginSnapshotId } : {}),
     ...(context ? { context } : {}),
     ...(research ? { research } : {}),
     ...(mediaExecution ? { mediaExecution } : {}),
@@ -518,6 +730,16 @@ export async function fetchVelaLoginStatus(): Promise<VelaLoginStatus | null> {
   }
 }
 
+export async function fetchAmrModels(): Promise<AmrModelsResponse | null> {
+  try {
+    const resp = await fetch('/api/amr/models', { cache: 'no-store' });
+    if (!resp.ok) return null;
+    return (await resp.json()) as AmrModelsResponse;
+  } catch {
+    return null;
+  }
+}
+
 export interface StartVelaLoginResult {
   ok: boolean;
   status: number;
@@ -526,9 +748,15 @@ export interface StartVelaLoginResult {
   error?: string;
 }
 
-export async function startVelaLogin(): Promise<StartVelaLoginResult> {
+export async function startVelaLogin(
+  attribution?: AmrEntryAttribution | null,
+): Promise<StartVelaLoginResult> {
   try {
-    const resp = await fetch('/api/integrations/vela/login', { method: 'POST' });
+    const resp = await fetch('/api/integrations/vela/login', {
+      method: 'POST',
+      headers: attribution ? { 'Content-Type': 'application/json' } : undefined,
+      body: attribution ? JSON.stringify({ attribution }) : undefined,
+    });
     if (resp.ok) {
       const body = (await resp.json()) as { pid?: number };
       return { ok: true, status: resp.status, pid: body.pid };
@@ -719,6 +947,16 @@ async function consumeDaemonRun({
           }
 
           if (event.event === 'agent') {
+            if (event.data.type === 'tool_input_delta') {
+              if (
+                typeof event.data.id === 'string' &&
+                typeof event.data.name === 'string' &&
+                typeof event.data.delta === 'string'
+              ) {
+                handlers.onToolInputDelta?.(event.data.id, event.data.name, event.data.delta);
+              }
+              continue;
+            }
             const translated = translateAgentEvent(event.data);
             if (!translated) continue;
             if (translated.kind === 'text') {
@@ -809,9 +1047,13 @@ async function consumeDaemonRun({
         handlers.onDone(acc);
         return;
       }
-      const tail = stderrBuf.trim().slice(-400);
+      const cleanedStderr = cleanAmrOpenCodeStderrFallback(agentId, stderrBuf);
+      const formattedOpenCodeError = formatLegacyOpenCodeSessionError(cleanedStderr);
+      const tail = (formattedOpenCodeError ?? cleanedStderr).trim().slice(-400);
+      const fallbackTail =
+        tail || (isAmrOpenCodeExitFallback(agentId, stderrBuf) ? AMR_OPENCODE_INCOMPLETE_MESSAGE : '');
       handlers.onError(
-        new Error(`agent exited with ${exitSignal ? `signal ${exitSignal}` : `code ${exitCode}`}${tail ? `\n${tail}` : ''}`),
+        new Error(`agent exited with ${exitSignal ? `signal ${exitSignal}` : `code ${exitCode}`}${fallbackTail ? `\n${fallbackTail}` : ''}`),
       );
       return;
     }

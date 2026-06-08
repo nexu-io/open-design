@@ -147,6 +147,17 @@ function rpcErrorMessage(raw: unknown): string {
     : message;
 }
 
+function rpcErrorData(raw: unknown): unknown {
+  const obj = asObject(raw);
+  const error = asObject(obj?.error);
+  return error && 'data' in error ? error.data : undefined;
+}
+
+function rpcErrorRetryable(data: unknown): boolean | undefined {
+  const details = asObject(data);
+  return typeof details?.retryable === 'boolean' ? details.retryable : undefined;
+}
+
 interface FormattedUsage {
   input_tokens?: number;
   output_tokens?: number;
@@ -692,6 +703,7 @@ export function attachAcpSession({
   let emittedThinkingStart = false;
   let emittedFirstTokenStatus = false;
   let emittedTextChunk = false;
+  let emittedToolCall = false;
   let emittedTextBuffer = '';
   let finished = false;
   let fatal = false;
@@ -739,7 +751,7 @@ export function attachAcpSession({
 
   const fail = (
     message: string,
-    options: { forceModelUnavailable?: boolean } = {},
+    options: { forceModelUnavailable?: boolean; details?: unknown; retryable?: boolean } = {},
   ) => {
     if (finished) return;
     finished = true;
@@ -750,7 +762,19 @@ export function attachAcpSession({
       (options.forceModelUnavailable || isModelUnavailableError(message));
     send(
       'error',
-      useModelUnavailable ? amrModelUnavailablePayload(message) : { message },
+      useModelUnavailable
+        ? amrModelUnavailablePayload(message)
+        : options.details === undefined && options.retryable === undefined
+          ? { message }
+          : {
+              message,
+              error: {
+                code: 'AGENT_EXECUTION_FAILED',
+                message,
+                retryable: options.retryable ?? false,
+                ...(options.details === undefined ? {} : { details: options.details }),
+              },
+            },
     );
     if (!child.killed) child.kill('SIGTERM');
   };
@@ -831,7 +855,12 @@ export function attachAcpSession({
       if (error?.code === -32603 && obj.id !== expectedId) {
         return;
       }
-      fail(rpcErr);
+      const details = rpcErrorData(obj);
+      const retryable = rpcErrorRetryable(details);
+      fail(rpcErr, {
+        details,
+        ...(retryable === undefined ? {} : { retryable }),
+      });
       return;
     }
     if (obj.method === 'session/request_permission') {
@@ -871,6 +900,16 @@ export function attachAcpSession({
             send('agent', { type: 'text_delta', delta });
           }
         }
+        return;
+      }
+      if (
+        update.sessionUpdate === 'tool_call' ||
+        update.sessionUpdate === 'tool_call_update'
+      ) {
+        // The turn did real work (a tool call / file edit), which is valid output even
+        // when the model emits no closing assistant text. Track it so the prompt-complete
+        // handler does not misreport such a turn as "no output / model unavailable".
+        emittedToolCall = true;
         return;
       }
       return;
@@ -924,7 +963,7 @@ export function attachAcpSession({
       return;
     }
     if (promptRequestId !== null && obj.id === promptRequestId) {
-      if (!emittedTextChunk && modelUnavailableErrorCode) {
+      if (!emittedTextChunk && !emittedToolCall && modelUnavailableErrorCode) {
         fail(
           'ACP session completed without producing any assistant text. Refresh the AMR model list, choose a supported model, and retry this run.',
           { forceModelUnavailable: true },

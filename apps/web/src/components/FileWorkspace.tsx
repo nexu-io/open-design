@@ -1,9 +1,11 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type DragEvent as ReactDragEvent,
+  type ReactNode,
 } from 'react';
 import { Button } from '@open-design/components';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
@@ -19,7 +21,10 @@ import { isMacPlatform } from '../utils/platform';
 import {
   deleteProjectFile,
   fetchProjectFileText,
+  fetchProjectFolders,
   projectFileUrl,
+  createProjectFolder,
+  deleteProjectFolder,
   renameProjectFile,
   updateDesignSystemDraft,
   type UploadProjectFilesResult,
@@ -28,29 +33,50 @@ import {
 } from '../providers/registry';
 import { deriveFileOps, type FileOpEntry } from '../runtime/file-ops';
 import { latestTodosFromEvents, type TodoItem } from '../runtime/todos';
+import { deliverableSlideNavForActiveFile, isSlideNavDeliverableNow } from '../runtime/slide-nav';
 import {
   type AgentEvent,
+  type AgentInfo,
+  type AppConfig,
   type ChatAttachment,
   type ChatCommentAttachment,
+  type Conversation,
+  conversationIdFromSideChatTabId,
+  isSideChatTabId,
+  isTerminalTabId,
+  terminalIdFromTabId,
   liveArtifactSummaryToWorkspaceEntry,
   type LiveArtifactSummary,
   type LiveArtifactEventItem,
   type LiveArtifactWorkspaceEntry,
   type OpenTabsState,
+  type ProjectBrowserWorkspaceTab,
   type PreviewComment,
   type PreviewCommentTarget,
   type DesignSystemSummary,
   type ProjectMetadata,
   type ProjectFile,
+  type ProjectFolder,
 } from '../types';
-import { DesignFilesPanel } from './DesignFilesPanel';
+import type { ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
+import { createTerminal, killTerminal } from '../state/projects';
+import type { QuestionForm } from '../artifacts/question-form';
+import { DesignFilesPanel, type DesignFilesNavState } from './DesignFilesPanel';
+import { DesignBrowserPanel, labelFromUrl, type BrowserPageInfo } from './DesignBrowserPanel';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
+import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
-import { Icon } from './Icon';
+import { Icon, type IconName } from './Icon';
+import { Toast } from './Toast';
+import { TabLauncherMenu } from './workspace/TabLauncherMenu';
+import { buildLauncherActions, type LauncherContext } from './workspace/tab-launcher';
+import { SideChatTab, type ActiveConversationChatState } from './workspace/SideChatTab';
+import { TerminalViewer } from './workspace/TerminalViewer';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
 import { PasteTextDialog } from './PasteTextDialog';
+import { QuestionsPanel } from './QuestionsPanel';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
 import {
@@ -59,6 +85,7 @@ import {
   parseSketchWorkspaceDocument,
   type SketchItem,
 } from './sketch-model';
+import { AnimatePresence } from 'motion/react';
 import { GenerationPreviewStage } from './GenerationPreviewStage';
 import { AmrGuidance } from './AmrGuidance';
 import { buildGenerationPreviewState } from '../runtime/generation-preview';
@@ -67,6 +94,15 @@ import type { ChatMessage } from '../types';
 interface Props {
   projectId: string;
   projectKind: TrackingProjectKind;
+  // Basename of the project's chosen working directory (e.g. "openclaw").
+  // Threaded to DesignFilesPanel as the breadcrumb root label. Undefined for
+  // default-storage projects.
+  rootDirName?: string;
+  // True while a working-dir replace is reindexing; shows a loading state.
+  reloading?: boolean;
+  /** Absolute on-disk project directory (from GET /api/projects/:id). Used by
+   * the Design Files panel's "copy absolute path" action. */
+  resolvedDir?: string | null;
   files: ProjectFile[];
   liveArtifacts: LiveArtifactSummary[];
   filesRefreshKey?: number;
@@ -77,6 +113,13 @@ interface Props {
   commentQueueOnSend?: boolean;
   commentSendDisabled?: boolean;
   openRequest?: { name: string; nonce: number } | null;
+  // Open the named file AND surface its Share/Export menu. Drives the chat-side
+  // "Share" next-step action without a dedicated share backend.
+  shareRequest?: { name: string; nonce: number } | null;
+  // Flip a deck preview to a given slide when a queued chat send starts. Mirrors
+  // `shareRequest`: the named file is activated (if open) and the matching
+  // FileViewer consumes the nonce to navigate.
+  slideNavRequest?: { name: string; slideIndex: number; nonce: number } | null;
   liveArtifactEvents?: LiveArtifactEventItem[];
   designSystemActivityEvents?: AgentEvent[];
   // Persisted set of open tabs + active tab. Owned by ProjectView so the
@@ -84,15 +127,18 @@ interface Props {
   tabsState: OpenTabsState;
   onTabsStateChange: (next: OpenTabsState) => void;
   previewComments?: PreviewComment[];
-  onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
+  onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[]) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
-  onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<boolean | void> | boolean | void;
+  onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
+  onRequestBrowserUsePrompt?: (prompt: string) => void;
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
+  preferredPreviewFile?: string | null;
+  autoPreviewDesignArtifacts?: boolean;
   focusMode?: boolean;
   onFocusModeChange?: (next: boolean) => void;
   designSystemProject?: DesignSystemSummary | null;
@@ -115,6 +161,26 @@ interface Props {
   githubConnected?: boolean;
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
+  // Side Chat (`chat:<conversationId>` tab) wiring. Threaded from ProjectView
+  // so a secondary ChatPane can render an already-open conversation tab without
+  // FileWorkspace owning any chat state. All optional: a workspace mounted
+  // without these simply does not render restored side-chat tabs. There is no
+  // launcher affordance to create new side chats — only persisted `chat:` tabs
+  // are restored.
+  chatConfig?: AppConfig;
+  chatAgentsById?: Map<string, AgentInfo>;
+  chatLocale?: string;
+  conversations?: Conversation[];
+  /** The primary chat's active conversation. */
+  activeConversationId?: string | null;
+  onSelectConversation?: (id: string) => void;
+  onDeleteConversation?: (id: string) => void;
+  onRenameConversation?: (id: string, title: string) => void;
+  onConversationSessionModeChange?: (id: string, mode: ChatSessionMode) => void;
+  onNewConversation?: () => void;
+  activeConversationChat?: ActiveConversationChatState;
+  onActiveContextChange?: (context: WorkspaceContextItem | null) => void;
+  onWorkspaceContextsChange?: (contexts: WorkspaceContextItem[]) => void;
   messages?: ChatMessage[];
   artifactHtml?: string | null;
   conversationError?: string | null;
@@ -126,6 +192,30 @@ interface Props {
   onLaunchTerminalAuth?: () => void;
   // Conversation id for the AMR promotion-card telemetry payload.
   conversationId?: string | null;
+  // Project-level actions (settings, handoff, avatar menu) rendered at the
+  // right end of the Design Files tab row. The former standalone chrome header
+  // row was removed; these moved here alongside the FileViewer present/Share
+  // portal that targets the same actions container.
+  headerActions?: ReactNode;
+  // Active discovery question form, surfaced in the right-hand Questions tab
+  // instead of inline in the chat. Owned by ProjectView (derived from the
+  // latest assistant message).
+  questionForm?: QuestionForm | null;
+  // Tolerantly-parsed form shown while the block is still streaming, so the
+  // panel renders a frame and fills questions in progressively.
+  questionFormPreview?: QuestionForm | null;
+  // Stable per-occurrence id so the panel can remember a completed reveal
+  // across the streaming→persisted remount instead of re-animating.
+  questionFormKey?: string | null;
+  questionFormInteractive?: boolean;
+  // The turn is busy (streaming/queued) — keep Continue/Skip disabled while the
+  // form itself stays editable.
+  questionFormSubmitDisabled?: boolean;
+  questionFormSubmittedAnswers?: Record<string, string | string[]>;
+  questionsGenerating?: boolean;
+  onSubmitQuestionForm?: (text: string) => void;
+  // Bumped nonce that focuses the Questions tab (banner click / new form).
+  focusQuestionsRequest?: { nonce: number } | null;
 }
 
 interface SketchState {
@@ -139,9 +229,25 @@ interface SketchState {
   saving: boolean;
 }
 
-const DESIGN_FILES_TAB = '__design_files__';
-const DESIGN_SYSTEM_TAB = '__design_system__';
+export const DESIGN_FILES_TAB = '__design_files__';
+export const DESIGN_SYSTEM_TAB = '__design_system__';
+const QUESTIONS_TAB = '__questions__';
+const BROWSER_TAB_PREFIX = '__browser__:';
+// Keep at most this many embedded-browser `<webview>`s mounted at once. Each is
+// a full out-of-process Chromium guest (timers, JS, network, a GPU surface), so
+// mounting every open browser tab made memory/CPU grow linearly with tab count.
+// We keep an LRU of the most-recently-activated browser tabs live and unmount
+// the rest; switching back to an evicted tab remounts (reloads) it.
+const BROWSER_KEEPALIVE_CAP = 3;
+
+// Stable empty folder list so the render-phase project-switch reset is
+// idempotent (passing a fresh `[]` each render would re-trigger the reset).
+const EMPTY_PROJECT_FOLDERS: ProjectFolder[] = [];
 type TabDropEdge = 'before' | 'after';
+type BrowserWorkspaceTab = ProjectBrowserWorkspaceTab;
+type WorkspaceOrderedTab =
+  | { id: string; kind: 'browser'; browserTab: BrowserWorkspaceTab }
+  | { id: string; kind: 'file'; name: string };
 type DesignSystemReviewDecision =
   NonNullable<ProjectMetadata['designSystemReview']>[string]['decision'];
 type DesignSystemReviewEntry = NonNullable<ProjectMetadata['designSystemReview']>[string];
@@ -167,6 +273,12 @@ interface DesignSystemProjectSection {
   category: DesignSystemReviewCategory;
   requiredFile?: string;
 }
+
+function consumeFileWorkspaceTabShortcut(event: KeyboardEvent) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
 type DesignSystemSectionActivityPhase =
   | 'idle'
   | 'planned'
@@ -183,6 +295,35 @@ interface DesignSystemSectionActivity {
   todoText?: string;
   todoStatus?: TodoItem['status'];
 }
+
+function formatBrowserTabUrl(url: string): string {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, '');
+    const path = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    if (!path || path === '/') return host || url;
+    return `${host}${path}`;
+  } catch {
+    return url;
+  }
+}
+
+function joinDisplayPath(root: string, child: string): string {
+  const cleanRoot = root.replace(/[\\/]+$/u, '');
+  const cleanChild = child.replace(/^[\\/]+/u, '');
+  return cleanChild ? `${cleanRoot}/${cleanChild}` : cleanRoot;
+}
+
+function createDefaultDesignFilesNavState(): DesignFilesNavState {
+  return {
+    kindFilter: new Set(),
+    currentDir: '',
+    page: 0,
+    pageSize: 30,
+  };
+}
+
 interface DesignSystemProjectSectionReview {
   section: DesignSystemProjectSection;
   previewFile: ProjectFile | null;
@@ -211,6 +352,9 @@ const DESIGN_SYSTEM_IMAGE_OR_FONT_EXTENSIONS = /\.(svg|png|jpe?g|gif|webp|avif|i
 export function FileWorkspace({
   projectId,
   projectKind,
+  rootDirName,
+  reloading,
+  resolvedDir,
   files,
   liveArtifacts,
   filesRefreshKey = 0,
@@ -221,6 +365,8 @@ export function FileWorkspace({
   commentQueueOnSend = false,
   commentSendDisabled = false,
   openRequest,
+  shareRequest,
+  slideNavRequest,
   liveArtifactEvents = [],
   designSystemActivityEvents = [],
   tabsState,
@@ -229,9 +375,12 @@ export function FileWorkspace({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onRequestBrowserUsePrompt,
   onPluginFolderAgentAction,
   activePluginActionPaths,
   hiddenPluginActionPaths,
+  preferredPreviewFile = null,
+  autoPreviewDesignArtifacts = false,
   focusMode = false,
   onFocusModeChange,
   designSystemProject = null,
@@ -246,6 +395,19 @@ export function FileWorkspace({
   githubConnected,
   commentPortalId,
   onCommentModeChange,
+  chatConfig,
+  chatAgentsById,
+  chatLocale,
+  conversations = [],
+  activeConversationId = null,
+  onSelectConversation,
+  onDeleteConversation,
+  onRenameConversation,
+  onConversationSessionModeChange,
+  onNewConversation,
+  activeConversationChat,
+  onActiveContextChange,
+  onWorkspaceContextsChange,
   messages = [],
   artifactHtml,
   conversationError,
@@ -253,8 +415,22 @@ export function FileWorkspace({
   onAuthorizeAndRetry,
   onLaunchTerminalAuth,
   conversationId,
+  headerActions,
+  questionForm = null,
+  questionFormPreview = null,
+  questionFormKey = null,
+  questionFormInteractive = false,
+  questionFormSubmitDisabled = false,
+  questionFormSubmittedAnswers,
+  questionsGenerating = false,
+  onSubmitQuestionForm,
+  focusQuestionsRequest = null,
 }: Props) {
   const t = useT();
+  // The chat column only shows a compact Questions banner; the form itself
+  // lives here, including after submission when a banner click can reopen the
+  // answered preview.
+  const showQuestionsTab = Boolean(questionForm || questionFormPreview || questionsGenerating);
   const analytics = useAnalytics();
   // P1 page_view page_name=file_manager — once per project the user lands
   // inside the workspace. Re-fire when the projectId changes so a
@@ -270,22 +446,90 @@ export function FileWorkspace({
   // Persisted tabs come from the parent. Active tab can transiently point
   // at a pending sketch — pending sketches are not in tabsState.tabs.
   const persistedTabs = tabsState.tabs;
+  // Launcher "create" actions (New Terminal / Side Chat) resolve
+  // asynchronously; keep the latest committed tab state out of render
+  // closures so opening the new tab appends to the freshest list instead of
+  // replaying a stale closure and dropping tabs added in the meantime.
+  const tabsStateRef = useRef(tabsState);
+  const lastTabsStatePropRef = useRef(tabsState);
+  if (lastTabsStatePropRef.current !== tabsState) {
+    tabsStateRef.current = tabsState;
+    lastTabsStatePropRef.current = tabsState;
+  }
   const [activeTab, setActiveTab] = useState<string>(
     tabsState.active ?? defaultRootTab,
   );
 
   const [showPasteDialog, setShowPasteDialog] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // The folder the Design Files panel is currently viewing (synced via
+  // onCurrentDirChange). New files — uploads, pastes, sketches, dropped files —
+  // are created under this folder instead of the project root.
+  const [uploadDir, setUploadDir] = useState<string>('');
   const [sketches, setSketches] = useState<Record<string, SketchState>>({});
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+  const [projectFolders, setProjectFolders] = useState<ProjectFolder[]>(EMPTY_PROJECT_FOLDERS);
+  // Reset the folder list during render — NOT in an effect — when the project
+  // changes. DesignFilesPanel is keyed by `projectId`, so an effect-based reset
+  // would let the new panel mount once with the previous project's folders and
+  // briefly suppress the new project's empty state (the exact regression this
+  // fix removes). Adjusting state during render discards this render before the
+  // child commits, so the new panel never sees stale folders. Mirrors the
+  // designFilesNav ref reset above. The stable empty constant keeps this
+  // idempotent (no re-entrant render loop).
+  const projectFoldersProjectIdRef = useRef(projectId);
+  if (projectFoldersProjectIdRef.current !== projectId) {
+    projectFoldersProjectIdRef.current = projectId;
+    setProjectFolders(EMPTY_PROJECT_FOLDERS);
+  }
+  const [browserTabs, setBrowserTabs] = useState<BrowserWorkspaceTab[]>(
+    () => browserTabsFromState(tabsState.browserTabs),
+  );
+  // "+" launcher (file search + registry-driven create-new actions:
+  // Side Chat, Terminal, Browser).
+  const [launcherOpen, setLauncherOpen] = useState(false);
+  // Transient feedback when a launcher "create" action (e.g. New Terminal)
+  // fails on the daemon side, so the click is never a silent no-op.
+  const [launcherToast, setLauncherToast] = useState<string | null>(null);
+  const [tabsOverflowing, setTabsOverflowing] = useState(false);
   const [draggedTabName, setDraggedTabName] = useState<string | null>(null);
   const [dragOverTab, setDragOverTab] = useState<{
     name: string;
     edge: TabDropEdge;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const launcherBtnRef = useRef<HTMLButtonElement | null>(null);
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
   const draggedTabNameRef = useRef<string | null>(null);
+  const browserTabSequenceRef = useRef(0);
+  const designFilesNavProjectIdRef = useRef(projectId);
+  const designFilesNavRef = useRef<DesignFilesNavState>(createDefaultDesignFilesNavState());
+  if (designFilesNavProjectIdRef.current !== projectId) {
+    designFilesNavProjectIdRef.current = projectId;
+    designFilesNavRef.current = createDefaultDesignFilesNavState();
+  }
+  const onDesignFilesNavStateChange = useCallback((state: DesignFilesNavState) => {
+    designFilesNavRef.current = state;
+  }, []);
+
+  // Maps a terminal tab's original session id (the `terminal:<id>` suffix) to
+  // the PTY session it is CURRENTLY bound to. Restart rebinds the surface to a
+  // fresh session while the tab id stays constant, and the surface is unmounted
+  // whenever its tab isn't active — so this ref (which survives the child's
+  // unmount) is the only place that knows which PTY to kill on an explicit
+  // Close. `<TerminalViewer onSessionIdChange>` keeps it current.
+  const terminalLiveSessionsRef = useRef<Map<string, string>>(new Map());
+  const handleTerminalSessionChange = useCallback(
+    (originalId: string, sessionId: string) => {
+      terminalLiveSessionsRef.current.set(originalId, sessionId);
+    },
+    [],
+  );
+
+  // LRU of browser tab ids whose `<webview>` is currently mounted (most-recent
+  // first). A browser tab is mounted only after it has been activated; we cap
+  // the live set at BROWSER_KEEPALIVE_CAP and unmount the rest.
+  const [liveBrowserTabIds, setLiveBrowserTabIds] = useState<string[]>([]);
 
   const visibleFiles = useMemo(
     () => files.filter((file) => !isLiveArtifactImplementationPath(file.name)),
@@ -296,6 +540,24 @@ export function FileWorkspace({
     () => liveArtifacts.map(liveArtifactSummaryToWorkspaceEntry),
     [liveArtifacts],
   );
+
+  const refreshProjectFolders = useCallback(async (): Promise<ProjectFolder[]> => {
+    const next = await fetchProjectFolders(projectId);
+    setProjectFolders(next);
+    return next;
+  }, [projectId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    // The synchronous clear happens during render (see projectFoldersProjectIdRef
+    // above); here we only fetch the new project's folders.
+    void fetchProjectFolders(projectId).then((next) => {
+      if (!cancelled) setProjectFolders(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   const generationPreview = useMemo(
     () =>
@@ -319,10 +581,107 @@ export function FileWorkspace({
     setActiveTab(tabsState.active ?? defaultRootTab);
   }, [tabsState.active, defaultRootTab]);
 
-  function setPersistedActive(name: string | null) {
-    setActiveTab(name ?? defaultRootTab);
-    onTabsStateChange({ tabs: persistedTabs, active: name });
+  useEffect(() => {
+    setBrowserTabs([]);
+    browserTabSequenceRef.current = 0;
+    setLauncherOpen(false);
+  }, [projectId]);
+
+  useEffect(() => {
+    const nextBrowserTabs = browserTabsFromState(tabsState.browserTabs);
+    setBrowserTabs(nextBrowserTabs);
+    browserTabSequenceRef.current = maxBrowserTabSequence(nextBrowserTabs);
+  }, [tabsState.browserTabs]);
+
+  function workspaceTabsState(
+    tabs: string[],
+    active: string | null,
+    nextBrowserTabs = browserTabs,
+  ): OpenTabsState {
+    const state: OpenTabsState = { tabs, active };
+    if (nextBrowserTabs.length > 0) state.browserTabs = nextBrowserTabs;
+    return state;
   }
+
+  // Single entry point for committing tab state: mirror it into the ref so
+  // async launcher actions read the freshest tabs, then notify the parent.
+  function commitTabsState(next: OpenTabsState) {
+    tabsStateRef.current = next;
+    onTabsStateChange(next);
+  }
+
+  function setPersistedActive(name: string | null) {
+    const nextActive = name ?? defaultRootTab;
+    setActiveTab(nextActive);
+    commitTabsState(workspaceTabsState(persistedTabs, name));
+  }
+
+  function openBrowserTab() {
+    setUploadError(null);
+    const nextIndex = browserTabSequenceRef.current + 1;
+    browserTabSequenceRef.current = nextIndex;
+    const anchor = lastWorkspaceTabId(orderedWorkspaceTabs) ?? activeTab;
+    const nextTab: BrowserWorkspaceTab = {
+      id: `${BROWSER_TAB_PREFIX}${nextIndex}`,
+      insertAfter: anchor,
+      label: nextIndex === 1 ? 'Browser' : `Browser ${nextIndex}`,
+    };
+    const nextTabs = [...browserTabs, nextTab];
+    setBrowserTabs(nextTabs);
+    setActiveTab(nextTab.id);
+    commitTabsState(workspaceTabsState(persistedTabs, nextTab.id, nextTabs));
+  }
+
+  function closeBrowserTab(tabId: string) {
+    const closingIndex = browserTabs.findIndex((tab) => tab.id === tabId);
+    const nextTabs = browserTabs.filter((tab) => tab.id !== tabId);
+    setBrowserTabs(nextTabs);
+    const nextActive =
+      activeTab === tabId
+        ? nextTabs[Math.min(Math.max(closingIndex, 0), nextTabs.length - 1)]?.id ?? DESIGN_FILES_TAB
+        : tabsState.active === tabId
+          ? DESIGN_FILES_TAB
+          : tabsState.active;
+    if (activeTab === tabId) {
+      setActiveTab(nextActive ?? DESIGN_FILES_TAB);
+    }
+    onTabsStateChange(workspaceTabsState(persistedTabs, nextActive, nextTabs));
+  }
+
+  const updateBrowserTabInfo = useCallback((tabId: string, info: BrowserPageInfo) => {
+    const nextUrl = info.url.trim();
+    const nextIconUrl = info.iconUrl?.trim() ?? '';
+    let changed = false;
+    const nextTabs = browserTabs.map((tab) => {
+      if (tab.id !== tabId) return tab;
+      const nextTitle = nextUrl
+        ? info.title.trim() || labelFromUrl(nextUrl)
+        : tab.label;
+      const normalizedUrl = nextUrl === 'about:blank' ? '' : nextUrl;
+      if (
+        tab.title === nextTitle
+        && (tab.url ?? '') === normalizedUrl
+        && (tab.iconUrl ?? '') === nextIconUrl
+      ) {
+        return tab;
+      }
+      changed = true;
+      const nextTab: BrowserWorkspaceTab = {
+        ...tab,
+        title: nextTitle,
+        url: normalizedUrl,
+      };
+      if (nextIconUrl) {
+        nextTab.iconUrl = nextIconUrl;
+      } else {
+        delete nextTab.iconUrl;
+      }
+      return nextTab;
+    });
+    if (!changed) return;
+    setBrowserTabs(nextTabs);
+    onTabsStateChange(workspaceTabsState(persistedTabs, activeTab, nextTabs));
+  }, [activeTab, browserTabs, onTabsStateChange, persistedTabs]);
 
   function activatePending(name: string) {
     // Pending sketches are not in tabsState.tabs — flip the local
@@ -330,11 +689,36 @@ export function FileWorkspace({
     setActiveTab(name);
   }
 
+  // Promote the active browser tab to the front of the keep-alive LRU (and cap
+  // it). Activating a browser tab is the only thing that mounts its webview.
+  useEffect(() => {
+    if (!isBrowserTabId(activeTab)) return;
+    setLiveBrowserTabIds((prev) => {
+      if (prev[0] === activeTab) return prev;
+      return [activeTab, ...prev.filter((id) => id !== activeTab)].slice(0, BROWSER_KEEPALIVE_CAP);
+    });
+  }, [activeTab]);
+
+  // Drop closed browser tabs from the live set so their webview unmounts.
+  useEffect(() => {
+    setLiveBrowserTabIds((prev) => {
+      const existing = new Set(browserTabs.map((tab) => tab.id));
+      const next = prev.filter((id) => existing.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [browserTabs]);
+
   // When the persisted tab list changes and the active tab is gone, fall
   // back to the last remaining tab. Skip transient activeTab values
   // (DESIGN_FILES_TAB, pending sketches) since those aren't in persistedTabs.
   useEffect(() => {
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB) return;
+    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === QUESTIONS_TAB) return;
+    if (isBrowserTabId(activeTab)) {
+      if (!browserTabs.some((tab) => tab.id === activeTab)) {
+        setActiveTab(DESIGN_FILES_TAB);
+      }
+      return;
+    }
     if (sketches[activeTab] && !sketches[activeTab]!.persisted) return;
     if (!persistedTabs.includes(activeTab)) {
       setPersistedActive(persistedTabs[persistedTabs.length - 1] ?? null);
@@ -349,21 +733,177 @@ export function FileWorkspace({
     if (!openRequest) return;
     const name = openRequest.name;
     if (!name) return;
-    onTabsStateChange({
-      tabs: persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
-      active: name,
-    });
+    if (name === DESIGN_FILES_TAB || name === DESIGN_SYSTEM_TAB) {
+      const nextActive =
+        name === DESIGN_SYSTEM_TAB && !designSystemProject
+          ? DESIGN_FILES_TAB
+          : name;
+      onTabsStateChange(workspaceTabsState(persistedTabs, nextActive));
+      setActiveTab(nextActive);
+      return;
+    }
+    if (isBrowserTabId(name) && browserTabs.some((tab) => tab.id === name)) {
+      onTabsStateChange(workspaceTabsState(persistedTabs, name));
+      setActiveTab(name);
+      return;
+    }
+    const isNewTab = !persistedTabs.includes(name);
+    const nextBrowserTabs = isNewTab
+      ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
+      : browserTabs;
+    if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
+    onTabsStateChange(workspaceTabsState(
+      isNewTab ? [...persistedTabs, name] : persistedTabs,
+      name,
+      nextBrowserTabs,
+    ));
     setActiveTab(name);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequest]);
 
+  // Share request: ensure the target file is open + active so the FileViewer
+  // below receives the matching `shareRequest` and opens its Share menu.
+  useEffect(() => {
+    if (!shareRequest) return;
+    const name = shareRequest.name;
+    if (!name) return;
+    commitTabsState(workspaceTabsState(
+      persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
+      name,
+    ));
+    setActiveTab(name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shareRequest]);
+
+  // Slide-nav request: decide deliverability once, at fire time. Only if the
+  // named deck is already an open tab do we mark this nonce deliverable and
+  // bring it forward so the matching FileViewer is mounted and flips. We never
+  // open a closed file — auto-flipping is a follow-along, not a reason to yank
+  // the user into a tab they never opened. Recording the deliverable nonce in
+  // state (not a ref) also means a request for a closed deck stays undeliverable
+  // forever: opening that file later matches the name but not the nonce, so the
+  // stale request can't resurface and jump the preview.
+  const [slideNavDeliverableNonce, setSlideNavDeliverableNonce] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isSlideNavDeliverableNow(slideNavRequest, persistedTabs)) return;
+    setSlideNavDeliverableNonce(slideNavRequest!.nonce);
+    setActiveTab(slideNavRequest!.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slideNavRequest]);
+
+  // Focus the Questions tab when the parent bumps the nonce (banner click in
+  // chat, or a freshly generated form). The tab is transient — not added to
+  // the persisted tab list.
+  useEffect(() => {
+    if (!focusQuestionsRequest) return;
+    setActiveTab(QUESTIONS_TAB);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusQuestionsRequest?.nonce]);
+
+  // Submitting from the right-hand panel should close the preview once. The
+  // answered form remains available, so a later chat-banner click can reopen
+  // the same Questions tab without this effect immediately closing it again.
+  const previousQuestionFormSubmittedAnswersRef = useRef(questionFormSubmittedAnswers);
+  useEffect(() => {
+    const wasAnswered = previousQuestionFormSubmittedAnswersRef.current !== undefined;
+    const isAnswered = questionFormSubmittedAnswers !== undefined;
+    previousQuestionFormSubmittedAnswersRef.current = questionFormSubmittedAnswers;
+    if (activeTab === QUESTIONS_TAB && !wasAnswered && isAnswered) {
+      setActiveTab(defaultRootTab);
+    }
+  }, [activeTab, defaultRootTab, questionFormSubmittedAnswers]);
+
+  // If the Questions tab is active but the form is gone because a new assistant
+  // turn has no form, fall back to the default root tab.
+  useEffect(() => {
+    if (activeTab === QUESTIONS_TAB && !showQuestionsTab) {
+      setActiveTab(defaultRootTab);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, showQuestionsTab]);
+
   function openFile(name: string) {
     setUploadError(null);
-    onTabsStateChange({
-      tabs: persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
-      active: name,
-    });
+    // Read from the ref, not the `persistedTabs` prop closure: this path is
+    // reached asynchronously from launcher "create" actions (after the daemon
+    // resolves a new terminal/side-chat id), so the closure could be stale and
+    // clobber tabs added in the meantime.
+    const currentTabs = tabsStateRef.current.tabs;
+    const isNewTab = !currentTabs.includes(name);
+    const nextBrowserTabs = isNewTab
+      ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
+      : browserTabs;
+    const nextTabs = currentTabs.includes(name) ? currentTabs : [...currentTabs, name];
+    if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
+    commitTabsState(workspaceTabsState(nextTabs, name, nextBrowserTabs));
     setActiveTab(name);
+  }
+
+  function focusWorkspaceTab(tabId: string) {
+    setUploadError(null);
+    if (tabId === DESIGN_SYSTEM_TAB) {
+      setPersistedActive(designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB);
+      return;
+    }
+    if (tabId === DESIGN_FILES_TAB) {
+      setPersistedActive(DESIGN_FILES_TAB);
+      return;
+    }
+    if (isBrowserTabId(tabId)) {
+      if (!browserTabs.some((tab) => tab.id === tabId)) return;
+      commitTabsState(workspaceTabsState(persistedTabs, tabId, browserTabs));
+      setActiveTab(tabId);
+      return;
+    }
+    openFile(tabId);
+  }
+
+  function activateWorkspaceTab(tabId: string) {
+    if (tabId === QUESTIONS_TAB) {
+      setUploadError(null);
+      setActiveTab(QUESTIONS_TAB);
+      return;
+    }
+    const sketchEntry = sketches[tabId];
+    if (sketchEntry && !sketchEntry.persisted) {
+      setUploadError(null);
+      activatePending(tabId);
+      return;
+    }
+    focusWorkspaceTab(tabId);
+  }
+
+  function activateWorkspaceTabByOffset(offset: number) {
+    if (workspaceTabIds.length === 0) return;
+    const activeIndex = workspaceTabIds.indexOf(activeTab);
+    const startIndex = activeIndex >= 0 ? activeIndex : 0;
+    const targetIndex =
+      (startIndex + offset + workspaceTabIds.length) % workspaceTabIds.length;
+    activateWorkspaceTab(workspaceTabIds[targetIndex]!);
+  }
+
+  function activateWorkspaceTabByIndex(index: number) {
+    if (index < 0 || index >= workspaceTabIds.length) return;
+    activateWorkspaceTab(workspaceTabIds[index]!);
+  }
+
+  function openWorkspaceTabLauncher() {
+    setLauncherOpen(true);
+    launcherBtnRef.current?.focus();
+  }
+
+  function closeActiveWorkspaceTab() {
+    if (!workspaceTabIds.includes(activeTab)) return;
+    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB) return;
+    if (activeTab === QUESTIONS_TAB) {
+      setActiveTab(defaultRootTab);
+      return;
+    }
+    if (isBrowserTabId(activeTab)) {
+      closeBrowserTab(activeTab);
+      return;
+    }
+    closeTab(activeTab);
   }
 
   // Open `openName` (focusing it) and close `closeName` in a single tab-state
@@ -378,11 +918,21 @@ export function FileWorkspace({
     const nextTabs = withoutClosed.includes(openName)
       ? withoutClosed
       : [...withoutClosed, openName];
-    onTabsStateChange({ tabs: nextTabs, active: openName });
+    onTabsStateChange(workspaceTabsState(nextTabs, openName));
     setActiveTab(openName);
   }
 
   function closeTab(name: string) {
+    // Terminal tabs own a daemon PTY that now outlives unmount (so tab switches
+    // reattach cheaply). An explicit Close is the one place we terminate it —
+    // kill the LIVE session (which may differ from the tab's original id after
+    // a Restart), falling back to the tab id when the surface never reported.
+    if (isTerminalTabId(name)) {
+      const originalId = terminalIdFromTabId(name);
+      const liveId = terminalLiveSessionsRef.current.get(originalId) ?? originalId;
+      void killTerminal(projectId, liveId, { keepalive: true });
+      terminalLiveSessionsRef.current.delete(originalId);
+    }
     const sketchEntry = sketches[name];
     const isPending = sketchEntry && !sketchEntry.persisted;
     const hasUnsavedStrokes = sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted);
@@ -403,7 +953,7 @@ export function FileWorkspace({
       tabsState.active === name
         ? nextTabs[nextTabs.length - 1] ?? null
         : tabsState.active;
-    onTabsStateChange({ tabs: nextTabs, active: nextActive });
+    onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
     setActiveTab(nextActive ?? DESIGN_FILES_TAB);
     setSketches((curr) => {
       const next = { ...curr };
@@ -427,7 +977,7 @@ export function FileWorkspace({
     if (targetIndex === -1) return;
     nextTabs.splice(edge === 'after' ? targetIndex + 1 : targetIndex, 0, draggedName);
     if (arraysEqual(nextTabs, persistedTabs)) return;
-    onTabsStateChange({ tabs: nextTabs, active: tabsState.active });
+    onTabsStateChange(workspaceTabsState(nextTabs, tabsState.active));
   }
 
   function clearTabDragState() {
@@ -451,7 +1001,7 @@ export function FileWorkspace({
     const cohort = deriveUploadCohort(picked);
     let result: UploadProjectFilesResult;
     try {
-      result = await uploadProjectFiles(projectId, picked);
+      result = await uploadProjectFiles(projectId, picked, uploadDir);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setUploadError(`Upload failed for ${picked.length} file(s) (${detail}).`);
@@ -505,7 +1055,7 @@ export function FileWorkspace({
       Array.from(e.dataTransfer?.types ?? []).includes('Files');
     const isAllowedDropTarget = (target: EventTarget | null) => {
       if (!(target instanceof Element)) return false;
-      return Boolean(target.closest('.df-drop, .composer'));
+      return Boolean(target.closest('.df-panel, .composer'));
     };
     const onDragOver = (e: DragEvent) => {
       if (!hasFiles(e) || isAllowedDropTarget(e.target)) return;
@@ -541,7 +1091,7 @@ export function FileWorkspace({
   // The Design Files entry is already sticky-pinned, so we only scroll
   // for real workspace tabs. Issue #775.
   useEffect(() => {
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB) return;
+    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === QUESTIONS_TAB) return;
     const tabBar = tabsBarRef.current;
     if (!tabBar) return;
     const el = tabBar.querySelector<HTMLElement>('.ws-tab.active');
@@ -564,6 +1114,64 @@ export function FileWorkspace({
       tabBar.scrollLeft += tabRect.right - visibleRight;
     }
   }, [activeTab]);
+
+  // Browser-style shortcuts for the high-frequency Design Files workspace
+  // tabs. Capture phase prevents the host browser/Electron shell from opening
+  // or closing its own top-level tab before the workspace handles the command.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing) return;
+      const key = e.key;
+      const lowerKey = key.toLowerCase();
+      const primaryModifier = (e.metaKey || e.ctrlKey) && !e.altKey;
+      const ctrlWithoutPlatformModifiers = e.ctrlKey && !e.metaKey && !e.altKey;
+      const commandOption = e.metaKey && e.altKey && !e.ctrlKey;
+
+      if (primaryModifier && !e.shiftKey && lowerKey === 't') {
+        consumeFileWorkspaceTabShortcut(e);
+        openWorkspaceTabLauncher();
+        return;
+      }
+
+      if (primaryModifier && !e.shiftKey && lowerKey === 'w') {
+        consumeFileWorkspaceTabShortcut(e);
+        closeActiveWorkspaceTab();
+        return;
+      }
+
+      if (ctrlWithoutPlatformModifiers && key === 'Tab') {
+        consumeFileWorkspaceTabShortcut(e);
+        activateWorkspaceTabByOffset(e.shiftKey ? -1 : 1);
+        return;
+      }
+
+      if (
+        (ctrlWithoutPlatformModifiers && !e.shiftKey && key === 'PageDown')
+        || (commandOption && !e.shiftKey && key === 'ArrowRight')
+      ) {
+        consumeFileWorkspaceTabShortcut(e);
+        activateWorkspaceTabByOffset(1);
+        return;
+      }
+
+      if (
+        (ctrlWithoutPlatformModifiers && !e.shiftKey && key === 'PageUp')
+        || (commandOption && !e.shiftKey && key === 'ArrowLeft')
+      ) {
+        consumeFileWorkspaceTabShortcut(e);
+        activateWorkspaceTabByOffset(-1);
+        return;
+      }
+
+      if (primaryModifier && !e.shiftKey && /^[1-9]$/u.test(key)) {
+        consumeFileWorkspaceTabShortcut(e);
+        const index = key === '9' ? workspaceTabIds.length - 1 : Number(key) - 1;
+        activateWorkspaceTabByIndex(index);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  });
 
   // Cmd+P (mac) / Ctrl+P (win/linux) opens the file palette. Capture phase
   // so we beat the browser's default print dialog. Platform-gated so on
@@ -597,7 +1205,7 @@ export function FileWorkspace({
         // User is viewing the file being deleted: fall back to another
         // open tab (or the Design Files panel if none remain).
         const nextActive = nextTabs[nextTabs.length - 1] ?? null;
-        onTabsStateChange({ tabs: nextTabs, active: nextActive });
+        onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
         setActiveTab(nextActive ?? DESIGN_FILES_TAB);
       } else {
         // Deletion was triggered from the Design Files panel (or another
@@ -607,7 +1215,7 @@ export function FileWorkspace({
         // when it points at the deleted file so we don't leave a dangling
         // pointer behind.
         const nextActive = tabsState.active === name ? null : tabsState.active;
-        onTabsStateChange({ tabs: nextTabs, active: nextActive });
+        onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
       }
       setSketches((curr) => {
         const next = { ...curr };
@@ -633,12 +1241,12 @@ export function FileWorkspace({
       const nextTabs = persistedTabs.filter((n) => !deletedSet.has(n));
       if (activeTab && deletedSet.has(activeTab)) {
         const nextActive = nextTabs[nextTabs.length - 1] ?? null;
-        onTabsStateChange({ tabs: nextTabs, active: nextActive });
+        onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
         setActiveTab(nextActive ?? DESIGN_FILES_TAB);
       } else {
         const nextActive =
           tabsState.active && deletedSet.has(tabsState.active) ? null : tabsState.active;
-        onTabsStateChange({ tabs: nextTabs, active: nextActive });
+        onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
       }
       setSketches((curr) => {
         const next = { ...curr };
@@ -664,10 +1272,11 @@ export function FileWorkspace({
     const result = await renameProjectFile(projectId, oldName, nextName);
     const renamed = result.file;
     await onRefreshFiles();
+    await refreshProjectFolders();
 
     const nextTabs = persistedTabs.map((name) => (name === oldName ? renamed.name : name));
     const nextActive = tabsState.active === oldName ? renamed.name : tabsState.active;
-    onTabsStateChange({ tabs: nextTabs, active: nextActive });
+    onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
     if (activeTab === oldName) setActiveTab(renamed.name);
 
     setSketches((curr) => {
@@ -684,7 +1293,11 @@ export function FileWorkspace({
 
   function startNewSketch() {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const name = `sketch-${stamp}.sketch.json`;
+    const base = `sketch-${stamp}.sketch.json`;
+    // Create under the folder currently being viewed, if any. The slash-joined
+    // name flows through as the sketch's tab id and save path; the daemon's
+    // sanitizePath turns it into a real subdirectory on save.
+    const name = uploadDir ? `${uploadDir}/${base}` : base;
     setSketches((curr) => ({
       ...curr,
       [name]: {
@@ -795,10 +1408,10 @@ export function FileWorkspace({
         },
       }));
       // Promote the previously-pending sketch into the persisted tab list.
-      onTabsStateChange({
-        tabs: persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
-        active: name,
-      });
+      onTabsStateChange(workspaceTabsState(
+        persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
+        name,
+      ));
       setActiveTab(name);
       await onRefreshFiles();
       return true;
@@ -809,7 +1422,12 @@ export function FileWorkspace({
   }
 
   const activeFile = useMemo<ProjectFile | null>(() => {
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB) return null;
+    if (
+      activeTab === DESIGN_FILES_TAB
+      || activeTab === DESIGN_SYSTEM_TAB
+      || activeTab === QUESTIONS_TAB
+      || isBrowserTabId(activeTab)
+    ) return null;
     const onDisk = visibleFiles.find((f) => f.name === activeTab);
     if (onDisk) return onDisk;
     if (isSketchName(activeTab) && sketches[activeTab]) {
@@ -825,9 +1443,105 @@ export function FileWorkspace({
   }, [activeTab, visibleFiles, sketches]);
 
   const activeLiveArtifact = useMemo<LiveArtifactWorkspaceEntry | null>(() => {
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB) return null;
+    if (
+      activeTab === DESIGN_FILES_TAB
+      || activeTab === DESIGN_SYSTEM_TAB
+      || activeTab === QUESTIONS_TAB
+      || isBrowserTabId(activeTab)
+    ) return null;
     return liveArtifactEntries.find((entry) => entry.tabId === activeTab) ?? null;
   }, [activeTab, liveArtifactEntries]);
+
+  const activeWorkspaceContext = useMemo<WorkspaceContextItem | null>(() => {
+    if (activeTab === DESIGN_SYSTEM_TAB && designSystemProject) {
+      return {
+        id: 'workspace:design-system',
+        kind: 'design-system',
+        label: 'Design System',
+        tabId: activeTab,
+      };
+    }
+    if (activeTab === DESIGN_FILES_TAB) {
+      const trimmedDir = uploadDir.trim();
+      const label = trimmedDir.split('/').filter(Boolean).pop() || t('workspace.designFiles');
+      return {
+        id: trimmedDir ? `folder:${trimmedDir}` : 'workspace:design-files',
+        kind: trimmedDir ? 'folder' : 'design-files',
+        label,
+        tabId: activeTab,
+        ...(trimmedDir ? { path: trimmedDir } : {}),
+        ...(resolvedDir ? { absolutePath: joinDisplayPath(resolvedDir, trimmedDir) } : {}),
+      };
+    }
+    if (isBrowserTabId(activeTab)) {
+      const tab = browserTabs.find((candidate) => candidate.id === activeTab);
+      if (!tab) return null;
+      const url = tab.url?.trim() ?? '';
+      const label = url ? tab.title?.trim() || labelFromUrl(url) : tab.label;
+      return {
+        id: `browser:${tab.id}`,
+        kind: 'browser',
+        label,
+        tabId: tab.id,
+        ...(tab.title ? { title: tab.title } : {}),
+        ...(url ? { url } : {}),
+      };
+    }
+    if (isTerminalTabId(activeTab)) {
+      const terminalId = terminalIdFromTabId(activeTab);
+      return {
+        id: `terminal:${terminalId}`,
+        kind: 'terminal',
+        label: t('workspace.newTerminal'),
+        tabId: activeTab,
+      };
+    }
+    if (isSideChatTabId(activeTab)) {
+      const conversationId = conversationIdFromSideChatTabId(activeTab);
+      const conversation = conversations.find((item) => item.id === conversationId);
+      return {
+        id: `side-chat:${conversationId}`,
+        kind: 'side-chat',
+        label: conversation?.title?.trim() || t('workspace.sideChatDefaultTitle'),
+        tabId: activeTab,
+      };
+    }
+    if (activeLiveArtifact) {
+      return {
+        id: `live-artifact:${activeLiveArtifact.artifactId}`,
+        kind: 'live-artifact',
+        label: activeLiveArtifact.title,
+        tabId: activeLiveArtifact.tabId,
+        path: activeLiveArtifact.slug,
+      };
+    }
+    if (activeFile) {
+      const filePath = activeFile.path ?? activeFile.name;
+      return {
+        id: `file:${filePath}`,
+        kind: 'file',
+        label: filePath.split('/').filter(Boolean).pop() || filePath,
+        tabId: activeTab,
+        path: filePath,
+        ...(resolvedDir ? { absolutePath: joinDisplayPath(resolvedDir, filePath) } : {}),
+      };
+    }
+    return null;
+  }, [
+    activeFile,
+    activeLiveArtifact,
+    activeTab,
+    browserTabs,
+    conversations,
+    designSystemProject,
+    resolvedDir,
+    t,
+    uploadDir,
+  ]);
+
+  useEffect(() => {
+    onActiveContextChange?.(activeWorkspaceContext);
+  }, [activeWorkspaceContext, onActiveContextChange]);
 
   // Tabs rendered are persisted tabs plus any pending (un-saved) sketches.
   const tabNames = useMemo(() => {
@@ -842,8 +1556,225 @@ export function FileWorkspace({
     return [...persistedTabs, ...extras];
   }, [persistedTabs, sketches]);
 
+  const orderedWorkspaceTabs = useMemo(
+    () => orderWorkspaceTabs(tabNames, browserTabs),
+    [browserTabs, tabNames],
+  );
+
+  const workspaceTabIds = useMemo(() => {
+    const ids: string[] = [];
+    if (designSystemProject) ids.push(DESIGN_SYSTEM_TAB);
+    ids.push(DESIGN_FILES_TAB);
+    if (showQuestionsTab) ids.push(QUESTIONS_TAB);
+    for (const entry of orderedWorkspaceTabs) {
+      ids.push(entry.kind === 'browser' ? entry.browserTab.id : entry.name);
+    }
+    return ids;
+  }, [designSystemProject, orderedWorkspaceTabs, showQuestionsTab]);
+
+  const workspaceContexts = useMemo<WorkspaceContextItem[]>(() => {
+    const out: WorkspaceContextItem[] = [];
+    const seen = new Set<string>();
+    const push = (item: WorkspaceContextItem | null | undefined) => {
+      if (!item) return;
+      const key = `${item.kind}:${item.id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(item);
+    };
+
+    if (designSystemProject) {
+      push({
+        id: 'workspace:design-system',
+        kind: 'design-system',
+        label: 'Design System',
+        tabId: DESIGN_SYSTEM_TAB,
+      });
+    }
+
+    const trimmedDir = uploadDir.trim();
+    const designFilesLabel = trimmedDir.split('/').filter(Boolean).pop() || t('workspace.designFiles');
+    push({
+      id: trimmedDir ? `folder:${trimmedDir}` : 'workspace:design-files',
+      kind: trimmedDir ? 'folder' : 'design-files',
+      label: designFilesLabel,
+      tabId: DESIGN_FILES_TAB,
+      ...(trimmedDir ? { path: trimmedDir } : {}),
+      ...(resolvedDir ? { absolutePath: joinDisplayPath(resolvedDir, trimmedDir) } : {}),
+    });
+
+    const filesByName = new Map(visibleFiles.map((file) => [file.name, file] as const));
+    const liveByTabId = new Map(liveArtifactEntries.map((entry) => [entry.tabId, entry] as const));
+    const terminalTabNames = tabNames.filter(isTerminalTabId);
+
+    for (const entry of orderedWorkspaceTabs) {
+      if (entry.kind === 'browser') {
+        const tab = entry.browserTab;
+        const url = tab.url?.trim() ?? '';
+        const label = url ? tab.title?.trim() || labelFromUrl(url) : tab.label;
+        push({
+          id: `browser:${tab.id}`,
+          kind: 'browser',
+          label,
+          tabId: tab.id,
+          ...(tab.title ? { title: tab.title } : {}),
+          ...(url ? { url } : {}),
+        });
+        continue;
+      }
+
+      const name = entry.name;
+      if (isTerminalTabId(name)) {
+        const terminalId = terminalIdFromTabId(name);
+        const ordinal = terminalTabNames.indexOf(name) + 1;
+        push({
+          id: `terminal:${terminalId}`,
+          kind: 'terminal',
+          label: ordinal > 1 ? `${t('workspace.newTerminal')} ${ordinal}` : t('workspace.newTerminal'),
+          tabId: name,
+        });
+        continue;
+      }
+
+      if (isSideChatTabId(name)) {
+        const conversationId = conversationIdFromSideChatTabId(name);
+        const conversation = conversations.find((item) => item.id === conversationId);
+        push({
+          id: `side-chat:${conversationId}`,
+          kind: 'side-chat',
+          label: conversation?.title?.trim() || t('workspace.sideChatDefaultTitle'),
+          tabId: name,
+        });
+        continue;
+      }
+
+      const liveArtifact = liveByTabId.get(name as LiveArtifactWorkspaceEntry['tabId']);
+      if (liveArtifact) {
+        push({
+          id: `live-artifact:${liveArtifact.artifactId}`,
+          kind: 'live-artifact',
+          label: liveArtifact.title,
+          tabId: liveArtifact.tabId,
+          path: liveArtifact.slug,
+        });
+        continue;
+      }
+
+      const file = filesByName.get(name);
+      if (file || (isSketchName(name) && sketches[name])) {
+        const filePath = file?.path ?? file?.name ?? name;
+        push({
+          id: `file:${filePath}`,
+          kind: 'file',
+          label: filePath.split('/').filter(Boolean).pop() || filePath,
+          tabId: name,
+          path: filePath,
+          ...(resolvedDir ? { absolutePath: joinDisplayPath(resolvedDir, filePath) } : {}),
+        });
+      }
+    }
+
+    return out;
+  }, [
+    browserTabs,
+    conversations,
+    designSystemProject,
+    liveArtifactEntries,
+    orderedWorkspaceTabs,
+    resolvedDir,
+    sketches,
+    t,
+    tabNames,
+    uploadDir,
+    visibleFiles,
+  ]);
+
+  useEffect(() => {
+    onWorkspaceContextsChange?.(workspaceContexts);
+  }, [onWorkspaceContextsChange, workspaceContexts]);
+
+  useEffect(() => {
+    const tabBar = tabsBarRef.current;
+    if (!tabBar) return;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      setTabsOverflowing(tabBar.scrollWidth > tabBar.clientWidth + 1);
+    };
+    const requestMeasure = () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(measure);
+    };
+    requestMeasure();
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(requestMeasure);
+    if (resizeObserver) {
+      resizeObserver.observe(tabBar);
+      Array.from(tabBar.children).forEach((child) => resizeObserver.observe(child));
+    }
+    window.addEventListener('resize', requestMeasure);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', requestMeasure);
+    };
+  }, [browserTabs.length, designSystemProject, tabNames.length]);
+
   const isActiveSketch = activeFile?.kind === 'sketch' && isSketchName(activeFile.name);
   const activeSketch = activeFile && isActiveSketch ? sketches[activeFile.name] : null;
+  // The design-files tab is the default landing tab, so while a run is in
+  // flight and no previewable artifact exists yet the progress card must take
+  // over its empty "Creations will appear here" state rather than leave an idle
+  // empty list. (Pre-#3516 the preview branch rendered before the design-files
+  // branch with no tab guard; the composer rewrite added an `activeTab !==
+  // DESIGN_FILES_TAB` clause here that hid the progress card on the default
+  // tab.) But the override is scoped to the *empty* design-files tab: a
+  // populated project keeps its file browser while generating. The condition
+  // mirrors DesignFilesPanel's own empty-state gate exactly (no files, no live
+  // artifacts, no folders), so the card only wins where the panel would have
+  // shown its empty placeholder.
+  const designFilesTabIsEmpty =
+    visibleFiles.length === 0
+    && liveArtifactEntries.length === 0
+    && projectFolders.length === 0;
+  const showGenerationPreview = Boolean(generationPreview)
+    && activeTab !== DESIGN_SYSTEM_TAB
+    && (activeTab !== DESIGN_FILES_TAB || designFilesTabIsEmpty)
+    && !isBrowserTabId(activeTab)
+    && !isSideChatTabId(activeTab)
+    && !isTerminalTabId(activeTab)
+    && !activeLiveArtifact
+    && !activeFile;
+
+  // The "+" launcher's create-new actions come from the registry. `openTab`
+  // reuses the same tab-state path as opening a file so a new terminal:<id>
+  // tab is focused; `createBrowser` opens an embedded browser tab.
+  // Built fresh each render (not memoized): `createBrowser` closes over
+  // `openBrowserTab`, which reads the live `browserTabs` state — memoizing it
+  // would capture a stale closure and make every "New Browser" click overwrite
+  // the same single tab. The terminal action routes through `openFile`
+  // (ref-based), so freshness here is cheap and only matters while the launcher
+  // is open.
+  const launcherContext: LauncherContext = {
+    projectId,
+    openTab: openFile,
+    // Browser is owned by this branch's DesignBrowserPanel: spin up a browser
+    // tab synchronously (no daemon round-trip) and let the launcher close.
+    createBrowser: () => openBrowserTab(),
+    // Terminal needs only the project id — spawn the PTY here and hand the
+    // resulting session id back so the launcher opens a terminal:<id> tab.
+    // Surface a toast when the daemon can't start one (e.g. node-pty not
+    // compiled) instead of silently no-opping the launcher action.
+    createTerminal: async () => {
+      const term = await createTerminal(projectId);
+      if (!term) {
+        setLauncherToast(t('workspace.terminalStartFailed'));
+        return null;
+      }
+      return term.id;
+    },
+  };
+  const launcherActions = buildLauncherActions(launcherContext);
 
   return (
     <div
@@ -857,10 +1788,12 @@ export function FileWorkspace({
         {onFocusModeChange && focusMode ? (
           <button
             type="button"
-            className="icon-only ws-focus-expand"
+            className="icon-only ws-focus-expand od-tooltip"
             data-testid="workspace-focus-toggle"
             aria-pressed={focusMode}
             title={t('workspace.showChat')}
+            data-tooltip={t('workspace.showChat')}
+            data-tooltip-placement="bottom"
             aria-label={t('workspace.showChat')}
             onClick={() => onFocusModeChange(false)}
           >
@@ -869,9 +1802,19 @@ export function FileWorkspace({
         ) : null}
         <div
           ref={tabsBarRef}
-          className="ws-tabs-bar"
+          className={`ws-tabs-bar${tabsOverflowing ? ' is-overflowing' : ''}`}
           role="tablist"
           aria-label={t('workspace.designFiles')}
+          onWheel={(event) => {
+            // Translate vertical wheel into horizontal tab scroll so Windows
+            // mouse-wheel users (no horizontal wheel/trackpad) can reach
+            // overflowed tabs. Only act when there's actually horizontal
+            // overflow and the gesture is predominantly vertical.
+            const el = event.currentTarget;
+            if (el.scrollWidth <= el.clientWidth) return;
+            if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+            el.scrollLeft += event.deltaY;
+          }}
           onDragLeave={(event) => {
             if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
             setDragOverTab(null);
@@ -889,7 +1832,7 @@ export function FileWorkspace({
               aria-selected={activeTab === DESIGN_SYSTEM_TAB}
               tabIndex={0}
               data-testid="design-system-project-tab"
-              onClick={() => setActiveTab(DESIGN_SYSTEM_TAB)}
+              onClick={() => setPersistedActive(DESIGN_SYSTEM_TAB)}
               title="Design System"
             >
               <span className="tab-icon" aria-hidden>
@@ -905,7 +1848,7 @@ export function FileWorkspace({
             aria-selected={activeTab === DESIGN_FILES_TAB}
             tabIndex={0}
             data-testid="design-files-tab"
-            onClick={() => setActiveTab(DESIGN_FILES_TAB)}
+            onClick={() => setPersistedActive(DESIGN_FILES_TAB)}
             title={t('workspace.designFiles')}
           >
             <span className="tab-icon" aria-hidden>
@@ -913,7 +1856,45 @@ export function FileWorkspace({
             </span>
             <span className="ws-tab-label">{t('workspace.designFiles')}</span>
           </button>
-          {tabNames.map((name) => {
+          {showQuestionsTab ? (
+            <button
+              type="button"
+              className={`ws-tab questions-tab ${activeTab === QUESTIONS_TAB ? 'active' : ''}`}
+              role="tab"
+              aria-selected={activeTab === QUESTIONS_TAB}
+              tabIndex={0}
+              data-testid="questions-tab"
+              onClick={() => setActiveTab(QUESTIONS_TAB)}
+              title={t('questions.tabLabel')}
+            >
+              <span className="tab-icon" aria-hidden>
+                <Icon name="help-circle" size={13} />
+              </span>
+              <span className="ws-tab-label">{t('questions.tabLabel')}</span>
+            </button>
+          ) : null}
+          {orderedWorkspaceTabs.map((entry) => {
+            if (entry.kind === 'browser') {
+              const browserTab = entry.browserTab;
+              const browserUrl = browserTab.url?.trim() ?? '';
+              const browserTitle = browserUrl
+                ? browserTab.title?.trim() || labelFromUrl(browserUrl)
+                : browserTab.label;
+              const browserMeta = browserUrl ? formatBrowserTabUrl(browserUrl) : undefined;
+              return (
+                <Tab
+                  key={browserTab.id}
+                  label={browserTitle}
+                  meta={browserMeta}
+                  title={browserUrl ? `${browserTitle}\n${browserUrl}` : browserTitle}
+                  active={activeTab === browserTab.id}
+                  onActivate={() => setPersistedActive(browserTab.id)}
+                  onClose={() => closeBrowserTab(browserTab.id)}
+                  kind="browser"
+                />
+              );
+            }
+            const name = entry.name;
             const sketchEntry = sketches[name];
             const dirtyMark =
               sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted) ? ' •' : '';
@@ -921,10 +1902,36 @@ export function FileWorkspace({
             const onDisk = visibleFiles.find((f) => f.name === name);
             const liveArtifact = liveArtifactEntries.find((entry) => entry.tabId === name);
             const kind = liveArtifact ? 'live-artifact' : onDisk?.kind ?? (isSketchName(name) ? 'sketch' : 'text');
+            const isTerminal = isTerminalTabId(name);
+            const isSideChat = isSideChatTabId(name);
+            // Terminal and side-chat tabs are not files: give them a friendly
+            // label + glyph instead of the raw `terminal:<id>` / `chat:<id>` id.
+            let label: string;
+            if (isTerminal) {
+              // Number multiple terminals so the tabs stay distinguishable.
+              const ordinal = tabNames.filter(isTerminalTabId).indexOf(name) + 1;
+              label =
+                ordinal > 1
+                  ? `${t('workspace.newTerminal')} ${ordinal}`
+                  : t('workspace.newTerminal');
+            } else if (isSideChat) {
+              const conv = conversations.find(
+                (c) => c.id === conversationIdFromSideChatTabId(name),
+              );
+              label = conv?.title?.trim() || t('workspace.sideChatDefaultTitle');
+            } else {
+              label = `${liveArtifact?.title ?? name}${dirtyMark}`;
+            }
+            const iconNameOverride: IconName | undefined = isTerminal
+              ? 'terminal'
+              : isSideChat
+                ? 'comment'
+                : undefined;
             return (
               <Tab
                 key={name}
-                label={`${liveArtifact?.title ?? name}${dirtyMark}`}
+                label={label}
+                iconNameOverride={iconNameOverride}
                 active={activeTab === name}
                 onActivate={() =>
                   isPending ? activatePending(name) : setPersistedActive(name)
@@ -974,7 +1981,56 @@ export function FileWorkspace({
             );
           })}
         </div>
+        <div className="ws-add-tab">
+          <button
+            ref={launcherBtnRef}
+            type="button"
+            className="icon-only ws-tab-add od-tooltip"
+            data-testid="workspace-add-tab"
+            aria-haspopup="dialog"
+            aria-expanded={launcherOpen}
+            title={t('workspace.newTab')}
+            data-tooltip={t('workspace.newTab')}
+            data-tooltip-placement="bottom"
+            aria-label={t('workspace.newTab')}
+            onClick={() => setLauncherOpen((v) => !v)}
+          >
+            <Icon name="plus" size={15} />
+          </button>
+        </div>
+        {/* Pinned to the right for project/file actions; the tab launcher sits
+            next to the file tabs so its spatial relationship stays clear. */}
+        <div className="ws-tabs-actions">
+          <div
+            id={APP_CHROME_FILE_ACTIONS_ID}
+            className="ws-tabs-file-actions"
+            data-app-chrome-file-actions="true"
+          />
+          {headerActions ? (
+            <div className="ws-tabs-project-actions">{headerActions}</div>
+          ) : null}
+        </div>
       </div>
+      {launcherOpen ? (
+        <TabLauncherMenu
+          anchor={launcherBtnRef.current}
+          files={visibleFiles}
+          workspaceContexts={workspaceContexts}
+          openTabNames={tabNames}
+          actions={launcherActions}
+          launcherContext={launcherContext}
+          onOpenFile={openFile}
+          onOpenTab={focusWorkspaceTab}
+          onClose={() => setLauncherOpen(false)}
+        />
+      ) : null}
+      {launcherToast ? (
+        <Toast
+          message={launcherToast}
+          role="alert"
+          onDismiss={() => setLauncherToast(null)}
+        />
+      ) : null}
       <div className="ws-body">
         {/* Banner moved into DesignFilesPanel for the Design Files tab so
             single-click preview (which keeps activeTab on DESIGN_FILES_TAB)
@@ -995,7 +2051,42 @@ export function FileWorkspace({
             </button>
           </div>
         ) : null}
-        {activeTab === DESIGN_SYSTEM_TAB && designSystemProject ? (
+        {browserTabs.filter((browserTab) => liveBrowserTabIds.includes(browserTab.id)).map((browserTab) => (
+          <div
+            key={`${projectId}:${browserTab.id}`}
+            className={`ws-browser-panel ${activeTab === browserTab.id ? 'active' : ''}`}
+            aria-hidden={activeTab === browserTab.id ? undefined : true}
+          >
+            <DesignBrowserPanel
+              projectId={projectId}
+              resolvedDir={resolvedDir}
+              initialIconUrl={browserTab.iconUrl}
+              initialTitle={browserTab.title}
+              initialUrl={browserTab.url}
+              sendDisabled={Boolean(streaming)}
+              previewComments={previewComments}
+              onSavePreviewComment={onSavePreviewComment}
+              onRemovePreviewComment={onRemovePreviewComment}
+              onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+              onRequestBrowserUsePrompt={onRequestBrowserUsePrompt}
+              onRefreshFiles={onRefreshFiles}
+              onOpenFile={openFile}
+              onPageInfoChange={(info) => updateBrowserTabInfo(browserTab.id, info)}
+            />
+          </div>
+        ))}
+        {activeTab === QUESTIONS_TAB ? (
+          <QuestionsPanel
+            key={questionFormKey ?? undefined}
+            formKey={questionFormKey}
+            form={questionForm ?? questionFormPreview}
+            interactive={questionFormInteractive}
+            submitDisabled={questionFormSubmitDisabled}
+            submittedAnswers={questionFormSubmittedAnswers}
+            generating={questionsGenerating}
+            onSubmit={(text) => onSubmitQuestionForm?.(text)}
+          />
+        ) : activeTab === DESIGN_SYSTEM_TAB && designSystemProject ? (
           <DesignSystemProjectPanel
             projectId={projectId}
             system={designSystemProject}
@@ -1014,7 +2105,7 @@ export function FileWorkspace({
             onConnectRepo={onConnectRepo}
             githubConnected={githubConnected}
           />
-        ) : generationPreview ? (
+        ) : showGenerationPreview && generationPreview ? (
           <GenerationPreviewStage
             model={generationPreview}
             onRetry={
@@ -1028,6 +2119,8 @@ export function FileWorkspace({
                 : undefined
             }
             onLaunchTerminalAuth={onLaunchTerminalAuth}
+            amrAuthorizeSourceDetail="generation_preview_authorize_retry"
+            amrRechargeSourceDetail="generation_preview_recharge"
             amrGuidance={
               generationPreview.promoteAmrSwitch
                 && generationPreview.errorCode
@@ -1040,6 +2133,7 @@ export function FileWorkspace({
                   conversationId={conversationId ?? null}
                   assistantMessageId={generationPreview.retryTarget.id}
                   runId={generationPreview.retryTarget.runId ?? null}
+                  sourceDetail="generation_preview_switch_retry_card"
                   onActivate={() => onAuthorizeAndRetry(generationPreview.retryTarget!)}
                 />
               ) : undefined
@@ -1049,9 +2143,15 @@ export function FileWorkspace({
           <DesignFilesPanel
             key={projectId}
             projectId={projectId}
+            rootDirName={rootDirName}
+            reloading={reloading}
             files={visibleFiles}
+            folders={projectFolders}
             liveArtifacts={liveArtifactEntries}
             onRefreshFiles={onRefreshFiles}
+            onCurrentDirChange={setUploadDir}
+            navState={designFilesNavRef.current}
+            onNavStateChange={onDesignFilesNavStateChange}
             onOpenFile={openFile}
             onOpenLiveArtifact={(tabId) => openFile(tabId)}
             onRenameFile={handleRename}
@@ -1098,10 +2198,14 @@ export function FileWorkspace({
             }}
             uploadError={uploadError}
             onClearUploadError={() => setUploadError(null)}
+            preferredPreviewFile={preferredPreviewFile}
+            autoPreviewDesignArtifacts={autoPreviewDesignArtifacts}
             onPluginFolderAgentAction={onPluginFolderAgentAction}
             activePluginActionPaths={activePluginActionPaths}
             hiddenPluginActionPaths={hiddenPluginActionPaths}
           />
+        ) : isBrowserTabId(activeTab) ? (
+          null
         ) : isActiveSketch && activeSketch && activeFile ? (
           activeSketch.loaded ? (
             <SketchEditor
@@ -1120,6 +2224,32 @@ export function FileWorkspace({
           ) : (
             <div className="viewer-empty">{t('workspace.loadingSketch')}</div>
           )
+        ) : isSideChatTabId(activeTab) && chatConfig && chatAgentsById ? (
+          <SideChatTab
+            key={`${projectId}:${activeTab}`}
+            projectId={projectId}
+            conversationId={conversationIdFromSideChatTabId(activeTab)}
+            config={chatConfig}
+            agentsById={chatAgentsById}
+            locale={chatLocale ?? 'en'}
+            projectFiles={visibleFiles}
+            conversations={conversations}
+            onSelectConversation={onSelectConversation ?? (() => {})}
+            onDeleteConversation={onDeleteConversation ?? (() => {})}
+            onRenameConversation={onRenameConversation}
+            onSessionModeChange={onConversationSessionModeChange}
+            onNewConversation={onNewConversation}
+            activeConversationChat={activeConversationChat}
+            onRequestOpenFile={openFile}
+          />
+        ) : isTerminalTabId(activeTab) ? (
+          <TerminalViewer
+            key={activeTab}
+            projectId={projectId}
+            terminalId={terminalIdFromTabId(activeTab)}
+            onClose={() => closeTab(activeTab)}
+            onSessionIdChange={handleTerminalSessionChange}
+          />
         ) : activeLiveArtifact ? (
           <LiveArtifactViewer
             projectId={projectId}
@@ -1146,6 +2276,16 @@ export function FileWorkspace({
             onOpenFileReplacing={openFileReplacing}
             commentPortalId={commentPortalId}
             onCommentModeChange={onCommentModeChange}
+            shareRequest={
+              shareRequest && shareRequest.name === activeFile.name
+                ? { nonce: shareRequest.nonce }
+                : null
+            }
+            slideNavRequest={deliverableSlideNavForActiveFile(
+              slideNavRequest,
+              activeFile.name,
+              slideNavDeliverableNonce,
+            )}
           />
         ) : (
           <div className="viewer-empty">
@@ -1172,30 +2312,41 @@ export function FileWorkspace({
         style={{ display: 'none' }}
         onChange={handleFilePicked}
       />
-      {showPasteDialog ? (
-        <PasteTextDialog
-          onClose={() => setShowPasteDialog(false)}
-          onSave={async (name, content) => {
-            setShowPasteDialog(false);
-            const file = await writeProjectTextFile(projectId, name, content);
-            if (file) {
-              await onRefreshFiles();
-              openFile(file.name);
-            }
-          }}
-        />
-      ) : null}
-      {quickSwitcherOpen ? (
-        <QuickSwitcher
-          projectId={projectId}
-          files={visibleFiles}
-          onOpenFile={(name) => {
-            openFile(name);
-            setQuickSwitcherOpen(false);
-          }}
-          onClose={() => setQuickSwitcherOpen(false)}
-        />
-      ) : null}
+      <AnimatePresence>
+        {showPasteDialog ? (
+          <PasteTextDialog
+            onClose={() => setShowPasteDialog(false)}
+            onSave={async (name, content) => {
+              setShowPasteDialog(false);
+              // Save under the folder currently being viewed, if any.
+              const target = uploadDir ? `${uploadDir}/${name}` : name;
+              const file = await writeProjectTextFile(projectId, target, content);
+              if (file) {
+                await onRefreshFiles();
+                openFile(file.name);
+              }
+            }}
+          />
+        ) : null}
+      </AnimatePresence>
+      <AnimatePresence>
+        {quickSwitcherOpen ? (
+          <QuickSwitcher
+            projectId={projectId}
+            files={visibleFiles}
+            workspaceContexts={workspaceContexts}
+            onOpenFile={(name) => {
+              openFile(name);
+              setQuickSwitcherOpen(false);
+            }}
+            onOpenTab={(tabId) => {
+              focusWorkspaceTab(tabId);
+              setQuickSwitcherOpen(false);
+            }}
+            onClose={() => setQuickSwitcherOpen(false)}
+          />
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }
@@ -2541,11 +3692,14 @@ function DesignSystemInlinePreview({
 
 function Tab({
   label,
+  meta,
+  title,
   active,
   onActivate,
   onClose,
   closable = true,
   kind,
+  iconNameOverride,
   liveArtifact,
   draggable = false,
   dragging = false,
@@ -2557,11 +3711,15 @@ function Tab({
   onDragEnd,
 }: {
   label: string;
+  meta?: string;
+  title?: string;
   active: boolean;
   onActivate: () => void;
   onClose?: () => void;
   closable?: boolean;
-  kind?: ProjectFile['kind'] | 'live-artifact';
+  kind?: ProjectFile['kind'] | 'live-artifact' | 'browser';
+  /** Force a specific icon (e.g. non-file tabs like terminal:<id> / chat:<id>). */
+  iconNameOverride?: IconName;
   liveArtifact?: LiveArtifactWorkspaceEntry;
   draggable?: boolean;
   dragging?: boolean;
@@ -2573,11 +3731,13 @@ function Tab({
   onDragEnd?: () => void;
 }) {
   const t = useT();
-  const iconName = kindIconName(kind);
+  const iconName = iconNameOverride ?? kindIconName(kind);
+  const tabTitle = title ?? (meta ? `${label} ${meta}` : label);
   return (
     <div
       className={[
         'ws-tab',
+        meta ? 'has-meta' : '',
         kind === 'live-artifact' ? 'live-artifact-tab' : '',
         active ? 'active' : '',
         draggable ? 'draggable' : '',
@@ -2594,6 +3754,7 @@ function Tab({
       role="tab"
       aria-selected={active}
       tabIndex={0}
+      title={tabTitle}
       draggable={draggable}
       onDragStart={draggable ? onDragStart : undefined}
       onDragOver={draggable ? onDragOver : undefined}
@@ -2606,7 +3767,10 @@ function Tab({
           <Icon name={iconName} size={13} />
         </span>
       ) : null}
-      <span className="ws-tab-label">{label}</span>
+      <span className="ws-tab-text">
+        <span className="ws-tab-label">{label}</span>
+        {meta ? <span className="ws-tab-meta">{meta}</span> : null}
+      </span>
       {liveArtifact ? (
         <LiveArtifactBadges
           compact
@@ -2618,12 +3782,15 @@ function Tab({
       {closable && onClose ? (
         <button
           type="button"
-          className="ws-tab-close"
+          className="ws-tab-close od-tooltip"
           onClick={(e) => {
             e.stopPropagation();
             onClose();
           }}
           title={t('workspace.closeTab')}
+          data-tooltip={t('workspace.closeTab')}
+          data-tooltip-placement="bottom"
+          aria-label={t('workspace.closeTab')}
         >
           <Icon name="close" size={11} />
         </button>
@@ -2670,10 +3837,12 @@ function kindIconName(
   kind?: string,
 ):
   | 'file-code'
+  | 'globe'
   | 'image'
   | 'pencil'
   | 'file'
   | null {
+  if (kind === 'browser') return 'globe';
   if (kind === 'live-artifact') return 'file-code';
   if (kind === 'html') return 'file-code';
   if (kind === 'image') return 'image';
@@ -2681,6 +3850,109 @@ function kindIconName(
   if (kind === 'code') return 'file-code';
   if (kind === 'text') return 'file';
   return 'file';
+}
+
+function isBrowserTabId(tabId: string): boolean {
+  return tabId.startsWith(BROWSER_TAB_PREFIX);
+}
+
+function browserTabsFromState(value: OpenTabsState['browserTabs']): BrowserWorkspaceTab[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const tabs: BrowserWorkspaceTab[] = [];
+  for (const item of value) {
+    if (!item || typeof item.id !== 'string' || seen.has(item.id)) continue;
+    if (!item.id.startsWith(BROWSER_TAB_PREFIX)) continue;
+    const label = item.label?.trim() || 'Browser';
+    const tab: BrowserWorkspaceTab = {
+      id: item.id,
+      label,
+    };
+    if (item.insertAfter === null) tab.insertAfter = null;
+    else if (typeof item.insertAfter === 'string') tab.insertAfter = item.insertAfter;
+    if (item.title?.trim()) tab.title = item.title.trim();
+    if (item.url?.trim()) tab.url = item.url.trim();
+    if (item.iconUrl?.trim()) tab.iconUrl = item.iconUrl.trim();
+    seen.add(item.id);
+    tabs.push(tab);
+  }
+  return tabs;
+}
+
+function maxBrowserTabSequence(tabs: BrowserWorkspaceTab[]): number {
+  let max = 0;
+  for (const tab of tabs) {
+    const suffix = tab.id.slice(BROWSER_TAB_PREFIX.length);
+    const value = Number.parseInt(suffix, 10);
+    if (Number.isFinite(value)) max = Math.max(max, value);
+  }
+  return max;
+}
+
+function lastWorkspaceTabId(tabs: WorkspaceOrderedTab[]): string | null {
+  return tabs[tabs.length - 1]?.id ?? null;
+}
+
+function reanchorBrowserTabsToCurrentOrder(
+  orderedTabs: WorkspaceOrderedTab[],
+  browserTabs: BrowserWorkspaceTab[],
+): BrowserWorkspaceTab[] {
+  if (browserTabs.length === 0) return browserTabs;
+  const anchorByBrowserId = new Map<string, string | null>();
+  let previousId: string | null = DESIGN_FILES_TAB;
+  for (const entry of orderedTabs) {
+    if (entry.kind === 'browser') {
+      anchorByBrowserId.set(entry.browserTab.id, previousId);
+      previousId = entry.browserTab.id;
+    } else {
+      previousId = entry.name;
+    }
+  }
+
+  let changed = false;
+  const nextTabs = browserTabs.map((tab) => {
+    if (!anchorByBrowserId.has(tab.id)) return tab;
+    const nextInsertAfter = anchorByBrowserId.get(tab.id) ?? null;
+    const currentInsertAfter = tab.insertAfter ?? null;
+    if (currentInsertAfter === nextInsertAfter) return tab;
+    changed = true;
+    return { ...tab, insertAfter: nextInsertAfter };
+  });
+  return changed ? nextTabs : browserTabs;
+}
+
+function orderWorkspaceTabs(
+  fileTabNames: string[],
+  browserTabs: BrowserWorkspaceTab[],
+): WorkspaceOrderedTab[] {
+  const ordered: WorkspaceOrderedTab[] = fileTabNames.map((name) => ({
+    id: name,
+    kind: 'file',
+    name,
+  }));
+  let rootAnchorInsertIndex = 0;
+
+  for (const browserTab of browserTabs) {
+    const entry: WorkspaceOrderedTab = {
+      id: browserTab.id,
+      kind: 'browser',
+      browserTab,
+    };
+    const anchor = browserTab.insertAfter;
+    if (!anchor || anchor === DESIGN_FILES_TAB || anchor === DESIGN_SYSTEM_TAB) {
+      ordered.splice(rootAnchorInsertIndex, 0, entry);
+      rootAnchorInsertIndex += 1;
+      continue;
+    }
+    const anchorIndex = ordered.findIndex((candidate) => candidate.id === anchor);
+    if (anchorIndex === -1) {
+      ordered.push(entry);
+      continue;
+    }
+    ordered.splice(anchorIndex + 1, 0, entry);
+  }
+
+  return ordered;
 }
 
 function isSketchName(name: string): boolean {

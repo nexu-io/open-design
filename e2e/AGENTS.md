@@ -49,6 +49,10 @@ pnpm test specs/mac.spec.ts
 pnpm test tests/tools-dev/inspect.test.ts
 pnpm test specs
 pnpm test tests
+pnpm test:p0
+pnpm test:p0p1
+pnpm test:ui:p0
+pnpm test:ui:p0p1
 pnpm typecheck
 pnpm exec tsx scripts/playwright.ts clean
 pnpm exec playwright test -c playwright.config.ts --list
@@ -56,3 +60,5 @@ pnpm exec playwright test -c playwright.config.ts
 ```
 
 Use a specific file path when validating a single case. Do not add root e2e aliases or extra package scripts for individual cases.
+
+Case-level priority tags use test-name prefixes: `[P0]`, `[P1]`, `[P2]`.

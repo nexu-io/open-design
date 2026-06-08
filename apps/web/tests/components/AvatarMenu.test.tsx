@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -61,6 +61,7 @@ type AgentModelChangeHandler = (
   choice: { model?: string; reasoning?: string },
 ) => void;
 type VoidHandler = () => void;
+type OpenSettingsHandler = (section?: 'execution') => void;
 
 function renderMenu({
   config = baseConfig,
@@ -69,7 +70,7 @@ function renderMenu({
   onModeChange = vi.fn<ModeChangeHandler>(),
   onAgentChange = vi.fn<AgentChangeHandler>(),
   onAgentModelChange = vi.fn<AgentModelChangeHandler>(),
-  onOpenSettings = vi.fn<VoidHandler>(),
+  onOpenSettings = vi.fn<OpenSettingsHandler>(),
   onRefreshAgents = vi.fn<VoidHandler>(),
 }: {
   config?: AppConfig;
@@ -78,7 +79,7 @@ function renderMenu({
   onModeChange?: ReturnType<typeof vi.fn<ModeChangeHandler>>;
   onAgentChange?: ReturnType<typeof vi.fn<AgentChangeHandler>>;
   onAgentModelChange?: ReturnType<typeof vi.fn<AgentModelChangeHandler>>;
-  onOpenSettings?: ReturnType<typeof vi.fn<VoidHandler>>;
+  onOpenSettings?: ReturnType<typeof vi.fn<OpenSettingsHandler>>;
   onRefreshAgents?: ReturnType<typeof vi.fn<VoidHandler>>;
 } = {}) {
   render(
@@ -123,7 +124,19 @@ describe('AvatarMenu', () => {
     openMenu();
     fireEvent.click(screen.getByRole('button', { name: /avatar.useLocal/i }));
 
-    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    expect(onOpenSettings).toHaveBeenCalledWith('execution');
+  });
+
+  it('opens execution settings from the popover action', () => {
+    const onOpenSettings = vi.fn<OpenSettingsHandler>();
+    renderMenu({ onOpenSettings });
+
+    openMenu();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'inlineSwitcher.openFullSettings' }),
+    );
+
+    expect(onOpenSettings).toHaveBeenCalledWith('execution');
   });
 
   it('rescans agents and re-renders newly available CLI entries', async () => {
@@ -182,10 +195,17 @@ describe('AvatarMenu', () => {
     });
 
     openMenu();
-    const modelSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
-    expect(modelSelect.value).toBe('custom-codex-model');
+    // The model picker is a SearchableModelSelect: a combobox button whose
+    // label shows the active selection, backed by a popover listbox. A custom
+    // saved model that isn't in the agent's declared list is injected as an
+    // additional option so it stays selectable instead of silently dropping.
+    const modelCombobox = screen.getAllByRole('combobox')[0] as HTMLButtonElement;
+    expect(modelCombobox.textContent).toContain('custom-codex-model');
+
+    fireEvent.click(modelCombobox);
+    const popover = screen.getByTestId('avatar-model-popover');
     expect(
-      screen.getByRole('option', { name: /custom-codex-model/i }),
+      within(popover).getByRole('option', { name: /custom-codex-model/i }),
     ).toBeTruthy();
   });
 });

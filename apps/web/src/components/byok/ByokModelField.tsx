@@ -71,6 +71,7 @@ export function ByokModelField({
           searchPlaceholder={labels.searchPlaceholder}
           searchInputTestId="settings-byok-model-search"
           popoverTestId="settings-byok-model-popover"
+          popoverClassName="settings-byok-select-popover"
           models={models}
           value={selectValue}
           onFocus={onFocus}
@@ -102,14 +103,8 @@ export function ByokModelField({
       {showSuggestedModelsHint ? (
         <p className="hint">{labels.suggestedModelsHint}</p>
       ) : null}
-      {showAzureModelFetchHint ? (
-        <p className="hint">{azureModelFetchHint}</p>
-      ) : null}
-      {showFetchModelsUnsupportedHint ? (
-        <p className="hint">{labels.fetchModelsUnsupported}</p>
-      ) : null}
       {customActive ? (
-        <label className="field">
+        <label className={'field' + (model.trim() ? '' : ' settings-byok-required-empty')}>
           <span className="field-label">
             {labels.customModelLabel}
             <span className="field-required" aria-label={labels.required}>
@@ -125,6 +120,12 @@ export function ByokModelField({
             onChange={(e) => onCustomModelChange(e.target.value.trim())}
           />
         </label>
+      ) : null}
+      {showAzureModelFetchHint ? (
+        <p className="hint">{azureModelFetchHint}</p>
+      ) : null}
+      {showFetchModelsUnsupportedHint ? (
+        <p className="hint">{labels.fetchModelsUnsupported}</p>
       ) : null}
     </>
   );

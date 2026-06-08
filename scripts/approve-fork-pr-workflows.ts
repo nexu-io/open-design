@@ -145,9 +145,7 @@ export function isDeniedChangedPath(path: string): boolean {
 function isDocsPath(path: string): boolean {
   return (
     path === "README.md" ||
-    path === "README.zh-CN.md" ||
     path === "CONTRIBUTING.md" ||
-    path === "CONTRIBUTING.zh-CN.md" ||
     path === "QUICKSTART.md" ||
     path.startsWith("docs/")
   );

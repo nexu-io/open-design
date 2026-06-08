@@ -25,6 +25,8 @@ export type AnalyticsEventName =
   // Run lifecycle (daemon authoritative)
   | 'run_created'
   | 'run_finished'
+  | 'run_retry_attempted'
+  | 'run_retry_finished'
   // Packaged updater lifecycle
   | 'update_install_result'
   | 'update_apply_observed'
@@ -111,6 +113,26 @@ export type TrackingProjectSource =
   | 'chat_composer'
   | 'unknown';
 
+export type TrackingAmrEntrySource =
+  | 'onboarding_amr_card'
+  | 'onboarding_amr_sign_in_continue'
+  | 'inline_model_switcher_amr_row'
+  | 'settings_amr_agent_card'
+  | 'settings_amr_authorize'
+  | 'chat_error_authorize_retry'
+  | 'chat_error_recharge'
+  | 'chat_error_switch_retry_card'
+  | 'generation_preview_authorize_retry'
+  | 'generation_preview_recharge'
+  | 'generation_preview_switch_retry_card';
+
+export interface AmrEntryAttribution {
+  entryId: string;
+  sourceProduct: 'open_design';
+  sourceDetail: TrackingAmrEntrySource;
+  occurredAt: string;
+}
+
 // The six tabs inside the New project modal (CSV row 7 tab_name).
 export type TrackingNewProjectTab =
   | 'prototype'
@@ -141,7 +163,8 @@ export type TrackingByokProviderId =
   | 'senseaudio';
 
 // v2 CLI provider catalogue (CSV row 63 + image 59). Adds `qoder_cli` and
-// `kilo` over v1.
+// `kilo` over v1, plus `amr` (the vela CLI runtime) so AMR runs no longer
+// fold into the `other` catch-all bucket.
 export type TrackingCliProviderId =
   | 'claude_code'
   | 'codex_cli'
@@ -156,6 +179,7 @@ export type TrackingCliProviderId =
   | 'github_copilot_cli'
   | 'pi'
   | 'kilo'
+  | 'amr'
   | 'other';
 
 export type TrackingFeedbackProviderId =
@@ -256,6 +280,23 @@ export type TrackingRunFailureUserAction =
   | 'reduce_context'
   | 'install_cli'
   | 'none';
+export type TrackingRunRetryStrategy = 'same_run_transient';
+export type TrackingRunRetryFinalResult =
+  | 'not_attempted'
+  | 'success'
+  | 'failed'
+  | 'suppressed';
+export type TrackingRunRetrySuppressedReason =
+  | 'not_failed'
+  | 'not_retryable'
+  | 'unsupported_category'
+  | 'hard_quota'
+  | 'attempt_limit_reached'
+  | 'cancel_requested'
+  | 'user_visible_output_seen'
+  | 'tool_call_seen'
+  | 'artifact_write_seen'
+  | 'live_artifact_seen';
 export type TrackingRunDiagnosticSource =
   | 'error_event'
   | 'stderr'
@@ -368,6 +409,7 @@ export type TrackingChatPanelPageViewSource =
 export type TrackingOnboardingArea =
   | 'runtime'
   | 'about_you'
+  | 'newsletter'
   | 'design_system'
   | 'generation_progress';
 
@@ -378,6 +420,7 @@ export type TrackingOnboardingStepIndex = '1' | '2' | '3' | 'progress';
 export type TrackingOnboardingStepName =
   | 'connect'
   | 'about_you'
+  | 'newsletter'
   | 'design_system'
   | 'generation';
 
@@ -474,6 +517,8 @@ export type TrackingOnboardingClickElement =
   | 'organization_size'
   | 'use_case'
   | 'hear_about_us'
+  // Optional newsletter email captured on the About-you step
+  | 'newsletter_email'
   // Fires once on Finish-setup, carrying the full survey snapshot
   // (role + organization_size + use_case + discovery_source) so the
   // funnel always has the user's final picks even when individual
@@ -495,7 +540,8 @@ export type TrackingOnboardingClickAction =
   | 'select_option'
   | 'add_source'
   | 'upload_source'
-  | 'show_access_methods';
+  | 'show_access_methods'
+  | 'subscribe';
 
 // All optional except the discriminators (area/element/action/step/
 // session id). `role`/`organization_size`/`use_case`/`discovery_source`
@@ -526,6 +572,9 @@ export interface OnboardingClickProps {
   source_type?: TrackingOnboardingSourceType;
   has_brand_description?: boolean;
   source_count?: number;
+  // True when the user left a (valid) newsletter email on the About-you
+  // step. Boolean only — the email address itself is never sent here.
+  newsletter_opt_in?: boolean;
 }
 
 // ---- Onboarding lifecycle result events ---------------------------------
@@ -1303,7 +1352,21 @@ export interface ChatPanelClickProps {
     | 'composer_settings'
     | 'attachment'
     | 'send'
+    | 'mention_popover_trigger'
     | 'resources_popover_trigger';
+}
+
+// Next-step action affordance shown under the last assistant message after a
+// previewable artifact is produced. `next_step_exposed` fires once when the
+// affordance becomes visible so the funnel can divide clicks by exposure;
+// the action elements drive the "second-turn rate" / "share rate" acceptance
+// metrics. `chip_id` carries the recommended-chip identity (e.g.
+// `polish_visual`, `second_version`) for the `chip` element.
+export interface NextStepActionClickProps {
+  page_name: 'chat_panel';
+  area: 'next_step';
+  element: 'next_step_exposed' | 'share' | 'chip';
+  chip_id?: string;
 }
 
 // Hosted-AMR nudge shown under a non-AMR agent's model/auth/quota failure.
@@ -1312,6 +1375,17 @@ export interface RunFailedToastClickProps {
   page_name: 'chat_panel';
   area: 'chat_panel';
   element: 'go_amr';
+}
+
+export interface AmrEntryClickProps {
+  page_name: TrackingPageName;
+  area: 'amr_entry';
+  element: TrackingAmrEntrySource;
+  action: 'click_amr_entry';
+  entry_id: string;
+  source_product: 'open_design';
+  source_detail: TrackingAmrEntrySource;
+  entry_occurred_at: string;
 }
 
 export interface ChatPanelResourcesPopoverClickProps {
@@ -1648,7 +1722,9 @@ export type UiClickProps =
   | IntegrationsSkillsTabClickProps
   | IntegrationsUseEverywhereTabClickProps
   | ChatPanelClickProps
+  | NextStepActionClickProps
   | RunFailedToastClickProps
+  | AmrEntryClickProps
   | ChatPanelResourcesPopoverClickProps
   | FileManagerClickProps
   | ArtifactToolbarClickProps
@@ -1903,6 +1979,36 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   design_system_created?: boolean;
   preview_module_count?: number;
   missing_font_count?: number;
+  retry_attempt_count?: number;
+  retry_final_result?: TrackingRunRetryFinalResult;
+  retry_suppressed_reason?: TrackingRunRetrySuppressedReason;
+}
+
+export interface RunRetryBaseProps {
+  page_name: 'chat_panel' | 'design_system_project';
+  area: 'chat_panel' | 'design_system_generation';
+  project_id: string;
+  conversation_id: string | null;
+  run_id: string;
+  retry_of_run_id: string;
+  retry_attempt_index: number;
+  retry_max_attempts: number;
+  retry_strategy: TrackingRunRetryStrategy;
+  agent_provider_id: TrackingCliProviderId;
+  model_id: string;
+  failure_category?: TrackingRunFailureCategory;
+  failure_detail?: TrackingRunFailureDetail;
+  failure_stage?: TrackingRunFailureStage;
+  error_code?: string;
+}
+
+export interface RunRetryAttemptedProps extends RunRetryBaseProps {
+  retry_reason: 'transient_failure';
+}
+
+export interface RunRetryFinishedProps extends RunRetryBaseProps {
+  retry_result: 'success' | 'failed' | 'suppressed';
+  retry_suppressed_reason?: TrackingRunRetrySuppressedReason;
 }
 
 export type TrackingUpdateApplyResult = 'success' | 'not_applied' | 'unknown';
@@ -2145,6 +2251,8 @@ export type AnalyticsEventPayload =
   | { event: 'plugin_replacement_result'; props: PluginReplacementResultProps }
   | { event: 'run_created'; props: RunCreatedProps }
   | { event: 'run_finished'; props: RunFinishedProps }
+  | { event: 'run_retry_attempted'; props: RunRetryAttemptedProps }
+  | { event: 'run_retry_finished'; props: RunRetryFinishedProps }
   | { event: 'update_install_result'; props: UpdateInstallResultProps }
   | { event: 'update_apply_observed'; props: UpdateApplyObservedProps }
   | { event: 'file_upload_result'; props: FileUploadResultProps }
@@ -2290,6 +2398,8 @@ export function agentIdToTracking(agentId: string | null | undefined): TrackingC
       return 'pi';
     case 'kilo':
       return 'kilo';
+    case 'amr':
+      return 'amr';
     default:
       return 'other';
   }

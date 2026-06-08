@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { ensureRailOpen } from '@/playwright/rail';
 import type { Page } from '@playwright/test';
 import { T } from '@/timeouts';
 
@@ -48,7 +49,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('API empty stream shows No output instead of Done', async ({ page }) => {
+test('[P0] API empty stream shows No output instead of Done', async ({ page }) => {
   await page.route('**/api/proxy/openai/stream', async (route) => {
     await route.fulfill({
       status: 200,
@@ -66,7 +67,7 @@ test('API empty stream shows No output instead of Done', async ({ page }) => {
   await sendPrompt(page, 'Create a login page');
 
   await expect(page.locator('.assistant-label', { hasText: 'No output' })).toBeVisible();
-  await expect(page.getByText(/provider ended the request/i)).toBeVisible();
+  await expect(page.getByText(/provider ended the request/i).first()).toBeVisible();
   await expect(page.locator('.assistant-label', { hasText: 'Done' })).toHaveCount(0);
 });
 
@@ -90,6 +91,7 @@ async function gotoEntryHome(page: Page) {
 }
 
 async function openNewProjectModal(page: Page) {
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-new-project').click();
   await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();

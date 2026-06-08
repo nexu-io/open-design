@@ -9,6 +9,7 @@ out/
 /OpenDesign.exe
 .vite
 .astro/
+.wrangler/
 .vscode
 
 # Local runtime data — auto-created by the daemon on first start.

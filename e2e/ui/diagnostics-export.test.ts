@@ -33,7 +33,7 @@ test.beforeEach(async ({ page }) => {
   }, STORAGE_KEY);
 });
 
-test('diagnostics export zip includes the primary daemon, web, and desktop logs', async ({ page }) => {
+test('[P1] diagnostics export zip includes the primary daemon, web, and desktop logs', async ({ page }) => {
   await gotoEntryHome(page);
 
   const response = await page.request.get('/api/diagnostics/export');

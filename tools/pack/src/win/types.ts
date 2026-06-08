@@ -1,4 +1,5 @@
 import type { DesktopEvalResult, DesktopScreenshotResult, DesktopStatusSnapshot, DesktopUpdateResult } from "@open-design/sidecar-proto";
+import type { ToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
 import type { CacheReport } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
 import type { INTERNAL_PACKAGES } from "./constants.js";
@@ -63,8 +64,10 @@ export type WinPaths = {
   exePath: string;
   installDir: string;
   installedExePath: string;
-  installerPayloadPath: string;
+  installerBasePayloadPath: string;
+  installerOverlayPayloadPath: string;
   installerScriptPath: string;
+  launcherPayloadPath: string;
   publicDesktopShortcutPath: string;
   latestYmlPath: string;
   installMarkerPath: string;
@@ -97,10 +100,12 @@ export type WinPackResult = {
   installerPath: string | null;
   latestYmlPath: string | null;
   outputRoot: string;
+  payloadPath: string | null;
   portableZipPath: string | null;
   resourceRoot: string;
   runtimeNamespaceRoot: string;
   cacheReport: CacheReport;
+  segments: WinPackTiming[];
   sizeReport: WinSizeReport;
   timings: WinPackTiming[];
   to: ToolPackConfig["to"];
@@ -109,6 +114,7 @@ export type WinPackResult = {
 };
 
 export type WinPackTiming = {
+  details?: Record<string, unknown>;
   durationMs: number;
   phase: string;
 };
@@ -178,6 +184,7 @@ export type WinInstallResult = {
   desktopShortcutExists: boolean;
   desktopShortcutPath: string;
   installDir: string;
+  lifecycleTimings: WinLifecycleTiming[];
   installerPath: string;
   installPayload: WinInstallPayloadReport;
   markerPath: string;
@@ -200,6 +207,11 @@ export type WinInstallPayloadReport = {
   }>;
 };
 
+export type WinLifecycleTiming = {
+  durationMs: number;
+  step: string;
+};
+
 export type WinStartResult = {
   executablePath: string;
   logPath: string;
@@ -218,6 +230,7 @@ export type WinStopResult = {
 };
 
 export type WinUninstallResult = {
+  lifecycleTimings: WinLifecycleTiming[];
   markerPath: string;
   namespace: string;
   nsisLogPath: string;
@@ -315,6 +328,7 @@ export type WinResetResult = {
 
 export type WinInspectResult = {
   eval?: DesktopEvalResult;
+  launcher: ToolPackLauncherRuntimeSnapshot;
   screenshot?: DesktopScreenshotResult;
   status: DesktopStatusSnapshot | null;
   update?: DesktopUpdateResult;

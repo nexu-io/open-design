@@ -6,6 +6,7 @@ import {
   exportAsImage,
   exportAsPdf,
   exportAsZip,
+  captureHostIframeSnapshot,
   openSandboxedPreviewInNewTab,
   requestPreviewSnapshot,
 } from '../runtime/exports';
@@ -469,8 +470,15 @@ export function PreviewModal({
   const canOpenTemplateShareMenu = canExportFiles || Boolean(previewShareUrl);
 
   return (
-    <div className="ds-modal-backdrop" role="dialog" aria-modal="true" aria-label={`${title} preview`}>
-      <div className={`ds-modal ${fullscreen ? 'ds-modal-fullscreen' : ''}`}>
+    <div
+      className="ds-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${title} preview`}
+    >
+      <div
+        className={`ds-modal ${fullscreen ? 'ds-modal-fullscreen' : ''}`}
+      >
         <header className="ds-modal-header">
           <div className="ds-modal-header-top">
             <div className="ds-modal-title-block">
@@ -753,7 +761,9 @@ export function PreviewModal({
                               setTemplateShareOpen(false);
                               const iframe = previewIframeRef.current;
                               if (!iframe) return;
-                              const snap = await requestPreviewSnapshot(iframe);
+                              const snap =
+                                (await captureHostIframeSnapshot(iframe)) ??
+                                (await requestPreviewSnapshot(iframe));
                               try {
                                 if (snap) {
                                   exportAsImage(snap.dataUrl, exportTitle);

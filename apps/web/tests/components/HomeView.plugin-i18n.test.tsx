@@ -4,6 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { HomeView } from '../../src/components/HomeView';
 import { I18nProvider } from '../../src/i18n';
+// HomeHero's prompt input is now the same Lexical contenteditable as the
+// project composer, so `home-hero-input` has no `.value`. Read its serialized
+// text through the shared helper instead.
+import { homeHeroPromptText } from '../helpers/home-hero-lexical';
 
 const PLUGIN_ROW = {
   id: 'localized-plugin',
@@ -71,10 +75,16 @@ describe('HomeView plugin i18n', () => {
     cleanup();
   });
 
-  it('adds the plugin card Use action as context without hydrating the query', async () => {
+  it('routes the plugin card Use action as the active driver without hydrating the query', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [PLUGIN_ROW] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/apply')) {
+        return new Response(JSON.stringify(APPLY_RESULT), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -83,22 +93,40 @@ describe('HomeView plugin i18n', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(
+    const view = render(
       <I18nProvider initial="zh-CN">
-        <HomeView
-          projects={[]}
-          onSubmit={() => undefined}
-          onOpenProject={() => undefined}
-          onViewAllProjects={() => undefined}
-        />
+        <div className="entry-main--scroll">
+          <HomeView
+            projects={[]}
+            onSubmit={() => undefined}
+            onOpenProject={() => undefined}
+            onViewAllProjects={() => undefined}
+          />
+        </div>
       </I18nProvider>,
     );
+    const scrollContainer = view.container.querySelector('.entry-main--scroll') as HTMLElement;
+    scrollContainer.scrollTop = 240;
 
     fireEvent.click(await waitFor(() => screen.getByTestId('plugins-home-use-localized-plugin')));
 
-    expect(screen.getByTestId('home-hero-context-plugin-localized-plugin')).toBeTruthy();
-    expect((await screen.findByTestId('home-hero-input') as HTMLTextAreaElement).value).toBe('');
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
+    // Plain "Use" now routes the plugin as the active driver (so its own
+    // pipeline + context apply on submit) and applies it, surfacing the
+    // active-plugin chip.
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-plugin')).toBeTruthy();
+    });
+    await waitFor(() => expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes('/apply')),
+    ).toBe(true));
+    // Plain `use` must NOT hydrate the query into the prompt editor, so the
+    // Lexical editor stays empty (serializes to whitespace).
+    await screen.findByTestId('home-hero-input');
+    expect(homeHeroPromptText().trim()).toBe('');
+    // Routing the plugin scrolls the Home surface back to the top.
+    await waitFor(() => {
+      expect(scrollContainer.scrollTop).toBe(0);
+    });
   });
 
   it('hydrates the Home prompt with the localized plugin query', async () => {
@@ -133,12 +161,18 @@ describe('HomeView plugin i18n', () => {
     fireEvent.click(await waitFor(() => screen.getByTestId('plugins-home-use-menu-localized-plugin')));
     fireEvent.click(screen.getByTestId('plugins-home-use-with-query-localized-plugin'));
 
-    const input = await screen.findByTestId('home-hero-input');
+    await screen.findByTestId('home-hero-input');
+    // The localized query hydrates the Lexical editor's serialized text (the
+    // draft was empty, so the appended query is the whole prompt). The
+    // caret-at-end assertion is dropped: a contenteditable has no
+    // selectionStart/End, and the caret is placed by the editor's own model.
     await waitFor(() => {
-      expect((input as HTMLTextAreaElement).value).toBe('生成一份关于 设计系统 的简报。');
-      expect((input as HTMLTextAreaElement).selectionStart).toBe('生成一份关于 设计系统 的简报。'.length);
-      expect((input as HTMLTextAreaElement).selectionEnd).toBe('生成一份关于 设计系统 的简报。'.length);
+      expect(homeHeroPromptText()).toBe('生成一份关于 设计系统 的简报。');
     });
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
+    // use-with-query now also routes the plugin as the active driver, so it
+    // applies (binding its pipeline/context for submit).
+    await waitFor(() => expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes('/apply')),
+    ).toBe(true));
   });
 });

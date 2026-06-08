@@ -33,6 +33,18 @@ describe('WorkingDirPill', () => {
     expect(screen.getByTestId('working-dir-pill-menu')).toBeTruthy();
   });
 
+  it('renders only the folder name for Windows backslash paths', () => {
+    render(
+      <WorkingDirPill
+        projectId="project-1"
+        resolvedDir="C:\\work\\repo"
+      />,
+    );
+
+    expect(screen.getByTestId('working-dir-pill-trigger').textContent).toContain('repo');
+    expect(screen.getByTestId('working-dir-pill-trigger').textContent).not.toContain('C:\\work');
+  });
+
   it('opens the project directory through the desktop host bridge', async () => {
     const openPath = vi.fn(async () => ({ ok: true as const }));
     restoreHost = installMockOpenDesignHost({

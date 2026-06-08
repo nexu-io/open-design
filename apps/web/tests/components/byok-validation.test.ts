@@ -102,6 +102,43 @@ describe('BYOK draft validation', () => {
     ).toBe(true);
   });
 
+  it('can enforce first-party key shape when the first-party Base URL looks mistyped', () => {
+    const withoutHint = validateByokDraft('anthropic', {
+      apiKey: 'sk-openai-key',
+      baseUrl: 'https://api.anthropic.comsssss',
+      model: 'claude-sonnet-4-5',
+    });
+    expect(withoutHint.issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: 'api_key',
+          code: 'api_key_wrong_protocol',
+        }),
+      ]),
+    );
+
+    const withHint = validateByokDraft(
+      'anthropic',
+      {
+        apiKey: 'sk-openai-key',
+        baseUrl: 'https://api.anthropic.comsssss',
+        model: 'claude-sonnet-4-5',
+      },
+      { keyValidationBaseUrl: 'https://api.anthropic.com' },
+    );
+    expect(withHint.ok).toBe(false);
+    expect(withHint.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: 'api_key',
+          level: 'error',
+          code: 'api_key_wrong_protocol',
+          detectedProtocol: 'openai',
+        }),
+      ]),
+    );
+  });
+
   it('still enforces key shape on first-party OpenAI and Google endpoints', () => {
     const openai = validateByokDraft('openai', {
       apiKey: 'enterprise-openai-key',

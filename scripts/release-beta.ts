@@ -97,13 +97,13 @@ function parseBetaVersion(value: string, sourceName: string): ParsedBetaVersion 
 function parseBetaMetadataJson(value: string): ParsedBetaMetadata {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(value);
+    parsed = JSON.parse(value.replace(/^\uFEFF/u, ""));
   } catch (error) {
-    fail(`R2 beta metadata.json is invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+    fail(`beta metadata.json is invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   if (typeof parsed !== "object" || parsed == null || Array.isArray(parsed)) {
-    fail("R2 beta metadata.json must be a JSON object");
+    fail("beta metadata.json must be a JSON object");
   }
 
   const record = parsed as Record<string, unknown>;
@@ -112,26 +112,51 @@ function parseBetaMetadataJson(value: string): ParsedBetaMetadata {
   const baseVersion = readStringField(record, "baseVersion");
 
   if (betaVersion != null) {
-    const beta = parseBetaVersion(betaVersion, "R2 beta metadata.json");
+    const beta = parseBetaVersion(betaVersion, "beta metadata.json");
     if (baseVersion != null && baseVersion !== beta.baseVersion) {
-      fail(`R2 beta metadata.json baseVersion ${baseVersion} does not match betaVersion ${beta.betaVersion}`);
+      fail(`beta metadata.json baseVersion ${baseVersion} does not match betaVersion ${beta.betaVersion}`);
     }
     if (betaNumber != null && betaNumber !== beta.betaNumber) {
-      fail(`R2 beta metadata.json betaNumber ${betaNumber} does not match betaVersion ${beta.betaVersion}`);
+      fail(`beta metadata.json betaNumber ${betaNumber} does not match betaVersion ${beta.betaVersion}`);
     }
     return { ...beta, source: "metadata-json" };
   }
 
   if (baseVersion == null || betaNumber == null) {
-    fail("R2 beta metadata.json must include betaVersion or baseVersion+betaNumber");
+    fail("beta metadata.json must include betaVersion or baseVersion+betaNumber");
   }
 
   const parsedBase = parseStableVersion(baseVersion);
   if (parsedBase == null) {
-    fail(`R2 beta metadata.json baseVersion must be x.y.z; got ${baseVersion}`);
+    fail(`beta metadata.json baseVersion must be x.y.z; got ${baseVersion}`);
   }
 
   return { ...parseBetaParts(baseVersion, String(betaNumber)), source: "metadata-json" };
+}
+
+function parseStableMetadataJson(value: string): ParsedStableVersion {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value.replace(/^\uFEFF/u, ""));
+  } catch (error) {
+    fail(`stable metadata.json is invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (typeof parsed !== "object" || parsed == null || Array.isArray(parsed)) {
+    fail("stable metadata.json must be a JSON object");
+  }
+
+  const record = parsed as Record<string, unknown>;
+  const stableVersion = readStringField(record, "stableVersion") ?? readStringField(record, "releaseVersion");
+  if (stableVersion == null) {
+    fail("stable metadata.json must include stableVersion or releaseVersion");
+  }
+
+  const parsedStable = parseStableVersion(stableVersion);
+  if (parsedStable == null) {
+    fail(`stable metadata.json stableVersion must be x.y.z; got ${stableVersion}`);
+  }
+  return { parsed: parsedStable, value: stableVersion };
 }
 
 async function readPackagedVersion(): Promise<string> {
@@ -157,7 +182,7 @@ async function fetchGitTags(pattern: string): Promise<string[]> {
     .filter((tag) => tag.length > 0);
 }
 
-function fetchOptionalHttpsText(url: string, redirectCount = 0): Promise<string | null> {
+function fetchOptionalHttpsTextOnce(url: string, redirectCount = 0): Promise<string | null> {
   return new Promise((resolvePromise, reject) => {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:") {
@@ -188,7 +213,7 @@ function fetchOptionalHttpsText(url: string, redirectCount = 0): Promise<string 
             return;
           }
           const nextUrl = new URL(location, parsed).toString();
-          fetchOptionalHttpsText(nextUrl, redirectCount + 1).then(resolvePromise, reject);
+          fetchOptionalHttpsTextOnce(nextUrl, redirectCount + 1).then(resolvePromise, reject);
           return;
         }
 
@@ -215,6 +240,27 @@ function fetchOptionalHttpsText(url: string, redirectCount = 0): Promise<string 
   });
 }
 
+async function fetchOptionalHttpsText(url: string): Promise<string | null> {
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await fetchOptionalHttpsTextOnce(url);
+    } catch (error) {
+      if (attempt === maxAttempts) {
+        throw error;
+      }
+      const delayMs = 1_000 * attempt;
+      console.warn(
+        `[release-beta] metadata request failed (attempt ${attempt}/${maxAttempts}); retrying in ${delayMs}ms: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  return null;
+}
+
 function validateHttpsUrl(value: string, name: string): void {
   let parsed: URL;
   try {
@@ -236,15 +282,26 @@ function setOutput(name: string, value: string): void {
 
 const packagedVersion = await readPackagedVersion();
 const packagedParsed = parseStableVersion(packagedVersion) ?? fail(`invalid packaged version: ${packagedVersion}`);
-const tags = await fetchGitTags("open-design-v*");
 
 let latestStable: ParsedStableVersion | null = null;
-for (const tag of tags) {
-  const stableVersion = extractStableVersionFromTag(tag);
-  if (stableVersion == null) continue;
+const stableMetadataUrl = process.env.OPEN_DESIGN_STABLE_METADATA_URL;
+if (stableMetadataUrl != null && stableMetadataUrl.length > 0) {
+  validateHttpsUrl(stableMetadataUrl, "OPEN_DESIGN_STABLE_METADATA_URL");
+  const stableMetadataJson = await fetchOptionalHttpsText(stableMetadataUrl);
+  if (stableMetadataJson == null) {
+    fail(`stable metadata.json was not found: ${stableMetadataUrl}`);
+  }
+  latestStable = parseStableMetadataJson(stableMetadataJson);
+  console.log(`[release-beta] stable metadata.json version: ${latestStable.value}`);
+} else {
+  const tags = await fetchGitTags("open-design-v*");
+  for (const tag of tags) {
+    const stableVersion = extractStableVersionFromTag(tag);
+    if (stableVersion == null) continue;
 
-  if (latestStable == null || compareVersions(stableVersion.parsed, latestStable.parsed) > 0) {
-    latestStable = stableVersion;
+    if (latestStable == null || compareVersions(stableVersion.parsed, latestStable.parsed) > 0) {
+      latestStable = stableVersion;
+    }
   }
 }
 
@@ -260,7 +317,7 @@ validateHttpsUrl(metadataUrl, "OPEN_DESIGN_BETA_METADATA_URL");
 
 let betaNumber = 1;
 let latestBeta: ParsedBetaVersion | null = null;
-let stateSource = "R2 metadata.json";
+let stateSource = "beta metadata.json";
 const latestMetadataJson = await fetchOptionalHttpsText(metadataUrl);
 if (latestMetadataJson == null) {
   // Only HTTP 404 reaches this branch; other fetch failures throw above. This
@@ -271,11 +328,11 @@ if (latestMetadataJson == null) {
     betaNumber: 0,
     betaVersion: `${packagedVersion}-beta.0`,
   };
-  stateSource = "missing R2 metadata.json fallback beta.0";
-  console.log("[release-beta] R2 beta metadata.json: not found; using beta.0 fallback");
+  stateSource = "missing beta metadata.json fallback beta.0";
+  console.log("[release-beta] beta metadata.json: not found; using beta.0 fallback");
 } else {
   latestBeta = parseBetaMetadataJson(latestMetadataJson);
-  console.log(`[release-beta] R2 beta metadata.json version: ${latestBeta.betaVersion}`);
+  console.log(`[release-beta] beta metadata.json version: ${latestBeta.betaVersion}`);
 }
 
 if (latestBeta != null) {

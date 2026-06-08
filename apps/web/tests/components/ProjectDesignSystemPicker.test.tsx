@@ -93,13 +93,41 @@ describe('ProjectDesignSystemPicker', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('uses localized picker copy and design-system category labels', async () => {
+  it('selects a design system option with keyboard activation', async () => {
+    const onChange = vi.fn();
+    renderPicker({ onChange });
+
+    fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
+    const option = await screen.findByTestId('project-ds-picker-option-clay');
+    option.focus();
+    fireEvent.keyDown(option, { key: 'Enter' });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith('clay');
+  });
+
+  it('selects the no-design-system option with keyboard activation', async () => {
+    const onChange = vi.fn();
+    renderPicker({ onChange });
+
+    fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
+    const option = (await screen.findAllByRole('option'))[0];
+    if (!option) throw new Error('Expected the no-design-system option to render');
+    option.focus();
+    fireEvent.keyDown(option, { key: ' ' });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(null);
+  });
+
+  it('uses localized picker copy', async () => {
     renderPicker({}, 'fr');
 
     fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
 
+    // Category chips were removed from the list/preview per design; only the
+    // surrounding picker copy needs to localize.
     expect(screen.getByPlaceholderText('Rechercher des systèmes de design')).toBeTruthy();
-    expect(await screen.findByText('Produit')).toBeTruthy();
     expect(screen.getByText('Aucun système de design')).toBeTruthy();
   });
 });

@@ -136,6 +136,58 @@ function renderOnboarding(
   return props;
 }
 
+function renderHome(
+  overrides: Partial<React.ComponentProps<typeof EntryShell>> = {},
+) {
+  window.history.replaceState(null, '', '/');
+  const props: React.ComponentProps<typeof EntryShell> = {
+    skills: [],
+    designTemplates: [],
+    designSystems: [],
+    projects: [],
+    templates: [],
+    promptTemplates: [],
+    defaultDesignSystemId: null,
+    connectors: [],
+    connectorsLoading: false,
+    config: baseConfig({
+      agentId: 'claude-code',
+      agentModels: { 'claude-code': { model: 'sonnet' } },
+      theme: 'system',
+    }),
+    agents: [cliAgent()],
+    daemonLive: true,
+    onModeChange: vi.fn(),
+    onAgentChange: vi.fn(),
+    onAgentModelChange: vi.fn(),
+    onApiProtocolChange: vi.fn(),
+    onApiModelChange: vi.fn(),
+    onConfigPersist: vi.fn(),
+    onRefreshAgents: vi.fn(() => [cliAgent()]),
+    onThemeChange: vi.fn(),
+    onCreateProject: vi.fn(),
+    onCreatePluginShareProject: vi.fn(),
+    onImportClaudeDesign: vi.fn(),
+    onOpenProject: vi.fn(),
+    onOpenLiveArtifact: vi.fn(),
+    onDeleteProject: vi.fn(),
+    onRenameProject: vi.fn(),
+    onChangeDefaultDesignSystem: vi.fn(),
+    onPersistComposioKey: vi.fn(),
+    onOpenSettings: vi.fn(),
+    onCompleteOnboarding: vi.fn(),
+    ...overrides,
+  };
+
+  render(
+    <I18nProvider initial="en">
+      <EntryShell {...props} />
+    </I18nProvider>,
+  );
+
+  return props;
+}
+
 function trackedEvents(name: string) {
   return analyticsMocks.track.mock.calls.filter(([eventName]) => eventName === name);
 }
@@ -186,6 +238,52 @@ afterEach(() => {
 beforeEach(() => {
   globalThis.fetch = originalFetch;
   analyticsMocks.track.mockReset();
+});
+
+describe('EntryShell settings menu', () => {
+  it('opens quick actions before opening the full settings dialog', async () => {
+    globalThis.fetch = vi.fn(async (input) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.endsWith('/api/community/discord')) {
+        return jsonResponse({
+          inviteCode: 'mHAjSMV6gz',
+          inviteUrl: 'https://discord.gg/mHAjSMV6gz',
+          onlineCount: 1234,
+          memberCount: 4321,
+          fetchedAt: Date.now(),
+          stale: false,
+        });
+      }
+      if (url.endsWith('/api/github/open-design')) {
+        return jsonResponse({
+          repo: 'nexu-io/open-design',
+          stargazers_count: 56100,
+          fetchedAt: Date.now(),
+          stale: false,
+        });
+      }
+      return jsonResponse({});
+    }) as typeof fetch;
+    const props = renderHome();
+
+    await waitFor(() => {
+      expect(screen.getByText('1.2k online')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('entry-settings-menu-trigger'));
+
+    expect(props.onOpenSettings).not.toHaveBeenCalled();
+    expect(screen.getByTestId('entry-settings-menu')).toBeTruthy();
+    expect(screen.getByText('Language')).toBeTruthy();
+    expect(screen.getByText('Appearance')).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Join Discord/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /1.2k online/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Follow @nexudotio on X/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('entry-settings-open-details'));
+
+    expect(props.onOpenSettings).toHaveBeenCalledWith();
+  });
 });
 
 describe('EntryShell onboarding Open Design AMR runtime', () => {
@@ -267,7 +365,24 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await act(async () => {});
 
     await vi.waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login', { method: 'POST' });
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/integrations/vela/login',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: expect.any(String),
+        }),
+      );
+    });
+    const loginInit = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith('/api/integrations/vela/login'),
+    )?.[1] as RequestInit;
+    expect(JSON.parse(String(loginInit.body))).toMatchObject({
+      attribution: {
+        entryId: expect.stringMatching(/^od-amr-/u),
+        sourceProduct: 'open_design',
+        sourceDetail: 'onboarding_amr_sign_in_continue',
+      },
     });
     expect(screen.getByText('Signing in…')).toBeTruthy();
     expect(screen.queryByText('Not signed in')).toBeNull();
@@ -276,6 +391,30 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(screen.getByText('Signing in…')).toBeTruthy();
     expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
     expect(screen.getByText('Connect')).toBeTruthy();
+  });
+
+  it('shows daemon startup errors when AMR sign-in fails immediately', async () => {
+    const startupError = 'profile "prod" api URL: is not configured';
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        return jsonResponse({ error: startupError }, 500);
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Sign in to continue/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toBe(startupError);
+    });
+    expect(screen.queryByText('AMR sign-in failed.')).toBeNull();
+    expect(screen.queryByText('Signing in…')).toBeNull();
   });
 
   it('clears AMR login pending when the user switches to another runtime', async () => {
@@ -341,7 +480,14 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login', { method: 'POST' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/integrations/vela/login',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: expect.any(String),
+      }),
+    );
     expect(screen.getByText('Signing in…')).toBeTruthy();
 
     await act(async () => {
@@ -474,7 +620,13 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     chooseDropdownOption('Organization size', /Growth company/i);
     chooseDropdownOption('Use case', /Product design/i);
     chooseDropdownOption('Where did you hear about us?', /Search/i);
+    // About you is no longer the last step — advance to the newsletter step.
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
+    });
+    // Finish from the newsletter step.
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
 
     expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
 
@@ -493,12 +645,22 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
           step_index: '2',
           step_name: 'about_you',
         }),
+        expect.objectContaining({
+          page_name: 'onboarding',
+          area: 'newsletter',
+          step_index: '3',
+          step_name: 'newsletter',
+        }),
       ]),
     );
 
+    // The About-you survey snapshot now fires on Finish from the newsletter
+    // step (the new last step), so it carries area: 'newsletter'. The payload
+    // — the user's role/org/use-case/source picks — is what matters and is
+    // still intact.
     expect(findTrackedEvent('ui_click', (payload) => payload.element === 'about_you_submit')).toMatchObject({
       page_name: 'onboarding',
-      area: 'about_you',
+      area: 'newsletter',
       element: 'about_you_submit',
       action: 'continue',
       role: 'engineer',
@@ -520,6 +682,91 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       use_cases: ['product'],
       discovery_source: 'search',
     });
+  });
+
+  it('submits the optional newsletter email when finishing the About-you step', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      if (url.endsWith('/subscribe')) {
+        return jsonResponse({ ok: true });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding();
+
+    // Connect -> About you
+    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    });
+    // About you -> newsletter step (where the email field now lives)
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
+    });
+
+    const emailInput = document.querySelector('.onboarding-view__email-input');
+    expect(emailInput).toBeInstanceOf(HTMLInputElement);
+    expect((emailInput as HTMLInputElement).placeholder).toBe('you@studio.com');
+
+    fireEvent.change(emailInput as HTMLInputElement, {
+      target: { value: '  Tester@Studio.com  ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
+
+    const subscribeCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/subscribe'));
+    expect(subscribeCall).toBeTruthy();
+    expect(JSON.parse(String(subscribeCall?.[1]?.body))).toEqual({
+      email: 'tester@studio.com',
+      source: 'client',
+    });
+
+    expect(findTrackedEvent('ui_click', (payload) => payload.element === 'newsletter_email')).toMatchObject({
+      page_name: 'onboarding',
+      element: 'newsletter_email',
+      action: 'subscribe',
+      newsletter_opt_in: true,
+    });
+  });
+
+  it('skips the newsletter request when the email field is left blank', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    });
+    // Advance to the newsletter step, then finish without typing an email.
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
+
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/subscribe'))).toBe(false);
   });
 
   it('persists the BYOK config before finishing onboarding', async () => {
@@ -569,7 +816,12 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
     });
+    // About you -> newsletter step
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
 
     expect(props.onModeChange).toHaveBeenCalledWith('api');
     expect(props.onApiModelChange).toHaveBeenCalledWith('claude-opus-4-8');

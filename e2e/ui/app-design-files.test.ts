@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { ensureRailOpen } from '@/playwright/rail';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
@@ -60,7 +61,7 @@ const designFileFlows = new Set([
 ]);
 
 for (const entry of automatedUiScenarios().filter((scenario) => designFileFlows.has(scenario.flow ?? ''))) {
-  test(`${entry.id}: ${entry.title}`, async ({ page }) => {
+  test(`[${designFileScenarioPriority(entry)}] ${entry.id}: ${entry.title}`, async ({ page }) => {
     await page.route('**/api/agents', async (route) => {
       await route.fulfill({
         json: {
@@ -130,6 +131,7 @@ async function gotoEntryHome(page: Page) {
 }
 
 async function openNewProjectModal(page: Page) {
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-new-project').click();
   await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
@@ -290,7 +292,12 @@ async function openDesignFile(page: Page, fileName: string) {
     return;
   }
 
-  await page.getByRole('button', { name: new RegExp(fileName.replace(/\./g, '\\.')) }).click();
+  await page.getByTestId('design-files-tab').click();
+  const fileRow = page.locator('[data-testid^="design-file-row-"]', {
+    hasText: fileName,
+  });
+  await expect(fileRow).toBeVisible();
+  await fileRow.getByRole('button').first().click();
   await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
 }
 
@@ -353,7 +360,7 @@ async function runDesignFilesUploadFlow(page: Page) {
   await expect(preview).toBeVisible();
   await expect(preview.getByText(/moodboard\.png/i)).toBeVisible();
 
-  await nameBtn.dblclick();
+  await preview.getByRole('button', { name: 'Open' }).click();
   await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();
   await expectProjectFilesToIncludeSuffixes(page, projectId, ['moodboard.png']);
 }
@@ -589,4 +596,17 @@ function homeDesignCard(page: Page, name: string): Locator {
   return page.locator('.design-card', {
     has: page.locator('.design-card-name', { hasText: name }),
   });
+}
+
+function designFileScenarioPriority(entry: UiScenario): 'P0' | 'P1' {
+  switch (entry.flow) {
+    case 'design-files-upload':
+    case 'design-files-delete':
+    case 'design-files-tab-persistence':
+      return 'P0';
+    case 'uploaded-image-renders-in-preview':
+    case 'python-source-preview':
+    default:
+      return 'P1';
+  }
 }

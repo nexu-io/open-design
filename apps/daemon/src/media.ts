@@ -63,7 +63,7 @@ import {
   findProvider,
   modelsForSurface,
 } from './media-models.js';
-import { assertExternalAssetUrl } from './connectionTest.js';
+import { assertAndFetchExternalAsset } from './connectionTest.js';
 import { resolveModelAlias, resolveProviderConfig } from './media-config.js';
 import {
   ensureProject,
@@ -71,6 +71,14 @@ import {
   mimeFor,
   sanitizeName,
 } from './projects.js';
+import {
+  AIHUBMIX_DEFAULT_BASE_URL,
+  aihubmixHeaders,
+  aihubmixWireModel,
+  aihubmixVideoSeconds,
+  aihubmixGeminiImageBytes,
+  classifyAIHubMixModel,
+} from './aihubmix.js';
 
 const execFile = promisify(execFileCb);
 type ProviderConfig = { apiKey?: string; baseUrl?: string; model?: string };
@@ -340,6 +348,7 @@ export async function generateMedia(args: {
   // is needed because the fal renderer reads ctx.surface directly.
   let def = findMediaModel(model);
   let isFalCustomPath = false;
+  let isCatalogBypass = false;
   if (!def) {
     if (/^fal-ai\//.test(model)) {
       isFalCustomPath = true;
@@ -349,6 +358,27 @@ export async function generateMedia(args: {
         hint: 'Fal.ai',
         provider: 'fal',
         caps: surface === 'image' ? ['t2i'] : surface === 'video' ? ['t2v'] : [],
+      };
+    } else if (/^aihubmix-/.test(model)) {
+      // AIHubMix image/audio models are discovered live from its catalogue
+      // (GET /api/v1/models?type=image_generation), so most ids are NOT in the
+      // static registry. They all render through the same OpenAI-compatible
+      // endpoint, so synthesize a def on the fly — aihubmixWireModel() strips
+      // the `aihubmix-` prefix to the real wire name inside the renderer.
+      isCatalogBypass = true;
+      def = {
+        id: model,
+        label: model,
+        hint: 'AIHubMix',
+        provider: 'aihubmix',
+        caps:
+          surface === 'image'
+            ? ['t2i', 'i2i']
+            : surface === 'video'
+              ? ['t2v', 'i2v']
+              : surface === 'audio'
+                ? ['tts']
+                : [],
       };
     } else {
       throw new Error(
@@ -360,7 +390,7 @@ export async function generateMedia(args: {
   // Reject cross-surface combinations for catalogued models.
   const resolvedAudioKind =
     surface === 'audio' ? audioKind || 'music' : undefined;
-  if (!isFalCustomPath) {
+  if (!isFalCustomPath && !isCatalogBypass) {
     const allowed = modelsForSurface(surface, resolvedAudioKind);
     if (!allowed.some((m) => m.id === model)) {
       const ids = allowed.map((m) => m.id).join(', ');
@@ -500,6 +530,25 @@ export async function generateMedia(args: {
       && ctx.audioKind === 'speech'
     ) {
       const result = await renderOpenAISpeech(ctx, credentials, safeOut);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'aihubmix' && surface === 'image') {
+      const result = await renderAIHubMixImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (
+      def.provider === 'aihubmix'
+      && surface === 'audio'
+      && ctx.audioKind === 'speech'
+    ) {
+      const result = await renderAIHubMixTTS(ctx, credentials, safeOut);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'aihubmix' && surface === 'video') {
+      const result = await renderAIHubMixVideo(ctx, credentials, args.onProgress);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -2828,16 +2877,11 @@ async function renderSenseAudioImage(ctx: MediaContext, credentials: ProviderCon
   if (!url) {
     throw new Error('senseaudio image response missing url');
   }
-  // Mirror the chat-tool SSRF guard (byok-tools.ts): the gateway-returned
-  // `url` is attacker-controllable inside a successful response, so DNS-
-  // resolve it through validateBaseUrlResolved and refuse loopback /
-  // RFC1918 / metadata-service hosts. Pair with `redirect: 'error'` so a
-  // 3xx hop into private space is also blocked.
-  const urlCheck = await assertExternalAssetUrl(url);
-  if (!urlCheck.ok) {
-    throw new Error(`senseaudio image ${urlCheck.error}`);
-  }
-  const imgResp = await fetch(url, withMediaRequestInit(ctx, { redirect: 'error' }));
+  // The gateway-returned `url` is attacker-controllable inside a successful
+  // response. assertAndFetchExternalAsset DNS-resolves it and refuses loopback /
+  // RFC1918 / metadata-service hosts, and pins `redirect: 'error'` so a 3xx hop
+  // from a validated public URL into private space is blocked too.
+  const imgResp = await assertAndFetchExternalAsset(url, withMediaRequestInit(ctx));
   if (!imgResp.ok) {
     throw new Error(`senseaudio image fetch ${imgResp.status}`);
   }
@@ -2850,6 +2894,310 @@ async function renderSenseAudioImage(ctx: MediaContext, credentials: ProviderCon
     bytes,
     providerNote: `senseaudio/${ctx.wireModel} · ${size}${reference ? ' · i2i' : ''} · ${bytes.length} bytes`,
     suggestedExt: '.png',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: AIHubMix — OpenAI-wire-compatible aggregator.
+//
+// Image:  POST /v1/images/generations  (OpenAI shape, b64_json or url)
+// Speech: POST /v1/audio/speech        (OpenAI shape, raw audio bytes)
+// Every request carries the fixed APP-Code attribution header. Catalogue ids
+// are `aihubmix-<wire>`; aihubmixWireModel() strips the prefix to the real
+// upstream model name before it hits the gateway.
+// ---------------------------------------------------------------------------
+
+async function renderAIHubMixImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error('no AIHubMix API key — configure it in Settings or set OD_AIHUBMIX_API_KEY');
+  }
+  const baseUrl = credentials.baseUrl || AIHUBMIX_DEFAULT_BASE_URL;
+  const wireModel = aihubmixWireModel(credentials.model || ctx.wireModel);
+
+  // The live catalogue exposes Gemini/Imagen-family image models, which reject
+  // the OpenAI `/images/generations` shape ("Unknown name prompt/n/size") and
+  // must use the Gemini-native generateContent wire instead. Mirror the chat
+  // tool's per-model branch (executeAIHubMixGenerateImage) so the Home / New
+  // Project / CLI media path handles the same catalogue it now exposes.
+  if (classifyAIHubMixModel(wireModel) === 'gemini') {
+    return renderAIHubMixGeminiImage(ctx, credentials, baseUrl, wireModel);
+  }
+
+  const url = buildOpenAIImageUrl(baseUrl, false);
+
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    prompt: ctx.prompt || 'A high-quality reference image.',
+    n: 1,
+    size: openaiSizeFor(wireModel, ctx.aspect),
+  };
+  if (wireModel.startsWith('dall-e-')) {
+    body.response_format = 'b64_json';
+    body.quality = wireModel === 'dall-e-3' ? 'hd' : 'standard';
+  } else {
+    body.quality = 'high';
+  }
+
+  const resp = await fetch(url, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...aihubmixHeaders(credentials.apiKey) },
+    body: JSON.stringify(body),
+  }));
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`aihubmix ${resp.status}: ${truncate(text, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`aihubmix non-JSON response: ${truncate(text, 200)}`);
+  }
+  const entry = data && Array.isArray(data.data) ? data.data[0] : null;
+  if (!entry) throw new Error('aihubmix response had no data[0]');
+  let bytes;
+  if (entry.b64_json) {
+    bytes = Buffer.from(entry.b64_json, 'base64');
+  } else if (entry.url) {
+    const imgResp = await assertAndFetchExternalAsset(entry.url, withMediaRequestInit(ctx));
+    if (!imgResp.ok) throw new Error(`aihubmix image fetch ${imgResp.status}`);
+    bytes = Buffer.from(await imgResp.arrayBuffer());
+  } else {
+    throw new Error('aihubmix response had neither b64_json nor url');
+  }
+  return {
+    bytes,
+    providerNote: `aihubmix/${wireModel} · ${ctx.aspect} · ${bytes.length} bytes`,
+    suggestedExt: '.png',
+  };
+}
+
+// Gemini/Imagen-family image models on AIHubMix: the OpenAI image shape 400s
+// for these, so route them through the shared Gemini-native helper the chat
+// tool also uses (aihubmixGeminiImageBytes), passing the media request-init
+// wrapper so proxy/abort settings still apply.
+async function renderAIHubMixGeminiImage(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  baseUrl: string,
+  wireModel: string,
+): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error('no AIHubMix API key — configure it in Settings or set OD_AIHUBMIX_API_KEY');
+  }
+  const aspect = ctx.aspect || '1:1';
+  const bytes = await aihubmixGeminiImageBytes(
+    {
+      baseUrl,
+      apiKey: credentials.apiKey,
+      wireModel,
+      prompt: ctx.prompt || 'A high-quality reference image.',
+      aspect,
+    },
+    (url, init) => fetch(url, withMediaRequestInit(ctx, init)),
+  );
+  return {
+    bytes,
+    providerNote: `aihubmix/${wireModel} · ${aspect} · ${bytes.length} bytes (gemini-native)`,
+    suggestedExt: '.png',
+  };
+}
+
+async function renderAIHubMixTTS(ctx: MediaContext, credentials: ProviderConfig, fileName: string): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error('no AIHubMix API key — configure it in Settings or set OD_AIHUBMIX_API_KEY');
+  }
+  const baseUrl = credentials.baseUrl || AIHUBMIX_DEFAULT_BASE_URL;
+  const wireModel = aihubmixWireModel(credentials.model || ctx.wireModel);
+  const url = buildOpenAISpeechUrl(baseUrl, false);
+  const format = openaiSpeechFormatFor(fileName);
+  const text = (ctx.prompt && ctx.prompt.trim()) || 'This is a test.';
+  const requestedVoice = (ctx.voice && ctx.voice.trim()) || '';
+  const voice = requestedVoice && OPENAI_TTS_VOICES.has(requestedVoice) ? requestedVoice : 'alloy';
+
+  const resp = await fetch(url, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...aihubmixHeaders(credentials.apiKey) },
+    body: JSON.stringify({ model: wireModel, input: text, voice, response_format: format }),
+  }));
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`aihubmix speech ${resp.status}: ${truncate(errText, 240)}`);
+  }
+  const bytes = Buffer.from(await resp.arrayBuffer());
+  if (bytes.length === 0) {
+    throw new Error('aihubmix speech returned zero bytes');
+  }
+  return {
+    bytes,
+    providerNote: `aihubmix/${wireModel} · ${voice} · ${format} · ${bytes.length} bytes`,
+    suggestedExt: format === 'opus' ? '.ogg' : `.${format}`,
+  };
+}
+
+// AIHubMix video uses the OpenAI Sora-style async `/v1/videos` API (NOT the
+// `/videos/generations` synchronous shape some gateways expose): POST to submit
+// a job, GET `/v1/videos/{id}` to poll status, then GET `/v1/videos/{id}/content`
+// to download the finished MP4. `aspect` maps to a concrete `size` string.
+function aihubmixVideoSizeFor(aspect: string | undefined): string {
+  switch (aspect) {
+    case '9:16':
+      return '720x1280';
+    case '1:1':
+      return '1024x1024';
+    case '4:3':
+      return '960x720';
+    case '3:4':
+      return '720x960';
+    case '16:9':
+    default:
+      return '1280x720';
+  }
+}
+
+async function renderAIHubMixVideo(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  onProgress?: ProgressFn,
+): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error('no AIHubMix API key — configure it in Settings or set OD_AIHUBMIX_API_KEY');
+  }
+  const baseUrl = (credentials.baseUrl || AIHUBMIX_DEFAULT_BASE_URL).replace(/\/$/, '');
+  const wireModel = aihubmixWireModel(credentials.model || ctx.wireModel);
+  const size = aihubmixVideoSizeFor(ctx.aspect);
+  // Snap to the model family's allowed duration set (Veo: 4/6/8, Sora: 4/8/12,
+  // wan: 5/10) so an out-of-set value isn't rejected upstream.
+  const seconds = aihubmixVideoSeconds(wireModel, ctx.length || 5);
+
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    prompt: ctx.prompt || 'A short cinematic clip.',
+    size,
+    seconds,
+  };
+  // First-frame reference for i2v flows; AIHubMix accepts a data URL.
+  if (ctx.imageRef?.dataUrl) {
+    body.input_reference = ctx.imageRef.dataUrl;
+  }
+
+  const submitResp = await fetch(`${baseUrl}/videos`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...aihubmixHeaders(credentials.apiKey) },
+    body: JSON.stringify(body),
+  }));
+  const submitText = await submitResp.text();
+  if (!submitResp.ok) {
+    throw new Error(`aihubmix video submit ${submitResp.status}: ${truncate(submitText, 240)}`);
+  }
+  let submitData: any;
+  try {
+    submitData = JSON.parse(submitText);
+  } catch {
+    throw new Error(`aihubmix video non-JSON: ${truncate(submitText, 200)}`);
+  }
+  const taskId = submitData?.id || submitData?.data?.id;
+  if (!taskId) throw new Error('aihubmix video response missing id');
+
+  // Poll until completed/failed. Sora-class generations routinely take a few
+  // minutes; match the Volcengine ceiling (12 min, env-overridable). Emit a
+  // heartbeat each tick so the agent's bash watchdog never marks the call hung.
+  const startedAt = Date.now();
+  const configuredMaxMs = Number(process.env.OD_AIHUBMIX_VIDEO_MAX_POLL_MS);
+  const maxMs =
+    Number.isFinite(configuredMaxMs) && configuredMaxMs >= 60_000
+      ? configuredMaxMs
+      : 12 * 60 * 1000;
+  if (typeof onProgress === 'function') {
+    const mode = ctx.imageRef ? 'i2v' : 't2v';
+    onProgress(`aihubmix ${mode} video task ${taskId} accepted; polling status…`);
+  }
+  let lastStatus = '';
+  let directUrl: string | null = null;
+  let done = false;
+  while (Date.now() - startedAt < maxMs) {
+    await sleep(4000);
+    const pollResp = await fetch(`${baseUrl}/videos/${encodeURIComponent(taskId)}`, withMediaRequestInit(ctx, {
+      headers: { ...aihubmixHeaders(credentials.apiKey) },
+    }));
+    const pollText = await pollResp.text();
+    if (!pollResp.ok) {
+      throw new Error(`aihubmix video poll ${pollResp.status}: ${truncate(pollText, 240)}`);
+    }
+    let pollData: any;
+    try {
+      pollData = JSON.parse(pollText);
+    } catch {
+      throw new Error(`aihubmix video poll non-JSON: ${truncate(pollText, 200)}`);
+    }
+    lastStatus = pollData?.status || pollData?.data?.status || '';
+    if (typeof onProgress === 'function') {
+      const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+      onProgress(`aihubmix video task ${taskId} status=${lastStatus || 'pending'} (elapsed ${elapsedSec}s)`);
+    }
+    if (lastStatus === 'completed' || lastStatus === 'succeeded' || lastStatus === 'done') {
+      // Some gateways surface the asset URL inline; otherwise fall back to the
+      // /content download endpoint below.
+      directUrl =
+        pollData?.video_url
+        || pollData?.url
+        || pollData?.output_url
+        || pollData?.data?.video_url
+        || pollData?.data?.url
+        || (Array.isArray(pollData?.data) ? pollData.data[0]?.url : null)
+        || null;
+      done = true;
+      break;
+    }
+    if (lastStatus === 'failed' || lastStatus === 'cancelled' || lastStatus === 'error') {
+      const reason = pollData?.error?.message || pollData?.error || lastStatus;
+      throw new Error(`aihubmix video task ${lastStatus}: ${truncate(reason, 200)}`);
+    }
+  }
+  if (!done) {
+    throw new Error(`aihubmix video did not finish in time (last status: ${lastStatus || 'unknown'})`);
+  }
+
+  let bytes: Buffer;
+  if (directUrl) {
+    // AIHubMix's completed-video URL is often an authenticated endpoint on the
+    // AIHubMix origin (a bare GET returns 401). Re-send the Bearer + APP-Code
+    // headers when the asset is same-origin; a signed third-party CDN URL is
+    // fetched without our key. assertAndFetchExternalAsset re-validates the URL
+    // and pins `redirect: 'error'`, so a validated public URL can't 302 the
+    // daemon into private/metadata space or leak our headers to the hop target.
+    let sameOriginAsBase = false;
+    try {
+      sameOriginAsBase = new URL(directUrl).origin === new URL(baseUrl).origin;
+    } catch {
+      sameOriginAsBase = false;
+    }
+    const dl = await assertAndFetchExternalAsset(
+      directUrl,
+      withMediaRequestInit(
+        ctx,
+        sameOriginAsBase ? { headers: { ...aihubmixHeaders(credentials.apiKey) } } : {},
+      ),
+    );
+    if (!dl.ok) throw new Error(`aihubmix video fetch ${dl.status}`);
+    bytes = Buffer.from(await dl.arrayBuffer());
+  } else {
+    const contentResp = await fetch(`${baseUrl}/videos/${encodeURIComponent(taskId)}/content`, withMediaRequestInit(ctx, {
+      headers: { ...aihubmixHeaders(credentials.apiKey) },
+    }));
+    if (!contentResp.ok) {
+      throw new Error(`aihubmix video content ${contentResp.status}`);
+    }
+    bytes = Buffer.from(await contentResp.arrayBuffer());
+  }
+  if (bytes.length === 0) {
+    throw new Error('aihubmix video returned zero bytes');
+  }
+
+  return {
+    bytes,
+    providerNote: `aihubmix/${wireModel} · ${size} · ${seconds}s · ${bytes.length} bytes`,
+    suggestedExt: '.mp4',
   };
 }
 

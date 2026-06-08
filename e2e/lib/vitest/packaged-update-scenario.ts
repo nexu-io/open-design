@@ -40,10 +40,11 @@ export function applyPackagedUpdateEnv(
   env: NodeJS.ProcessEnv,
   scenario: PackagedUpdateScenario,
   metadataUrl: string,
+  options: { openDryRun?: boolean } = {},
 ): void {
   env.OD_UPDATE_ENABLED = '1';
   env.OD_UPDATE_METADATA_URL = metadataUrl;
-  env.OD_UPDATE_OPEN_DRY_RUN = '1';
+  env.OD_UPDATE_OPEN_DRY_RUN = options.openDryRun === false ? '0' : '1';
   env.OD_UPDATE_AUTO_CHECK = '1';
   if (scenario.currentVersionOverride == null) {
     delete env.OD_UPDATE_CURRENT_VERSION;

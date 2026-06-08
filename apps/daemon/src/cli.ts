@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @ts-nocheck
-import { runDaemonCliStartup } from './daemon-startup.js';
+import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
 import { runProjectHandoff } from './handoff-cli.js';
@@ -13,6 +13,13 @@ import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
+import {
+  AGENT_SLUGS,
+  isAgentSlug,
+  planAgentInstall,
+  applyJsonInstall,
+  removeJsonInstall,
+} from './mcp-agent-install.js';
 
 const argv = process.argv.slice(2);
 
@@ -67,6 +74,25 @@ const MCP_STRING_FLAGS = new Set([
 const MCP_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
+]);
+
+// Hoisted next to MCP_*_FLAGS for the same TDZ reason as the MEDIA flags
+// above: `od mcp install <agent>` dispatches through SUBCOMMAND_MAP during
+// top-level module evaluation, and runMcpInstall references these `const`
+// Sets — defining them next to runMcpInstall lower in the file would hit
+// the TDZ.
+const MCP_INSTALL_STRING_FLAGS = new Set([
+  'daemon-url',
+  'name',
+]);
+const MCP_INSTALL_BOOLEAN_FLAGS = new Set([
+  'help',
+  'h',
+  'json',
+  'print',
+  'dry-run',
+  'uninstall',
+  'remove',
 ]);
 
 const RESEARCH_SEARCH_STRING_FLAGS = new Set([
@@ -137,9 +163,7 @@ const UI_BOOLEAN_FLAGS = new Set([
 // during module load; any const declared further down the file is
 // still in TDZ when the handler executes, so `od status` /
 // `od atoms list` / etc. would crash with `Cannot access X before
-// initialization`. The actual definitions stay further down (next
-// to their handlers); we just export the bindings up here so the
-// dispatch path always sees an initialized value.
+// initialization`.
 const DAEMON_STRING_FLAGS = new Set([
   'daemon-url', 'port', 'host',
 ]);
@@ -148,12 +172,16 @@ const DAEMON_BOOLEAN_FLAGS = new Set([
 ]);
 const LIBRARY_STRING_FLAGS = new Set(['daemon-url', 'query', 'tag']);
 const LIBRARY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
+const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
+const CONFIG_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
   'pending-prompt', 'project', 'conversation', 'message', 'prompt',
   'prompt-file', 'path', 'dir', 'as',
   'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
-  'title', 'against',
+  'title', 'against', 'seed-from', 'fork-after', 'mode',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
 // `od templates …` mirrors NewProjectPanel / ExamplesTab. Same surface,
@@ -182,6 +210,12 @@ const MEMORY_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'description', 'type', 'body', 'body-file',
 ]);
 const MEMORY_BOOLEAN_FLAGS = new Set([
+  'help', 'h', 'json',
+]);
+const SHARE_STRING_FLAGS = new Set([
+  'daemon-url', 'url', 'title', 'text', 'copy-text', 'locale', 'platform',
+]);
+const SHARE_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
 // Hoisted because `runAutomation` is reachable through the top-of-file
@@ -225,14 +259,17 @@ const SUBCOMMAND_MAP = {
   plugin: runPlugin,
   ui: runUi,
   marketplace: runMarketplace,
+  share: runShare,
   project: runProject,
   automation: runAutomation,
   automations: runAutomation,
   memory: runMemory,
   run: runRun,
   files: runFiles,
+  shell: runShell,
   templates: runTemplates,
   conversation: runConversation,
+  chat: runChat,
   daemon: runDaemon,
   atoms: runAtoms,
   skills: runSkills,
@@ -337,8 +374,17 @@ function printRootHelp() {
   od memory tree <list|view|edit|move> [args]
       Inspect and edit the memory tree that is injected into agent prompts.
 
+  od share <open-design|url> [options]
+      Build localized social-share targets for the Open Design repo or a
+      deployed project URL. Use --json for scripted integrations.
+
   od ui <list|show|respond|revoke|prefill> [args]
       Read and answer GenUI surfaces (form / choice / confirmation / oauth-prompt) headlessly.
+
+  od chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<t>"] [--json]
+      Create a Side Chat: a new conversation that inherits another
+      conversation's context by copying its messages (--seed-from), optionally
+      stopping at one message (--fork-after). Mirrors the web chat fork action.
 
   od diagnostics export [<path>] [--json]
       Bundle daemon/web/desktop logs, machine info, and recent crash reports
@@ -836,6 +882,9 @@ files folder so the FileViewer can preview them immediately.`);
 // ---------------------------------------------------------------------------
 
 async function runMcp(args) {
+  if (args[0] === 'install') {
+    return runMcpInstall(args.slice(1));
+  }
   let flags;
   try {
     flags = parseFlags(args, {
@@ -897,7 +946,254 @@ callers can see which project/file got resolved.
 For the copy-paste, per-client snippet (with absolute paths resolved
 for your machine, plus a one-click deeplink for Cursor), open Settings
 → MCP server in the Open Design app. The daemon must be running locally
-for tool calls to succeed.`);
+for tool calls to succeed.
+
+To register this server into a coding agent's own config automatically:
+  od mcp install <agent> [--uninstall] [--print] [--json] [--daemon-url <url>]
+  Agents: ${AGENT_SLUGS.join(' ')}`);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od mcp install <agent>
+//
+// Wires this daemon's stdio MCP server into a coding agent's own config.
+// The pure planner (mcp-agent-install.ts) maps a resolved launch spec onto
+// one of three strategies — drive the agent's own `mcp add/remove` CLI,
+// deep-merge a JSON config file, or (for unverified formats) print a
+// ready-to-paste snippet. This executor performs the IO the planner avoids.
+// ---------------------------------------------------------------------------
+
+// Resolve the canonical launch spec from the running daemon's
+// /api/mcp/install-info (the same payload the Settings → MCP panel and the
+// Codex one-click install use), so every install path configures byte-for-
+// byte the same command. Falls back to a minimal `od mcp --daemon-url`
+// spec when the daemon is unreachable.
+async function resolveMcpLaunchSpec(flags) {
+  const base = await cliDaemonBaseUrl(flags);
+  try {
+    const resp = await fetch(`${base}/api/mcp/install-info`);
+    if (resp.ok) {
+      const info = await resp.json();
+      if (info && typeof info.command === 'string' && Array.isArray(info.args)) {
+        return {
+          command: info.command,
+          args: info.args,
+          env: info.env && typeof info.env === 'object' ? info.env : {},
+        };
+      }
+    }
+  } catch {
+    // daemon not running / unreachable — fall through to the minimal spec
+  }
+  return {
+    command: 'od',
+    args: ['mcp', '--daemon-url', base],
+    env: {},
+  };
+}
+
+function emitInstallResult(useJson, result) {
+  if (useJson) {
+    console.log(JSON.stringify(result));
+    return;
+  }
+  if (result.ok) {
+    console.log(`✓ ${result.message}`);
+  } else {
+    console.error(`✗ ${result.message}`);
+  }
+}
+
+async function runMcpInstall(args) {
+  let flags;
+  try {
+    flags = parseFlags(args, {
+      string: MCP_INSTALL_STRING_FLAGS,
+      boolean: MCP_INSTALL_BOOLEAN_FLAGS,
+    });
+  } catch (err) {
+    console.error(err.message);
+    printMcpInstallHelp();
+    process.exit(2);
+  }
+  if (flags.help || flags.h) {
+    printMcpInstallHelp();
+    return;
+  }
+
+  const slug = positionalArgs(args, MCP_INSTALL_STRING_FLAGS)[0];
+  const useJson = Boolean(flags.json);
+  if (!slug) {
+    console.error('missing agent slug');
+    printMcpInstallHelp();
+    process.exit(2);
+  }
+  if (!isAgentSlug(slug)) {
+    const msg = `unknown agent: ${slug} (expected one of: ${AGENT_SLUGS.join(' ')})`;
+    emitInstallResult(useJson, { ok: false, agent: slug, message: msg });
+    process.exit(2);
+  }
+
+  const uninstall = Boolean(flags.uninstall || flags.remove);
+  const dryRun = Boolean(flags.print || flags['dry-run']);
+  const serverName = flags.name || 'open-design';
+
+  const os = await import('node:os');
+  const spec = await resolveMcpLaunchSpec(flags);
+  const plan = planAgentInstall(slug, spec, {
+    home: os.homedir(),
+    platform: process.platform,
+    serverName,
+  });
+
+  if (plan.kind === 'manual') {
+    const result = {
+      ok: false,
+      agent: slug,
+      kind: 'manual',
+      configPath: plan.configPath,
+      format: plan.format,
+      snippet: plan.snippet,
+      message: `${slug}: manual setup required. ${plan.reason}`,
+    };
+    if (useJson) {
+      console.log(JSON.stringify(result));
+    } else {
+      console.error(`› ${result.message}`);
+      if (plan.configPath) console.error(`  Config: ${plan.configPath}`);
+      console.error(`  Add this ${plan.format} block:\n`);
+      console.log(plan.snippet);
+    }
+    return;
+  }
+
+  if (plan.kind === 'cli') {
+    const argv = uninstall ? plan.removeArgv : plan.addArgv;
+    if (dryRun) {
+      emitInstallResult(useJson, {
+        ok: true,
+        agent: slug,
+        kind: 'cli',
+        command: `${plan.bin} ${argv.join(' ')}`,
+        message: `would run: ${plan.bin} ${argv.join(' ')}`,
+      });
+      return;
+    }
+    const { spawn } = await import('node:child_process');
+    const code = await new Promise((resolve) => {
+      const child = spawn(plan.bin, argv, { stdio: 'inherit' });
+      child.on('error', (err) => {
+        console.error(`✗ failed to run ${plan.bin}: ${err.message}`);
+        resolve(127);
+      });
+      child.on('exit', (c) => resolve(c ?? 0));
+    });
+    if (code !== 0) {
+      emitInstallResult(useJson, {
+        ok: false,
+        agent: slug,
+        kind: 'cli',
+        message: `${plan.bin} exited with code ${code}`,
+      });
+      process.exit(code || 1);
+    }
+    emitInstallResult(useJson, {
+      ok: true,
+      agent: slug,
+      kind: 'cli',
+      message: uninstall
+        ? `removed ${serverName} from ${slug}`
+        : `installed ${serverName} into ${slug}`,
+    });
+    return;
+  }
+
+  // plan.kind === 'json'
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+  let existing = null;
+  try {
+    existing = await fs.readFile(plan.configPath, 'utf8');
+  } catch (err) {
+    if (err && err.code !== 'ENOENT') throw err;
+  }
+
+  if (uninstall) {
+    const next = removeJsonInstall(existing, plan);
+    if (next == null) {
+      emitInstallResult(useJson, {
+        ok: true,
+        agent: slug,
+        kind: 'json',
+        configPath: plan.configPath,
+        message: `${serverName} not present in ${plan.configPath} — nothing to remove`,
+      });
+      return;
+    }
+    if (dryRun) {
+      emitInstallResult(useJson, {
+        ok: true,
+        agent: slug,
+        kind: 'json',
+        configPath: plan.configPath,
+        preview: next,
+        message: `would update ${plan.configPath}`,
+      });
+      return;
+    }
+    await fs.writeFile(plan.configPath, next, 'utf8');
+    emitInstallResult(useJson, {
+      ok: true,
+      agent: slug,
+      kind: 'json',
+      configPath: plan.configPath,
+      message: `removed ${serverName} from ${plan.configPath}`,
+    });
+    return;
+  }
+
+  const next = applyJsonInstall(existing, plan);
+  if (dryRun) {
+    emitInstallResult(useJson, {
+      ok: true,
+      agent: slug,
+      kind: 'json',
+      configPath: plan.configPath,
+      preview: next,
+      message: `would write ${plan.configPath}`,
+    });
+    return;
+  }
+  await fs.mkdir(path.dirname(plan.configPath), { recursive: true });
+  await fs.writeFile(plan.configPath, next, 'utf8');
+  emitInstallResult(useJson, {
+    ok: true,
+    agent: slug,
+    kind: 'json',
+    configPath: plan.configPath,
+    message: `installed ${serverName} into ${plan.configPath}`,
+  });
+}
+
+function printMcpInstallHelp() {
+  console.log(`Usage: od mcp install <agent> [options]
+
+Register Open Design's stdio MCP server into a coding agent's own config.
+
+Agents:
+  ${AGENT_SLUGS.join(' ')}
+
+Options:
+  --uninstall, --remove   Remove the Open Design MCP server instead.
+  --print, --dry-run      Show what would change; write nothing.
+  --json                  Machine-readable result.
+  --name <name>           MCP server name in the agent config (default: open-design).
+  --daemon-url <url>      Daemon URL used to resolve the launch command.
+
+The launch command is resolved from the running daemon's
+/api/mcp/install-info, so the installed entry matches the Settings → MCP
+panel snippet byte-for-byte. Start the daemon first for an exact match;
+otherwise a minimal \`od mcp --daemon-url <url>\` command is used.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -4336,6 +4632,103 @@ async function projectDaemonUrl(flags) {
   return cliDaemonUrl(flags);
 }
 
+function printShareUsage() {
+  console.log(`Usage:
+  od share open-design [--locale <locale>] [--platform <id>] [--json]
+  od share url --url <https-url> [--title <title>] [--text <text>]
+               [--copy-text <text>] [--locale <locale>] [--platform <id>] [--json]
+
+Platforms:
+  x, linkedin, facebook, reddit, telegram, whatsapp, weibo, line, instagram, xiaohongshu
+
+Common options:
+  --daemon-url <url>   Open Design daemon HTTP base.
+  --json               Emit raw JSON.`);
+}
+
+async function runShare(args) {
+  const wantsHelp = args.length === 0
+    || args[0] === 'help'
+    || args.includes('--help')
+    || args.includes('-h');
+  if (wantsHelp) {
+    printShareUsage();
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+
+  const sub = args[0] && !args[0].startsWith('-') ? args[0] : 'open-design';
+  const rest = sub === args[0] ? args.slice(1) : args;
+  const flags = parseFlags(rest, {
+    string: SHARE_STRING_FLAGS,
+    boolean: SHARE_BOOLEAN_FLAGS,
+  });
+  const base = (await cliDaemonUrl(flags)).replace(/\/$/, '');
+  const positional = positionalArgs(rest, SHARE_STRING_FLAGS);
+  const url = flags.url ?? positional[0];
+  const body = sub === 'url'
+    ? {
+        kind: 'project-html',
+        url,
+        title: flags.title,
+        text: flags.text,
+        copyText: flags['copy-text'],
+        locale: flags.locale,
+      }
+    : {
+        kind: 'open-design-repo',
+        title: flags.title,
+        text: flags.text,
+        copyText: flags['copy-text'],
+        locale: flags.locale,
+      };
+
+  if (sub !== 'open-design' && sub !== 'url') {
+    console.error(`unknown share target: ${sub}`);
+    printShareUsage();
+    process.exit(2);
+  }
+  if (body.kind === 'project-html' && !body.url) {
+    console.error('Usage: od share url --url <https-url>');
+    process.exit(2);
+  }
+
+  const resp = await fetch(`${base}/api/social-share`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.platform) {
+    const target = (data.platforms ?? []).find((item) => item.platform === flags.platform);
+    if (!target) {
+      console.error(`unknown platform: ${flags.platform}`);
+      process.exit(2);
+    }
+    if (flags.json) return process.stdout.write(JSON.stringify(target, null, 2) + '\n');
+    if (target.shareUrl) {
+      console.log(target.shareUrl);
+      return;
+    }
+    console.log(data.copyText);
+    if (target.entryUrl) console.log(target.entryUrl);
+    return;
+  }
+  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  console.log(data.copyText);
+  for (const target of data.platforms ?? []) {
+    console.log(`${target.platform}\t${target.shareUrl ?? target.entryUrl ?? '-'}`);
+  }
+}
+
+function normalizeChatSessionModeFlag(value) {
+  if (value == null) return undefined;
+  const mode = String(value).trim().toLowerCase();
+  if (mode === 'design' || mode === 'chat') return mode;
+  console.error('--mode must be one of: design, chat');
+  process.exit(2);
+}
+
 function safeReadJsonFile(p) {
   try {
     const fs = (require ? require('node:fs') : null);
@@ -4436,6 +4829,7 @@ async function runProject(args) {
     console.log(`Usage:
   od project create [--name "<title>"] [--skill <id>] [--design-system <id>]
                     [--plugin <id>] [--inputs <json>] [--metadata-json <path|->]
+                    [--mode design|chat]
   od project import <baseDir> [--name "<title>"]
   od project import-folder <path> [--name "<title>"] [--skill <id>]
                     [--design-system <id>] [--json]
@@ -4509,6 +4903,8 @@ Common options:
         skillId:        flags.skill ?? null,
         designSystemId: flags['design-system'] ?? null,
       };
+      const conversationMode = normalizeChatSessionModeFlag(flags.mode);
+      if (conversationMode) body.conversationMode = conversationMode;
       if (flags['pending-prompt']) body.pendingPrompt = flags['pending-prompt'];
       if (flags['metadata-json']) {
         const mj = safeReadJsonFile(flags['metadata-json']);
@@ -4870,6 +5266,128 @@ async function streamRunEvents(base, runId) {
         return;
       }
     }
+  }
+}
+
+// `od shell --project <id>` opens an interactive PTY rooted at the project's
+// working directory and attaches to it. This is the CLI parity for the web
+// Terminal tab — both surfaces drive `/api/projects/:id/terminals`. Output
+// streams down over SSE; local keystrokes are POSTed back up to /stdin. When
+// stdin is a TTY we flip it into raw mode so the remote shell sees per-key
+// bytes (ctrl-c, arrows, tab) instead of line-buffered input.
+async function runShell(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od shell --project <projectId> [--shell <path>] [--json]
+                                  Open an interactive shell in the project's
+                                  working directory and attach to it.
+
+Common options:
+  --daemon-url <url>   Open Design daemon HTTP base.
+  --json               Print the created terminal session as JSON and exit
+                       (does not attach).`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const flags = parseFlags(args, { string: PROJECT_STRING_FLAGS, boolean: PROJECT_BOOLEAN_FLAGS });
+  if (!flags.project) {
+    console.error('--project <projectId> is required');
+    process.exit(2);
+  }
+  const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
+  const body = {};
+  if (flags.shell) body.shell = flags.shell;
+  if (process.stdout.columns) body.cols = process.stdout.columns;
+  if (process.stdout.rows) body.rows = process.stdout.rows;
+  const createResp = await fetch(
+    `${base}/api/projects/${encodeURIComponent(flags.project)}/terminals`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!createResp.ok) return structuredHttpFailure(createResp, 'project-not-found');
+  const created = await createResp.json();
+  if (flags.json) {
+    return process.stdout.write(JSON.stringify(created, null, 2) + '\n');
+  }
+  const terminalId = created?.terminal?.id;
+  if (!terminalId) {
+    console.error('terminal create returned no id');
+    process.exit(1);
+  }
+  await attachTerminal(base, flags.project, terminalId);
+}
+
+// Bridge a local TTY to a remote PTY session: SSE `data` events → stdout,
+// local stdin bytes → POST /stdin, terminal resize → POST /resize. Resolves
+// when the remote shell emits its `exit` event.
+async function attachTerminal(base, projectId, terminalId) {
+  const termPath = `${base}/api/projects/${encodeURIComponent(projectId)}/terminals/${encodeURIComponent(terminalId)}`;
+  const isRawTty = Boolean(process.stdin.isTTY && process.stdin.setRawMode);
+  if (isRawTty) process.stdin.setRawMode(true);
+  process.stdin.resume();
+
+  const onInput = (chunk) => {
+    fetch(`${termPath}/stdin`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ data: chunk.toString('utf8') }),
+    }).catch(() => {});
+  };
+  process.stdin.on('data', onInput);
+
+  const onResize = () => {
+    fetch(`${termPath}/resize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cols: process.stdout.columns, rows: process.stdout.rows }),
+    }).catch(() => {});
+  };
+  process.stdout.on('resize', onResize);
+
+  const restore = () => {
+    process.stdin.off('data', onInput);
+    process.stdout.off('resize', onResize);
+    if (isRawTty) {
+      try { process.stdin.setRawMode(false); } catch { /* ignore */ }
+    }
+    process.stdin.pause();
+  };
+
+  try {
+    const resp = await fetch(`${termPath}/stream`, { headers: { accept: 'text/event-stream' } });
+    if (!resp.ok || !resp.body) {
+      console.error(`shell attach failed: ${resp.status}`);
+      process.exit(1);
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split('\n\n');
+      buffer = blocks.pop() ?? '';
+      for (const block of blocks) {
+        const lines = block.split('\n');
+        const eventLine = lines.find((l) => l.startsWith('event: '));
+        const dataLine = lines.find((l) => l.startsWith('data: '));
+        const event = eventLine ? eventLine.slice('event: '.length) : 'message';
+        const dataRaw = dataLine ? dataLine.slice('data: '.length) : '';
+        let parsed;
+        try { parsed = JSON.parse(dataRaw); } catch { parsed = dataRaw; }
+        if (event === 'data' && parsed && typeof parsed.data === 'string') {
+          process.stdout.write(parsed.data);
+        } else if (event === 'exit') {
+          restore();
+          process.exit(typeof parsed?.code === 'number' ? parsed.code : 0);
+        }
+      }
+    }
+  } finally {
+    restore();
   }
 }
 
@@ -5328,8 +5846,12 @@ Common options:
 async function runConversation(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od conversation new  <projectId> [--title "<title>"]
+  od conversation new  <projectId> [--title "<title>"] [--seed-from <cid>] [--fork-after <mid>] [--mode design|chat]
                                            Create a conversation in a project.
+                                           --seed-from copies another
+                                           conversation's messages in (Side Chat).
+                                           --fork-after stops the copy at one
+                                           source message.
   od conversation list <projectId>           List conversations in a project.
   od conversation info <conversationId>      Print one conversation.
 
@@ -5346,11 +5868,23 @@ Common options:
     case 'new': {
       const [id] = positionalArgs(rest, PROJECT_STRING_FLAGS);
       if (!id) {
-        console.error('Usage: od conversation new <projectId> [--title "<title>"]');
+        console.error('Usage: od conversation new <projectId> [--title "<title>"] [--seed-from <cid>] [--fork-after <mid>]');
         process.exit(2);
       }
       const body = {};
       if (typeof flags.title === 'string') body.title = flags.title;
+      const sessionMode = normalizeChatSessionModeFlag(flags.mode);
+      if (sessionMode) body.sessionMode = sessionMode;
+      if (typeof flags['seed-from'] === 'string' && flags['seed-from']) {
+        body.seedFromConversationId = flags['seed-from'];
+      }
+      if (typeof flags['fork-after'] === 'string' && flags['fork-after']) {
+        if (!body.seedFromConversationId) {
+          console.error('--fork-after requires --seed-from');
+          process.exit(2);
+        }
+        body.forkAfterMessageId = flags['fork-after'];
+      }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/conversations`, {
         method:  'POST',
         headers: { 'content-type': 'application/json' },
@@ -5359,7 +5893,8 @@ Common options:
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const data = await resp.json();
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
-      console.log(`[conversation] created ${data.conversation?.id ?? '-'}`);
+      const conv = data.conversation;
+      console.log(`[conversation] created ${conv?.id ?? '-'} (mode ${conv?.sessionMode ?? sessionMode ?? 'design'})`);
       return;
     }
     case 'list': {
@@ -5388,6 +5923,85 @@ Common options:
     }
     default:
       console.error(`unknown subcommand: od conversation ${sub}`);
+      process.exit(2);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od chat  (Side Chat — context-seeded conversations)
+//
+// `od chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<t>"] [--json]`
+//   Creates a new conversation that inherits another conversation's context
+//   by copying its messages, optionally truncating at one source message.
+//   Mirrors the web chat fork action and POSTs to the same
+//   /api/projects/:id/conversations endpoint the UI uses. This is the CLI half
+//   of the dual-track surface for context-seeded conversations.
+// ---------------------------------------------------------------------------
+
+async function runChat(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<title>"] [--mode design|chat] [--json]
+                                           Create a Side Chat — a new conversation
+                                           that copies in another conversation's
+                                           context (--seed-from). Use
+                                           --fork-after to stop at one source
+                                           message.
+
+Common options:
+  --daemon-url <url>   Open Design daemon HTTP base.
+  --json               Emit raw JSON.`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const sub = args[0];
+  const rest = args.slice(1);
+  const flags = parseFlags(rest, { string: PROJECT_STRING_FLAGS, boolean: PROJECT_BOOLEAN_FLAGS });
+  const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
+  switch (sub) {
+    case 'new': {
+      // Accept --project for parity with the rest of the project-scoped CLI,
+      // or a bare positional id for convenience.
+      const id = typeof flags.project === 'string' && flags.project
+        ? flags.project
+        : positionalArgs(rest, PROJECT_STRING_FLAGS)[0];
+      if (!id) {
+        console.error('Usage: od chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<title>"]');
+        process.exit(2);
+      }
+      const body = {};
+      if (typeof flags.title === 'string') body.title = flags.title;
+      const sessionMode = normalizeChatSessionModeFlag(flags.mode);
+      if (sessionMode) body.sessionMode = sessionMode;
+      if (typeof flags['seed-from'] === 'string' && flags['seed-from']) {
+        body.seedFromConversationId = flags['seed-from'];
+      }
+      if (typeof flags['fork-after'] === 'string' && flags['fork-after']) {
+        if (!body.seedFromConversationId) {
+          console.error('--fork-after requires --seed-from');
+          process.exit(2);
+        }
+        body.forkAfterMessageId = flags['fork-after'];
+      }
+      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/conversations`, {
+        method:  'POST',
+        headers: { 'content-type': 'application/json' },
+        body:    JSON.stringify(body),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      const conv = data.conversation;
+      const seeded = body.seedFromConversationId
+        ? ` (seeded from ${body.seedFromConversationId})`
+        : '';
+      const forked = body.forkAfterMessageId
+        ? ` through ${body.forkAfterMessageId}`
+        : '';
+      console.log(`[chat] created ${conv?.id ?? '-'}${conv?.title ? ` "${conv.title}"` : ''}${seeded}${forked} (mode ${conv?.sessionMode ?? sessionMode ?? 'design'})`);
+      return;
+    }
+    default:
+      console.error(`unknown subcommand: od chat ${sub}`);
       process.exit(2);
   }
 }
@@ -5550,50 +6164,34 @@ function formatBytes(n) {
 }
 
 async function runDaemonStart(flags) {
-  // The headless flag implies --no-open AND auto-applies any other
-  // headless-only env defaults. Because the existing default-mode boot
-  // already handles port / host / no-open, we forward into it by
-  // mutating process.argv before re-entering the boot path.
-  // Simpler path: re-implement the boot inline, mirroring the default.
   const port = Number(flags.port ?? process.env.OD_PORT ?? 7456);
   const host = String(flags.host ?? process.env.OD_BIND_HOST ?? '127.0.0.1');
   const headless = Boolean(flags.headless || flags['no-open'] || flags['serve-web']);
-  process.env.OD_BIND_HOST = host;
-  process.env.OD_PORT = String(port);
-  const { startServer: startHeadless } = await import('./server.js');
-  const started = await startHeadless({ port, host, returnServer: true });
-  const url = started.url;
-  const server = started.server;
-  const shutdown = started.shutdown;
-  const closeServer = () => new Promise((resolve) => {
-    let resolved = false;
-    const resolveOnce = () => { if (!resolved) { resolved = true; resolve(); } };
-    const idleTimer = setTimeout(() => server.closeIdleConnections?.(), 1_000);
-    const hardTimer = setTimeout(() => { server.closeAllConnections?.(); resolveOnce(); }, 5_000);
-    idleTimer.unref?.();
-    hardTimer.unref?.();
-    server.close(() => resolveOnce());
+  const runtime = await startDaemonRuntime({
+    host,
+    logListening: false,
+    openBrowser: !headless,
+    port,
   });
-  let shuttingDown = false;
-  const stop = () => {
-    if (shuttingDown) process.exit(0);
-    shuttingDown = true;
-    void Promise.allSettled([
-      Promise.resolve().then(() => shutdown?.()),
-      closeServer(),
-    ]).finally(() => process.exit(0));
-  };
-  process.on('SIGINT', stop);
-  process.on('SIGTERM', stop);
-  console.log(`[od] listening on ${url} (${headless ? 'headless' : 'desktop'})`);
-  if (!headless) {
-    const opener = process.platform === 'darwin' ? 'open'
-      : process.platform === 'win32' ? 'start'
-      : 'xdg-open';
-    import('node:child_process').then(({ spawn }) => {
-      spawn(opener, [url], { detached: true, stdio: 'ignore' }).unref();
-    });
-  }
+  console.log(`[od] listening on ${runtime.url} (${headless ? 'headless' : 'desktop'})`);
+
+  await new Promise((resolve) => {
+    let shuttingDown = false;
+    const stop = () => {
+      if (shuttingDown) process.exit(0);
+      shuttingDown = true;
+      void runtime.stop().finally(() => {
+        cleanup();
+        resolve();
+      });
+    };
+    const cleanup = () => {
+      process.off('SIGINT', stop);
+      process.off('SIGTERM', stop);
+    };
+    process.on('SIGINT', stop);
+    process.on('SIGTERM', stop);
+  });
 }
 
 async function runDaemonStatus(flags) {
@@ -5767,11 +6365,189 @@ async function runCraft(args)         { return runLibraryList('craft', args); }
 
 async function runDesignSystems(args) {
   if (args[0] === 'rename') return runDesignSystemRename(args.slice(1));
+  if (args[0] === 'import-local') return runDesignSystemImportLocal(args.slice(1));
+  if (args[0] === 'import-github') return runDesignSystemImportGithub(args.slice(1));
+  if (args[0] === 'import-shadcn') return runDesignSystemImportShadcn(args.slice(1));
+  if (args[0] === 'rebuild-token-contract') return runDesignSystemTokenContractRebuild(args.slice(1));
   if (!args[0] || isDesignSystemsHelpArg(args[0])) {
     console.log(DESIGN_SYSTEMS_USAGE);
     process.exit(isDesignSystemsHelpArg(args[0]) ? 0 : 2);
   }
   return runLibraryList('design-systems', args);
+}
+
+// od design-systems import-local <path> [--name <name>]
+//   [--import-mode <mode>] [--craft <slug,slug>] [--json] [--daemon-url <url>]
+//
+// Imports a local app/design-system project through the same daemon endpoint as
+// the Settings UI. The CLI resolves relative paths before sending the request
+// because the daemon intentionally accepts only absolute host paths.
+async function runDesignSystemImportLocal(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od design-systems import-local <path> [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
+  od design-systems import-local --path <path> [--name <name>] [--json]
+
+Imports a local project directory as an editable Open Design design system.
+
+  <path>                 Local project directory to scan.
+  --path <path>          Path alternative for scripts that prefer named flags.
+  --name <name>          Display name override for the imported system.
+  --import-mode <mode>   normalized | hybrid | verbatim (default hybrid).
+  --craft <slugs>        Comma-separated craft sections to apply (e.g. color,type).`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const stringFlags = new Set([...LIBRARY_STRING_FLAGS, 'path', 'name', 'import-mode', 'craft']);
+  const flags = parseFlags(args, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
+  const localPath = typeof flags.path === 'string' ? flags.path : positionalArgs(args, stringFlags)[0];
+  if (!localPath) {
+    console.error('Usage: od design-systems import-local <path>');
+    process.exit(2);
+  }
+  const pathModule = await import('node:path');
+  const body = designSystemImportRequestBody(flags, {
+    baseDir: pathModule.resolve(localPath),
+  });
+  return postDesignSystemImport(flags, '/api/design-systems/import/local', body);
+}
+
+// od design-systems import-github <url> [--branch <branch>] [--name <name>]
+//   [--import-mode <mode>] [--craft <slug,slug>] [--json] [--daemon-url <url>]
+async function runDesignSystemImportGithub(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od design-systems import-github <url> [--branch <branch>] [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
+  od design-systems import-github --url <url> [--branch <branch>] [--json]
+
+Imports a public GitHub repository as an editable Open Design design system.
+
+  <url>                  Repository root URL, e.g. https://github.com/acme/design-kit.
+  --url <url>            URL alternative for scripts that prefer named flags.
+  --branch <branch>      Branch, tag, or ref to clone.
+  --name <name>          Display name override for the imported system.
+  --import-mode <mode>   normalized | hybrid | verbatim (default hybrid).
+  --craft <slugs>        Comma-separated craft sections to apply (e.g. color,type).`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const stringFlags = new Set([...LIBRARY_STRING_FLAGS, 'url', 'branch', 'name', 'import-mode', 'craft']);
+  const flags = parseFlags(args, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
+  const url = typeof flags.url === 'string' ? flags.url : positionalArgs(args, stringFlags)[0];
+  if (!url) {
+    console.error('Usage: od design-systems import-github <url>');
+    process.exit(2);
+  }
+  const body = designSystemImportRequestBody(flags, {
+    url,
+    ...(typeof flags.branch === 'string' ? { branch: flags.branch } : {}),
+  });
+  return postDesignSystemImport(flags, '/api/design-systems/import/github', body);
+}
+
+function designSystemImportRequestBody(flags, baseBody) {
+  const craftApplies =
+    typeof flags.craft === 'string'
+      ? flags.craft.split(',').map((slug) => slug.trim().toLowerCase()).filter(Boolean)
+      : undefined;
+  return {
+    ...baseBody,
+    ...(typeof flags.name === 'string' ? { name: flags.name } : {}),
+    ...(typeof flags['import-mode'] === 'string' ? { importMode: flags['import-mode'] } : {}),
+    ...(craftApplies && craftApplies.length > 0 ? { craftApplies } : {}),
+  };
+}
+
+async function postDesignSystemImport(flags, endpoint, body) {
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  const resp = await fetch(`${base}${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  const imported = data.designSystem ?? data;
+  console.log(`Imported ${imported.id ?? '(unknown id)'}${imported.title ? ` -> ${imported.title}` : ''}`);
+  if (data.tokenContractRebuild?.job) {
+    console.log(`Token contract rebuild queued: ${data.tokenContractRebuild.job.id}`);
+  } else if (data.tokenContractRebuild?.decision?.reason) {
+    console.log(`Token contract rebuild: ${data.tokenContractRebuild.decision.reason}`);
+  }
+}
+
+// od design-systems rebuild-token-contract <id> [--force] [--json]
+//
+// Starts the same review-gated token contract rebuild job exposed in the web
+// design-system detail view. Without --force the daemon only queues a job when
+// source/token-contract.report.json recommends it.
+async function runDesignSystemTokenContractRebuild(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od design-systems rebuild-token-contract <id> [--force] [--json] [--daemon-url <url>]
+
+Starts a review-gated TOKEN_SCHEMA token contract rebuild for an editable imported design system.
+
+  <id>       Editable design-system id, e.g. user:acme-product.
+  --force    Queue the review even when the quality report is already usable.`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const flags = parseFlags(args, {
+    string: LIBRARY_STRING_FLAGS,
+    boolean: new Set([...LIBRARY_BOOLEAN_FLAGS, 'force']),
+  });
+  const id = positionalArgs(args, LIBRARY_STRING_FLAGS)[0];
+  if (!id) {
+    console.error('Usage: od design-systems rebuild-token-contract <id>');
+    process.exit(2);
+  }
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  const resp = await fetch(`${base}/api/design-systems/${encodeURIComponent(id)}/token-contract/rebuild-jobs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force: flags.force === true }),
+  });
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  if (data.job) {
+    console.log(`Token contract rebuild queued for ${id}: ${data.job.id}`);
+    return;
+  }
+  const decision = data.decision;
+  console.log(`Token contract rebuild not queued for ${id}: ${decision?.reason ?? 'no rebuild needed'}`);
+}
+
+// od design-systems import-shadcn <reference> [--name <name>]
+//   [--import-mode <mode>] [--craft <slug,slug>] [--json] [--daemon-url <url>]
+//
+// Imports a shadcn registry item as an editable user design system via
+// POST /api/design-systems/import/shadcn — the CLI mirror of the Settings →
+// Design systems "shadcn" import source. <reference> is the shadcn CLI
+// shorthand "<owner>/<repo>/<item>" (e.g. shadcn/ui/theme-zinc) or a direct
+// https URL to a registry-item JSON document.
+async function runDesignSystemImportShadcn(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od design-systems import-shadcn <reference> [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
+
+Imports a shadcn registry item as an Open Design design system.
+
+  <reference>            "<owner>/<repo>/<item>" (e.g. shadcn/ui/theme-zinc)
+                         or an https URL to a registry-item JSON document.
+  --name <name>          Display name override for the imported system.
+  --import-mode <mode>   normalized | hybrid | verbatim (default hybrid).
+  --craft <slugs>        Comma-separated craft sections to apply (e.g. color,type).`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const stringFlags = new Set([...LIBRARY_STRING_FLAGS, 'name', 'import-mode', 'craft']);
+  const flags = parseFlags(args, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
+  const reference = positionalArgs(args, stringFlags)[0];
+  if (!reference) {
+    console.error('Usage: od design-systems import-shadcn <reference>');
+    process.exit(2);
+  }
+  const body = designSystemImportRequestBody(flags, { reference });
+  return postDesignSystemImport(flags, '/api/design-systems/import/shadcn', body);
 }
 
 // od design-systems rename <id> --title <new-title> [--json]
@@ -5824,9 +6600,6 @@ async function runStatus(args) {
 // `od doctor` follow-ups, shell scripts) can collect a support bundle
 // without driving the web UI.
 // ---------------------------------------------------------------------------
-
-const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
-const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 
 async function runDiagnostics(args) {
   const sub = args[0];
@@ -5928,9 +6701,6 @@ async function runVersion(args) {
 // without leaving the terminal. JSON values pass through unchanged;
 // scalar strings/numbers/booleans are coerced.
 // ---------------------------------------------------------------------------
-
-const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
-const CONFIG_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 
 async function runDoctor(args) {
   const flags = parseFlags(args, { string: CONFIG_STRING_FLAGS, boolean: CONFIG_BOOLEAN_FLAGS });

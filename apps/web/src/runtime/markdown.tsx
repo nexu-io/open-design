@@ -14,6 +14,7 @@
 import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { useT } from '../i18n';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
+import { Icon } from '../components/Icon';
 
 export type MarkdownLinkClickHandler = (
   href: string,
@@ -48,6 +49,7 @@ type Block =
   | { kind: 'h'; level: 1 | 2 | 3 | 4; text: string }
   | { kind: 'ul'; items: string[] }
   | { kind: 'ol'; items: string[] }
+  | { kind: 'bq'; text: string }
   | { kind: 'code'; lang: string | null; body: string }
   | { kind: 'codeComment'; comment: CodeCommentDirective }
   | { kind: 'table'; aligns: TableAlign[]; headers: string[]; rows: string[][] }
@@ -173,6 +175,16 @@ function parseBlocks(input: string): Block[] {
       i++;
       continue;
     }
+    // Blockquote. Group consecutive `>`-prefixed lines.
+    if (/^\s*>\s?/.test(line)) {
+      const buf: string[] = [];
+      while (i < lines.length && /^\s*>\s?/.test(lines[i] ?? '')) {
+        buf.push((lines[i] ?? '').replace(/^\s*>\s?/, ''));
+        i++;
+      }
+      out.push({ kind: 'bq', text: buf.join('\n') });
+      continue;
+    }
     // Unordered list. Group consecutive items.
     if (/^\s*[-*+]\s+/.test(line)) {
       const items: string[] = [];
@@ -220,6 +232,7 @@ function parseBlocks(input: string): Block[] {
       if (/^#{1,4}\s+/.test(next)) break;
       if (/^\s*[-*+]\s+/.test(next)) break;
       if (/^\s*\d+\.\s+/.test(next)) break;
+      if (/^\s*>\s?/.test(next)) break;
       if (parseCodeCommentDirective(next)) break;
       if (isTableStartAt(lines, i)) break;
       buf.push(next);
@@ -239,11 +252,24 @@ function renderBlock(block: Block, key: number, options?: RenderMarkdownOptions)
     return <Tag key={key} className={`md-h md-h${block.level}`}>{renderInline(block.text, options)}</Tag>;
   }
   if (block.kind === 'ul') {
+    const hasTask = block.items.some((it) => /^\[[ xX]\]\s+/.test(it));
     return (
-      <ul key={key} className="md-ul">
-        {block.items.map((item, i) => (
-          <li key={i}>{renderInline(item, options)}</li>
-        ))}
+      <ul key={key} className={`md-ul${hasTask ? ' md-task-list' : ''}`}>
+        {block.items.map((item, i) => {
+          const task = /^\[([ xX])\]\s+(.*)$/.exec(item);
+          if (task) {
+            const checked = task[1] !== ' ';
+            return (
+              <li key={i} className="md-task-item" data-checked={checked ? 'true' : 'false'}>
+                <span className="md-task-check" aria-hidden>
+                  {checked ? <Icon name="check" size={11} /> : null}
+                </span>
+                <span>{renderInline(task[2] ?? '', options)}</span>
+              </li>
+            );
+          }
+          return <li key={i}>{renderInline(item, options)}</li>;
+        })}
       </ul>
     );
   }
@@ -254,6 +280,13 @@ function renderBlock(block: Block, key: number, options?: RenderMarkdownOptions)
           <li key={i}>{renderInline(item, options)}</li>
         ))}
       </ol>
+    );
+  }
+  if (block.kind === 'bq') {
+    return (
+      <blockquote key={key} className="md-quote">
+        {renderInline(block.text, options)}
+      </blockquote>
     );
   }
   if (block.kind === 'code') {
@@ -372,15 +405,35 @@ function codeCommentLocation(comment: CodeCommentDirective): string {
   return `${comment.file}:${comment.start}`;
 }
 
+// Long blocks past this many lines start collapsed, matching Lobe's
+// "fold tall code" affordance so a single dump can't swallow the viewport.
+const CODE_COLLAPSE_LINE_THRESHOLD = 16;
+
 function MarkdownCodeBlock({ body, lang }: { body: string; lang: string | null }) {
   const t = useT();
   const [copied, setCopied] = useState(false);
+  const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null);
   const resetTimerRef = useRef<number | null>(null);
   const copyLabel = copied ? t('fileViewer.copied') : t('fileViewer.copy');
+
+  const lineCount = body.split('\n').length;
+  const collapsible = lineCount > CODE_COLLAPSE_LINE_THRESHOLD;
+  const [collapsed, setCollapsed] = useState(collapsible);
 
   useEffect(() => () => {
     if (resetTimerRef.current != null) window.clearTimeout(resetTimerRef.current);
   }, []);
+
+  useEffect(() => {
+    if (!lang) return;
+    let cancelled = false;
+    import('./shiki').then(({ highlightCode }) =>
+      highlightCode(body, lang).then((html) => {
+        if (!cancelled && html) setHighlightedHtml(html);
+      }),
+    ).catch(() => {});
+    return () => { cancelled = true; };
+  }, [body, lang]);
 
   async function handleCopy() {
     const ok = await copyToClipboard(body);
@@ -394,21 +447,46 @@ function MarkdownCodeBlock({ body, lang }: { body: string; lang: string | null }
   }
 
   return (
-    <div className="md-code-block">
-      <div className="md-code-actions">
-        <button
-          type="button"
-          className="md-code-action"
-          onClick={() => { void handleCopy(); }}
-          aria-label={copyLabel}
-          title={copyLabel}
-        >
-          {copyLabel}
-        </button>
+    <div className="md-code-block" data-collapsed={collapsed ? 'true' : undefined}>
+      <div className="md-code-header">
+        <span className="md-code-lang">{lang || 'text'}</span>
+        <div className="md-code-actions">
+          {collapsible ? (
+            <button
+              type="button"
+              className="md-code-action md-code-action-icon"
+              onClick={() => setCollapsed((c) => !c)}
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? t('designFiles.expandGroup') : t('designFiles.collapseGroup')}
+              title={collapsed ? t('designFiles.expandGroup') : t('designFiles.collapseGroup')}
+            >
+              <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={13} />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="md-code-action"
+            onClick={() => { void handleCopy(); }}
+            aria-label={copyLabel}
+            title={copyLabel}
+          >
+            <Icon name={copied ? 'check' : 'copy'} size={12} />
+            <span>{copyLabel}</span>
+          </button>
+        </div>
       </div>
-      <pre className="md-code">
-        <code data-lang={lang ?? undefined}>{body}</code>
-      </pre>
+      <div className="md-code-body">
+        {highlightedHtml ? (
+          <div
+            className="md-code md-code-highlighted"
+            dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+          />
+        ) : (
+          <pre className="md-code">
+            <code data-lang={lang ?? undefined}>{body}</code>
+          </pre>
+        )}
+      </div>
     </div>
   );
 }

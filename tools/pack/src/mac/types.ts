@@ -1,6 +1,7 @@
 import type { DesktopEvalResult, DesktopScreenshotResult, DesktopStatusSnapshot, DesktopUpdateResult, SidecarStamp } from "@open-design/sidecar-proto";
 import type { CacheReport } from "../cache.js";
 import type { ToolPackBuildOutput, ToolPackConfig } from "../config.js";
+import type { ToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
 import type { INTERNAL_PACKAGES } from "./constants.js";
 
 export type PackedTarballInfo = {
@@ -30,6 +31,7 @@ export type MacPaths = {
   packagedMainPrebundleMetaPath: string;
   packagedMainPrebundlePath: string;
   packagedConfigPath: string;
+  payloadZipPath: string;
   resourceRoot: string;
   systemApplicationsAppPath: string;
   tarballsRoot: string;
@@ -52,6 +54,7 @@ export type MacPackResult = {
   dmgPath: string | null;
   latestMacYmlPath: string | null;
   outputRoot: string;
+  payloadPath: string | null;
   resourceRoot: string;
   runtimeNamespaceRoot: string;
   sizeReport: MacSizeReport;
@@ -79,6 +82,7 @@ export type MacStartResult = {
 
 export type MacInspectResult = {
   eval?: DesktopEvalResult;
+  launcher: ToolPackLauncherRuntimeSnapshot;
   screenshot?: DesktopScreenshotResult;
   status: DesktopStatusSnapshot | null;
   update?: DesktopUpdateResult;

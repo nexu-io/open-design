@@ -9,13 +9,33 @@ import {
   liveCommentTargetMapsEqual,
   liveSnapshotForComment,
   mergeAttachedComments,
+  mergePreviewCommentAttachments,
   messageContentWithCommentAttachments,
   overlayBoundsFromSnapshot,
+  queuedSlideNavTarget,
   removeAttachedComment,
   targetFromSnapshot,
 } from '../src/comments';
 import type { PreviewCommentSnapshot } from '../src/comments';
-import type { ChatMessage, PreviewComment } from '../src/types';
+import type { ChatCommentAttachment, ChatMessage, PreviewComment } from '../src/types';
+
+function commentAttachment(
+  overrides: Partial<ChatCommentAttachment> = {},
+): ChatCommentAttachment {
+  return {
+    id: 'att-1',
+    order: 1,
+    filePath: 'deck.html',
+    elementId: 'el-1',
+    selector: '[data-od-id="el-1"]',
+    label: 'span.capsule.accent',
+    comment: 'make it white',
+    currentText: 'DTC launches',
+    pagePosition: { x: 0, y: 0, width: 10, height: 10 },
+    htmlHint: '<span></span>',
+    ...overrides,
+  };
+}
 
 describe('preview comment attachment helpers', () => {
   it('builds compact target context from an iframe snapshot', () => {
@@ -53,6 +73,58 @@ describe('preview comment attachment helpers', () => {
     expect(attachments).toMatchObject([
       { id: 'c1', order: 1, elementId: 'hero-title', comment: 'Shorten this title' },
       { id: 'c2', order: 2, elementId: 'chart', comment: 'Make it feel real' },
+    ]);
+  });
+
+  it('keeps saved comment images in send payloads even when the note is empty', () => {
+    const [attachment] = commentsToAttachments([
+      comment({
+        id: 'c1',
+        note: '',
+        attachments: [{ path: 'uploads/reference.png', name: 'reference.png' }],
+      }),
+    ]);
+
+    expect(attachment).toMatchObject({
+      id: 'c1',
+      comment: 'Use the attached image as the comment reference.',
+      imageAttachments: [{ path: 'uploads/reference.png', name: 'reference.png' }],
+    });
+    expect(messageContentWithCommentAttachments('', attachment ? [attachment] : []))
+      .toContain('image.1: uploads/reference.png | reference.png');
+  });
+
+  it('keeps the task query out of context when a comment is promoted to message text', () => {
+    const [attachment] = commentsToAttachments([
+      comment({ id: 'c1', elementId: 'hero-title', note: 'Make the title factual' }),
+    ]);
+    const contextOnly = attachment
+      ? [{ ...attachment, comment: '', commentContext: 'query' as const }]
+      : [];
+
+    const content = messageContentWithCommentAttachments('Make the title factual', contextOnly);
+
+    expect(content).toContain('Make the title factual');
+    expect(content).toContain('selector: [data-od-id="hero-title"]');
+    expect(content).not.toContain('comment: Make the title factual');
+  });
+
+  it('merges saved preview comment image attachments without duplicates', () => {
+    expect(
+      mergePreviewCommentAttachments(
+        [
+          { path: 'uploads/ref-a.png', name: 'ref-a.png' },
+          { path: 'uploads/ref-b.png', name: 'ref-b.png' },
+        ],
+        [
+          { path: 'uploads/ref-b.png', name: 'duplicate.png' },
+          { path: 'uploads/ref-c.png', name: '' },
+        ],
+      ),
+    ).toEqual([
+      { path: 'uploads/ref-a.png', name: 'ref-a.png' },
+      { path: 'uploads/ref-b.png', name: 'ref-b.png' },
+      { path: 'uploads/ref-c.png', name: 'ref-c.png' },
     ]);
   });
 
@@ -98,6 +170,31 @@ describe('preview comment attachment helpers', () => {
       comment: 'Tighten the hierarchy',
     });
     expect(messageContentWithCommentAttachments('', attachments)).toContain('memberCount: 2');
+  });
+
+  it('builds an image-only board payload when no text note was entered', () => {
+    const attachments = buildBoardCommentAttachments({
+      target: {
+        filePath: 'atlas.html',
+        elementId: 'hero-title',
+        selector: '[data-od-id="hero-title"]',
+        label: 'Hero title',
+        text: 'Open Design',
+        position: { x: 10, y: 20, width: 300, height: 80 },
+        htmlHint: '<h1 data-od-id="hero-title">',
+        selectionKind: 'element',
+      },
+      notes: [],
+      includeImageOnly: true,
+      imageAttachmentCount: 2,
+    });
+
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0]).toMatchObject({
+      elementId: 'hero-title',
+      comment: 'Use the 2 attached images as the comment reference.',
+      source: 'board-batch',
+    });
   });
 
   it('builds visual annotation payloads without requiring a selector', () => {
@@ -375,3 +472,45 @@ function comment(patch: Partial<PreviewComment>): PreviewComment {
     ...patch,
   };
 }
+
+describe('queuedSlideNavTarget', () => {
+  it('returns the slide a queued send should flip the deck to', () => {
+    const target = queuedSlideNavTarget([
+      commentAttachment({ filePath: 'deck.html', slideIndex: 1 }),
+    ]);
+    expect(target).toEqual({ filePath: 'deck.html', slideIndex: 1 });
+  });
+
+  it('uses the first attachment that names a deck file and a slide', () => {
+    const target = queuedSlideNavTarget([
+      commentAttachment({ id: 'a', filePath: 'deck.html', slideIndex: undefined }),
+      commentAttachment({ id: 'b', filePath: 'deck.html', slideIndex: 3 }),
+      commentAttachment({ id: 'c', filePath: 'deck.html', slideIndex: 5 }),
+    ]);
+    expect(target).toEqual({ filePath: 'deck.html', slideIndex: 3 });
+  });
+
+  it('floors fractional slide indices and accepts slide zero', () => {
+    expect(
+      queuedSlideNavTarget([commentAttachment({ slideIndex: 0 })]),
+    ).toEqual({ filePath: 'deck.html', slideIndex: 0 });
+    expect(
+      queuedSlideNavTarget([commentAttachment({ slideIndex: 2.9 })]),
+    ).toEqual({ filePath: 'deck.html', slideIndex: 2 });
+  });
+
+  it('returns null when nothing is slide-scoped', () => {
+    expect(queuedSlideNavTarget(undefined)).toBeNull();
+    expect(queuedSlideNavTarget(null)).toBeNull();
+    expect(queuedSlideNavTarget([])).toBeNull();
+    expect(
+      queuedSlideNavTarget([commentAttachment({ slideIndex: undefined })]),
+    ).toBeNull();
+    expect(
+      queuedSlideNavTarget([commentAttachment({ filePath: '', slideIndex: 2 })]),
+    ).toBeNull();
+    expect(
+      queuedSlideNavTarget([commentAttachment({ slideIndex: -1 })]),
+    ).toBeNull();
+  });
+});

@@ -135,6 +135,8 @@ vi.mock('../../src/state/projects', () => ({
   patchProject: (...args: unknown[]) => patchProject(...args),
   saveMessage: (...args: unknown[]) => saveMessage(...args),
   saveTabs: (...args: unknown[]) => saveTabs(...args),
+  cacheTabsLocally: (_projectId: string, state: unknown) => state,
+  persistTabsToDaemonNow: vi.fn(),
 }));
 
 vi.mock('../../src/components/AppChromeHeader', () => ({
@@ -241,6 +243,37 @@ describe('retry target resolution', () => {
       failedAssistant,
       userMsg: userMessage,
       priorMessages: [systemContext],
+      preservedAttempts: [failedAssistant],
+    });
+  });
+
+  it('keeps earlier failed retry attempts visible while reusing the original user turn', () => {
+    const firstFailure: ChatMessage = {
+      ...failedAssistant,
+      id: 'assistant-1',
+      content: 'First attempt produced partial output',
+      events: [{ kind: 'text', text: 'thinking before failure' }],
+      producedFiles: [
+        {
+          name: 'partial.html',
+          kind: 'html',
+          mime: 'text/html',
+          mtime: 1,
+          size: 100,
+        },
+      ],
+    };
+    const secondFailure: ChatMessage = {
+      ...failedAssistant,
+      id: 'assistant-2',
+      content: 'Retry failed too',
+    };
+
+    expect(resolveRetryTarget([userMessage, firstFailure, secondFailure], secondFailure.id)).toEqual({
+      failedAssistant: secondFailure,
+      userMsg: userMessage,
+      priorMessages: [],
+      preservedAttempts: [firstFailure, secondFailure],
     });
   });
 
@@ -777,10 +810,23 @@ describe('ProjectView daemon cleanup', () => {
 
     await waitFor(() => {
       const latest = chatPaneSpy.mock.calls.at(-1)?.[0] as {
-        queuedItems?: Array<{ commentAttachments?: Array<{ comment: string }> }>;
+        queuedItems?: Array<{
+          prompt?: string;
+          commentAttachments?: Array<{
+            comment: string;
+            commentContext?: string;
+            elementId?: string;
+          }>;
+        }>;
       };
       expect(latest.queuedItems).toHaveLength(1);
-      expect(latest.queuedItems?.[0]?.commentAttachments?.[0]?.comment).toBe('Use a warmer accent');
+      // Each board comment is queued as its own task: the comment text becomes
+      // the task prompt while the attachment rides along as element context
+      // (comment blanked, commentContext === 'query').
+      expect(latest.queuedItems?.[0]?.prompt).toBe('Use a warmer accent');
+      const queuedAttachment = latest.queuedItems?.[0]?.commentAttachments?.[0];
+      expect(queuedAttachment?.elementId).toBe('hero');
+      expect(queuedAttachment?.commentContext).toBe('query');
     });
     expect(streamViaDaemon).toHaveBeenCalledTimes(1);
   });
@@ -1227,7 +1273,7 @@ describe('ProjectView daemon cleanup', () => {
     });
   });
 
-  it('relinks terminal replay to an existing artifact without writing a duplicate file', async () => {
+  it('does not replay a terminal succeeded row with empty produced files', async () => {
     const runCreatedAt = Date.now();
     const existingArtifact = {
       artifactManifest: {
@@ -1314,20 +1360,17 @@ describe('ProjectView daemon cleanup', () => {
       />,
     );
 
-    await waitFor(() => {
-      expect(saveMessage.mock.calls).toEqual(
-        expect.arrayContaining([
-          expect.arrayContaining([
-            'project-1',
-            'conv-1',
-            expect.objectContaining({
-              id: 'msg-replay',
-              producedFiles: [existingArtifact],
-            }),
-          ]),
-        ]),
-      );
-    });
+    await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalledWith('project-1'));
+    expect(fetchChatRunStatus).not.toHaveBeenCalled();
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+    expect(saveMessage).not.toHaveBeenCalledWith(
+      'project-1',
+      'conv-1',
+      expect.objectContaining({
+        id: 'msg-replay',
+        producedFiles: [existingArtifact],
+      }),
+    );
     expect(writeProjectTextFile).not.toHaveBeenCalled();
   });
 });

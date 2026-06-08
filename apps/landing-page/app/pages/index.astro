@@ -22,6 +22,7 @@ import {
 } from '../i18n';
 import { getCatalogCounts } from '../_lib/catalog';
 import { getGithubRepoMeta } from '../_lib/github';
+import { RELEASE_METADATA_URL } from '../_lib/release-metadata';
 
 const locale: LandingLocaleCode = localeFromPath(Astro.url.pathname);
 const localeDef = getLocaleDefinition(locale);
@@ -195,7 +196,7 @@ const pageHtml = renderToStaticMarkup(
     <Fragment set:html={pageHtml} />
     <PreciseLazyload />
     <LocaleSwitcherScript />
-    <script is:inline>
+    <script is:inline define:vars={{ RELEASE_METADATA_URL }}>
       (() => {
         const formatStars = (count) => {
           if (!Number.isFinite(count) || count <= 0) return '0';
@@ -203,41 +204,31 @@ const pageHtml = renderToStaticMarkup(
           return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
         };
 
-        // Pull a clean 'v0.3.0'-style label from a GitHub release record.
-        // We prefer release.name (e.g. 'Open Design 0.3.0') because that's
-        // what we hand-author; fall back to tag_name (e.g.
-        // 'open-design-v0.3.0') with the project prefix stripped.
-        //
-        // Expected input shapes (release.name / release.tag_name):
-        //   { name: 'Open Design 0.3.0',  tag_name: 'v0.3.0' }            → 'v0.3.0'
-        //   { name: 'Open Design v0.3.0', tag_name: 'open-design-v0.3.0' } → 'v0.3.0'
-        //   { name: '0.3.0-beta.1',       tag_name: 'open-design_0.3.0' }  → 'v0.3.0-beta.1' (name wins)
-        //   { name: null,                 tag_name: 'open-design-v0.3.0' } → 'v0.3.0' (tag fallback)
-        //   { name: null,                 tag_name: null }                  → null (caller skips)
-        const formatVersion = (release) => {
+        const formatVersion = (metadata) => {
+          const fromVersion = (version) => {
+            if (typeof version !== 'string') return null;
+            const m = version.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
+            return m ? `v${m[1]}` : null;
+          };
           const fromTag = (tag) => {
             if (typeof tag !== 'string') return null;
             const cleaned = tag.replace(/^open-design[-_]?v?/i, '').trim();
             return cleaned ? `v${cleaned.replace(/^v/, '')}` : null;
           };
-          const fromName = (name) => {
-            if (typeof name !== 'string') return null;
-            const m = name.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
-            return m ? `v${m[1]}` : null;
-          };
-          return fromName(release?.name) ?? fromTag(release?.tag_name) ?? null;
+          return (
+            fromVersion(metadata?.releaseVersion) ??
+            fromVersion(metadata?.stableVersion) ??
+            fromVersion(metadata?.baseVersion) ??
+            fromTag(metadata?.versionTag) ??
+            null
+          );
         };
 
         // Best-effort OS + arch detection so the download CTAs point straight
-        // at the matching installer instead of bouncing through the releases
-        // page.
-        //
-        // Release assets are named (see the v0.x GitHub release):
-        //   open-design-<ver>-mac-arm64.dmg     Apple Silicon
-        //   open-design-<ver>-mac-x64.dmg       Intel Mac
-        //   open-design-<ver>-win-x64-setup.exe Windows
-        // There is no Linux artifact, so Linux/unknown leaves the CTA's
-        // pre-rendered releases-page href untouched.
+        // at the matching installer from the stable R2 metadata instead of
+        // bouncing through the releases page. There is no Linux artifact, so
+        // Linux/unknown leaves the CTA's pre-rendered releases-page href
+        // untouched.
         //
         // arm64 vs x64 on macOS is NOT reliably exposed to the browser
         // (Safari hides CPU arch). We sniff the WebGL renderer for an Intel/AMD
@@ -254,7 +245,7 @@ const pageHtml = renderToStaticMarkup(
           const isWindows = /win/.test(uaPlatform) || /windows/.test(ua);
           const isMac = /mac/.test(uaPlatform) || (/mac os x/.test(ua) && !/iphone|ipad|ipod/.test(ua));
           const isLinux = /linux/.test(uaPlatform) || (/linux/.test(ua) && !/android/.test(ua));
-          if (isWindows) return { os: 'Windows', arch: 'Windows', match: (n) => /win.*setup\.exe$/.test(n) };
+          if (isWindows) return { os: 'Windows', arch: 'Windows', artifact: (m) => m?.platforms?.win?.artifacts?.installer?.url };
           if (isMac) {
             const isIntel = (() => {
               try {
@@ -266,22 +257,22 @@ const pageHtml = renderToStaticMarkup(
                 return false;
               }
             })();
-            const suffix = isIntel ? 'mac-x64.dmg' : 'mac-arm64.dmg';
             const arch = isIntel ? 'Apple Intel' : 'Apple Silicon';
-            return { os: 'macOS', arch, match: (n) => n.endsWith(suffix) };
+            const key = isIntel ? 'macIntel' : 'mac';
+            return { os: 'macOS', arch, artifact: (m) => m?.platforms?.[key]?.artifacts?.dmg?.url };
           }
           // Linux has no published artifact: report the OS for the label but
           // never match an asset, so the CTA keeps its releases-page fallback.
-          if (isLinux) return { os: 'Linux', arch: '', match: () => false };
+          if (isLinux) return { os: 'Linux', arch: '', artifact: () => null };
           return null;
         };
 
         // Rewrite every [data-download-cta] anchor to the matching installer
-        // URL from the latest release, swap any [data-download-os] label to the
-        // detected OS, and append the arch suffix to [data-download-arch] slots
+        // URL from the stable metadata, swap any [data-download-os] label to
+        // the detected OS, and append the arch suffix to [data-download-arch] slots
         // (下载 -> 下载（Apple Silicon）). No-ops (keeping the releases-page
         // fallback) when the platform is unknown or no matching asset exists.
-        const enhanceDownloadCtas = (release) => {
+        const enhanceDownloadCtas = (metadata) => {
           const ctas = document.querySelectorAll('[data-download-cta]');
           if (ctas.length === 0) return;
           const platform = detectPlatform();
@@ -294,17 +285,15 @@ const pageHtml = renderToStaticMarkup(
             slot.textContent = `（${platform.arch}）`;
             slot.hidden = false;
           }
-          const assets = Array.isArray(release?.assets) ? release.assets : [];
-          const asset = assets.find(
-            (a) =>
-              a &&
-              typeof a.name === 'string' &&
-              typeof a.browser_download_url === 'string' &&
-              platform.match(a.name),
-          );
-          if (!asset) return;
+          const url = platform.artifact(metadata);
+          if (typeof url !== 'string' || url.length === 0) return;
           for (const cta of ctas) {
-            cta.href = asset.browser_download_url;
+            // The header nav download button routes to the /download page on
+            // purpose (it carries data-download-page); it still gets the arch
+            // label above but keeps its page href. The hero CTA has no such
+            // marker and is rewritten to the direct installer as before.
+            if (cta.hasAttribute('data-download-page')) continue;
+            cta.href = url;
             // A direct file download should not open a blank tab.
             cta.removeAttribute('target');
             cta.removeAttribute('rel');
@@ -388,21 +377,21 @@ const pageHtml = renderToStaticMarkup(
               .catch(() => {});
           }
 
-          // Latest stable release powers every "v0.x.y" badge on the page
+          // Stable release metadata powers every "v0.x.y" badge on the page
           // (topbar pulse, hero CTA-foot, footer download) AND the per-OS
-          // direct download CTAs. One unauthenticated API call per page view;
-          // the static fallbacks (version slot text, releases-page href) keep
-          // things sane if the request fails or 403s.
+          // direct download CTAs. Fetch it through the landing origin so
+          // deployed static pages stay fresh without depending on cross-origin
+          // R2 CORS headers.
           const versionSlots = document.querySelectorAll('[data-github-version]');
           const hasDownloadCtas = document.querySelector('[data-download-cta]') !== null;
           if (versionSlots.length === 0 && !hasDownloadCtas) return;
-          fetch('https://api.github.com/repos/nexu-io/open-design/releases/latest', {
-            headers: { Accept: 'application/vnd.github+json' },
+          fetch(RELEASE_METADATA_URL, {
+            headers: { Accept: 'application/json' },
           })
             .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
-            .then((data) => {
-              enhanceDownloadCtas(data);
-              const label = formatVersion(data);
+            .then((metadata) => {
+              enhanceDownloadCtas(metadata);
+              const label = formatVersion(metadata);
               if (!label) return;
               for (const slot of versionSlots) slot.textContent = label;
             })
@@ -534,6 +523,140 @@ const pageHtml = renderToStaticMarkup(
         );
 
         for (const el of elements) observer.observe(el);
+      })();
+    </script>
+    <script is:inline>
+      (() => {
+        const STORAGE_KEY = 'od-newsletter-dismissed';
+        const locale = (document.documentElement.getAttribute('lang') || 'en').toLowerCase();
+        const track = (area, result) => {
+          if (window.__odTrack)
+            window.__odTrack('newsletter_signup', { page_name: 'landing_home', area, result, locale });
+        };
+
+        const dismissed = () => {
+          try {
+            return window.localStorage.getItem(STORAGE_KEY) === '1';
+          } catch {
+            return false;
+          }
+        };
+        const setDismissed = () => {
+          try {
+            window.localStorage.setItem(STORAGE_KEY, '1');
+          } catch {
+            /* private mode — popup will just reappear next visit */
+          }
+        };
+
+        const wireForm = (form, area) => {
+          const input = form.querySelector('[data-newsletter-email]');
+          const msg = form.querySelector('[data-newsletter-msg]');
+          const submit = form.querySelector('.newsletter-submit');
+          const submitIdleText = submit ? (submit.textContent || '').trim() : '';
+          const successText = form.getAttribute('data-success') || '';
+          const errorText = form.getAttribute('data-error') || '';
+          form.addEventListener('submit', (ev) => {
+            ev.preventDefault();
+            const email = (input && input.value ? input.value : '').trim();
+            if (!email) return;
+            if (submit) {
+              submit.disabled = true;
+              submit.classList.add('is-loading');
+              submit.setAttribute('aria-busy', 'true');
+              submit.textContent = submitIdleText ? `${submitIdleText}...` : 'Loading...';
+            }
+            if (msg) msg.textContent = '';
+            fetch('/subscribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, source: form.getAttribute('data-source') || 'landing' }),
+            })
+              .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+              .then((data) => {
+                if (!data || data.ok !== true) throw new Error('rejected');
+                form.classList.add('is-success');
+                if (submit) {
+                  submit.classList.remove('is-loading');
+                  submit.removeAttribute('aria-busy');
+                  submit.textContent = submitIdleText;
+                }
+                if (msg) msg.textContent = successText;
+                if (input) input.value = '';
+                setDismissed();
+                track(area, 'success');
+              })
+              .catch(() => {
+                if (msg) msg.textContent = errorText;
+                if (submit) {
+                  submit.disabled = false;
+                  submit.classList.remove('is-loading');
+                  submit.removeAttribute('aria-busy');
+                  submit.textContent = submitIdleText;
+                }
+                track(area, 'error');
+              });
+          });
+        };
+
+        document.querySelectorAll('[data-newsletter-form]').forEach((form) => {
+          const popup = form.closest('[data-newsletter-popup]');
+          wireForm(form, popup ? 'popup' : 'section');
+        });
+
+        const popup = document.querySelector('[data-newsletter-popup]');
+        if (popup && !dismissed()) {
+          const syncPopupRailMask = () => {
+            if (popup.hidden || !popup.classList.contains('is-visible')) return;
+            const rect = popup.getBoundingClientRect();
+            document.body.style.setProperty('--newsletter-popup-mask-top', `${Math.max(0, rect.top)}px`);
+            document.body.style.setProperty(
+              '--newsletter-popup-mask-bottom',
+              `${Math.min(window.innerHeight, rect.bottom)}px`,
+            );
+          };
+          const clearPopupRailMask = () => {
+            document.body.classList.remove('newsletter-popup-visible');
+            document.body.style.removeProperty('--newsletter-popup-mask-top');
+            document.body.style.removeProperty('--newsletter-popup-mask-bottom');
+          };
+          const close = () => {
+            popup.hidden = true;
+            clearPopupRailMask();
+            setDismissed();
+          };
+          popup.querySelectorAll('[data-newsletter-dismiss]').forEach((btn) =>
+            btn.addEventListener('click', close),
+          );
+          document.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Escape' && !popup.hidden) close();
+          });
+          const reveal = () => {
+            if (dismissed()) return;
+            popup.hidden = false;
+            popup.classList.add('is-visible');
+            document.body.classList.add('newsletter-popup-visible');
+            requestAnimationFrame(syncPopupRailMask);
+            track('popup', 'view');
+          };
+          window.addEventListener('resize', syncPopupRailMask, { passive: true });
+          // Show after the visitor has scrolled past the hero, or a delay
+          // fallback — whichever comes first. Avoids interrupting the LCP.
+          let shown = false;
+          const showOnce = () => {
+            if (shown) return;
+            shown = true;
+            reveal();
+          };
+          const onScroll = () => {
+            if (window.scrollY > window.innerHeight * 0.5) {
+              window.removeEventListener('scroll', onScroll);
+              showOnce();
+            }
+          };
+          window.addEventListener('scroll', onScroll, { passive: true });
+          window.setTimeout(showOnce, 10000);
+        }
       })();
     </script>
   </body>

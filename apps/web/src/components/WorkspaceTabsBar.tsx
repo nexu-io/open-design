@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
 import { navigate, type EntryHomeView, type Route } from '../router';
@@ -43,6 +43,13 @@ interface DisplayTab {
   tab: WorkspaceChromeTab;
 }
 
+type TabDropEdge = 'before' | 'after';
+
+interface TabDragTarget {
+  tabId: string;
+  edge: TabDropEdge;
+}
+
 interface Props {
   route: Route;
   projects: Project[];
@@ -51,6 +58,18 @@ interface Props {
 const STORAGE_KEY = 'open-design:workspace-tabs:v1';
 const OPEN_WORKSPACE_TAB_EVENT = 'open-design:workspace-tabs:open';
 const MAX_SEARCH_RESULTS = 80;
+const TAB_DRAG_HAPTIC_MS = 8;
+const TAB_DROP_HAPTIC_MS = 12;
+
+function consumeWorkspaceTabShortcut(event: KeyboardEvent) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function shouldDeferShortcutToProjectWorkspace(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.querySelector('[data-testid="file-workspace"]') !== null;
+}
 
 export function openWorkspaceTab(route: Route): void {
   window.dispatchEvent(
@@ -170,27 +189,40 @@ function uniqueIdForTab(tab: WorkspaceChromeTab): string {
 function normalizeTabsState(state: WorkspaceTabsState): WorkspaceTabsState {
   let sourceTabs = state.tabs.length > 0 ? state.tabs : [createEntryTab('home')];
 
-  // Deduplicate Home tabs (singleton constraint)
-  const homeTabs = sourceTabs.filter((tab) => tab.kind === 'entry' && tab.view === 'home');
-  if (homeTabs.length > 1) {
-    // Find canonical Home tab:
-    // 1. Is one of them currently active?
-    // 2. Otherwise, pick the one with highest lastActiveAt.
-    // 3. Otherwise, pick the first one.
-    let canonicalHome = homeTabs.find((tab) => tab.id === state.activeTabId);
-    if (!canonicalHome) {
-      canonicalHome = homeTabs.reduce((newest, currentTab) =>
+  // Deduplicate entry tabs (singleton constraint): all sidebar sections
+  // (home / projects / tasks / design-systems / plugins / integrations) share
+  // ONE entry tab that switches its view in place. Keep the canonical one:
+  // 1. Is one of them currently active?
+  // 2. Otherwise, pick the one with highest lastActiveAt.
+  // 3. Otherwise, pick the first one.
+  const entryTabs = sourceTabs.filter((tab) => tab.kind === 'entry');
+  if (entryTabs.length > 1) {
+    let canonicalEntry = entryTabs.find((tab) => tab.id === state.activeTabId);
+    if (!canonicalEntry) {
+      canonicalEntry = entryTabs.reduce((newest, currentTab) =>
         currentTab.lastActiveAt > newest.lastActiveAt ? currentTab : newest,
-        homeTabs[0]!
+        entryTabs[0]!
       );
     }
-    // Filter out all duplicate Home tabs except the canonical one
-    sourceTabs = sourceTabs.filter((tab) => {
-      if (tab.kind === 'entry' && tab.view === 'home') {
-        return tab.id === canonicalHome!.id;
-      }
-      return true;
-    });
+    // Drop every other entry tab; the survivor keeps its own view so the
+    // section the user was on is preserved.
+    sourceTabs = sourceTabs.filter(
+      (tab) => tab.kind !== 'entry' || tab.id === canonicalEntry!.id,
+    );
+  }
+
+  // Pin the single entry tab to the leftmost position (Figma-style). It is the
+  // one permanent, non-closable tab regardless of which section it currently
+  // shows; project / marketplace tabs always sit to its right in insertion
+  // order. If no entry tab survives normalization — e.g. a user who reopens on
+  // a saved `[project, ...]` workspace — create one so the invariant "an entry
+  // tab always exists and is leftmost" holds for migrated state too.
+  const entryIndex = sourceTabs.findIndex((tab) => tab.kind === 'entry');
+  if (entryIndex < 0) {
+    sourceTabs = [createEntryTab('home'), ...sourceTabs];
+  } else if (entryIndex > 0) {
+    const [entryTab] = sourceTabs.splice(entryIndex, 1);
+    sourceTabs = [entryTab!, ...sourceTabs];
   }
 
   const usedIds = new Set<string>();
@@ -208,6 +240,42 @@ function normalizeTabsState(state: WorkspaceTabsState): WorkspaceTabsState {
     tabs,
     activeTabId: activeTabId || tabs[0]!.id,
   };
+}
+
+function reorderTabsById(
+  tabs: WorkspaceChromeTab[],
+  sourceId: string,
+  targetId: string,
+  edge: TabDropEdge,
+): WorkspaceChromeTab[] {
+  if (sourceId === targetId) return tabs;
+  const movedTab = tabs.find((tab) => tab.id === sourceId);
+  if (!movedTab) return tabs;
+
+  const nextTabs = tabs.filter((tab) => tab.id !== sourceId);
+  const targetIndex = nextTabs.findIndex((tab) => tab.id === targetId);
+  if (targetIndex < 0) return tabs;
+  nextTabs.splice(edge === 'after' ? targetIndex + 1 : targetIndex, 0, movedTab);
+  if (nextTabs.every((tab, index) => tab.id === tabs[index]?.id)) return tabs;
+  return nextTabs;
+}
+
+function tabDragTargetKey(target: TabDragTarget): string {
+  return `${target.tabId}:${target.edge}`;
+}
+
+function tabDropEdgeFromElement(event: DragEvent<HTMLElement>, element: HTMLElement): TabDropEdge {
+  const rect = element.getBoundingClientRect();
+  return event.clientX > rect.left + rect.width / 2 ? 'after' : 'before';
+}
+
+function pulseTabDragHaptic(durationMs = TAB_DRAG_HAPTIC_MS) {
+  if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
+  try {
+    navigator.vibrate(durationMs);
+  } catch {
+    // Haptics are opportunistic; unsupported environments should keep dragging normally.
+  }
 }
 
 function initialTabsState(route: Route): WorkspaceTabsState {
@@ -241,28 +309,28 @@ function syncStateToRoute(state: WorkspaceTabsState, route: Route): WorkspaceTab
   const current = normalizeTabsState(state);
   const currentActive = current.tabs.find((tab) => tab.id === current.activeTabId) ?? null;
 
-  // 1. If we are navigating to Home:
-  if (route.kind === 'home' && route.view === 'home') {
-    const existingHomeTab = current.tabs.find(
-      (tab) => tab.kind === 'entry' && tab.view === 'home',
-    );
-    if (existingHomeTab) {
+  // 1. If we are navigating to any entry view (home / projects / tasks /
+  // design-systems / plugins / integrations / onboarding), reuse the single
+  // entry tab and switch its view IN PLACE — all sidebar sections collapse
+  // into the one leftmost tab. Only create one if none exists.
+  if (route.kind === 'home') {
+    const existingEntryTab = current.tabs.find((tab) => tab.kind === 'entry');
+    if (existingEntryTab) {
       return normalizeTabsState({
         ...current,
         tabs: current.tabs.map((tab) =>
-          tab.id === existingHomeTab.id
-            ? { ...tab, lastActiveAt: timestamp }
+          tab.id === existingEntryTab.id
+            ? { ...tab, view: route.view, lastActiveAt: timestamp }
             : tab,
         ),
-        activeTabId: existingHomeTab.id,
-      });
-    } else {
-      const nextTab = tabFromRoute(route, timestamp);
-      return normalizeTabsState({
-        tabs: [...current.tabs, nextTab],
-        activeTabId: nextTab.id,
+        activeTabId: existingEntryTab.id,
       });
     }
+    const nextTab = tabFromRoute(route, timestamp);
+    return normalizeTabsState({
+      tabs: [...current.tabs, nextTab],
+      activeTabId: nextTab.id,
+    });
   }
 
   // 2. If we are navigating to a project, and that project tab already exists:
@@ -288,9 +356,10 @@ function syncStateToRoute(state: WorkspaceTabsState, route: Route): WorkspaceTab
     }
 
     // 3. If we are navigating to a project, and the project tab does NOT exist,
-    // but the current active tab is the Home tab, we should NOT replace the Home tab.
-    // Instead, we should append a new project tab!
-    if (currentActive && currentActive.kind === 'entry' && currentActive.view === 'home') {
+    // but the current active tab is the (single) entry tab, we should NOT
+    // replace it — append a new project tab instead, regardless of which entry
+    // view it currently shows.
+    if (currentActive && currentActive.kind === 'entry') {
       const nextTab = tabFromRoute(route, timestamp);
       return normalizeTabsState({
         tabs: [...current.tabs, nextTab],
@@ -327,6 +396,7 @@ interface HoverPreviewState {
   anchorLeft: number;
   anchorRight: number;
   anchorBottom: number;
+  anchorWidth: number;
 }
 
 const HOVER_PREVIEW_DELAY_MS = 380;
@@ -337,11 +407,17 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   const [tabsMenuOpen, setTabsMenuOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [hoverPreview, setHoverPreview] = useState<HoverPreviewState | null>(null);
+  const [tabsOverflowing, setTabsOverflowing] = useState(false);
   const stripRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const hoverTimerRef = useRef<number | null>(null);
+  const dragSuppressClickRef = useRef(false);
+  const draggingTabIdRef = useRef<string | null>(null);
+  const dragHapticTargetRef = useRef<string | null>(null);
+  const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<TabDragTarget | null>(null);
 
   function clearHoverTimer() {
     if (hoverTimerRef.current !== null) {
@@ -359,6 +435,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
         anchorLeft: rect.left,
         anchorRight: rect.right,
         anchorBottom: rect.bottom,
+        anchorWidth: rect.width,
       });
     }, HOVER_PREVIEW_DELAY_MS);
   }
@@ -429,6 +506,33 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   useEffect(() => {
     const stripElement = stripRef.current;
     if (!stripElement) return;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      setTabsOverflowing(stripElement.scrollWidth > stripElement.clientWidth + 1);
+    };
+    const requestMeasure = () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(measure);
+    };
+    requestMeasure();
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(requestMeasure);
+    if (resizeObserver) {
+      resizeObserver.observe(stripElement);
+      Array.from(stripElement.children).forEach((child) => resizeObserver.observe(child));
+    }
+    window.addEventListener('resize', requestMeasure);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', requestMeasure);
+    };
+  }, [state.tabs.length]);
+
+  useEffect(() => {
+    const stripElement = stripRef.current;
+    if (!stripElement) return;
     const activeEl = stripElement.querySelector<HTMLElement>('.workspace-tab.is-active');
     if (!activeEl) return;
     if (typeof activeEl.scrollIntoView === 'function') {
@@ -481,7 +585,70 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
     };
   }, [tabsMenuOpen]);
 
-  function openTab(tab: WorkspaceChromeTab) {
+  useEffect(() => {
+    function onWorkspaceTabShortcut(event: KeyboardEvent) {
+      if (event.defaultPrevented) return;
+
+      const key = event.key;
+      const lowerKey = key.toLocaleLowerCase();
+      const primaryModifier = event.metaKey || event.ctrlKey;
+      const primaryWithoutAlt = primaryModifier && !event.altKey;
+      const ctrlWithoutPlatformModifiers = event.ctrlKey && !event.metaKey && !event.altKey;
+      const isBrowserStyleTabShortcut =
+        (primaryWithoutAlt && !event.shiftKey && (lowerKey === 't' || lowerKey === 'w'))
+        || (ctrlWithoutPlatformModifiers && key === 'Tab')
+        || (ctrlWithoutPlatformModifiers && !event.shiftKey && (key === 'PageDown' || key === 'PageUp'))
+        || (primaryWithoutAlt && !event.shiftKey && /^[1-9]$/u.test(key));
+
+      if (isBrowserStyleTabShortcut && shouldDeferShortcutToProjectWorkspace()) {
+        return;
+      }
+
+      if (primaryWithoutAlt && !event.shiftKey && lowerKey === 't') {
+        consumeWorkspaceTabShortcut(event);
+        createNewTab();
+        return;
+      }
+
+      if (primaryWithoutAlt && !event.shiftKey && lowerKey === 'w') {
+        consumeWorkspaceTabShortcut(event);
+        closeActiveTab();
+        return;
+      }
+
+      if (ctrlWithoutPlatformModifiers && key === 'Tab') {
+        consumeWorkspaceTabShortcut(event);
+        activateTabByOffset(event.shiftKey ? -1 : 1);
+        return;
+      }
+
+      if (ctrlWithoutPlatformModifiers && !event.shiftKey && key === 'PageDown') {
+        consumeWorkspaceTabShortcut(event);
+        activateTabByOffset(1);
+        return;
+      }
+
+      if (ctrlWithoutPlatformModifiers && !event.shiftKey && key === 'PageUp') {
+        consumeWorkspaceTabShortcut(event);
+        activateTabByOffset(-1);
+        return;
+      }
+
+      if (primaryWithoutAlt && !event.shiftKey && /^[1-9]$/u.test(key)) {
+        consumeWorkspaceTabShortcut(event);
+        const normalized = normalizeTabsState(state);
+        const targetIndex = key === '9'
+          ? normalized.tabs.length - 1
+          : Number(key) - 1;
+        activateTabByIndex(targetIndex);
+      }
+    }
+
+    window.addEventListener('keydown', onWorkspaceTabShortcut, true);
+    return () => window.removeEventListener('keydown', onWorkspaceTabShortcut, true);
+  }, [state]);
+
+  function activateTab(tab: WorkspaceChromeTab) {
     setState((current) => ({
       tabs: normalizeTabsState(current).tabs.map((item) =>
         item.id === tab.id ? { ...item, lastActiveAt: Date.now() } : item,
@@ -493,15 +660,44 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
     navigate(routeForTab(tab));
   }
 
+  function activateTabByOffset(offset: number) {
+    const normalized = normalizeTabsState(state);
+    if (normalized.tabs.length === 0) return;
+    const activeIndex = Math.max(
+      0,
+      normalized.tabs.findIndex((tab) => tab.id === normalized.activeTabId),
+    );
+    const targetIndex =
+      (activeIndex + offset + normalized.tabs.length) % normalized.tabs.length;
+    activateTab(normalized.tabs[targetIndex]!);
+  }
+
+  function activateTabByIndex(index: number) {
+    const normalized = normalizeTabsState(state);
+    if (index < 0 || index >= normalized.tabs.length) return;
+    activateTab(normalized.tabs[index]!);
+  }
+
+  function closeActiveTab() {
+    const normalized = normalizeTabsState(state);
+    closeTab(normalized.activeTabId);
+  }
+
+  function openTab(tab: WorkspaceChromeTab) {
+    if (dragSuppressClickRef.current) {
+      dragSuppressClickRef.current = false;
+      return;
+    }
+    activateTab(tab);
+  }
+
   function createNewTab() {
     const normalized = normalizeTabsState(state);
-    const existingHomeTab = normalized.tabs.find(
-      (tab) => tab.kind === 'entry' && tab.view === 'home',
-    );
-    if (existingHomeTab) {
+    const existingEntryTab = normalized.tabs.find((tab) => tab.kind === 'entry');
+    if (existingEntryTab) {
       setState({
         ...normalized,
-        activeTabId: existingHomeTab.id,
+        activeTabId: existingEntryTab.id,
       });
       navigate({ kind: 'home', view: 'home' });
     } else {
@@ -520,6 +716,10 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
     const normalized = normalizeTabsState(state);
     const closingIndex = normalized.tabs.findIndex((tab) => tab.id === tabId);
     if (closingIndex < 0) return;
+    // The single entry tab is permanent — never close it, whatever section
+    // (home / projects / design-systems / …) it currently shows.
+    const closingTab = normalized.tabs[closingIndex]!;
+    if (closingTab.kind === 'entry') return;
     let nextRoute: Route | null = null;
     const nextTabs = normalized.tabs.filter((tab) => tab.id !== tabId);
     let nextState: WorkspaceTabsState;
@@ -538,14 +738,137 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
     if (nextRoute) navigate(nextRoute);
   }
 
+  function reorderTab(sourceId: string, targetId: string, edge: TabDropEdge) {
+    dismissHoverPreview();
+    setTabsMenuOpen(false);
+    setState((current) => {
+      const normalized = normalizeTabsState(current);
+      const tabs = reorderTabsById(normalized.tabs, sourceId, targetId, edge);
+      if (tabs === normalized.tabs) return normalized;
+      // Re-normalize so the Home tab is re-pinned to the leftmost slot even when
+      // a drop would otherwise have placed a tab before it. Home is the one
+      // permanent, non-closable tab and must always sit first.
+      return normalizeTabsState({ ...normalized, tabs });
+    });
+  }
+
+  function findTabDropTarget(event: DragEvent<HTMLElement>, sourceId: string): TabDragTarget | null {
+    const strip = stripRef.current;
+    if (!strip) return null;
+
+    // The single entry tab is pinned leftmost: never expose a drop target that
+    // would place another tab before it. Coerce any 'before entry' edge to
+    // 'after entry' so the live drag indicator and persisted order keep it first.
+    const entryTabId = state.tabs.find((tab) => tab.kind === 'entry')?.id;
+    const resolveTarget = (target: TabDragTarget): TabDragTarget =>
+      target.tabId === entryTabId && target.edge === 'before'
+        ? { tabId: target.tabId, edge: 'after' }
+        : target;
+
+    const eventTarget = event.target;
+    if (eventTarget instanceof HTMLElement) {
+      const tabElement = eventTarget.closest<HTMLElement>('[data-workspace-tab-id]');
+      if (tabElement && strip.contains(tabElement)) {
+        const tabId = tabElement.dataset.workspaceTabId;
+        if (tabId && tabId !== sourceId) {
+          return resolveTarget({ tabId, edge: tabDropEdgeFromElement(event, tabElement) });
+        }
+      }
+    }
+
+    let lastTarget: TabDragTarget | null = null;
+    for (const tabElement of strip.querySelectorAll<HTMLElement>('[data-workspace-tab-id]')) {
+      const tabId = tabElement.dataset.workspaceTabId;
+      if (!tabId || tabId === sourceId) continue;
+      const rect = tabElement.getBoundingClientRect();
+      if (event.clientX <= rect.left + rect.width / 2) return resolveTarget({ tabId, edge: 'before' });
+      if (event.clientX <= rect.right) return resolveTarget({ tabId, edge: 'after' });
+      lastTarget = { tabId, edge: 'after' };
+    }
+    return lastTarget;
+  }
+
+  function handleTabDragStart(tabId: string, event: DragEvent<HTMLDivElement>) {
+    const target = event.target;
+    if (target instanceof HTMLElement && target.closest('.workspace-tab__close')) {
+      event.preventDefault();
+      return;
+    }
+    dismissHoverPreview();
+    dragSuppressClickRef.current = true;
+    draggingTabIdRef.current = tabId;
+    dragHapticTargetRef.current = `${tabId}:self`;
+    setDragOverTarget(null);
+    setDraggingTabId(tabId);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', tabId);
+    pulseTabDragHaptic();
+  }
+
+  function handleStripDragOver(event: DragEvent<HTMLDivElement>) {
+    const sourceId = draggingTabIdRef.current ?? event.dataTransfer.getData('text/plain');
+    if (!sourceId) return;
+    const target = findTabDropTarget(event, sourceId);
+    if (!target) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    const targetKey = tabDragTargetKey(target);
+    setDragOverTarget((current) =>
+      current && tabDragTargetKey(current) === targetKey ? current : target,
+    );
+    if (dragHapticTargetRef.current !== targetKey) {
+      dragHapticTargetRef.current = targetKey;
+      pulseTabDragHaptic();
+    }
+    reorderTab(sourceId, target.tabId, target.edge);
+  }
+
+  function handleStripDrop(event: DragEvent<HTMLDivElement>) {
+    const sourceId = draggingTabIdRef.current ?? event.dataTransfer.getData('text/plain');
+    if (sourceId) {
+      event.preventDefault();
+    }
+    const target = sourceId ? findTabDropTarget(event, sourceId) : null;
+    if (sourceId && target) {
+      reorderTab(sourceId, target.tabId, target.edge);
+      pulseTabDragHaptic(TAB_DROP_HAPTIC_MS);
+    }
+    draggingTabIdRef.current = null;
+    dragHapticTargetRef.current = null;
+    setDragOverTarget(null);
+    setDraggingTabId(null);
+    window.setTimeout(() => {
+      dragSuppressClickRef.current = false;
+    }, 0);
+  }
+
+  function handleStripDragLeave(event: DragEvent<HTMLDivElement>) {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+    setDragOverTarget(null);
+  }
+
+  function handleTabDragEnd() {
+    draggingTabIdRef.current = null;
+    dragHapticTargetRef.current = null;
+    setDragOverTarget(null);
+    setDraggingTabId(null);
+    window.setTimeout(() => {
+      dragSuppressClickRef.current = false;
+    }, 0);
+  }
+
   return (
     <header className="app-chrome-header workspace-tabs-chrome" aria-label="Workspace tabs">
       <div className="app-chrome-traffic-space workspace-tabs-traffic" aria-hidden />
       <div
-        className="workspace-tabs-strip"
+        className={`workspace-tabs-strip${tabsOverflowing ? ' is-overflowing' : ''}`}
         role="tablist"
         aria-label="Open workspaces"
         ref={stripRef}
+        onDragOver={handleStripDragOver}
+        onDrop={handleStripDrop}
+        onDragLeave={handleStripDragLeave}
       >
         {/* Render every open tab — the strip itself scrolls horizontally
             when the tabs exceed the available chrome width. Previous
@@ -557,20 +880,34 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
         {state.tabs.map((tab) => {
           const display = displayTabById.get(tab.id) ?? displayTabFor(tab, projectById, t);
           const active = tab.id === state.activeTabId;
+          // The single entry tab is permanent and pinned leftmost: it cannot be
+          // closed or dragged out of the first slot, whatever section it shows.
+          const isPinned = tab.kind === 'entry';
+          const dragOverClass =
+            dragOverTarget?.tabId === tab.id && draggingTabId !== tab.id
+              ? ` is-drag-over-${dragOverTarget.edge}`
+              : '';
           return (
             <div
               key={tab.id}
-              className={`workspace-tab${active ? ' is-active' : ''}`}
+              className={`workspace-tab${active ? ' is-active' : ''}${isPinned ? ' is-pinned' : ''}${draggingTabId === tab.id ? ' is-dragging' : ''}${dragOverClass}`}
+              data-workspace-tab-id={tab.id}
               role="tab"
               aria-selected={active}
               aria-describedby={hoverPreview?.tabId === tab.id ? 'workspace-tab-preview' : undefined}
+              draggable={!isPinned && state.tabs.length > 1}
+              onDragStart={(event) => handleTabDragStart(tab.id, event)}
+              onDragEnd={handleTabDragEnd}
               onMouseEnter={(event) => scheduleHoverPreview(tab.id, event.currentTarget)}
               onMouseLeave={dismissHoverPreview}
             >
               <button
                 type="button"
-                className="workspace-tab__main"
+                className="workspace-tab__main od-tooltip"
                 onClick={() => openTab(tab)}
+                title={display.title}
+                data-tooltip={display.title}
+                data-tooltip-placement="bottom"
                 onFocus={(event) => scheduleHoverPreview(tab.id, event.currentTarget.parentElement ?? event.currentTarget)}
                 onBlur={dismissHoverPreview}
               >
@@ -579,33 +916,42 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                 </span>
                 <span className="workspace-tab__label">{display.title}</span>
               </button>
-              <button
-                type="button"
-                className="workspace-tab__close"
-                aria-label={t('common.close')}
-                onClick={() => closeTab(tab.id)}
-              >
-                <Icon name="close" size={10} />
-              </button>
+              {isPinned ? null : (
+                <button
+                  type="button"
+                  className="workspace-tab__close od-tooltip"
+                  aria-label={t('common.close')}
+                  title={t('common.close')}
+                  data-tooltip={t('common.close')}
+                  data-tooltip-placement="bottom"
+                  onClick={() => closeTab(tab.id)}
+                >
+                  <Icon name="close" size={10} />
+                </button>
+              )}
             </div>
           );
         })}
-      </div>
-      <div className="workspace-tabs-actions" ref={menuRef}>
         <button
           type="button"
-          className="workspace-tabs-new-btn"
+          className="workspace-tabs-new-btn od-tooltip"
           onClick={createNewTab}
           title="New tab"
+          data-tooltip="New tab"
+          data-tooltip-placement="bottom"
           aria-label="New tab"
         >
           <Icon name="plus" size={14} />
         </button>
+      </div>
+      <div className="workspace-tabs-actions" ref={menuRef}>
         <button
           type="button"
-          className={`workspace-tabs-icon-btn${tabsMenuOpen ? ' is-active' : ''}`}
+          className={`workspace-tabs-icon-btn od-tooltip${tabsMenuOpen ? ' is-active' : ''}`}
           onClick={() => setTabsMenuOpen((open) => !open)}
           title="Search tabs"
+          data-tooltip="Search tabs"
+          data-tooltip-placement="bottom"
           aria-label="Search tabs"
           aria-haspopup="dialog"
           aria-expanded={tabsMenuOpen}
@@ -647,8 +993,11 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                         >
                           <button
                             type="button"
-                            className="workspace-tabs-list__main"
+                            className="workspace-tabs-list__main od-tooltip"
                             onClick={() => openTab(display.tab)}
+                            title={display.title}
+                            data-tooltip={display.title}
+                            data-tooltip-placement="right"
                           >
                             <span className="workspace-tabs-list__icon" aria-hidden>
                               <Icon name={display.icon} size={15} />
@@ -658,15 +1007,19 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                               <span className="workspace-tabs-list__meta">{display.meta}</span>
                             </span>
                           </button>
-                          <button
-                            type="button"
-                            className="workspace-tabs-list__close"
-                            onClick={() => closeTab(display.id)}
-                            title={t('common.close')}
-                            aria-label={t('common.close')}
-                          >
-                            <Icon name="close" size={11} />
-                          </button>
+                          {display.tab.kind === 'entry' ? null : (
+                            <button
+                              type="button"
+                              className="workspace-tabs-list__close od-tooltip"
+                              onClick={() => closeTab(display.id)}
+                              title={t('common.close')}
+                              data-tooltip={t('common.close')}
+                              data-tooltip-placement="left"
+                              aria-label={t('common.close')}
+                            >
+                              <Icon name="close" size={11} />
+                            </button>
+                          )}
                         </div>
                       );
                     })
@@ -687,12 +1040,11 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
               const previewDisplay = displayTabById.get(previewTab.id)
                 ?? displayTabFor(previewTab, projectById, t);
               const previewDetail = describePreviewDetail(previewTab, projectById);
-              const previewWidth = 240;
-              const anchorCenter = (hoverPreview.anchorLeft + hoverPreview.anchorRight) / 2;
+              const previewWidth = Math.max(1, Math.round(hoverPreview.anchorWidth));
               const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
               const left = Math.max(
-                10,
-                Math.min(viewportWidth - previewWidth - 10, anchorCenter - previewWidth / 2),
+                0,
+                Math.min(viewportWidth - previewWidth, hoverPreview.anchorLeft),
               );
               return (
                 <div

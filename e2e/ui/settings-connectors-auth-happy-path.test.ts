@@ -2,7 +2,8 @@ import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
+const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
+const SETTINGS_MENU_LABEL = /Settings|设置|設定/i;
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -75,6 +76,10 @@ async function gotoEntryHome(page: Page) {
 async function openSettingsDialogFromEntry(page: Page) {
   await waitForLoadingToClear(page);
   await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
+  const menu = page.getByRole('menu');
+  if (await menu.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await menu.getByRole('menuitem', { name: SETTINGS_MENU_LABEL }).click();
+  }
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   return dialog;
@@ -252,7 +257,7 @@ async function openConnectorsSettings(
 }
 
 test.describe('Settings connectors auth happy path', () => {
-  test('shows an inline connector error when connect fails', async ({ page }) => {
+  test('[P0] shows an inline connector error when connect fails', async ({ page }) => {
     const dialog = await openConnectorsSettings(page, {
       onConnect: () => ({
         status: 500,
@@ -269,7 +274,7 @@ test.describe('Settings connectors auth happy path', () => {
     await expect(githubCard.getByRole('button', { name: 'Connect' })).toBeVisible();
   });
 
-  test('clears the inline error when the user retries and the connector succeeds', async ({ page }) => {
+  test('[P0] clears the inline error when the user retries and the connector succeeds', async ({ page }) => {
     let connectAttempts = 0;
     const dialog = await openConnectorsSettings(page, {
       onConnect: () => {
@@ -308,7 +313,7 @@ test.describe('Settings connectors auth happy path', () => {
     await expect(dialog.getByText('Composio provider is not configured')).toHaveCount(0);
   });
 
-  test('switches from Connect to Disconnect on success, then returns to Connect after a successful disconnect', async ({ page }) => {
+  test('[P0] switches from Connect to Disconnect on success, then returns to Connect after a successful disconnect', async ({ page }) => {
     let disconnectRequests = 0;
     const dialog = await openConnectorsSettings(page, {
       onConnect: () => ({
@@ -348,7 +353,7 @@ test.describe('Settings connectors auth happy path', () => {
     await expect(githubCard.getByRole('button', { name: 'Disconnect' })).toHaveCount(0);
   });
 
-  test('disconnecting and reconnecting keeps the connector usable without stale pending state', async ({ page }) => {
+  test('[P0] disconnecting and reconnecting keeps the connector usable without stale pending state', async ({ page }) => {
     let connectAttempts = 0;
     let disconnectRequests = 0;
     const dialog = await openConnectorsSettings(page, {

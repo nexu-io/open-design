@@ -92,7 +92,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     bullets: [
       '`od` (no args) — boots the daemon and opens the web UI.',
       '`od media generate ...` — produce image / video / audio bytes through the unified media protocol.',
-      '`od run ...` — start a project run from a prompt + skill.',
+      '`od project create` + `od run start` — create a project, send a message, and stream the run.',
       '`od plugin install <source>` / `od plugin apply <id>` — install and apply community plugins.',
       '`od skills list` / `od design-systems list` — inspect what is available locally.',
       '`od status` / `od doctor` — verify daemon health and detect agent CLIs on your PATH.',
@@ -110,13 +110,62 @@ export const GUIDE_SECTIONS: GuideSection[] = [
           '  --output ./out/hero.png',
       },
       {
-        label: 'Run a scenario plugin headlessly and stream events as JSON lines',
+        label: 'Use the CLI from a source checkout',
         language: 'bash',
         body:
-          'od run \\\n' +
+          'corepack enable\n' +
+          'pnpm install\n' +
+          'pnpm --filter @open-design/daemon build\n' +
+          '\n' +
+          'export OD_NODE_BIN="${OD_NODE_BIN:-/opt/homebrew/opt/node@24/bin/node}"\n' +
+          'export OD_BIN="$PWD/apps/daemon/dist/cli.js"\n' +
+          '"$OD_NODE_BIN" "$OD_BIN" daemon start --headless --serve-web --port 7456',
+      },
+      {
+        label: 'Run a design project headlessly and stream events',
+        language: 'bash',
+        body:
+          'DAEMON_URL=${DAEMON_URL:-http://127.0.0.1:7456}\n' +
+          'PROJECT_JSON=$(od project create \\\n' +
+          '  --name "Investor pitch" \\\n' +
+          '  --skill frontend-design \\\n' +
+          '  --design-system clean \\\n' +
+          '  --json \\\n' +
+          '  --daemon-url "$DAEMON_URL")\n' +
+          'PROJECT_ID=$(jq -r \'.project.id\' <<<"$PROJECT_JSON")\n' +
+          'CONVERSATION_ID=$(jq -r \'.conversationId\' <<<"$PROJECT_JSON")\n' +
+          '\n' +
+          'od run start \\\n' +
+          '  --project "$PROJECT_ID" \\\n' +
+          '  --conversation "$CONVERSATION_ID" \\\n' +
           '  --plugin od-new-generation \\\n' +
-          "  --prompt 'A 10-slide investor pitch for a SaaS for design teams' \\\n" +
-          '  --json --follow',
+          '  --agent codex \\\n' +
+          "  --message 'A 10-slide investor pitch for a SaaS for design teams' \\\n" +
+          '  --daemon-url "$DAEMON_URL" \\\n' +
+          '  --follow',
+      },
+      {
+        label: 'Answer a discovery question form from the CLI',
+        language: 'bash',
+        body:
+          'od run start \\\n' +
+          '  --project "$PROJECT_ID" \\\n' +
+          '  --conversation "$CONVERSATION_ID" \\\n' +
+          '  --agent codex \\\n' +
+          '  --message "[form answers - discovery]\n' +
+          '- Audience: Seed-stage investors\n' +
+          '- Format: 10-slide pitch deck\n' +
+          '- Tone: Confident, concise, product-led\n' +
+          '- Constraints: Use clean visuals and include traction placeholders" \\\n' +
+          '  --daemon-url "$DAEMON_URL" \\\n' +
+          '  --follow',
+      },
+      {
+        label: 'Verify generated files after the stream completes',
+        language: 'bash',
+        body:
+          'od files list "$PROJECT_ID" --daemon-url "$DAEMON_URL" --json\n' +
+          'od files read "$PROJECT_ID" index.html --daemon-url "$DAEMON_URL" | head',
       },
       {
         label: 'Inventory locally available skills and design systems',
@@ -140,7 +189,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     footer:
       'All subcommands accept `--daemon-url http://127.0.0.1:<port>` to ' +
       'target a specific running daemon — useful when running a sandboxed ' +
-      'second instance for tests.',
+      'second instance for tests. From a source checkout, replace `od` with ' +
+      '`"$OD_NODE_BIN" "$OD_BIN"` after exporting those variables.',
   },
   {
     id: 'mcp',

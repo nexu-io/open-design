@@ -269,6 +269,7 @@ test('conversation listing batches latest run summaries for large projects', () 
   assert.equal(preparedSql.length, 1);
   assert.equal(conversations[0]?.latestRun?.status, 'failed');
   assert.equal(conversations[0]?.latestRun?.durationMs, 75);
+  assert.equal(conversations[0]?.messageCount, 2);
 });
 
 test('only succeeded statuses are overridden by awaiting input', () => {

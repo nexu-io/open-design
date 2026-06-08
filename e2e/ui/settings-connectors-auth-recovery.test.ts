@@ -2,7 +2,8 @@ import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
+const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
+const SETTINGS_MENU_LABEL = /Settings|设置|設定/i;
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -96,6 +97,10 @@ async function gotoEntryHome(page: Page) {
 async function openSettingsDialogFromEntry(page: Page) {
   await waitForLoadingToClear(page);
   await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
+  const menu = page.getByRole('menu');
+  if (await menu.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await menu.getByRole('menuitem', { name: SETTINGS_MENU_LABEL }).click();
+  }
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   return dialog;
@@ -257,7 +262,7 @@ async function openConnectorsSettings(
 }
 
 test.describe('Settings connectors auth recovery', () => {
-  test('keeps a pending authorization visible when the connector enters authorization-pending state', async ({ page }) => {
+  test('[P0] keeps a pending authorization visible when the connector enters authorization-pending state', async ({ page }) => {
     const { dialog } = await openConnectorsSettings(page, {
       pendingAuthorization: pendingAuthorizationStorage(),
     });
@@ -277,7 +282,7 @@ test.describe('Settings connectors auth recovery', () => {
   });
 
 
-  test('shows a continue-in-browser CTA for pending authorizations that include a redirect URL', async ({ page }) => {
+  test('[P0] shows a continue-in-browser CTA for pending authorizations that include a redirect URL', async ({ page }) => {
     const { dialog } = await openConnectorsSettings(page, {
       pendingAuthorization: {
         github: {
@@ -292,7 +297,7 @@ test.describe('Settings connectors auth recovery', () => {
     await expect(githubCard.getByRole('button', { name: 'Continue in browser' })).toBeVisible();
   });
 
-  test('settles a pending authorization into Disconnect when status polling reports the connector as connected', async ({ page }) => {
+  test('[P0] settles a pending authorization into Disconnect when status polling reports the connector as connected', async ({ page }) => {
     let statusRequests = 0;
     const { dialog } = await openConnectorsSettings(page, {
       pendingAuthorization: pendingAuthorizationStorage(),
@@ -321,7 +326,7 @@ test.describe('Settings connectors auth recovery', () => {
       .toBe(null);
   });
 
-  test('returns a pending authorization to Connect and clears session storage after a successful cancel', async ({ page }) => {
+  test('[P0] returns a pending authorization to Connect and clears session storage after a successful cancel', async ({ page }) => {
     const { dialog } = await openConnectorsSettings(page, {
       pendingAuthorization: pendingAuthorizationStorage(),
       onCancel: () => ({
@@ -351,7 +356,7 @@ test.describe('Settings connectors auth recovery', () => {
   });
 
 
-  test('surfaces a connector error state when credentials have degraded', async ({ page }) => {
+  test('[P0] surfaces a connector error state when credentials have degraded', async ({ page }) => {
     const githubConnector = CONNECTORS[0];
     const slackConnector = CONNECTORS[1];
     if (!githubConnector || !slackConnector) throw new Error('missing connector fixtures');

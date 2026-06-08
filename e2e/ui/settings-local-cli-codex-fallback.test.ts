@@ -3,8 +3,8 @@ import type { Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
 const LOCALE_KEY = 'open-design:locale';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
-const SETTINGS_MENU_LABEL = /^Settings$|^设置$|^設定$/i;
+const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
+const SETTINGS_MENU_LABEL = /Settings|设置|設定/i;
 const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 
 test.describe.configure({ timeout: 30_000 });
@@ -155,13 +155,20 @@ async function openLocalCliSettings(
   });
 
   await gotoEntryHome(page);
-  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
+  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).first().click();
+  const dialog = page.getByRole('dialog');
   const menu = page.getByRole('menu');
+  await expect
+    .poll(async () => {
+      if (await dialog.isVisible().catch(() => false)) return 'dialog';
+      if (await menu.isVisible().catch(() => false)) return 'menu';
+      return 'pending';
+    })
+    .not.toBe('pending');
   if (await menu.isVisible().catch(() => false)) {
-    await menu.getByRole('button', { name: SETTINGS_MENU_LABEL }).click();
+    await menu.getByRole('menuitem', { name: SETTINGS_MENU_LABEL }).click();
   }
 
-  const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
   const codexCard = dialog.getByRole('button', { name: /Codex CLI/i });
@@ -177,7 +184,7 @@ async function openLocalCliSettings(
 }
 
 test.describe('Settings Local CLI Codex fallback UX', () => {
-  test('shows fallback repair actions and can replace the saved path with the detected Codex binary', async ({ page }) => {
+  test('[P0] shows fallback repair actions and can replace the saved path with the detected Codex binary', async ({ page }) => {
     const configuredPath = '/bad/codex';
     const detectedPath = '/usr/local/bin/codex';
     let lastRequest: Record<string, unknown> | null = null;
@@ -238,7 +245,7 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
     await expect(dialog.getByRole('button', { name: 'Use detected Codex' })).toHaveCount(0);
   });
 
-  test('can clear an unusable custom Codex path after a fallback_failed test result', async ({ page }) => {
+  test('[P0] can clear an unusable custom Codex path after a fallback_failed test result', async ({ page }) => {
     const configuredPath = '/Applications/Codex.app/Contents/Resources/codex';
     const detectedPath = '/opt/homebrew/bin/codex';
 

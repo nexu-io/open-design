@@ -1,5 +1,5 @@
 import type { InputFieldSpec, ProjectKind } from '@open-design/contracts';
-import type { AudioKind, MediaAspect, ProjectMetadata, PromptTemplateSummary } from '../../types';
+import type { AudioKind, ProjectMetadata, PromptTemplateSummary } from '../../types';
 import {
   AUDIO_DURATIONS_SEC,
   AUDIO_MODELS_BY_KIND,
@@ -8,6 +8,7 @@ import {
   DEFAULT_VIDEO_MODEL,
   IMAGE_MODELS,
   MEDIA_ASPECTS,
+  type MediaModel,
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
 } from '../../media/models';
@@ -48,8 +49,13 @@ export function buildHomeMediaComposer(
   promptTemplates: PromptTemplateSummary[],
   seedInputs: Record<string, unknown> = {},
   voiceOptions: Array<{ voiceId: string; name: string }> = [],
-  options: { elevenLabsVoiceWarning?: string | null; elevenLabsVoicesLoading?: boolean } = {},
+  options: {
+    elevenLabsVoiceWarning?: string | null;
+    elevenLabsVoicesLoading?: boolean;
+    imageModels?: MediaModel[];
+  } = {},
 ): HomeMediaComposerState {
+  const imageModels = options.imageModels ?? IMAGE_MODELS;
   const inputs = normalizeHomeMediaInputs(
     surface,
     {
@@ -58,8 +64,9 @@ export function buildHomeMediaComposer(
     },
     promptTemplates,
     voiceOptions,
+    imageModels,
   );
-  const fields = fieldsForSurface(surface, inputs, voiceOptions, options);
+  const fields = fieldsForSurface(surface, inputs, voiceOptions, options, imageModels);
   const editableFieldNames = fields.map((field) => field.name);
   const queryTemplate = queryTemplateForSurface(surface, inputs);
   return {
@@ -77,6 +84,7 @@ export function normalizeHomeMediaInputs(
   raw: Record<string, unknown>,
   promptTemplates: PromptTemplateSummary[] = [],
   voiceOptions: Array<{ voiceId: string; name: string }> = [],
+  imageModels: MediaModel[] = IMAGE_MODELS,
 ): Record<string, unknown> {
   if (surface === 'image') {
     const ratio = validOption(stringValue(raw.ratio) || stringValue(raw.aspect), MEDIA_ASPECTS, '16:9');
@@ -87,7 +95,7 @@ export function normalizeHomeMediaInputs(
       aspect: ratio,
       template: validTemplateId(surface, stringValue(raw.template), promptTemplates),
       designSystem: stringValue(raw.designSystem) || 'the active project design system',
-      model: validOption(stringValue(raw.model), IMAGE_MODELS.map((m) => m.id), DEFAULT_IMAGE_MODEL),
+      model: validOption(stringValue(raw.model), imageModels.map((m) => m.id), DEFAULT_IMAGE_MODEL),
       ratio,
       resolution: validOption(stringValue(raw.resolution), MEDIA_RESOLUTIONS, DEFAULT_MEDIA_RESOLUTION),
     };
@@ -174,33 +182,26 @@ export function metadataForHomeMediaComposer(
       }
     : undefined;
 
+  // Media surfaces no longer seed ratio / duration / model / audio kind from
+  // the composer footer — those are asked for by the agent during the run
+  // (system.ts prints "(unknown — ask: …)" when a field is unset). We only
+  // seed `kind` (+ the hyperframes route discriminator) and any picked prompt
+  // template, mirroring how prototype/deck defer their settings.
   if (surface === 'image') {
     return {
       kind: 'image',
-      imageModel: stringValue(inputs.model) || DEFAULT_IMAGE_MODEL,
-      imageAspect: (stringValue(inputs.ratio) || '16:9') as MediaAspect,
       ...(promptTemplate ? { promptTemplate } : {}),
     };
   }
   if (surface === 'video' || surface === 'hyperframes') {
     return {
       kind: 'video',
-      videoModel: surface === 'hyperframes' ? 'hyperframes-html' : stringValue(inputs.model) || DEFAULT_VIDEO_MODEL,
-      videoAspect: (stringValue(inputs.ratio) || '16:9') as MediaAspect,
-      videoLength: validNumber(inputs.duration, VIDEO_LENGTHS_SEC, surface === 'hyperframes' ? 10 : 5),
+      ...(surface === 'hyperframes' ? { videoModel: 'hyperframes-html' as const } : {}),
       ...(promptTemplate ? { promptTemplate } : {}),
     };
   }
-  const audioKind = (stringValue(inputs.audioType) || 'speech') as AudioKind;
-  const audioModel = stringValue(inputs.model) || defaultHomeAudioModel(audioKind);
   return {
     kind: 'audio',
-    audioKind,
-    audioModel,
-    audioDuration: validAudioDuration(audioKind, inputs.duration),
-    ...(audioModel === 'elevenlabs-v3' && stringValue(inputs.voice)
-      ? { voice: stringValue(inputs.voice) }
-      : {}),
   };
 }
 
@@ -229,11 +230,12 @@ function fieldsForSurface(
   inputs: Record<string, unknown>,
   voiceOptions: Array<{ voiceId: string; name: string }>,
   options: { elevenLabsVoiceWarning?: string | null; elevenLabsVoicesLoading?: boolean },
+  imageModels: MediaModel[] = IMAGE_MODELS,
 ): InputFieldSpec[] {
   if (surface === 'image') {
     return [
       stringField('designSystem', 'Design system', 'Design system'),
-      selectField('model', 'Model', IMAGE_MODELS.map((m) => m.id), modelLabels(IMAGE_MODELS)),
+      selectField('model', 'Model', imageModels.map((m) => m.id), modelLabels(imageModels)),
       selectField('ratio', 'Ratio', MEDIA_ASPECTS),
       selectField('resolution', 'Resolution', MEDIA_RESOLUTIONS, MEDIA_RESOLUTION_LABELS),
     ];
@@ -283,21 +285,21 @@ function fieldsForSurface(
 }
 
 function queryTemplateForSurface(surface: HomeComposerMediaSurface, inputs: Record<string, unknown>): string {
+  // No ratio / duration / model / resolution / voice slots — those are asked
+  // for by the agent during the run rather than baked into the prompt body.
   if (surface === 'image') {
-    return 'Create a premium product-studio image using {{designSystem}}: elegant composition, refined lighting, restrained color, rich material detail, and commercial campaign-level polish. Render with {{model}} at {{ratio}} in {{resolution}} resolution.';
+    return 'Create a premium product-studio image using {{designSystem}}: elegant composition, refined lighting, restrained color, rich material detail, and commercial campaign-level polish.';
   }
   if (surface === 'video') {
-    return 'Create a premium product-studio video using {{designSystem}}: cinematic product pacing, elegant motion, refined lighting, and a polished launch-film feel. Render with {{model}} at {{ratio}} for {{duration}} seconds in {{resolution}} resolution.';
+    return 'Create a premium product-studio video using {{designSystem}}: cinematic product pacing, elegant motion, refined lighting, and a polished launch-film feel.';
   }
   if (surface === 'hyperframes') {
-    return 'Create a premium product-studio HyperFrames video at {{ratio}} for {{duration}} seconds: refined kinetic typography, elegant transitions, restrained motion language, and studio-grade timing.';
+    return 'Create a premium product-studio HyperFrames video: refined kinetic typography, elegant transitions, restrained motion language, and studio-grade timing.';
   }
   if (stringValue(inputs.audioType) === 'sfx') {
-    return 'Create premium product-studio audio from {{prompt}} using {{model}} for {{duration}} seconds: crisp, elegant, memorable, and brand-ready.';
+    return 'Create premium product-studio audio from {{prompt}}: crisp, elegant, memorable, and brand-ready.';
   }
-  return stringValue(inputs.model) === 'elevenlabs-v3'
-    ? 'Create premium product-studio audio from {{text}} using {{model}} for {{duration}} seconds with {{voice}}: polished, restrained, clear, and brand-ready.'
-    : 'Create premium product-studio audio from {{text}} using {{model}} for {{duration}} seconds: polished, restrained, clear, and brand-ready.';
+  return 'Create premium product-studio audio from {{text}}: polished, restrained, clear, and brand-ready.';
 }
 
 function defaultInputsForSurface(
@@ -429,7 +431,7 @@ function validAudioDuration(kind: AudioKind, raw: unknown): number {
 
 function homeAudioModels(kind: AudioKind) {
   if (kind === 'music') return [];
-  const runnableProviders = new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine']);
+  const runnableProviders = new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']);
   return AUDIO_MODELS_BY_KIND[kind].filter((model) => runnableProviders.has(model.provider));
 }
 
