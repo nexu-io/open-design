@@ -1489,8 +1489,51 @@ export interface ArtifactHeaderClickProps {
     | 'back'
     | 'edit'
     | 'present_dropdown'
+    // `download_dropdown` distinguishes the Download split button from the
+    // Share button; before, both reported `share_dropdown` and were
+    // indistinguishable in the funnel.
+    | 'download_dropdown'
     | 'share_dropdown'
     | 'settings';
+  artifact_id?: string;
+  artifact_kind?: TrackingArtifactKind;
+}
+
+// Hand-off button in the workspace header (open the project folder in a local
+// editor, or copy a hand-off prompt for a code-agent CLI). Lives under
+// `page_name=artifact` / `area=handoff` so it sits next to the other header
+// actions (present/share/download/settings) in the funnel.
+export interface HandoffClickProps {
+  page_name: 'artifact';
+  area: 'handoff';
+  element:
+    // Primary split button — launches the preferred editor, or toggles the
+    // picker when there is no preferred target yet.
+    | 'trigger'
+    // Caret next to the primary button — toggles the picker menu.
+    | 'caret'
+    // Switch between the Editor and CLI tabs inside the picker.
+    | 'tab'
+    // Choose a target framework chip for the CLI hand-off prompt.
+    | 'framework'
+    // Copy the absolute project path.
+    | 'copy_path'
+    // Launch a specific editor target (or the Finder/Explorer fallback).
+    | 'open_editor'
+    // Copy the hand-off prompt for a specific CLI agent.
+    | 'copy_cli_prompt'
+    // Open the Open Design AMR website link.
+    | 'amr_website';
+  // Bounded enum id of the editor / CLI target, present for `open_editor`,
+  // `copy_cli_prompt`, and for `trigger` when it directly launches the
+  // preferred editor. Never a free path or display name.
+  target_id?: string;
+  // Whether the chosen editor / CLI target was detected as installed.
+  target_available?: boolean;
+  // Which hand-off tab the click relates to (tab switches and CLI copies).
+  handoff_tab?: 'editor' | 'cli';
+  // Selected framework id for CLI prompt copies / framework chip selection.
+  framework?: 'react' | 'vue' | 'svelte' | 'solid' | 'next' | 'vanilla';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
 }
@@ -1752,6 +1795,7 @@ export type UiClickProps =
   | TweaksPopoverClickProps
   | CommentPopoverClickProps
   | ArtifactHeaderClickProps
+  | HandoffClickProps
   | PresentPopoverClickProps
   | ShareOptionPopoverClickProps
   | AssistantFeedbackButtonClickProps

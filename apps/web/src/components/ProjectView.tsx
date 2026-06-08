@@ -67,6 +67,7 @@ import type {
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
+  trackArtifactHeaderClick,
   trackDesignSystemApplyResult,
   trackPageView,
 } from '../analytics/events';
@@ -5689,6 +5690,14 @@ export function ProjectView({
                 config={config}
                 onThemeChange={handleThemeChange}
                 onOpenSettings={onOpenSettings}
+                onTrackTriggerClick={() => {
+                  // Spec row 52: the settings gear in the artifact header.
+                  trackArtifactHeaderClick(analytics.track, {
+                    page_name: 'artifact',
+                    area: 'artifact_header',
+                    element: 'settings',
+                  });
+                }}
               />
               <HandoffButton
                 projectId={project.id}

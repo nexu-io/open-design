@@ -10,6 +10,8 @@ import type {
   HostEditorsResponse,
 } from '@open-design/contracts';
 import { fetchHostEditors, openProjectInEditor } from '../providers/registry';
+import { useAnalytics } from '../analytics/provider';
+import { trackHandoffClick } from '../analytics/events';
 import { useT } from '../i18n';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { Icon } from './Icon';
@@ -280,6 +282,18 @@ export function HandoffButton({
   onRequestRevealInFinder,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
+  // One-liner so every hand-off interaction emits the same
+  // `ui_click` / `area=handoff` shape; callers pass only what varies.
+  const fireHandoff = (
+    props: Omit<Parameters<typeof trackHandoffClick>[1], 'page_name' | 'area'>,
+  ) => {
+    trackHandoffClick(analytics.track, {
+      page_name: 'artifact',
+      area: 'handoff',
+      ...props,
+    });
+  };
   const [editors, setEditors] = useState<HostEditor[]>([]);
   const [platform, setPlatform] = useState<HostEditorsResponse['platform']>('unknown');
   const [loaded, setLoaded] = useState(false);
@@ -352,6 +366,12 @@ export function HandoffButton({
     FRAMEWORKS.find((framework) => framework.id === frameworkId) ?? DEFAULT_FRAMEWORK;
 
   async function launch(editor: HostEditor) {
+    fireHandoff({
+      element: 'open_editor',
+      target_id: editor.id,
+      target_available: editor.available,
+      handoff_tab: 'editor',
+    });
     if (!editor.available) {
       // Still try — the user might have an unprobed path (e.g. macOS
       // bundle in /Applications). The daemon will return 409 if it
@@ -383,6 +403,13 @@ export function HandoffButton({
   }
 
   async function copyCliPrompt(cli: CliTarget) {
+    fireHandoff({
+      element: 'copy_cli_prompt',
+      target_id: cli.id,
+      target_available: cli.available,
+      handoff_tab: 'cli',
+      framework: selectedFramework.id,
+    });
     if (!projectDir) {
       setError(t('handoff.projectPathUnavailable'));
       return;
@@ -431,6 +458,7 @@ export function HandoffButton({
   }
 
   async function copyProjectPath() {
+    fireHandoff({ element: 'copy_path' });
     if (!projectDir) {
       setError(t('handoff.projectPathUnavailable'));
       return;
@@ -457,6 +485,7 @@ export function HandoffButton({
   }
 
   function chooseFramework(id: FrameworkId) {
+    fireHandoff({ element: 'framework', framework: id, handoff_tab: 'cli' });
     setFrameworkId(id);
     writePreferredFramework(id);
     setError(null);
@@ -497,6 +526,12 @@ export function HandoffButton({
             // open-in catalogue (open / explorer / xdg-open), so this performs a
             // genuine reveal rather than a no-op; the renderer reveal bridge is a
             // secondary fallback if the daemon spawn fails.
+            fireHandoff({
+              element: 'open_editor',
+              target_id: fallbackId,
+              target_available: false,
+              handoff_tab: 'editor',
+            });
             setError(null);
             setBusy(fallbackId);
             void openProjectInEditor(projectId, fallbackId)
@@ -540,8 +575,10 @@ export function HandoffButton({
           aria-label={primaryTitle}
           onClick={() => {
             if (primary && busy !== primary.id) {
+              // launch() emits the `open_editor` ui_click itself.
               void launch(primary);
             } else {
+              fireHandoff({ element: 'trigger' });
               setOpen((v) => !v);
             }
           }}
@@ -569,7 +606,10 @@ export function HandoffButton({
           data-tooltip={t('handoff.chooseTargetAria')}
           data-tooltip-placement="bottom"
           data-testid="handoff-caret"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => {
+            fireHandoff({ element: 'caret' });
+            setOpen((v) => !v);
+          }}
           disabled={busy !== null}
         >
           <Icon name="chevron-down" size={14} />
@@ -583,7 +623,10 @@ export function HandoffButton({
               className={`handoff-menu-tab${activeTab === 'editor' ? ' active' : ''}`}
               role="tab"
               aria-selected={activeTab === 'editor'}
-              onClick={() => setActiveTab('editor')}
+              onClick={() => {
+                fireHandoff({ element: 'tab', handoff_tab: 'editor' });
+                setActiveTab('editor');
+              }}
             >
               {t('handoff.editorSection')}
             </button>
@@ -592,7 +635,10 @@ export function HandoffButton({
               className={`handoff-menu-tab${activeTab === 'cli' ? ' active' : ''}`}
               role="tab"
               aria-selected={activeTab === 'cli'}
-              onClick={() => setActiveTab('cli')}
+              onClick={() => {
+                fireHandoff({ element: 'tab', handoff_tab: 'cli' });
+                setActiveTab('cli');
+              }}
             >
               {t('handoff.cliSection')}
             </button>
@@ -667,6 +713,7 @@ export function HandoffButton({
                 href={AMR_WEBSITE_URL}
                 target="_blank"
                 rel="noreferrer"
+                onClick={() => fireHandoff({ element: 'amr_website', handoff_tab: 'cli' })}
               >
                 <AgentIcon id="amr" size={18} />
                 <span>{t('handoff.amrWebsite')}</span>
