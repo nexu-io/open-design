@@ -37,6 +37,7 @@ import {
 import { localeFromPath, localizedHref } from '../i18n';
 import { localizeTaxonomyValue } from '../content-i18n';
 import { getPluginsCopy } from '../_lib/plugins-i18n';
+import { templateMarketingPath } from '../_lib/template-marketing';
 
 export interface Props {
   record: BundledPluginRecord;
@@ -59,7 +60,7 @@ const href = (path: string) => localizedHref(path, locale);
 
 const name = resolveBundledTitle(record, locale);
 const description = resolveBundledDescription(record, locale);
-const detailHref = href(record.detailHref);
+const detailHref = href(templateMarketingPath(record));
 
 /*
  * Share text — bake the localized share template into a `data-share-text`

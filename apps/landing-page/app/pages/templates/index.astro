@@ -1,0 +1,84 @@
+---
+import Layout from '../../_components/sub-page-layout.astro';
+import TemplateCard from '../../_components/template-card.astro';
+import { getPluginsCopy } from '../../_lib/plugins-i18n';
+import { getTemplateMarketingEntries } from '../../_lib/template-marketing';
+import { localeFromPath, localizedHref } from '../../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const pcopy = getPluginsCopy(locale);
+const entries = getTemplateMarketingEntries();
+
+const categoryCounts = new Map<string, number>();
+for (const entry of entries) {
+  categoryCounts.set(entry.categoryLabel, (categoryCounts.get(entry.categoryLabel) ?? 0) + 1);
+}
+
+const title = 'Open Design Templates · Agent-built design templates';
+const description =
+  'Browse Open Design templates for landing pages, dashboards, pitch decks, images, videos, and production-ready agent-built artifacts.';
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: title,
+  description,
+  url: new URL('/templates/', Astro.site).toString(),
+  numberOfItems: entries.length,
+  hasPart: entries.slice(0, 24).map((entry) => ({
+    '@type': 'CreativeWork',
+    name: entry.record.title,
+    url: new URL(entry.path, Astro.site).toString(),
+  })),
+};
+---
+
+<Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label={pcopy.breadcrumbLabel}>
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <span aria-current="page">Templates</span>
+  </nav>
+
+  <header class="catalog-head tpl-hero od-template-hero">
+    <div class="tpl-hero-text">
+      <span class="label">Open Design templates</span>
+      <h1 class="display">Templates for agent-built design<span class="dot">.</span></h1>
+      <p class="lead">
+        Start from a concrete artifact: SaaS landing pages, dashboards, pitch decks,
+        image prompts, video storyboards, and HyperFrames compositions.
+      </p>
+      <div class="detail-actions">
+        <a class="btn btn-primary" href={href('/plugins/templates/')}>Browse registry</a>
+        <a class="btn btn-ghost" href="https://github.com/nexu-io/open-design/tree/main/plugins/_official" target="_blank" rel="noopener">View source</a>
+      </div>
+    </div>
+    <div class="tpl-hero-side">
+      <span class="tpl-counter">Templates · <strong>{entries.length}</strong></span>
+    </div>
+  </header>
+
+  <section class="filter-strip" aria-label="Template categories">
+    <div class="filter-group">
+      <span class="filter-label">Popular uses</span>
+      <ul>
+        {Array.from(categoryCounts.entries()).map(([label, count]) => (
+          <li><span class="chip">{label}<span class="chip-num">{count}</span></span></li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="tpl-grid" aria-label="Open Design templates">
+    {entries.map((entry, idx) => (
+      <TemplateCard record={entry.record} index={idx} featured={idx < 6} />
+    ))}
+  </section>
+</Layout>
+
+<style>
+  .od-template-hero .detail-actions {
+    margin-top: 24px;
+  }
+</style>

@@ -1,0 +1,224 @@
+---
+import Layout from '../../../_components/sub-page-layout.astro';
+import TemplateCard from '../../../_components/template-card.astro';
+import {
+  resolveBundledDescription,
+  resolveBundledTitle,
+} from '../../../_lib/bundled-plugins';
+import { getPluginsCopy } from '../../../_lib/plugins-i18n';
+import {
+  getTemplateMarketingEntries,
+  templateLandingDescription,
+  templateLandingTitle,
+  type TemplateMarketingEntry,
+} from '../../../_lib/template-marketing';
+import { localeFromPath, localizedHref } from '../../../i18n';
+
+export function getStaticPaths() {
+  return getTemplateMarketingEntries().map((entry) => ({
+    params: { slug: entry.slug },
+    props: { entry },
+  }));
+}
+
+interface Props {
+  entry: TemplateMarketingEntry;
+}
+
+const { entry } = Astro.props as Props;
+const { record } = entry;
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const pcopy = getPluginsCopy(locale);
+
+const h1 = templateLandingTitle(entry, locale);
+const baseTitle = resolveBundledTitle(record, locale);
+const baseDescription = resolveBundledDescription(record, locale);
+const title = `${h1} · Open Design templates`;
+const description = templateLandingDescription(entry, locale);
+const related = getTemplateMarketingEntries()
+  .filter((item) => item.slug !== entry.slug && item.category === entry.category)
+  .slice(0, 6);
+
+const useCases = [
+  entry.subcategoryDescription,
+  `Run this ${entry.categoryLabel.toLowerCase()} template locally with your own model keys.`,
+  'Fork the prompt, inspect the manifest, and adapt the example artifact from GitHub.',
+].filter(Boolean);
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: Astro.site?.toString() },
+      { '@type': 'ListItem', position: 2, name: 'Templates', item: new URL('/templates/', Astro.site).toString() },
+      { '@type': 'ListItem', position: 3, name: h1, item: new URL(entry.path, Astro.site).toString() },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'CreativeWork',
+    name: h1,
+    description,
+    image: record.previewPoster,
+    creator: record.authorName ? { '@type': 'Person', name: record.authorName } : { '@type': 'Organization', name: 'Open Design' },
+    license: 'https://www.apache.org/licenses/LICENSE-2.0',
+    url: new URL(entry.path, Astro.site).toString(),
+    isBasedOn: record.sourceUrl,
+  },
+];
+---
+
+<Layout title={title} description={description} active="plugins" ogImage={record.previewPoster} jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label={pcopy.breadcrumbLabel}>
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <a href={href('/templates/')}>Templates</a>
+    <span>/</span>
+    <span aria-current="page">{h1}</span>
+  </nav>
+
+  <article class="template-landing">
+    <header class="template-landing-hero">
+      <div>
+        <span class="label">{entry.categoryLabel} template</span>
+        <h1 class="display">{h1}<span class="dot">.</span></h1>
+        <p class="lead">{baseDescription}</p>
+        <div class="detail-actions">
+          <a class="btn btn-primary" href={href(record.detailHref)}>{pcopy.cardUseTemplate}</a>
+          <a class="btn btn-ghost" href={record.sourceUrl} target="_blank" rel="noopener">{pcopy.detailFindOnGithub}</a>
+        </div>
+      </div>
+      {record.previewPoster && (
+        <figure class="template-preview">
+          {record.previewType === 'video' && record.previewVideo ? (
+            <video controls preload="metadata" poster={record.previewPoster}>
+              <source src={record.previewVideo} type="video/mp4" />
+            </video>
+          ) : (
+            <img src={record.previewPoster} alt={pcopy.previewImageAlt(baseTitle)} loading="eager" fetchpriority="high" />
+          )}
+          <figcaption>Preview from the Open Design template manifest.</figcaption>
+        </figure>
+      )}
+    </header>
+
+    <section class="template-section">
+      <h2>Make {baseTitle.toLowerCase()} with Open Design</h2>
+      <p>{description}</p>
+      <ul class="template-use-list">
+        {useCases.map((item) => <li>{item}</li>)}
+      </ul>
+    </section>
+
+    <section class="template-section template-source">
+      <h2>Template source</h2>
+      <dl class="detail-meta">
+        <dt>Artifact kind</dt>
+        <dd>{entry.categoryLabel}</dd>
+        {entry.subcategoryLabel && (
+          <Fragment>
+            <dt>Use case</dt>
+            <dd>{entry.subcategoryLabel}</dd>
+          </Fragment>
+        )}
+        {record.mode && (
+          <Fragment>
+            <dt>{pcopy.detailMode}</dt>
+            <dd>{record.mode}</dd>
+          </Fragment>
+        )}
+        {record.scenario && (
+          <Fragment>
+            <dt>{pcopy.detailScenario}</dt>
+            <dd>{record.scenario}</dd>
+          </Fragment>
+        )}
+        <dt>{pcopy.detailManifestId}</dt>
+        <dd><code>{record.manifestId}</code></dd>
+      </dl>
+    </section>
+
+    {related.length > 0 && (
+      <section class="template-section">
+        <h2>Related {entry.categoryLabel.toLowerCase()} templates</h2>
+        <div class="tpl-grid compact">
+          {related.map((item, idx) => (
+            <TemplateCard record={item.record} index={idx} />
+          ))}
+        </div>
+      </section>
+    )}
+  </article>
+</Layout>
+
+<style>
+  .template-landing {
+    padding-bottom: 88px;
+  }
+  .template-landing-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 0.92fr) minmax(320px, 1.08fr);
+    gap: 40px;
+    align-items: start;
+    padding: 34px 0 42px;
+  }
+  .template-landing-hero .detail-actions {
+    margin-top: 24px;
+  }
+  .template-preview {
+    margin: 0;
+    border: 1px solid var(--line);
+    background: var(--paper-warm);
+  }
+  .template-preview img,
+  .template-preview video {
+    width: 100%;
+    display: block;
+  }
+  .template-preview figcaption {
+    padding: 10px 12px;
+    color: var(--ink-faint);
+    font-size: 0.82rem;
+  }
+  .template-section {
+    border-top: 1px solid var(--line-soft);
+    padding: 34px 0;
+  }
+  .template-section h2 {
+    margin: 0 0 14px;
+    font-size: clamp(1.5rem, 2.2vw, 2.2rem);
+    letter-spacing: 0;
+  }
+  .template-section p {
+    max-width: 820px;
+    color: var(--ink-muted);
+    line-height: 1.7;
+  }
+  .template-use-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    padding: 0;
+    margin: 22px 0 0;
+    list-style: none;
+  }
+  .template-use-list li {
+    border: 1px solid var(--line-soft);
+    background: rgba(255, 252, 242, 0.52);
+    padding: 16px;
+    min-height: 112px;
+    color: var(--ink-muted);
+    line-height: 1.5;
+  }
+  .template-source .detail-meta {
+    margin-top: 10px;
+  }
+  @media (max-width: 860px) {
+    .template-landing-hero,
+    .template-use-list {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
