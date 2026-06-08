@@ -67,6 +67,9 @@ describe('isPrivateAddress', () => {
       'fc00::1',
       'fd12::3',
       'ff02::1',
+      'fe80::1', // link-local low end
+      'fe90::1', // link-local — was missed by an exact fe80 match
+      'febf::1', // link-local high end (fe80::/10)
       '::ffff:127.0.0.1',
       '::ffff:7f00:1', // hex IPv4-mapped 127.0.0.1 (Node normalizes brackets to this)
       '::ffff:0a00:1', // hex IPv4-mapped 10.0.0.1
@@ -227,13 +230,34 @@ describe('createPluginAssetCache', () => {
     expect(out.contentType).toBe('video/mp4');
   });
 
-  it('rejects oversized assets', async () => {
+  it('rejects oversized assets (declared Content-Length)', async () => {
     const cache = createPluginAssetCache({
       cacheDir: dir,
       maxBytes: 16,
       fetchImpl: (async () => pngResponse(1024)) as typeof fetch,
     });
     await expect(cache.get('https://res.cloudinary.com/x/big.png')).rejects.toMatchObject({ status: 413 });
+  });
+
+  it('stops reading a no-Content-Length body once it exceeds the cap (no full buffering)', async () => {
+    let pulls = 0;
+    // 100 chunks × 8 bytes = 800 bytes, streamed, with NO content-length.
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controllerStream) {
+        pulls += 1;
+        if (pulls > 100) return controllerStream.close();
+        controllerStream.enqueue(new Uint8Array(8).fill(7));
+      },
+    });
+    const cache = createPluginAssetCache({
+      cacheDir: dir,
+      maxBytes: 16, // two 8-byte chunks fit; the third must trip the cap
+      fetchImpl: (async () =>
+        new Response(stream, { status: 200, headers: { 'content-type': 'image/png' } })) as typeof fetch,
+    });
+    await expect(cache.get('https://res.cloudinary.com/x/stream.png')).rejects.toMatchObject({ status: 413 });
+    // It must abort after a few chunks, NOT drain all 100 (no full buffering).
+    expect(pulls).toBeLessThan(10);
   });
 
   it('refuses non-cacheable urls without fetching', async () => {

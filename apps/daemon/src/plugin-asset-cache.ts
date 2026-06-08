@@ -153,9 +153,10 @@ export function isPrivateAddress(addr: string): boolean {
     }
     if (groups.every((g) => g === 0)) return true; // ::  (unspecified)
     if (groups.slice(0, 7).every((g) => g === 0) && groups[7] === 1) return true; // ::1 loopback
-    if (groups[0] === 0xfe80) return true; // link-local fe80::/10
-    if (groups[0] !== undefined && (groups[0] & 0xfe00) === 0xfc00) return true; // ULA fc00::/7
-    if (groups[0] !== undefined && (groups[0] & 0xff00) === 0xff00) return true; // multicast ff00::/8
+    const first = groups[0] ?? 0;
+    if ((first & 0xffc0) === 0xfe80) return true; // link-local fe80::/10 (fe80–febf)
+    if ((first & 0xfe00) === 0xfc00) return true; // unique-local fc00::/7
+    if ((first & 0xff00) === 0xff00) return true; // multicast ff00::/8
     return false;
   }
   return true; // not a literal IP — caller must resolve before trusting it
@@ -300,44 +301,78 @@ export function createPluginAssetCache(opts: PluginAssetCacheOptions): PluginAss
     throw new AssetCacheError(415, `unsupported content-type: ${header || 'unknown'}`);
   }
 
+  /** Drain the body, aborting the moment the accumulated size exceeds
+   *  `maxBytes`. A response without a trustworthy Content-Length must never be
+   *  fully buffered first — that would turn this caller-supplied proxy into a
+   *  memory-exhaustion path. */
+  async function readBodyCapped(response: Response, controller: AbortController): Promise<Buffer> {
+    const body = response.body;
+    if (!body) {
+      const ab = await response.arrayBuffer();
+      if (ab.byteLength > maxBytes) throw new AssetCacheError(413, 'asset exceeds size limit');
+      return Buffer.from(ab);
+    }
+    const reader = body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+        total += value.byteLength;
+        if (total > maxBytes) {
+          controller.abort(); // stop pulling more bytes from upstream
+          throw new AssetCacheError(413, 'asset exceeds size limit');
+        }
+        chunks.push(value);
+      }
+    } finally {
+      try {
+        await reader.cancel();
+      } catch {
+        // reader already closed / errored — nothing to release
+      }
+    }
+    return Buffer.concat(chunks);
+  }
+
   async function fetchAndStore(rawUrl: string, key: string): Promise<AssetCacheResult> {
     const url = assertSafePublicUrl(rawUrl);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    let response: Response;
     try {
-      // `dispatcher` carries the connection-time SSRF guard. It is an undici
-      // extension of RequestInit; attach it at runtime to avoid the
-      // undici-types (bundled with @types/node) vs undici@7 Dispatcher version
-      // skew that a typed field would trip over.
-      const init: RequestInit = { redirect: 'error', signal: controller.signal };
-      (init as { dispatcher?: unknown }).dispatcher = dispatcher;
-      response = await fetchImpl(url, init);
-    } catch (err) {
-      throw new AssetCacheError(502, `fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+      let response: Response;
+      try {
+        // `dispatcher` carries the connection-time SSRF guard. It is an undici
+        // extension of RequestInit; attach it at runtime to avoid the
+        // undici-types (bundled with @types/node) vs undici@7 Dispatcher version
+        // skew that a typed field would trip over.
+        const init: RequestInit = { redirect: 'error', signal: controller.signal };
+        (init as { dispatcher?: unknown }).dispatcher = dispatcher;
+        response = await fetchImpl(url, init);
+      } catch (err) {
+        throw new AssetCacheError(502, `fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      if (!response.ok) {
+        throw new AssetCacheError(502, `upstream responded ${response.status}`);
+      }
+      const declaredLength = Number(response.headers.get('content-length') ?? '');
+      if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+        throw new AssetCacheError(413, 'asset exceeds size limit');
+      }
+      const contentType = resolveContentType(response.headers.get('content-type'), url);
+      const buf = await readBodyCapped(response, controller);
+      const result: AssetCacheResult = { buf, contentType };
+      try {
+        await writeToDisk(key, result);
+      } catch {
+        // A cache-write failure must not fail the request; serve from memory.
+      }
+      return result;
     } finally {
       clearTimeout(timer);
     }
-    if (!response.ok) {
-      throw new AssetCacheError(502, `upstream responded ${response.status}`);
-    }
-    const declaredLength = Number(response.headers.get('content-length') ?? '');
-    if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-      throw new AssetCacheError(413, 'asset exceeds size limit');
-    }
-    const contentType = resolveContentType(response.headers.get('content-type'), url);
-    const arrayBuffer = await response.arrayBuffer();
-    const buf = Buffer.from(arrayBuffer);
-    if (buf.byteLength > maxBytes) {
-      throw new AssetCacheError(413, 'asset exceeds size limit');
-    }
-    const result: AssetCacheResult = { buf, contentType };
-    try {
-      await writeToDisk(key, result);
-    } catch {
-      // A cache-write failure must not fail the request; serve from memory.
-    }
-    return result;
   }
 
   async function get(rawUrl: string): Promise<AssetCacheResult> {
