@@ -1140,8 +1140,11 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding-top: 6px;
-  margin-top: 2px;
+  /* Center the divider between the input above (8px composer gap) and the
+     controls below (8px padding) so the toolbar isn't cramped against the
+     border. */
+  margin-top: 0;
+  padding-top: 8px;
   border-top: 1px solid var(--border-soft);
 }
 .composer-row .icon-btn {
@@ -1172,6 +1175,48 @@
 .composer-row .icon-btn:active:not(:disabled) { background: var(--bg-muted); }
 .composer-row .icon-btn:disabled { opacity: 0.45; cursor: default; }
 .composer-spacer { flex: 1; }
+
+/* --- Composer footer: one control system ----------------------------------
+   The toolbar mixes five controls authored in five different components —
+   the + icon (.icon-btn), the working-dir pill (.working-dir-pill-trigger),
+   the agent avatar (.avatar-agent-trigger), the "Design" session-mode toggle
+   (.session-mode-toggle__trigger) and Send (.composer-send) — which had
+   drifted to three heights (28/32px) and three corner radii (full-pill / 8 /
+   6). Normalize the interactive controls to one 32px, radius-sm pill so the
+   row reads as a single system. Send keeps its accent fill and + stays a
+   ghost icon; only geometry/elevation is unified, not color. `.app` raises
+   specificity above the per-component base rules in routines/shell.css. */
+.app .composer-row .working-dir-pill-trigger,
+.app .composer-row .avatar-agent-trigger,
+.app .composer-row .session-mode-toggle__trigger,
+.app .composer-row .composer-send,
+.app .composer-row .icon-btn {
+  height: 28px;
+  border-radius: var(--radius-sm);
+  box-sizing: border-box;
+}
+.app .composer-row .working-dir-pill-trigger {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.app .composer-row .session-mode-toggle__trigger {
+  box-shadow: none;
+}
+/* The agent avatar is a 32px round image; shrink it (and the trigger grid)
+   so it fits the 28px control height without being clipped. */
+.app .composer-row .avatar-agent-trigger {
+  width: 48px;
+  grid-template-columns: 26px 20px;
+}
+.app .composer-row .avatar-btn {
+  width: 22px;
+  height: 22px;
+}
+.app .composer-row .icon-btn {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+}
 .session-mode-toggle {
   position: relative;
   display: inline-flex;
