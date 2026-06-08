@@ -12957,6 +12957,29 @@ export async function startServer({
 
     if (def.streamFormat === 'claude-stream-json') {
       const claude = createClaudeStreamHandler((ev) => {
+        if (ev?.type === 'error') {
+          if (agentStreamError) return;
+          const message = String((ev as any).message || 'Claude Code stream error');
+          const failureText = [
+            message,
+            typeof (ev as any).code === 'string' ? (ev as any).code : '',
+            agentStdoutTail,
+            agentStderrTail,
+          ].join('\n');
+          agentStreamError = rewriteKnownAgentStreamError(
+            agentId,
+            message,
+            failureText,
+          );
+          clearInactivityWatchdog();
+          const serviceCode = classifyAgentServiceFailure(failureText);
+          send('error', createSseErrorPayload(
+            serviceCode ?? 'AGENT_EXECUTION_FAILED',
+            agentStreamError,
+            { retryable: serviceCode === 'AGENT_AUTH_REQUIRED' || serviceCode === 'RATE_LIMITED' },
+          ));
+          return;
+        }
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
         noteAgentActivity();
         noteFirstTokenFromAgentEvent(ev);
