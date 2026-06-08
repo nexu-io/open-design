@@ -57,12 +57,17 @@ interface Props {
   config: AppConfig;
   onThemeChange: (theme: AppTheme) => void;
   onOpenSettings: (section?: EntrySettingsSection) => void;
+  // Fired when the gear trigger is clicked. Used by the in-project header to
+  // emit the `artifact_header` / `settings` ui_click; the home/entry shell
+  // leaves it undefined so that context is not mislabelled as `artifact`.
+  onTrackTriggerClick?: () => void;
 }
 
 export function EntrySettingsMenu({
   config,
   onThemeChange,
   onOpenSettings,
+  onTrackTriggerClick,
 }: Props) {
   const t = useT();
   const { locale, setLocale } = useI18n();
@@ -137,7 +142,10 @@ export function EntrySettingsMenu({
         ref={triggerRef}
         type="button"
         className="settings-icon-btn od-tooltip"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          onTrackTriggerClick?.();
+          setOpen((value) => !value);
+        }}
         title={t('entry.openSettingsTitle')}
         data-tooltip={t('entry.openSettingsTitle')}
         data-tooltip-placement="bottom"

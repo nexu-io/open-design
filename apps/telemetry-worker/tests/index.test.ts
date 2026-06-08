@@ -27,6 +27,16 @@ function makeRateLimiter(success: boolean) {
   };
 }
 
+function makeScopeKv(seed: Record<string, string> = {}) {
+  const values = new Map(Object.entries(seed));
+  return {
+    get: vi.fn(async (key: string) => values.get(key) ?? null),
+    put: vi.fn(async (key: string, value: string) => {
+      values.set(key, value);
+    }),
+  };
+}
+
 function objectRelayHeaders(): Record<string, string> {
   return {
     'Content-Type': 'application/json',
@@ -287,8 +297,9 @@ describe('telemetry worker', () => {
     fetchSpy.mockRestore();
   });
 
-  it('rejects public marker-only object authorization metadata', async () => {
+  it('rejects object authorization metadata without registered telemetry scope', async () => {
     const content = 'hello object';
+    const scopeKv = makeScopeKv();
     const response = await worker.fetch(
       new Request('https://telemetry.open-design.ai/api/objects/authorize', {
         method: 'POST',
@@ -315,17 +326,58 @@ describe('telemetry worker', () => {
         ...env,
         TRACE_OBJECT_BUCKET: { put: vi.fn() },
         TRACE_OBJECT_UPLOAD_SECRET: objectUploadSecret,
+        TRACE_OBJECT_SCOPE_KV: scopeKv,
       },
     );
 
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({
-      error: 'object upload authorization is disabled',
+      error: 'object upload authority is not registered',
     });
   });
 
-  it('issues test-only short-lived object upload tokens scoped to declared objects', async () => {
+  it('issues short-lived object upload tokens for scopes registered by telemetry traces', async () => {
     const content = 'hello object';
+    const scopeKv = makeScopeKv();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ successes: [], errors: [] }), { status: 207 }),
+    );
+    const traceResponse = await worker.fetch(
+      makeRequest({
+        batch: [
+          {
+            id: 'evt-1',
+            type: 'trace-create',
+            timestamp: '2026-06-08T00:00:00.000Z',
+            body: {
+              id: 'run-1',
+              name: 'open-design-turn',
+              userId: 'installation-1',
+              metadata: {
+                projectId: 'proj-1',
+                attachment_manifest: [
+                  {
+                    storage_ref: 'od://objects/workspaces/unknown/projects/proj-1/runs/run-1/attachment/att-1/brief.txt',
+                    object_class: 'attachment',
+                    size_bytes: content.length,
+                    sha256: `sha256:${requireSha256(content)}`,
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      }),
+      {
+        ...env,
+        TRACE_OBJECT_BUCKET: { put: vi.fn() },
+        TRACE_OBJECT_UPLOAD_SECRET: objectUploadSecret,
+        TRACE_OBJECT_SCOPE_KV: scopeKv,
+      },
+    );
+    expect(traceResponse.status).toBe(207);
+    expect(scopeKv.put).toHaveBeenCalledTimes(1);
+
     const response = await worker.fetch(
       new Request('https://telemetry.open-design.ai/api/objects/authorize', {
         method: 'POST',
@@ -352,7 +404,7 @@ describe('telemetry worker', () => {
         ...env,
         TRACE_OBJECT_BUCKET: { put: vi.fn() },
         TRACE_OBJECT_UPLOAD_SECRET: objectUploadSecret,
-        TRACE_OBJECT_AUTHORIZE_TEST_ONLY: '1',
+        TRACE_OBJECT_SCOPE_KV: scopeKv,
       },
     );
 
@@ -360,6 +412,110 @@ describe('telemetry worker', () => {
     const body = await response.json() as { upload_token?: string; expires_at?: string };
     expect(body.upload_token).toEqual(expect.stringMatching(/^[A-Za-z0-9_-]+\.[a-f0-9]{64}$/));
     expect(body.expires_at).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/));
+    fetchSpy.mockRestore();
+  });
+
+  it('registers object upload scopes when only a sibling observation is rejected', async () => {
+    const content = 'hello object';
+    const scopeKv = makeScopeKv();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          successes: [{ id: 'trace-evt-1' }],
+          errors: [{ id: 'span-evt-1', status: 400 }],
+        }),
+        { status: 207 },
+      ),
+    );
+    const response = await worker.fetch(
+      makeRequest({
+        batch: [
+          {
+            id: 'trace-evt-1',
+            type: 'trace-create',
+            timestamp: '2026-06-08T00:00:00.000Z',
+            body: {
+              id: 'run-1',
+              name: 'open-design-turn',
+              userId: 'installation-1',
+              metadata: {
+                projectId: 'proj-1',
+                artifact_manifest: [
+                  {
+                    storage_ref: 'od://objects/workspaces/unknown/projects/proj-1/runs/run-1/artifact/art-1/index.html',
+                    object_class: 'artifact',
+                    size_bytes: content.length,
+                    sha256: `sha256:${requireSha256(content)}`,
+                  },
+                ],
+              },
+            },
+          },
+          {
+            id: 'span-evt-1',
+            type: 'span-create',
+            timestamp: '2026-06-08T00:00:00.000Z',
+            body: { id: 'span-1', traceId: 'run-1', name: 'agent-call' },
+          },
+        ],
+      }),
+      {
+        ...env,
+        TRACE_OBJECT_BUCKET: { put: vi.fn() },
+        TRACE_OBJECT_UPLOAD_SECRET: objectUploadSecret,
+        TRACE_OBJECT_SCOPE_KV: scopeKv,
+      },
+    );
+
+    expect(response.status).toBe(207);
+    expect(scopeKv.put).toHaveBeenCalledTimes(1);
+    fetchSpy.mockRestore();
+  });
+
+  it('does not register object upload scopes when Langfuse rejects the trace batch', async () => {
+    const scopeKv = makeScopeKv();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ successes: [], errors: [{ id: 'evt-1', status: 400 }] }), {
+        status: 207,
+      }),
+    );
+    const response = await worker.fetch(
+      makeRequest({
+        batch: [
+          {
+            id: 'evt-1',
+            type: 'trace-create',
+            timestamp: '2026-06-08T00:00:00.000Z',
+            body: {
+              id: 'run-1',
+              name: 'open-design-turn',
+              userId: 'installation-1',
+              metadata: {
+                projectId: 'proj-1',
+                artifact_manifest: [
+                  {
+                    storage_ref: 'od://objects/workspaces/unknown/projects/proj-1/runs/run-1/artifact/art-1/index.html',
+                    object_class: 'artifact',
+                    size_bytes: 12,
+                    sha256: `sha256:${requireSha256('hello object')}`,
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      }),
+      {
+        ...env,
+        TRACE_OBJECT_BUCKET: { put: vi.fn() },
+        TRACE_OBJECT_UPLOAD_SECRET: objectUploadSecret,
+        TRACE_OBJECT_SCOPE_KV: scopeKv,
+      },
+    );
+
+    expect(response.status).toBe(207);
+    expect(scopeKv.put).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 
   it('rejects object batches without the object marker', async () => {

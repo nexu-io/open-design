@@ -45,6 +45,7 @@ const STYLELESS_HOOKS = new Set([
   'db-action-browser-use',
   'db-action-menu',
   'db-action-primary',
+  'db-action-secondary',
   'db-action-save',
   'db-action-screenshot',
   'db-inspect-bg',

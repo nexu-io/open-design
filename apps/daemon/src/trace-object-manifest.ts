@@ -61,6 +61,7 @@ export interface BuildTraceObjectManifestsOptions {
   fetchImpl?: typeof fetch;
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
+  uploadMode?: 'manifest-only' | 'upload';
 }
 
 export interface TraceArtifactObjectSource {
@@ -136,15 +137,7 @@ function storageRef(projectId: string, runId: string, objectClass: ObjectClass, 
 function inferRelayUrl(env: NodeJS.ProcessEnv): string | null {
   const explicit = env.OPEN_DESIGN_OBJECT_RELAY_URL?.trim();
   if (explicit) return explicit.replace(/\/+$/, '');
-  const telemetry = env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim();
-  if (!telemetry) return null;
-  try {
-    const url = new URL(telemetry);
-    url.pathname = url.pathname.replace(/\/api\/langfuse\/?$/, '/api/objects/batch');
-    return url.toString().replace(/\/+$/, '');
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function inferAuthorizeUrl(batchUrl: string): string {
@@ -169,7 +162,7 @@ function readRelayConfig(env: NodeJS.ProcessEnv): ObjectRelayConfig | null {
   return {
     url,
     authorizeUrl: inferAuthorizeUrl(url),
-    uploadsEnabled: env.NODE_ENV === 'test',
+    uploadsEnabled: true,
     timeoutMs: parsePositiveInt(
       env.OPEN_DESIGN_OBJECT_RELAY_TIMEOUT_MS ?? env.OPEN_DESIGN_TELEMETRY_TIMEOUT_MS,
       10_000,
@@ -247,6 +240,18 @@ function manifestBase(
     input_text_snapshot_id: source.id,
     type: 'text',
     source: 'user_prompt',
+  };
+}
+
+function mergeSourceDigest(
+  entry: TraceObjectManifestEntry,
+  source: TraceObjectSource,
+): TraceObjectManifestEntry {
+  if (!source.body) return entry;
+  return {
+    ...entry,
+    size_bytes: source.body.byteLength,
+    sha256: sha256(source.body),
   };
 }
 
@@ -640,6 +645,14 @@ export async function buildTraceObjectManifests(
   if (sources.length === 0) return undefined;
 
   const manifests = sources.map((source) => manifestBase(source, opts, now));
+  if (opts.uploadMode === 'manifest-only') {
+    return groupManifests(manifests.map((entry, index) => ({
+      ...mergeSourceDigest(entry, sources[index]!),
+      status: 'unavailable' as const,
+      stored_in_open_design: false,
+      reason: entry.reason ?? 'relay_authorization_pending',
+    })));
+  }
 
   const relayResults = await postObjectBatch(config, opts, manifests, sources);
   const resultByRef = new Map(relayResults.map((result) => [result.storage_ref, result]));

@@ -30,6 +30,7 @@
   flex-direction: column;
   width: 100%;
   max-width: 100%;
+  height: var(--cfl-max-h, 460px);
   max-height: var(--cfl-max-h, 460px);
   background: var(--bg-panel);
   border: 1px solid var(--border);

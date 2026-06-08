@@ -32,7 +32,11 @@ import type {
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
-import { trackHomeChatComposerClick } from '../analytics/events';
+import {
+  trackComposerSessionModeClick,
+  trackHomeChatComposerClick,
+} from '../analytics/events';
+import { sessionModeToTracking } from '@open-design/contracts/analytics';
 import {
   chipsForGroup,
   type ChipGroup,
@@ -735,6 +739,18 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onPickExamplePlugin(record, chipId, promptText);
   }
 
+  // The task-type rail (原型 / 幻灯片 / HyperFrames / 视频 / …). Records which
+  // task type the user picked before delegating to the host's chip handler.
+  function handlePickTaskChip(chip: HomeHeroChip) {
+    trackHomeChatComposerClick(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      element: 'task_chip',
+      chip_id: chip.id,
+    });
+    onPickChip(chip);
+  }
+
   function handleDrop(event: ReactDragEvent<HTMLDivElement>) {
     const files = Array.from(event.dataTransfer.files ?? []);
     if (files.length === 0) return;
@@ -1056,89 +1072,91 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 </button>
               ))}
             </div>
-            {visibleLoading && visiblePickerOptions.length === 0 ? (
-              <div className="home-hero__plugin-picker-empty">{t('homeHero.loadingContext')}</div>
-            ) : null}
-            {!visibleLoading && visiblePickerOptions.length === 0 ? (
-              <div className="home-hero__plugin-picker-empty">
-                {mentionQuery ? (
-                  <>{t('homeHero.noResults', { query: mentionQuery })}</>
-                ) : (
-                  <>{t('homeHero.searchPrompt')}</>
-                )}
-              </div>
-            ) : null}
-            {visibleSections.map((section) => (
-              <div key={section.id} className="home-hero__mention-section">
-                <div className="home-hero__mention-section-label">{section.label}</div>
-                {section.options.map((item) => {
-                  const optionIndex = optionRenderIndex;
-                  optionRenderIndex += 1;
-                  return (
-                    <button
-                      key={item.id}
-                      id={`home-hero-option-${optionIndex}`}
-                      type="button"
-                      role="option"
-                      aria-selected={optionIndex === selectedIndex}
-                      className={`home-hero__plugin-option${
-                        optionIndex === selectedIndex ? ' is-active' : ''
-                      }`}
-                      onMouseEnter={() => {
-                        setSelectedIndex(optionIndex);
-                        setHoveredPlugin(item.pluginRecord ?? null);
-                      }}
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        if (!item.disabled) item.onPick();
-                      }}
-                      disabled={item.disabled}
-                    >
-                      <span className="home-hero__plugin-option-icon" aria-hidden>
-                        <Icon name={item.icon} size={13} />
-                      </span>
-                      <span className="home-hero__plugin-option-main">
-                        <span>{item.title}</span>
-                        <span>{item.description}</span>
-                      </span>
-                      <span className="home-hero__plugin-option-meta">
-                        {item.meta}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-            {hoveredPlugin ? (
-              <div
-                className="home-hero__plugin-hover-card"
-                data-testid="home-hero-plugin-hover-card"
-              >
-                <div>
-                  <span className="home-hero__plugin-hover-kicker">
-                    {getPluginSourceLabel(hoveredPlugin)}
-                  </span>
-                  <strong>{localizePluginTitle(locale, hoveredPlugin)}</strong>
-                  <p>{localizePluginDescription(locale, hoveredPlugin) || hoveredPlugin.id}</p>
+            <div className="home-hero__plugin-picker-results">
+              {visibleLoading && visiblePickerOptions.length === 0 ? (
+                <div className="home-hero__plugin-picker-empty">{t('homeHero.loadingContext')}</div>
+              ) : null}
+              {!visibleLoading && visiblePickerOptions.length === 0 ? (
+                <div className="home-hero__plugin-picker-empty">
+                  {mentionQuery ? (
+                    <>{t('homeHero.noResults', { query: mentionQuery })}</>
+                  ) : (
+                    <>{t('homeHero.searchPrompt')}</>
+                  )}
                 </div>
-                <div className="home-hero__plugin-hover-meta">
-                  <span>{t('homeHero.parameters', { n: (hoveredPlugin.manifest?.od?.inputs ?? []).length })}</span>
-                  {getPluginQueryPreview(hoveredPlugin) ? (
-                    <span>{getPluginQueryPreview(hoveredPlugin)}</span>
-                  ) : null}
+              ) : null}
+              {visibleSections.map((section) => (
+                <div key={section.id} className="home-hero__mention-section">
+                  <div className="home-hero__mention-section-label">{section.label}</div>
+                  {section.options.map((item) => {
+                    const optionIndex = optionRenderIndex;
+                    optionRenderIndex += 1;
+                    return (
+                      <button
+                        key={item.id}
+                        id={`home-hero-option-${optionIndex}`}
+                        type="button"
+                        role="option"
+                        aria-selected={optionIndex === selectedIndex}
+                        className={`home-hero__plugin-option${
+                          optionIndex === selectedIndex ? ' is-active' : ''
+                        }`}
+                        onMouseEnter={() => {
+                          setSelectedIndex(optionIndex);
+                          setHoveredPlugin(item.pluginRecord ?? null);
+                        }}
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          if (!item.disabled) item.onPick();
+                        }}
+                        disabled={item.disabled}
+                      >
+                        <span className="home-hero__plugin-option-icon" aria-hidden>
+                          <Icon name={item.icon} size={13} />
+                        </span>
+                        <span className="home-hero__plugin-option-main">
+                          <span>{item.title}</span>
+                          <span>{item.description}</span>
+                        </span>
+                        <span className="home-hero__plugin-option-meta">
+                          {item.meta}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
-                <button
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    dismissMentionPicker();
-                    onOpenPluginDetails(hoveredPlugin);
-                  }}
+              ))}
+              {hoveredPlugin ? (
+                <div
+                  className="home-hero__plugin-hover-card"
+                  data-testid="home-hero-plugin-hover-card"
                 >
-                  {t('homeHero.details')}
-                </button>
-              </div>
-            ) : null}
+                  <div>
+                    <span className="home-hero__plugin-hover-kicker">
+                      {getPluginSourceLabel(hoveredPlugin)}
+                    </span>
+                    <strong>{localizePluginTitle(locale, hoveredPlugin)}</strong>
+                    <p>{localizePluginDescription(locale, hoveredPlugin) || hoveredPlugin.id}</p>
+                  </div>
+                  <div className="home-hero__plugin-hover-meta">
+                    <span>{t('homeHero.parameters', { n: (hoveredPlugin.manifest?.od?.inputs ?? []).length })}</span>
+                    {getPluginQueryPreview(hoveredPlugin) ? (
+                      <span>{getPluginQueryPreview(hoveredPlugin)}</span>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      dismissMentionPicker();
+                      onOpenPluginDetails(hoveredPlugin);
+                    }}
+                  >
+                    {t('homeHero.details')}
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </CaretFloatingLayer>
         <div className="home-hero__input-foot">
@@ -1157,15 +1175,73 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           <div className="home-hero__foot-left">
             <ComposerPlusMenu
               triggerTestId="home-hero-plus-trigger"
+              onOpen={() =>
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_menu_open',
+                })
+              }
               connectors={connectorOptions}
-              onPickConnector={pickConnector}
-              onAddConnector={onAddConnector}
+              onPickConnector={(connector) => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_pick',
+                  resource_kind: 'connector',
+                  resource_id: connector.id,
+                });
+                pickConnector(connector);
+              }}
+              onAddConnector={() => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_add',
+                  resource_kind: 'connector',
+                });
+                onAddConnector();
+              }}
               plugins={pluginOptions}
-              onPickPlugin={pickPlugin}
-              onAddPlugin={onAddPlugin}
+              onPickPlugin={(record) => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_pick',
+                  resource_kind: 'plugin',
+                  resource_id: record.id,
+                });
+                pickPlugin(record);
+              }}
+              onAddPlugin={() => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_add',
+                  resource_kind: 'plugin',
+                });
+                onAddPlugin();
+              }}
               mcpServers={mcpOptions}
-              onPickMcp={pickMcp}
-              onAddMcp={onAddMcp}
+              onPickMcp={(server) => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_pick',
+                  resource_kind: 'mcp',
+                  resource_id: server.id,
+                });
+                pickMcp(server);
+              }}
+              onAddMcp={() => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_add',
+                  resource_kind: 'mcp',
+                });
+                onAddMcp();
+              }}
               onAttachFiles={() => {
                 trackHomeChatComposerClick(analytics.track, {
                   page_name: 'home',
@@ -1180,7 +1256,14 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 <button
                   type="button"
                   className={`home-hero__working-dir od-tooltip${workingDir ? ' picked' : ''}`}
-                  onClick={onPickWorkingDir}
+                  onClick={() => {
+                    trackHomeChatComposerClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'working_dir',
+                    });
+                    onPickWorkingDir?.();
+                  }}
                   title={workingDir ?? t('workingDirPicker.homeTitle')}
                   data-tooltip={workingDir ?? t('workingDirPicker.homeTitle')}
                 >
@@ -1193,7 +1276,14 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   <button
                     type="button"
                     className="home-hero__working-dir-clear"
-                    onClick={() => onClearWorkingDir?.()}
+                    onClick={() => {
+                      trackHomeChatComposerClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'chat_composer',
+                        element: 'working_dir_clear',
+                      });
+                      onClearWorkingDir?.();
+                    }}
                     aria-label={t('workingDirPicker.clearAria')}
                   >
                     <Icon name="close" size={10} />
@@ -1227,7 +1317,18 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           <div className="home-hero__foot-right">
             <SessionModeToggle
               mode={sessionMode}
-              onChange={onSessionModeChange}
+              onChange={(next) => {
+                if (next !== sessionMode) {
+                  trackComposerSessionModeClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'chat_composer',
+                    element: 'session_mode_toggle',
+                    mode_before: sessionModeToTracking(sessionMode),
+                    mode_after: sessionModeToTracking(next),
+                  });
+                }
+                onSessionModeChange?.(next);
+              }}
               disabled={Boolean(submitDisabled)}
             />
             {executionSwitcher ? (
@@ -1259,7 +1360,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           pendingChipId={pendingChipId}
           pendingPluginId={pendingPluginId}
           pluginsLoading={pluginsLoading}
-          onPickChip={onPickChip}
+          onPickChip={handlePickTaskChip}
           variant="tabs"
         >
           <ShortcutsMenu
@@ -1272,7 +1373,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             onOpenChange={setShortcutsOpen}
             onPickChip={(chip) => {
               setShortcutsOpen(false);
-              onPickChip(chip);
+              handlePickTaskChip(chip);
             }}
           />
         </RailGroup>

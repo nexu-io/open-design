@@ -14,6 +14,7 @@ import {
   trackFileManagerClick,
   trackFileUploadResult,
   trackPageView,
+  trackTabLauncherClick,
 } from '../analytics/events';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
 import { useT } from '../i18n';
@@ -2021,6 +2022,14 @@ export function FileWorkspace({
           launcherContext={launcherContext}
           onOpenFile={openFile}
           onOpenTab={focusWorkspaceTab}
+          onTrack={(input) =>
+            trackTabLauncherClick(analytics.track, {
+              page_name: 'file_manager',
+              area: 'tab_launcher',
+              ...(projectId ? { project_id: projectId } : {}),
+              ...input,
+            })
+          }
           onClose={() => setLauncherOpen(false)}
         />
       ) : null}

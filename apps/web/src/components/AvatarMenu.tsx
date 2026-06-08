@@ -29,6 +29,8 @@ interface Props {
   onRefreshAgents: () => void;
   onBack?: () => void;
   placement?: 'down' | 'up';
+  /** Fired when the dropdown transitions from closed to open. */
+  onOpen?: () => void;
 }
 
 function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
@@ -52,9 +54,18 @@ export function AvatarMenu({
   onRefreshAgents,
   onBack,
   placement = 'down',
+  onOpen,
 }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  // Toggle that reports the closed→open transition (for analytics) without
+  // firing on close.
+  function toggleOpen() {
+    setOpen((v) => {
+      if (!v) onOpen?.();
+      return !v;
+    });
+  }
   const [discoveredProviderModels, setDiscoveredProviderModels] = useState<Record<string, ProviderModelOption[]>>({});
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -215,7 +226,7 @@ export function AvatarMenu({
         ref={triggerRef}
         type="button"
         className="avatar-agent-trigger"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggleOpen}
         aria-haspopup="menu"
         aria-expanded={open}
         data-tooltip={t('avatar.title')}
