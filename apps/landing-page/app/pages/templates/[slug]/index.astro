@@ -32,6 +32,16 @@ const plugins = getPluginsForTemplateUseCase(useCase);
 const relatedUseCases = getTemplateUseCases()
   .filter((item) => item.slug !== useCase.slug)
   .slice(0, 6);
+const isZh = locale === 'zh' || locale === 'zh-tw';
+const queryFaq = useCase.keywords.map((keyword) => ({
+  question: isZh
+    ? `可以用 Open Design 做 ${keyword} 吗？`
+    : `Can I use Open Design for ${keyword}?`,
+  answer: isZh
+    ? `可以。${copy.title}页面把相关的真实 Open Design 模板聚合在一起，每个结果都链接到原模板详情页，包含预览、来源归因和 GitHub 源码。`
+    : `Yes. ${copy.title} collects real Open Design templates for this search intent. Each result links to the original template detail page with preview media, attribution, and GitHub source.`,
+}));
+const faqItems = [...queryFaq, ...useCase.faq];
 
 const title = `${copy.title} · Open Design templates`;
 const description = copy.description;
@@ -68,7 +78,7 @@ const jsonLd = [
   {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
-    mainEntity: useCase.faq.map((item) => ({
+    mainEntity: faqItems.map((item) => ({
       '@type': 'Question',
       name: item.question,
       acceptedAnswer: {
@@ -84,7 +94,7 @@ const jsonLd = [
   <nav class="breadcrumb" aria-label={pcopy.breadcrumbLabel}>
     <a href={href('/')}>Open Design</a>
     <span>/</span>
-    <a href={href('/templates/')}>{locale === 'zh' || locale === 'zh-tw' ? '模板场景' : 'Templates'}</a>
+    <a href={href('/templates/')}>{isZh ? '模板场景' : 'Templates'}</a>
     <span>/</span>
     <span aria-current="page">{copy.title}</span>
   </nav>
@@ -112,8 +122,20 @@ const jsonLd = [
     ))}
   </section>
 
+  <section class="template-usecase-faq" aria-label="Search Q&A">
+    <h2>{isZh ? '搜索问题' : 'Search Q&A'}</h2>
+    <div class="template-usecase-faq-list">
+      {queryFaq.map((item) => (
+        <details class="template-usecase-faq-item">
+          <summary>{item.question}</summary>
+          <p>{item.answer}</p>
+        </details>
+      ))}
+    </div>
+  </section>
+
   <section class="template-usecase-faq" aria-label="FAQ">
-    <h2>{locale === 'zh' || locale === 'zh-tw' ? '常见问题' : 'FAQ'}</h2>
+    <h2>{isZh ? '常见问题' : 'FAQ'}</h2>
     <div class="template-usecase-faq-list">
       {useCase.faq.map((item) => (
         <details class="template-usecase-faq-item">
@@ -125,7 +147,7 @@ const jsonLd = [
   </section>
 
   <section class="template-usecase-related" aria-label="Related template use cases">
-    <h2>{locale === 'zh' || locale === 'zh-tw' ? '相关模板场景' : 'Related template use cases'}</h2>
+    <h2>{isZh ? '相关模板场景' : 'Related template use cases'}</h2>
     <div class="template-usecase-related-list">
       {relatedUseCases.map((item) => {
         const relatedCopy = getTemplateUseCaseCopy(item, locale);
