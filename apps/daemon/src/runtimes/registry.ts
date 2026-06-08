@@ -1,4 +1,3 @@
-import { ampAgentDef } from './defs/amp.js';
 import { amrAgentDef } from './defs/amr.js';
 import { claudeAgentDef } from './defs/claude.js';
 import { codexAgentDef } from './defs/codex.js';
@@ -13,6 +12,7 @@ import { cursorAgentDef } from './defs/cursor-agent.js';
 import { qwenAgentDef } from './defs/qwen.js';
 import { qoderAgentDef } from './defs/qoder.js';
 import { copilotAgentDef } from './defs/copilot.js';
+import { ampAgentDef } from './defs/amp.js';
 import { piAgentDef } from './defs/pi.js';
 import { kiroAgentDef } from './defs/kiro.js';
 import { kiloAgentDef } from './defs/kilo.js';
@@ -25,7 +25,6 @@ import { readLocalAgentProfileDefs as readLocalAgentProfileDefsFromFile } from '
 import type { RuntimeAgentDef } from './types.js';
 
 const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
-  ampAgentDef,
   amrAgentDef,
   claudeAgentDef,
   codexAgentDef,
@@ -40,6 +39,7 @@ const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
   qwenAgentDef,
   qoderAgentDef,
   copilotAgentDef,
+  ampAgentDef,
   piAgentDef,
   kiroAgentDef,
   kiloAgentDef,
