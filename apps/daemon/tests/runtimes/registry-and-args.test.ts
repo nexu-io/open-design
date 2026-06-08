@@ -3,6 +3,7 @@ import {
   AGENT_DEFS, assert, chmodSync, codex, cursorAgent, detectAgents, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 import { codexNeedsDangerFullAccessSandbox } from '../../src/runtimes/defs/codex.js';
+import { isKnownServiceTier } from '../../src/runtimes/models.js';
 import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
 
 test('AGENT_DEFS ids are unique', () => {
@@ -439,6 +440,48 @@ test('codex derives service tier options from speed tiers when service tiers are
       serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
     },
   ]);
+});
+
+test('codex detection enriches sparse live GPT-5.5 metadata from fallback tiers', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-sparse-live-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
+      const codexBin = join(dir, 'codex');
+      writeFileSync(
+        codexBin,
+        `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
+if [ "$1" = "debug" ] && [ "$2" = "models" ]; then
+  printf '%s\\n' '{"models":[{"slug":"gpt-5.5","display_name":"GPT-5.5","visibility":"list"}]}'
+  exit 0
+fi
+exit 2
+`,
+      );
+      chmodSync(codexBin, 0o755);
+      process.env.OD_AGENT_HOME = dir;
+      process.env.PATH = dir;
+      delete process.env.CODEX_BIN;
+
+      const agents = await detectAgents();
+      const detected = agents.find((agent) => agent.id === 'codex');
+
+      assert.ok(detected);
+      assert.equal(detected.modelsSource, 'live');
+      assert.deepEqual(detected.models, [
+        { id: 'default', label: 'Default (CLI config)' },
+        {
+          id: 'gpt-5.5',
+          label: 'GPT-5.5',
+          additionalSpeedTiers: ['fast'],
+          serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+        },
+      ]);
+      assert.equal(isKnownServiceTier(codex, 'gpt-5.5', 'priority'), true);
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('codex detection surfaces live debug models separately from fallback models', async () => {

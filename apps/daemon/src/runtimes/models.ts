@@ -42,6 +42,61 @@ export function preferFreshLiveModels(
   return freshModels.length > 0 ? freshModels : rememberedModels;
 }
 
+function findFallbackModel(
+  def: RuntimeAgentDef,
+  modelId: string,
+): RuntimeModelOption | null {
+  if (!Array.isArray(def.fallbackModels)) return null;
+  return def.fallbackModels.find((m) => m.id === modelId) ?? null;
+}
+
+function cloneModelOptions(options: RuntimeModelOption[]): RuntimeModelOption[] {
+  return options.map((option) => ({ ...option }));
+}
+
+function cloneStringOptions(options: string[]): string[] {
+  return [...options];
+}
+
+function mergeMissingFallbackModelMetadata(
+  model: RuntimeModelOption,
+  fallback: RuntimeModelOption | null,
+): RuntimeModelOption {
+  if (!fallback) return model;
+  const fallbackSpeedTiers = fallback.additionalSpeedTiers;
+  const fallbackServiceTiers = fallback.serviceTierOptions;
+  const needsSpeedTiers =
+    (!model.additionalSpeedTiers || model.additionalSpeedTiers.length === 0) &&
+    Array.isArray(fallbackSpeedTiers) &&
+    fallbackSpeedTiers.length > 0;
+  const needsServiceTiers =
+    (!model.serviceTierOptions || model.serviceTierOptions.length === 0) &&
+    Array.isArray(fallbackServiceTiers) &&
+    fallbackServiceTiers.length > 0;
+  if (!needsSpeedTiers && !needsServiceTiers) return model;
+  return {
+    ...model,
+    ...(needsSpeedTiers
+      ? { additionalSpeedTiers: cloneStringOptions(fallbackSpeedTiers) }
+      : {}),
+    ...(needsServiceTiers
+      ? { serviceTierOptions: cloneModelOptions(fallbackServiceTiers) }
+      : {}),
+  };
+}
+
+export function mergeFallbackModelMetadata(
+  def: RuntimeAgentDef,
+  models: RuntimeModelOption[],
+): RuntimeModelOption[] {
+  if (!Array.isArray(def.fallbackModels) || def.fallbackModels.length === 0) {
+    return models;
+  }
+  return models.map((model) =>
+    mergeMissingFallbackModelMetadata(model, findFallbackModel(def, model.id)),
+  );
+}
+
 export function findKnownModel(
   def: RuntimeAgentDef,
   modelId: string | null | undefined,
@@ -49,11 +104,11 @@ export function findKnownModel(
   if (!modelId) return null;
   const live = liveModelCache.get(def.id);
   const liveModel = live?.get(modelId);
-  if (liveModel) return liveModel;
-  if (Array.isArray(def.fallbackModels)) {
-    return def.fallbackModels.find((m) => m.id === modelId) ?? null;
+  const fallbackModel = findFallbackModel(def, modelId);
+  if (liveModel) {
+    return mergeMissingFallbackModelMetadata(liveModel, fallbackModel);
   }
-  return null;
+  return fallbackModel;
 }
 
 export function isKnownModel(def: RuntimeAgentDef, modelId: string | null | undefined) {
