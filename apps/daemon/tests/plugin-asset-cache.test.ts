@@ -18,6 +18,7 @@ import {
   assetCacheKey,
   assetCacheRewriteUrl,
   createPluginAssetCache,
+  createValidatingLookup,
   isCacheableExternalUrl,
   isPrivateAddress,
 } from '../src/plugin-asset-cache.js';
@@ -80,35 +81,66 @@ describe('isPrivateAddress', () => {
   });
 });
 
-describe('assertSafePublicUrl', () => {
-  const publicResolve = async () => ['93.184.216.34'];
-
-  it('rejects unsupported schemes and embedded credentials', async () => {
-    await expect(assertSafePublicUrl('ftp://host/x.png', publicResolve)).rejects.toMatchObject({
-      status: 400,
-    });
-    await expect(assertSafePublicUrl('https://user:pass@host/x.png', publicResolve)).rejects.toMatchObject(
-      { status: 400 },
+describe('assertSafePublicUrl (up-front rejection)', () => {
+  it('rejects unsupported schemes and embedded credentials', () => {
+    expect(() => assertSafePublicUrl('ftp://host/x.png')).toThrow(
+      expect.objectContaining({ status: 400 }),
     );
-    await expect(assertSafePublicUrl('not a url', publicResolve)).rejects.toBeInstanceOf(AssetCacheError);
+    expect(() => assertSafePublicUrl('https://user:pass@host/x.png')).toThrow(
+      expect.objectContaining({ status: 400 }),
+    );
+    expect(() => assertSafePublicUrl('not a url')).toThrow(AssetCacheError);
   });
 
-  it('rejects localhost and hosts that resolve to private addresses', async () => {
-    await expect(assertSafePublicUrl('http://localhost/x.png', publicResolve)).rejects.toMatchObject({
-      status: 400,
-    });
-    await expect(assertSafePublicUrl('http://127.0.0.1/x.png', publicResolve)).rejects.toMatchObject({
-      status: 400,
-    });
-    const privateResolve = async () => ['10.0.0.9'];
-    await expect(assertSafePublicUrl('https://evil.example.com/x.png', privateResolve)).rejects.toMatchObject(
-      { status: 400 },
+  it('rejects localhost and literal private IPs before any socket opens', () => {
+    expect(() => assertSafePublicUrl('http://localhost/x.png')).toThrow(
+      expect.objectContaining({ status: 400 }),
+    );
+    expect(() => assertSafePublicUrl('http://127.0.0.1/x.png')).toThrow(
+      expect.objectContaining({ status: 400 }),
+    );
+    expect(() => assertSafePublicUrl('http://169.254.169.254/x.png')).toThrow(
+      expect.objectContaining({ status: 400 }),
     );
   });
 
-  it('accepts a public host', async () => {
-    const url = await assertSafePublicUrl('https://res.cloudinary.com/x/a.png', publicResolve);
-    expect(url.hostname).toBe('res.cloudinary.com');
+  it('accepts a public host (DNS is validated later, at connection time)', () => {
+    expect(assertSafePublicUrl('https://res.cloudinary.com/x/a.png').hostname).toBe('res.cloudinary.com');
+  });
+});
+
+describe('createValidatingLookup (DNS-rebinding / TOCTOU guard)', () => {
+  // The lookup the Agent actually connects through: whatever address it
+  // resolves is the address that must pass, so a rebinding resolver cannot
+  // hand a public IP to a pre-check and a private IP to the real fetch.
+  function run(lookupImpl: (h: string, o: unknown, cb: (e: Error | null, a?: unknown, f?: number) => void) => void) {
+    return new Promise<{ err: Error | null; address?: unknown }>((resolve) => {
+      createValidatingLookup(lookupImpl as never)('host.example', { all: false }, (err, address) =>
+        resolve({ err, address }),
+      );
+    });
+  }
+
+  it('passes a public resolved address through', async () => {
+    const { err, address } = await run((_h, _o, cb) => cb(null, '93.184.216.34', 4));
+    expect(err).toBeNull();
+    expect(address).toBe('93.184.216.34');
+  });
+
+  it('rejects when the resolved address is private (the rebinding case)', async () => {
+    const { err } = await run((_h, _o, cb) => cb(null, '169.254.169.254', 4));
+    expect(err).toBeInstanceOf(AssetCacheError);
+    expect((err as AssetCacheError).status).toBe(400);
+  });
+
+  it('rejects when any address in an all:true result is private', async () => {
+    const { err } = await run((_h, _o, cb) =>
+      cb(null, [
+        { address: '93.184.216.34', family: 4 },
+        { address: '10.0.0.9', family: 4 },
+      ]),
+    );
+    expect(err).toBeInstanceOf(AssetCacheError);
   });
 });
 
@@ -132,7 +164,6 @@ describe('createPluginAssetCache', () => {
     let calls = 0;
     const cache = createPluginAssetCache({
       cacheDir: dir,
-      resolveHost: async () => ['93.184.216.34'],
       fetchImpl: (async () => {
         calls += 1;
         return pngResponse();
@@ -155,7 +186,6 @@ describe('createPluginAssetCache', () => {
     let calls = 0;
     const cache = createPluginAssetCache({
       cacheDir: dir,
-      resolveHost: async () => ['93.184.216.34'],
       fetchImpl: (async () => {
         calls += 1;
         await new Promise((r) => setTimeout(r, 10));
@@ -172,7 +202,6 @@ describe('createPluginAssetCache', () => {
   it('derives content-type from the extension when the header is generic', async () => {
     const cache = createPluginAssetCache({
       cacheDir: dir,
-      resolveHost: async () => ['93.184.216.34'],
       fetchImpl: (async () =>
         new Response(Buffer.alloc(4, 2), {
           status: 200,
@@ -187,7 +216,6 @@ describe('createPluginAssetCache', () => {
     const cache = createPluginAssetCache({
       cacheDir: dir,
       maxBytes: 16,
-      resolveHost: async () => ['93.184.216.34'],
       fetchImpl: (async () => pngResponse(1024)) as typeof fetch,
     });
     await expect(cache.get('https://res.cloudinary.com/x/big.png')).rejects.toMatchObject({ status: 413 });
@@ -206,17 +234,20 @@ describe('createPluginAssetCache', () => {
     expect(calls).toBe(0);
   });
 
-  it('refuses urls that resolve to a private address (SSRF)', async () => {
+  it('refuses a literal private-IP url before fetching (SSRF up-front guard)', async () => {
     let calls = 0;
     const cache = createPluginAssetCache({
       cacheDir: dir,
-      resolveHost: async () => ['169.254.169.254'],
       fetchImpl: (async () => {
         calls += 1;
         return pngResponse();
       }) as typeof fetch,
     });
-    await expect(cache.get('https://metadata.example.com/x.png')).rejects.toMatchObject({ status: 400 });
+    // 169.254.169.254 is the cloud metadata endpoint — must never be fetched.
+    await expect(cache.get('https://169.254.169.254/x.png')).rejects.toMatchObject({ status: 400 });
     expect(calls).toBe(0);
   });
+  // DNS-rebinding (host that *resolves* to a private address) is covered by the
+  // createValidatingLookup suite above — that guard runs at connection time,
+  // inside the undici Agent, not through the injectable fetchImpl.
 });

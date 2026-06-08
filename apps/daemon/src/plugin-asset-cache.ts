@@ -14,15 +14,20 @@
 // stored content-addressably on disk, and replayed instantly afterwards.
 //
 // SSRF is the load-bearing risk here: the route fetches a caller-supplied URL.
-// `assertSafePublicUrl` rejects non-http(s) schemes, embedded credentials, and
-// any host that resolves to a private/loopback/link-local/ULA/multicast
-// address, so the proxy can never be steered at the daemon's own network.
+// `assertSafePublicUrl` rejects non-http(s) schemes, embedded credentials,
+// localhost, and literal private IPs up-front. The authoritative guard against
+// DNS rebinding / TOCTOU is `createValidatingLookup`: it is installed as the
+// undici Agent's connection-time `lookup`, so the address that is *validated*
+// is the exact address the socket *connects to* — there is no separate
+// validation lookup a rebinding resolver could diverge from.
 
 import { createHash } from 'node:crypto';
-import { lookup as dnsLookup } from 'node:dns/promises';
+import { lookup as dnsLookupCb } from 'node:dns';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { isIP } from 'node:net';
+import { isIP, type LookupFunction } from 'node:net';
 import path from 'node:path';
+
+import { Agent } from 'undici';
 
 /** Media extensions we are willing to cache + proxy. Anything else (HTML,
  *  CSS, JS, fonts) is intentionally left alone so this surface never becomes a
@@ -108,12 +113,11 @@ export function isPrivateAddress(addr: string): boolean {
   return true; // not a literal IP — caller must resolve before trusting it
 }
 
-/** Parse `raw`, enforce http(s) + no credentials, and require every resolved
- *  address to be public. Throws `AssetCacheError` on any violation. */
-export async function assertSafePublicUrl(
-  raw: string,
-  resolve: (host: string) => Promise<string[]> = defaultResolve,
-): Promise<URL> {
+/** Cheap up-front rejection: enforce http(s), no embedded credentials, no
+ *  localhost, and no *literal* private IP. This is NOT the DNS-rebinding guard
+ *  (that is `createValidatingLookup`, applied at connection time) — it only
+ *  fast-fails the obvious cases before any socket is opened. */
+export function assertSafePublicUrl(raw: string): URL {
   let url: URL;
   try {
     url = new URL(raw);
@@ -131,30 +135,47 @@ export async function assertSafePublicUrl(
   if (lowerHost === 'localhost' || lowerHost.endsWith('.localhost')) {
     throw new AssetCacheError(400, 'localhost is not allowed');
   }
-  if (isIP(host)) {
-    if (isPrivateAddress(host)) {
-      throw new AssetCacheError(400, 'url resolves to a private address');
-    }
-    return url;
-  }
-  let addrs: string[];
-  try {
-    addrs = await resolve(host);
-  } catch {
-    throw new AssetCacheError(502, 'dns resolution failed');
-  }
-  if (!addrs.length) throw new AssetCacheError(502, 'host has no addresses');
-  for (const addr of addrs) {
-    if (isPrivateAddress(addr)) {
-      throw new AssetCacheError(400, 'url resolves to a private address');
-    }
+  if (isIP(host) && isPrivateAddress(host)) {
+    throw new AssetCacheError(400, 'url points at a private address');
   }
   return url;
 }
 
-async function defaultResolve(host: string): Promise<string[]> {
-  const records = await dnsLookup(host, { all: true });
-  return records.map((r) => r.address);
+type DnsLookupCb = typeof dnsLookupCb;
+
+/** Wrap a `dns.lookup`-shaped resolver so the resolved address is rejected when
+ *  it is private. Installed as the undici Agent's connection-time `lookup`, so
+ *  the validated address IS the one the socket connects to — closing the
+ *  DNS-rebinding / TOCTOU gap a separate pre-validation lookup would leave open.
+ *  Exported so the guard can be unit-tested without standing up a server. */
+export function createValidatingLookup(lookupImpl: DnsLookupCb = dnsLookupCb) {
+  return function validatingLookup(
+    hostname: string,
+    options: unknown,
+    callback?: (err: Error | null, address?: unknown, family?: number) => void,
+  ): void {
+    const cb = (typeof options === 'function' ? options : callback) as (
+      err: Error | null,
+      address?: unknown,
+      family?: number,
+    ) => void;
+    const opts = (typeof options === 'function' ? {} : (options ?? {})) as Record<string, unknown>;
+    (lookupImpl as unknown as (h: string, o: unknown, c: (e: Error | null, a?: unknown, f?: number) => void) => void)(
+      hostname,
+      opts,
+      (err, address, family) => {
+        if (err) return cb(err);
+        const list = Array.isArray(address) ? address : [{ address, family }];
+        for (const entry of list) {
+          const addr = typeof entry === 'string' ? entry : (entry as { address: string }).address;
+          if (isPrivateAddress(addr)) {
+            return cb(new AssetCacheError(400, 'host resolves to a private address'));
+          }
+        }
+        return cb(null, address, family);
+      },
+    );
+  };
 }
 
 export interface AssetCacheResult {
@@ -171,8 +192,8 @@ export interface PluginAssetCacheOptions {
   fetchTimeoutMs?: number;
   /** Injectable fetch (tests). Defaults to global fetch. */
   fetchImpl?: typeof fetch;
-  /** Injectable DNS resolver (tests). */
-  resolveHost?: (host: string) => Promise<string[]>;
+  /** Injectable `dns.lookup` for the connection-time SSRF guard (tests). */
+  lookupImpl?: DnsLookupCb;
 }
 
 export interface PluginAssetCache {
@@ -187,7 +208,12 @@ export function createPluginAssetCache(opts: PluginAssetCacheOptions): PluginAss
   const maxBytes = opts.maxBytes ?? 64 * 1024 * 1024;
   const timeoutMs = opts.fetchTimeoutMs ?? 15_000;
   const fetchImpl = opts.fetchImpl ?? fetch;
-  const resolveHost = opts.resolveHost ?? defaultResolve;
+  // Pin SSRF validation to the actual outbound connection: the Agent resolves
+  // the host once, and `validatingLookup` rejects the connection if that exact
+  // address is private. No separate pre-validation lookup to rebind around.
+  const dispatcher = new Agent({
+    connect: { lookup: createValidatingLookup(opts.lookupImpl) as unknown as LookupFunction },
+  });
   const inflight = new Map<string, Promise<AssetCacheResult>>();
 
   function keyFor(rawUrl: string): string {
@@ -227,12 +253,18 @@ export function createPluginAssetCache(opts: PluginAssetCacheOptions): PluginAss
   }
 
   async function fetchAndStore(rawUrl: string, key: string): Promise<AssetCacheResult> {
-    const url = await assertSafePublicUrl(rawUrl, resolveHost);
+    const url = assertSafePublicUrl(rawUrl);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
-      response = await fetchImpl(url, { redirect: 'error', signal: controller.signal });
+      // `dispatcher` carries the connection-time SSRF guard. It is an undici
+      // extension of RequestInit; attach it at runtime to avoid the
+      // undici-types (bundled with @types/node) vs undici@7 Dispatcher version
+      // skew that a typed field would trip over.
+      const init: RequestInit = { redirect: 'error', signal: controller.signal };
+      (init as { dispatcher?: unknown }).dispatcher = dispatcher;
+      response = await fetchImpl(url, init);
     } catch (err) {
       throw new AssetCacheError(502, `fetch failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
