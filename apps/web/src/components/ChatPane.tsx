@@ -1735,11 +1735,11 @@ export function ChatPane({
               <div className="chat-history-menu-head">
                 <span className="chat-history-menu-title">
                   {t('chat.conversationsHeading')}
-                </span>
-                <span className="chat-history-menu-count">
-                  {filteredConversations.length === conversations.length
-                    ? compactCount(conversations.length)
-                    : `${compactCount(filteredConversations.length)} / ${compactCount(conversations.length)}`}
+                  <span className="chat-history-menu-count">
+                    {filteredConversations.length === conversations.length
+                      ? `(${compactCount(conversations.length)})`
+                      : `(${compactCount(filteredConversations.length)} / ${compactCount(conversations.length)})`}
+                  </span>
                 </span>
                 {onNewConversation ? (
                   <button

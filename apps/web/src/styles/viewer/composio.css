@@ -2216,6 +2216,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   font-weight: 600;
 }
 .chat-history-menu-count {
+  margin-left: 4px;
   color: var(--text-faint);
   font-size: 10.5px;
   font-weight: 500;
