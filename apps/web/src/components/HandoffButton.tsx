@@ -575,7 +575,17 @@ export function HandoffButton({
           aria-label={primaryTitle}
           onClick={() => {
             if (primary && busy !== primary.id) {
-              // launch() emits the `open_editor` ui_click itself.
+              // Record the button intent first (the most common path through
+              // this surface), carrying the preferred editor as target so it
+              // is distinguishable from picking the same editor in the
+              // dropdown; launch() then emits `open_editor` for the actual
+              // target launch.
+              fireHandoff({
+                element: 'trigger',
+                target_id: primary.id,
+                target_available: primary.available,
+                handoff_tab: 'editor',
+              });
               void launch(primary);
             } else {
               fireHandoff({ element: 'trigger' });
