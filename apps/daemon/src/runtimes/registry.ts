@@ -1,3 +1,4 @@
+import { ampAgentDef } from './defs/amp.js';
 import { amrAgentDef } from './defs/amr.js';
 import { claudeAgentDef } from './defs/claude.js';
 import { codexAgentDef } from './defs/codex.js';
@@ -24,6 +25,7 @@ import { readLocalAgentProfileDefs as readLocalAgentProfileDefsFromFile } from '
 import type { RuntimeAgentDef } from './types.js';
 
 const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
+  ampAgentDef,
   amrAgentDef,
   claudeAgentDef,
   codexAgentDef,

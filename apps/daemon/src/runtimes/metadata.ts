@@ -3,6 +3,10 @@ const AGENT_INSTALL_LINKS: Record<
   string,
   { installUrl?: string; docsUrl?: string }
 > = {
+  amp: {
+    installUrl: 'https://ampcode.com/manual#install',
+    docsUrl: 'https://ampcode.com/manual',
+  },
   amr: {
     installUrl: 'https://github.com/nexu-io/vela',
     docsUrl: 'https://github.com/nexu-io/open-design/blob/main/docs/new-agent-runtime-acp.md',
