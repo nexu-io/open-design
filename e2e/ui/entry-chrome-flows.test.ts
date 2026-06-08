@@ -469,7 +469,7 @@ test('[P1] entry execution pill remains available across secondary entry pages',
   }
 });
 
-test('[P1] home starters can browse registry and use a starter query from Home', async ({ page }) => {
+test('[P1] home starters can browse registry and use a starter from Home', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -498,12 +498,12 @@ test('[P1] home starters can browse registry and use a starter query from Home',
   // collapse button on hover, which would intercept the click).
   await page.getByTestId('entry-nav-home').click();
   await expect(page.getByTestId('home-hero')).toBeVisible();
-  await expect(page.getByTestId('plugins-home-use-menu-localized-plugin')).toBeVisible();
-  await page.getByTestId('plugins-home-use-menu-localized-plugin').click({ force: true });
-  await page.getByTestId('plugins-home-use-with-query-localized-plugin').click();
-
-  const input = page.getByTestId('home-hero-input');
-  await expect(input).toHaveText('Make a design systems brief.');
+  // Community is a gallery now (no inline Use button): open the starter's
+  // detail modal and use it. Plain "Use" routes it as the active driver — its
+  // query/context bind on submit — rather than pre-filling the prompt text.
+  await page.getByTestId('plugins-home-details-localized-plugin').click({ force: true });
+  await page.getByTestId('plugin-details-use-localized-plugin').click();
+  await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
 });
 
 test('[P2] home starters shows the empty catalog state when no plugins are available', async ({ page }) => {
@@ -534,8 +534,6 @@ test('[P2] home starters search and facet filters narrow the visible gallery', a
 
   await gotoEntryHome(page);
 
-  await expect(page.getByTestId('plugins-home-chip-saved')).toBeVisible();
-  await expect(page.getByTestId('plugins-home-chip-saved')).toContainText('0');
   await expect(page.getByTestId('plugins-home-pill-category-all')).toContainText('4');
 
   await page.getByTestId('plugins-home-pill-category-deck').click();
@@ -556,15 +554,7 @@ test('[P2] home starters search and facet filters narrow the visible gallery', a
   await expect(page.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
   await expect(page.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
   await page.getByTestId('plugins-home-search-clear').click();
-
-  await page.getByTestId('plugins-home-save-localized-plugin').click();
-  await page.getByTestId('plugins-home-save-hyperframes-video').click();
-  await expect(page.getByTestId('plugins-home-chip-saved')).toContainText('2');
-  await page.getByTestId('plugins-home-chip-saved').click();
   await expect(page.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
-  await expect(page.locator('[data-plugin-id="hyperframes-video"]')).toBeVisible();
-  await expect(page.locator('[data-plugin-id="deck-writer"]')).toHaveCount(0);
-  await expect(page.locator('[data-plugin-id="figma-importer"]')).toHaveCount(0);
 });
 
 test('[P1] home starters can jump into plugin creation through the registry browse flow', async ({ page }) => {
@@ -666,21 +656,21 @@ test('[P2] home starters html details modal exposes header actions and closes fr
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('HTML Details Plugin');
   await expect(page.getByTestId('plugin-details-use-html-details-plugin')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Plugin info', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Fullscreen|全屏/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /Share/i }).first()).toBeVisible();
-  await expect(page.getByTestId('plugin-share-html-details-plugin')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Plugin info', exact: true }).click();
-  await expect(page.locator('.ds-modal-sidebar')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Plugin info', exact: true }).click();
-  await expect(page.locator('.ds-modal-sidebar')).toBeVisible();
+  // Designer-first redesign: the info sidebar starts collapsed and the
+  // preview owns the stage. The header "Plugin info" toggle and the inline
+  // "More" share menu were removed; the sidebar opens via the preview-edge
+  // handle.
+  await expect(dialog.locator('.ds-modal-sidebar')).toHaveCount(0);
+  await dialog.locator('.ds-modal-stage-handle.is-expand').click();
+  await expect(dialog.locator('.ds-modal-sidebar')).toBeVisible();
 
   await dialog.locator('.ds-modal-close').click();
   await expect(dialog).toHaveCount(0);
 });
 
-test('[P2] home starters html details modal shows metadata links, supports copy query, and opens the plugin share menu', async ({ page }) => {
+test('[P2] home starters html details modal shows metadata links and supports copy query', async ({ page }) => {
   const htmlPlugin = makeStarterPlugin({
     id: 'html-metadata-plugin',
     title: 'HTML Metadata Plugin',
@@ -740,6 +730,10 @@ test('[P2] home starters html details modal shows metadata links, supports copy 
 
   const dialog = page.getByRole('dialog', { name: /HTML Metadata Plugin preview/i });
   await expect(dialog).toBeVisible();
+  // The info sidebar starts collapsed in the redesign; open it via the
+  // preview-edge handle before inspecting the manifest metadata.
+  await dialog.locator('.ds-modal-stage-handle.is-expand').click();
+  await expect(dialog.locator('.ds-modal-sidebar')).toBeVisible();
   await expect(page.getByTestId('plugin-details-author')).toContainText('Open Design');
   await expect(page.getByTestId('plugin-details-author-profile')).toHaveAttribute(
     'href',
@@ -761,18 +755,8 @@ test('[P2] home starters html details modal shows metadata links, supports copy 
   await expect(dialog.getByRole('button', { name: /^Copied$/i })).toBeVisible();
   const copied = await page.evaluate(() => (window as typeof window & { __copiedTexts?: string[] }).__copiedTexts ?? []);
   expect(copied.at(-1)).toBe('Use the {{topic}} template for a polished launch deck.');
-
-  await page.getByTestId('plugin-share-html-metadata-plugin').getByRole('button', { name: /^More$/i }).click();
-  const shareMenu = page.locator('.plugin-share-popover[role="menu"]');
-  await expect(shareMenu).toBeVisible();
-  await expect(shareMenu.getByRole('menuitem', { name: /Copy install command/i })).toBeVisible();
-  await expect(shareMenu.getByRole('menuitem', { name: /Copy plugin ID/i })).toBeVisible();
-  // Bundled plugins now have a public open-design.ai detail page, so the
-  // README badge (which links to it) is offered.
-  await expect(shareMenu.getByRole('menuitem', { name: /Copy README badge/i })).toBeVisible();
-  await expect(shareMenu.getByRole('menuitem', { name: /Open source on GitHub/i })).toBeVisible();
-  await expect(shareMenu.getByRole('menuitem', { name: /Open homepage/i })).toBeVisible();
-  await expect(shareMenu.getByRole('menuitem', { name: /Open in marketplace/i })).toBeVisible();
+  // The inline "More" plugin-share menu was removed from the detail modal in
+  // the redesign; sharing is offered through the header Share menu instead.
 });
 
 test('[P1] home starters Use plugin from the details modal applies the plugin to the home hero', async ({ page }) => {
@@ -833,8 +817,10 @@ test('[P0] home starters direct Use routes the plugin as the active driver and k
   await expect(input).toHaveText('');
 
   const applyResponsePromise = page.waitForResponse('**/api/plugins/localized-plugin/apply');
-  await page.locator('article.plugins-home__card[data-plugin-id="localized-plugin"]').hover();
-  await page.getByTestId('plugins-home-use-localized-plugin').click({ force: true });
+  // Community is a gallery (no inline Use button): open the starter's detail
+  // modal and use it from there.
+  await page.getByTestId('plugins-home-details-localized-plugin').click({ force: true });
+  await page.getByTestId('plugin-details-use-localized-plugin').click();
   // Plain "Use" routes the starter as the active driver (active-plugin chip)
   // without seeding the prompt; the user can still type their own brief.
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
@@ -870,7 +856,7 @@ test('[P0] home starters direct Use routes the plugin as the active driver and k
   expect(projectBody.pluginId).toBe('localized-plugin');
 });
 
-test('[P1] home starters Use with query hydrates the prompt and routes the plugin as the active driver', async ({ page }) => {
+test('[P1] home starters route the picked plugin as the active driver from its detail modal', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -884,17 +870,13 @@ test('[P1] home starters Use with query hydrates the prompt and routes the plugi
 
   await gotoEntryHome(page);
 
-  const input = page.getByTestId('home-hero-input');
-  await expect(input).toHaveText('');
   const starterCard = page.locator('[data-plugin-id="localized-plugin"]').first();
   await starterCard.scrollIntoViewIfNeeded();
-  await starterCard.hover();
-  await expect(page.getByTestId('plugins-home-use-menu-localized-plugin')).toBeVisible();
-  await page.getByTestId('plugins-home-use-menu-localized-plugin').click();
-  await page.getByTestId('plugins-home-use-with-query-localized-plugin').click();
-  await expect(input).toHaveText('Make a design systems brief.');
-  // The query hydrates the empty draft and the plugin is routed as the active
-  // driver (active-plugin chip), so its pipeline/context bind on submit.
+  // Community is a gallery: open the starter's detail modal and use it. Plain
+  // "Use" routes the plugin as the active driver (active-plugin chip), so its
+  // pipeline/context bind on submit.
+  await page.getByTestId('plugins-home-details-localized-plugin').click({ force: true });
+  await page.getByTestId('plugin-details-use-localized-plugin').click();
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
 });
 
@@ -915,11 +897,13 @@ test('[P0] home starters Use with query carries the hydrated starter prompt into
   const input = page.getByTestId('home-hero-input');
   const starterCard = page.locator('[data-plugin-id="localized-plugin"]').first();
   await starterCard.scrollIntoViewIfNeeded();
-  await starterCard.hover();
-  await expect(page.getByTestId('plugins-home-use-menu-localized-plugin')).toBeVisible();
-  await page.getByTestId('plugins-home-use-menu-localized-plugin').click();
-  await page.getByTestId('plugins-home-use-with-query-localized-plugin').click();
-  await expect(input).toHaveText('Make a design systems brief.');
+  // Use the starter from its detail modal (gallery has no inline Use). Plain
+  // "Use" routes it as the active run driver; the gallery no longer pre-fills
+  // the prompt, so the user types their brief before submitting.
+  await page.getByTestId('plugins-home-details-localized-plugin').click({ force: true });
+  await page.getByTestId('plugin-details-use-localized-plugin').click();
+  await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
+  await input.fill('Make a design systems brief.');
 
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
   await page.getByTestId('home-hero-submit').click();

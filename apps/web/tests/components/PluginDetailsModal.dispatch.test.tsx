@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 
 import { PluginDetailsModal } from '../../src/components/PluginDetailsModal';
+import { PluginMetaSections } from '../../src/components/plugin-details/PluginMetaSections';
 import { I18nProvider } from '../../src/i18n';
 
 interface MakeArgs {
@@ -154,7 +155,10 @@ describe('PluginDetailsModal dispatch', () => {
     expect(html).toContain('ds-modal');
     expect(html).toContain('ds-modal-primary-action');
     expect(html).toContain('plugin-details-use-live-dashboard');
-    expect(html).toContain('plugin-share-live-dashboard');
+    // Share stays available via the unified template share menu; the
+    // redundant inline "More" plugin-share menu was removed.
+    expect(html).toContain('template-share-menu');
+    expect(html).not.toContain('plugin-share-live-dashboard');
   });
 
   it('routes design-system plugins to the showcase + DESIGN.md surface (with share menu)', () => {
@@ -230,20 +234,44 @@ describe('PluginDetailsModal common metadata coverage', () => {
     expect(html).toContain('/tmp');
   });
 
-  it('surfaces meta sections in the example variant via the sidebar', () => {
+  it('collapses the example variant sidebar by default so the preview owns the stage', () => {
     const html = render(
       pluginWithMeta({
         id: 'html-with-meta',
         preview: { type: 'html', entry: './ex.html' },
       }),
     );
-    expect(html).toContain('plugin-info-pane');
-    expect(html).toContain('plugin-meta-sections');
-    expect(html).toContain('plugin-meta-sections__heading');
-    expect(html).toMatch(/<h3[^>]*>Plugin info<\/h3>/);
-    expect(html).toContain('Workflow');
-    expect(html).toContain('Capabilities');
-    expect(html).toContain('mcp:invoke');
+    // Designer-first: the live preview is the hero. The manifest
+    // sidebar starts collapsed behind an expand handle instead of
+    // rendering its meta sections inline.
+    expect(html).toContain('ds-modal-stage-handle is-expand');
+    expect(html).not.toContain('plugin-meta-sections');
+  });
+
+  it('minimal meta variant keeps example query inline and tucks dev detail behind a disclosure', () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider>
+        <PluginMetaSections
+          record={pluginWithMeta({
+            id: 'minimal-meta',
+            query: 'Generate a {style} hero for {brand}.',
+          })}
+          omit={{ description: true }}
+          compact
+          heading="Plugin info"
+          variant="minimal"
+        />
+      </I18nProvider>,
+    );
+    // Designer-relevant blocks render inline (above the disclosure).
+    expect(html).toContain('Example query');
+    expect(html).toContain('Generate a {style} hero for {brand}.');
+    // Developer manifest detail is collapsed inside the disclosure.
+    expect(html).toContain('plugin-meta-advanced');
+    expect(html).toContain('Developer details');
+    // Workflow / Capabilities / Source live after the disclosure opens.
+    expect(html.indexOf('plugin-meta-advanced')).toBeLessThan(html.indexOf('Workflow'));
+    expect(html.indexOf('plugin-meta-advanced')).toBeLessThan(html.indexOf('Capabilities'));
   });
 
   it('surfaces Plugin info first in the design-system sidebar, with DESIGN.md below', () => {

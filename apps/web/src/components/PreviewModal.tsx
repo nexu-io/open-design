@@ -204,6 +204,10 @@ interface Props {
   onFullscreenClick?: () => void;
   onShareClick?: () => void;
   onSidebarToggleClick?: (open: boolean) => void;
+  // Hide the header sidebar-toggle button (the plugin detail opens its
+  // collapsed info panel via the preview-edge handle instead). Other
+  // variants — design-system "DESIGN.md", media, scenario — keep it.
+  hideSidebarToggle?: boolean;
   // Fires when the user picks a share-menu item ("pdf" / "zip" / "html"
   // / "image" / "open_in_new_tab"). Used by callers that want to track popover-
   // level clicks separately from the share trigger.
@@ -229,6 +233,7 @@ export function PreviewModal({
   primaryAction,
   headerExtras,
   shareTarget,
+  hideSidebarToggle = false,
   onFullscreenClick,
   onShareClick,
   onSidebarToggleClick,
@@ -353,19 +358,47 @@ export function PreviewModal({
   useEffect(() => {
     const el = stageFrameRef.current;
     if (!el) return;
+    // Use layout box metrics (clientWidth/Height) rather than
+    // getBoundingClientRect: the modal animates in with a CSS
+    // `transform: scale()`, and rect width is transform-aware, so an
+    // early measure lands a few percent short and the scaler never
+    // catches up — leaving a white gutter. clientWidth ignores the
+    // ancestor transform and always reports the settled layout width.
     const measure = () => {
-      const r = el.getBoundingClientRect();
-      setStageSize({ w: r.width, h: r.height });
+      setStageSize({ w: el.clientWidth, h: el.clientHeight });
     };
     measure();
+    // The first synchronous measure can land before the modal's
+    // entrance/layout fully settles, leaving the scaler a few dozen px
+    // short of the stage and exposing a white gutter. Re-measure on the
+    // next frame so the scaled preview fills the stage edge-to-edge.
+    const raf = requestAnimationFrame(measure);
     if (typeof ResizeObserver !== 'undefined') {
       const ro = new ResizeObserver(measure);
       ro.observe(el);
-      return () => ro.disconnect();
+      return () => {
+        cancelAnimationFrame(raf);
+        ro.disconnect();
+      };
     }
     window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', measure);
+    };
   }, []);
+
+  // Re-measure when the sidebar opens/closes (the stage width jumps) or
+  // the active view changes, so `scale` tracks the current stage width
+  // instead of a stale value left over from the previous layout.
+  useEffect(() => {
+    const el = stageFrameRef.current;
+    if (!el) return;
+    const raf = requestAnimationFrame(() => {
+      setStageSize({ w: el.clientWidth, h: el.clientHeight });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [sidebarOpen, activeId]);
 
   const activeView = views.find((v) => v.id === activeId) ?? views[0];
   const activeCustom = activeView?.custom ?? null;
@@ -403,11 +436,12 @@ export function PreviewModal({
     [previewShareText, previewShareUrl],
   );
 
-  // Only down-scale: when the stage is wider than the design viewport we
-  // render the iframe at native size instead of upscaling pixels.
-  const scale = stageSize.w > 0 ? Math.min(1, stageSize.w / designWidth) : 1;
+  // Always fit the design viewport to the full stage width — scaling up
+  // as well as down — so the preview fills the stage edge-to-edge with
+  // no letterbox gutter when the sidebar collapses and the stage widens.
+  const scale = stageSize.w > 0 ? stageSize.w / designWidth : 1;
   const scalerStyle = useMemo(() => {
-    if (scale >= 1 || stageSize.w === 0) {
+    if (stageSize.w === 0) {
       return {
         width: '100%',
         height: '100%',
@@ -487,17 +521,6 @@ export function PreviewModal({
                 <div className="ds-modal-subtitle">{subtitle}</div>
               ) : null}
             </div>
-            <button
-              type="button"
-              className="ds-modal-close"
-              onClick={onClose}
-              title={t('preview.closeTitle')}
-              aria-label={t('common.close')}
-            >
-              <Icon name="close" size={14} />
-            </button>
-          </div>
-          <div className="ds-modal-header-toolbar">
             {showTabs ? (
               <div className="ds-modal-tabs" role="tablist">
                 {views.map((v) => (
@@ -532,7 +555,9 @@ export function PreviewModal({
               ) : null}
               {sidebar ? (
                 <button
-                  className={`ghost ${sidebarOpen ? 'is-active' : ''}`}
+                  className={`ghost ${sidebarOpen ? 'is-active' : ''}${
+                    hideSidebarToggle ? ' ds-modal-sidebar-toggle--compact-only' : ''
+                  }`}
                   onClick={() => {
                     setSidebarOpen((v) => {
                       const next = !v;
@@ -546,21 +571,6 @@ export function PreviewModal({
                   {sidebar.label}
                 </button>
               ) : null}
-              <button
-                className="ghost"
-                onClick={() => {
-                  onFullscreenClick?.();
-                  if (fullscreen) exitFullscreen();
-                  else enterFullscreen();
-                }}
-                title={
-                  fullscreen
-                    ? t('common.exitFullscreen')
-                    : t('common.fullscreen')
-                }
-              >
-                {fullscreen ? t('preview.exit') : t('preview.fullscreen')}
-              </button>
               {showTemplateShareMenu ? (
                 <div className="share-menu template-share-menu" ref={templateShareRef}>
                   <button
@@ -805,6 +815,15 @@ export function PreviewModal({
               ) : null}
               {headerExtras}
             </div>
+            <button
+              type="button"
+              className="ds-modal-close"
+              onClick={onClose}
+              title={t('preview.closeTitle')}
+              aria-label={t('common.close')}
+            >
+              <Icon name="close" size={14} />
+            </button>
           </div>
         </header>
         <div
@@ -812,6 +831,40 @@ export function PreviewModal({
           ref={stageRef}
         >
           <div className="ds-modal-stage-iframe" ref={stageFrameRef}>
+            {/* Also render for custom-stage views (media players: image /
+                video / audio) — the header no longer carries fullscreen, so
+                this hover icon is their only fullscreen affordance. */}
+            {!activeUnavailable && !activeError ? (
+              <button
+                type="button"
+                className="ds-modal-stage-fullscreen"
+                onClick={() => {
+                  onFullscreenClick?.();
+                  if (fullscreen) exitFullscreen();
+                  else enterFullscreen();
+                }}
+                title={fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')}
+                aria-label={fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')}
+              >
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  {fullscreen ? (
+                    <path d="M9 3v6H3M3 9l6-6M15 21v-6h6M21 15l-6 6" />
+                  ) : (
+                    <path d="M3 9V3h6M3 3l6 6M21 15v6h-6M21 21l-6-6" />
+                  )}
+                </svg>
+              </button>
+            ) : null}
             {isCustomView ? (
               // Caller-rendered ReactNode (e.g. plugin media player).
               // The modal still owns chrome (header, sidebar toggle,

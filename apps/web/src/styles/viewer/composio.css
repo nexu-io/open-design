@@ -1334,28 +1334,32 @@
 .ds-modal-header {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px 20px;
+  gap: 10px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
 }
+/* One row: title + description stacked on the left, action buttons and
+   close on the right. Vertically centering the right cluster against the
+   two-line title block drops the buttons down so they sit balanced with
+   the description instead of hugging the top edge. */
 .ds-modal-header-top {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: center;
+  gap: 20px;
+}
+.ds-modal-title-block {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .ds-modal-header-toolbar {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-}
-.ds-modal-title-block {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
 }
 .ds-modal-title {
   font-size: 16px;
@@ -1367,17 +1371,22 @@
   color: var(--text-strong, var(--text));
 }
 .ds-modal-subtitle {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--text-muted);
-  line-height: 1.5;
-  /* Allow up to two lines for long descriptions (e.g. Chinese plugin
-     subtitles) instead of clipping at the first word — keeps the
-     vertical footprint bounded but readable. */
+  line-height: 1.55;
+  /* Clamp to two lines so a long brief stays readable without growing
+     the header. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   word-break: break-word;
+}
+.ds-modal-actions {
+  flex-shrink: 0;
+}
+.ds-modal-header-top .ds-modal-close {
+  flex-shrink: 0;
 }
 .ds-modal-tabs {
   display: inline-flex;
@@ -1454,6 +1463,39 @@
 .ds-modal-stage.has-sidebar .ds-modal-stage-iframe {
   flex: 1 1 60%;
 }
+/* Fullscreen affordance: hidden until the pointer hovers the preview,
+   then a compact icon-only button in the top-right of the preview. */
+.ds-modal-stage-fullscreen {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 4;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: opacity 140ms ease, transform 140ms ease, color 140ms ease,
+    background 140ms ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.16);
+}
+.ds-modal-stage-iframe:hover .ds-modal-stage-fullscreen,
+.ds-modal-stage-fullscreen:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.ds-modal-stage-fullscreen:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
 .ds-modal-sidebar {
   position: relative;
   flex: 1 1 40%;
@@ -1465,6 +1507,39 @@
   scrollbar-gutter: stable;
   display: flex;
   flex-direction: column;
+  /* Slide + fade in when "Plugin info" reveals the panel. A soft,
+     slightly longer ease-out keeps it from snapping. */
+  animation: ds-modal-sidebar-in 340ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes ds-modal-sidebar-in {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+/* Stagger the panel's own content in just behind the panel so the
+   reveal reads as one fluid motion rather than a hard pop. */
+.ds-modal-sidebar .plugin-info-pane {
+  animation: ds-modal-sidebar-content-in 360ms cubic-bezier(0.16, 1, 0.3, 1) 60ms both;
+}
+@keyframes ds-modal-sidebar-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-modal-sidebar {
+    animation: none;
+  }
 }
 .ds-modal-stage-handle {
   position: absolute;
@@ -1821,6 +1896,14 @@
   border: 1px solid rgba(0, 0, 0, 0.12);
   vertical-align: middle;
 }
+/* Plugin detail suppresses the header sidebar toggle on desktop (the
+   preview-edge handle opens the info panel there). Hide it on desktop but
+   expose it again on small screens, where the edge handle is hidden and
+   would otherwise leave the collapsed info panel unreachable. */
+.ds-modal-sidebar-toggle--compact-only {
+  display: none;
+}
+
 @media (max-width: 760px) {
   .ds-modal-backdrop { padding: 0; }
   .ds-modal { border-radius: 0; }
@@ -1838,6 +1921,7 @@
   /* On stacked layout the side handles (which assume horizontal split)
      would float over content awkwardly — fall back to the header toggle. */
   .ds-modal-stage-handle { display: none; }
+  .ds-modal-sidebar-toggle--compact-only { display: inline-flex; }
 }
 
 /* Examples gallery toolbar — filter pills + richer card metadata */

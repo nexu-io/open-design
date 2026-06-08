@@ -1302,6 +1302,19 @@ export interface PluginLoopClickProps {
   plugin_id?: string;
 }
 
+// COMMUNITY — the home "Community" gallery: a wall of live example.html
+// preview tiles (PluginsHomeSection cardLayout="gallery"). `card` opens
+// the plugin detail modal (tile body click or keyboard); `card_open_external`
+// is the ↗ that opens the real example page in a new tab, bypassing the
+// modal — a strong "go straight to the finished thing" intent signal.
+export interface CommunityGalleryClickProps {
+  page_name: 'home';
+  area: 'community_gallery';
+  element: 'card' | 'card_open_external';
+  plugin_id?: string;
+  plugin_type?: string;
+}
+
 // DESIGN SYSTEMS
 export interface DesignSystemsTopClickProps {
   page_name: 'design_systems';
@@ -1934,6 +1947,7 @@ export type UiClickProps =
   | PluginsSourcesTabClickProps
   | PluginDetailClickProps
   | PluginLoopClickProps
+  | CommunityGalleryClickProps
   | DesignSystemsTopClickProps
   | DesignSystemsTemplateCardClickProps
   | DesignSystemsTemplatesModalClickProps
@@ -1994,6 +2008,16 @@ export interface PluginReplacementModalSurfaceViewProps {
   area: 'plugin_replacement_modal';
 }
 
+// Impression of the plugin detail modal opened from the home Community
+// gallery. Fires once per open so the gallery → detail funnel has a
+// denominator (card clicks) and a numerator (modal exposures).
+export interface PluginDetailModalSurfaceViewProps {
+  page_name: 'home';
+  area: 'plugin_detail_modal';
+  plugin_id?: string;
+  plugin_type?: string;
+}
+
 export interface DesignSystemsTemplatesModalSurfaceViewProps {
   page_name: 'design_systems';
   area: 'templates_modal';
@@ -2051,6 +2075,7 @@ export type SurfaceViewProps =
   | HelpPopoverSurfaceViewProps
   | NewProjectModalSurfaceViewProps
   | PluginReplacementModalSurfaceViewProps
+  | PluginDetailModalSurfaceViewProps
   | DesignSystemsTemplatesModalSurfaceViewProps
   | AssistantFeedbackReasonPanelSurfaceViewProps
   | UpdateIndicatorSurfaceViewProps
