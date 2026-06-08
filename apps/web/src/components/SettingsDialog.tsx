@@ -3381,6 +3381,7 @@ export function SettingsDialog({
                             <div
                               key={a.id}
                               ref={isAmrAgent ? amrCardRef : undefined}
+                              data-testid={`settings-agent-card-${a.id}`}
                               className={
                                 'agent-card agent-card-installed' +
                                 (active ? ' active' : '') +
@@ -3399,6 +3400,7 @@ export function SettingsDialog({
                                 <button
                                   type="button"
                                   className="agent-card-select"
+                                  data-testid={`settings-agent-select-${a.id}`}
                                   onClick={() => {
                                     trackSettingsLocalCliClick(analytics.track, {
                                       page_name: 'settings',

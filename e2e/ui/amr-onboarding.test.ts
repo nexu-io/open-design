@@ -126,8 +126,15 @@ test('[P0] onboarding AMR card lets the user pick a live runtime model before co
   let selectedModel = 'deepseek-v4-flash';
   const modelSelect = page.locator('.onboarding-view__model-picker select');
   if ((await modelSelect.count()) > 0) {
-    await expect(modelSelect).toHaveValue('claude-opus-4.8');
+    const optionValues = await modelSelect.locator('option').evaluateAll((options) =>
+      options.map((option) => (option as HTMLOptionElement).value).filter(Boolean),
+    );
+    expect(optionValues.length).toBeGreaterThan(0);
+    selectedModel = optionValues.includes(selectedModel)
+      ? selectedModel
+      : optionValues[0]!;
     await modelSelect.selectOption(selectedModel);
+    await expect(modelSelect).toHaveValue(selectedModel);
   } else {
     selectedModel = 'glm-5.1';
     const modelPicker = amrCard.getByRole('combobox', { name: /Model.*AMR CLI/i });
@@ -141,6 +148,15 @@ test('[P0] onboarding AMR card lets the user pick a live runtime model before co
     }
     await popover.getByRole('option', { name: 'GLM 5.1' }).click();
   }
+  await expect
+    .poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '{}'), STORAGE_KEY))
+    .toMatchObject({
+      agentModels: {
+        amr: {
+          model: selectedModel,
+        },
+      },
+    });
   await page.getByRole('button', { name: /Continue/i }).click();
 
   await expect

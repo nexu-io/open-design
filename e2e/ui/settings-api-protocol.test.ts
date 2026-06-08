@@ -18,7 +18,7 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
   await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
 }
@@ -478,7 +478,7 @@ test('[P0] saving Local CLI updates the entry status pill with the selected agen
   const dialog = page.getByRole('dialog');
 
   await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
-  await dialog.getByRole('button', { name: /Codex CLI/i }).click();
+  await dialog.getByTestId('settings-agent-select-codex').click();
   await expect.poll(async () => readSavedConfig(page)).toMatchObject({
     mode: 'daemon',
     agentId: 'codex',
