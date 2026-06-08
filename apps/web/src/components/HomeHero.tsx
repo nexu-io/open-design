@@ -45,7 +45,6 @@ import {
   type HomeHeroChip,
 } from './home-hero/chips';
 import {
-  filterPluginsBySubChip,
   isSubChipParent,
   subChipsForChip,
   type HomeHeroSubChip,
@@ -63,6 +62,8 @@ import {
 } from '../i18n/content';
 import { PreviewSurface } from './plugins-home/cards/PreviewSurface';
 import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
+import { sortByVisualAppeal } from './plugins-home/visualScore';
+import { applyFacetSelection } from './plugins-home/facets';
 import { inferPluginPreview } from './plugins-home/preview';
 import { SessionModeToggle } from './SessionModeToggle';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
@@ -472,21 +473,31 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         : [],
     [activeChipId, locale, pluginOptions],
   );
-  // Derive sub-category pills from the SAME list that feeds the preset cards
-  // (`activeExamplePlugins`), not the full install set. This guarantees every
-  // pill maps to at least one visible card, so selecting it always filters to
-  // a non-empty slice — no "looks unfiltered" fallback needed.
+  // Derive sub-category pills from the FULL install set so the rail mirrors the
+  // Community section exactly — same sub-category set and same order. (Earlier
+  // this read only `activeExamplePlugins` to guarantee non-empty slices, but
+  // that left the rail showing fewer types than Community; the empty case is
+  // now handled by the full-catalog fallback in `filteredExamplePlugins`.)
   const activeSubChips = useMemo(
-    () => subChipsForChip(activeChipId, activeExamplePlugins),
-    [activeChipId, activeExamplePlugins],
+    () => subChipsForChip(activeChipId, pluginOptions),
+    [activeChipId, pluginOptions],
   );
-  // When a sub-category pill is active, narrow the example-prompt cards to that
-  // scene. Because the pills are derived from this very list, the slice is
-  // always non-empty for a real selection.
+  // When a sub-category pill is active, show the SAME set the Community section
+  // shows for that sub-category — every matching plugin from the full install
+  // set, in the same visual-appeal order — rather than the small curated
+  // example showcase. This keeps the example-prompt count consistent with the
+  // Community count badge (e.g. Brand / design shows all 16, not just 1).
+  // Atoms are excluded to match Community's `visiblePlugins` derivation, and
+  // `applyFacetSelection` is the exact filter Community uses — it requires the
+  // plugin's primary category to be this chip AND match the sub-category, so a
+  // deck/image plugin that merely carries a "brand" tag is not pulled in.
   const filteredExamplePlugins = useMemo(() => {
     if (!selectedSubcategory || !isSubChipParent(activeChipId)) return activeExamplePlugins;
-    return filterPluginsBySubChip(activeExamplePlugins, activeChipId, selectedSubcategory);
-  }, [activeExamplePlugins, activeChipId, selectedSubcategory]);
+    const pool = pluginOptions.filter((plugin) => plugin.manifest?.od?.kind !== 'atom');
+    return sortByVisualAppeal(
+      applyFacetSelection(pool, { category: activeChipId, subcategory: selectedSubcategory }),
+    );
+  }, [activeExamplePlugins, activeChipId, selectedSubcategory, pluginOptions]);
   const activePromptExamples = useMemo(
     () => activeChipId && activeExamplePlugins.length === 0
       ? homeHeroChipPromptExamples(activeChipId, locale)
