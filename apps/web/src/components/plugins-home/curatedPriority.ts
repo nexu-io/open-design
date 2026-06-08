@@ -6,7 +6,40 @@
 
 import type { InstalledPluginRecord } from '@open-design/contracts';
 
+// Pinned-to-front template set (curator request): these premium
+// prototype templates lead both the Home hero prototype chip and the
+// Home plugin grid, ahead of the standing curated picks below. Order
+// here is the exact display order requested.
+const PINNED_TEMPLATE_PLUGIN_IDS = [
+  'example-mythic-naturecore',
+  'example-art-landing',
+  'example-dreamcore-landing',
+  'example-prisma-creative-studio',
+  'example-skyelite-private-jets',
+  'example-layered-depth',
+  'example-urban-jungle',
+  'example-luxury-botanical',
+  'example-modern-agency',
+  'example-aerocore',
+  'example-liquid-glass-agency',
+  'example-portfolio-cosmic',
+  'example-shamoni',
+  'example-innovation',
+  'example-orbis-nft',
+  'example-mindloop-landing',
+  'example-cinematic-landing-page',
+  'example-ai-designer-portfolio',
+  'example-ai-automation',
+  'example-codenest-coding-platform',
+  'example-nimbus-grid',
+  'example-acreage-farming',
+  'example-evergreen-finance',
+  'example-flowmate',
+  'example-stellar-launch',
+] as const;
+
 const CURATED_PROTOTYPE_PLUGIN_IDS = [
+  ...PINNED_TEMPLATE_PLUGIN_IDS,
   'example-open-design-landing',
   'example-kanban-board',
   'example-social-carousel',

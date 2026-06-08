@@ -11,7 +11,7 @@
   min-width: 0;
   min-height: 34px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-panel);
   color: var(--text);
   display: inline-flex;
@@ -115,7 +115,7 @@
   gap: 8px;
   padding: 12px;
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-subtle);
 }
 

@@ -59,14 +59,21 @@ import {
   type MemorySystemPromptResponse,
   type ResearchOptions,
 } from '@open-design/contracts';
-import { projectKindToTracking } from '@open-design/contracts/analytics';
+import {
+  anonymizeArtifactId,
+  artifactKindToTracking,
+  projectKindToTracking,
+} from '@open-design/contracts/analytics';
 import type {
+  TrackingArtifactKind,
   TrackingDesignSystemApplyTargetKind,
   TrackingDesignSystemOrigin,
   TrackingDesignSystemStatusValue,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
+  trackArtifactHeaderClick,
+  trackComposerBarClick,
   trackDesignSystemApplyResult,
   trackPageView,
 } from '../analytics/events';
@@ -158,7 +165,7 @@ import { AvatarMenu } from './AvatarMenu';
 import { EntrySettingsMenu } from './EntrySettingsMenu';
 import { HandoffButton } from './HandoffButton';
 import { Icon } from './Icon';
-import { ProjectDesignSystemPicker } from './ProjectDesignSystemPicker';
+import { DesignSystemPicker } from './DesignSystemPicker';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import {
@@ -910,34 +917,6 @@ export function ProjectView({
   const byokImageModelOptionsPV = useByokImageModelOptions(config.apiProtocol);
   const byokVideoModelOptionsPV = useByokVideoModelOptions(config.apiProtocol);
   const byokSpeechModelOptionsPV = useByokSpeechModelOptions(config.apiProtocol);
-  // `closed` → no surface; `review` → read-only saved-state panel with a
-  // preview + reopen-to-edit action (#1822); `edit` → the textarea editor.
-  const [instructionsMode, setInstructionsMode] = useState<'closed' | 'review' | 'edit'>('closed');
-  const [instructionsDraft, setInstructionsDraft] = useState(project.customInstructions ?? '');
-  const [instructionsSaving, setInstructionsSaving] = useState(false);
-  // Keep the draft in sync with the server value while the editor is not
-  // open (e.g. after an external update or project switch). If the saved
-  // value disappears while the review panel is showing, collapse the
-  // surface so it never renders a stale or empty read-back.
-  useEffect(() => {
-    if (instructionsMode === 'edit') return;
-    setInstructionsDraft(project.customInstructions ?? '');
-    if (instructionsMode === 'review' && !(project.customInstructions ?? '').trim()) {
-      setInstructionsMode('closed');
-    }
-  }, [project.customInstructions, instructionsMode]);
-  useEffect(() => {
-    if (instructionsMode === 'closed') return;
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setInstructionsDraft(project.customInstructions ?? '');
-        setInstructionsMode('closed');
-      }
-    }
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [instructionsMode, project.customInstructions]);
-
   // PR #974 round 7 (mrcfps @ useDesignMdState.ts:131): counter that
   // bumps on file-changed SSE events, live_artifact* events, and the
   // chat streaming-completion edge so the staleness chip stays in sync
@@ -984,6 +963,25 @@ export function ProjectView({
     tabs: [],
     active: null,
   });
+  // Artifact context for the header actions (settings gear, handoff) that live
+  // in this workspace's header alongside FileViewer's present/share/download.
+  // Mirrors the artifact_id / artifact_kind that FileViewer attaches, derived
+  // from the currently-active file tab, so all artifact_header analytics carry
+  // the same dimensions. Undefined on non-file tabs (e.g. the file list).
+  const headerArtifact = useMemo<{
+    artifact_id?: string;
+    artifact_kind?: TrackingArtifactKind;
+  }>(() => {
+    const activeName = openTabsState.active;
+    const file = activeName
+      ? projectFiles.find((entry) => entry.name === activeName) ?? null
+      : null;
+    if (!file) return {};
+    return {
+      artifact_id: anonymizeArtifactId({ projectId: project.id, fileName: file.name }),
+      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+    };
+  }, [openTabsState.active, projectFiles, project.id]);
   const routeFileNameRef = useRef(routeFileName);
   routeFileNameRef.current = routeFileName;
   const [activeWorkspaceContext, setActiveWorkspaceContext] =
@@ -4575,23 +4573,6 @@ export function ProjectView({
     [project, onProjectChange],
   );
 
-  const handleSaveProjectInstructions = useCallback(async () => {
-    if (instructionsSaving) return;
-    const nextInstructions = instructionsDraft.trim();
-    setInstructionsSaving(true);
-    const saved = await patchProject(project.id, {
-      customInstructions: nextInstructions || null,
-    });
-    setInstructionsSaving(false);
-    if (saved) {
-      onProjectChange(saved);
-      setInstructionsDraft(saved.customInstructions ?? '');
-      setInstructionsMode(saved.customInstructions?.trim() ? 'review' : 'closed');
-      return;
-    }
-    setError('Could not save project instructions.');
-  }, [instructionsDraft, instructionsSaving, onProjectChange, project]);
-
   const activeConversationChatState = useMemo(
     () =>
       activeConversationId
@@ -4649,7 +4630,7 @@ export function ProjectView({
       // surfaces. `target_project_kind` derives from
       // `project.metadata.kind`.
       const target =
-        (projectKindToTracking(project.metadata?.kind ?? null) ?? 'unknown') as TrackingDesignSystemApplyTargetKind;
+        (projectKindToTracking(project.metadata?.kind ?? null, project.metadata?.videoModel) ?? 'unknown') as TrackingDesignSystemApplyTargetKind;
       const picked = nextId
         ? designSystems.find((d) => d.id === nextId)
         : null;
@@ -5288,8 +5269,35 @@ export function ProjectView({
       agents={agents}
       daemonLive={daemonLive}
       onModeChange={onModeChange}
-      onAgentChange={onAgentChange}
-      onAgentModelChange={onAgentModelChange}
+      onOpen={() => {
+        trackComposerBarClick(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          element: 'agent_selector_open',
+          ...(project?.id ? { project_id: project.id } : {}),
+        });
+      }}
+      onAgentChange={(id) => {
+        trackComposerBarClick(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          element: 'agent_select',
+          agent_id: id,
+          ...(project?.id ? { project_id: project.id } : {}),
+        });
+        onAgentChange(id);
+      }}
+      onAgentModelChange={(agentId, choice) => {
+        trackComposerBarClick(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          element: 'agent_model_select',
+          agent_id: agentId,
+          ...(choice?.model ? { model_id: choice.model } : {}),
+          ...(project?.id ? { project_id: project.id } : {}),
+        });
+        onAgentModelChange(agentId, choice);
+      }}
       onOpenSettings={onOpenSettings}
       onRefreshAgents={onRefreshAgents}
       onBack={onBack}
@@ -5303,98 +5311,6 @@ export function ProjectView({
         projectId={project.id}
         enabled={critiqueTheaterEnabled}
       />
-      {instructionsMode !== 'closed' ? (
-        <div
-          className="project-instructions-modal-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setInstructionsDraft(project.customInstructions ?? '');
-              setInstructionsMode('closed');
-            }
-          }}
-        >
-          <section
-            className="project-instructions-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="project-instructions-title"
-          >
-            <div className="project-instructions-modal-head">
-              <div className="project-instructions-modal-title-wrap">
-                <h2 id="project-instructions-title" className="project-instructions-modal-title">
-                  {t('project.customInstructions')}
-                </h2>
-                {project.customInstructions?.trim() ? (
-                  <span className="project-instructions-status">
-                    <Icon name="check" size={12} />
-                    {t('sketch.saved')}
-                  </span>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                className="project-instructions-modal-close"
-                aria-label={t('common.close')}
-                title={t('common.close')}
-                onClick={() => {
-                  setInstructionsDraft(project.customInstructions ?? '');
-                  setInstructionsMode('closed');
-                }}
-              >
-                <Icon name="close" size={16} />
-              </button>
-            </div>
-            {instructionsMode === 'edit' ? (
-              <>
-                <textarea
-                  className="project-instructions-input"
-                  data-testid="project-instructions-textarea"
-                  value={instructionsDraft}
-                  placeholder={t('project.customInstructionsPlaceholder')}
-                  onChange={(event) => setInstructionsDraft(event.target.value)}
-                />
-                <div className="project-instructions-actions">
-                  <button
-                    type="button"
-                    className="btn secondary"
-                    onClick={() => {
-                      setInstructionsDraft(project.customInstructions ?? '');
-                      setInstructionsMode(project.customInstructions?.trim() ? 'review' : 'closed');
-                    }}
-                  >
-                    {t('common.cancel')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn primary"
-                    data-testid="project-instructions-save"
-                    disabled={instructionsSaving}
-                    onClick={() => void handleSaveProjectInstructions()}
-                  >
-                    {instructionsSaving ? t('sketch.saving') : t('common.save')}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="project-instructions-preview" data-testid="project-instructions-preview">
-                  {project.customInstructions}
-                </div>
-                <div className="project-instructions-actions">
-                  <button
-                    type="button"
-                    className="btn secondary"
-                    onClick={() => setInstructionsMode('edit')}
-                  >
-                    {t('common.edit')}
-                  </button>
-                </div>
-              </>
-            )}
-          </section>
-        </div>
-      ) : null}
       {/* ProjectActionsToolbar removed per 00efdcba — hide finalize-design
           toolbar from project header. Restore from cf1cd9bb if product
           wants the Finalize + Continue-in-CLI buttons back in the chrome. */}
@@ -5429,7 +5345,7 @@ export function ProjectView({
               projectId={project.id}
               sessionMode={activeSessionMode}
               onSessionModeChange={handleActiveConversationSessionModeChange}
-              projectKindForTracking={projectKindToTracking(project.metadata?.kind)}
+              projectKindForTracking={projectKindToTracking(project.metadata?.kind, project.metadata?.videoModel)}
               projectFiles={projectFiles}
               activeProjectFileName={activeProjectFileName}
               hasActiveDesignSystem={!!project.designSystemId}
@@ -5538,6 +5454,28 @@ export function ProjectView({
               onBack={onBack}
               backLabel={t('project.backToProjects')}
               composerFooterAccessory={executionControls}
+              composerLeadingAccessory={(
+                <WorkingDirPill
+                  projectId={project.id}
+                  resolvedDir={projectDetail.resolvedDir}
+                  onReplaced={({ project: updated }) => {
+                    if (updated) onProjectChange(updated);
+                    // The new working dir has a different file tree, so the
+                    // current listing, breadcrumb nav, and open tabs are all
+                    // stale. Refetch files; DesignFilesPanel's self-heal then
+                    // drops the now-unmatched currentDir back to root.
+                    // projectDetail.refresh() repulls resolvedDir so the
+                    // breadcrumb root + pill show the new folder name even on
+                    // the Electron path, which reports no updated project.
+                    setWorkingDirReplacing(true);
+                    refreshFilesAndDesignMd();
+                    void Promise.all([
+                      refreshWorkspaceItems(),
+                      projectDetail.refresh(),
+                    ]).finally(() => setWorkingDirReplacing(false));
+                  }}
+                />
+              )}
               projectHeader={(
                 <span className="chat-project-title-line">
                   <span
@@ -5558,43 +5496,13 @@ export function ProjectView({
                   >
                     {project.name}
                   </span>
-                  {project.customInstructions?.trim() ? (
-                    <button
-                      type="button"
-                      className={[
-                        'project-instructions-chip',
-                        instructionsMode === 'review' ? 'is-open' : '',
-                      ].filter(Boolean).join(' ')}
-                      onClick={() => {
-                        setInstructionsDraft(project.customInstructions ?? '');
-                        setInstructionsMode('review');
-                      }}
-                    >
-                      <Icon name="comment" size={12} />
-                      <span>{project.customInstructions}</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="project-instructions-toggle"
-                      data-testid="project-instructions-add"
-                      aria-label={t('project.customInstructions')}
-                      title={t('project.customInstructions')}
-                      onClick={() => {
-                        setInstructionsDraft(project.customInstructions ?? '');
-                        setInstructionsMode('edit');
-                      }}
-                    >
-                      <Icon name="plus" size={14} />
-                    </button>
-                  )}
                   {projectMeta !== t('project.metaFreeform') ? (
                     <span className="meta" data-testid="project-meta">{projectMeta}</span>
                   ) : null}
                 </span>
               )}
               designSystemPicker={(
-                <ProjectDesignSystemPicker
+                <DesignSystemPicker
                   designSystems={designSystems}
                   selectedId={project.designSystemId ?? null}
                   onChange={handleChangeDesignSystemId}
@@ -5629,7 +5537,7 @@ export function ProjectView({
         ) : null}
         <FileWorkspace
           projectId={project.id}
-          projectKind={projectKindToTracking(project.metadata?.kind) ?? 'prototype'}
+          projectKind={projectKindToTracking(project.metadata?.kind, project.metadata?.videoModel) ?? 'prototype'}
           rootDirName={(() => {
             const baseDir =
               projectDetail.project?.metadata?.baseDir ?? project.metadata?.baseDir;
@@ -5703,36 +5611,29 @@ export function ProjectView({
           conversationId={activeConversationId}
           headerActions={(
             <>
-              <WorkingDirPill
-                projectId={project.id}
-                resolvedDir={projectDetail.resolvedDir}
-                onReplaced={({ project: updated }) => {
-                  if (updated) onProjectChange(updated);
-                  // The new working dir has a different file tree, so the
-                  // current listing, breadcrumb nav, and open tabs are all
-                  // stale. Refetch files; DesignFilesPanel's self-heal then
-                  // drops the now-unmatched currentDir back to root.
-                  // projectDetail.refresh() repulls resolvedDir so the
-                  // breadcrumb root + pill show the new folder name even on
-                  // the Electron path, which reports no updated project.
-                  setWorkingDirReplacing(true);
-                  refreshFilesAndDesignMd();
-                  void Promise.all([
-                    refreshWorkspaceItems(),
-                    projectDetail.refresh(),
-                  ]).finally(() => setWorkingDirReplacing(false));
-                }}
-              />
-              <EntrySettingsMenu
-                config={config}
-                onThemeChange={handleThemeChange}
-                onOpenSettings={onOpenSettings}
-              />
               <HandoffButton
                 projectId={project.id}
                 projectName={project.name}
                 projectDir={projectDetail.resolvedDir}
                 agents={agents}
+                artifactId={headerArtifact.artifact_id}
+                artifactKind={headerArtifact.artifact_kind}
+              />
+              <EntrySettingsMenu
+                config={config}
+                onThemeChange={handleThemeChange}
+                onOpenSettings={onOpenSettings}
+                onTrackTriggerClick={() => {
+                  // Spec row 52: the settings gear in the artifact header.
+                  // Carry the active artifact so settings slices line up with
+                  // the rest of the artifact_header funnel.
+                  trackArtifactHeaderClick(analytics.track, {
+                    page_name: 'artifact',
+                    area: 'artifact_header',
+                    element: 'settings',
+                    ...headerArtifact,
+                  });
+                }}
               />
             </>
           )}

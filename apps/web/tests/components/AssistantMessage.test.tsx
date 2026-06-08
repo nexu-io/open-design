@@ -209,7 +209,7 @@ describe('AssistantMessage feedback gate', () => {
     expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
   });
 
-  it('hides the feedback widget when the run failed', () => {
+  it('shows the feedback widget when the run failed', () => {
     render(
       <AssistantMessage
         message={baseMessage({
@@ -221,7 +221,9 @@ describe('AssistantMessage feedback gate', () => {
         onFeedback={vi.fn()}
       />,
     );
-    expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
+    // A failed turn is a settled outcome worth rating — it's exactly the case a
+    // user most wants to thumbs-down, so the feedback row must be present.
+    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
   });
 
   it('hides the feedback widget when the run ended with an empty_response status', () => {
@@ -256,7 +258,7 @@ describe('AssistantMessage re-renders on live tool input changes', () => {
         liveToolInput={{ t1: { name: 'AskUserQuestion', text: '{"questions":[{"question":"Which databa","options":[]}]}', seq: 0 } }}
       />,
     );
-    expect(container.querySelector('.op-ask-question-prompt')?.textContent).toBe('Which databa');
+    expect(container.querySelector('.qf-label')?.textContent).toBe('Which databa');
 
     rerender(
       <AssistantMessage
@@ -267,7 +269,7 @@ describe('AssistantMessage re-renders on live tool input changes', () => {
       />,
     );
     // Re-rendered to the grown prompt rather than frozen at "Which databa".
-    expect(container.querySelector('.op-ask-question-prompt')?.textContent).toBe('Which database?');
+    expect(container.querySelector('.qf-label')?.textContent).toBe('Which database?');
   });
 });
 

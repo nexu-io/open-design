@@ -56,6 +56,29 @@ export function exportAsHtml(html: string, title: string): void {
   triggerDownload(blob, `${safeFilename(title, 'artifact')}.html`);
 }
 
+export async function exportProjectAsHtml(opts: {
+  projectId: string;
+  filePath: string;
+  fallbackHtml: string;
+  fallbackTitle: string;
+}): Promise<void> {
+  const segments = opts.filePath
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+  const url = `/api/projects/${encodeURIComponent(opts.projectId)}/export/${segments}?inline=1`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`html export request failed (${resp.status})`);
+    const blob = await resp.blob();
+    triggerDownload(blob, `${safeFilename(opts.fallbackTitle, 'artifact')}.html`);
+  } catch (err) {
+    console.warn('[exportProjectAsHtml] falling back to source HTML export:', err);
+    exportAsHtml(opts.fallbackHtml, opts.fallbackTitle);
+  }
+}
+
 // A file is treated as a preview-chrome wrapper only when it lives inside
 // a frames/ or device-frames/ directory, or its filename is an unambiguous
 // wrapper template (browser-chrome.html, device-frame.html).  Filenames

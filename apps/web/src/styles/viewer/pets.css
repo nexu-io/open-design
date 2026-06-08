@@ -123,7 +123,7 @@
 .pet-current-summary__sprite {
   width: 42px;
   height: 42px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -252,7 +252,7 @@
   cursor: pointer;
   text-align: left;
   color: var(--text);
-  transition: border-color 120ms ease, transform 120ms ease;
+  transition: border-color 120ms var(--ease-out), transform 120ms var(--ease-out);
 }
 .pet-card:hover {
   border-color: var(--border-strong);
@@ -656,7 +656,7 @@
   gap: 9px;
   padding: 0 9px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: transparent;
   color: var(--text-strong);
   font: inherit;
@@ -777,22 +777,6 @@
   font-size: 12.5px;
   font-weight: 650;
 }
-.composer-design-toolbox-lucky {
-  height: 26px;
-  padding: 0 8px;
-  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  color: var(--text);
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 650;
-  cursor: pointer;
-}
-.composer-design-toolbox-lucky:hover {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
-}
 .composer-design-toolbox-row {
   align-items: flex-start;
   gap: 9px;
@@ -822,7 +806,7 @@
   width: 22px;
   height: 22px;
   flex: 0 0 22px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--text);
 }
@@ -844,7 +828,7 @@
   white-space: nowrap;
   padding: 2px 5px;
   border: 1px solid var(--border-soft);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 10.5px;
@@ -1055,7 +1039,7 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   min-width: 0;
 }
 .composer-tools-row-main:hover {
@@ -1075,7 +1059,7 @@
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .composer-tools-row-side:hover {
   color: var(--text);
@@ -1329,7 +1313,7 @@
   /* The sprite element switches rows on the fly; smooth out the
      row transitions so direction changes feel less jarring without
      blurring the per-frame `steps()` cadence. */
-  transition: background-position-y 220ms ease;
+  transition: background-position-y 220ms var(--ease-out);
 }
 @keyframes pet-atlas-frames {
   from { background-position-x: 0%; }

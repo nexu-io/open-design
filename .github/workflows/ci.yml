@@ -171,6 +171,9 @@ jobs:
             else
               git diff --name-only --diff-filter=AMR "$before" "$after" > "$changed_files"
             fi
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && git rev-parse --verify origin/main >/dev/null 2>&1; then
+            base="$(git merge-base origin/main HEAD)"
+            git diff --name-only --diff-filter=AMR "$base" HEAD > "$changed_files"
           else
             git ls-files > "$changed_files"
           fi
@@ -387,6 +390,23 @@ jobs:
             pnpm --filter @open-design/tools-pack test
           fi
 
+  windows_tools_pack_payload_tests:
+    name: Windows tools-pack payload tests
+    needs: [change_scopes]
+    if: ${{ needs.change_scopes.outputs.tools_pack_tests_required == 'true' }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Windows launcher payload archive tests
+        run: pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts
+
   daemon_workspace_tests:
     name: Daemon workspace tests
     needs: [change_scopes]
@@ -498,6 +518,7 @@ jobs:
       - preflight
       - nix_validation
       - workspace_unit_tests
+      - windows_tools_pack_payload_tests
       - daemon_workspace_tests
       - web_workspace_tests
       - browser_tests

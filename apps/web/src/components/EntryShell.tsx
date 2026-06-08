@@ -10,9 +10,11 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type Dispatch,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
@@ -124,13 +126,39 @@ import {
 import {
   AMR_LOGIN_POLL_INTERVAL_MS,
   amrLoginPollOutcome,
+  notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
+import { closeAmrActivationWindowBestEffort } from './AmrLoginPill';
 import { AnimatePresence } from 'motion/react';
 import { renderModelOptions } from './modelOptions';
 import {
   providerModelsCacheKey,
   type ProviderModelsCache,
 } from './providerModelsCache';
+
+// Persist the entry nav-rail open/collapsed state so it survives both a
+// home -> project -> home navigation (EntryShell unmounts on the project
+// route) and a full reload. Without this the rail always reset to its
+// collapsed default on return.
+const RAIL_OPEN_STORAGE_KEY = 'od.entry.railOpen';
+
+function readStoredRailOpen(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(RAIL_OPEN_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writeStoredRailOpen(open: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(RAIL_OPEN_STORAGE_KEY, open ? 'true' : 'false');
+  } catch {
+    /* ignore quota / disabled storage */
+  }
+}
 
 const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
 const X_URL = 'https://x.com/nexudotio';
@@ -421,7 +449,13 @@ export function EntryShell({
   // The entry nav rail is collapsed by default (Manus-style) so the entry
   // view opens clean and full-width; the panel toggle in the topbar opens it
   // as an overlay that dismisses on selection / backdrop click / Escape.
-  const [railOpen, setRailOpen] = useState(false);
+  // Its open/collapsed state is persisted (localStorage) so it survives a
+  // home -> project -> home round trip (EntryShell unmounts on the project
+  // route) and a reload, instead of snapping back to collapsed.
+  const [railOpen, setRailOpen] = useState<boolean>(readStoredRailOpen);
+  useEffect(() => {
+    writeStoredRailOpen(railOpen);
+  }, [railOpen]);
   const [localProviderModelsCache, setLocalProviderModelsCache] =
     useState<ProviderModelsCache>({});
   const hasSharedProviderModelsCache =
@@ -886,6 +920,7 @@ function OnboardingView({
   const [cliScanStatus, setCliScanStatus] = useState<'idle' | 'scanning' | 'done'>('idle');
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
+  const [amrLoginCancelPending, setAmrLoginCancelPending] = useState(false);
   const [newsletterSubmitting, setNewsletterSubmitting] = useState(false);
   const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
   const [visibleAgentIds, setVisibleAgentIds] = useState<string[]>([]);
@@ -1037,6 +1072,7 @@ function OnboardingView({
     if (runtime === 'amr') return;
     amrLoginPollCancelledRef.current = true;
     setAmrLoginPending(false);
+    setAmrLoginCancelPending(false);
   }, [runtime]);
 
   // Onboarding step exposure. Design-system intake used to live here
@@ -1398,18 +1434,32 @@ function OnboardingView({
   async function handleAmrSignInToContinue(
     attribution?: AmrEntryAttribution | null,
   ) {
-    if (amrLoginPending) return;
+    if (amrLoginPending || amrLoginCancelPending) return;
     amrLoginPollCancelledRef.current = false;
     setAmrLoginError(null);
     setAmrLoginPending(true);
     try {
       const currentStatus = await fetchVelaLoginStatus();
+      if (amrLoginPollCancelledRef.current) return;
       if (currentStatus) setAmrStatus(currentStatus);
       if (currentStatus?.loggedIn) {
         setStep((current) => current + 1);
         return;
       }
+      if (amrLoginPollCancelledRef.current) return;
       const loginResult = await startVelaLogin(attribution);
+      if (amrLoginPollCancelledRef.current) {
+        if (loginResult.ok || loginResult.alreadyRunning) {
+          const cancelResult = await cancelVelaLogin();
+          closeAmrActivationWindowBestEffort();
+          if (!cancelResult.ok) {
+            setAmrLoginError(t('settings.amrLoginErrorCompact'));
+            return;
+          }
+          notifyAmrLoginStatusChanged('login-canceled');
+        }
+        return;
+      }
       if (!loginResult.ok && !loginResult.alreadyRunning) {
         setAmrLoginError(loginResult.error || t('settings.amrLoginErrorCompact'));
         return;
@@ -1420,6 +1470,27 @@ function OnboardingView({
     } finally {
       setAmrLoginPending(false);
     }
+  }
+
+  async function handleCancelAmrLogin() {
+    if (!amrLoginPending || amrLoginCancelPending) return;
+    amrLoginPollCancelledRef.current = true;
+    setAmrLoginError(null);
+    setAmrLoginCancelPending(true);
+    setAmrStatus((current) => (
+      current
+        ? { ...current, loggedIn: false, loginInFlight: false, user: null }
+        : current
+    ));
+    setAmrLoginPending(false);
+    const result = await cancelVelaLogin();
+    closeAmrActivationWindowBestEffort();
+    setAmrLoginCancelPending(false);
+    if (!result.ok) {
+      setAmrLoginError(t('settings.amrLoginErrorCompact'));
+      return;
+    }
+    notifyAmrLoginStatusChanged('login-canceled');
   }
 
   async function pollAmrLoginCompletion(): Promise<boolean> {
@@ -1935,11 +2006,21 @@ function OnboardingView({
             >
               {step === 0 ? t('settings.onboardingSkip') : t('settings.onboardingBack')}
             </button>
+            {step === 0 && amrLoginPending ? (
+              <button
+                type="button"
+                className="onboarding-view__secondary"
+                onClick={handleCancelAmrLogin}
+                disabled={amrLoginCancelPending}
+              >
+                {t('settings.amrCancelSignIn')}
+              </button>
+            ) : null}
             <button
               type="button"
               className="onboarding-view__primary"
               onClick={handlePrimaryAction}
-              disabled={amrLoginPending || newsletterSubmitting}
+              disabled={amrLoginPending || amrLoginCancelPending || newsletterSubmitting}
               aria-busy={newsletterSubmitting ? true : undefined}
             >
               <span>{primaryActionLabel}</span>
@@ -2457,7 +2538,7 @@ type OnboardingDropdownProps =
       multiple: true;
     });
 
-function OnboardingDropdown(props: OnboardingDropdownProps) {
+export function OnboardingDropdown(props: OnboardingDropdownProps) {
   const {
     label,
     placeholder,
@@ -2467,6 +2548,8 @@ function OnboardingDropdown(props: OnboardingDropdownProps) {
     multiple = false,
   } = props;
   const [open, setOpen] = useState(false);
+  const [resolvedPlacement, setResolvedPlacement] = useState(placement);
+  const [menuMaxHeight, setMenuMaxHeight] = useState(240);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const selectedValues = Array.isArray(value) ? value : value ? [value] : [];
   const selectedOptions = options.filter((option) => selectedValues.includes(option.value));
@@ -2475,6 +2558,36 @@ function OnboardingDropdown(props: OnboardingDropdownProps) {
   const selectedLabel = multiple
     ? selectedOptions.map((option) => option.label).join(', ')
     : selectedOption?.label;
+  const triggerLabel = selectedLabel || placeholder;
+
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    function measureMenu() {
+      const root = rootRef.current;
+      if (!root) return;
+
+      const rect = root.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
+      const spaceBelow = viewportHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const nextPlacement =
+        placement === 'top' || (spaceBelow < 260 && spaceAbove > spaceBelow)
+          ? 'top'
+          : 'bottom';
+      const availableSpace = nextPlacement === 'top' ? spaceAbove : spaceBelow;
+      setResolvedPlacement(nextPlacement);
+      setMenuMaxHeight(Math.max(48, Math.min(240, availableSpace - 16)));
+    }
+
+    measureMenu();
+    window.addEventListener('resize', measureMenu);
+    window.addEventListener('scroll', measureMenu, true);
+    return () => {
+      window.removeEventListener('resize', measureMenu);
+      window.removeEventListener('scroll', measureMenu, true);
+    };
+  }, [open, placement, options.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -2500,7 +2613,12 @@ function OnboardingDropdown(props: OnboardingDropdownProps) {
   }, [open]);
 
   return (
-    <div className="onboarding-view__select-field" data-placement={placement} ref={rootRef}>
+    <div
+      className="onboarding-view__select-field"
+      data-placement={resolvedPlacement}
+      data-open={open || undefined}
+      ref={rootRef}
+    >
       <span className="onboarding-view__select-label">{label}</span>
       <button
         type="button"
@@ -2509,9 +2627,10 @@ function OnboardingDropdown(props: OnboardingDropdownProps) {
         }`}
         aria-haspopup="listbox"
         aria-expanded={open}
+        title={triggerLabel}
         onClick={() => setOpen((current) => !current)}
       >
-        <span>{selectedLabel || placeholder}</span>
+        <span>{triggerLabel}</span>
         <Icon name="chevron-down" size={16} />
       </button>
       {open ? (
@@ -2520,6 +2639,7 @@ function OnboardingDropdown(props: OnboardingDropdownProps) {
           role="listbox"
           aria-label={label}
           aria-multiselectable={multiple || undefined}
+          style={{ '--onboarding-select-menu-max-height': `${menuMaxHeight}px` } as CSSProperties}
         >
           {options.map((option) => {
             const selected = selectedValues.includes(option.value);

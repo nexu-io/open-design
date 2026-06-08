@@ -1,4 +1,4 @@
-import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import {
@@ -25,6 +25,7 @@ import {
 } from "@open-design/platform";
 
 import type { ToolPackConfig } from "../config.js";
+import { readToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
 import { DESKTOP_LOG_ECHO_ENV } from "./constants.js";
 import { listDirectories, pathExists, removeTree } from "./fs.js";
 import { readBuiltAppManifest } from "./manifest.js";
@@ -199,9 +200,28 @@ export async function installPackedWinApp(config: ToolPackConfig): Promise<WinIn
   };
 }
 
+async function writeInstalledLaunchPackagedConfig(config: ToolPackConfig, executablePath: string): Promise<string> {
+  const installedConfigPath = join(dirname(executablePath), "resources", "open-design-config.json");
+  const raw = JSON.parse(await readFile(installedConfigPath, "utf8")) as Record<string, unknown>;
+  const launchConfigPath = join(config.roots.runtime.namespaceRoot, "runtime", "launch-open-design-config.json");
+  await mkdir(dirname(launchConfigPath), { recursive: true });
+  await writeFile(
+    launchConfigPath,
+    `${JSON.stringify({ ...raw, namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }, null, 2)}\n`,
+    "utf8",
+  );
+  return launchConfigPath;
+}
+
 async function resolveStartTarget(config: ToolPackConfig): Promise<{ configPath: string | null; executablePath: string; source: "built" | "installed" }> {
   const paths = resolveWinPaths(config);
-  if (await pathExists(paths.installedExePath)) return { configPath: null, executablePath: paths.installedExePath, source: "installed" };
+  if (await pathExists(paths.installedExePath)) {
+    return {
+      configPath: await writeInstalledLaunchPackagedConfig(config, paths.installedExePath),
+      executablePath: paths.installedExePath,
+      source: "installed",
+    };
+  }
   const builtManifest = await readBuiltAppManifest(paths, { requireExecutable: true });
   if (builtManifest != null) return { configPath: builtManifest.configPath, executablePath: builtManifest.executablePath, source: "built" };
   if (await pathExists(paths.unpackedExePath)) return { configPath: null, executablePath: paths.unpackedExePath, source: "built" };
@@ -440,6 +460,7 @@ export async function inspectPackedWinApp(config: ToolPackConfig, options: { exp
         { timeoutMs: 5000 },
       ),
     }),
+    launcher: await readToolPackLauncherRuntimeSnapshot(config),
     ...(options.path == null ? {} : {
       screenshot: await requestJsonIpc<DesktopScreenshotResult>(
         stamp.ipc,

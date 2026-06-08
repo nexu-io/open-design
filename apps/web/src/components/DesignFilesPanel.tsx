@@ -1374,6 +1374,43 @@ export function DesignFilesPanel({
 
   const visibleUploadError = uploadError ?? dropReadError;
   const hasSelection = selected.size > 0;
+  const breadcrumbs = (
+    <nav className="df-breadcrumbs" aria-label={t('designFiles.crumbs')}>
+      {currentDir === '' ? (
+        <span className="df-breadcrumb-current">{rootDirName ?? t('designFiles.crumbs')}</span>
+      ) : (
+        <>
+          <button
+            type="button"
+            className="df-breadcrumb-btn"
+            onClick={() => setCurrentDir('')}
+          >
+            {rootDirName ?? t('designFiles.crumbs')}
+          </button>
+          {currentDir.split('/').filter(Boolean).map((segment, idx, parts) => {
+            const path = parts.slice(0, idx + 1).join('/');
+            const isLast = idx === parts.length - 1;
+            return (
+              <span key={path} className="df-breadcrumb-segment">
+                <span className="df-breadcrumb-sep" aria-hidden>/</span>
+                {isLast ? (
+                  <span className="df-breadcrumb-current">{segment}</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="df-breadcrumb-btn"
+                    onClick={() => setCurrentDir(path)}
+                  >
+                    {segment}
+                  </button>
+                )}
+              </span>
+            );
+          })}
+        </>
+      )}
+    </nav>
+  );
 
   return (
     <div className={`df-panel ${previewFile ? '' : 'no-preview'} ${hasSelection ? 'has-selection' : ''}`}>
@@ -1386,7 +1423,32 @@ export function DesignFilesPanel({
         </div>
       ) : null}
       <div className="df-main">
-        <div className="df-body">
+        <div className="df-topbar">
+          <div className="df-topbar-left">{breadcrumbs}</div>
+          <div className="df-topbar-right">{fileActions}</div>
+        </div>
+        <div
+          className="df-body"
+          onDragEnter={(ev) => {
+            ev.preventDefault();
+            dragDepthRef.current += 1;
+            setDraggingFiles(true);
+          }}
+          onDragOver={(ev) => {
+            ev.preventDefault();
+            ev.dataTransfer.dropEffect = 'copy';
+          }}
+          onDragLeave={(ev) => {
+            if (!ev.currentTarget.contains(ev.relatedTarget as Node | null)) {
+              dragDepthRef.current = 0;
+              setDraggingFiles(false);
+              return;
+            }
+            dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+            if (dragDepthRef.current === 0) setDraggingFiles(false);
+          }}
+          onDrop={handleDrop}
+        >
           {visibleUploadError && !preview ? (
             <div className="df-upload-banner" data-testid="upload-error-banner">
               <span>{visibleUploadError}</span>
@@ -1409,43 +1471,7 @@ export function DesignFilesPanel({
             {groupToggle}
             {kindFilterControl}
             {fileScopeControl}
-            {fileActions}
           </div>
-          <nav className="df-breadcrumbs" aria-label={t('designFiles.crumbs')}>
-            {currentDir === '' ? (
-              <span className="df-breadcrumb-current">{rootDirName ?? t('designFiles.crumbs')}</span>
-            ) : (
-              <>
-              <button
-                type="button"
-                className="df-breadcrumb-btn"
-                onClick={() => setCurrentDir('')}
-              >
-                {rootDirName ?? t('designFiles.crumbs')}
-              </button>
-              {currentDir.split('/').map((segment, idx, parts) => {
-                const path = parts.slice(0, idx + 1).join('/');
-                const isLast = idx === parts.length - 1;
-                return (
-                  <span key={path} className="df-breadcrumb-segment">
-                    <span className="df-breadcrumb-sep" aria-hidden>/</span>
-                    {isLast ? (
-                      <span className="df-breadcrumb-current">{segment}</span>
-                    ) : (
-                      <button
-                        type="button"
-                        className="df-breadcrumb-btn"
-                        onClick={() => setCurrentDir(path)}
-                      >
-                        {segment}
-                      </button>
-                    )}
-                  </span>
-                );
-              })}
-              </>
-            )}
-          </nav>
           {files.length === 0 && liveArtifacts.length === 0 && (folders?.length ?? 0) === 0 ? (
             <div className="df-empty" data-testid="design-files-empty">
               <div className="df-empty-pill">
@@ -1719,32 +1745,26 @@ export function DesignFilesPanel({
               ) : null}
             </>
           )}
-          <div
-            className={`df-drop ${draggingFiles ? 'dragging' : ''}`}
-            onDragEnter={(ev) => {
-              ev.preventDefault();
-              dragDepthRef.current += 1;
-              setDraggingFiles(true);
-            }}
-            onDragOver={(ev) => {
-              ev.preventDefault();
-              ev.dataTransfer.dropEffect = 'copy';
-            }}
-            onDragLeave={(ev) => {
-              if (!ev.currentTarget.contains(ev.relatedTarget as Node | null)) {
-                dragDepthRef.current = 0;
-                setDraggingFiles(false);
-                return;
-              }
-              dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-              if (dragDepthRef.current === 0) setDraggingFiles(false);
-            }}
-            onDrop={handleDrop}
-          >
-            <span className="label">{t('designFiles.dropTitle')}</span>
-            <span className="desc">{t('designFiles.dropDesc')}</span>
+          <div className="df-footer-info">
+            <div className="df-drop-hint">
+              <Icon name="upload" size={12} />
+              <span>{t('designFiles.dropDesc')}</span>
+            </div>
+            <div className="df-useful-info">
+              <span className="df-useful-info-label">{t('designFiles.usefulInfoLabel')}</span>
+              <span className="df-useful-info-tip">{t('designFiles.usefulInfoTip')}</span>
+            </div>
           </div>
         </div>
+        {draggingFiles ? (
+          <div className="df-drop-overlay" aria-hidden>
+            <div className="df-drop-overlay-card">
+              <Icon name="upload" size={22} />
+              <span className="label">{t('designFiles.dropTitle')}</span>
+              <span className="desc">{t('designFiles.dropDesc')}</span>
+            </div>
+          </div>
+        ) : null}
       </div>
       {preview && previewFile ? (
         // Key on the file name so React unmounts the previous DfPreview

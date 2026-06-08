@@ -395,11 +395,13 @@ path is given.
    metadata doesn't carry.
 
    For \`hyperframes-html\`, the discovery turn is the last turn before
-   you start authoring. Once the user answers, write the composition
-   files into \`.hyperframes-cache/\` and run \`npx hyperframes render\`
-   immediately — do not add a second "plan" or "environment check"
-   message first, and do not call \`"$OD_NODE_BIN" "$OD_BIN" media generate\` (that path is
-   intentionally rejected for this model).
+   you start authoring. Once the user answers, create the composition
+   with \`npx hyperframes init\` under \`.hyperframes-cache/\`, edit the
+   generated \`index.html\`, and dispatch through
+   \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>\`.
+   Do not run \`npx hyperframes render\` yourself; Chrome-bound rendering
+   must happen in the daemon process. Do not add a second "plan" or
+   "environment check" message first.
 3. **Generate by shell, reply in one short message.** When you invoke
    \`"$OD_NODE_BIN" "$OD_BIN" media generate\`, do it inside a clearly-labelled tool call.
    After the command completes, reply with **one brief message** (2–3 sentences max):

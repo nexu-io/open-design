@@ -1463,7 +1463,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
 
-    render(
+    const view = render(
       <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
@@ -1475,6 +1475,10 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     expect(await screen.findByRole('dialog')).toBeTruthy();
+    const backdrop = document.body.querySelector('.viewer-modal-backdrop.deploy-flow-backdrop');
+    expect(backdrop).toBeTruthy();
+    expect(backdrop?.parentElement).toBe(document.body);
+    expect(view.container.querySelector('.viewer-modal-backdrop')).toBeNull();
     expect(screen.getByText('Account ID')).toBeTruthy();
     expect(screen.getByText(/Select Pages Edit when creating the API token/i)).toBeTruthy();
     expect(screen.getByText(/Zone Read/i)).toBeTruthy();
@@ -2674,7 +2678,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
 
-    render(
+    const view = render(
       <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
@@ -2684,6 +2688,10 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /save as template/i }));
 
     expect(screen.getByRole('dialog')).toBeTruthy();
+    const backdrop = document.body.querySelector('.viewer-modal-backdrop');
+    expect(backdrop).toBeTruthy();
+    expect(backdrop?.parentElement).toBe(document.body);
+    expect(view.container.querySelector('.viewer-modal-backdrop')).toBeNull();
     const nameInput = screen.getByLabelText(/template name/i) as HTMLInputElement;
     expect(nameInput.value).toBe('landing-page');
     fireEvent.change(nameInput, { target: { value: 'Landing Page' } });

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-urban-jungle",
+  "title": "Urban Jungle — Scroll Video Hero",
+  "title_i18n": {
+    "zh-CN": "Urban Jungle — 滚动视频英雄页",
+    "en": "Urban Jungle — Scroll Video Hero"
+  },
+  "version": "0.1.0",
+  "description": "Cinematic scroll-driven hero: a fixed full-screen video that scrubs frame-by-frame with scroll, an oversized display headline that floats away, a frosted-glass About panel sliding up from below, a GSAP liquid-fill pill nav, and a text-logo marquee.",
+  "description_i18n": {
+    "zh-CN": "电影感滚动英雄页：随滚动逐帧擦除的全屏视频、超大展示字体标题随滚动飘散、从底部滑入的毛玻璃 About 面板、GSAP 液态填充胶囊导航与文字 logo 跑马灯。",
+    "en": "Cinematic scroll-driven hero: a fixed full-screen video that scrubs frame-by-frame with scroll, an oversized display headline that floats away, a frosted-glass About panel sliding up from below, a GSAP liquid-fill pill nav, and a text-logo marquee."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Eli"
+  },
+  "homepage": "https://motionsites.ai/sections",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "scroll",
+    "hero",
+    "video",
+    "glassmorphism"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a scroll-driven hero section landing page using React 19, Vite, Tailwind CSS v4 (using @tailwindcss/vite plugin), GSAP (with ScrollTrigger + ScrollToPlugin), hls.js, and react-router-dom (BrowserRouter). The page body is black with white text. The root container is 500vh tall.\n\nSETUP\nDependencies (package.json):\n\nreact, react-dom, react-router-dom, gsap, hls.js, lucide-react, motion, tailwindcss v4, @tailwindcss/vite, @vitejs/plugin-react, vite\nVite config: Use @tailwindcss/vite and @vitejs/plugin-react plugins.\n\nEntry point (main.tsx): Wrap <App /> in <StrictMode> and <BrowserRouter>.\n\nCustom headline font: Download the font file from https://dirtylinestudio.com/wp-content/uploads/2022/05/Dirtyline-36daysoftype-2022.woff2 and save it to the public/ directory as Dirtyline-36daysoftype-2022.woff2. Then register it via @font-face in CSS.\n\nGoogle Fonts (loaded via CSS @import): Manrope:wght@400;500;600;700 and Instrument+Serif:ital@0;1\n\nTailwind v4 theme (index.css):\n\n@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');\n@import \"tailwindcss\";\n\n@theme {\n  --font-sans: \"Manrope\", ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\";\n  --font-serif: \"Instrument Serif\", ui-serif, Georgia, Cambria, \"Times New Roman\", Times, serif;\n  --font-dirtyline: \"Dirtyline36Daysoftype2022\", sans-serif;\n  --animate-marquee: marquee 20s linear infinite;\n  @keyframes marquee {\n    100% { transform: translateX(-50%); }\n  }\n}\n\n@font-face {\n  font-family: 'Dirtyline36Daysoftype2022';\n  src: url('/Dirtyline-36daysoftype-2022.woff2') format('woff2');\n  font-style: normal;\n  font-weight: normal;\n  text-rendering: optimizeLegibility;\n  font-display: swap;\n}\n\nbody {\n  background-color: black;\n  color: white;\n}\n\nLAYER 1: BACKGROUND -- ScrollVideo Component\nA full-screen fixed video background that scrubs its playback position based on scroll progress (scroll at top = frame 0, scroll at bottom = last frame).\n\nVideo source (Mux HLS stream):\nhttps://stream.mux.com/43NlHXsaMrmyzWamMk87m01fNyxSTekAD669BBAPBNm00.m3u8\n\nProps: src (string), className (string)\n\nImplementation:\n\nUse hls.js. On MANIFEST_PARSED, force the highest quality level: hls.currentLevel = maxLevel; hls.startLevel = maxLevel. Config: maxBufferLength: 120, maxMaxBufferLength: 600, maxBufferSize: 200 * 1024 * 1024, startPosition: 0, capLevelToPlayerSize: false, startLevel: -1, autoStartLoad: true.\nFor Safari (native HLS), set video.src = src directly.\nTrack buffer progress via FRAG_BUFFERED event, calculating (bufferedEnd / duration) * 100.\nThe <video> element is rendered directly (no canvas). Classes: w-full h-full object-cover scale-[1.35]. Attributes: muted, playsInline, crossOrigin=\"anonymous\".\nScroll-to-seek: Use GSAP ScrollTrigger.create with trigger: document.documentElement, start: 'top top', end: 'bottom bottom', scrub: true. On onUpdate, calculate targetTime = self.progress * duration. Throttle seeking: track a currentTarget variable. If video.seeking is true, set seekPending = true. On the seeked event, if seekPending, call doSeek() again with the latest currentTarget. This prevents hammering the decoder.\nif (!video.seeking).\nТепер ми кажемо браузеру: \"Оновлюй кадр відео ТІЛЬКИ тоді, коли ти повністю закінчив малювати попередній\".\"\nMouse parallax on video wrapper: On mousemove, GSAP tweens the wrapper's x/y by moveX * -30 and moveY * -30, where moveX/moveY are normalized mouse offset from center (-1 to 1). Duration: 1.5, ease: power2.out.\nLoading overlay: Show a fixed, z-50, centered black overlay with \"Loading... {progress}%\" in white, text-2xl font-sans. Hide once canplay fires.\nWrapper div classes: fixed top-0 left-0 w-full h-full z-0 scale-[1.05] origin-center\n\nLAYER 2: HERO TEXT -- ScrollFloat Component\nA fixed overlay at z-10, positioned at the bottom of the viewport: fixed inset-0 flex flex-col justify-end p-4 md:p-8 pointer-events-none.\n\nText content: \"Unleash The\\nFull Power\" (literal newline between the two lines).\n\nScrollFloat component implementation:\n\nSplits the text string by \\n into lines, then by spaces into words, then into individual characters.\nEach line is wrapped in <span style=\"display: block\">.\nEach word is wrapped in <span style=\"display: inline-block; white-space: nowrap\">.\nEach character is wrapped in <span class=\"char\">.\nWord separators:   between words.\nAnimation: Uses gsap.fromTo on all .char elements. FROM: {opacity: 1, yPercent: 0, scaleY: 1, scaleX: 1, transformOrigin: '50% 0%'}. TO: {opacity: 0, yPercent: 250, scaleY: 1.2, scaleX: 0.9}. So the text starts fully visible and animates away as you scroll down.\nScrollTrigger config: trigger: document.body, start: 'top top', end: '+=1000', scrub: 1.5.\nStagger: 0.05, ease: power2.inOut, duration: 1.\nTypography: Font family: font-dirtyline (the Dirtyline custom font). Font size: clamp(4rem, 15vw, 317px). Line height: 0.85. Letter spacing: 0%. Color: white.\n\nScrollFloat.css:\n.scroll-float-text { display: inline-block; }\n.char { display: inline-block; }\n\nLAYER 3: GLASS PANEL -- GlassPanel Component (About Us section)\nPositioned absolutely at the bottom of the 500vh container: absolute bottom-0 left-0 w-full h-screen. It slides up from below as you scroll to the bottom.\n\nSlide-up animation: gsap.fromTo on the panel wrapper: from {y: '100%'} to {y: '0%'}, ease: none. ScrollTrigger: trigger is the container div, start: 'top bottom', end: 'bottom bottom', scrub: 1.5.\n\nPanel wrapper: w-full max-w-[1250px] h-[900px] max-h-[85vh] pointer-events-auto with perspective: 1000px inline style.\n\nPanel itself: w-full h-full flex flex-col justify-between rounded-3xl relative overflow-hidden with inline styles:\nbackgroundColor: 'rgba(0, 0, 0, 0.16)'\nbackdropFilter: 'blur(160px)'\nWebkitBackdropFilter: 'blur(160px)'\nborder: '1px solid rgba(255, 255, 255, 0.1)'\ntransformStyle: 'preserve-3d'\nwillChange: 'transform'\n\n3D mouse parallax on panel: On mousemove, GSAP tweens: x: moveX * 20, y: moveY * 20, rotationY: moveX * 4, rotationX: -moveY * 4. Ease: power3.out, duration: 1.\n\nContent (all centered text):\nSubtitle: <p> with font-serif italic text-white/70 text-base md:text-lg mb-4 md:mb-6 -- text: \"About Us\"\nMain heading: <h2> with font-serif text-white text-4xl md:text-6xl lg:text-[96px] leading-[1.1] lg:leading-[92.6px] tracking-tight w-full max-w-[1000px] mx-auto -- text: \"We transform sterile concrete into thriving urban jungles. Our innovative designs bring wild nature back to modern cities. Experience the bloom\" where the italic words (urban, nature, bloom) are wrapped in <span className=\"italic\">.\nAll text is centered: the content area uses flex flex-col items-center justify-center px-6 md:px-12 text-center.\n\nBottom marquee (text-based logos, not images):\nInstead of image logos, use text brand names as the marquee items. Use names like \"VOICEFLOW\", \"ZENDESK\", \"PENDO\", \"GLIDE\", \"CANVA\". Each name is rendered as white text, opacity-40 hover:opacity-100 transition-opacity duration-300, uppercase, font-sans font-semibold text-sm tracking-widest. The marquee row is duplicated 4x for seamless infinite scroll, using the CSS animate-marquee keyframe (translateX(-50%) over 20s linear infinite). The marquee sits at the bottom of the glass panel, separated by a border-t border-white/10 py-6.\n\nLAYER 4: PILL NAVIGATION -- PillNav Component\nFixed at top center of viewport (position: fixed; top: 24px; left: 50%; transform: translateX(-50%); z-index: 100). Font: Manrope, 600 weight, 14px, uppercase, 0.05em letter-spacing.\n\nStructure:\nA circular black logo button (48x48px, border-radius: 50%) containing a 4-petal SVG icon (white fill, 24x24). The SVG paths:\nm50,50c0,18.2,14.77,32.98,32.97,32.98,0-18.2-14.77-32.98-32.97-32.98Z\nm17.02,82.98c18.2,0,32.98-14.77,32.98-32.98-18.2,0-32.98,14.77-32.98,32.98Z\nm82.98,17.02c-18.2,0-32.97,14.77-32.97,32.97,18.2,0,32.97-14.77,32.97-32.97Z\nm17.02,17.02c0,18.2,14.77,32.97,32.98,32.97,0-18.2-14.77-32.97-32.98-32.97Z\nviewBox: 0 0 100 100. On hover, the SVG container rotates 360deg via GSAP (duration: 0.2).\n\nNav items container: black background, border-radius: 50px, padding: 4px, border: 2px solid #000. Contains a <ul> with flex layout, gap: 4px.\n\nEach nav pill: padding: 8px 24px, border-radius: 50px, background-color: #f0f0f0, color: #000, font-weight: 600, font-size: 14px, letter-spacing: 0.05em, text-transform: uppercase, overflow: hidden, position: relative.\n\nPill hover effect (GSAP-powered liquid fill):\nEach pill contains a hidden .hover-circle element (absolute, black, border-radius: 50%, scale: 0).\nThe circle's size is calculated dynamically: R = (w*w/4 + h*h) / (2*h), D = 2*R + 2, positioned at bottom: -delta where delta = R - sqrt(R*R - w*w/4) + 1. Transform origin: 50% ${D - delta}px.\nA .label-stack contains two labels: .pill-label (dark text, visible) and .pill-label-hover (white text, hidden below).\nOn hover enter: a GSAP timeline plays forward -- circle scales to 3, pill-label slides up out of view, pill-label-hover slides up into view (white text over black circle). Timeline tweened to end in 0.3s.\nOn hover leave: timeline tweened back to 0 in 0.2s.\n\nNav items: HOME, ABOUT, SERVICES, CONTACT.\nHOME onClick: gsap.to(window, { duration: 3, scrollTo: 0, ease: 'power3.inOut' })\nABOUT onClick: gsap.to(window, { duration: 3, scrollTo: document.body.scrollHeight, ease: 'power3.inOut' })\n\nInitial load animation: Logo scales from 0 to 1 (duration 0.6). Nav items container width animates from 0 to auto (duration 0.6).\n\nResponsive: At 768px breakpoint, desktop nav items are hidden and replaced with a hamburger button (two 24x2px lines, gap 4px). On toggle, lines animate to X shape (rotation +/-45deg, y +/-3px). A popover menu appears below with fade+slide animation.\n\nPillNav.css (full):\n.pill-nav-container { position: fixed; top: 24px; left: 50%; transform: translateX(-50%); z-index: 100; font-family: 'Manrope', sans-serif; }\n.pill-nav { display: flex; align-items: center; background-color: transparent; padding: 0; gap: 0; }\n.pill-logo { display: flex; align-items: center; justify-content: center; border-radius: 50%; background-color: #000; width: 48px; height: 48px; flex-shrink: 0; }\n.logo-svg-container { display: flex; align-items: center; justify-content: center; }\n.pill-nav-items { background-color: #000; border-radius: 50px; padding: 4px; border: 2px solid #000; }\n.pill-list { display: flex; align-items: center; gap: 4px; list-style: none; margin: 0; padding: 0; }\n.pill { position: relative; display: block; padding: 8px 24px; border-radius: 50px; text-decoration: none; color: #000; font-weight: 600; font-size: 14px; letter-spacing: 0.05em; text-transform: uppercase; overflow: hidden; background-color: #f0f0f0; transition: background-color 0.3s ease; }\n.pill.is-active { background-color: #e0e0e0; }\n.hover-circle { position: absolute; background-color: #000; border-radius: 50%; pointer-events: none; z-index: 0; transform: scale(0); }\n.label-stack { position: relative; display: block; z-index: 1; overflow: hidden; height: 1.2em; }\n.pill-label, .pill-label-hover { display: block; line-height: 1.2em; text-align: center; }\n.pill-label-hover { position: absolute; top: 0; left: 0; width: 100%; color: #fff; }\n.mobile-menu-button { background: none; border: none; cursor: pointer; display: flex; flex-direction: column; gap: 4px; padding: 8px; }\n.hamburger-line { width: 24px; height: 2px; background-color: var(--pill-text); display: block; }\n.mobile-menu-popover { position: absolute; top: 100%; left: 0; right: 0; margin-top: 8px; background-color: var(--pill-bg); border-radius: 16px; padding: 16px; visibility: hidden; }\n.mobile-menu-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }\n.mobile-menu-link { color: var(--pill-text); text-decoration: none; font-size: 1.1rem; display: block; text-align: center; }\n@media (min-width: 769px) { .mobile-only { display: none !important; } }\n@media (max-width: 768px) { .desktop-only { display: none !important; } }\n\nAPP COMPONENT ASSEMBLY\n<ScrollVideo src=\"https://stream.mux.com/43NlHXsaMrmyzWamMk87m01fNyxSTekAD669BBAPBNm00.m3u8\" />\n<PillNav />\n<div style={{ position: \"relative\", height: \"500vh\" }}>\n  <ScrollFloat>{`Unleash The\\nFull Power`}</ScrollFloat>\n  <GlassPanel />\n</div>",
+        "zh-CN": "构建 Urban Jungle 滚动视频英雄落地页（完整规格见 en 字段，以 en 为准）：500vh 容器、随滚动擦除的 Mux HLS 全屏视频、Dirtyline 展示字体标题随滚动飘散、从底部滑入的毛玻璃 About 面板、GSAP 液态填充胶囊导航与文字跑马灯。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Urban Jungle — Scroll Video Hero"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "network"
+    ]
+  }
+}

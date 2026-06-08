@@ -13,23 +13,23 @@ describe('StreamingAskUserQuestionCard key stability', () => {
     const p2 = '{"questions":[{"question":"Which database?","options":[{"label":"Postgres"}]}]}';
 
     const { container, rerender } = render(<StreamingAskUserQuestionCard raw={p1} />);
-    const field1 = container.querySelector('.op-ask-question-field');
-    const option1 = container.querySelector('.op-ask-question-option');
+    const field1 = container.querySelector('.qf-field');
+    const option1 = container.querySelector('.qf-chip');
     expect(field1).not.toBeNull();
     expect(option1).not.toBeNull();
     // text reflects the early prefix
-    expect(container.querySelector('.op-ask-question-prompt')?.textContent).toBe('Which databa');
+    expect(container.querySelector('.qf-label')?.textContent).toBe('Which databa');
 
     rerender(<StreamingAskUserQuestionCard raw={p2} />);
-    const field2 = container.querySelector('.op-ask-question-field');
-    const option2 = container.querySelector('.op-ask-question-option');
+    const field2 = container.querySelector('.qf-field');
+    const option2 = container.querySelector('.qf-chip');
 
     // Positional keys mean React updates these nodes in place rather than
     // remounting them (which would replay the reveal every token).
     expect(field2).toBe(field1);
     expect(option2).toBe(option1);
     // …and the text updated in place to the longer prefix.
-    expect(container.querySelector('.op-ask-question-prompt')?.textContent).toBe('Which database?');
-    expect(container.querySelector('.op-ask-question-option-label')?.textContent).toBe('Postgres');
+    expect(container.querySelector('.qf-label')?.textContent).toBe('Which database?');
+    expect(container.querySelector('.qf-chip-copy')?.textContent).toBe('Postgres');
   });
 });

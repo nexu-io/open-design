@@ -52,10 +52,27 @@
   --shadow-md: 0 6px 24px rgba(28, 27, 26, 0.07), 0 2px 6px rgba(28, 27, 26, 0.04);
   --shadow-lg: 0 24px 60px rgba(28, 27, 26, 0.16), 0 8px 16px rgba(28, 27, 26, 0.07);
 
+  /* Corner-radius scale — the only radii UI should reach for (Shape
+     Consistency Lock). xs for inline code / micro-chips, sm for controls,
+     base for cards/menus, md for medium containers, lg for large surfaces,
+     pill for fully-rounded interactive. Off-scale values (7px, 9px, 10px
+     literals) are drift; collapse them to the nearest token. */
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius: 8px;
+  --radius-md: 10px;
   --radius-lg: 12px;
   --radius-pill: 999px;
+
+  /* Motion — codifies the UI animation philosophy (see AGENTS.md). The
+     built-in `ease` curve is too weak and `ease-in` is banned for UI;
+     --ease-out is the single canonical curve for product transitions.
+     Enter reads gentle, exit reads decisive (asymmetric durations);
+     --dur-quick is for hover / focus micro-feedback. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --dur-quick: 120ms;
+  --dur-enter: 200ms;
+  --dur-exit: 140ms;
 
   /* "Active option" indicator color, intentionally separate from --accent
      (brand orange used by primary CTAs like Create / Save). Use --selected

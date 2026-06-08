@@ -164,7 +164,12 @@ function targetConfig(): TargetConfig {
     const artifacts: Record<string, AssetEntry> = { dmg: assetEntry(dmg) };
     const assetNames = [dmg, `${dmg}.sha256`];
     let feed = null;
-    if (artifactMode !== "dmg-only") {
+    if (artifactMode === "dmg-and-payload" || artifactMode === "all") {
+      const payload = `open-design-${releaseVersion}${assetSuffix}-mac-${arch}-payload.zip`;
+      artifacts.payload = assetEntry(payload);
+      assetNames.push(payload, `${payload}.sha256`);
+    }
+    if (artifactMode === "dmg-and-zip" || artifactMode === "all") {
       artifacts.zip = assetEntry(zip);
       assetNames.push(zip, `${zip}.sha256`, "latest-mac.yml");
       feed = {
@@ -187,10 +192,11 @@ function targetConfig(): TargetConfig {
   }
   if (target === "win_x64") {
     const installer = `open-design-${releaseVersion}${assetSuffix}-win-x64-setup.exe`;
+    const payload = `open-design-${releaseVersion}${assetSuffix}-win-x64-payload.7z`;
     const portableZip = `open-design-${releaseVersion}${assetSuffix}-win-x64-portable.zip`;
     const includeZip = optional("WIN_INCLUDE_ZIP", "true") !== "false";
-    const artifacts: Record<string, AssetEntry> = { installer: assetEntry(installer) };
-    const assetNames = [installer, `${installer}.sha256`, "latest.yml"];
+    const artifacts: Record<string, AssetEntry> = { installer: assetEntry(installer), payload: assetEntry(payload) };
+    const assetNames = [installer, `${installer}.sha256`, payload, `${payload}.sha256`, "latest.yml"];
     if (includeZip) {
       artifacts.portableZip = assetEntry(portableZip);
       assetNames.push(portableZip, `${portableZip}.sha256`);

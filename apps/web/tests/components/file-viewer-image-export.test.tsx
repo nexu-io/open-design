@@ -91,6 +91,27 @@ describe('FileViewer image export', () => {
     vi.resetAllMocks();
   });
 
+  it('portals the image export dialog above fixed chat composer layers', async () => {
+    requestPreviewSnapshotMock.mockResolvedValueOnce({
+      dataUrl: 'data:image/png;base64,ok',
+      w: 800,
+      h: 600,
+    });
+    imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
+
+    const { container } = renderHtmlPreview();
+    openImageExportDialog();
+
+    const backdrop = document.body.querySelector('.viewer-modal-backdrop');
+    expect(backdrop).toBeTruthy();
+    expect(backdrop?.classList.contains('image-export-backdrop')).toBe(true);
+    expect(backdrop?.parentElement).toBe(document.body);
+    expect(container.querySelector('.viewer-modal-backdrop')).toBeNull();
+    await waitFor(() => {
+      expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,ok', 'png');
+    });
+  });
+
   it('lets users choose an image format before saving URL-loaded HTML previews', async () => {
     const pngBlob = new Blob(['png'], { type: 'image/png' });
     const imageBlob = new Blob(['jpeg'], { type: 'image/jpeg' });

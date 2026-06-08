@@ -32,6 +32,7 @@ function createPaths(root: string): WinPaths {
     installerBasePayloadPath: join(namespaceRoot, "installer", "payload-base.7z"),
     installerOverlayPayloadPath: join(namespaceRoot, "installer", "payload-overlay.7z"),
     installerScriptPath: join(namespaceRoot, "installer", "installer.nsi"),
+    launcherPayloadPath: join(namespaceRoot, "payload", "Open Design-second-payload.7z"),
     publicDesktopShortcutPath: join(namespaceRoot, "desktop", "public.lnk"),
     latestYmlPath: join(namespaceRoot, "builder", "latest.yml"),
     installMarkerPath: join(namespaceRoot, "logs", "install.marker.json"),

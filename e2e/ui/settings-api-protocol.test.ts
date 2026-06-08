@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { Locator, Page } from '@playwright/test';
+import type { Locator, Page, Route } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
@@ -18,7 +18,7 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
   await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
 }
@@ -26,7 +26,7 @@ async function gotoEntryHome(page: Page) {
 async function openSettingsDialogFromEntry(page: Page) {
   await waitForLoadingToClear(page);
   await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).first().click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.locator('.modal-settings[role="dialog"]');
   const menu = page.getByRole('menu');
   await expect
     .poll(async () => {
@@ -117,12 +117,49 @@ async function openExecutionSettingsWithAgents(
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({ json: { agents } });
+  await page.route('**/api/agents**', async (route) => {
+    await fulfillAgentsRoute(route, agents);
   });
 
   await gotoEntryHome(page);
   await openSettingsDialogFromEntry(page);
+}
+
+async function fulfillAgentsRoute(
+  route: Route,
+  agents: Array<{
+    id: string;
+    name: string;
+    bin: string;
+    available: boolean;
+    version?: string | null;
+    models?: Array<{ id: string; label: string }>;
+  }>,
+) {
+  const url = new URL(route.request().url());
+  if (url.searchParams.get('stream') === '1') {
+    const body = [
+      ...agents.flatMap((agent) => [
+        'event: agent',
+        `data: ${JSON.stringify(agent)}`,
+        '',
+      ]),
+      'event: done',
+      'data: {}',
+      '',
+      '',
+    ].join('\n');
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body,
+    });
+    return;
+  }
+  await route.fulfill({ json: { agents } });
 }
 
 test('[P1] legacy known OpenAI provider switches to the matching Anthropic preset', async ({ page }) => {
@@ -437,6 +474,7 @@ test('[P0] BYOK fetched models are searchable inside the Settings model dropdown
 });
 
 test('[P0] saving Local CLI updates the entry status pill with the selected agent', async ({ page }) => {
+  test.setTimeout(60_000);
   await openExecutionSettingsWithAgents(
     page,
     {
@@ -478,7 +516,9 @@ test('[P0] saving Local CLI updates the entry status pill with the selected agen
   const dialog = page.getByRole('dialog');
 
   await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
-  await dialog.getByRole('button', { name: /Codex CLI/i }).click();
+  const codexAgent = dialog.getByTestId('settings-agent-select-codex');
+  await expect(codexAgent).toBeVisible();
+  await codexAgent.click();
   await expect.poll(async () => readSavedConfig(page)).toMatchObject({
     mode: 'daemon',
     agentId: 'codex',

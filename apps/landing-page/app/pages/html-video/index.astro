@@ -41,24 +41,24 @@ const HV_REPO_API = `https://api.github.com/repos/${HV_REPO}`;
  * each locale's natural order (Google tokenizes regardless).
  */
 const SEO_TITLE: Record<LandingLocaleCode, string> = {
-  en:      'HTML to Video · Hyperframes · Open Source HTML Video',
-  zh:      'HTML 转视频 · Hyperframes · 开源 HTML Video',
-  'zh-tw': 'HTML 轉影片 · Hyperframes · 開源 HTML Video',
-  ja:      'HTML を動画に · Hyperframes · オープンソース HTML Video',
-  ko:      'HTML을 동영상으로 · Hyperframes · 오픈 소스 HTML Video',
-  de:      'HTML zu Video · Hyperframes · Open Source HTML Video',
-  fr:      'HTML en vidéo · Hyperframes · HTML Video Open Source',
-  ru:      'HTML в видео · Hyperframes · HTML Video с открытым исходным кодом',
-  es:      'HTML a vídeo · Hyperframes · HTML Video Open Source',
-  'pt-br': 'HTML para vídeo · Hyperframes · HTML Video Open Source',
-  it:      'HTML in video · Hyperframes · HTML Video Open Source',
-  vi:      'HTML sang video · Hyperframes · HTML Video mã nguồn mở',
-  pl:      'HTML na wideo · Hyperframes · HTML Video Open Source',
-  id:      'HTML ke video · Hyperframes · HTML Video Open Source',
-  nl:      'HTML naar video · Hyperframes · Open Source HTML Video',
-  ar:      'HTML إلى فيديو · Hyperframes · HTML Video مفتوح المصدر',
-  tr:      'HTML’den videoya · Hyperframes · Açık Kaynak HTML Video',
-  uk:      'HTML у відео · Hyperframes · HTML Video з відкритим кодом',
+  en:      'html-video — HTML to video, programmatic video for coding agents · Hyperframes',
+  zh:      'html-video — HTML 转视频，面向 coding agent 的程序化视频 · Hyperframes',
+  'zh-tw': 'html-video — HTML 轉影片，面向 coding agent 的程式化影片 · Hyperframes',
+  ja:      'html-video — HTML を動画に、コーディングエージェント向けプログラマティック動画 · Hyperframes',
+  ko:      'html-video — HTML을 동영상으로, 코딩 에이전트용 프로그래매틱 비디오 · Hyperframes',
+  de:      'html-video — HTML zu Video, programmatisches Video für Coding-Agents · Hyperframes',
+  fr:      'html-video — HTML en vidéo, vidéo programmatique pour agents de code · Hyperframes',
+  ru:      'html-video — HTML в видео, программное видео для кодинг-агентов · Hyperframes',
+  es:      'html-video — HTML a vídeo, vídeo programático para agentes de código · Hyperframes',
+  'pt-br': 'html-video — HTML para vídeo, vídeo programático para agentes de código · Hyperframes',
+  it:      'html-video — HTML in video, video programmatico per agenti di codice · Hyperframes',
+  vi:      'html-video — HTML sang video, video lập trình cho coding agent · Hyperframes',
+  pl:      'html-video — HTML na wideo, programmatyczne wideo dla agentów kodu · Hyperframes',
+  id:      'html-video — HTML ke video, video programatik untuk coding agent · Hyperframes',
+  nl:      'html-video — HTML naar video, programmatische video voor coding-agents · Hyperframes',
+  ar:      'html-video — HTML إلى فيديو، فيديو برمجي لوكلاء البرمجة · Hyperframes',
+  tr:      'html-video — HTML’den videoya, kodlama ajanları için programatik video · Hyperframes',
+  uk:      'html-video — HTML у відео, програмне відео для кодинг-агентів · Hyperframes',
 };
 
 /*
@@ -153,9 +153,9 @@ type HtmlVideoCopy = {
 const HTML_VIDEO_COPY_EN: HtmlVideoCopy = {
   title: SEO_TITLE.en,
   description:
-    'html-video turns HTML into video — on your laptop. An HTML to video meta-layer: bring your local coding agent (Open Design, Claude Code, Cursor, Codex, Hermes, or the Anthropic API), describe a video or paste an article link / GitHub repo, and the agent renders a multi-frame animated video to a real MP4 via Hyperframes (headless Chromium + ffmpeg). 21 templates, optional AI soundtrack. Open-source, Apache-2.0, no per-render fees.',
+    'html-video turns HTML into video — on your laptop. Programmatic video for coding agents: an HTML to video meta-layer — bring your local coding agent (Open Design, Claude Code, Cursor, Codex, Hermes, or the Anthropic API), describe a video or paste an article link / GitHub repo, and the agent renders a multi-frame animated video to a real MP4 via Hyperframes (headless Chromium + ffmpeg). 21 templates, optional AI soundtrack. Open-source, Apache-2.0, no per-render fees.',
   label: 'Sister project',
-  heading: 'HTML becomes video, on your laptop',
+  heading: 'HTML to video, on your laptop',
   lead:
     'The HTML to video meta-layer from the Open Design family. Describe a video — or paste an article link or a GitHub repo — and your local agent writes a multi-frame storyboard, fills each frame with animated HTML, and renders a real MP4 with the Hyperframes engine. Pluggable engines, a curated template gallery, optional AI soundtrack. No cloud render, no per-clip fee.',
   githubCta: 'View on GitHub →',
@@ -265,9 +265,9 @@ const HTML_VIDEO_COPY_ZH: HtmlVideoCopy = {
   ...HTML_VIDEO_COPY_EN,
   title: SEO_TITLE.zh,
   description:
-    'html-video 把 HTML 变成视频——就在你的电脑上。一个 HTML 转视频的 meta-layer：用你本地的 coding agent（Open Design、Claude Code、Cursor、Codex、Hermes 或 Anthropic API），描述一个视频，或粘贴一篇文章链接 / GitHub 仓库，agent 就生成多帧动画视频，并通过 Hyperframes（无头 Chromium + ffmpeg）渲染成真实 MP4。21 个模板，可选 AI 配乐。开源，Apache-2.0，无按次渲染费。',
+    'html-video 把 HTML 变成视频——就在你的电脑上。面向 coding agent 的程序化视频（programmatic video）：一个 HTML 转视频的 meta-layer，用你本地的 coding agent（Open Design、Claude Code、Cursor、Codex、Hermes 或 Anthropic API），描述一个视频，或粘贴一篇文章链接 / GitHub 仓库，agent 就生成多帧动画视频，并通过 Hyperframes（无头 Chromium + ffmpeg）渲染成真实 MP4。21 个模板，可选 AI 配乐。开源，Apache-2.0，无按次渲染费。',
   label: '姊妹项目',
-  heading: '把 HTML 变成视频，就在你的电脑上',
+  heading: 'HTML 转视频，就在你的电脑上',
   lead:
     'Open Design 家族里的 HTML 转视频 meta-layer。描述一个视频——或粘贴一篇文章链接、一个 GitHub 仓库——你的本地 agent 就写出多帧 storyboard，给每一帧填上动画 HTML，再用 Hyperframes 引擎渲染成真实 MP4。可插拔引擎、策划过的模板库、可选 AI 配乐。不走云渲染，没有按片计费。',
   githubCta: '在 GitHub 查看 →',

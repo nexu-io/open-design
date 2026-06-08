@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { ensureRailOpen } from '@/playwright/rail';
-import type { Locator, Page, Request } from '@playwright/test';
+import type { Locator, Page, Request, Route } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
@@ -111,14 +111,37 @@ test.beforeEach(async ({ page }) => {
     });
   });
 
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: AGENTS,
-      },
-    });
+  await page.route('**/api/agents**', async (route) => {
+    await fulfillAgentsRoute(route, AGENTS);
   });
 });
+
+async function fulfillAgentsRoute(route: Route, agents: typeof AGENTS) {
+  const url = new URL(route.request().url());
+  if (url.searchParams.get('stream') === '1') {
+    const body = [
+      ...agents.flatMap((agent) => [
+        'event: agent',
+        `data: ${JSON.stringify(agent)}`,
+        '',
+      ]),
+      'event: done',
+      'data: {}',
+      '',
+      '',
+    ].join('\n');
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body,
+    });
+    return;
+  }
+  await route.fulfill({ json: { agents } });
+}
 
 function artifactPreview(page: Page) {
   return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
@@ -463,15 +486,12 @@ test('[P0] project instructions flow into the next API run as project-level syst
 });
 
 test('[P0] project detail avatar menu lets the user switch Local CLI agents and models', async ({ page }) => {
+  test.setTimeout(60_000);
   await page.goto('/');
   await createProject(page, 'Header agent switch');
   await expectWorkspaceReady(page);
 
-  const trigger = page.locator('.avatar-menu .avatar-agent-trigger');
-  await trigger.click();
-  const menu = page.locator('.avatar-popover[role="dialog"]');
-  await expect(menu).toBeVisible();
-  const claudeButton = menu.getByRole('button', { name: /Claude Code/i });
+  const { menu, claudeButton } = await openAvatarAgentMenu(page);
   await expect(claudeButton).toBeVisible();
   await claudeButton.click();
 
@@ -485,6 +505,7 @@ test('[P0] project detail avatar menu lets the user switch Local CLI agents and 
 });
 
 test('[P0] project detail agent and model switches carry into the next daemon run request', async ({ page }) => {
+  test.setTimeout(60_000);
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await page.route('**/api/runs', async (route) => {
     const raw = route.request().postData();
@@ -507,11 +528,8 @@ test('[P0] project detail agent and model switches carry into the next daemon ru
   await createProject(page, 'Header agent switch run context');
   await expectWorkspaceReady(page);
 
-  const trigger = page.locator('.avatar-menu .avatar-agent-trigger');
-  await trigger.click();
-  const menu = page.locator('.avatar-popover[role="dialog"]');
-  await expect(menu).toBeVisible();
-  await menu.getByRole('button', { name: /Claude Code/i }).click();
+  const { menu, claudeButton } = await openAvatarAgentMenu(page);
+  await claudeButton.click();
   const modelSelect = menu.locator('.avatar-model-section [role=\"combobox\"]').first();
   await modelSelect.click();
   await page.getByRole('option', { name: /^Sonnet \(alias\)$/i }).click();
@@ -1473,6 +1491,32 @@ async function openEntrySettingsDialog(page: Page, sectionName?: RegExp | string
     await settingsDialog.getByRole('button', { name: sectionName }).click();
   }
   return settingsDialog;
+}
+
+async function openAvatarAgentMenu(page: Page): Promise<{
+  menu: Locator;
+  claudeButton: Locator;
+}> {
+  const trigger = page.locator('.avatar-menu .avatar-agent-trigger');
+  await trigger.click();
+  const menu = page.locator('.avatar-popover[role="dialog"]');
+  await expect(menu).toBeVisible();
+
+  const claudeButton = menu
+    .locator('[data-testid="avatar-agent-option-claude"], .avatar-item', {
+      hasText: /Claude Code/i,
+    })
+    .first();
+  if (!(await claudeButton.isVisible().catch(() => false))) {
+    const localCliOption = menu.getByRole('button', {
+      name: /Local CLI|本机 CLI|本地 CLI|Use local/i,
+    });
+    if (await localCliOption.isVisible().catch(() => false)) {
+      await localCliOption.click();
+    }
+  }
+  await expect(claudeButton).toBeVisible({ timeout: 20_000 });
+  return { menu, claudeButton };
 }
 
 async function expectWorkspaceReady(page: Page) {

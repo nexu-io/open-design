@@ -34,20 +34,30 @@ if (-not (Test-Path -LiteralPath $BuildJsonPath)) {
 }
 $build = Get-Content -LiteralPath $BuildJsonPath -Raw -Encoding utf8 | ConvertFrom-Json
 $sourceInstaller = [string]$build.installerPath
+$sourcePayload = [string]$build.payloadPath
 $sourceZip = [string]$build.portableZipPath
 if ([string]::IsNullOrWhiteSpace($sourceInstaller) -or -not (Test-Path -LiteralPath $sourceInstaller)) {
   throw "expected installer path from build json not found at $sourceInstaller"
+}
+if ([string]::IsNullOrWhiteSpace($sourcePayload) -or -not (Test-Path -LiteralPath $sourcePayload)) {
+  throw "expected launcher payload path from build json not found at $sourcePayload"
 }
 if ($IncludeZip -and ([string]::IsNullOrWhiteSpace($sourceZip) -or -not (Test-Path -LiteralPath $sourceZip))) {
   throw "expected portable zip path from build json not found at $sourceZip"
 }
 
 $versionedInstaller = "open-design-$ReleaseVersion$ReleaseAssetSuffix-win-x64-setup.exe"
+$versionedPayload = "open-design-$ReleaseVersion$ReleaseAssetSuffix-win-x64-payload.7z"
 $versionedZip = "open-design-$ReleaseVersion$ReleaseAssetSuffix-win-x64-portable.zip"
 $installerPath = Join-Path $ReleaseAssetsDir $versionedInstaller
 Copy-Item -LiteralPath $sourceInstaller -Destination $installerPath -Force
 $installerHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
 "$installerHash  $versionedInstaller" | Set-Content -Path "$installerPath.sha256" -Encoding utf8
+
+$payloadPath = Join-Path $ReleaseAssetsDir $versionedPayload
+Copy-Item -LiteralPath $sourcePayload -Destination $payloadPath -Force
+$payloadHash = (Get-FileHash -LiteralPath $payloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
+"$payloadHash  $versionedPayload" | Set-Content -Path "$payloadPath.sha256" -Encoding utf8
 
 if ($IncludeZip) {
   $zipPath = Join-Path $ReleaseAssetsDir $versionedZip

@@ -98,6 +98,7 @@ const outputs = {
   release_version: process.env.RELEASE_VERSION,
   ...(build.appPath ? { app_path: build.appPath } : {}),
   ...(build.dmgPath ? { dmg_path: build.dmgPath } : {}),
+  ...(build.payloadPath ? { payload_path: build.payloadPath } : {}),
   ...(build.zipPath ? { zip_path: build.zipPath } : {}),
   ...(build.outputRoot ? { output_root: build.outputRoot } : {}),
 };
@@ -221,9 +222,41 @@ elif [ "$RELEASE_TARGET" = "linux_x64" ]; then
   pnpm --dir e2e test specs/linux.spec.ts 2>&1 | tee "$RELEASE_REPORT_DIR/vitest.log"
 else
   required RELEASE_REPORT_DIR
+  update_build_json_path=""
+  update_version=""
+  if [ "$RELEASE_SMOKE_MODE" = "full" ] && [ "$RELEASE_TARGET" = "mac_arm64" ] && [ -z "${OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL:-}" ]; then
+    if [[ "$RELEASE_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-beta\.([0-9]+)$ ]]; then
+      update_version="${BASH_REMATCH[1]}-beta.$((BASH_REMATCH[2] + 1))"
+      update_fixture_dir="$RELEASE_WORK_DIR/tools-pack-update-fixture"
+      update_build_json_path="$RELEASE_WORK_DIR/mac-tools-pack-update-build.json"
+      update_args=(
+        exec tools-pack mac build
+        --dir "$update_fixture_dir"
+        --cache-dir "$TOOLS_PACK_CACHE_DIR"
+        --namespace "$RELEASE_NAMESPACE"
+        --portable
+        --app-version "$update_version"
+        --mac-compression "${MAC_COMPRESSION:-normal}"
+        --to dmg
+        --json
+      )
+      build_mac_update_fixture() {
+        local update_output
+        update_output="$(pnpm "${update_args[@]}")"
+        printf '%s\n' "$update_output" > "$update_build_json_path"
+      }
+      measure_step "tools-pack mac build update fixture" build_mac_update_fixture
+    else
+      echo "full mac payload smoke requires beta version x.y.z-beta.N; got $RELEASE_VERSION" >&2
+      exit 1
+    fi
+  fi
   OD_PACKAGED_E2E_BUILD_JSON_PATH="$BUILD_JSON_PATH" \
   OD_PACKAGED_E2E_BUILD_LOG_PATH="$BUILD_LOG_PATH" \
   OD_PACKAGED_E2E_MAC=1 \
+  OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH="$update_build_json_path" \
+  OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL="${OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL:-}" \
+  OD_PACKAGED_E2E_MAC_UPDATE_VERSION="${OD_PACKAGED_E2E_MAC_UPDATE_VERSION:-$update_version}" \
   OD_PACKAGED_E2E_MAC_SMOKE_PROFILE="$RELEASE_SMOKE_MODE" \
   OD_PACKAGED_E2E_NAMESPACE="$RELEASE_NAMESPACE" \
   OD_PACKAGED_E2E_RELEASE_CHANNEL=beta \

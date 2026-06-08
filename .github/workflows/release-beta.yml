@@ -76,6 +76,16 @@ on:
           - dmg
           - all
         default: dmg
+      mac_arm64_update_metadata_url:
+        description: "Optional external updater metadata URL for full macOS arm64 payload smoke."
+        required: false
+        type: string
+        default: ""
+      mac_arm64_update_target_version:
+        description: "Optional external updater target version expected by full macOS arm64 payload smoke."
+        required: false
+        type: string
+        default: ""
       mac_x64_sign_mode:
         description: "macOS x64 signing mode."
         required: true
@@ -129,6 +139,16 @@ on:
           - zip
           - dir
         default: all
+      win_x64_update_metadata_url:
+        description: "Optional external updater metadata URL for full Windows payload smoke."
+        required: false
+        type: string
+        default: ""
+      win_x64_update_target_version:
+        description: "Optional external updater target version expected by full Windows payload smoke."
+        required: false
+        type: string
+        default: ""
       linux_x64_smoke_mode:
         description: "Linux x64 smoke coverage."
         required: true
@@ -188,6 +208,14 @@ on:
         required: false
         type: string
         default: dmg
+      mac_arm64_update_metadata_url:
+        required: false
+        type: string
+        default: ""
+      mac_arm64_update_target_version:
+        required: false
+        type: string
+        default: ""
       mac_x64_sign_mode:
         required: false
         type: string
@@ -212,6 +240,14 @@ on:
         required: false
         type: string
         default: all
+      win_x64_update_metadata_url:
+        required: false
+        type: string
+        default: ""
+      win_x64_update_target_version:
+        required: false
+        type: string
+        default: ""
       linux_x64_smoke_mode:
         required: false
         type: string
@@ -381,6 +417,8 @@ jobs:
           BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
           BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.log
           MAC_COMPRESSION: normal
+          OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}
+          OD_PACKAGED_E2E_MAC_UPDATE_VERSION: ${{ inputs.mac_arm64_update_target_version }}
           RELEASE_BUILD_TARGET: ${{ inputs.mac_arm64_target }}
           RELEASE_NAMESPACE: release-beta
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-build/mac_arm64/outputs.json
@@ -419,7 +457,7 @@ jobs:
       - name: Prepare mac_arm64 assets
         if: ${{ inputs.publish }}
         env:
-          RELEASE_ARTIFACT_MODE: dmg-only
+          RELEASE_ARTIFACT_MODE: dmg-and-payload
           RELEASE_ASSET_SUFFIX: .signed
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
           RELEASE_CHANNEL: beta
@@ -436,7 +474,7 @@ jobs:
         env:
           RELEASE_ASSET_SUFFIX: .signed
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
-          RELEASE_ARTIFACT_MODE: dmg-only
+          RELEASE_ARTIFACT_MODE: dmg-and-payload
           RELEASE_CHANNEL: beta
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/mac_arm64.json
@@ -534,7 +572,7 @@ jobs:
       - name: Prepare mac_x64 assets
         if: ${{ inputs.publish }}
         env:
-          RELEASE_ARTIFACT_MODE: dmg-and-zip
+          RELEASE_ARTIFACT_MODE: ${{ inputs.mac_x64_target == 'all' && 'all' || 'dmg-and-payload' }}
           RELEASE_ASSET_SUFFIX: ${{ inputs.mac_x64_sign_mode != 'no' && '.signed' || '.unsigned' }}
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_x64
           RELEASE_CHANNEL: beta
@@ -550,7 +588,7 @@ jobs:
         env:
           RELEASE_ASSET_SUFFIX: ${{ inputs.mac_x64_sign_mode != 'no' && '.signed' || '.unsigned' }}
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_x64
-          RELEASE_ARTIFACT_MODE: dmg-and-zip
+          RELEASE_ARTIFACT_MODE: ${{ inputs.mac_x64_target == 'all' && 'all' || 'dmg-and-payload' }}
           RELEASE_CHANNEL: beta
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/mac_x64.json
@@ -626,6 +664,8 @@ jobs:
           OD_BETA_WINDOWS_SIGNING_SIGNTOOL_FOUND: ${{ steps.sign_probe.outputs.signtool_found }}
           OD_BETA_WINDOWS_SIGNTOOL_PATH: ${{ steps.sign_probe.outputs.signtool_path }}
           OD_BETA_WINDOWS_SIGN_CERT_SHA1: ${{ steps.sign_probe.outputs.thumbprint }}
+          OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}
+          OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}
         run: |
           .\.github\workflow\scripts\release\build-platform.ps1 `
             -ReleaseTarget win_x64 `

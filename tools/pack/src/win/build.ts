@@ -17,6 +17,7 @@ import {
   readBuiltAppManifest,
   readPackagedVersion,
 } from "./manifest.js";
+import { buildWinLauncherPayloadArchive } from "./payload.js";
 import { resolveWinPaths } from "./paths.js";
 import {
   collectWinSizeReport,
@@ -119,12 +120,17 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
     await writeLocalLatestYml(config, paths);
   });
   const builtApp = await readBuiltAppManifest(paths);
+  await runPhase("payload-artifact", async () => {
+    if (builtApp == null) throw new Error("cannot build Windows launcher payload without a built app manifest");
+    segments.push(...await buildWinLauncherPayloadArchive(config, paths, builtApp));
+  });
   const sizeReport = await runPhase("size-report", async () => collectWinSizeReport(config, paths, builtApp));
   return {
     blockmapPath: (await pathExists(paths.blockmapPath)) ? paths.blockmapPath : null,
     installerPath: hasNsisTarget && await pathExists(paths.setupPath) ? paths.setupPath : null,
     latestYmlPath: hasNsisTarget && await pathExists(paths.latestYmlPath) ? paths.latestYmlPath : null,
     outputRoot: config.roots.output.namespaceRoot,
+    payloadPath: (await pathExists(paths.launcherPayloadPath)) ? paths.launcherPayloadPath : null,
     portableZipPath: hasZipTarget && await pathExists(paths.setupZipPath) ? paths.setupZipPath : null,
     resourceRoot: builtApp == null ? paths.resourceRoot : join(builtApp.unpackedRoot, "resources", "open-design"),
     runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,

@@ -53,11 +53,6 @@ import {
 import type { Dict } from "../i18n/types";
 import { agentDisplayName, agentIconId, exactAgentDisplayName } from "../utils/agentLabels";
 import { AgentIcon } from "./AgentIcon";
-import {
-  exactDateTime,
-  messageTime,
-  relativeTimeLong,
-} from "../utils/chatTime";
 import { filterImplicitProducedFiles } from "../produced-files";
 import type {
   AgentEvent,
@@ -123,16 +118,14 @@ type SkillPluginCandidateBlock = Extract<Block, { kind: "plugin-candidate" }>;
 function SkillPluginCandidateCard({
   block,
   projectId,
-  onDismissed,
   onRequestOpenFile,
 }: {
   block: SkillPluginCandidateBlock;
   projectId: string | null;
-  onDismissed: (candidateId: string) => void;
   onRequestOpenFile?: (name: string) => void;
 }) {
   const t = useT();
-  const [busy, setBusy] = useState<null | "draft" | "publish" | "contribute" | "dismiss">(null);
+  const [busy, setBusy] = useState<null | "draft" | "contribute">(null);
   const [notice, setNotice] = useState<ActionNotice | null>(null);
   const disabled = !projectId || busy !== null;
   const description =
@@ -193,9 +186,9 @@ function SkillPluginCandidateCard({
     }
   }
 
-  async function share(action: "publish-github" | "contribute-open-design") {
+  async function share(action: "contribute-open-design") {
     if (!projectId) return;
-    setBusy(action === "publish-github" ? "publish" : "contribute");
+    setBusy("contribute");
     setNotice(null);
     try {
       const data = await post(
@@ -203,28 +196,11 @@ function SkillPluginCandidateCard({
         { action },
       );
       setNotice({
-        message:
-          action === "publish-github"
-            ? `GitHub publish task started for ${data?.path ?? "the draft"}.`
-            : `Open Design contribution task started for ${data?.path ?? "the draft"}.`,
+        message: `Open Design contribution task started for ${data?.path ?? "the draft"}.`,
       });
     } catch (err) {
       setNotice({ message: err instanceof Error ? err.message : String(err) });
     } finally {
-      setBusy(null);
-    }
-  }
-
-  async function dismiss() {
-    if (!projectId) return;
-    setBusy("dismiss");
-    try {
-      await post(
-        `/api/projects/${encodeURIComponent(projectId)}/plugin-candidates/${encodeURIComponent(block.candidateId)}/dismiss`,
-      );
-      onDismissed(block.candidateId);
-    } catch (err) {
-      setNotice({ message: err instanceof Error ? err.message : String(err) });
       setBusy(null);
     }
   }
@@ -245,15 +221,6 @@ function SkillPluginCandidateCard({
               type="button"
               className="plugin-action-button plugin-action-button--primary"
               disabled={disabled}
-              onClick={() => void createDraft()}
-            >
-              <Icon name={busy === "draft" ? "spinner" : "plus"} size={13} />
-              <span>{busy === "draft" ? "Creating..." : t("skillPluginCandidate.createForMe")}</span>
-            </button>
-            <button
-              type="button"
-              className="plugin-action-button"
-              disabled={disabled}
               onClick={() => void share("contribute-open-design")}
             >
               <Icon name={busy === "contribute" ? "spinner" : "share"} size={13} />
@@ -263,19 +230,10 @@ function SkillPluginCandidateCard({
               type="button"
               className="plugin-action-button"
               disabled={disabled}
-              onClick={() => void share("publish-github")}
+              onClick={() => void createDraft()}
             >
-              <Icon name={busy === "publish" ? "spinner" : "github"} size={13} />
-              <span>{busy === "publish" ? "Starting..." : t("skillPluginCandidate.publishRepo")}</span>
-            </button>
-            <button
-              type="button"
-              className="plugin-action-button"
-              disabled={disabled}
-              onClick={() => void dismiss()}
-            >
-              <Icon name={busy === "dismiss" ? "spinner" : "close"} size={13} />
-              <span>{t("skillPluginCandidate.dismiss")}</span>
+              <Icon name={busy === "draft" ? "spinner" : "plus"} size={13} />
+              <span>{busy === "draft" ? "Creating..." : t("skillPluginCandidate.createForMe")}</span>
             </button>
           </div>
           {notice ? (
@@ -627,9 +585,6 @@ function AssistantMessageImpl({
   // start so switching project tabs or remounting the message cannot restart it.
   const hasContent = blocks.some((b) => b.kind !== "status") || fileOps.length > 0;
   const preparing = streaming && !hasContent;
-  const [dismissedCandidateIds, setDismissedCandidateIds] = useState<Set<string>>(
-    () => new Set()
-  );
   // Route interactive tool answers (currently AskUserQuestion) back to the
   // still-open stream-json child via the daemon. We resolve to `true` on
   // success so the card can flip into its answered state; on `false` (run
@@ -723,19 +678,11 @@ function AssistantMessageImpl({
             return <LiveCodeBox key={b.id} name={b.name} raw={b.raw} />;
           }
           if (b.kind === "plugin-candidate") {
-            if (dismissedCandidateIds.has(b.candidateId)) return null;
             return (
               <SkillPluginCandidateCard
                 key={i}
                 block={b}
                 projectId={projectId}
-                onDismissed={(candidateId) =>
-                  setDismissedCandidateIds((prev) => {
-                    const next = new Set(prev);
-                    next.add(candidateId);
-                    return next;
-                  })
-                }
                 onRequestOpenFile={onRequestOpenFile}
               />
             );
@@ -840,7 +787,6 @@ function AssistantMessageImpl({
                   onFork: canFork ? onForkFromMessage : undefined,
                   forking,
                   forceVisible: true,
-                  message,
                   isLast: !!isLast,
                 }}
               />
@@ -856,20 +802,19 @@ function AssistantMessageImpl({
                 copyMarkdown={copyMarkdown}
                 onFork={canFork ? onForkFromMessage : undefined}
                 forking={forking}
-                message={message}
                 isLast={!!isLast}
               />
             )}
             {/*
               "Share to Open Design" — pairs with the post-feedback Discord
               prompt (assistant-feedback-discord-note). Only shows on the most
-              recent assistant message after a successful run, gated on the
-              same isFeedbackEligible signal so it appears alongside the
-              thumbs-up/down + Discord CTA — not on errored runs, partial
-              streams, or empty responses. Click hands the user a packaged
-              plugin via the bundled od-share-to-community scenario.
+              recent assistant message after a successful run. The thumbs row
+              now also renders on failed/canceled turns, so Share keeps its own
+              `runSucceeded` gate to stay off errored runs, partial streams, or
+              empty responses. Click hands the user a packaged plugin via the
+              bundled od-share-to-community scenario.
             */}
-            {onShareToOpenDesign && isLast && showFeedback ? (
+            {onShareToOpenDesign && isLast && showFeedback && runSucceeded ? (
               <button
                 type="button"
                 className="assistant-share-to-od-btn"
@@ -930,6 +875,18 @@ function inferProducedFilesFromTurn({
   ).sort((a, b) => b.mtime - a.mtime);
 }
 
+// A run that reached a terminal state — succeeded, failed, or canceled — has a
+// settled assistant turn worth rating. Only queued/running turns are still in
+// flight, so they have no outcome to give feedback on yet. Feedback used to be
+// gated on success alone, which silently dropped the thumbs row on failed and
+// canceled turns even though those are exactly the outcomes a user most wants
+// to thumbs-down.
+function isTerminalRunStatus(
+  status: NonNullable<ChatMessage["runStatus"]>
+): boolean {
+  return status === "succeeded" || status === "failed" || status === "canceled";
+}
+
 function isFeedbackEligible({
   streaming,
   message,
@@ -942,28 +899,8 @@ function isFeedbackEligible({
   hasUnfinishedTodos: boolean;
 }): boolean {
   if (streaming || hasEmptyResponse || hasUnfinishedTodos) return false;
-  if (message.runStatus) return message.runStatus === "succeeded";
+  if (message.runStatus) return isTerminalRunStatus(message.runStatus);
   return !!message.endedAt;
-}
-
-function MessageTimestamp({
-  message,
-  t,
-}: {
-  message: ChatMessage;
-  t: TranslateFn;
-}) {
-  const ts = messageTime(message);
-  if (!ts) return null;
-  return (
-    <time
-      className="msg-time"
-      dateTime={new Date(ts).toISOString()}
-      title={exactDateTime(ts)}
-    >
-      {relativeTimeLong(ts, t)}
-    </time>
-  );
 }
 
 // The agent name without the trailing model id — the role header shows the
@@ -1043,7 +980,6 @@ interface AssistantFooterProps {
   forking?: boolean;
   feedbackControls?: ReactNode;
   forceVisible?: boolean;
-  message?: ChatMessage;
   // The most recent assistant reply keeps its footer permanently visible
   // (not hover-gated), matching Lobe Chat's persistent last-message footer.
   isLast?: boolean;
@@ -1062,7 +998,6 @@ function AssistantFooter({
   forking = false,
   feedbackControls,
   forceVisible = false,
-  message,
   isLast = false,
 }: AssistantFooterProps) {
   const t = useT();
@@ -1123,7 +1058,6 @@ function AssistantFooter({
           {feedbackControls}
         </span>
       ) : null}
-      {!streaming && message ? <MessageTimestamp message={message} t={t} /> : null}
     </div>
   );
 }
