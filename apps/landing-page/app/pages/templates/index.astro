@@ -1,0 +1,154 @@
+---
+import Layout from '../../_components/sub-page-layout.astro';
+import {
+  getPluginsForTemplateUseCase,
+  getTemplateUseCaseCopy,
+  getTemplateUseCases,
+} from '../../_lib/template-use-cases';
+import { getPluginsCopy } from '../../_lib/plugins-i18n';
+import { localeFromPath, localizedHref } from '../../i18n';
+
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const pcopy = getPluginsCopy(locale);
+
+const useCases = getTemplateUseCases();
+const title =
+  locale === 'zh' || locale === 'zh-tw'
+    ? 'Open Design 模板场景库'
+    : 'Open Design template use cases';
+const description =
+  locale === 'zh' || locale === 'zh-tw'
+    ? '按真实使用场景浏览 Open Design 模板：SaaS 落地页、Pitch Deck、婚礼媒体、专题报道、看板、短视频等。'
+    : 'Browse Open Design templates by real use case: SaaS landing pages, pitch decks, wedding media, editorial features, dashboards, short-form video, and more.';
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: title,
+    description,
+    url: new URL(href('/templates/'), SITE).toString(),
+    numberOfItems: useCases.length,
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    itemListElement: useCases.map((useCase, index) => {
+      const copy = getTemplateUseCaseCopy(useCase, locale);
+      return {
+        '@type': 'ListItem',
+        position: index + 1,
+        name: copy.title,
+        url: new URL(href(`/templates/${useCase.slug}/`), SITE).toString(),
+      };
+    }),
+  },
+];
+---
+
+<Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label={pcopy.breadcrumbLabel}>
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <span aria-current="page">{locale === 'zh' || locale === 'zh-tw' ? '模板场景' : 'Templates'}</span>
+  </nav>
+
+  <header class="catalog-head template-usecase-head">
+    <span class="label">{locale === 'zh' || locale === 'zh-tw' ? '模板 SEO 场景入口' : 'Template use-case landing pages'}</span>
+    <h1 class="display">{title}<span class="dot">.</span></h1>
+    <p class="lead">{description}</p>
+    <div class="template-usecase-actions">
+      <a class="btn btn-primary" href={href('/plugins/templates/')}>{pcopy.tileTemplates}</a>
+      <span class="template-usecase-count">{useCases.length} use cases</span>
+    </div>
+  </header>
+
+  <section class="template-usecase-grid" aria-label={title}>
+    {useCases.map((useCase) => {
+      const copy = getTemplateUseCaseCopy(useCase, locale);
+      const count = getPluginsForTemplateUseCase(useCase).length;
+      return (
+        <article class="template-usecase-card">
+          <a href={href(`/templates/${useCase.slug}/`)}>
+            <span class="template-usecase-eyebrow">{copy.eyebrow}</span>
+            <h2>{copy.title}</h2>
+            <p>{copy.description}</p>
+            <span class="template-usecase-meta">{count} source templates</span>
+          </a>
+        </article>
+      );
+    })}
+  </section>
+</Layout>
+
+<style>
+  .template-usecase-head {
+    max-width: 860px;
+  }
+
+  .template-usecase-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    margin-top: 24px;
+  }
+
+  .template-usecase-count,
+  .template-usecase-meta {
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+
+  .template-usecase-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin: 34px 0 80px;
+  }
+
+  .template-usecase-card {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--paper);
+    transition:
+      border-color 160ms ease,
+      transform 160ms ease;
+  }
+
+  .template-usecase-card:hover {
+    border-color: var(--ink);
+    transform: translateY(-2px);
+  }
+
+  .template-usecase-card a {
+    display: grid;
+    gap: 12px;
+    min-height: 100%;
+    padding: 22px;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .template-usecase-eyebrow {
+    color: var(--coral);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .template-usecase-card h2 {
+    margin: 0;
+    font-size: clamp(1.28rem, 2vw, 1.7rem);
+    line-height: 1.12;
+  }
+
+  .template-usecase-card p {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+</style>

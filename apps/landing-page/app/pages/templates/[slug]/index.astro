@@ -1,0 +1,229 @@
+---
+import Layout from '../../../_components/sub-page-layout.astro';
+import TemplateCard from '../../../_components/template-card.astro';
+import { resolveBundledTitle } from '../../../_lib/bundled-plugins';
+import { getPluginsCopy } from '../../../_lib/plugins-i18n';
+import {
+  getPluginsForTemplateUseCase,
+  getTemplateUseCaseCopy,
+  getTemplateUseCases,
+  type TemplateUseCase,
+} from '../../../_lib/template-use-cases';
+import { localeFromPath, localizedHref } from '../../../i18n';
+
+export function getStaticPaths() {
+  return getTemplateUseCases().map((useCase) => ({
+    params: { slug: useCase.slug },
+    props: { useCase },
+  }));
+}
+
+interface Props {
+  useCase: TemplateUseCase;
+}
+
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const { useCase } = Astro.props as Props;
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const pcopy = getPluginsCopy(locale);
+const copy = getTemplateUseCaseCopy(useCase, locale);
+const plugins = getPluginsForTemplateUseCase(useCase);
+const relatedUseCases = getTemplateUseCases()
+  .filter((item) => item.slug !== useCase.slug)
+  .slice(0, 6);
+
+const title = `${copy.title} · Open Design templates`;
+const description = copy.description;
+const pageUrl = new URL(href(`/templates/${useCase.slug}/`), SITE).toString();
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 2, name: 'Templates', item: new URL(href('/templates/'), SITE).toString() },
+      { '@type': 'ListItem', position: 3, name: copy.title, item: pageUrl },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: copy.title,
+    description,
+    url: pageUrl,
+    keywords: useCase.keywords.join(', '),
+    numberOfItems: plugins.length,
+    mainEntity: {
+      '@type': 'ItemList',
+      itemListElement: plugins.map((plugin, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        name: resolveBundledTitle(plugin, locale),
+        url: new URL(href(plugin.detailHref), SITE).toString(),
+      })),
+    },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: useCase.faq.map((item) => ({
+      '@type': 'Question',
+      name: item.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: item.answer,
+      },
+    })),
+  },
+];
+---
+
+<Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label={pcopy.breadcrumbLabel}>
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <a href={href('/templates/')}>{locale === 'zh' || locale === 'zh-tw' ? '模板场景' : 'Templates'}</a>
+    <span>/</span>
+    <span aria-current="page">{copy.title}</span>
+  </nav>
+
+  <header class="catalog-head template-usecase-detail-head">
+    <span class="label">{copy.eyebrow}</span>
+    <h1 class="display">{copy.title}<span class="dot">.</span></h1>
+    <p class="lead">{copy.description}</p>
+    <p class="template-usecase-intro">{copy.intro}</p>
+    <div class="template-usecase-actions">
+      <a class="btn btn-primary" href="#templates">{copy.ctaLabel}</a>
+      <a class="btn btn-ghost" href={href('/plugins/templates/')}>{pcopy.tileTemplates}</a>
+    </div>
+  </header>
+
+  <section class="template-usecase-keywords" aria-label="Search intents">
+    {useCase.keywords.map((keyword) => (
+      <span>{keyword}</span>
+    ))}
+  </section>
+
+  <section id="templates" class="tpl-grid template-usecase-template-grid" aria-label={copy.title}>
+    {plugins.map((plugin, idx) => (
+      <TemplateCard record={plugin} index={idx} />
+    ))}
+  </section>
+
+  <section class="template-usecase-faq" aria-label="FAQ">
+    <h2>{locale === 'zh' || locale === 'zh-tw' ? '常见问题' : 'FAQ'}</h2>
+    <div class="template-usecase-faq-list">
+      {useCase.faq.map((item) => (
+        <details class="template-usecase-faq-item">
+          <summary>{item.question}</summary>
+          <p>{item.answer}</p>
+        </details>
+      ))}
+    </div>
+  </section>
+
+  <section class="template-usecase-related" aria-label="Related template use cases">
+    <h2>{locale === 'zh' || locale === 'zh-tw' ? '相关模板场景' : 'Related template use cases'}</h2>
+    <div class="template-usecase-related-list">
+      {relatedUseCases.map((item) => {
+        const relatedCopy = getTemplateUseCaseCopy(item, locale);
+        return <a href={href(`/templates/${item.slug}/`)}>{relatedCopy.title}</a>;
+      })}
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .template-usecase-detail-head {
+    max-width: 940px;
+  }
+
+  .template-usecase-intro {
+    max-width: 780px;
+    margin: 18px 0 0;
+    color: var(--muted);
+    font-size: 1.02rem;
+    line-height: 1.65;
+  }
+
+  .template-usecase-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .template-usecase-keywords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 28px 0 26px;
+  }
+
+  .template-usecase-keywords span {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 8px 12px;
+    background: var(--paper);
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .template-usecase-template-grid {
+    margin-top: 20px;
+  }
+
+  .template-usecase-faq,
+  .template-usecase-related {
+    margin: 70px 0 0;
+  }
+
+  .template-usecase-faq h2,
+  .template-usecase-related h2 {
+    margin: 0 0 18px;
+    font-size: clamp(1.5rem, 2.4vw, 2rem);
+  }
+
+  .template-usecase-faq-list {
+    display: grid;
+    gap: 12px;
+  }
+
+  .template-usecase-faq-item {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--paper);
+    padding: 18px 20px;
+  }
+
+  .template-usecase-faq-item summary {
+    cursor: pointer;
+    font-weight: 700;
+  }
+
+  .template-usecase-faq-item p {
+    margin: 12px 0 0;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .template-usecase-related-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .template-usecase-related-list a {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 9px 13px;
+    color: var(--ink);
+    text-decoration: none;
+  }
+
+  .template-usecase-related-list a:hover {
+    border-color: var(--ink);
+  }
+</style>

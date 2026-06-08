@@ -21,6 +21,10 @@ import {
   type BundledPluginRecord,
 } from '../../../_lib/bundled-plugins';
 import { getPluginsCopy } from '../../../_lib/plugins-i18n';
+import {
+  getTemplateUseCaseCopy,
+  getTemplateUseCasesForPlugin,
+} from '../../../_lib/template-use-cases';
 import { localeFromPath, localizedHref } from '../../../i18n';
 
 export async function getStaticPaths() {
@@ -69,6 +73,7 @@ const authorUrl = plugin.authorUrl
 
 const title = `${pluginTitle} · Open Design plugin`;
 const description = pluginDescription;
+const templateUseCases = getTemplateUseCasesForPlugin(plugin);
 
 /*
  * Share-dialog copy. The English template stays as a fallback inside
@@ -336,6 +341,22 @@ const jsonLd = [
       </Fragment>
     </dl>
 
+    {templateUseCases.length > 0 && (
+      <section class="detail-block detail-template-usecases">
+        <h2>{locale === 'zh' || locale === 'zh-tw' ? '收录于这些模板场景' : 'Appears in these template use cases'}</h2>
+        <ul class="detail-template-usecase-list">
+          {templateUseCases.map((useCase) => {
+            const useCaseCopy = getTemplateUseCaseCopy(useCase, locale);
+            return (
+              <li>
+                <a href={href(`/templates/${useCase.slug}/`)}>{useCaseCopy.title}</a>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    )}
+
     {plugin.tags.length > 0 && (
       <section class="detail-block">
         <h2>{pcopy.detailTags}</h2>
@@ -361,5 +382,27 @@ const jsonLd = [
     display: block;
     border: 1px solid var(--line);
     background: #000;
+  }
+
+  .detail-template-usecase-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .detail-template-usecase-list a {
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 9px 13px;
+    color: var(--ink);
+    text-decoration: none;
+  }
+
+  .detail-template-usecase-list a:hover {
+    border-color: var(--ink);
   }
 </style>
