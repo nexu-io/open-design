@@ -4,9 +4,9 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { ToolPackCache } from "../src/cache.js";
+import { hashJson, ToolPackCache } from "../src/cache.js";
 import type { ToolPackConfig } from "../src/config.js";
-import { ensureWorkspaceBuildArtifacts } from "../src/workspace-build.js";
+import { ensureWorkspaceBuildArtifacts, workspaceBuildVersionFamilyAliasKey } from "../src/workspace-build.js";
 
 const PACKAGE_DIRS = [
   "packages/components",
@@ -278,5 +278,55 @@ describe("ensureWorkspaceBuildArtifacts", () => {
     } finally {
       await rm(root, { force: true, recursive: true });
     }
+  });
+});
+
+describe("workspaceBuildVersionFamilyAliasKey (warm-cache launcher-proto regression)", () => {
+  const FAMILY = "0.9";
+  const SET_WITHOUT_LAUNCHER_PROTO = [
+    "outputs/packages/contracts/dist",
+    "outputs/packages/registry-protocol/dist",
+    "outputs/packages/sidecar-proto/dist",
+  ];
+  const SET_WITH_LAUNCHER_PROTO = [...SET_WITHOUT_LAUNCHER_PROTO, "outputs/packages/launcher-proto/dist"];
+
+  it("changes the version-family alias key when the build artifact set changes", () => {
+    const config = createConfig("/x/ws", "/x/cache");
+
+    const keyBefore = workspaceBuildVersionFamilyAliasKey(config, FAMILY, SET_WITHOUT_LAUNCHER_PROTO);
+    const keyAfter = workspaceBuildVersionFamilyAliasKey(config, FAMILY, SET_WITH_LAUNCHER_PROTO);
+
+    // A warm alias produced before `packages/launcher-proto/dist` joined the
+    // artifact set must not be seeded into a build that now expects it:
+    // ToolPackCache.seedFromAlias() would cp() a `from` path the old entry
+    // never produced and ENOENT instead of rebuilding. Different artifact set
+    // => different alias key => the stale alias is simply not found.
+    expect(keyAfter).not.toBe(keyBefore);
+  });
+
+  it("is independent of artifact-path ordering", () => {
+    const config = createConfig("/x/ws", "/x/cache");
+    const a = workspaceBuildVersionFamilyAliasKey(config, FAMILY, ["outputs/a", "outputs/b"]);
+    const b = workspaceBuildVersionFamilyAliasKey(config, FAMILY, ["outputs/b", "outputs/a"]);
+    expect(a).toBe(b);
+  });
+
+  it("does not collide with a pre-fix artifact-set-blind (schemaVersion 1) alias key", () => {
+    const config = createConfig("/x/ws", "/x/cache");
+
+    // The pre-fix key ignored the artifact set and used schemaVersion 1, so a
+    // warm alias written by the old code would otherwise be reused verbatim.
+    const legacyKey = hashJson({
+      node: "win.workspace-build",
+      nodeVersion: process.version,
+      platform: "win",
+      schemaVersion: 1,
+      scope: "version-family",
+      versionFamily: FAMILY,
+      webOutputMode: config.webOutputMode,
+    });
+    const currentKey = workspaceBuildVersionFamilyAliasKey(config, FAMILY, SET_WITH_LAUNCHER_PROTO);
+
+    expect(currentKey).not.toBe(legacyKey);
   });
 });

@@ -63,6 +63,34 @@ async function resolveWorkspaceBuildVersionFamily(config: ToolPackBuildOnlyConfi
   return appVersion == null ? null : versionFamilyForAppVersion(appVersion);
 }
 
+// Cache key for the Windows `version-family` alias used to seed a packaged
+// build from a warm build of an earlier patch in the same family.
+// `ToolPackCache.seedFromAlias()` blindly `cp()`s every materialize `from`
+// path out of the aliased entry before `build()` runs, so the alias is only
+// safe to reuse when the entry was produced with the *same artifact set*.
+// The set is therefore part of the key: adding/removing a workspace artifact
+// (e.g. `packages/launcher-proto/dist`) yields a different alias key, so a
+// warm alias from a build that never produced the new artifact is never
+// seeded (which would otherwise ENOENT instead of rebuilding). `schemaVersion`
+// is bumped to 2 alongside this change so pre-existing warm aliases written
+// under the artifact-set-blind v1 key are invalidated rather than reused.
+export function workspaceBuildVersionFamilyAliasKey(
+  config: ToolPackBuildOnlyConfig,
+  versionFamily: string,
+  artifactCachePaths: readonly string[],
+): string {
+  return hashJson({
+    artifactSet: [...artifactCachePaths].sort(),
+    node: `${config.platform}.workspace-build`,
+    nodeVersion: process.version,
+    platform: config.platform,
+    schemaVersion: 2,
+    scope: "version-family",
+    versionFamily,
+    webOutputMode: config.webOutputMode,
+  });
+}
+
 async function pathExists(path: string): Promise<boolean> {
   try {
     await access(path);
@@ -301,15 +329,7 @@ export async function ensureWorkspaceBuildArtifacts(
   const versionFamily = await resolveWorkspaceBuildVersionFamily(config);
   const versionFamilyAlias = versionFamily == null
     ? null
-    : hashJson({
-        node: nodeId,
-        nodeVersion: process.version,
-        platform: config.platform,
-        schemaVersion: 1,
-        scope: "version-family",
-        versionFamily,
-        webOutputMode: config.webOutputMode,
-      });
+    : workspaceBuildVersionFamilyAliasKey(config, versionFamily, artifacts.map((artifact) => artifact.cachePath));
   const materialize = artifacts.map((artifact) => ({
     from: artifact.cachePath,
     reuse: true,
