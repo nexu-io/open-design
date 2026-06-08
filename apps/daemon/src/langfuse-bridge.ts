@@ -10,6 +10,7 @@
 
 import { createHash } from 'node:crypto';
 import os from 'node:os';
+import path from 'node:path';
 
 import { modelIdForTracking } from '@open-design/contracts/analytics';
 
@@ -26,6 +27,7 @@ import {
   type AttachmentManifestEntry,
   type EventsSummary,
   type FeedbackReportContext,
+  type InputTextSnapshotManifestEntry,
   type ObjectManifestCompleteness,
   type MessageSummary,
   type ReportContext,
@@ -45,6 +47,8 @@ import {
 import { collectStderrTailSummary } from './run-diagnostics.js';
 import { classifyRunFailure } from './run-failure-classification.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
+import { buildTraceObjectManifests } from './trace-object-manifest.js';
+import type { TraceArtifactObjectSource } from './trace-object-manifest.js';
 
 interface DaemonRunRecord {
   id: string;
@@ -76,11 +80,20 @@ interface DaemonRunRecord {
   designSystemId?: string;
   clientType?: 'desktop' | 'web' | 'unknown';
   promptTelemetry?: PromptStackTelemetry;
+  projectAttachmentPaths?: string[];
+  projectMetadata?: Record<string, unknown> | null;
 }
 
 interface TraceSafeManifestResult {
   attachmentManifest: AttachmentManifestEntry[];
   artifactManifest: ArtifactManifestEntry[];
+  completeness: ObjectManifestCompleteness;
+}
+
+interface FinalTraceSafeManifests {
+  attachmentManifest: AttachmentManifestEntry[];
+  artifactManifest: ArtifactManifestEntry[];
+  inputTextSnapshotManifest?: InputTextSnapshotManifestEntry[];
   completeness: ObjectManifestCompleteness;
 }
 
@@ -115,6 +128,44 @@ function getRuntimeInfo(appVersion?: AppVersionInfo | null): RuntimeInfo {
   }
   cachedRuntime = info;
   return info;
+}
+
+function deriveManifestCompleteness(
+  entries: Array<
+    AttachmentManifestEntry | ArtifactManifestEntry | InputTextSnapshotManifestEntry
+  >,
+  fallbackUnavailableSelected: boolean,
+): ObjectManifestCompleteness {
+  if (fallbackUnavailableSelected) return 'unavailable';
+  if (entries.length === 0) return 'unavailable';
+  if (entries.some((entry) => entry.status === 'unavailable')) return 'unavailable';
+  if (entries.some((entry) => entry.status === 'partial')) return 'partial';
+  return 'complete';
+}
+
+function mergeTraceSafeManifests(
+  fallback: TraceSafeManifestResult,
+  uploaded: Awaited<ReturnType<typeof buildTraceObjectManifests>>,
+): FinalTraceSafeManifests {
+  const attachmentManifest = uploaded?.attachmentManifest ?? fallback.attachmentManifest;
+  const artifactManifest = uploaded?.artifactManifest ?? fallback.artifactManifest;
+  const inputTextSnapshotManifest = uploaded?.inputTextSnapshotManifest;
+  const entries = [
+    ...attachmentManifest,
+    ...artifactManifest,
+    ...(inputTextSnapshotManifest ?? []),
+  ];
+  const selectedFallbackUnavailable =
+    fallback.completeness === 'unavailable' &&
+    (uploaded === undefined ||
+      (uploaded.attachmentManifest === undefined && fallback.attachmentManifest.length > 0) ||
+      (uploaded.artifactManifest === undefined && fallback.artifactManifest.length > 0));
+  return {
+    attachmentManifest,
+    artifactManifest,
+    ...(inputTextSnapshotManifest ? { inputTextSnapshotManifest } : {}),
+    completeness: deriveManifestCompleteness(entries, selectedFallbackUnavailable),
+  };
 }
 
 function turnInfoFromRun(
@@ -509,6 +560,31 @@ function summarizeProducedFiles(items: unknown): ArtifactSummary[] {
   return out;
 }
 
+function buildTraceObjectArtifactSources(items: unknown): TraceArtifactObjectSource[] {
+  if (!Array.isArray(items)) return [];
+  const out: TraceArtifactObjectSource[] = [];
+  for (const item of items) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const obj = item as Record<string, unknown>;
+    const slug = sanitizeProducedFileSlug(obj);
+    if (!slug) continue;
+    const rawPath = typeof obj.path === 'string' && obj.path.trim()
+      ? obj.path
+      : typeof obj.name === 'string' && obj.name.trim()
+        ? obj.name
+        : undefined;
+    out.push({
+      summary: {
+        slug,
+        type: typeof obj.kind === 'string' ? obj.kind : 'unknown',
+        sizeBytes: typeof obj.size === 'number' ? obj.size : 0,
+      },
+      ...(rawPath ? { sourcePath: rawPath } : {}),
+    });
+  }
+  return out;
+}
+
 function collectPriorUserAttachments(
   messages: Array<Record<string, unknown>>,
   assistantIndex: number,
@@ -791,12 +867,26 @@ export async function reportRunCompletedFromDaemon(
       ...getRuntimeInfo(opts.appVersion ?? null),
       ...(run.clientType ? { clientType: run.clientType } : {}),
     };
+    const artifacts = summarizeProducedFiles(producedFilesRaw);
     const manifests = buildTraceSafeManifests({
       projectId: run.projectId,
       runId: run.id,
       attachmentsRaw,
       producedFilesRaw,
     });
+    const uploadedManifests = await buildTraceObjectManifests({
+      installationId,
+      projectId: run.projectId ?? '',
+      runId: run.id,
+      projectsRoot: path.join(dataDir, 'projects'),
+      ...(run.projectMetadata ? { projectMetadata: run.projectMetadata } : {}),
+      ...(run.projectAttachmentPaths ? { attachmentPaths: run.projectAttachmentPaths } : {}),
+      artifacts: buildTraceObjectArtifactSources(producedFilesRaw),
+      prompt: telemetryPrompt,
+      prefs,
+      ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+    });
+    const finalManifests = mergeTraceSafeManifests(manifests, uploadedManifests);
     const ctx: ReportContext = {
       installationId,
       projectId: run.projectId ?? '',
@@ -824,10 +914,13 @@ export async function reportRunCompletedFromDaemon(
         output: redactSecrets(messageContent),
         ...(usage ? { usage } : {}),
       },
-      artifacts: summarizeProducedFiles(producedFilesRaw),
-      attachmentManifest: manifests.attachmentManifest,
-      artifactManifest: manifests.artifactManifest,
-      manifestCompleteness: manifests.completeness,
+      artifacts,
+      attachmentManifest: finalManifests.attachmentManifest,
+      artifactManifest: finalManifests.artifactManifest,
+      ...(finalManifests.inputTextSnapshotManifest
+        ? { inputTextSnapshotManifest: finalManifests.inputTextSnapshotManifest }
+        : {}),
+      manifestCompleteness: finalManifests.completeness,
       tools: collectToolCalls(run.events, startedAt, endedAt),
       agentEvents: collectAgentEvents(run.events, startedAt, endedAt, run.agentId),
       eventsSummary: summarizeEvents(run.events, durationMs),
