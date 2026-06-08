@@ -1512,7 +1512,7 @@ function PluginPromptPresetCard({
   record: InstalledPluginRecord;
 }) {
   const preview = useMemo(() => inferPluginPreview(record), [record]);
-  const promptPreview = pluginPresetPromptPreview(record, locale, chipId);
+  const seedPrompt = examplePresetSeedPrompt(record, locale, chipId);
   return (
     <button
       type="button"
@@ -1521,7 +1521,7 @@ function PluginPromptPresetCard({
       data-plugin-id={record.id}
       role="listitem"
       disabled={disabled}
-      onClick={() => onPick(record, chipId, promptPreview)}
+      onClick={() => onPick(record, chipId, seedPrompt)}
     >
       <span className="home-hero__plugin-preset-preview" aria-hidden>
         <PreviewSurface
@@ -2710,6 +2710,43 @@ function pluginPresetPromptPreview(
     ? renderPluginPresetQuery(record, query)
     : localizePluginDescription(locale, record);
   return textPromptForPluginPreset(record, rendered, chipId, locale);
+}
+
+// The seed text dropped into the composer when a preset card is picked.
+// The full build spec now rides along as plugin context (SKILL.md +
+// example.html injected once the plugin is applied), so the textarea only
+// needs a short, human-readable, editable hook — not the verbatim spec.
+function examplePresetSeedPrompt(
+  record: InstalledPluginRecord,
+  locale: Locale,
+  chipId: string,
+): string {
+  const description = localizePluginDescription(locale, record).trim();
+  // zh: the localized useCase.query is a generator-facing meta-instruction
+  // ("follow the en field verbatim; start from example.html"), useless as a
+  // human seed — surface the curated one-line description instead.
+  if (promptLocaleKind(locale) === 'zh' && description) return description;
+  const query = pluginPresetQuery(record, locale);
+  if (query) {
+    const head = firstPromptParagraph(renderPluginPresetQuery(record, query));
+    // Skip meta-instructions that reference fields/assets the model can't see
+    // from the textarea; fall back to the description.
+    if (head && !isMetaInstructionSeed(head)) return head;
+  }
+  if (description) return description;
+  return pluginPresetPromptPreview(record, locale, chipId);
+}
+
+function firstPromptParagraph(value: string): string {
+  const normalized = value.replace(/\r\n/g, '\n').trim();
+  if (!normalized) return '';
+  // First paragraph = text up to the first blank line / markdown rule fence.
+  const [head] = normalized.split(/\n\s*\n/);
+  return (head ?? normalized).trim();
+}
+
+function isMetaInstructionSeed(value: string): boolean {
+  return /逐字注入|以\s*en\s*字段为准|verbatim|example\.html/iu.test(value);
 }
 
 function pluginPresetQuery(record: InstalledPluginRecord, locale: Locale): string | null {
