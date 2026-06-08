@@ -101,15 +101,6 @@ importers:
       node-pty:
         specifier: 1.1.0
         version: 1.1.0
-      pixelmatch:
-        specifier: 7.2.0
-        version: 7.2.0
-      playwright:
-        specifier: 1.60.0
-        version: 1.60.0
-      pngjs:
-        specifier: 7.0.0
-        version: 7.0.0
       posthog-node:
         specifier: 5.34.6
         version: 5.34.6
@@ -135,9 +126,6 @@ importers:
       '@types/node':
         specifier: 20.19.39
         version: 20.19.39
-      '@types/pngjs':
-        specifier: 6.0.5
-        version: 6.0.5
       typescript:
         specifier: 5.9.3
         version: 5.9.3

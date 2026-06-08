@@ -1081,6 +1081,17 @@ function normalizeToolInput(input: unknown): unknown {
   return input;
 }
 
+const TRANSIENT_ACP_STATUS_LABELS = new Set([
+  'waiting_for_first_output',
+  'tool_call',
+  'tool_call_update',
+  'session_update',
+]);
+
+function normalizeAgentStatusLabel(label: string): string {
+  return TRANSIENT_ACP_STATUS_LABELS.has(label) ? 'running' : label;
+}
+
 // Translate a raw `agent` SSE payload (what apps/daemon/src/claude-stream.ts emits)
 // into the UI's AgentEvent union. Keep this liberal — unknown types just
 // return null so the UI ignores them instead of rendering garbage.
@@ -1089,7 +1100,7 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
   if (t === 'status' && typeof data.label === 'string') {
     return {
       kind: 'status',
-      label: data.label,
+      label: normalizeAgentStatusLabel(data.label),
       detail:
         typeof data.detail === 'string'
           ? data.detail

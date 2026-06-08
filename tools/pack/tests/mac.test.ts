@@ -14,7 +14,6 @@ import {
 } from "../src/mac/app.js";
 import { resolveSeededAppConfigPaths, seedPackagedAppConfig, writeLaunchPackagedConfig } from "../src/mac/index.js";
 import { resolveMacPaths } from "../src/mac/paths.js";
-import { ensureDaemonPlaywrightFixture } from "./playwright-fixture.js";
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -156,7 +155,6 @@ describe("seedPackagedAppConfig", () => {
 describe("copyResourceTree", () => {
   it("does not embed the build machine Node launcher into mac resources", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
-    const playwrightFixture = await ensureDaemonPlaywrightFixture(process.cwd());
     try {
       const config = makeConfig(root);
       const paths = resolveMacPaths(config);
@@ -180,7 +178,6 @@ describe("copyResourceTree", () => {
 
       expect(await pathExists(join(paths.resourceRoot, "bin", "node"))).toBe(false);
     } finally {
-      await playwrightFixture.cleanup();
       await rm(root, { force: true, recursive: true });
     }
   });

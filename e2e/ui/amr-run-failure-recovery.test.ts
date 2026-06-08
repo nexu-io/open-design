@@ -153,7 +153,7 @@ test('[P0] after an AMR failure the user can switch to Codex and complete a fres
   await expect(page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first()).toBeVisible();
 
   const settings = await openSettingsDialog(page);
-  await settings.getByRole('button', { name: /Codex CLI/i }).click();
+  await settings.getByTestId('settings-agent-select-codex').click();
   await expect
     .poll(async () => {
       const raw = await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY);

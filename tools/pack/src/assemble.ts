@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { createPackageManagerInvocation } from "@open-design/platform";
 
 import type { ToolPackBuildOnlyConfig } from "./config.js";
-import { copyBundledPlaywrightChromium, copyBundledResourceTrees } from "./resources.js";
+import { copyBundledResourceTrees } from "./resources.js";
 import { copyOptionalVelaCliBinary } from "./vela-cli.js";
 import { electronBuilderVersionForAppVersion, readRuntimeAppVersion } from "./versions.js";
 import { processWebSourcemaps } from "./web-sourcemaps.js";
@@ -128,15 +128,11 @@ export async function collectWorkspaceTarballs(
 // into `<resourceRoot>`. By default it also copies the current `process.execPath`
 // into `<resourceRoot>/bin/node` (chmod 755) so packaged Electron builds ship a
 // Node binary; the WebUI distribution sets `includeNodeBinary: false` because it
-// requires the user's installed system Node. Likewise it bundles the daemon's
-// Playwright Chromium under `<resourceRoot>/ms-playwright` by default so packaged
-// Electron builds can run the visual-validation atom offline; the WebUI
-// distribution sets `includePlaywrightChromium: false` to stay a thin no-Electron
-// lane that defers to the host's own Playwright install.
+// requires the user's installed system Node.
 export async function copyResourceTree(
   config: ToolPackBuildOnlyConfig,
   resourceRoot: string,
-  options: { includeNodeBinary?: boolean; includePlaywrightChromium?: boolean } = {},
+  options: { includeNodeBinary?: boolean } = {},
 ): Promise<void> {
   await rm(resourceRoot, { force: true, recursive: true });
   await mkdir(resourceRoot, { recursive: true });
@@ -144,12 +140,6 @@ export async function copyResourceTree(
     workspaceRoot: config.workspaceRoot,
     resourceRoot,
   });
-  if (options.includePlaywrightChromium !== false) {
-    await copyBundledPlaywrightChromium({
-      workspaceRoot: config.workspaceRoot,
-      resourceRoot,
-    });
-  }
   if (options.includeNodeBinary !== false) {
     await mkdir(join(resourceRoot, "bin"), { recursive: true });
     await cp(process.execPath, join(resourceRoot, "bin", "node"));

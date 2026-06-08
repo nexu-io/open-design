@@ -471,7 +471,7 @@ test('[P0] project detail avatar menu lets the user switch Local CLI agents and 
   await trigger.click();
   const menu = page.locator('.avatar-popover[role="dialog"]');
   await expect(menu).toBeVisible();
-  const claudeButton = menu.getByRole('button', { name: /Claude Code/i });
+  const claudeButton = menu.getByTestId('avatar-agent-option-claude');
   await expect(claudeButton).toBeVisible();
   await claudeButton.click();
 
@@ -511,7 +511,7 @@ test('[P0] project detail agent and model switches carry into the next daemon ru
   await trigger.click();
   const menu = page.locator('.avatar-popover[role="dialog"]');
   await expect(menu).toBeVisible();
-  await menu.getByRole('button', { name: /Claude Code/i }).click();
+  await menu.getByTestId('avatar-agent-option-claude').click();
   const modelSelect = menu.locator('.avatar-model-section [role=\"combobox\"]').first();
   await modelSelect.click();
   await page.getByRole('option', { name: /^Sonnet \(alias\)$/i }).click();
