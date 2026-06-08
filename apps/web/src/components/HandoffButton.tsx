@@ -9,7 +9,10 @@ import type {
   HostEditorId,
   HostEditorsResponse,
 } from '@open-design/contracts';
-import type { TrackingArtifactKind } from '@open-design/contracts/analytics';
+import {
+  handoffTargetIdToTracking,
+  type TrackingArtifactKind,
+} from '@open-design/contracts/analytics';
 import { fetchHostEditors, openProjectInEditor } from '../providers/registry';
 import { useAnalytics } from '../analytics/provider';
 import { trackHandoffClick } from '../analytics/events';
@@ -383,7 +386,7 @@ export function HandoffButton({
   async function launch(editor: HostEditor) {
     fireHandoff({
       element: 'open_editor',
-      target_id: editor.id,
+      target_id: handoffTargetIdToTracking(editor.id),
       target_available: editor.available,
       handoff_tab: 'editor',
     });
@@ -420,7 +423,7 @@ export function HandoffButton({
   async function copyCliPrompt(cli: CliTarget) {
     fireHandoff({
       element: 'copy_cli_prompt',
-      target_id: cli.id,
+      target_id: handoffTargetIdToTracking(cli.id),
       target_available: cli.available,
       handoff_tab: 'cli',
       framework: selectedFramework.id,
@@ -543,7 +546,7 @@ export function HandoffButton({
             // secondary fallback if the daemon spawn fails.
             fireHandoff({
               element: 'open_editor',
-              target_id: fallbackId,
+              target_id: handoffTargetIdToTracking(fallbackId),
               target_available: false,
               handoff_tab: 'editor',
             });
@@ -597,7 +600,7 @@ export function HandoffButton({
               // target launch.
               fireHandoff({
                 element: 'trigger',
-                target_id: primary.id,
+                target_id: handoffTargetIdToTracking(primary.id),
                 target_available: primary.available,
                 handoff_tab: 'editor',
               });
