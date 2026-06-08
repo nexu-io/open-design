@@ -1421,6 +1421,23 @@ export interface FileManagerClickProps {
     | 'per_page_dropdown';
 }
 
+// The workspace tab strip's "+" launcher — a command-palette popover for
+// opening tabs. `open` fires when the menu is opened; `filter` when a file-kind
+// chip is picked (`kind_filter`); `create` when a "New …" action runs
+// (`action_id` = new-terminal | new-browser | …); `open_file` when a project
+// file is opened as a tab (`file_kind`); `open_tab` when an already-open tab is
+// focused (`tab_kind` = browser | terminal | design-files | …).
+export interface TabLauncherClickProps {
+  page_name: 'file_manager';
+  area: 'tab_launcher';
+  element: 'open' | 'filter' | 'create' | 'open_file' | 'open_tab';
+  action_id?: string;
+  kind_filter?: string;
+  file_kind?: string;
+  tab_kind?: string;
+  project_id?: string;
+}
+
 // ARTIFACT
 export interface ArtifactToolbarClickProps {
   page_name: 'artifact';
@@ -1727,6 +1744,7 @@ export type UiClickProps =
   | AmrEntryClickProps
   | ChatPanelResourcesPopoverClickProps
   | FileManagerClickProps
+  | TabLauncherClickProps
   | ArtifactToolbarClickProps
   | TweaksPopoverClickProps
   | CommentPopoverClickProps

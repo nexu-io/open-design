@@ -54,6 +54,7 @@ import type {
   RunFailedToastSurfaceViewProps,
   ChatPanelResourcesPopoverClickProps,
   FileManagerClickProps,
+  TabLauncherClickProps,
   ArtifactToolbarClickProps,
   TweaksPopoverClickProps,
   CommentPopoverClickProps,
@@ -459,6 +460,13 @@ export function trackChatPanelResourcesPopoverClick(
 export function trackFileManagerClick(
   track: Track,
   props: FileManagerClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackTabLauncherClick(
+  track: Track,
+  props: TabLauncherClickProps,
 ): void {
   send(track, 'ui_click', props);
 }
