@@ -905,34 +905,6 @@ export function ProjectView({
   const byokImageModelOptionsPV = useByokImageModelOptions(config.apiProtocol);
   const byokVideoModelOptionsPV = useByokVideoModelOptions(config.apiProtocol);
   const byokSpeechModelOptionsPV = useByokSpeechModelOptions(config.apiProtocol);
-  // `closed` → no surface; `review` → read-only saved-state panel with a
-  // preview + reopen-to-edit action (#1822); `edit` → the textarea editor.
-  const [instructionsMode, setInstructionsMode] = useState<'closed' | 'review' | 'edit'>('closed');
-  const [instructionsDraft, setInstructionsDraft] = useState(project.customInstructions ?? '');
-  const [instructionsSaving, setInstructionsSaving] = useState(false);
-  // Keep the draft in sync with the server value while the editor is not
-  // open (e.g. after an external update or project switch). If the saved
-  // value disappears while the review panel is showing, collapse the
-  // surface so it never renders a stale or empty read-back.
-  useEffect(() => {
-    if (instructionsMode === 'edit') return;
-    setInstructionsDraft(project.customInstructions ?? '');
-    if (instructionsMode === 'review' && !(project.customInstructions ?? '').trim()) {
-      setInstructionsMode('closed');
-    }
-  }, [project.customInstructions, instructionsMode]);
-  useEffect(() => {
-    if (instructionsMode === 'closed') return;
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setInstructionsDraft(project.customInstructions ?? '');
-        setInstructionsMode('closed');
-      }
-    }
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [instructionsMode, project.customInstructions]);
-
   // PR #974 round 7 (mrcfps @ useDesignMdState.ts:131): counter that
   // bumps on file-changed SSE events, live_artifact* events, and the
   // chat streaming-completion edge so the staleness chip stays in sync
@@ -4539,23 +4511,6 @@ export function ProjectView({
     [project, onProjectChange],
   );
 
-  const handleSaveProjectInstructions = useCallback(async () => {
-    if (instructionsSaving) return;
-    const nextInstructions = instructionsDraft.trim();
-    setInstructionsSaving(true);
-    const saved = await patchProject(project.id, {
-      customInstructions: nextInstructions || null,
-    });
-    setInstructionsSaving(false);
-    if (saved) {
-      onProjectChange(saved);
-      setInstructionsDraft(saved.customInstructions ?? '');
-      setInstructionsMode(saved.customInstructions?.trim() ? 'review' : 'closed');
-      return;
-    }
-    setError('Could not save project instructions.');
-  }, [instructionsDraft, instructionsSaving, onProjectChange, project]);
-
   const activeConversationChatState = useMemo(
     () =>
       activeConversationId
@@ -5267,98 +5222,6 @@ export function ProjectView({
         projectId={project.id}
         enabled={critiqueTheaterEnabled}
       />
-      {instructionsMode !== 'closed' ? (
-        <div
-          className="project-instructions-modal-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setInstructionsDraft(project.customInstructions ?? '');
-              setInstructionsMode('closed');
-            }
-          }}
-        >
-          <section
-            className="project-instructions-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="project-instructions-title"
-          >
-            <div className="project-instructions-modal-head">
-              <div className="project-instructions-modal-title-wrap">
-                <h2 id="project-instructions-title" className="project-instructions-modal-title">
-                  {t('project.customInstructions')}
-                </h2>
-                {project.customInstructions?.trim() ? (
-                  <span className="project-instructions-status">
-                    <Icon name="check" size={12} />
-                    {t('sketch.saved')}
-                  </span>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                className="project-instructions-modal-close"
-                aria-label={t('common.close')}
-                title={t('common.close')}
-                onClick={() => {
-                  setInstructionsDraft(project.customInstructions ?? '');
-                  setInstructionsMode('closed');
-                }}
-              >
-                <Icon name="close" size={16} />
-              </button>
-            </div>
-            {instructionsMode === 'edit' ? (
-              <>
-                <textarea
-                  className="project-instructions-input"
-                  data-testid="project-instructions-textarea"
-                  value={instructionsDraft}
-                  placeholder={t('project.customInstructionsPlaceholder')}
-                  onChange={(event) => setInstructionsDraft(event.target.value)}
-                />
-                <div className="project-instructions-actions">
-                  <button
-                    type="button"
-                    className="btn secondary"
-                    onClick={() => {
-                      setInstructionsDraft(project.customInstructions ?? '');
-                      setInstructionsMode(project.customInstructions?.trim() ? 'review' : 'closed');
-                    }}
-                  >
-                    {t('common.cancel')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn primary"
-                    data-testid="project-instructions-save"
-                    disabled={instructionsSaving}
-                    onClick={() => void handleSaveProjectInstructions()}
-                  >
-                    {instructionsSaving ? t('sketch.saving') : t('common.save')}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="project-instructions-preview" data-testid="project-instructions-preview">
-                  {project.customInstructions}
-                </div>
-                <div className="project-instructions-actions">
-                  <button
-                    type="button"
-                    className="btn secondary"
-                    onClick={() => setInstructionsMode('edit')}
-                  >
-                    {t('common.edit')}
-                  </button>
-                </div>
-              </>
-            )}
-          </section>
-        </div>
-      ) : null}
       {/* ProjectActionsToolbar removed per 00efdcba — hide finalize-design
           toolbar from project header. Restore from cf1cd9bb if product
           wants the Finalize + Continue-in-CLI buttons back in the chrome. */}
@@ -5542,36 +5405,6 @@ export function ProjectView({
                   >
                     {project.name}
                   </span>
-                  {project.customInstructions?.trim() ? (
-                    <button
-                      type="button"
-                      className={[
-                        'project-instructions-chip',
-                        instructionsMode === 'review' ? 'is-open' : '',
-                      ].filter(Boolean).join(' ')}
-                      onClick={() => {
-                        setInstructionsDraft(project.customInstructions ?? '');
-                        setInstructionsMode('review');
-                      }}
-                    >
-                      <Icon name="comment" size={12} />
-                      <span>{project.customInstructions}</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="project-instructions-toggle"
-                      data-testid="project-instructions-add"
-                      aria-label={t('project.customInstructions')}
-                      title={t('project.customInstructions')}
-                      onClick={() => {
-                        setInstructionsDraft(project.customInstructions ?? '');
-                        setInstructionsMode('edit');
-                      }}
-                    >
-                      <Icon name="plus" size={14} />
-                    </button>
-                  )}
                   {projectMeta !== t('project.metaFreeform') ? (
                     <span className="meta" data-testid="project-meta">{projectMeta}</span>
                   ) : null}
