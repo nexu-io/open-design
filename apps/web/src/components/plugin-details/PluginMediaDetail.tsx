@@ -79,6 +79,7 @@ export function PluginMediaDetail({
 }: Props) {
   const t = useT();
   const [copied, setCopied] = useState(false);
+  const [posterLoadFailed, setPosterLoadFailed] = useState(false);
 
   const manifest: PluginManifest = record.manifest ?? ({} as PluginManifest);
   const od = manifest.od ?? {};
@@ -86,12 +87,17 @@ export function PluginMediaDetail({
   const query = resolvePluginQueryFallback(od.useCase?.query);
   const media = useMemo(() => readMedia(record), [record]);
   const hasAsset = Boolean(media.poster || media.videoUrl || media.audioUrl);
+  const showPoster = Boolean(media.poster && !posterLoadFailed);
 
   // Reset transient state when the active record swaps so the next
   // open never inherits the previous plugin's copied flag.
   useEffect(() => {
     setCopied(false);
   }, [record.id]);
+
+  useEffect(() => {
+    setPosterLoadFailed(false);
+  }, [media.poster, record.id]);
 
   function handleCopy() {
     if (!query) return;
@@ -126,13 +132,14 @@ export function PluginMediaDetail({
         />
       ) : media.isAudio && media.audioUrl ? (
         <div className="plugin-media-stage__audio">
-          {media.poster ? (
+          {showPoster ? (
             <img
               className="plugin-media-stage__audio-poster"
-              src={media.poster}
+              src={media.poster ?? undefined}
               alt={record.title}
               referrerPolicy="no-referrer"
               loading="lazy"
+              onError={() => setPosterLoadFailed(true)}
             />
           ) : (
             <div
@@ -149,14 +156,19 @@ export function PluginMediaDetail({
             preload="none"
           />
         </div>
-      ) : media.poster ? (
+      ) : showPoster ? (
         <img
           className="plugin-media-stage__image"
-          src={media.poster}
+          src={media.poster ?? undefined}
           alt={record.title}
           loading="lazy"
           referrerPolicy="no-referrer"
+          onError={() => setPosterLoadFailed(true)}
         />
+      ) : media.poster ? (
+        <div className="plugin-media-stage__empty">
+          {t('fileViewer.previewUnavailable')}
+        </div>
       ) : null}
     </div>
   );
