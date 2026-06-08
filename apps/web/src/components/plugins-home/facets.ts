@@ -183,9 +183,56 @@ const PRIMARY_CATEGORIES: readonly CategoryDef[] = [
   },
 ];
 
+// Display-order overrides for sub-category rails/catalog, keyed by parent.
+//
+// IMPORTANT: this is presentation only. `extractSubcategories()` resolves a
+// plugin's bucket via `SUBCATEGORIES.find(...)`, so the *array order* below is
+// the matching precedence and must stay stable — reordering it would re-bucket
+// overlapping-tag plugins (e.g. a `dashboard`+`design` plugin would flip from
+// Dashboards to Brand / design). To change only the order chips/cards appear
+// in — without touching which bucket a plugin lands in — list the parent's
+// slugs here in the desired display order. Any slug not listed keeps its
+// natural `SUBCATEGORIES` order behind the explicitly-ordered ones.
+const SUBCATEGORY_DISPLAY_ORDER: Record<string, readonly string[]> = {
+  prototype: [
+    'landing-marketing',
+    'brand-design',
+    'business-dashboards',
+    'app-prototypes',
+    'developer-tools',
+    'docs-reports',
+  ],
+  deck: [
+    'creative-decks',
+    'engineering-talks',
+    'pitch-business',
+    'course-training',
+    'reports-briefings',
+    'product-sales',
+  ],
+};
+
+function orderSubcategoriesForDisplay(parent: string, options: FacetOption[]): FacetOption[] {
+  const order = SUBCATEGORY_DISPLAY_ORDER[parent];
+  if (!order) return options;
+  const rank = (slug: string) => {
+    const index = order.indexOf(slug);
+    return index === -1 ? order.length : index;
+  };
+  // Stable sort: explicitly-ordered slugs float to the front in the configured
+  // order; everything else keeps its original relative position behind them.
+  return options
+    .map((option, index) => ({ option, index }))
+    .sort((a, b) => rank(a.option.slug) - rank(b.option.slug) || a.index - b.index)
+    .map((entry) => entry.option);
+}
+
 // Scene child buckets based on the Feishu prompt taxonomy. HyperFrames
 // and Audio intentionally have no children, so selecting them keeps the
 // section flat.
+//
+// NOTE: array order here is matching precedence (see SUBCATEGORY_DISPLAY_ORDER
+// above), NOT the on-screen order. Keep it stable.
 const SUBCATEGORIES: readonly SubcategoryDef[] = [
   {
     parent: 'prototype',
@@ -575,7 +622,10 @@ export function buildSubcategoryCatalog(plugins: InstalledPluginRecord[]): Recor
         starterPrompt: c.starterPrompt,
         count: counts.get(`${category.slug}:${c.slug}`) ?? 0,
       }));
-    if (options.length > 0) acc[category.slug] = options;
+    if (options.length > 0) {
+      // Presentation order only; bucket membership is fixed by SUBCATEGORIES.
+      acc[category.slug] = orderSubcategoriesForDisplay(category.slug, options);
+    }
     return acc;
   }, {});
 }
