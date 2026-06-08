@@ -2221,6 +2221,9 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   font-size: 10.5px;
   font-weight: 500;
   line-height: 1;
+  /* Nested in the uppercase title, but compactCount() suffixes (k/m) are
+     lowercase by design — opt this span back out of the inherited transform. */
+  text-transform: none;
 }
 .chat-history-search {
   display: flex;
