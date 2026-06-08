@@ -125,24 +125,11 @@ function validateElectronPath(path: string): void {
 // ─── Windows implementation ─────────────────────────────────────────────────
 
 /**
- * Escape a string for `reg add /d` so the value stored in the
- * registry is byte-identical to the input.
- *
- * `reg add` interprets its `/d` value as a string with backslash
- * escapes — `\\` is collapsed to `\` on the way in, so a Windows
- * UNC path like `\\.\pipe\foo` (which must reach the child process
- * as TWO literal backslashes) has to be passed as FOUR backslashes.
- * Without this, the `\\.\pipe\…` sidecar IPC path was being stored
- * as `\.pipe\…` (one backslash), the new process received a
- * malformed arg, and the sidecar IPC layer refused the connection —
- * which is exactly the auto-start boot loop the user kept hitting.
- *
- * The function is intentionally narrow: it only doubles backslashes
- * and leaves every other character alone. The outer `"…"` quoting
- * inside `buildRunCommand` is what protects the value from cmd's
- * metacharacter handling, and `reg add` itself has no other
- * "interesting" escapes (no `\n`, `\t`, `\xNN`, etc.) to worry
- * about.
+ * `reg add /d` collapses `\\` to `\` on write, so a Windows UNC path
+ * like `\\.\pipe\…` must be passed as FOUR backslashes for the
+ * registry to store TWO. Without this, the sidecar IPC path arrives
+ * at the child process with a single backslash and the IPC layer
+ * rejects it.
  */
 function escapeForRegAddValue(value: string): string {
   return value.replaceAll("\\", "\\\\");
@@ -183,15 +170,6 @@ function buildRunCommand(namespace: string, ipc: string): string {
   // sidecar-proto (defaulting to "dev" for dev tooling, "runtime" for
   // packaged launchers); a typo in the env var throws at boot instead
   // of writing an unrecognised stamp.
-  //
-  // The `ipc` value goes through `escapeForRegAddValue` because the
-  // sidecar IPC path is a Windows UNC pipe (`\\.\pipe\…`) and `reg add`
-  // collapses `\\` to `\` on write — without doubling, the registry
-  // would store `\.\pipe\…` and the child process would receive a
-  // malformed `--od-stamp-ipc` arg. `namespace` is typically a plain
-  // identifier like "default", but we run it through the same escape
-  // so a future namespace that contains backslashes (e.g. a Windows
-  // path-style namespace) round-trips intact.
   const stamp = [
     `--od-stamp-app=${APP_KEYS.DESKTOP}`,
     `--od-stamp-mode=${resolveSidecarModeFromEnv()}`,

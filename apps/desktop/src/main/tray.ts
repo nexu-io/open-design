@@ -292,35 +292,15 @@ export async function createDesktopTray(
   let tray: Tray | null = null;
 
   /**
-   * Toggle auto-start on login. Writes TWO things in order:
-   *
-   *   1. The platform's actual launch-on-login hook. On Windows this
-   *      is the HKCU\…\Run registry value via `setAutoStart`; on
-   *      macOS it's the LaunchAgent plist. Without this call the UI
-   *      toggle would only flip a JSON flag with no OS effect — which
-   *      is exactly the regression that left the registry value
-   *      stale and the auto-start feature silently broken.
-   *   2. The local JSON config (`configPath`) so the next launch
-   *      remembers the user's choice. Persisted AFTER the OS write
-   *      so a failure to flip the OS hook doesn't get masked by a
-   *      successful config write.
-   *
-   * The runtime's `namespace` and `ipc` are passed through to the
-   * OS hook so the child process on next login reads the same stamp
-   * it was given at this session's start. On Windows the IPC path
-   * is a UNC `\\.\pipe\…` string and goes through
-   * `escapeForRegAddValue` inside `auto-start.ts` so `reg add`
-   * doesn't collapse the leading `\\` to `\`.
+   * Toggle auto-start on login. OS hook first, config second: a
+   * config write must not succeed while the OS write fails, or the
+   * next launch will disagree with the user's last toggle.
    */
   async function persistAutoStart(enabled: boolean): Promise<void> {
     try {
       await setAutoStart(enabled, undefined, runtime.namespace, runtime.ipc);
     } catch (error) {
-      // Re-throw after a brief log line so the caller can surface a
-      // user-visible diagnostic — but the in-memory `state.autoStart`
-      // has already been flipped by the time we get here, so the menu
-      // checkbox will visibly disagree with the OS state until the
-      // next successful toggle.
+      // Log + rethrow: the caller surfaces a user-visible diagnostic.
       console.error(`[desktop-tray] setAutoStart(${enabled}) failed:`, error);
       throw error;
     }

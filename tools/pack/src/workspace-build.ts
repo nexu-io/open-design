@@ -232,7 +232,10 @@ async function hoistStandaloneNextPeerDeps(standaloneRoot: string): Promise<void
     // from a previous build with different react/react-dom versions)
     // before recreating, so repeated invocations don't EEXIST.
     if (existing) await unlink(linkPath).catch(() => undefined);
-    await symlink(relativeTarget, linkPath);
+    // Junction on Windows works without admin / Developer Mode, which
+    // `fs.symlink` would otherwise require. POSIX ignores the `type`
+    // arg, so the same call works on every host.
+    await symlink(relativeTarget, linkPath, "junction");
   }
 }
 
