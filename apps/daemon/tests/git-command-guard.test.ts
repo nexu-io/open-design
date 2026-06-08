@@ -66,6 +66,14 @@ describe('git command guard', () => {
     };
     expect(gitCommandBlockedReason(['status'])).toBeNull();
     expect(gitCommandBlockedReason(['-C', '/repo', 'status'])).toBeNull();
+    expect(gitCommandBlockedReason(['--config-env', 'core.filemode=F00', 'status'])).toBeNull();
+    expect(gitCommandBlockedReason(['--config-env=core.filemode=F00', 'status'])).toBeNull();
+    expect(gitCommandBlockedReason(['--config-env', 'core.filemode=F00', 'reset', '--hard'])).toContain(
+      'reset --hard',
+    );
+    expect(gitCommandBlockedReason(['--config-env=core.filemode=F00', 'reset', '--hard'])).toContain(
+      'reset --hard',
+    );
     expect(gitCommandBlockedReason(['--exec-path', '/tmp/git-core', 'status'])).toBeNull();
     expect(gitCommandBlockedReason(['--exec-path', '/tmp/git-core', 'reset', '--hard'])).toContain(
       'reset --hard',
@@ -268,6 +276,20 @@ describe('git command guard', () => {
     });
     expect(destructiveWithExecPath.status).toBe(126);
     expect(destructiveWithExecPath.stderr).toContain('git command guard blocked');
+
+    const destructiveWithConfigEnv = spawnSync('git', ['--config-env', 'core.filemode=F00', 'reset', '--hard'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveWithConfigEnv.status).toBe(126);
+    expect(destructiveWithConfigEnv.stderr).toContain('git command guard blocked');
+
+    const destructiveWithInlineConfigEnv = spawnSync('git', ['--config-env=core.filemode=F00', 'reset', '--hard'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(destructiveWithInlineConfigEnv.status).toBe(126);
+    expect(destructiveWithInlineConfigEnv.stderr).toContain('git command guard blocked');
 
     const destructiveCleanGroup = spawnSync('git', ['clean', '-fdx'], {
       env: guardEnv,
