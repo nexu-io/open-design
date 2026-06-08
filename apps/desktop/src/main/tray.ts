@@ -23,6 +23,7 @@ import { type SidecarRuntimeContext } from "@open-design/sidecar";
 import { crc32 } from "./utils/crc32.js";
 import { DaemonManager } from "./daemon-manager.js";
 import { t } from "./i18n.js";
+import { setAutoStart } from "./auto-start.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -290,9 +291,41 @@ export async function createDesktopTray(
   let shuttingDown = false;
   let tray: Tray | null = null;
 
-  function persistAutoStart(enabled: boolean): Promise<void> {
-    if (!configPath) return Promise.resolve();
-    return writeConfigFile(configPath, { autoStart: enabled });
+  /**
+   * Toggle auto-start on login. Writes TWO things in order:
+   *
+   *   1. The platform's actual launch-on-login hook. On Windows this
+   *      is the HKCU\…\Run registry value via `setAutoStart`; on
+   *      macOS it's the LaunchAgent plist. Without this call the UI
+   *      toggle would only flip a JSON flag with no OS effect — which
+   *      is exactly the regression that left the registry value
+   *      stale and the auto-start feature silently broken.
+   *   2. The local JSON config (`configPath`) so the next launch
+   *      remembers the user's choice. Persisted AFTER the OS write
+   *      so a failure to flip the OS hook doesn't get masked by a
+   *      successful config write.
+   *
+   * The runtime's `namespace` and `ipc` are passed through to the
+   * OS hook so the child process on next login reads the same stamp
+   * it was given at this session's start. On Windows the IPC path
+   * is a UNC `\\.\pipe\…` string and goes through
+   * `escapeForRegAddValue` inside `auto-start.ts` so `reg add`
+   * doesn't collapse the leading `\\` to `\`.
+   */
+  async function persistAutoStart(enabled: boolean): Promise<void> {
+    try {
+      await setAutoStart(enabled, undefined, runtime.namespace, runtime.ipc);
+    } catch (error) {
+      // Re-throw after a brief log line so the caller can surface a
+      // user-visible diagnostic — but the in-memory `state.autoStart`
+      // has already been flipped by the time we get here, so the menu
+      // checkbox will visibly disagree with the OS state until the
+      // next successful toggle.
+      console.error(`[desktop-tray] setAutoStart(${enabled}) failed:`, error);
+      throw error;
+    }
+    if (!configPath) return;
+    await writeConfigFile(configPath, { autoStart: enabled });
   }
 
   async function refreshFromDaemon(): Promise<void> {
