@@ -73,6 +73,7 @@ import type {
 import { useAnalytics } from '../analytics/provider';
 import {
   trackArtifactHeaderClick,
+  trackComposerBarClick,
   trackDesignSystemApplyResult,
   trackPageView,
 } from '../analytics/events';
@@ -4593,7 +4594,7 @@ export function ProjectView({
       // surfaces. `target_project_kind` derives from
       // `project.metadata.kind`.
       const target =
-        (projectKindToTracking(project.metadata?.kind ?? null) ?? 'unknown') as TrackingDesignSystemApplyTargetKind;
+        (projectKindToTracking(project.metadata?.kind ?? null, project.metadata?.videoModel) ?? 'unknown') as TrackingDesignSystemApplyTargetKind;
       const picked = nextId
         ? designSystems.find((d) => d.id === nextId)
         : null;
@@ -5232,8 +5233,35 @@ export function ProjectView({
       agents={agents}
       daemonLive={daemonLive}
       onModeChange={onModeChange}
-      onAgentChange={onAgentChange}
-      onAgentModelChange={onAgentModelChange}
+      onOpen={() => {
+        trackComposerBarClick(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          element: 'agent_selector_open',
+          ...(project?.id ? { project_id: project.id } : {}),
+        });
+      }}
+      onAgentChange={(id) => {
+        trackComposerBarClick(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          element: 'agent_select',
+          agent_id: id,
+          ...(project?.id ? { project_id: project.id } : {}),
+        });
+        onAgentChange(id);
+      }}
+      onAgentModelChange={(agentId, choice) => {
+        trackComposerBarClick(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          element: 'agent_model_select',
+          agent_id: agentId,
+          ...(choice?.model ? { model_id: choice.model } : {}),
+          ...(project?.id ? { project_id: project.id } : {}),
+        });
+        onAgentModelChange(agentId, choice);
+      }}
       onOpenSettings={onOpenSettings}
       onRefreshAgents={onRefreshAgents}
       onBack={onBack}
@@ -5281,7 +5309,7 @@ export function ProjectView({
               projectId={project.id}
               sessionMode={activeSessionMode}
               onSessionModeChange={handleActiveConversationSessionModeChange}
-              projectKindForTracking={projectKindToTracking(project.metadata?.kind)}
+              projectKindForTracking={projectKindToTracking(project.metadata?.kind, project.metadata?.videoModel)}
               projectFiles={projectFiles}
               activeProjectFileName={activeProjectFileName}
               hasActiveDesignSystem={!!project.designSystemId}
@@ -5471,7 +5499,7 @@ export function ProjectView({
         ) : null}
         <FileWorkspace
           projectId={project.id}
-          projectKind={projectKindToTracking(project.metadata?.kind) ?? 'prototype'}
+          projectKind={projectKindToTracking(project.metadata?.kind, project.metadata?.videoModel) ?? 'prototype'}
           rootDirName={(() => {
             const baseDir =
               projectDetail.project?.metadata?.baseDir ?? project.metadata?.baseDir;

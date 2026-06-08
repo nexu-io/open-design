@@ -48,12 +48,16 @@ import type {
   IntegrationsSkillsTabClickProps,
   IntegrationsUseEverywhereTabClickProps,
   ChatPanelClickProps,
+  ComposerSessionModeClickProps,
+  ComposerBarClickProps,
+  DesignToolboxClickProps,
   NextStepActionClickProps,
   RunFailedToastClickProps,
   AmrEntryClickProps,
   RunFailedToastSurfaceViewProps,
   ChatPanelResourcesPopoverClickProps,
   FileManagerClickProps,
+  TabLauncherClickProps,
   ArtifactToolbarClickProps,
   TweaksPopoverClickProps,
   CommentPopoverClickProps,
@@ -441,6 +445,27 @@ export function trackChatPanelClick(
   send(track, 'ui_click', props);
 }
 
+export function trackComposerSessionModeClick(
+  track: Track,
+  props: ComposerSessionModeClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackDesignToolboxClick(
+  track: Track,
+  props: DesignToolboxClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackComposerBarClick(
+  track: Track,
+  props: ComposerBarClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
 export function trackNextStepActionClick(
   track: Track,
   props: NextStepActionClickProps,
@@ -460,6 +485,13 @@ export function trackChatPanelResourcesPopoverClick(
 export function trackFileManagerClick(
   track: Track,
   props: FileManagerClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackTabLauncherClick(
+  track: Track,
+  props: TabLauncherClickProps,
 ): void {
   send(track, 'ui_click', props);
 }

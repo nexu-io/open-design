@@ -21,8 +21,16 @@ import {
 import { useAnalytics } from '../analytics/provider';
 import {
   trackChatPanelClick,
+  trackComposerBarClick,
+  trackComposerSessionModeClick,
+  trackDesignToolboxClick,
   trackFileUploadResult,
 } from '../analytics/events';
+import { sessionModeToTracking } from '@open-design/contracts/analytics';
+import type {
+  ComposerBarClickProps,
+  DesignToolboxClickProps,
+} from '@open-design/contracts/analytics';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
 import { projectRawUrl, uploadProjectFiles, openFolderDialog } from "../providers/registry";
 import { patchProject } from "../state/projects";
@@ -1084,6 +1092,43 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       editorRef.current?.focus();
     }
 
+    // Fills the fixed page/area/project context for the rest of the composer
+    // bottom bar (plus menu, design-system / working-dir switch, agent
+    // selector, context-chip removal).
+    const trackComposerBar = (
+      fields: Omit<ComposerBarClickProps, 'page_name' | 'area' | 'project_id'>,
+    ) => {
+      trackComposerBarClick(analytics.track, {
+        page_name: 'chat_panel',
+        area: 'chat_composer',
+        ...(projectId ? { project_id: projectId } : {}),
+        ...fields,
+      });
+    };
+
+    // Fills the fixed page/area/project context so toolbox call sites only
+    // pass the event-specific fields (element + ids).
+    const trackDesignToolbox = (
+      fields: Omit<DesignToolboxClickProps, 'page_name' | 'area' | 'project_id'>,
+    ) => {
+      trackDesignToolboxClick(analytics.track, {
+        page_name: 'chat_panel',
+        area: 'chat_composer',
+        ...(projectId ? { project_id: projectId } : {}),
+        ...fields,
+      });
+    };
+
+    // Every toolbox resource carries a common `kind` + `id`, and the tracking
+    // enum mirrors `DesignToolboxResourceKind` exactly, so this is a direct
+    // projection.
+    function designToolboxResourceTracking(resource: DesignToolboxResource): {
+      resource_kind: NonNullable<DesignToolboxClickProps['resource_kind']>;
+      resource_id: string;
+    } {
+      return { resource_kind: resource.kind, resource_id: resource.id };
+    }
+
     function applyDesignToolboxAction(action: DesignToolboxAction) {
       const skill = findDesignToolboxSkill(action, skills);
       applyDesignToolboxPrompt(
@@ -1170,6 +1215,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
 
     function removeStagedSkill(id: string) {
+      trackComposerBar({ element: 'context_remove', resource_kind: 'skill', resource_id: id });
       const skill = stagedSkills.find((s) => s.id === id) ?? null;
       setStagedSkills((prev) => prev.filter((s) => s.id !== id));
       const labels = [id, skill?.name ?? ''];
@@ -1177,6 +1223,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
 
     function removeStagedMcpServer(id: string) {
+      trackComposerBar({ element: 'context_remove', resource_kind: 'mcp', resource_id: id });
       const server = stagedMcpServers.find((item) => item.id === id) ?? null;
       setStagedMcpServers((prev) => prev.filter((item) => item.id !== id));
       replaceEditorDraft(stripInlineMentionLabels(draft, [
@@ -1186,6 +1233,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
 
     function removeStagedConnector(id: string) {
+      trackComposerBar({ element: 'context_remove', resource_kind: 'connector', resource_id: id });
       const connector = stagedConnectors.find((item) => item.id === id) ?? null;
       setStagedConnectors((prev) => prev.filter((item) => item.id !== id));
       replaceEditorDraft(stripInlineMentionLabels(draft, [
@@ -1195,6 +1243,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
 
     function removeWorkspaceContext(id: string) {
+      trackComposerBar({ element: 'context_remove', resource_kind: 'workspace', resource_id: id });
       if (visibleWorkspaceContext?.id === id) setDismissedWorkspaceContextId(id);
       const workspaceItem = selectedWorkspaceContexts.find((item) => item.id === id) ?? null;
       setStagedWorkspaceContexts((prev) => prev.filter((item) => item.id !== id));
@@ -1521,6 +1570,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         onShowToast?.(t('chat.importDesignSystemFailed'));
         return false;
       }
+      trackComposerBar({
+        element: 'design_system_switch',
+        ...(designSystemId ? { design_system_id: designSystemId } : {}),
+      });
       onActiveDesignSystemChange?.(result);
       const switchedTitle = designSystemId === null
         ? t('chat.importDesignSystemNone')
@@ -1783,6 +1836,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
 
     function removeStaged(p: string) {
+      trackComposerBar({ element: 'context_remove', resource_kind: 'attachment', resource_id: p });
       setStaged((s) => s.filter((a) => a.path !== p));
       setStagedVisualComments((current) => current.filter((attachment) => attachment.screenshotPath !== p));
       // Strip the `@<path>` token from the draft and push the result back into
@@ -2159,16 +2213,49 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             />
             <ComposerPlusMenu
               triggerTestId="chat-plus-trigger"
-              onOpen={() => setComposerEngaged(true)}
+              onOpen={() => {
+                trackComposerBar({ element: 'plus_menu_open' });
+                setComposerEngaged(true);
+              }}
               connectors={connectors}
-              onPickConnector={insertConnectorMention}
-              onAddConnector={onOpenConnectors}
+              onPickConnector={(connector) => {
+                trackComposerBar({
+                  element: 'plus_pick',
+                  resource_kind: 'connector',
+                  resource_id: connector.id,
+                });
+                insertConnectorMention(connector);
+              }}
+              onAddConnector={() => {
+                trackComposerBar({ element: 'plus_add', resource_kind: 'connector' });
+                onOpenConnectors?.();
+              }}
               plugins={pluginsForComposer}
-              onPickPlugin={(record) => void insertPluginMention(record)}
-              onAddPlugin={onBrowsePlugins}
+              onPickPlugin={(record) => {
+                trackComposerBar({
+                  element: 'plus_pick',
+                  resource_kind: 'plugin',
+                  resource_id: record.id,
+                });
+                void insertPluginMention(record);
+              }}
+              onAddPlugin={() => {
+                trackComposerBar({ element: 'plus_add', resource_kind: 'plugin' });
+                onBrowsePlugins?.();
+              }}
               mcpServers={enabledMcpServers}
-              onPickMcp={insertMcpMention}
-              onAddMcp={onOpenMcpSettings}
+              onPickMcp={(server) => {
+                trackComposerBar({
+                  element: 'plus_pick',
+                  resource_kind: 'mcp',
+                  resource_id: server.id,
+                });
+                insertMcpMention(server);
+              }}
+              onAddMcp={() => {
+                trackComposerBar({ element: 'plus_add', resource_kind: 'mcp' });
+                onOpenMcpSettings?.();
+              }}
               onAttachFiles={() => {
                 trackChatPanelClick(analytics.track, {
                   page_name: 'chat_panel',
@@ -2193,9 +2280,32 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   activeMcpServerIds={stagedMcpServers.map((server) => server.id)}
                   activeConnectorIds={stagedConnectors.map((connector) => connector.id)}
                   activeFilePaths={staged.map((item) => item.path)}
-                  onPickAction={(action) => { applyDesignToolboxAction(action); close(); }}
-                  onPickSkill={(skill) => { applyDesignToolboxSkill(skill); close(); }}
-                  onPickResource={(resource) => { applyDesignToolboxResource(resource); close(); }}
+                  onOpened={() => trackDesignToolbox({ element: 'design_toolbox_open' })}
+                  onPickAction={(action) => {
+                    trackDesignToolbox({
+                      element: 'design_toolbox_action',
+                      toolbox_action_id: action.id,
+                    });
+                    applyDesignToolboxAction(action);
+                    close();
+                  }}
+                  onPickSkill={(skill) => {
+                    trackDesignToolbox({
+                      element: 'design_toolbox_resource',
+                      resource_kind: 'skill',
+                      resource_id: skill.id,
+                    });
+                    applyDesignToolboxSkill(skill);
+                    close();
+                  }}
+                  onPickResource={(resource) => {
+                    trackDesignToolbox({
+                      element: 'design_toolbox_resource',
+                      ...designToolboxResourceTracking(resource),
+                    });
+                    applyDesignToolboxResource(resource);
+                    close();
+                  }}
                 />
               )}
             />
@@ -2204,7 +2314,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             {footerAccessory}
             <SessionModeToggle
               mode={sessionMode}
-              onChange={onSessionModeChange}
+              onChange={(next) => {
+                if (next !== sessionMode) {
+                  trackComposerSessionModeClick(analytics.track, {
+                    page_name: 'chat_panel',
+                    area: 'chat_composer',
+                    element: 'session_mode_toggle',
+                    mode_before: sessionModeToTracking(sessionMode),
+                    mode_after: sessionModeToTracking(next),
+                    ...(projectId ? { project_id: projectId } : {}),
+                  });
+                }
+                onSessionModeChange?.(next);
+              }}
             />
             {showStopButton ? (
               <button
@@ -3077,6 +3199,7 @@ function DesignToolboxPanel({
   onPickAction,
   onPickSkill,
   onPickResource,
+  onOpened,
 }: {
   actions: DesignToolboxAction[];
   skills: SkillSummary[];
@@ -3093,9 +3216,15 @@ function DesignToolboxPanel({
   onPickAction: (action: DesignToolboxAction) => void;
   onPickSkill: (skill: SkillSummary) => void;
   onPickResource: (resource: DesignToolboxResource) => void;
+  onOpened?: () => void;
 }) {
   const { locale, t } = useI18n();
   const [query, setQuery] = useState('');
+  // Fire once when the toolbox panel mounts (i.e. the user opened it).
+  useEffect(() => {
+    onOpened?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const activeSkillSet = useMemo(() => new Set(activeSkillIds), [activeSkillIds]);
   const activeMcpServerSet = useMemo(() => new Set(activeMcpServerIds), [activeMcpServerIds]);
   const activeConnectorSet = useMemo(() => new Set(activeConnectorIds), [activeConnectorIds]);

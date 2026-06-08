@@ -9,6 +9,8 @@ import {
   replaceProjectWorkingDir,
 } from '../providers/registry';
 import { useT } from '../i18n';
+import { useAnalytics } from '../analytics/provider';
+import { trackComposerBarClick } from '../analytics/events';
 import type { Project } from '../types';
 import { Icon } from './Icon';
 
@@ -28,6 +30,7 @@ function shortPath(dir: string): string {
 
 export function WorkingDirPill({ projectId, resolvedDir: propResolvedDir, onReplaced }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,12 +82,25 @@ export function WorkingDirPill({ projectId, resolvedDir: propResolvedDir, onRepl
     };
   }, [open]);
 
+  // Both working-dir replacement paths (browser/fallback `applyDir` and the
+  // desktop host `handlePickDir`) funnel their success through this so the
+  // event fires once per successful switch on every platform.
+  function trackWorkingDirSwitch() {
+    trackComposerBarClick(analytics.track, {
+      page_name: 'chat_panel',
+      area: 'chat_composer',
+      element: 'working_dir_switch',
+      project_id: projectId,
+    });
+  }
+
   async function applyDir(dir: string) {
     setError(null);
     setBusy(true);
     setOpen(false);
     try {
       const result = await replaceProjectWorkingDir(projectId, dir);
+      trackWorkingDirSwitch();
       setFetchedDir(result.baseDir);
       onReplaced?.({
         baseDir: result.baseDir,
@@ -106,6 +122,7 @@ export function WorkingDirPill({ projectId, resolvedDir: propResolvedDir, onRepl
       try {
         const result = await pickAndReplaceHostProjectWorkingDir(projectId);
         if (result.ok) {
+          trackWorkingDirSwitch();
           setFetchedDir(result.baseDir);
           onReplaced?.({
             baseDir: result.baseDir,
