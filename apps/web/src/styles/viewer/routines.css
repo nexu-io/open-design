@@ -773,9 +773,14 @@
   width: 156px;
   height: 26px;
   min-height: 26px;
-  min-width: 112px;
+  /* Auto-shrink in the project shell: tabs sit at 156px when there's room and
+     shrink toward --workspace-tab-min-width as more open, keeping the whole row
+     visible without scrolling for as long as possible. flex-grow 0 stops a lone
+     tab from ballooning; only once every tab hits its min do we fall back to the
+     shared strip's horizontal scroll. */
+  min-width: var(--workspace-tab-min-width, 56px);
   max-width: 168px;
-  flex: 0 0 156px;
+  flex: 0 1 156px;
   grid-template-columns: minmax(0, 1fr) 22px;
   align-self: center;
   /* Intentional compact-chrome value (26px tab); kept off the radius scale
@@ -787,6 +792,22 @@
 }
 .workspace-shell .workspace-tab + .workspace-tab::before {
   display: none;
+}
+/* The pinned Home tab is fixed: it never shrinks with the project tabs and
+   stays stuck to the left edge so it remains fully visible after the rest
+   overflow into horizontal scroll. The opaque tab-bar background keeps scrolled
+   tabs from showing through it. Declared before .is-active so an active Home
+   tab still picks up the active highlight. */
+.workspace-shell .workspace-tab.is-pinned {
+  flex: 0 0 104px;
+  width: 104px;
+  min-width: 104px;
+  max-width: 104px;
+  grid-template-columns: minmax(0, 1fr);
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--workspace-tab-bar-bg);
 }
 .workspace-shell .workspace-tab.is-active {
   background: color-mix(in srgb, var(--bg-panel) 94%, var(--bg-subtle));
