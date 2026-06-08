@@ -339,7 +339,7 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
       && projectRoot
     ) {
       try {
-        const cred = await resolveProviderConfig(projectRoot, 'openai');
+        const cred = await resolveProviderConfig(projectRoot, 'openai', dataDir);
         if (cred?.apiKey?.trim()) {
           resolvedKey = cred.apiKey.trim();
           credentialSource = 'media-config';
@@ -419,7 +419,7 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
     // media-config table only has openai-shaped credentials today.
     if (chatProtocol === 'openai' && projectRoot) {
       try {
-        const cred = await resolveProviderConfig(projectRoot, 'openai');
+        const cred = await resolveProviderConfig(projectRoot, 'openai', dataDir);
         if (cred && typeof cred.apiKey === 'string' && cred.apiKey.trim()) {
           return {
             kind: 'openai',
@@ -517,7 +517,7 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
   // for them and only the regex-based heuristic ever runs.
   if (projectRoot) {
     try {
-      const cred = await resolveProviderConfig(projectRoot, 'openai');
+      const cred = await resolveProviderConfig(projectRoot, 'openai', dataDir);
       if (cred && typeof cred.apiKey === 'string' && cred.apiKey.trim()) {
         return {
           kind: 'openai',
@@ -1044,14 +1044,14 @@ async function collectProposedEntries(dataDir, input, options) {
 
   const cfg = await readMemoryConfig(dataDir);
   if (!cfg.enabled) {
-    recordSkip({ userMessage, reason: 'memory-disabled', kind: extractionKind });
+    recordSkip({ userMessage, reason: 'memory-disabled', kind: extractionKind, dataDir });
     return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
   }
   if (extractionKind !== 'connector' && !cfg.chatExtractionEnabled) {
     return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
   }
   if (userMessage.length === 0) {
-    recordSkip({ userMessage, reason: 'empty-message', kind: extractionKind });
+    recordSkip({ userMessage, reason: 'empty-message', kind: extractionKind, dataDir });
     return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
   }
 
@@ -1063,14 +1063,14 @@ async function collectProposedEntries(dataDir, input, options) {
     chatModel,
   );
   if (!provider) {
-    recordSkip({ userMessage, reason: 'no-provider', kind: extractionKind });
+    recordSkip({ userMessage, reason: 'no-provider', kind: extractionKind, dataDir });
     return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
   }
 
   // Past this point we have a provider committed and an actual model
   // call about to happen — switch from one-shot skip records to a
   // running record we can update through phase transitions.
-  const attemptId = startExtraction({ userMessage, kind: extractionKind });
+  const attemptId = startExtraction({ userMessage, kind: extractionKind, dataDir });
   markProvider(attemptId, {
     kind: provider.kind,
     model: provider.model,
@@ -1198,6 +1198,7 @@ export async function extractWithLLM(dataDir, input, options) {
       kind: 'extract',
       count: written.length,
       source: changeSource,
+      dataDir,
       at: Date.now(),
     });
   }

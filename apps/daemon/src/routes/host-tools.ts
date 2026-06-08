@@ -23,6 +23,7 @@ import type {
   HostEditorsResponse,
   OpenProjectInEditorResponse,
 } from '@open-design/contracts';
+import { ownerScopeForRequest } from '../project-owner-scope.js';
 import type { RouteDeps } from '../server-context.js';
 
 export interface RegisterHostToolsRoutesDeps
@@ -250,7 +251,7 @@ function projectHostOpenDir(
 export function registerHostToolsRoutes(app: Express, ctx: RegisterHostToolsRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
-  const { PROJECTS_DIR } = ctx.paths;
+  const { projectsDirFor } = ctx.paths;
   const { getProject } = ctx.projectStore;
   const { resolveProjectDir } = ctx.projectFiles;
 
@@ -293,12 +294,12 @@ export function registerHostToolsRoutes(app: Express, ctx: RegisterHostToolsRout
       if (!applicableForPlatform(entry, platform)) {
         return sendApiError(res, 400, 'BAD_REQUEST', `${entry.label} is not available on ${platform}`);
       }
-      const project = getProject(db, projectId);
+      const project = getProject(db, projectId, ownerScopeForRequest(req));
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
       const resolvedDir = projectHostOpenDir(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         project,
         resolveProjectDir,
       );

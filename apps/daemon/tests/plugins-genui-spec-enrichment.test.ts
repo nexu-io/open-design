@@ -25,6 +25,11 @@ const serverRuntimeDataRoot = process.env.OD_DATA_DIR
   ? path.resolve(projectRoot, process.env.OD_DATA_DIR)
   : path.join(projectRoot, '.od');
 
+const authHeaders = (email: string) => ({
+  'content-type': 'application/json',
+  'cf-access-authenticated-user-email': email,
+});
+
 let server: http.Server | undefined;
 let baseUrl: string;
 let pluginRoot: string;
@@ -204,5 +209,80 @@ describe('GET /api/runs/:runId/genui/:surfaceId enriches with snapshot spec', ()
     expect(body.spec.schema?.required).toEqual(['topic']);
     expect(body.spec.schema?.properties?.topic).toBeDefined();
     expect(body.spec.schema?.properties?.audience?.enum).toEqual(['VC pitch', 'general']);
+  });
+
+  it('scopes run GenUI surfaces to the source project owner', async () => {
+    const projectId = `phase2a5-owner-${Date.now()}`;
+    cleanupRows.push(projectId);
+    const projResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: authHeaders('bob@example.com'),
+      body: JSON.stringify({
+        id: projectId,
+        name: 'phase2a5 owner project',
+        pluginId: PLUGIN_ID,
+        pluginInputs: {},
+        grantCaps: ['prompt:inject', 'genui:form'],
+      }),
+    });
+    if (projResp.status !== 200) {
+      const errBody = await projResp.text();
+      throw new Error(`POST /api/projects failed: ${projResp.status} ${errBody}`);
+    }
+    const projBody = await projResp.json() as { appliedPluginSnapshotId: string };
+    const snapshotId = projBody.appliedPluginSnapshotId;
+
+    const dbPath = path.join(serverRuntimeDataRoot, 'app.sqlite');
+    const db = new Database(dbPath);
+    const runId = `run-phase2a5-owner-${Date.now()}`;
+    const surfaceRowId = `srf-phase2a5-owner-${Date.now()}`;
+    db.pragma('foreign_keys = OFF');
+    db.prepare(
+      `INSERT INTO genui_surfaces (
+         id, project_id, owner_email, owner_dir_hash, conversation_id, run_id, plugin_snapshot_id,
+         surface_id, kind, persist, schema_digest, value_json, status,
+         responded_by, requested_at, responded_at, expires_at
+       ) VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, 'form', 'project', NULL, NULL,
+                 'pending', NULL, ?, NULL, NULL)`,
+    ).run(
+      surfaceRowId,
+      projectId,
+      'bob@example.com',
+      runId,
+      snapshotId,
+      'discovery',
+      Date.now(),
+    );
+    db.prepare('DELETE FROM projects WHERE id = ?').run(projectId);
+    db.pragma('foreign_keys = ON');
+    db.close();
+
+    const aliceList = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/genui`, {
+      headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
+    });
+    expect(aliceList.status).toBe(200);
+    const aliceListBody = await aliceList.json() as { surfaces: Array<{ id: string }> };
+    expect(aliceListBody.surfaces.map((surface) => surface.id)).not.toContain(surfaceRowId);
+
+    const aliceDetail = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/genui/discovery`, {
+      headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
+    });
+    expect(aliceDetail.status).toBe(404);
+
+    const aliceRespond = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/genui/discovery/respond`, {
+      method: 'POST',
+      headers: authHeaders('alice@example.com'),
+      body: JSON.stringify({ value: { topic: 'nope' } }),
+    });
+    expect(aliceRespond.status).toBe(404);
+
+    const bobDetail = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/genui/discovery`, {
+      headers: { 'cf-access-authenticated-user-email': 'bob@example.com' },
+    });
+    expect(bobDetail.status).toBe(200);
+    const bobDetailBody = await bobDetail.json() as { id: string; status: string; ownerEmail?: string };
+    expect(bobDetailBody.id).toBe(surfaceRowId);
+    expect(bobDetailBody.status).toBe('pending');
+    expect(bobDetailBody.ownerEmail).toBeUndefined();
   });
 });

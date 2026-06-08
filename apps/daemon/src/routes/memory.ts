@@ -1,4 +1,4 @@
-import type { Express } from 'express';
+import type { Express, Request } from 'express';
 import type { RouteDeps } from '../server-context.js';
 
 import {
@@ -27,6 +27,7 @@ import {
   extractMemoryFromConnectors,
   suggestMemoryFromConnectors,
 } from '../memory-connectors.js';
+import { connectorServiceForDataDir } from '../connectors/service.js';
 
 export interface RegisterMemoryRoutesDeps extends RouteDeps<'http' | 'paths' | 'appConfig'> {}
 
@@ -84,25 +85,37 @@ function isExtractionProvider(value: unknown): value is MemoryExtractionProvider
 }
 
 export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps) {
-  const { RUNTIME_DATA_DIR, PROJECT_ROOT, PROJECTS_DIR } = ctx.paths;
+  const { PROJECT_ROOT, projectsDirFor, runtimeDataDirFor } = ctx.paths;
   const { createSseResponse, requireLocalDaemonRequest } = ctx.http;
   const { readAppConfig } = ctx.appConfig;
+
+  const memoryDataDirFor = (req: Request): string => runtimeDataDirFor(req);
+  const eventMatchesDataDir = (event: unknown, dataDir: string): boolean => {
+    const record = asRecord(event);
+    return record.dataDir === dataDir;
+  };
+  const publicMemoryEvent = (event: unknown): UnknownRecord => {
+    const record = asRecord(event);
+    const { dataDir: _dataDir, ...publicEvent } = record;
+    return publicEvent;
+  };
 
   // ----- Memory store -----------------------------------------------------
   // Markdown-on-disk memory under <dataDir>/memory/. The daemon folds these
   // into every system prompt (gated by `enabled`) and the chat run loop
   // calls `/api/memory/extract` after each turn to sediment new facts.
-  app.get('/api/memory', async (_req, res) => {
+  app.get('/api/memory', async (req, res) => {
     try {
+      const dataDir = memoryDataDirFor(req);
       const [config, index, entries] = await Promise.all([
-        readMemoryConfig(RUNTIME_DATA_DIR),
-        readMemoryIndex(RUNTIME_DATA_DIR),
-        listMemoryEntries(RUNTIME_DATA_DIR),
+        readMemoryConfig(dataDir),
+        readMemoryIndex(dataDir),
+        listMemoryEntries(dataDir),
       ]);
       res.json({
         enabled: config.enabled,
         chatExtractionEnabled: config.chatExtractionEnabled,
-        rootDir: memoryDir(RUNTIME_DATA_DIR),
+        rootDir: memoryDir(dataDir),
         index,
         entries,
         extraction: maskMemoryExtractionConfig(config.extraction),
@@ -115,15 +128,16 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
   // Static sub-resources (`/index`, `/config`, `/extract`) registered
   // BEFORE the `:id` catch-alls so an `index` / `config` / `extract` slug
   // can't shadow the real handlers.
-  app.get('/api/memory/tree', async (_req, res) => {
+  app.get('/api/memory/tree', async (req, res) => {
     try {
+      const dataDir = memoryDataDirFor(req);
       const [config, tree] = await Promise.all([
-        readMemoryConfig(RUNTIME_DATA_DIR),
-        buildMemoryTree(RUNTIME_DATA_DIR),
+        readMemoryConfig(dataDir),
+        buildMemoryTree(dataDir),
       ]);
       res.json({
         enabled: config.enabled,
-        rootDir: memoryDir(RUNTIME_DATA_DIR),
+        rootDir: memoryDir(dataDir),
         tree,
       });
     } catch (err) {
@@ -133,13 +147,14 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
 
   app.patch('/api/memory/tree/:id', async (req, res) => {
     try {
+      const dataDir = memoryDataDirFor(req);
       const body = asRecord(req.body);
       const entry = await updateMemoryTreeNode(
-        RUNTIME_DATA_DIR,
+        dataDir,
         req.params.id,
         body,
       );
-      const tree = await buildMemoryTree(RUNTIME_DATA_DIR);
+      const tree = await buildMemoryTree(dataDir);
       res.json({ entry, tree });
     } catch (err) {
       const message = errorMessage(err);
@@ -149,9 +164,10 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
 
   app.put('/api/memory/index', async (req, res) => {
     try {
+      const dataDir = memoryDataDirFor(req);
       const body = asRecord(req.body);
       const index = typeof body.index === 'string' ? body.index : '';
-      await writeMemoryIndex(RUNTIME_DATA_DIR, index, undefined);
+      await writeMemoryIndex(dataDir, index, undefined);
       res.json({ index });
     } catch (err) {
       res.status(400).json({ error: errorMessage(err) });
@@ -160,6 +176,7 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
 
   app.patch('/api/memory/config', async (req, res) => {
     try {
+      const dataDir = memoryDataDirFor(req);
       const body = asRecord(req.body);
       const patch: MemoryConfigPatch = {};
       if (typeof body.enabled === 'boolean') patch.enabled = body.enabled;
@@ -191,7 +208,7 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
           patch.extraction = null;
         } else if (body.extraction && typeof body.extraction === 'object') {
           const incoming = body.extraction as UnknownRecord;
-          const current = await readMemoryConfig(RUNTIME_DATA_DIR);
+          const current = await readMemoryConfig(dataDir);
           const currentExtraction = current.extraction as MemoryExtractionPatch | null;
           const apiKeyOmitted = !Object.prototype.hasOwnProperty.call(
             incoming,
@@ -227,7 +244,7 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
           patch.extraction = nextExtraction;
         }
       }
-      const next = await writeMemoryConfig(RUNTIME_DATA_DIR, patch);
+      const next = await writeMemoryConfig(dataDir, patch);
       res.json({
         enabled: next.enabled,
         chatExtractionEnabled: next.chatExtractionEnabled,
@@ -247,14 +264,19 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
   // extraction phase transition — so the settings panel can render a
   // live "recent extractions" list. We multiplex on a single SSE stream
   // so the browser opens one connection instead of two.
-  app.get('/api/memory/events', async (_req, res) => {
+  app.get('/api/memory/events', async (req, res) => {
+    const dataDir = memoryDataDirFor(req);
     const sse = createSseResponse(res);
     sse.send('connected', { at: Date.now() });
     const onChange = (event: unknown) => {
-      sse.send('change', event);
+      if (eventMatchesDataDir(event, dataDir)) {
+        sse.send('change', publicMemoryEvent(event));
+      }
     };
     const onExtraction = (event: unknown) => {
-      sse.send('extraction', event);
+      if (eventMatchesDataDir(event, dataDir)) {
+        sse.send('extraction', publicMemoryEvent(event));
+      }
     };
     memoryEvents.on('change', onChange);
     memoryEvents.on('extraction', onExtraction);
@@ -268,9 +290,9 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
   // Surfaces skip reasons, in-flight calls, success counts, and errors
   // so the settings panel can show "why didn't memory update?" at a
   // glance instead of leaving the user to guess.
-  app.get('/api/memory/extractions', async (_req, res) => {
+  app.get('/api/memory/extractions', async (req, res) => {
     try {
-      res.json({ extractions: listMemoryExtractions() });
+      res.json({ extractions: listMemoryExtractions(memoryDataDirFor(req)) });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
@@ -279,9 +301,9 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
   // Drop the entire extraction history. Registered BEFORE the `:id`
   // catch-all so a literal "/api/memory/extractions" can still be
   // cleared with `curl -X DELETE`.
-  app.delete('/api/memory/extractions', async (_req, res) => {
+  app.delete('/api/memory/extractions', async (req, res) => {
     try {
-      const removed = clearMemoryExtractions();
+      const removed = clearMemoryExtractions(memoryDataDirFor(req));
       res.json({ removed });
     } catch (err) {
       res.status(400).json({ error: errorMessage(err) });
@@ -290,7 +312,7 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
 
   app.delete('/api/memory/extractions/:id', async (req, res) => {
     try {
-      const removed = removeMemoryExtraction(req.params.id);
+      const removed = removeMemoryExtraction(req.params.id, memoryDataDirFor(req));
       res.json({ removed });
     } catch (err) {
       res.status(400).json({ error: errorMessage(err) });
@@ -299,6 +321,7 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
 
   app.post('/api/memory/connectors/suggest', requireLocalDaemonRequest, async (req, res) => {
     try {
+      const dataDir = memoryDataDirFor(req);
       const body = asRecord(req.body);
       const connectorIds = Array.isArray(body.connectorIds)
         ? body.connectorIds
@@ -313,7 +336,7 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
         typeof body.projectId === 'string' && body.projectId.trim()
           ? body.projectId.trim()
           : null;
-      const appConfig = (await readAppConfig(RUNTIME_DATA_DIR).catch(() => ({}))) as MemoryAppConfigLike;
+      const appConfig = (await readAppConfig(dataDir).catch(() => ({}))) as MemoryAppConfigLike;
       const chatAgentId =
         typeof body.chatAgentId === 'string' && body.chatAgentId.trim()
           ? body.chatAgentId.trim()
@@ -330,15 +353,16 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
           ? appConfig.agentModels[chatAgentId].model ?? null
           : null);
       const options = {
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectRoot: PROJECT_ROOT,
+        service: connectorServiceForDataDir(dataDir),
         ...(projectId ? { projectId } : {}),
         ...(connectorIds ? { connectorIds } : {}),
         ...(query ? { query } : {}),
         ...(chatAgentId ? { chatAgentId } : {}),
         ...(chatModel ? { chatModel } : {}),
       };
-      const result = await suggestMemoryFromConnectors(RUNTIME_DATA_DIR, options);
+      const result = await suggestMemoryFromConnectors(dataDir, options);
       res.json(result);
     } catch (err) {
       res.status(400).json({ error: errorMessage(err) });
@@ -347,6 +371,7 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
 
   app.post('/api/memory/connectors/extract', requireLocalDaemonRequest, async (req, res) => {
     try {
+      const dataDir = memoryDataDirFor(req);
       const body = asRecord(req.body);
       const connectorIds = Array.isArray(body.connectorIds)
         ? body.connectorIds
@@ -361,7 +386,7 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
         typeof body.projectId === 'string' && body.projectId.trim()
           ? body.projectId.trim()
           : null;
-      const appConfig = (await readAppConfig(RUNTIME_DATA_DIR).catch(() => ({}))) as MemoryAppConfigLike;
+      const appConfig = (await readAppConfig(dataDir).catch(() => ({}))) as MemoryAppConfigLike;
       const chatAgentId =
         typeof body.chatAgentId === 'string' && body.chatAgentId.trim()
           ? body.chatAgentId.trim()
@@ -378,15 +403,16 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
           ? appConfig.agentModels[chatAgentId].model ?? null
           : null);
       const options = {
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectRoot: PROJECT_ROOT,
+        service: connectorServiceForDataDir(dataDir),
         ...(projectId ? { projectId } : {}),
         ...(connectorIds ? { connectorIds } : {}),
         ...(query ? { query } : {}),
         ...(chatAgentId ? { chatAgentId } : {}),
         ...(chatModel ? { chatModel } : {}),
       };
-      const result = await extractMemoryFromConnectors(RUNTIME_DATA_DIR, options);
+      const result = await extractMemoryFromConnectors(dataDir, options);
       res.json(result);
     } catch (err) {
       res.status(400).json({ error: errorMessage(err) });
@@ -415,19 +441,20 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
   // `userMessage` keep the legacy behaviour: heuristic-only.
   app.post('/api/memory/extract', async (req, res) => {
     try {
+      const dataDir = memoryDataDirFor(req);
       const body = asRecord(req.body);
       const userMessage =
         typeof body.userMessage === 'string' ? body.userMessage : '';
       const assistantMessage =
         typeof body.assistantMessage === 'string' ? body.assistantMessage : '';
       const hasAssistant = assistantMessage.trim().length > 0;
-      const memoryConfig = await readMemoryConfig(RUNTIME_DATA_DIR);
+      const memoryConfig = await readMemoryConfig(dataDir);
       if (memoryConfig.chatExtractionEnabled === false) {
         return res.json({ changed: [], attemptedLLM: false });
       }
       const changed = hasAssistant
         ? []
-        : await extractFromMessage(RUNTIME_DATA_DIR, userMessage);
+        : await extractFromMessage(dataDir, userMessage);
       // BYOK chat config — only forwarded by the web app for API-mode
       // chats. We strip the surface to the five fields pickProvider()
       // actually consumes and validate the provider against the four
@@ -462,7 +489,7 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
         void import('../memory-llm.js')
           .then(({ extractWithLLM }) =>
             extractWithLLM(
-              RUNTIME_DATA_DIR,
+              dataDir,
               { userMessage, assistantMessage },
               {
                 projectRoot: PROJECT_ROOT,
@@ -489,9 +516,9 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
   // BYOK turn and passes the result into `composeSystemPrompt`'s
   // `memoryBody` field — without this, the Memory tab is a no-op for
   // BYOK users even though the UI saves model/index/entries for them.
-  app.get('/api/memory/system-prompt', async (_req, res) => {
+  app.get('/api/memory/system-prompt', async (req, res) => {
     try {
-      const body = await composeMemoryBody(RUNTIME_DATA_DIR);
+      const body = await composeMemoryBody(memoryDataDirFor(req));
       res.json({ body });
     } catch (err) {
       res.status(500).json({ error: errorMessage(err) });
@@ -500,12 +527,13 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
 
   app.post('/api/memory', async (req, res) => {
     try {
+      const dataDir = memoryDataDirFor(req);
       const body = asRecord(req.body);
       if (!isMemoryType(body.type) || typeof body.name !== 'string') {
         throw new Error('memory entry requires `name` and a valid `type`');
       }
       const entry = await upsertMemoryEntry(
-        RUNTIME_DATA_DIR,
+        dataDir,
         body as unknown as MemoryEntryInput,
         undefined,
       );
@@ -517,7 +545,7 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
 
   app.get('/api/memory/:id', async (req, res) => {
     try {
-      const entry = await readMemoryEntry(RUNTIME_DATA_DIR, req.params.id);
+      const entry = await readMemoryEntry(memoryDataDirFor(req), req.params.id);
       if (!entry) return res.status(404).json({ error: 'memory not found' });
       res.json({ entry });
     } catch (err) {
@@ -527,12 +555,13 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
 
   app.put('/api/memory/:id', async (req, res) => {
     try {
+      const dataDir = memoryDataDirFor(req);
       const body = asRecord(req.body);
       if (!isMemoryType(body.type) || typeof body.name !== 'string') {
         throw new Error('memory entry requires `name` and a valid `type`');
       }
       const entry = await upsertMemoryEntry(
-        RUNTIME_DATA_DIR,
+        dataDir,
         {
           ...(body as unknown as MemoryEntryInput),
           id: req.params.id,
@@ -547,7 +576,7 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
 
   app.delete('/api/memory/:id', async (req, res) => {
     try {
-      await deleteMemoryEntry(RUNTIME_DATA_DIR, req.params.id);
+      await deleteMemoryEntry(memoryDataDirFor(req), req.params.id);
       res.json({ ok: true });
     } catch (err) {
       res.status(400).json({ error: errorMessage(err) });

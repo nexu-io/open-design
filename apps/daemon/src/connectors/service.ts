@@ -568,6 +568,11 @@ export class ConnectorService {
 
   deleteCredentialsByProvider(provider: string): void {
     this.statusService.deleteCredentialsByProvider(provider);
+    if (provider === 'composio') {
+      for (const definition of this.listFastDefinitions()) {
+        if (definition.authentication === 'composio') this.statusService.clear(definition.id);
+      }
+    }
   }
 
   async listDefinitions(signal?: AbortSignal): Promise<ConnectorCatalogDefinition[]> {
@@ -678,7 +683,16 @@ export class ConnectorService {
     return { results };
   }
 
-  async connect(connectorId: string, options: { accountLabel?: string; credentials?: ConnectorCredentialMaterial; callbackUrl?: string; signal?: AbortSignal } = {}): Promise<ConnectorConnectResult> {
+  async connect(
+    connectorId: string,
+    options: {
+      accountLabel?: string;
+      credentials?: ConnectorCredentialMaterial;
+      callbackUrl?: string;
+      dataDir?: string;
+      signal?: AbortSignal;
+    } = {},
+  ): Promise<ConnectorConnectResult> {
     const definition = this.getFastDefinition(connectorId) ?? await this.getDefinition(connectorId, options.signal);
     if (!definition) {
       throw new ConnectorServiceError('CONNECTOR_NOT_FOUND', 'connector not found', 404);
@@ -690,7 +704,12 @@ export class ConnectorService {
       if (!options.callbackUrl) {
         throw new ConnectorServiceError('CONNECTOR_EXECUTION_FAILED', 'callbackUrl is required for Composio connectors', 400, { connectorId });
       }
-      auth = await composioConnectorProvider.connect(definition, options.callbackUrl, options.signal);
+      auth = await composioConnectorProvider.connect(
+        definition,
+        options.callbackUrl,
+        options.signal,
+        options.dataDir,
+      );
       if (auth.kind === 'redirect_required' || auth.kind === 'pending') {
         return { connector: this.toDetail(detailDefinition), auth: publicComposioAuthStart(auth) };
       }
@@ -917,6 +936,20 @@ export class ConnectorService {
 }
 
 export const connectorService = new ConnectorService();
+const connectorServicesByDataDir = new Map<string, ConnectorService>();
+
+export function connectorServiceForDataDir(dataDir: string): ConnectorService {
+  const resolvedDataDir = path.resolve(dataDir);
+  const existing = connectorServicesByDataDir.get(resolvedDataDir);
+  if (existing) return existing;
+  const service = new ConnectorService(
+    new ConnectorStatusService({
+      credentialStore: new FileConnectorCredentialStore(resolvedDataDir),
+    }),
+  );
+  connectorServicesByDataDir.set(resolvedDataDir, service);
+  return service;
+}
 
 export function configureConnectorCredentialStore(credentialStore: ConnectorCredentialStore): void {
   connectorService.setCredentialStore(credentialStore);
@@ -924,6 +957,9 @@ export function configureConnectorCredentialStore(credentialStore: ConnectorCred
 
 export function deleteConnectorCredentialsByProvider(provider: string): void {
   connectorService.deleteCredentialsByProvider(provider);
+  for (const service of connectorServicesByDataDir.values()) {
+    service.deleteCredentialsByProvider(provider);
+  }
 }
 
 function summarizeConnectorOutput(output: BoundedJsonValue): string | undefined {

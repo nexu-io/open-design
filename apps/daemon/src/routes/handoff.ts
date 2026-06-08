@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { ownerScopeForRequest } from '../project-owner-scope.js';
 import type { RouteDeps } from '../server-context.js';
 
 export interface RegisterHandoffRoutesDeps
@@ -27,7 +28,7 @@ export interface RegisterHandoffRoutesDeps
 export function registerHandoffRoutes(app: Express, ctx: RegisterHandoffRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
-  const { PROJECTS_DIR } = ctx.paths;
+  const { projectsDirFor } = ctx.paths;
   const { getProject } = ctx.projectStore;
   const { getConversation } = ctx.conversations;
   const { isSafeId, validateExternalApiBaseUrl } = ctx.validation;
@@ -86,7 +87,7 @@ export function registerHandoffRoutes(app: Express, ctx: RegisterHandoffRoutesDe
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid conversationId');
       }
 
-      const project = getProject(db, req.params.id);
+      const project = getProject(db, req.params.id, ownerScopeForRequest(req));
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
@@ -112,13 +113,14 @@ export function registerHandoffRoutes(app: Express, ctx: RegisterHandoffRoutesDe
 
       let result;
       try {
-        result = await synthesizeHandoffPrompt(db, PROJECTS_DIR, req.params.id, {
+        result = await synthesizeHandoffPrompt(db, projectsDirFor(req), req.params.id, {
           conversationId,
           apiKey,
           baseUrl,
           model,
           maxTokens,
           signal: handoffAbort.signal,
+          projectOwnerScope: ownerScopeForRequest(req),
         });
       } finally {
         res.off('close', abortFromRequest);

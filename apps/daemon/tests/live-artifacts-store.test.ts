@@ -38,6 +38,8 @@ import {
   withLiveArtifactRefreshRun,
   withLiveArtifactRefreshSourceTimeout,
 } from '../src/live-artifacts/refresh.js';
+import { refreshLiveArtifact } from '../src/live-artifacts/refresh-service.js';
+import type { ConnectorService } from '../src/connectors/service.js';
 
 const tempRoots: string[] = [];
 
@@ -1272,6 +1274,64 @@ describe('live artifact store layout', () => {
 
     expect(rendered.html).toBe('<h1>Disk &lt;Title&gt;</h1><p>Disk &amp; Owner</p>');
     expect(await readFile(created.paths.generatedPreviewHtmlPath, 'utf8')).toBe(rendered.html);
+  });
+
+  it('uses the injected connector service for connector refresh sources', async () => {
+    const projectsRoot = await makeProjectsRoot();
+    const created = await createLiveArtifact({
+      projectsRoot,
+      projectId: 'project-1',
+      input: {
+        ...validCreateInput(),
+        document: {
+          ...validCreateInput().document,
+          dataJson: { title: 'Connector dashboard' },
+          sourceJson: {
+            type: 'connector_tool' as const,
+            toolName: 'github.github_search_repositories',
+            input: { query: 'open design' },
+            connector: {
+              connectorId: 'github',
+              toolName: 'github.github_search_repositories',
+              accountLabel: 'alice@example.com',
+            },
+            outputMapping: {
+              dataPaths: [{ from: 'count', to: 'repository.count' }],
+            },
+            refreshPermission: 'manual_refresh_granted_for_read_only' as const,
+          },
+        },
+      },
+      templateHtml: '<h1>{{data.title}}</h1>',
+    });
+    const execute = vi.fn(async () => ({
+      output: { count: 7 },
+    }));
+
+    const result = await refreshLiveArtifact({
+      projectsRoot,
+      projectId: 'project-1',
+      artifactId: created.artifact.id,
+      connectorService: { execute } as unknown as ConnectorService,
+    });
+
+    expect(execute).toHaveBeenCalledWith(
+      {
+        connectorId: 'github',
+        toolName: 'github.github_search_repositories',
+        input: { query: 'open design' },
+        expectedAccountLabel: 'alice@example.com',
+      },
+      expect.objectContaining({
+        projectsRoot,
+        projectId: 'project-1',
+        purpose: 'artifact_refresh',
+      }),
+    );
+    expect(result.refresh.status).toBe('succeeded');
+    expect(result.artifact.document?.dataJson).toMatchObject({
+      repository: { count: 7 },
+    });
   });
 
   it('regenerates missing derived preview output when needed', async () => {

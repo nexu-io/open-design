@@ -35,12 +35,13 @@ afterEach(() => {
   projectsRoot = null;
 });
 
-function setupProjectFixture(): { db: any; projectsRoot: string } {
+function setupProjectFixture(options: { ownerEmail?: string | null } = {}): { db: any; projectsRoot: string } {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-handoff-'));
   const db = openDatabase(tempDir);
   insertProject(db, {
     id: PROJECT_ID,
     name: 'Project',
+    ownerEmail: options.ownerEmail ?? null,
     createdAt: 1,
     updatedAt: 1,
   });
@@ -150,6 +151,22 @@ describe('synthesizeHandoffPrompt (pipeline)', () => {
     model: 'claude-opus-4-7',
     maxTokens: 4096,
   };
+
+  it('rejects projects outside the caller owner scope before exporting the transcript', async () => {
+    const { db, projectsRoot } = setupProjectFixture({ ownerEmail: 'bob@example.com' });
+    seedConversation(db);
+
+    const fetchImpl = vi.fn(async () => fakeAnthropicSuccess('## Context\nshould not run\n'));
+
+    await expect(
+      synthesizeHandoffPrompt(db, projectsRoot, PROJECT_ID, {
+        ...baseOptions,
+        fetchImpl,
+        projectOwnerScope: { ownerEmail: 'alice@example.com', includeOwnerless: false },
+      }),
+    ).rejects.toThrow(`project not found: ${PROJECT_ID}`);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 
   it('returns { prompt, model, inputTokens, outputTokens, transcriptMessageCount } on happy path', async () => {
     const { db, projectsRoot } = setupProjectFixture();

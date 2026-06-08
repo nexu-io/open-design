@@ -230,11 +230,19 @@ describe('memory routes', () => {
       userMessage: 'Remember I prefer dark mode',
       writtenCount: 1,
       writtenIds: ['user_ui_preferences'],
+      dataDir,
     });
     recordHeuristic({
       userMessage: 'No durable memory in this turn',
       writtenCount: 0,
       writtenIds: [],
+      dataDir,
+    });
+    recordHeuristic({
+      userMessage: 'Other tenant memory',
+      writtenCount: 1,
+      writtenIds: ['user_other_tenant'],
+      dataDir: path.join(dataDir, 'other-user'),
     });
 
     const listRes = await fetch(`${baseUrl}/api/memory/extractions`);
@@ -265,11 +273,19 @@ describe('memory routes', () => {
       userMessage: 'Remember I prefer dark mode',
       writtenCount: 1,
       writtenIds: ['user_ui_preferences'],
+      dataDir,
     });
     recordHeuristic({
       userMessage: 'Remember I like weekly summaries',
       writtenCount: 1,
       writtenIds: ['user_weekly_summaries'],
+      dataDir,
+    });
+    recordHeuristic({
+      userMessage: 'Remember an unrelated tenant setting',
+      writtenCount: 1,
+      writtenIds: ['user_other_tenant'],
+      dataDir: path.join(dataDir, 'other-user'),
     });
 
     const clearRes = await fetch(`${baseUrl}/api/memory/extractions`, {
@@ -459,6 +475,7 @@ describe('memory routes', () => {
         userMessage: 'Remember that I prefer editorial chart labels.',
         writtenCount: 1,
         writtenIds: ['feedback_editorial_chart_labels'],
+        dataDir,
       });
 
       const extraction = await readNextSseEvent(reader, decoder, state);
@@ -468,6 +485,45 @@ describe('memory routes', () => {
         phase: 'success',
         writtenCount: 1,
         writtenIds: ['feedback_editorial_chart_labels'],
+      });
+    } finally {
+      await reader.cancel();
+    }
+  });
+
+  it('does not stream unscoped extraction events over tenant SSE connections', async () => {
+    const response = await fetch(`${baseUrl}/api/memory/events`);
+    expect(response.status).toBe(200);
+    expect(response.body).toBeTruthy();
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    const state = { buffer: '' };
+
+    try {
+      const connected = await readNextSseEvent(reader, decoder, state);
+      expect(connected.event).toBe('connected');
+
+      recordHeuristic({
+        userMessage: 'Remember that I prefer private unscoped notes.',
+        writtenCount: 1,
+        writtenIds: ['feedback_private_unscoped_notes'],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      recordHeuristic({
+        userMessage: 'Remember that I prefer tenant-scoped chart labels.',
+        writtenCount: 1,
+        writtenIds: ['feedback_tenant_scoped_chart_labels'],
+        dataDir,
+      });
+
+      const extraction = await readNextSseEvent(reader, decoder, state);
+      expect(extraction.event).toBe('extraction');
+      expect(extraction.data).toMatchObject({
+        kind: 'heuristic',
+        phase: 'success',
+        writtenIds: ['feedback_tenant_scoped_chart_labels'],
       });
     } finally {
       await reader.cancel();

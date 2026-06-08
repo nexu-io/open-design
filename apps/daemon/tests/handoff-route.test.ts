@@ -70,10 +70,14 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
     return new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
-  function postHandoff(id: string, body: unknown): Promise<Response> {
+  function postHandoff(
+    id: string,
+    body: unknown,
+    headers: Record<string, string> = {},
+  ): Promise<Response> {
     return fetch(`${baseUrl}/api/projects/${id}/handoff`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...headers },
       body: JSON.stringify(body),
     });
   }
@@ -114,6 +118,37 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error.code).toBe('BAD_REQUEST');
+  });
+
+  it('404 PROJECT_NOT_FOUND when another owner requests handoff for the project', async () => {
+    const projectId = `handoff-owner-bob-${Date.now()}`;
+    const bobCreate = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'cf-access-authenticated-user-email': 'bob@example.com',
+      },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Bob handoff fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(bobCreate.status).toBe(200);
+
+    const res = await postHandoff(
+      projectId,
+      {
+        conversationId: 'foreign-conversation',
+        apiKey: 'sk-test',
+        model: 'claude-opus-4-7',
+      },
+      { 'cf-access-authenticated-user-email': 'alice@example.com' },
+    );
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error.code).toBe('PROJECT_NOT_FOUND');
   });
 
   it('403 FORBIDDEN when baseUrl points at a private internal IP', async () => {

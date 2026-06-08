@@ -52,12 +52,16 @@ export type ConnectorApiErrorSender = (
 
 export interface RegisterConnectorRoutesOptions {
   service?: ConnectorService;
+  serviceForRequest?: (req: Request) => ConnectorService;
+  serviceForDataDir?: (dataDir: string) => ConnectorService;
+  dataDirForRequest?: (req: Request) => string;
   sendApiError: ConnectorApiErrorSender;
-  projectsRoot?: string;
+  projectsRoot?: string | ((req: Request) => string);
   authorizeToolRequest?: (req: Request, res: Response, operation: string) => ToolTokenGrant | null;
   requireLocalDaemonRequest?: RequestHandler;
   composio?: {
     clearDiscoveryCache: () => void;
+    pendingConnectionDataDir?: (connectorId: string, state: string) => string | undefined;
   };
 }
 
@@ -66,6 +70,13 @@ function sendConnectorRouteError(res: Response, err: unknown, sendApiError: Conn
     return sendApiError(res, err.status, err.code, err.message, err.details === undefined ? {} : { details: err.details });
   }
   return sendApiError(res, 500, 'CONNECTOR_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
+}
+
+function projectsRootForRequest(
+  projectsRoot: RegisterConnectorRoutesOptions['projectsRoot'],
+  req: Request,
+): string | null {
+  return typeof projectsRoot === 'function' ? projectsRoot(req) : projectsRoot ?? null;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -526,10 +537,22 @@ function renderConnectorConnectedHtml(connectorId: string): string {
 }
 
 export function registerConnectorRoutes(app: Express, options: RegisterConnectorRoutesOptions): void {
-  const service = options.service ?? connectorService;
+  const defaultService = options.service ?? connectorService;
+  const serviceForRequest = (req: Request): ConnectorService =>
+    options.serviceForRequest?.(req) ?? defaultService;
+  const serviceForPendingConnection = (
+    req: Request,
+    connectorId: string,
+    state: string,
+  ): ConnectorService => {
+    const dataDir = options.composio?.pendingConnectionDataDir?.(connectorId, state);
+    if (dataDir && options.serviceForDataDir) return options.serviceForDataDir(dataDir);
+    return serviceForRequest(req);
+  };
   const requireLocalDaemonRequest: RequestHandler = options.requireLocalDaemonRequest ?? ((_req, _res, next) => next());
 
-  app.get('/api/connectors', async (_req: Request, res: Response) => {
+  app.get('/api/connectors', async (req: Request, res: Response) => {
+    const service = serviceForRequest(req);
     try {
       res.json({ connectors: await service.listConnectors() });
     } catch (err) {
@@ -537,7 +560,8 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
     }
   });
 
-  app.get('/api/connectors/status', async (_req: Request, res: Response) => {
+  app.get('/api/connectors/status', async (req: Request, res: Response) => {
+    const service = serviceForRequest(req);
     try {
       res.json({ statuses: service.listConnectorStatuses() });
     } catch (err) {
@@ -546,6 +570,7 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
   });
 
   app.get('/api/connectors/discovery', async (req: Request, res: Response) => {
+    const service = serviceForRequest(req);
     try {
       const refresh = typeof req.query.refresh === 'string'
         ? ['1', 'true', 'yes'].includes(req.query.refresh.toLowerCase())
@@ -591,6 +616,7 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
   });
 
   app.get('/api/connectors/:connectorId', async (req: Request<{ connectorId: string }>, res: Response) => {
+    const service = serviceForRequest(req);
     try {
       const connectorId = req.params.connectorId;
       if (!connectorId) return options.sendApiError(res, 400, 'CONNECTOR_NOT_FOUND', 'connectorId is required');
@@ -611,6 +637,7 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
   });
 
   app.post('/api/connectors/auth-configs/prepare', requireLocalDaemonRequest, async (req: Request, res: Response) => {
+    const service = serviceForRequest(req);
     try {
       const body = isPlainObject(req.body) ? req.body : {};
       const connectorIds = Array.isArray(body.connectorIds)
@@ -627,6 +654,7 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
   });
 
   app.post('/api/connectors/:connectorId/connect', requireLocalDaemonRequest, async (req: Request<{ connectorId: string }>, res: Response) => {
+    const service = serviceForRequest(req);
     try {
       const connectorId = req.params.connectorId;
       if (!connectorId) return options.sendApiError(res, 400, 'CONNECTOR_NOT_FOUND', 'connectorId is required');
@@ -647,6 +675,9 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
           ...(accountLabel === undefined ? {} : { accountLabel }),
           ...(credentials === undefined ? {} : { credentials }),
           callbackUrl: `${connectorCallbackUrl(req)}/${encodeURIComponent(connectorId)}`,
+          ...(options.dataDirForRequest === undefined
+            ? {}
+            : { dataDir: options.dataDirForRequest(req) }),
         })),
       });
     } catch (err) {
@@ -660,6 +691,7 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
       if (!connectorId) return options.sendApiError(res, 400, 'CONNECTOR_NOT_FOUND', 'connectorId is required');
       const state = typeof req.query.state === 'string' ? req.query.state : undefined;
       if (!state) return options.sendApiError(res, 400, 'BAD_REQUEST', 'state is required');
+      const service = serviceForPendingConnection(req, connectorId, state);
       const providerConnectionId = typeof req.query.connected_account_id === 'string'
         ? req.query.connected_account_id
         : typeof req.query.connection_id === 'string'
@@ -676,6 +708,7 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
   });
 
   app.post('/api/connectors/:connectorId/authorization/cancel', requireLocalDaemonRequest, async (req: Request<{ connectorId: string }>, res: Response) => {
+    const service = serviceForRequest(req);
     try {
       const connectorId = req.params.connectorId;
       if (!connectorId) return options.sendApiError(res, 400, 'CONNECTOR_NOT_FOUND', 'connectorId is required');
@@ -686,6 +719,7 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
   });
 
   app.delete('/api/connectors/:connectorId/connection', requireLocalDaemonRequest, async (req: Request<{ connectorId: string }>, res: Response) => {
+    const service = serviceForRequest(req);
     try {
       const connectorId = req.params.connectorId;
       if (!connectorId) return options.sendApiError(res, 400, 'CONNECTOR_NOT_FOUND', 'connectorId is required');
@@ -696,6 +730,7 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
   });
 
   app.get('/api/tools/connectors/list', async (req: Request, res: Response) => {
+    const service = serviceForRequest(req);
     try {
       if (!options.authorizeToolRequest) {
         options.sendApiError(res, 500, 'CONNECTOR_EXECUTION_FAILED', 'connector tool routes are not configured');
@@ -710,7 +745,8 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
         });
         return;
       }
-      if (!options.projectsRoot) {
+      const projectsRoot = projectsRootForRequest(options.projectsRoot, req);
+      if (!projectsRoot) {
         options.sendApiError(res, 500, 'CONNECTOR_EXECUTION_FAILED', 'connector tool routes are not configured');
         return;
       }
@@ -720,13 +756,14 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
         options.sendApiError(res, 400, 'BAD_REQUEST', 'useCase must be personal_daily_digest');
         return;
       }
-      res.json({ connectors: await listConnectorTools({ grant, projectsRoot: options.projectsRoot, service, ...(useCase === undefined ? {} : { useCase }) }) });
+      res.json({ connectors: await listConnectorTools({ grant, projectsRoot, service, ...(useCase === undefined ? {} : { useCase }) }) });
     } catch (err) {
       sendConnectorRouteError(res, err, options.sendApiError);
     }
   });
 
   app.post('/api/tools/connectors/execute', async (req: Request, res: Response) => {
+    const service = serviceForRequest(req);
     try {
       if (!options.authorizeToolRequest) {
         options.sendApiError(res, 500, 'CONNECTOR_EXECUTION_FAILED', 'connector tool routes are not configured');
@@ -734,7 +771,8 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
       }
       const grant = options.authorizeToolRequest?.(req, res, 'connectors:execute');
       if (!grant) return;
-      if (!options.projectsRoot) {
+      const projectsRoot = projectsRootForRequest(options.projectsRoot, req);
+      if (!projectsRoot) {
         options.sendApiError(res, 500, 'CONNECTOR_EXECUTION_FAILED', 'connector tool routes are not configured');
         return;
       }
@@ -782,7 +820,7 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
 
       const result = await executeConnectorTool(
         { connectorId, toolName, input: inputValidation.value },
-        { grant, projectsRoot: options.projectsRoot, service },
+        { grant, projectsRoot, service },
       );
       res.json(result);
     } catch (err) {

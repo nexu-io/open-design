@@ -6,7 +6,10 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { startServer } from '../src/server.js';
-import { connectorService, ConnectorServiceError } from '../src/connectors/service.js';
+import {
+  connectorServiceForDataDir,
+  ConnectorServiceError,
+} from '../src/connectors/service.js';
 import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from '../src/tool-tokens.js';
 
 type StartedServer = { server: http.Server; url: string };
@@ -33,6 +36,10 @@ const serverRuntimeDataRoot = process.env.OD_DATA_DIR
 let server: http.Server | undefined;
 let baseUrl: string;
 const projectIds: string[] = [];
+
+function routeConnectorService() {
+  return connectorServiceForDataDir(serverRuntimeDataRoot);
+}
 
 beforeEach(async () => {
   const started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
@@ -90,10 +97,17 @@ async function textFetch(url: string | URL, init?: RequestInit): Promise<TextFet
   return { status: response.status, headers: response.headers, body: await response.text() };
 }
 
-async function createProject(projectId: string): Promise<JsonFetchResult> {
+function userHeaders(email: string): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    'cf-access-authenticated-user-email': email,
+  };
+}
+
+async function createProject(projectId: string, ownerEmail?: string): Promise<JsonFetchResult> {
   const response = await fetch(`${baseUrl}/api/projects`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: ownerEmail ? userHeaders(ownerEmail) : { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: projectId, name: projectId }),
   });
   return { status: response.status, body: (await response.json()) as JsonObject };
@@ -215,6 +229,46 @@ function mintToolToken(projectId: string, runId: string, overrides: Partial<Para
 }
 
 describe('live artifact tool routes', () => {
+  it('scopes UI live artifact routes to the project owner', async () => {
+    const projectId = uniqueProjectId();
+    const runId = 'run-route-test-owner-scope';
+    const createdProject = await createProject(projectId, 'bob@example.com');
+    expect(createdProject.status).toBe(200);
+
+    const token = mintToolToken(projectId, runId);
+    const create = await jsonFetch(`${baseUrl}/api/tools/live-artifacts/create`, {
+      method: 'POST',
+      headers: { ...userHeaders('bob@example.com'), Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        input: validCreateInput('Bob artifact'),
+        templateHtml: '<!doctype html><h1>{{data.title}}</h1><p>{{data.owner}}</p>',
+      }),
+    });
+    expect(create.status).toBe(200);
+    const artifactId = create.body.artifact.id;
+
+    const aliceList = await jsonFetch(
+      `${baseUrl}/api/live-artifacts?projectId=${encodeURIComponent(projectId)}`,
+      { headers: { 'cf-access-authenticated-user-email': 'alice@example.com' } },
+    );
+    expect(aliceList.status).toBe(404);
+    expect(aliceList.body).toMatchObject({ error: { code: 'PROJECT_NOT_FOUND' } });
+
+    const aliceDetail = await jsonFetch(
+      `${baseUrl}/api/live-artifacts/${artifactId}?projectId=${encodeURIComponent(projectId)}`,
+      { headers: { 'cf-access-authenticated-user-email': 'alice@example.com' } },
+    );
+    expect(aliceDetail.status).toBe(404);
+    expect(aliceDetail.body).toMatchObject({ error: { code: 'PROJECT_NOT_FOUND' } });
+
+    const bobDetail = await jsonFetch(
+      `${baseUrl}/api/live-artifacts/${artifactId}?projectId=${encodeURIComponent(projectId)}`,
+      { headers: { 'cf-access-authenticated-user-email': 'bob@example.com' } },
+    );
+    expect(bobDetail.status).toBe(200);
+    expect(bobDetail.body.artifact.id).toBe(artifactId);
+  });
+
   it('creates and lists live artifacts for agent registration', async () => {
     const projectId = uniqueProjectId();
     const runId = 'run-route-test';
@@ -259,7 +313,7 @@ describe('live artifact tool routes', () => {
   it('refreshes live artifacts through tool and UI routes', async () => {
     const projectId = uniqueProjectId();
     const token = mintToolToken(projectId, 'run-route-test-refresh');
-    const executeConnector = vi.spyOn(connectorService, 'execute')
+    const executeConnector = vi.spyOn(routeConnectorService(), 'execute')
       .mockResolvedValueOnce({
         ok: true,
         connectorId: 'monet',
@@ -502,7 +556,7 @@ describe('live artifact tool routes', () => {
   it('rejects manual refresh requests with non-loopback host before refresh side effects', async () => {
     const projectId = uniqueProjectId();
     const token = mintToolToken(projectId, 'run-route-test-refresh-local-security');
-    const executeConnector = vi.spyOn(connectorService, 'execute').mockResolvedValue({
+    const executeConnector = vi.spyOn(routeConnectorService(), 'execute').mockResolvedValue({
       ok: true,
       connectorId: 'monet',
       toolName: 'monet.metrics',
@@ -551,7 +605,7 @@ describe('live artifact tool routes', () => {
   it('rejects connector refresh sources when refreshPermission is none', async () => {
     const projectId = uniqueProjectId();
     const token = mintToolToken(projectId, 'run-route-test-refresh-default');
-    const executeConnector = vi.spyOn(connectorService, 'execute').mockResolvedValueOnce({
+    const executeConnector = vi.spyOn(routeConnectorService(), 'execute').mockResolvedValueOnce({
       ok: true,
       connectorId: 'monet',
       toolName: 'monet.metrics',
@@ -627,7 +681,7 @@ describe('live artifact tool routes', () => {
   it('marks artifacts failed and returns connector refresh error codes', async () => {
     const projectId = uniqueProjectId();
     const token = mintToolToken(projectId, 'run-route-test-refresh-failure');
-    vi.spyOn(connectorService, 'execute').mockRejectedValueOnce(
+    vi.spyOn(routeConnectorService(), 'execute').mockRejectedValueOnce(
       new ConnectorServiceError('CONNECTOR_NOT_CONNECTED', 'connector is not connected', 403, { connectorId: 'monet' }),
     );
 

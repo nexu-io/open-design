@@ -24,10 +24,10 @@
 //                                     x_search tool, gated on the user's
 //                                     SuperGrok subscription bearer
 
-import type { Express } from 'express';
+import type { Express, Request } from 'express';
 
 import { proxyDispatcherRequestInit } from '../connectionTest.js';
-import { mediaConfigDir, resolveProviderConfig } from '../media-config.js';
+import { mediaConfigDirForDataDir, resolveProviderConfig } from '../media-config.js';
 import { PendingAuthCache } from '../mcp-oauth.js';
 import { beginXAIAuth, completeXAIAuth } from '../xai-oauth.js';
 import {
@@ -53,8 +53,11 @@ function fetchWithRequestInit(
 
 export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
   const { isLocalSameOrigin, resolvedPortRef } = ctx.http;
-  const { PROJECT_ROOT } = ctx.paths;
+  const { PROJECT_ROOT, runtimeDataDirFor } = ctx.paths;
   const getResolvedPort = () => resolvedPortRef.current;
+  const mediaConfigDataDirFor = (req: Request): string => runtimeDataDirFor(req);
+  const mediaCredentialDirFor = (req: Request): string =>
+    mediaConfigDirForDataDir(mediaConfigDataDirFor(req));
 
   // Match the loopback listener's 30 min self-close timeout so the
   // PKCE state, the open :56121 socket, and the paste-back UI all
@@ -85,10 +88,14 @@ export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
     }
     const proxyDispatcher = proxyDispatcherRequestInit(process.env);
     try {
+      let pendingDataDir = '';
       const tokenResp = await completeXAIAuth({
         pending: pendingAuth,
         state: outcome.state,
         code: outcome.code,
+        onPending: (pending) => {
+          pendingDataDir = pending.dataDir ?? '';
+        },
         fetchImpl: fetchWithRequestInit(proxyDispatcher.requestInit),
       });
       const stored: StoredXAIToken = {
@@ -101,7 +108,10 @@ export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
       if (typeof tokenResp.expires_in === 'number') {
         stored.expiresAt = Date.now() + tokenResp.expires_in * 1000;
       }
-      await setXAIToken(mediaConfigDir(PROJECT_ROOT), stored);
+      if (!pendingDataDir) {
+        throw new Error('xAI OAuth state is missing dataDir');
+      }
+      await setXAIToken(mediaConfigDirForDataDir(pendingDataDir), stored);
       console.log('[xai-oauth] token stored');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -121,7 +131,10 @@ export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
     await stopActiveListener();
 
     try {
-      const { authorizeUrl, state } = beginXAIAuth({ pending: pendingAuth });
+      const { authorizeUrl, state } = beginXAIAuth({
+        pending: pendingAuth,
+        dataDir: mediaConfigDataDirFor(req),
+      });
       // Open the one-shot listener BEFORE returning so the client can
       // navigate the browser to authorizeUrl without racing startup.
       activeListener = await startCallbackListener({
@@ -162,10 +175,14 @@ export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
     }
     const proxyDispatcher = proxyDispatcherRequestInit(process.env);
     try {
+      let pendingDataDir = '';
       const tokenResp = await completeXAIAuth({
         pending: pendingAuth,
         state,
         code,
+        onPending: (pending) => {
+          pendingDataDir = pending.dataDir ?? '';
+        },
         fetchImpl: fetchWithRequestInit(proxyDispatcher.requestInit),
       });
       const stored: StoredXAIToken = {
@@ -180,7 +197,10 @@ export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
       if (typeof tokenResp.expires_in === 'number') {
         stored.expiresAt = Date.now() + tokenResp.expires_in * 1000;
       }
-      await setXAIToken(mediaConfigDir(PROJECT_ROOT), stored);
+      await setXAIToken(
+        mediaConfigDirForDataDir(pendingDataDir || mediaConfigDataDirFor(req)),
+        stored,
+      );
       // We won the race against the loopback listener (or it was never
       // going to resolve in the first place); shut it down so the next
       // /start has a clean slate.
@@ -201,7 +221,7 @@ export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      const tok = await getXAIToken(mediaConfigDir(PROJECT_ROOT));
+      const tok = await getXAIToken(mediaCredentialDirFor(req));
       if (!tok) {
         return res.json({ connected: false, listening: activeListener !== null });
       }
@@ -242,7 +262,7 @@ export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
     }
     try {
       await stopActiveListener();
-      await clearXAIToken(mediaConfigDir(PROJECT_ROOT));
+      await clearXAIToken(mediaCredentialDirFor(req));
       res.json({ ok: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -265,7 +285,7 @@ export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
     // OD-native xai-tokens → Hermes auth.json borrow → OD_GROK_API_KEY
     // → XAI_API_KEY. Anything that lights up the Grok image button
     // automatically lights up X search too.
-    const provider = await resolveProviderConfig(PROJECT_ROOT, 'grok');
+    const provider = await resolveProviderConfig(PROJECT_ROOT, 'grok', mediaConfigDataDirFor(req));
     const apiKey = provider.apiKey || '';
     if (!apiKey) {
       return res.status(401).json({

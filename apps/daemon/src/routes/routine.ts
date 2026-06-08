@@ -1,4 +1,4 @@
-import type { Express } from 'express';
+import type { Express, Request } from 'express';
 import { randomUUID } from 'node:crypto';
 import {
   getAnyAutomationTemplate,
@@ -14,8 +14,10 @@ import {
   listRoutineRuns,
   listRoutines,
   updateRoutine,
+  type RoutineOwnerScope,
 } from '../db.js';
 import { ingestAutomationSource } from '../automation-ingestions.js';
+import { ownerFieldsForRequest, ownerScopeForRequest } from '../project-owner-scope.js';
 import {
   validateSchedule as validateRoutineSchedule,
   validateTarget as validateRoutineTarget,
@@ -24,7 +26,7 @@ import {
 import type { PathDeps, RouteDeps } from '../server-context.js';
 
 export interface RegisterRoutineRoutesDeps extends RouteDeps<'db' | 'routines'> {
-  paths: Pick<PathDeps, 'RUNTIME_DATA_DIR'>;
+  paths: Pick<PathDeps, 'runtimeDataDirFor'>;
 }
 
 export type RoutineRoutesService = Pick<
@@ -128,10 +130,18 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
   const { db } = ctx;
   const { routineService } = ctx.routines;
 
-  app.get('/api/automation-templates', async (_req, res) => {
+  function routineOwnerScope(req: Request): RoutineOwnerScope {
+    return ownerScopeForRequest(req);
+  }
+
+  function routineOwnerFields(req: Request) {
+    return ownerFieldsForRequest(req);
+  }
+
+  app.get('/api/automation-templates', async (req, res) => {
     try {
       res.json({
-        templates: await listAllAutomationTemplates(ctx.paths.RUNTIME_DATA_DIR),
+        templates: await listAllAutomationTemplates(ctx.paths.runtimeDataDirFor(req)),
       });
     } catch (err: any) {
       res.status(500).json({ error: String(err?.message ?? err) });
@@ -141,7 +151,7 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
   app.get('/api/automation-templates/:id', async (req, res) => {
     try {
       const template = await getAnyAutomationTemplate(
-        ctx.paths.RUNTIME_DATA_DIR,
+        ctx.paths.runtimeDataDirFor(req),
         req.params.id,
       );
       if (!template) return res.status(404).json({ error: 'automation template not found' });
@@ -160,8 +170,8 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
     return { scheduleKind: schedule.kind, scheduleValue: value, scheduleJson: json };
   }
 
-  function routineFromDb(id: string) {
-    const row = getRoutine(db, id);
+  function routineFromDb(id: string, req: Request) {
+    const row = getRoutine(db, id, routineOwnerScope(req));
     if (!row) return null;
     const latest = getLatestRoutineRun(db, id);
     const contract = routineDbRowToContract(row, latest);
@@ -170,7 +180,7 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
     return contract;
   }
 
-  function validateRoutineInput(body: any, partial: boolean) {
+  function validateRoutineInput(req: Request, body: any, partial: boolean) {
     if (!body || typeof body !== 'object') throw new Error('Request body must be an object');
     if (!partial || body.name !== undefined) {
       if (typeof body.name !== 'string' || !body.name.trim()) throw new Error('name is required');
@@ -182,16 +192,16 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
     if (!partial || body.target !== undefined) {
       validateRoutineTarget(body.target);
       if (body.target.mode === 'reuse') {
-        const project = getProject(db, body.target.projectId);
+        const project = getProject(db, body.target.projectId, routineOwnerScope(req));
         if (!project) throw new Error(`target project ${body.target.projectId} not found`);
       }
     }
     if (!partial || body.context !== undefined) normalizeRoutineContext(body.context);
   }
 
-  app.get('/api/routines', (_req, res) => {
+  app.get('/api/routines', (req, res) => {
     try {
-      const routines = listRoutines(db).map((row) => {
+      const routines = listRoutines(db, routineOwnerScope(req)).map((row) => {
         const latest = getLatestRoutineRun(db, row.id);
         const contract = routineDbRowToContract(row, latest);
         const nextDate = routineService?.nextRunAt(row.id) ?? null;
@@ -207,12 +217,13 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
   app.post('/api/routines', (req, res) => {
     try {
       const body = req.body || {};
-      validateRoutineInput(body, false);
+      validateRoutineInput(req, body, false);
       const id = `routine-${randomUUID()}`;
       const now = Date.now();
       const scheduleCols = scheduleToDbCols(body.schedule);
       insertRoutine(db, {
         id,
+        ...routineOwnerFields(req),
         name: body.name.trim(),
         prompt: body.prompt,
         ...scheduleCols,
@@ -226,7 +237,7 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
         updatedAt: now,
       });
       routineService?.rescheduleOne(id);
-      const routine = routineFromDb(id);
+      const routine = routineFromDb(id, req);
       res.status(201).json({ routine });
     } catch (err: any) {
       res.status(400).json({ error: String(err?.message ?? err) });
@@ -234,17 +245,17 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
   });
 
   app.get('/api/routines/:id', (req, res) => {
-    const routine = routineFromDb(req.params.id);
+    const routine = routineFromDb(req.params.id, req);
     if (!routine) return res.status(404).json({ error: 'routine not found' });
     res.json({ routine });
   });
 
   app.patch('/api/routines/:id', (req, res) => {
     try {
-      const existing = getRoutine(db, req.params.id);
+      const existing = getRoutine(db, req.params.id, routineOwnerScope(req));
       if (!existing) return res.status(404).json({ error: 'routine not found' });
       const body = req.body || {};
-      validateRoutineInput(body, true);
+      validateRoutineInput(req, body, true);
       const patch: any = {};
       if (body.name !== undefined) patch.name = body.name.trim();
       if (body.prompt !== undefined) patch.prompt = body.prompt;
@@ -259,26 +270,28 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
       if (body.enabled !== undefined) patch.enabled = Boolean(body.enabled);
       updateRoutine(db, req.params.id, patch);
       routineService?.rescheduleOne(req.params.id);
-      res.json({ routine: routineFromDb(req.params.id) });
+      res.json({ routine: routineFromDb(req.params.id, req) });
     } catch (err: any) {
       res.status(400).json({ error: String(err?.message ?? err) });
     }
   });
 
   app.delete('/api/routines/:id', (req, res) => {
+    const existing = getRoutine(db, req.params.id, routineOwnerScope(req));
+    if (!existing) return res.status(404).json({ error: 'routine not found' });
     routineService?.unschedule(req.params.id);
-    const removed = dbDeleteRoutine(db, req.params.id);
+    const removed = dbDeleteRoutine(db, req.params.id, routineOwnerScope(req));
     if (!removed) return res.status(404).json({ error: 'routine not found' });
     res.status(204).end();
   });
 
   app.post('/api/routines/:id/run', async (req, res) => {
     try {
-      const existing = getRoutine(db, req.params.id);
+      const existing = getRoutine(db, req.params.id, routineOwnerScope(req));
       if (!existing) return res.status(404).json({ error: 'routine not found' });
       const start = await routineService.runNow(req.params.id);
       res.status(202).json({
-        routine: routineFromDb(req.params.id),
+        routine: routineFromDb(req.params.id, req),
         run: getLatestRoutineRun(db, req.params.id),
         projectId: start.projectId,
         conversationId: start.conversationId,
@@ -290,7 +303,7 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
   });
 
   app.get('/api/routines/:id/runs', (req, res) => {
-    const existing = getRoutine(db, req.params.id);
+    const existing = getRoutine(db, req.params.id, routineOwnerScope(req));
     if (!existing) return res.status(404).json({ error: 'routine not found' });
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
     res.json({ runs: listRoutineRuns(db, req.params.id, limit) });
@@ -298,7 +311,7 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
 
   app.post('/api/routines/:id/runs/:runId/crystallize', async (req, res) => {
     try {
-      const routine = getRoutine(db, req.params.id);
+      const routine = getRoutine(db, req.params.id, routineOwnerScope(req));
       if (!routine) return res.status(404).json({ error: 'routine not found' });
       const run = getRoutineRun(db, req.params.runId);
       if (!run || run.routineId !== req.params.id) {
@@ -324,7 +337,7 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
         '',
         run.summary || 'No run summary was recorded; crystallize from the automation prompt and run metadata.',
       ].join('\n');
-      const result = await ingestAutomationSource(ctx.paths.RUNTIME_DATA_DIR, {
+      const result = await ingestAutomationSource(ctx.paths.runtimeDataDirFor(req), {
         templateId: 'crystallize-run-into-skill',
         sourceKind: 'chat',
         sourceRef: `routine-run:${run.id}`,

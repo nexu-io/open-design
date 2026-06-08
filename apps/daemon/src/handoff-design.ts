@@ -28,6 +28,7 @@ import type {
 } from '@open-design/contracts/api/handoff';
 import fs from 'node:fs';
 import { getProject } from './db.js';
+import type { ProjectOwnerScope } from './db.js';
 import {
   callAnthropicWithRetry,
   DEFAULT_TIMEOUT_MS,
@@ -72,6 +73,7 @@ export interface HandoffOptions {
   now?: () => Date;
   fetchImpl?: typeof globalThis.fetch;
   signal?: AbortSignal;
+  projectOwnerScope?: ProjectOwnerScope;
   /**
    * Override the helper-internal upstream-call timeout. Production
    * callers omit this so the helper bounds at DEFAULT_TIMEOUT_MS; tests
@@ -160,7 +162,7 @@ export async function synthesizeHandoffPrompt(
   projectId: string,
   options: HandoffOptions,
 ): Promise<HandoffResponse> {
-  const project = getProject(db, projectId);
+  const project = getProject(db, projectId, options.projectOwnerScope);
   if (!project) {
     throw new Error(`project not found: ${projectId}`);
   }

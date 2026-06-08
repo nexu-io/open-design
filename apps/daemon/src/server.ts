@@ -354,6 +354,20 @@ import {
   setToken,
 } from './mcp-tokens.js';
 import { agentCliEnvForAgent, readAppConfig, readPluginEnvKnobs, writeAppConfig } from './app-config.js';
+import {
+  createAuthContextMiddleware,
+  type AuthenticatedRequest,
+  type DaemonUser,
+} from './auth-context.js';
+import {
+  artifactsDirFor,
+  artifactsDirForUser,
+  projectsDirFor,
+  projectsDirForUser,
+  runtimeDataDirFor,
+  runtimeDataDirForUser,
+} from './per-user-paths.js';
+import { ownerFieldsForRequest, ownerFieldsForUser, ownerScopeForRequest, ownerScopeForUser } from './project-owner-scope.js';
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
 import { buildOrbitNoLiveArtifactSummary } from './orbit-agent-summary.js';
 import {
@@ -398,6 +412,7 @@ import { validateArtifactManifestInput } from './artifact-manifest.js';
 import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
 import { readCurrentAppVersionInfo } from './app-version.js';
 import {
+  assertNoOwnerlessHostedData,
   appendMessageAgentEvent,
   appendMessageStatusEvent,
   deleteConversation,
@@ -463,6 +478,7 @@ import {
   LiveArtifactStoreValidationError,
   listLiveArtifacts,
   listLiveArtifactRefreshLogEntries,
+  readLiveArtifactOwnerMetadata,
   readLiveArtifactCode,
   recoverStaleLiveArtifactRefreshes,
   updateLiveArtifact,
@@ -491,8 +507,14 @@ import { registerMemoryRoutes } from './routes/memory.js';
 import { registerStaticResourceRoutes } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
 import { installRouteRegistrationGuard } from './route-registration-guard.js';
+import { submitToolResultToRunState } from './run-tool-results.js';
 import { assertServerContextSatisfiesRoutes } from './route-context-contract.js';
-import { configureConnectorCredentialStore, connectorService, ConnectorServiceError, FileConnectorCredentialStore } from './connectors/service.js';
+import {
+  configureConnectorCredentialStore,
+  connectorServiceForDataDir,
+  ConnectorServiceError,
+  FileConnectorCredentialStore,
+} from './connectors/service.js';
 import { composioConnectorProvider } from './connectors/composio.js';
 import { configureComposioConfigStore } from './connectors/composio-config.js';
 import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
@@ -1653,6 +1675,16 @@ const orbitService = new OrbitService(RUNTIME_DATA_DIR);
 const designSystemGenerationJobs = createDesignSystemGenerationJobStore({
   root: USER_DESIGN_SYSTEMS_DIR,
 });
+const designSystemGenerationJobsByRoot = new Map([
+  [USER_DESIGN_SYSTEMS_DIR, designSystemGenerationJobs],
+]);
+function designSystemGenerationJobsForRoot(root) {
+  const existing = designSystemGenerationJobsByRoot.get(root);
+  if (existing) return existing;
+  const store = createDesignSystemGenerationJobStore({ root });
+  designSystemGenerationJobsByRoot.set(root, store);
+  return store;
+}
 let routineService = null;
 
 // In-memory OAuth state cache. Lives for the daemon process's lifetime.
@@ -3119,7 +3151,7 @@ export function createFinalizedMessageTelemetryReporter({
       const start = Date.now();
       const delivery = await report({
         db,
-        dataDir,
+        dataDir: options.dataDir ?? dataDir,
         run,
         persistedRunStatus: saved.runStatus,
         persistedEndedAt: saved.endedAt,
@@ -3953,7 +3985,7 @@ const pluginUpload = multer({
 // startServer() sets this so the upload destination can route attachments
 // into the right project root, including folder-imported projects whose
 // files live under metadata.baseDir.
-let projectMetadataLookup: ((id: string) => Record<string, unknown> | null) | null = null;
+let projectMetadataLookup: ((req: any, id: string) => Record<string, unknown> | null) | null = null;
 
 const projectUpload = multer({
   storage: multer.diskStorage({
@@ -3965,7 +3997,7 @@ const projectUpload = multer({
         // it sees. projectMetadataLookup is populated at startServer() boot
         // and keyed by project id; null fallback gives the standard
         // .od/projects/<id>/ behavior for non-imported projects.
-        const meta = projectMetadataLookup?.(req.params.id) ?? null;
+        const meta = projectMetadataLookup?.(req, req.params.id) ?? null;
         // Optional `dir` form field (sent BEFORE the file parts by the web
         // client) routes uploads into a subfolder, so files dropped/picked
         // while viewing a folder land there instead of the project root. The
@@ -3973,7 +4005,7 @@ const projectUpload = multer({
         // report each file's true project-relative path.
         const subdir = typeof req.body?.dir === 'string' ? req.body.dir : '';
         const { absDir, relDir } = await ensureProjectSubdir(
-          PROJECTS_DIR,
+          projectsDirFor(req),
           req.params.id,
           subdir,
           meta,
@@ -4058,6 +4090,8 @@ function hydrateMediaTask(row) {
   const task = {
     id: row.id,
     projectId: row.projectId,
+    ownerEmail: row.ownerEmail ?? null,
+    ownerDirHash: row.ownerDirHash ?? null,
     status: row.status,
     surface: row.surface,
     model: row.model,
@@ -4083,6 +4117,8 @@ function createMediaTask(db, taskId, projectId, info = {}) {
   const task = {
     id: taskId,
     projectId,
+    ownerEmail: info.ownerEmail ?? null,
+    ownerDirHash: info.ownerDirHash ?? null,
     status: 'queued',
     surface: info.surface,
     model: info.model,
@@ -4097,6 +4133,8 @@ function createMediaTask(db, taskId, projectId, info = {}) {
   insertMediaTask(db, {
     id: taskId,
     projectId,
+    ownerEmail: task.ownerEmail,
+    ownerDirHash: task.ownerDirHash,
     status: task.status,
     surface: task.surface,
     model: task.model,
@@ -4111,6 +4149,8 @@ function createMediaTask(db, taskId, projectId, info = {}) {
 
 function persistMediaTask(db, task) {
   updateMediaTask(db, task.id, {
+    ownerEmail: task.ownerEmail ?? null,
+    ownerDirHash: task.ownerDirHash ?? null,
     status: task.status,
     surface: task.surface,
     model: task.model,
@@ -4171,6 +4211,8 @@ function createPluginShareTask(taskId, projectId, info = {}) {
   const task = {
     id: taskId,
     projectId,
+    ownerEmail: info.ownerEmail ?? null,
+    ownerDirHash: info.ownerDirHash ?? null,
     status: 'queued',
     action: info.action,
     path: info.path,
@@ -4667,29 +4709,150 @@ export async function startServer({
     });
   }
 
+  const authContextMiddleware = createAuthContextMiddleware({
+    baseDataDir: RUNTIME_DATA_DIR,
+    projectRoot: PROJECT_ROOT,
+    publicPaths: ['/health', '/ready', '/version'],
+  });
+  const authContextForApi = (req, res, next) => {
+    let endpoint = req.path;
+    try {
+      endpoint = new URL(req.originalUrl, 'http://open-design.local').pathname;
+    } catch {
+      // Fall back to the mounted path; the regular auth middleware will
+      // handle malformed URLs as unauthenticated requests.
+    }
+    if (CHAT_TOOL_ENDPOINTS.includes(endpoint)) {
+      const validation = toolTokenRegistry.validate(bearerTokenFromRequest(req), { endpoint });
+      if (validation.ok) {
+        const run = design.runs.get(validation.grant.runId);
+        const runUser = run?.user ?? null;
+        if (runUser) {
+          (req as AuthenticatedRequest).user = runUser;
+        } else if (validation.grant.ownerEmail) {
+          try {
+            (req as AuthenticatedRequest).user = authContextMiddleware.resolveUser(
+              validation.grant.ownerEmail,
+            );
+          } catch {
+            // Fall back to the regular identity-header path below.
+          }
+        }
+        if ((req as AuthenticatedRequest).user) {
+          next();
+          return;
+        }
+      }
+    }
+    authContextMiddleware(req, res, next);
+  };
+  app.use('/api', authContextForApi);
+  app.use('/artifacts', authContextMiddleware);
+  const serveUserArtifacts = (req, res, next) => {
+    try {
+      return express.static(artifactsDirFor(req))(req, res, next);
+    } catch (error) {
+      return next(error);
+    }
+  };
+
   // Multi-directory scanning shared by every skill / template surface. The
   // helpers delegate to listSkills(roots) which walks roots in priority
   // order, tags each entry with the SkillSource ('user' for the user
   // root, 'built-in' for the bundled root) the contracts package
   // declares, and lets a user-imported entry shadow a built-in one of
   // the same id without erasing the built-in copy.
+  function userSkillsDirForDataDir(dataDir = RUNTIME_DATA_DIR) {
+    return path.join(dataDir, 'skills');
+  }
+
+  function userSkillsDirFor(req) {
+    return userSkillsDirForDataDir(runtimeDataDirFor(req));
+  }
+
+  function userDesignTemplatesDirForDataDir(dataDir = RUNTIME_DATA_DIR) {
+    return path.join(dataDir, 'design-templates');
+  }
+
+  function userDesignTemplatesDirFor(req) {
+    return userDesignTemplatesDirForDataDir(runtimeDataDirFor(req));
+  }
+
+  function skillRootsForUserRoot(userSkillsRoot = USER_SKILLS_DIR) {
+    return [userSkillsRoot, SKILLS_DIR];
+  }
+
+  function designTemplateRootsForUserRoot(userDesignTemplatesRoot = USER_DESIGN_TEMPLATES_DIR) {
+    return [userDesignTemplatesRoot, DESIGN_TEMPLATES_DIR];
+  }
+
+  function allSkillLikeRootsForUserRoots(
+    userSkillsRoot = USER_SKILLS_DIR,
+    userDesignTemplatesRoot = USER_DESIGN_TEMPLATES_DIR,
+  ) {
+    return [
+      userSkillsRoot,
+      userDesignTemplatesRoot,
+      SKILLS_DIR,
+      DESIGN_TEMPLATES_DIR,
+    ];
+  }
+
+  async function listAllSkillsForUserRoot(userSkillsRoot = USER_SKILLS_DIR) {
+    return listSkills(skillRootsForUserRoot(userSkillsRoot));
+  }
+
   async function listAllSkills() {
-    return listSkills(SKILL_ROOTS);
+    return listAllSkillsForUserRoot();
+  }
+
+  async function listAllSkillsForRequest(req) {
+    return listAllSkillsForUserRoot(userSkillsDirFor(req));
+  }
+
+  async function listAllDesignTemplatesForUserRoot(userDesignTemplatesRoot = USER_DESIGN_TEMPLATES_DIR) {
+    return listSkills(designTemplateRootsForUserRoot(userDesignTemplatesRoot));
   }
 
   async function listAllDesignTemplates() {
-    return listSkills(DESIGN_TEMPLATE_ROOTS);
+    return listAllDesignTemplatesForUserRoot();
+  }
+
+  async function listAllDesignTemplatesForRequest(req) {
+    return listAllDesignTemplatesForUserRoot(userDesignTemplatesDirFor(req));
   }
 
   // Spans both roots so chat run system-prompt composition and the orbit
   // template resolver can resolve a stored project.skillId regardless of
   // which surface created the project after the skills/design-templates
   // split. Keep in sync with SKILL_ROOTS + DESIGN_TEMPLATE_ROOTS above.
-  async function listAllSkillLikeEntries() {
-    return listSkills(ALL_SKILL_LIKE_ROOTS);
+  async function listAllSkillLikeEntriesForUserRoots(
+    userSkillsRoot = USER_SKILLS_DIR,
+    userDesignTemplatesRoot = USER_DESIGN_TEMPLATES_DIR,
+  ) {
+    return listSkills(allSkillLikeRootsForUserRoots(userSkillsRoot, userDesignTemplatesRoot));
   }
 
-  async function listAllDesignSystems() {
+  async function listAllSkillLikeEntries() {
+    return listAllSkillLikeEntriesForUserRoots();
+  }
+
+  async function listAllSkillLikeEntriesForRequest(req) {
+    return listAllSkillLikeEntriesForUserRoots(
+      userSkillsDirFor(req),
+      userDesignTemplatesDirFor(req),
+    );
+  }
+
+  function userDesignSystemsDirForDataDir(dataDir = RUNTIME_DATA_DIR) {
+    return path.join(dataDir, 'design-systems');
+  }
+
+  function userDesignSystemsDirFor(req) {
+    return userDesignSystemsDirForDataDir(runtimeDataDirFor(req));
+  }
+
+  async function listAllDesignSystemsForUserRoot(userDesignSystemsRoot = USER_DESIGN_SYSTEMS_DIR) {
     const builtIn = (await listDesignSystems(DESIGN_SYSTEMS_DIR)).map((s) => ({
       ...s,
       source: 'built-in',
@@ -4698,7 +4861,7 @@ export async function startServer({
     }));
     let installed = [];
     try {
-      installed = await listDesignSystems(USER_DESIGN_SYSTEMS_DIR, {
+      installed = await listDesignSystems(userDesignSystemsRoot, {
         idPrefix: 'user:',
         source: 'user',
         isEditable: true,
@@ -4717,23 +4880,31 @@ export async function startServer({
     ];
   }
 
-  async function readAvailableDesignSystem(id) {
+  async function listAllDesignSystems() {
+    return listAllDesignSystemsForUserRoot();
+  }
+
+  async function listAllDesignSystemsForRequest(req) {
+    return listAllDesignSystemsForUserRoot(userDesignSystemsDirFor(req));
+  }
+
+  async function readAvailableDesignSystem(id, userDesignSystemsRoot = USER_DESIGN_SYSTEMS_DIR) {
     if (typeof id === 'string' && id.startsWith('user:')) {
-      return readDesignSystem(USER_DESIGN_SYSTEMS_DIR, id, { idPrefix: 'user:' });
+      return readDesignSystem(userDesignSystemsRoot, id, { idPrefix: 'user:' });
     }
     return (
       (await readDesignSystem(DESIGN_SYSTEMS_DIR, id))
-      ?? (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, id))
+      ?? (await readDesignSystem(userDesignSystemsRoot, id))
     );
   }
 
-  async function readAvailableDesignSystemPackageInfo(id) {
+  async function readAvailableDesignSystemPackageInfo(id, userDesignSystemsRoot = USER_DESIGN_SYSTEMS_DIR) {
     if (typeof id === 'string' && id.startsWith('user:')) {
-      return readDesignSystemPackageInfo(USER_DESIGN_SYSTEMS_DIR, id, { idPrefix: 'user:' });
+      return readDesignSystemPackageInfo(userDesignSystemsRoot, id, { idPrefix: 'user:' });
     }
     return (
       (await readDesignSystemPackageInfo(DESIGN_SYSTEMS_DIR, id))
-      ?? (await readDesignSystemPackageInfo(USER_DESIGN_SYSTEMS_DIR, id))
+      ?? (await readDesignSystemPackageInfo(userDesignSystemsRoot, id))
     );
   }
 
@@ -4741,7 +4912,7 @@ export async function startServer({
     return summary?.status !== 'draft';
   }
 
-  async function validateProjectDesignSystemId(id) {
+  async function validateProjectDesignSystemId(id, req = null) {
     if (id === undefined || id === null || id === '') return { ok: true, id: null };
     if (typeof id !== 'string') {
       return {
@@ -4750,7 +4921,7 @@ export async function startServer({
         message: 'designSystemId must be a string or null',
       };
     }
-    const systems = await listAllDesignSystems();
+    const systems = req ? await listAllDesignSystemsForRequest(req) : await listAllDesignSystems();
     const summary = systems.find((system) => system.id === id);
     if (!summary) {
       return {
@@ -4769,7 +4940,7 @@ export async function startServer({
     return { ok: true, id };
   }
 
-  async function validateProjectSkillId(id) {
+  async function validateProjectSkillId(id, req = null) {
     if (id === undefined || id === null || id === '') {
       return { ok: true, id: null };
     }
@@ -4780,7 +4951,7 @@ export async function startServer({
         message: 'skillId must be a string or null',
       };
     }
-    const skills = await listAllSkillLikeEntries();
+    const skills = req ? await listAllSkillLikeEntriesForRequest(req) : await listAllSkillLikeEntries();
     const resolved = findSkillById(skills, id);
     if (!resolved) {
       return {
@@ -4792,25 +4963,36 @@ export async function startServer({
     return { ok: true, id: resolved.id };
   }
 
-  function userDesignSystemWorkspaceProjectId(id) {
+  function userDesignSystemWorkspaceProjectId(id, ownerDirHash = null) {
     if (typeof id !== 'string' || !id.startsWith('user:')) return null;
     const dirId = id.slice('user:'.length);
     if (!/^[A-Za-z0-9._-]{1,120}$/.test(dirId)) return null;
-    return `ds-${dirId}`.slice(0, 128);
+    const ownerSegment =
+      typeof ownerDirHash === 'string' && /^[a-f0-9]{12}$/u.test(ownerDirHash)
+        ? `${ownerDirHash}-`
+        : '';
+    return `ds-${ownerSegment}${dirId}`.slice(0, 128);
   }
 
-  function projectBackedDesignSystemProjectId(id, summary) {
+  function projectBackedDesignSystemProjectId(id, summary, ownerDirHash = null) {
     if (typeof summary?.projectId === 'string' && isSafeId(summary.projectId)) {
       return summary.projectId;
     }
-    return userDesignSystemWorkspaceProjectId(id);
+    return userDesignSystemWorkspaceProjectId(id, ownerDirHash);
   }
 
-  async function ensureUserDesignSystemWorkspaceProject(db, id) {
-    const systems = await listAllDesignSystems();
+  async function ensureUserDesignSystemWorkspaceProject(
+    db,
+    id,
+    projectsRoot,
+    userDesignSystemsRoot = USER_DESIGN_SYSTEMS_DIR,
+    ownerFields = { ownerEmail: null, ownerDirHash: null },
+    ownerScope = undefined,
+  ) {
+    const systems = await listAllDesignSystemsForUserRoot(userDesignSystemsRoot);
     const summary = systems.find((s) => s.id === id && s.source === 'user');
     if (!summary) return null;
-    const projectId = projectBackedDesignSystemProjectId(id, summary);
+    const projectId = projectBackedDesignSystemProjectId(id, summary, ownerFields.ownerDirHash);
     if (!projectId) return null;
 
     const now = Date.now();
@@ -4820,16 +5002,17 @@ export async function startServer({
       entryFile: 'DESIGN.md',
       sourceFileName: id,
     };
-    const existing = getProject(db, projectId);
+    const existing = getProject(db, projectId, ownerScope);
     const project = existing
       ? updateProject(db, projectId, {
           name: summary.title,
           designSystemId: id,
           metadata: { ...existing.metadata, ...metadata },
           updatedAt: now,
-        })
+        }, ownerScope)
       : insertProject(db, {
           id: projectId,
+          ...ownerFields,
           name: summary.title,
           skillId: null,
           designSystemId: id,
@@ -4840,22 +5023,22 @@ export async function startServer({
         });
     if (!project) return null;
 
-    const files = await listUserDesignSystemFiles(USER_DESIGN_SYSTEMS_DIR, id);
+    const files = await listUserDesignSystemFiles(userDesignSystemsRoot, id);
     if (!files) return null;
     for (const file of files) {
       if (file.kind === 'folder') continue;
-      const detail = await readUserDesignSystemFile(USER_DESIGN_SYSTEMS_DIR, id, file.path);
+      const detail = await readUserDesignSystemFile(userDesignSystemsRoot, id, file.path);
       if (!detail) continue;
       if (existing) {
         try {
-          const existingFile = await readProjectFile(PROJECTS_DIR, projectId, detail.path, project.metadata);
+          const existingFile = await readProjectFile(projectsRoot, projectId, detail.path, project.metadata);
           if (!isReplaceableDesignSystemWorkspaceFile(detail.path, existingFile)) continue;
         } catch (err) {
           if (!err || err.code !== 'ENOENT') throw err;
         }
       }
       await writeProjectFile(
-        PROJECTS_DIR,
+        projectsRoot,
         projectId,
         detail.path,
         Buffer.from(detail.content, 'utf8'),
@@ -4863,9 +5046,9 @@ export async function startServer({
         project.metadata,
       );
     }
-    await removeLegacyDesignSystemWorkspaceArtifacts(project);
-    await linkUserDesignSystemProject(USER_DESIGN_SYSTEMS_DIR, id, project.id);
-    const projectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: project.metadata });
+    await removeLegacyDesignSystemWorkspaceArtifacts(project, projectsRoot);
+    await linkUserDesignSystemProject(userDesignSystemsRoot, id, project.id);
+    const projectFiles = await listFiles(projectsRoot, projectId, { metadata: project.metadata });
     return { project, files: projectFiles };
   }
 
@@ -4886,9 +5069,9 @@ export async function startServer({
     return /preview\/(colors-node-types|colors-ui-palette|typography-scale|spacing-system|logo-variants)\.html|ui_kits\/generated_interface(?:\/index\.html|\/)?/u.test(text);
   }
 
-  async function removeLegacyDesignSystemWorkspaceArtifacts(project) {
+  async function removeLegacyDesignSystemWorkspaceArtifacts(project, projectsRoot) {
     if (project?.metadata?.importedFrom !== 'design-system') return;
-    const dir = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
+    const dir = resolveProjectDir(projectsRoot, project.id, project.metadata);
     for (const artifact of LEGACY_DESIGN_SYSTEM_ARTIFACTS) {
       const replacementReady = await Promise.all(
         artifact.replacementPaths.map(async (replacementPath) => {
@@ -4909,13 +5092,13 @@ export async function startServer({
     }
   }
 
-  async function readDesignSystemWorkspaceTextFile(db, summary, filePath) {
+  async function readDesignSystemWorkspaceTextFile(db, summary, filePath, projectsRoot, projectOwnerScope = undefined) {
     if (!summary?.projectId || !isSafeId(summary.projectId)) return null;
-    const project = getProject(db, summary.projectId);
+    const project = getProject(db, summary.projectId, projectOwnerScope);
     if (!project) return null;
     try {
       const file = await readProjectFile(
-        PROJECTS_DIR,
+        projectsRoot,
         project.id,
         filePath,
         project.metadata,
@@ -4978,21 +5161,44 @@ export async function startServer({
     next();
   });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
+  if (authContextMiddleware.multitenant) {
+    assertNoOwnerlessHostedData(db);
+  }
   // Wire the upload-destination bridge to this db so multer can route
   // file uploads into baseDir-rooted projects' actual folders.
-  projectMetadataLookup = (id) => {
-    try { return getProject(db, id)?.metadata ?? null; } catch { return null; }
+  projectMetadataLookup = (req, id) => {
+    try { return getProject(db, id, ownerScopeForRequest(req))?.metadata ?? null; } catch { return null; }
   };
   configureConnectorCredentialStore(new FileConnectorCredentialStore(RUNTIME_DATA_DIR));
   configureComposioConfigStore(RUNTIME_DATA_DIR);
   composioConnectorProvider.configureCatalogCache(RUNTIME_DATA_DIR);
   composioConnectorProvider.startCatalogRefreshLoop();
 
+  const routineForScheduler = (row) => ({
+    ...routineDbRowToContract(row, null),
+    ownerEmail: row.ownerEmail ?? null,
+    ownerDirHash: row.ownerDirHash ?? null,
+  });
+  const routineHasRunnableOwner = (row) =>
+    typeof row.ownerEmail === 'string' && row.ownerEmail.length > 0
+    || !authContextMiddleware.multitenant;
+  const ownerUserForRoutine = (routine) => {
+    if (typeof routine.ownerEmail === 'string' && routine.ownerEmail.length > 0) {
+      return authContextMiddleware.resolveUser(routine.ownerEmail);
+    }
+    if (!authContextMiddleware.multitenant) {
+      return authContextMiddleware.devUser;
+    }
+    throw new Error(`Routine ${routine.id} has no owner; cannot resolve runtime data dir`);
+  };
+
   // RoutineService persistence is a thin adapter over the SQLite helpers.
   // Routines are stored as DB rows; the service holds in-memory timers and
   // delegates "list me everything" / "record a run" back to SQLite.
   routineService = new RoutineService({
-    list: () => listRoutines(db).map((row) => routineDbRowToContract(row, null)),
+    list: () => listRoutines(db)
+      .filter(routineHasRunnableOwner)
+      .map(routineForScheduler),
     insertRun: (run, options) => {
       const row = {
         id: run.id,
@@ -5487,12 +5693,45 @@ export async function startServer({
     }
   });
 
+  const pathDeps = {
+    PROJECT_ROOT,
+    PROJECTS_DIR,
+    ARTIFACTS_DIR,
+    artifactsDirFor,
+    artifactsDirForUser,
+    projectsDirFor,
+    projectsDirForUser,
+    runtimeDataDirFor,
+    runtimeDataDirForUser,
+    userDesignTemplatesDirFor,
+    userDesignSystemsDirFor,
+    userSkillsDirFor,
+    RUNTIME_DATA_DIR,
+    RUNTIME_DATA_DIR_CANONICAL,
+    DESIGN_SYSTEMS_DIR,
+    USER_DESIGN_SYSTEMS_DIR,
+    DESIGN_TEMPLATES_DIR,
+    USER_DESIGN_TEMPLATES_DIR,
+    SKILLS_DIR,
+    USER_SKILLS_DIR,
+    PROMPT_TEMPLATES_DIR,
+    BUNDLED_PETS_DIR,
+    OD_BIN,
+  };
+
   registerConnectorRoutes(app, {
     sendApiError,
+    serviceForRequest: (req) => connectorServiceForDataDir(runtimeDataDirFor(req)),
+    serviceForDataDir: connectorServiceForDataDir,
+    dataDirForRequest: runtimeDataDirFor,
     authorizeToolRequest,
-    projectsRoot: PROJECTS_DIR,
+    projectsRoot: projectsDirFor,
     requireLocalDaemonRequest,
-    composio: composioConnectorProvider,
+    composio: {
+      clearDiscoveryCache: () => composioConnectorProvider.clearDiscoveryCache(),
+      pendingConnectionDataDir: (connectorId, state) =>
+        composioConnectorProvider.getPendingConnectionDataDir(connectorId, state),
+    },
   });
 
   // Gate the diagnostics export behind requireLocalDaemonRequest so it stays
@@ -5516,14 +5755,14 @@ export async function startServer({
 
   registerMemoryRoutes(app, {
     http: { createSseResponse, requireLocalDaemonRequest },
-    paths: { RUNTIME_DATA_DIR, PROJECT_ROOT, PROJECTS_DIR },
+    paths: pathDeps,
     appConfig: { readAppConfig },
   });
 
   app.get('/api/automation-source-packets', async (req, res) => {
     try {
       const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
-      const packets = await listAutomationSourcePackets(RUNTIME_DATA_DIR, { limit });
+      const packets = await listAutomationSourcePackets(runtimeDataDirFor(req), { limit });
       res.json({ packets });
     } catch (err) {
       res.status(500).json({ error: String((err && err.message) || err) });
@@ -5533,7 +5772,7 @@ export async function startServer({
   app.post('/api/automation-ingestions', async (req, res) => {
     try {
       const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const result = await ingestAutomationSource(RUNTIME_DATA_DIR, body);
+      const result = await ingestAutomationSource(runtimeDataDirFor(req), body);
       res.json(result);
     } catch (err) {
       res.status(400).json({ error: String((err && err.message) || err) });
@@ -5542,7 +5781,7 @@ export async function startServer({
 
   app.get('/api/automation-source-packets/:id', async (req, res) => {
     try {
-      const packet = await getAutomationSourcePacket(RUNTIME_DATA_DIR, req.params.id);
+      const packet = await getAutomationSourcePacket(runtimeDataDirFor(req), req.params.id);
       if (!packet) return res.status(404).json({ error: 'automation source packet not found' });
       res.json({ packet });
     } catch (err) {
@@ -5553,7 +5792,7 @@ export async function startServer({
   app.get('/api/automation-proposals', async (req, res) => {
     try {
       const rawStatus = typeof req.query.status === 'string' ? req.query.status : 'all';
-      const proposals = await listAutomationProposals(RUNTIME_DATA_DIR, {
+      const proposals = await listAutomationProposals(runtimeDataDirFor(req), {
         status: rawStatus,
       });
       res.json({ proposals });
@@ -5565,7 +5804,7 @@ export async function startServer({
   app.post('/api/automation-proposals', async (req, res) => {
     try {
       const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const proposal = await createAutomationProposal(RUNTIME_DATA_DIR, body);
+      const proposal = await createAutomationProposal(runtimeDataDirFor(req), body);
       res.json({ proposal });
     } catch (err) {
       res.status(400).json({ error: String((err && err.message) || err) });
@@ -5574,7 +5813,7 @@ export async function startServer({
 
   app.get('/api/automation-proposals/:id', async (req, res) => {
     try {
-      const proposal = await getAutomationProposal(RUNTIME_DATA_DIR, req.params.id);
+      const proposal = await getAutomationProposal(runtimeDataDirFor(req), req.params.id);
       if (!proposal) return res.status(404).json({ error: 'automation proposal not found' });
       res.json({ proposal });
     } catch (err) {
@@ -5584,7 +5823,7 @@ export async function startServer({
 
   app.post('/api/automation-proposals/:id/apply', async (req, res) => {
     try {
-      const result = await applyAutomationProposal(RUNTIME_DATA_DIR, req.params.id);
+      const result = await applyAutomationProposal(runtimeDataDirFor(req), req.params.id);
       res.json(result);
     } catch (err) {
       const message = String((err && err.message) || err);
@@ -5597,7 +5836,7 @@ export async function startServer({
     try {
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       const proposal = await rejectAutomationProposal(
-        RUNTIME_DATA_DIR,
+        runtimeDataDirFor(req),
         req.params.id,
         typeof body.reason === 'string' ? body.reason : undefined,
       );
@@ -5653,7 +5892,7 @@ export async function startServer({
   // - When the build itself has no POSTHOG_KEY (forks, PR builds, OSS
   //   contributors), `key` and `host` are null and even the error
   //   pipeline becomes a no-op.
-  app.get('/api/analytics/config', async (_req, res) => {
+  app.get('/api/analytics/config', async (req, res) => {
     const baseline = readPublicConfigResponse();
     if (!baseline.enabled) {
       // No build-time key → nothing to report on, consent or not.
@@ -5661,7 +5900,7 @@ export async function startServer({
       return;
     }
     try {
-      const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
+      const appCfg = await readAppConfig(runtimeDataDirFor(req));
       const consentGranted = appCfg.telemetry?.metrics === true;
       // Echo the installationId so the web client uses the same anonymous
       // id PostHog already saw on prior runs (and that Langfuse uses too).
@@ -5869,9 +6108,10 @@ export async function startServer({
     hasCustomReason: boolean;
     customReason: string;
     scoreMetadata?: Record<string, unknown>;
+    dataDir?: string;
   }) =>
     reportRunFeedbackFromDaemon({
-      dataDir: RUNTIME_DATA_DIR,
+      dataDir: req.dataDir ?? RUNTIME_DATA_DIR,
       ...req,
     });
 
@@ -5900,22 +6140,6 @@ export async function startServer({
     requireLocalDaemonRequest,
     isLocalSameOrigin,
     resolvedPortRef,
-  };
-  const pathDeps = {
-    PROJECT_ROOT,
-    PROJECTS_DIR,
-    ARTIFACTS_DIR,
-    RUNTIME_DATA_DIR,
-    RUNTIME_DATA_DIR_CANONICAL,
-    DESIGN_SYSTEMS_DIR,
-    USER_DESIGN_SYSTEMS_DIR,
-    DESIGN_TEMPLATES_DIR,
-    USER_DESIGN_TEMPLATES_DIR,
-    SKILLS_DIR,
-    USER_SKILLS_DIR,
-    PROMPT_TEMPLATES_DIR,
-    BUNDLED_PETS_DIR,
-    OD_BIN,
   };
   const nodeDeps = { fs, path };
   const idDeps = { randomId, randomUUID };
@@ -6030,7 +6254,22 @@ export async function startServer({
     listElevenLabsVoiceOptions,
   };
   const appConfigDeps = { readAppConfig, writeAppConfig };
-  const orbitDeps = { orbitService };
+  const orbitServicesByDataDir = new Map<string, OrbitService>([
+    [RUNTIME_DATA_DIR, orbitService],
+  ]);
+  const orbitServiceForUser = (user: DaemonUser | null | undefined): OrbitService => {
+    if (!user) return orbitService;
+    const dataDir = runtimeDataDirForUser(user);
+    const existing = orbitServicesByDataDir.get(dataDir);
+    if (existing) return existing;
+    const service = new OrbitService(dataDir);
+    registerOrbitServiceHandlers(service, user);
+    orbitServicesByDataDir.set(dataDir, service);
+    return service;
+  };
+  const orbitServiceForRequest = (req: AuthenticatedRequest): OrbitService =>
+    orbitServiceForUser(req.user);
+  const orbitDeps = { orbitService, orbitServiceForRequest };
   const nativeDialogDeps = { openNativeFolderDialog };
   const researchDeps = { searchResearch, ResearchError };
   const liveArtifactDeps = {
@@ -6046,6 +6285,7 @@ export async function startServer({
     setLiveArtifactPreviewHeaders,
     getLiveArtifact,
     listLiveArtifactRefreshLogEntries,
+    readLiveArtifactOwnerMetadata,
     deleteLiveArtifact,
   };
   const authDeps = {
@@ -6159,20 +6399,25 @@ export async function startServer({
     http: httpDeps,
     paths: pathDeps,
     resources: {
-      listAllSkills,
-      listAllDesignTemplates,
-      listAllSkillLikeEntries,
-      listAllDesignSystems,
+      listAllSkills: (req = null) =>
+        req ? listAllSkillsForRequest(req) : listAllSkills(),
+      listAllDesignTemplates: (req = null) =>
+        req ? listAllDesignTemplatesForRequest(req) : listAllDesignTemplates(),
+      listAllSkillLikeEntries: (req = null) =>
+        req ? listAllSkillLikeEntriesForRequest(req) : listAllSkillLikeEntries(),
+      listAllDesignSystems: (req = null) =>
+        req ? listAllDesignSystemsForRequest(req) : listAllDesignSystems(),
       mimeFor,
     },
     tokenContractRebuild: {
-      maybeStartForImportedDesignSystem: async (designSystemId) => {
+      maybeStartForImportedDesignSystem: async (designSystemId, req = null) => {
+        const userDesignSystemsRoot = req ? userDesignSystemsDirFor(req) : USER_DESIGN_SYSTEMS_DIR;
         const preparation = await prepareDesignTokenContractRebuild(
-          USER_DESIGN_SYSTEMS_DIR,
+          userDesignSystemsRoot,
           designSystemId,
         );
         if (!preparation.revision) return { decision: preparation.decision };
-        const job = designSystemGenerationJobs.rebuildTokenContract({
+        const job = designSystemGenerationJobsForRoot(userDesignSystemsRoot).rebuildTokenContract({
           designSystemId,
           decision: preparation.decision,
           ...preparation.revision,
@@ -6200,9 +6445,9 @@ export async function startServer({
     auth: authDeps,
     http: httpDeps,
     paths: pathDeps,
-    projects: { getProject: (id: string) => getProject(db, id) },
+    projects: { getProject: (req, id: string) => getProject(db, id, ownerScopeForRequest(req)) },
   });
-  app.use('/artifacts', express.static(ARTIFACTS_DIR));
+  app.use('/artifacts', serveUserArtifacts);
   app.use(
     PLUGIN_PREVIEWS_ROUTE,
     express.static(PLUGIN_PREVIEWS_DIR, { maxAge: '1d', immutable: false }),
@@ -6232,7 +6477,12 @@ export async function startServer({
     validation: validationDeps,
     handoff: handoffDeps,
   });
-  registerDeploymentCheckRoutes(app, { db, http: httpDeps, deploy: deployDeps });
+  registerDeploymentCheckRoutes(app, {
+    db,
+    http: httpDeps,
+    deploy: deployDeps,
+    projectStore: projectStoreDeps,
+  });
   app.use('/frames', express.static(FRAMES_DIR));
   registerProjectExportRoutes(app, {
     db,
@@ -6276,7 +6526,7 @@ export async function startServer({
   app.delete('/api/projects/:id', async (req, res) => {
     try {
       dbDeleteProject(db, req.params.id);
-      await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
+      await removeProjectDir(projectsDirFor(req), req.params.id).catch(() => {});
       /** @type {import('@open-design/contracts').OkResponse} */
       const body = { ok: true };
       res.json(body);
@@ -6309,7 +6559,7 @@ export async function startServer({
       }
       sinks.add(projectEventSink);
       const watchProject = getProject(db, req.params.id);
-      sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt) => {
+      sub = subscribeFileEvents(projectsDirFor(req), req.params.id, (evt) => {
         sse.send('file-changed', evt);
       }, { metadata: watchProject?.metadata });
       sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => {});
@@ -6443,6 +6693,7 @@ export async function startServer({
     updateProject(db, req.params.id, {});
     reportFinalizedMessage(saved, m, {
       analyticsContext: readAnalyticsContext(req),
+      dataDir: runtimeDataDirFor(req),
       projectId: req.params.id,
       conversationId: req.params.cid,
     });
@@ -6556,84 +6807,12 @@ export async function startServer({
     res.json(result);
   });
 
-  // ---- Templates ----------------------------------------------------------
-  // User-saved snapshots of a project's HTML files. Surfaced in the
-  // "From template" tab of the new-project panel so a user can spin up
-  // a fresh project pre-seeded with another project's design as a
-  // starting point. Created via the project's Share menu (snapshots
-  // every .html file in the project folder at the moment of save).
-
-  app.get('/api/templates', (_req, res) => {
-    res.json({ templates: listTemplates(db) });
-  });
-
-  app.get('/api/templates/:id', (req, res) => {
-    const t = getTemplate(db, req.params.id);
-    if (!t) return res.status(404).json({ error: 'not found' });
-    res.json({ template: t });
-  });
-
-  app.post('/api/templates', async (req, res) => {
-    try {
-      const { name, description, sourceProjectId } = req.body || {};
-      if (typeof name !== 'string' || !name.trim()) {
-        return res.status(400).json({ error: 'name required' });
-      }
-      if (typeof sourceProjectId !== 'string') {
-        return res.status(400).json({ error: 'sourceProjectId required' });
-      }
-      const sourceProject = getProject(db, sourceProjectId);
-      if (!sourceProject) {
-        return res.status(404).json({ error: 'source project not found' });
-      }
-      // Snapshot every HTML / sketch / text file in the source project.
-      // We deliberately skip binary uploads — templates are about the
-      // generated design, not the user's reference imagery.
-      const files = await listFiles(PROJECTS_DIR, sourceProjectId, {
-        metadata: sourceProject.metadata,
-      });
-      const snapshot = [];
-      for (const f of files) {
-        if (f.kind !== 'html' && f.kind !== 'text' && f.kind !== 'code')
-          continue;
-        const entry = await readProjectFile(
-          PROJECTS_DIR,
-          sourceProjectId,
-          f.name,
-          sourceProject.metadata,
-        );
-        if (entry && Buffer.isBuffer(entry.buffer)) {
-          snapshot.push({
-            name: f.name,
-            content: entry.buffer.toString('utf8'),
-          });
-        }
-      }
-      const t = insertTemplate(db, {
-        id: randomId(),
-        name: name.trim(),
-        description: typeof description === 'string' ? description : null,
-        sourceProjectId,
-        files: snapshot,
-        createdAt: Date.now(),
-      });
-      res.json({ template: t });
-    } catch (err) {
-      res.status(400).json({ error: String(err) });
-    }
-  });
-
-  app.delete('/api/templates/:id', (req, res) => {
-    deleteTemplate(db, req.params.id);
-    res.json({ ok: true });
-  });
-
   // AMR (vela) login integration — see `apps/daemon/src/integrations/vela.ts`.
   // The vela CLI owns the device-authorization UX (URL + code + browser open);
   // these routes only surface enough state for Open Design's Settings card to
   // show login status and trigger a login from a button.
-  async function resolveAmrModelProbe() {
-    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+  async function resolveAmrModelProbe(req) {
+    const appConfig = await readAppConfig(runtimeDataDirFor(req));
     const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
     const def = getAgentDef('amr');
     if (!def) throw new Error('AMR runtime definition is missing');
@@ -6666,9 +6845,9 @@ export async function startServer({
     return { launchPath, env, configuredEnv, cacheKey };
   }
 
-  app.get('/api/amr/models', async (_req, res) => {
+  app.get('/api/amr/models', async (req, res) => {
     try {
-      const probe = await resolveAmrModelProbe();
+      const probe = await resolveAmrModelProbe(req);
       const response = await amrModelLoadingCache.get(probe.cacheKey, {
         fetchPreset: () => fetchVelaPresetModels(probe.launchPath, probe.env),
         fetchRemote: () => fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
@@ -6679,13 +6858,13 @@ export async function startServer({
     }
   });
 
-  app.get('/api/integrations/vela/status', async (_req, res) => {
+  app.get('/api/integrations/vela/status', async (req, res) => {
     try {
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      const appConfig = await readAppConfig(runtimeDataDirFor(req));
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
       const status = readVelaLoginStatus(mergeVelaEnv(process.env, configuredEnv));
       if (status.loggedIn) {
-        void resolveAmrModelProbe()
+        void resolveAmrModelProbe(req)
           .then((probe) => {
             amrModelLoadingCache.warm(probe.cacheKey, () =>
               fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
@@ -6701,7 +6880,7 @@ export async function startServer({
 
   app.post('/api/integrations/vela/login', async (req, res) => {
     try {
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      const appConfig = await readAppConfig(runtimeDataDirFor(req));
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
       const attribution = parseVelaLoginAttribution(req.body);
       const spawned = await spawnVelaLogin({ configuredEnv, attribution });
@@ -6741,7 +6920,7 @@ export async function startServer({
     // Defense in depth: re-read telemetry.metrics from app-config so a stale
     // header leak after opt-out still cannot ship behavior to AMR, matching
     // createAnalyticsService.capture (apps/daemon/src/analytics.ts).
-    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+    const appConfig = await readAppConfig(runtimeDataDirFor(req));
     if (appConfig.telemetry?.metrics !== true) {
       res.status(202).json({ mirrored: false });
       return;
@@ -6753,9 +6932,10 @@ export async function startServer({
     res.status(202).json(result);
   });
 
-  app.post('/api/integrations/vela/logout', async (_req, res) => {
+  app.post('/api/integrations/vela/logout', async (req, res) => {
     try {
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      const requestDataDir = runtimeDataDirFor(req);
+      const appConfig = await readAppConfig(requestDataDir);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
       forgetVelaLogin(mergeVelaEnv(process.env, configuredEnv));
       delete process.env.VELA_RUNTIME_KEY;
@@ -6769,7 +6949,7 @@ export async function startServer({
       } else {
         delete agentCliEnv.amr;
       }
-      await writeAppConfig(RUNTIME_DATA_DIR, { agentCliEnv });
+      await writeAppConfig(requestDataDir, { agentCliEnv });
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -6879,9 +7059,9 @@ export async function startServer({
     }
   });
 
-  app.get('/api/design-systems', async (_req, res) => {
+  app.get('/api/design-systems', async (req, res) => {
     try {
-      const systems = await listAllDesignSystems();
+      const systems = await listAllDesignSystemsForRequest(req);
       res.json({
         designSystems: systems.map(({ body, ...rest }) => rest),
       });
@@ -6892,7 +7072,7 @@ export async function startServer({
 
   app.post('/api/design-systems', async (req, res) => {
     try {
-      const created = await createUserDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.body || {});
+      const created = await createUserDesignSystem(userDesignSystemsDirFor(req), req.body || {});
       res.status(201).json({ ...created, designSystem: created });
     } catch (err) {
       res.status(400).json({ error: String(err) });
@@ -6901,7 +7081,7 @@ export async function startServer({
 
   app.post('/api/design-systems/generation-jobs', async (req, res) => {
     try {
-      const job = designSystemGenerationJobs.start(req.body || {});
+      const job = designSystemGenerationJobsForRoot(userDesignSystemsDirFor(req)).start(req.body || {});
       res.status(202).json({ job });
     } catch (err) {
       res.status(400).json({ error: String(err) });
@@ -6910,7 +7090,7 @@ export async function startServer({
 
   app.get('/api/design-systems/generation-jobs/:jobId', async (req, res) => {
     try {
-      const job = designSystemGenerationJobs.get(req.params.jobId);
+      const job = designSystemGenerationJobsForRoot(userDesignSystemsDirFor(req)).get(req.params.jobId);
       if (!job) {
         return res.status(404).json({ error: 'design system generation job not found' });
       }
@@ -6924,7 +7104,7 @@ export async function startServer({
     try {
       const feedback = typeof req.body?.feedback === 'string' ? req.body.feedback : '';
       if (!feedback.trim()) return res.status(400).json({ error: 'feedback is required' });
-      const job = designSystemGenerationJobs.revise({
+      const job = designSystemGenerationJobsForRoot(userDesignSystemsDirFor(req)).revise({
         designSystemId: req.params.id,
         feedback,
         sectionTitle: typeof req.body?.sectionTitle === 'string' ? req.body.sectionTitle : undefined,
@@ -6939,7 +7119,7 @@ export async function startServer({
   app.post('/api/design-systems/:id/token-contract/rebuild-jobs', async (req, res) => {
     try {
       const preparation = await prepareDesignTokenContractRebuild(
-        USER_DESIGN_SYSTEMS_DIR,
+        userDesignSystemsDirFor(req),
         req.params.id,
         { force: req.body?.force === true },
       );
@@ -6949,7 +7129,7 @@ export async function startServer({
       if (!preparation.revision) {
         return res.status(200).json({ decision: preparation.decision });
       }
-      const job = designSystemGenerationJobs.rebuildTokenContract({
+      const job = designSystemGenerationJobsForRoot(userDesignSystemsDirFor(req)).rebuildTokenContract({
         designSystemId: req.params.id,
         decision: preparation.decision,
         ...preparation.revision,
@@ -6963,7 +7143,7 @@ export async function startServer({
   app.get('/api/design-systems/:id/revisions', async (req, res) => {
     try {
       const revisions = await listUserDesignSystemRevisions(
-        USER_DESIGN_SYSTEMS_DIR,
+        userDesignSystemsDirFor(req),
         req.params.id,
       );
       if (!revisions) {
@@ -6982,7 +7162,7 @@ export async function startServer({
         return res.status(400).json({ error: 'status must be accepted or rejected' });
       }
       const revision = await updateUserDesignSystemRevisionStatus(
-        USER_DESIGN_SYSTEMS_DIR,
+        userDesignSystemsDirFor(req),
         req.params.id,
         req.params.revisionId,
         status,
@@ -6998,13 +7178,20 @@ export async function startServer({
 
   app.get('/api/design-systems/:id', async (req, res) => {
     try {
-      const systems = await listAllDesignSystems();
+      const userDesignSystemsRoot = userDesignSystemsDirFor(req);
+      const systems = await listAllDesignSystemsForRequest(req);
       const summary = systems.find((s) => s.id === req.params.id);
-      const projectBody = await readDesignSystemWorkspaceTextFile(db, summary, 'DESIGN.md');
-      const body = projectBody ?? await readAvailableDesignSystem(req.params.id);
+      const projectBody = await readDesignSystemWorkspaceTextFile(
+        db,
+        summary,
+        'DESIGN.md',
+        projectsDirFor(req),
+        ownerScopeForRequest(req),
+      );
+      const body = projectBody ?? await readAvailableDesignSystem(req.params.id, userDesignSystemsRoot);
       if (body === null || !summary)
         return res.status(404).json({ error: 'design system not found' });
-      const packageInfo = await readAvailableDesignSystemPackageInfo(req.params.id);
+      const packageInfo = await readAvailableDesignSystemPackageInfo(req.params.id, userDesignSystemsRoot);
       const detail = { ...summary, body, ...(packageInfo ? { packageInfo } : {}) };
       res.json({ ...detail, designSystem: detail });
     } catch (err) {
@@ -7014,7 +7201,14 @@ export async function startServer({
 
   app.post('/api/design-systems/:id/workspace', async (req, res) => {
     try {
-      const workspace = await ensureUserDesignSystemWorkspaceProject(db, req.params.id);
+      const workspace = await ensureUserDesignSystemWorkspaceProject(
+        db,
+        req.params.id,
+        projectsDirFor(req),
+        userDesignSystemsDirFor(req),
+        ownerFieldsForRequest(req),
+        ownerScopeForRequest(req),
+      );
       if (!workspace) {
         return res.status(404).json({ error: 'editable design system not found' });
       }
@@ -7026,7 +7220,7 @@ export async function startServer({
 
   app.get('/api/design-systems/:id/files', async (req, res) => {
     try {
-      const files = await listUserDesignSystemFiles(USER_DESIGN_SYSTEMS_DIR, req.params.id);
+      const files = await listUserDesignSystemFiles(userDesignSystemsDirFor(req), req.params.id);
       if (!files) {
         return res.status(404).json({ error: 'editable design system not found' });
       }
@@ -7040,7 +7234,7 @@ export async function startServer({
     try {
       const requestedPath = typeof req.query.path === 'string' ? req.query.path : '';
       const file = await readUserDesignSystemFile(
-        USER_DESIGN_SYSTEMS_DIR,
+        userDesignSystemsDirFor(req),
         req.params.id,
         requestedPath,
       );
@@ -7054,7 +7248,7 @@ export async function startServer({
   app.patch('/api/design-systems/:id', async (req, res) => {
     try {
       const updated = await updateUserDesignSystem(
-        USER_DESIGN_SYSTEMS_DIR,
+        userDesignSystemsDirFor(req),
         req.params.id,
         req.body || {},
       );
@@ -7069,7 +7263,7 @@ export async function startServer({
 
   app.delete('/api/design-systems/:id', async (req, res) => {
     try {
-      const ok = await deleteUserDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.params.id);
+      const ok = await deleteUserDesignSystem(userDesignSystemsDirFor(req), req.params.id);
       if (!ok) {
         return res.status(404).json({ error: 'editable design system not found' });
       }
@@ -7448,10 +7642,10 @@ export async function startServer({
   // plugin context against the live registry. Skills + design systems are
   // walked from disk; craft is empty in v1; atoms come from the
   // first-party catalog. Project-scoped overrides arrive in Phase 4.
-  async function loadPluginRegistryView() {
+  async function loadPluginRegistryView(dataDir = RUNTIME_DATA_DIR) {
     const [skills, designSystems] = await Promise.all([
-      listAllSkills(),
-      listAllDesignSystems(),
+      listAllSkillsForUserRoot(userSkillsDirForDataDir(dataDir)),
+      listAllDesignSystemsForUserRoot(userDesignSystemsDirForDataDir(dataDir)),
     ]);
     // Spec §23.3.3: surface the bundled scenario plugins so apply()
     // can fall back to the matching scenario's pipeline when the
@@ -7526,8 +7720,10 @@ export async function startServer({
         : [];
       const locale = typeof body.locale === 'string' ? body.locale : undefined;
 
-      const registry = await loadPluginRegistryView();
-      const connectorProbe = buildConnectorProbe(connectorService);
+      const registry = await loadPluginRegistryView(runtimeDataDirFor(req));
+      const connectorProbe = buildConnectorProbe(
+        connectorServiceForDataDir(runtimeDataDirFor(req)),
+      );
       const computed = applyPlugin({ plugin, inputs, registry, locale, connectorProbe });
       // Plan §3.B2 — apply-time grants are merged into the snapshot's
       // capabilitiesGranted so the §9 capability gate sees them, but
@@ -7587,7 +7783,7 @@ export async function startServer({
       const stagedPath = `plugin-source/${sourceSlug}`;
       const prompt = renderPluginSharePrompt({ action, sourcePlugin, stagedPath });
       const metadata = { kind: 'prototype' };
-      const projectRoot = await ensureProject(PROJECTS_DIR, id, metadata);
+      const projectRoot = await ensureProject(projectsDirFor(req), id, metadata);
       await copyPluginFolderForProjectContext(
         sourcePlugin.fsPath,
         path.join(projectRoot, 'plugin-source', sourceSlug),
@@ -7595,6 +7791,7 @@ export async function startServer({
 
       insertProject(db, {
         id,
+        ...ownerFieldsForRequest(req),
         name: `${PLUGIN_SHARE_ACTION_LABELS[action]}: ${sourcePlugin.title || sourcePlugin.id}`,
         skillId: null,
         designSystemId: null,
@@ -7611,8 +7808,10 @@ export async function startServer({
         updatedAt: now,
       });
 
-      const registry = await loadPluginRegistryView();
-      const connectorProbe = buildConnectorProbe(connectorService);
+      const registry = await loadPluginRegistryView(runtimeDataDirFor(req));
+      const connectorProbe = buildConnectorProbe(
+        connectorServiceForDataDir(runtimeDataDirFor(req)),
+      );
       const resolved = resolvePluginSnapshot({
         db,
         body: {
@@ -7636,7 +7835,7 @@ export async function startServer({
         return;
       }
 
-      const project = getProject(db, id);
+      const project = getProject(db, id, ownerScopeForRequest(req));
       if (!project) {
         sendApiError(res, 500, 'INTERNAL_ERROR', 'created project could not be loaded');
         return;
@@ -7661,8 +7860,10 @@ export async function startServer({
     try {
       const plugin = getInstalledPlugin(db, req.params.id);
       if (!plugin) return res.status(404).json({ error: 'plugin not found' });
-      const registry = await loadPluginRegistryView();
-      const connectorProbe = buildConnectorProbe(connectorService);
+      const registry = await loadPluginRegistryView(runtimeDataDirFor(req));
+      const connectorProbe = buildConnectorProbe(
+        connectorServiceForDataDir(runtimeDataDirFor(req)),
+      );
       const report = doctorPlugin(plugin, registry, { connectorProbe });
       res.json(report);
     } catch (err) {
@@ -8322,10 +8523,24 @@ export async function startServer({
     }
   });
 
+  function isSnapshotVisibleToRequest(req: AuthenticatedRequest, snap: { snapshotId?: unknown }): boolean {
+    const snapshotId = typeof snap?.snapshotId === 'string' ? snap.snapshotId : '';
+    if (!snapshotId) return false;
+    const row = db
+      .prepare(`SELECT project_id AS projectId FROM applied_plugin_snapshots WHERE id = ?`)
+      .get(snapshotId) as { projectId?: string | null } | undefined;
+    const projectId = typeof row?.projectId === 'string' ? row.projectId : '';
+    if (!projectId) return true;
+    return Boolean(getProject(db, projectId, ownerScopeForRequest(req)));
+  }
+
   app.get('/api/applied-plugins/:snapshotId', (req, res) => {
     try {
       const snap = getSnapshot(db, req.params.snapshotId);
       if (!snap) return res.status(404).json({ error: 'snapshot not found' });
+      if (!isSnapshotVisibleToRequest(req, snap)) {
+        return res.status(404).json({ error: 'snapshot not found' });
+      }
       res.json(snap);
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -8366,6 +8581,9 @@ export async function startServer({
     try {
       const snap = getSnapshot(db, req.params.snapshotId);
       if (!snap) return res.status(404).json({ error: 'snapshot not found' });
+      if (!isSnapshotVisibleToRequest(req, snap)) {
+        return res.status(404).json({ error: 'snapshot not found' });
+      }
       const block = pluginPromptBlock(snap);
       const accepts = String(req.headers['accept'] ?? '').toLowerCase();
       if (accepts.includes('text/plain')) {
@@ -8505,13 +8723,15 @@ export async function startServer({
 
   // Plan §3.A5: list all applied snapshots; useful for `od plugin
   // snapshots list` and the audit dashboard.
-  app.get('/api/applied-plugins', (_req, res) => {
+  app.get('/api/applied-plugins', (req, res) => {
     try {
       const rows = db
         .prepare(`SELECT id FROM applied_plugin_snapshots ORDER BY applied_at DESC LIMIT 500`)
         .all();
       res.json({
-        snapshots: rows.map((r) => getSnapshot(db, (r).id)).filter((x) => x !== null),
+        snapshots: rows
+          .map((r) => getSnapshot(db, (r).id))
+          .filter((snap) => snap !== null && isSnapshotVisibleToRequest(req, snap)),
       });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -8519,6 +8739,9 @@ export async function startServer({
   });
   app.get('/api/projects/:projectId/applied-plugins', (req, res) => {
     try {
+      if (!getProject(db, req.params.projectId, ownerScopeForRequest(req))) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
       const rows = db
         .prepare(`SELECT id FROM applied_plugin_snapshots WHERE project_id = ? ORDER BY applied_at DESC`)
         .all(req.params.projectId);
@@ -8606,9 +8829,43 @@ export async function startServer({
   // route shapes. The surface writers go through `apps/daemon/src/genui/store.ts`
   // (sole writer of `genui_surfaces`) so the F8 cross-conversation cache stays
   // intact.
+  function publicGenuiSurface(surface) {
+    const { ownerEmail: _ownerEmail, ownerDirHash: _ownerDirHash, ...publicSurface } = surface;
+    return publicSurface;
+  }
+
+  function genuiSurfaceVisibleToRequest(req, surface) {
+    const ownerScope = ownerScopeForRequest(req);
+    const surfaceOwnerEmail =
+      typeof surface?.ownerEmail === 'string' && surface.ownerEmail.length > 0
+        ? surface.ownerEmail
+        : null;
+    if (surfaceOwnerEmail) return ownerScope.ownerEmail === surfaceOwnerEmail;
+    const runId = typeof surface?.runId === 'string' ? surface.runId : null;
+    if (runId) {
+      const run = design.runs.get(runId);
+      const runOwnerEmail =
+        typeof run?.user?.email === 'string' && run.user.email.length > 0
+          ? run.user.email
+          : null;
+      if (runOwnerEmail) return ownerScope.ownerEmail === runOwnerEmail;
+    }
+    const projectId = typeof surface?.projectId === 'string' ? surface.projectId : null;
+    if (!projectId) return ownerScope.includeOwnerless;
+    if (getProject(db, projectId, ownerScope)) return true;
+    if (getProject(db, projectId)) return false;
+    return ownerScope.includeOwnerless;
+  }
+
   app.get('/api/runs/:runId/genui', (req, res) => {
     try {
-      const surfaces = listSurfacesForRun(db, req.params.runId);
+      const run = design.runs.get(req.params.runId);
+      if (run && !isRunVisibleToRequest(req, run)) {
+        return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+      }
+      const surfaces = listSurfacesForRun(db, req.params.runId)
+        .filter((surface) => genuiSurfaceVisibleToRequest(req, surface))
+        .map(publicGenuiSurface);
       res.json({ runId: req.params.runId, surfaces });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -8617,7 +8874,11 @@ export async function startServer({
 
   app.get('/api/projects/:projectId/genui', (req, res) => {
     try {
-      const surfaces = listSurfacesForProject(db, req.params.projectId);
+      if (!getProject(db, req.params.projectId, ownerScopeForRequest(req))) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      const surfaces = listSurfacesForProject(db, req.params.projectId)
+        .map(publicGenuiSurface);
       res.json({ projectId: req.params.projectId, surfaces });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -8643,6 +8904,10 @@ export async function startServer({
       if (!row?.id) {
         return res.status(404).json({ error: 'no pending surface for runId/surfaceId' });
       }
+      const pendingSurface = getSurface(db, row.id);
+      if (!pendingSurface || !genuiSurfaceVisibleToRequest(req, pendingSurface)) {
+        return res.status(404).json({ error: 'no pending surface for runId/surfaceId' });
+      }
       const updated = respondSurfaceRow(db, { rowId: row.id, value, respondedBy });
 
       // Plan §3.R1 / spec §10.3 / §21.5 — auto-bridge for the
@@ -8656,13 +8921,14 @@ export async function startServer({
       if (isDiffReviewSurfaceId(req.params.surfaceId)) {
         try {
           const run = design.runs.get(req.params.runId);
-          const projectId = (run as { projectId?: string | null } | undefined)?.projectId ?? null;
+          const projectId =
+            (run as { projectId?: string | null } | undefined)?.projectId ?? updated.projectId;
           if (projectId) {
-            const project = getProject(db, projectId);
+            const project = getProject(db, projectId, ownerScopeForRequest(req)) ?? getProject(db, projectId);
             const metadata = project?.metadata && typeof project.metadata === 'string'
               ? JSON.parse(project.metadata)
               : project?.metadata ?? undefined;
-            const cwd = resolveProjectDir(PROJECTS_DIR, projectId, metadata);
+            const cwd = resolveProjectDir(projectsDirFor(req), projectId, metadata);
             const bridgeResult = await applyDiffReviewDecisionToCwd({
               cwd,
               value,
@@ -8678,7 +8944,7 @@ export async function startServer({
         }
       }
 
-      const responsePayload: Record<string, unknown> = { ok: true, surface: updated };
+      const responsePayload: Record<string, unknown> = { ok: true, surface: publicGenuiSurface(updated) };
       if (diffReviewBridge) responsePayload.diffReviewBridge = diffReviewBridge;
       res.json(responsePayload);
     } catch (err) {
@@ -8688,6 +8954,9 @@ export async function startServer({
 
   app.post('/api/projects/:projectId/genui/:surfaceId/revoke', (req, res) => {
     try {
+      if (!getProject(db, req.params.projectId, ownerScopeForRequest(req))) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
       const changed = revokeProjectSurface(db, {
         projectId: req.params.projectId,
         surfaceId: req.params.surfaceId,
@@ -8700,6 +8969,9 @@ export async function startServer({
 
   app.post('/api/projects/:projectId/genui/prefill', (req, res) => {
     try {
+      if (!getProject(db, req.params.projectId, ownerScopeForRequest(req))) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       const snapshotId = typeof body.snapshotId === 'string' ? body.snapshotId : '';
       const surfaceId  = typeof body.surfaceId  === 'string' ? body.surfaceId  : '';
@@ -8714,6 +8986,7 @@ export async function startServer({
       }
       const row = prefillProjectSurface(db, {
         projectId:        req.params.projectId,
+        ...ownerFieldsForRequest(req),
         pluginSnapshotId: snapshotId,
         surfaceId,
         kind,
@@ -8722,7 +8995,7 @@ export async function startServer({
         schema:           body.schema,
         expiresAt:        typeof body.expiresAt === 'number' ? body.expiresAt : null,
       });
-      res.json({ ok: true, surface: row });
+      res.json({ ok: true, surface: publicGenuiSurface(row) });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
@@ -8738,6 +9011,9 @@ export async function startServer({
       if (!row?.id) return res.status(404).json({ error: 'surface not found' });
       const surface = getSurface(db, row.id);
       if (!surface) return res.status(404).json({ error: 'surface not found' });
+      if (!genuiSurfaceVisibleToRequest(req, surface)) {
+        return res.status(404).json({ error: 'surface not found' });
+      }
       // Plan §6 Phase 2A.5 — enrich the response with the surface
       // spec (incl. schema, prompt, persist tier) pulled out of the
       // pinned AppliedPluginSnapshot. This is what `od ui show`
@@ -8752,7 +9028,7 @@ export async function startServer({
           spec = snap.genuiSurfaces.find((s) => s?.id === surface.surfaceId) ?? null;
         }
       }
-      res.json({ ...surface, spec });
+      res.json({ ...publicGenuiSurface(surface), spec });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
@@ -8789,6 +9065,9 @@ export async function startServer({
       }
       const snapshot = getSnapshot(db, snapshotId);
       if (!snapshot) return res.status(404).json({ error: 'snapshot not found' });
+      if (!isSnapshotVisibleToRequest(req, snapshot)) {
+        return res.status(404).json({ error: 'snapshot not found' });
+      }
       res.json({
         ok:        true,
         runId:     req.params.runId,
@@ -8841,7 +9120,7 @@ export async function startServer({
   // file shows up on the next view, no rebuild needed.
   app.get('/api/design-systems/:id/preview', async (req, res) => {
     try {
-      const body = await readAvailableDesignSystem(req.params.id);
+      const body = await readAvailableDesignSystem(req.params.id, userDesignSystemsDirFor(req));
       if (body === null)
         return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemPreview(req.params.id, body);
@@ -8856,7 +9135,7 @@ export async function startServer({
   // /preview: built at request time, no caching.
   app.get('/api/design-systems/:id/showcase', async (req, res) => {
     try {
-      const body = await readAvailableDesignSystem(req.params.id);
+      const body = await readAvailableDesignSystem(req.params.id, userDesignSystemsDirFor(req));
       if (body === null)
         return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemShowcase(req.params.id, body);
@@ -9066,7 +9345,7 @@ export async function startServer({
       }
       const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
       const slug = sanitizeSlug(identifier || title || 'artifact');
-      const dir = path.join(ARTIFACTS_DIR, `${stamp}-${slug}`);
+      const dir = path.join(artifactsDirFor(req), `${stamp}-${slug}`);
       fs.mkdirSync(dir, { recursive: true });
       const file = path.join(dir, 'index.html');
       fs.writeFileSync(file, html, 'utf8');
@@ -9108,7 +9387,7 @@ export async function startServer({
       }
 
       const artifacts = await listLiveArtifacts({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId,
       });
       res.json({ artifacts });
@@ -9131,7 +9410,7 @@ export async function startServer({
       const variant = typeof req.query.variant === 'string' ? req.query.variant : 'rendered';
       if (variant === 'template' || variant === 'rendered-source') {
         const html = await readLiveArtifactCode({
-          projectsRoot: PROJECTS_DIR,
+          projectsRoot: projectsDirFor(req),
           projectId,
           artifactId: req.params.artifactId,
           variant: variant === 'template' ? 'template' : 'rendered',
@@ -9144,7 +9423,7 @@ export async function startServer({
       }
 
       const record = await ensureLiveArtifactPreview({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId,
         artifactId: req.params.artifactId,
       });
@@ -9163,7 +9442,7 @@ export async function startServer({
       }
 
       const record = await getLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId,
         artifactId: req.params.artifactId,
       });
@@ -9181,7 +9460,7 @@ export async function startServer({
       }
 
       const refreshes = await listLiveArtifactRefreshLogEntries({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId,
         artifactId: req.params.artifactId,
       });
@@ -9208,12 +9487,13 @@ export async function startServer({
       }
 
       const record = await createLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId: toolGrant.projectId,
         input: input ?? {},
         templateHtml,
         provenanceJson,
         createdByRunId: toolGrant.runId,
+        ...ownerFieldsForRequest(req),
       });
       emitLiveArtifactEvent(toolGrant, 'created', record.artifact);
       res.json({ artifact: record.artifact });
@@ -9234,7 +9514,7 @@ export async function startServer({
       }
 
       const artifacts = await listLiveArtifacts({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId: toolGrant.projectId,
       });
       res.json({ artifacts });
@@ -9258,7 +9538,7 @@ export async function startServer({
       }
 
       const record = await updateLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId: toolGrant.projectId,
         artifactId,
         input: input ?? {},
@@ -9289,9 +9569,10 @@ export async function startServer({
       let result;
       try {
         result = await refreshLiveArtifact({
-          projectsRoot: PROJECTS_DIR,
+          projectsRoot: projectsDirFor(req),
           projectId: toolGrant.projectId,
           artifactId,
+          connectorService: connectorServiceForDataDir(runtimeDataDirFor(req)),
           onStarted: ({ refreshId }) => {
             emitLiveArtifactRefreshEvent(toolGrant, { phase: 'started', artifactId, refreshId });
           },
@@ -9325,7 +9606,7 @@ export async function startServer({
       }
 
       const record = await updateLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId,
         artifactId: req.params.artifactId,
         input: req.body ?? {},
@@ -9345,12 +9626,12 @@ export async function startServer({
       }
 
       const existing = await getLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId,
         artifactId: req.params.artifactId,
       });
       await deleteLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId,
         artifactId: req.params.artifactId,
       });
@@ -9376,9 +9657,10 @@ export async function startServer({
       let result;
       try {
         result = await refreshLiveArtifact({
-          projectsRoot: PROJECTS_DIR,
+          projectsRoot: projectsDirFor(req),
           projectId,
           artifactId: req.params.artifactId,
+          connectorService: connectorServiceForDataDir(runtimeDataDirFor(req)),
           onStarted: ({ refreshId }) => {
             emitLiveArtifactRefreshEvent({ projectId }, { phase: 'started', artifactId: req.params.artifactId, refreshId });
           },
@@ -9404,7 +9686,7 @@ export async function startServer({
     }
   });
 
-  app.use('/artifacts', express.static(ARTIFACTS_DIR));
+  app.use('/artifacts', serveUserArtifacts);
 
   // ---- Deploy --------------------------------------------------------------
 
@@ -9482,7 +9764,7 @@ export async function startServer({
       const prior = getDeployment(db, req.params.id, fileName, providerId);
       const deployProject = getProject(db, req.params.id);
       const files = await buildDeployFileSet(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         req.params.id,
         fileName,
         { metadata: deployProject?.metadata },
@@ -9564,7 +9846,7 @@ export async function startServer({
       const preflightProject = getProject(db, req.params.id);
       /** @type {import('@open-design/contracts').DeployPreflightResponse} */
       const body = await prepareDeployPreflight(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         req.params.id,
         fileName,
         { metadata: preflightProject?.metadata, providerId },
@@ -9625,17 +9907,23 @@ export async function startServer({
         return sendApiError(res, 400, 'BAD_REQUEST', 'maxTokens must be a positive number when provided');
       }
 
-      const project = getProject(db, req.params.id);
+      const project = getProject(db, req.params.id, ownerScopeForRequest(req));
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
 
       const result = await finalizeDesignPackage(
         db,
-        PROJECTS_DIR,
+        projectsDirFor(req),
         DESIGN_SYSTEMS_DIR,
         req.params.id,
-        { apiKey, baseUrl, model, maxTokens },
+        {
+          apiKey,
+          baseUrl,
+          model,
+          maxTokens,
+          projectOwnerScope: ownerScopeForRequest(req),
+        },
       );
       res.json(result);
     } catch (err) {
@@ -9754,7 +10042,7 @@ export async function startServer({
     try {
       const since = Number(req.query?.since);
       const project = getProject(db, req.params.id);
-      const files = await listFiles(PROJECTS_DIR, req.params.id, {
+      const files = await listFiles(projectsDirFor(req), req.params.id, {
         since: Number.isFinite(since) ? since : undefined,
         metadata: project?.metadata,
       });
@@ -9768,14 +10056,14 @@ export async function startServer({
 
   app.post('/api/projects/:id/plugins/install-folder', async (req, res) => {
     try {
-      const project = getProject(db, req.params.id);
+      const project = getProject(db, req.params.id, ownerScopeForRequest(req));
       if (!project) {
         sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         return;
       }
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       const relativePath = normalizeProjectPluginFolderPath(body.path);
-      const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
+      const projectRoot = resolveProjectDir(projectsDirFor(req), req.params.id, project.metadata);
       const folder = await resolveProjectChildDirectory(projectRoot, relativePath);
       const warnings = [];
       const log = [];
@@ -9809,14 +10097,14 @@ export async function startServer({
 
   app.post('/api/projects/:id/plugins/publish-github', async (req, res) => {
     try {
-      const project = getProject(db, req.params.id);
+      const project = getProject(db, req.params.id, ownerScopeForRequest(req));
       if (!project) {
         sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         return;
       }
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       const relativePath = normalizeProjectPluginFolderPath(body.path);
-      const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
+      const projectRoot = resolveProjectDir(projectsDirFor(req), req.params.id, project.metadata);
       const folder = await resolveProjectChildDirectory(projectRoot, relativePath);
       const result = await execCommandViaLoginShell(OD_NODE_BIN, [
         OD_BIN,
@@ -9848,7 +10136,7 @@ export async function startServer({
 
   app.get('/api/projects/:id/plugin-candidates', (req, res) => {
     try {
-      const project = getProject(db, req.params.id);
+      const project = getProject(db, req.params.id, ownerScopeForRequest(req));
       if (!project) {
         sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         return;
@@ -9863,6 +10151,10 @@ export async function startServer({
   app.post('/api/projects/:id/plugin-candidates/:candidateId/dismiss', (req, res) => {
     if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    if (!getProject(db, req.params.id, ownerScopeForRequest(req))) {
+      sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      return;
     }
     const candidate = dismissSkillPluginCandidate(db, req.params.id, req.params.candidateId);
     if (!candidate) {
@@ -9880,12 +10172,12 @@ export async function startServer({
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      const project = getProject(db, req.params.id);
+      const project = getProject(db, req.params.id, ownerScopeForRequest(req));
       if (!project) {
         sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         return;
       }
-      const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
+      const projectRoot = resolveProjectDir(projectsDirFor(req), req.params.id, project.metadata);
       const result = await generateSkillPluginDraft(db, projectRoot, req.params.id, req.params.candidateId);
       if (!result) {
         sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found');
@@ -9902,7 +10194,7 @@ export async function startServer({
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      const project = getProject(db, req.params.id);
+      const project = getProject(db, req.params.id, ownerScopeForRequest(req));
       if (!project) {
         sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         return;
@@ -9915,7 +10207,7 @@ export async function startServer({
         sendApiError(res, 400, 'BAD_REQUEST', 'plugin share action is required');
         return;
       }
-      const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
+      const projectRoot = resolveProjectDir(projectsDirFor(req), req.params.id, project.metadata);
       const draft = await generateSkillPluginDraft(db, projectRoot, req.params.id, req.params.candidateId);
       if (!draft) {
         sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found');
@@ -9934,6 +10226,7 @@ export async function startServer({
       const task = createPluginShareTask(taskId, req.params.id, {
         action,
         path: draft.draftPath,
+        ...ownerFieldsForRequest(req),
       });
       task.status = 'running';
       notifyPluginShareTaskWaiters(task);
@@ -9962,14 +10255,14 @@ export async function startServer({
 
   app.post('/api/projects/:id/plugins/contribute-open-design', async (req, res) => {
     try {
-      const project = getProject(db, req.params.id);
+      const project = getProject(db, req.params.id, ownerScopeForRequest(req));
       if (!project) {
         sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         return;
       }
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       const relativePath = normalizeProjectPluginFolderPath(body.path);
-      const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
+      const projectRoot = resolveProjectDir(projectsDirFor(req), req.params.id, project.metadata);
       const folder = await resolveProjectChildDirectory(projectRoot, relativePath);
       const result = await execCommandViaLoginShell(OD_NODE_BIN, [
         OD_BIN,
@@ -10004,7 +10297,7 @@ export async function startServer({
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      const project = getProject(db, req.params.id);
+      const project = getProject(db, req.params.id, ownerScopeForRequest(req));
       if (!project) {
         sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         return;
@@ -10018,12 +10311,13 @@ export async function startServer({
         return;
       }
       const relativePath = normalizeProjectPluginFolderPath(body.path);
-      const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
+      const projectRoot = resolveProjectDir(projectsDirFor(req), req.params.id, project.metadata);
       const folder = await resolveProjectChildDirectory(projectRoot, relativePath);
       const taskId = randomUUID();
       const task = createPluginShareTask(taskId, req.params.id, {
         action,
         path: relativePath,
+        ...ownerFieldsForRequest(req),
       });
       task.status = 'running';
       notifyPluginShareTaskWaiters(task);
@@ -10056,12 +10350,35 @@ export async function startServer({
     }
   });
 
+  function pluginShareTaskVisibleToRequest(req, task) {
+    const ownerEmail = typeof task?.ownerEmail === 'string' && task.ownerEmail.length > 0
+      ? task.ownerEmail
+      : null;
+    if (ownerEmail) return req.user?.email === ownerEmail;
+    const projectId = typeof task?.projectId === 'string' ? task.projectId : '';
+    if (!projectId) return false;
+    if (getProject(db, projectId, ownerScopeForRequest(req))) return true;
+    return !getProject(db, projectId);
+  }
+
+  function getProjectForFileRequest(req, res, projectId) {
+    const project = getProject(db, projectId, ownerScopeForRequest(req));
+    if (!project) {
+      sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      return null;
+    }
+    return project;
+  }
+
   app.post('/api/plugins/share-tasks/:id/wait', (req, res) => {
     if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const task = getLivePluginShareTask(req.params.id);
     if (!task) return res.status(404).json({ error: 'task not found' });
+    if (!pluginShareTaskVisibleToRequest(req, task)) {
+      return res.status(404).json({ error: 'task not found' });
+    }
 
     const since = Number.isFinite(req.body?.since) ? Number(req.body.since) : 0;
     const requestedTimeout = Number.isFinite(req.body?.timeoutMs)
@@ -10100,11 +10417,12 @@ export async function startServer({
       }
       const pattern = req.query.pattern ? String(req.query.pattern) : null;
       const max = Math.min(Number(req.query.max) || 200, 1000);
-      const searchProject = getProject(db, req.params.id);
-      const matches = await searchProjectFiles(PROJECTS_DIR, req.params.id, query, {
+      const searchProject = getProjectForFileRequest(req, res, req.params.id);
+      if (!searchProject) return;
+      const matches = await searchProjectFiles(projectsDirFor(req), req.params.id, query, {
         pattern,
         max,
-        metadata: searchProject?.metadata,
+        metadata: searchProject.metadata,
       });
       res.json({ query, matches });
     } catch (err) {
@@ -10120,14 +10438,15 @@ export async function startServer({
   app.get('/api/projects/:id/archive', async (req, res) => {
     try {
       const root = typeof req.query?.root === 'string' ? req.query.root : '';
-      const project = getProject(db, req.params.id);
+      const project = getProjectForFileRequest(req, res, req.params.id);
+      if (!project) return;
       const { buffer, baseName } = await buildProjectArchive(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         req.params.id,
         root,
-        project?.metadata,
+        project.metadata,
       );
-      const fallbackName = project?.name || req.params.id;
+      const fallbackName = project.name || req.params.id;
       const fileSlug = sanitizeArchiveFilename(baseName || fallbackName) || 'project';
       const filename = `${fileSlug}.zip`;
       // RFC 5987 dance: legacy `filename=` carries an ASCII fallback, while
@@ -10162,14 +10481,15 @@ export async function startServer({
         sendApiError(res, 400, 'BAD_REQUEST', 'files must be a non-empty array');
         return;
       }
-      const project = getProject(db, req.params.id);
+      const project = getProjectForFileRequest(req, res, req.params.id);
+      if (!project) return;
       const { buffer } = await buildBatchArchive(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         req.params.id,
         files,
-        project?.metadata,
+        project.metadata,
       );
-      const fileSlug = sanitizeArchiveFilename(project?.name || req.params.id) || 'project';
+      const fileSlug = sanitizeArchiveFilename(project.name || req.params.id) || 'project';
       const filename = `${fileSlug}.zip`;
       const asciiFallback =
         filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'project.zip';
@@ -10207,8 +10527,9 @@ export async function startServer({
     try {
       const projectId = String(req.params[0] ?? '');
       const relPath = String(req.params[1] ?? '');
-      const project = getProject(db, projectId);
-      const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, project?.metadata);
+      const project = getProjectForFileRequest(req, res, projectId);
+      if (!project) return;
+      const file = await readProjectFile(projectsDirFor(req), projectId, relPath, project.metadata);
       // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
       // data: URIs, file://, and some sandboxed iframes also send null — all are
       // local-only callers, so this is safe. Real cross-origin sites send a real
@@ -10232,8 +10553,9 @@ export async function startServer({
     try {
       const projectId = String(req.params[0] ?? '');
       const rawSplat = String(req.params[1] ?? '');
-      const project = getProject(db, projectId);
-      await deleteProjectFile(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
+      const project = getProjectForFileRequest(req, res, projectId);
+      if (!project) return;
+      await deleteProjectFile(projectsDirFor(req), projectId, rawSplat, project.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -10250,12 +10572,13 @@ export async function startServer({
 
   app.get('/api/projects/:id/files/:name/preview', async (req, res) => {
     try {
-      const project = getProject(db, req.params.id);
+      const project = getProjectForFileRequest(req, res, req.params.id);
+      if (!project) return;
       const file = await readProjectFile(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         req.params.id,
         req.params.name,
-        project?.metadata,
+        project.metadata,
       );
       const preview = await buildDocumentPreview(file);
       res.json(preview);
@@ -10279,12 +10602,13 @@ export async function startServer({
     try {
       const projectId = String(req.params[0] ?? '');
       const fileSplat = String(req.params[1] ?? '');
-      const project = getProject(db, projectId);
+      const project = getProjectForFileRequest(req, res, projectId);
+      if (!project) return;
       const file = await readProjectFile(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         projectId,
         fileSplat,
-        project?.metadata,
+        project.metadata,
       );
       res.type(file.mime).send(file.buffer);
     } catch (err) {
@@ -10311,20 +10635,21 @@ export async function startServer({
     },
     async (req, res) => {
       try {
-        const uploadProject = getProject(db, req.params.id);
-        await ensureProject(PROJECTS_DIR, req.params.id, uploadProject?.metadata);
+        const uploadProject = getProjectForFileRequest(req, res, req.params.id);
+        if (!uploadProject) return;
+        await ensureProject(projectsDirFor(req), req.params.id, uploadProject.metadata);
         if (req.file) {
           const buf = await fs.promises.readFile(req.file.path);
           const desiredName = sanitizeName(
             req.body?.name || req.file.originalname,
           );
           const meta = await writeProjectFile(
-            PROJECTS_DIR,
+            projectsDirFor(req),
             req.params.id,
             desiredName,
             buf,
             {},
-            uploadProject?.metadata,
+            uploadProject.metadata,
           );
           fs.promises.unlink(req.file.path).catch(() => {});
           /** @type {import('@open-design/contracts').ProjectFileResponse} */
@@ -10359,12 +10684,12 @@ export async function startServer({
             ? Buffer.from(content, 'base64')
             : Buffer.from(content, 'utf8');
         const meta = await writeProjectFile(
-          PROJECTS_DIR,
+          projectsDirFor(req),
           req.params.id,
           name,
           buf,
           { artifactManifest },
-          uploadProject?.metadata,
+          uploadProject.metadata,
         );
         /** @type {import('@open-design/contracts').ProjectFileResponse} */
         const body = { file: meta };
@@ -10382,8 +10707,9 @@ export async function startServer({
 
   app.delete('/api/projects/:id/files/:name', async (req, res) => {
     try {
-      const delProject = getProject(db, req.params.id);
-      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
+      const delProject = getProjectForFileRequest(req, res, req.params.id);
+      if (!delProject) return;
+      await deleteProjectFile(projectsDirFor(req), req.params.id, req.params.name, delProject.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -10410,9 +10736,9 @@ export async function startServer({
     });
   });
 
-  app.get('/api/media/config', async (_req, res) => {
+  app.get('/api/media/config', async (req, res) => {
     try {
-      const cfg = await readMaskedConfig(PROJECT_ROOT);
+      const cfg = await readMaskedConfig(PROJECT_ROOT, runtimeDataDirFor(req));
       res.json(cfg);
     } catch (err) {
       res
@@ -10423,7 +10749,7 @@ export async function startServer({
 
   app.put('/api/media/config', async (req, res) => {
     try {
-      const cfg = await writeConfig(PROJECT_ROOT, req.body);
+      const cfg = await writeConfig(PROJECT_ROOT, req.body, runtimeDataDirFor(req));
       res.json(cfg);
     } catch (err) {
       const status = typeof err?.status === 'number' ? err.status : 400;
@@ -10438,7 +10764,7 @@ export async function startServer({
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      const config = await readAppConfig(RUNTIME_DATA_DIR);
+      const config = await readAppConfig(runtimeDataDirFor(req));
       res.json({ config });
     } catch (err) {
       res
@@ -10452,8 +10778,8 @@ export async function startServer({
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      const config = await writeAppConfig(RUNTIME_DATA_DIR, req.body);
-      orbitService.configure(config.orbit);
+      const config = await writeAppConfig(runtimeDataDirFor(req), req.body);
+      orbitServiceForRequest(req).configure(config.orbit);
       res.json({ config });
     } catch (err) {
       res
@@ -10467,7 +10793,10 @@ export async function startServer({
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      res.json(await orbitService.status());
+      const config = await readAppConfig(runtimeDataDirFor(req));
+      const service = orbitServiceForRequest(req);
+      service.configure(config.orbit);
+      res.json(await service.status());
     } catch (err) {
       res
         .status(500)
@@ -10481,7 +10810,10 @@ export async function startServer({
     }
     try {
       const locale = typeof req.body?.locale === 'string' ? req.body.locale : null;
-      res.json(await orbitService.start('manual', { locale }));
+      const config = await readAppConfig(runtimeDataDirFor(req));
+      const service = orbitServiceForRequest(req);
+      service.configure(config.orbit);
+      res.json(await service.start('manual', { locale }));
     } catch (err) {
       res
         .status(500)
@@ -10539,6 +10871,7 @@ export async function startServer({
     try {
       const result = await searchResearch({
         projectRoot: PROJECT_ROOT,
+        mediaConfigDataDir: runtimeDataDirFor(req),
         query: req.body?.query,
         maxSources:
           typeof req.body?.maxSources === 'number'
@@ -10564,6 +10897,17 @@ export async function startServer({
     }
   });
 
+  function mediaTaskVisibleToRequest(req, task) {
+    const ownerEmail = typeof task?.ownerEmail === 'string' && task.ownerEmail.length > 0
+      ? task.ownerEmail
+      : null;
+    if (ownerEmail) return req.user?.email === ownerEmail;
+    const projectId = typeof task?.projectId === 'string' ? task.projectId : '';
+    if (!projectId) return false;
+    if (getProject(db, projectId, ownerScopeForRequest(req))) return true;
+    return !getProject(db, projectId);
+  }
+
   app.post('/api/media/tasks/:id/wait', async (req, res) => {
     if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
@@ -10571,6 +10915,9 @@ export async function startServer({
     const taskId = req.params.id;
     const task = getLiveMediaTask(db, taskId);
     if (!task) return res.status(404).json({ error: 'task not found' });
+    if (!mediaTaskVisibleToRequest(req, task)) {
+      return res.status(404).json({ error: 'task not found' });
+    }
 
     const since = Number.isFinite(req.body?.since) ? Number(req.body.since) : 0;
     const requestedTimeout = Number.isFinite(req.body?.timeoutMs)
@@ -10635,6 +10982,12 @@ export async function startServer({
   // without a separate refetch.
   app.post(
     '/api/projects/:id/upload',
+    (req, res, next) => {
+      if (!getProject(db, req.params.id, ownerScopeForRequest(req))) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      next();
+    },
     handleProjectUpload,
     async (req, res) => {
       try {
@@ -10677,7 +11030,13 @@ export async function startServer({
   // main: file-upload routes lifted to a dedicated module. Keep alongside the
   // inline routes garnet still owns above; duplicate registrations resolve in
   // a follow-up after route-routes.ts vs garnet inline coverage is audited.
-  registerProjectUploadRoutes(app, { http: httpDeps, uploads: uploadDeps, node: nodeDeps });
+  registerProjectUploadRoutes(app, {
+    db,
+    http: httpDeps,
+    uploads: uploadDeps,
+    node: nodeDeps,
+    projectStore: projectStoreDeps,
+  });
 
   const composeDaemonSystemPrompt = async ({
     agentId,
@@ -10691,10 +11050,14 @@ export async function startServer({
     connectedExternalMcp,
     appliedPluginSnapshotId,
     mediaExecution,
+    runtimeDataDir = RUNTIME_DATA_DIR,
+    projectsRoot = PROJECTS_DIR,
+    projectOwnerScope,
+    projectOwnerFields = { ownerEmail: null, ownerDirHash: null },
   }) => {
     const project =
       typeof projectId === 'string' && projectId
-        ? getProject(db, projectId)
+        ? getProject(db, projectId, projectOwnerScope)
         : null;
     const effectiveSkillId =
       typeof skillId === 'string' && skillId ? skillId : project?.skillId;
@@ -10703,9 +11066,15 @@ export async function startServer({
         ? designSystemId
         : project?.designSystemId;
     const metadata = project?.metadata;
-    let allSkillsPromise: ReturnType<typeof listAllSkillLikeEntries> | null = null;
+    const promptUserSkillsDir = userSkillsDirForDataDir(runtimeDataDir);
+    const promptUserDesignTemplatesDir = userDesignTemplatesDirForDataDir(runtimeDataDir);
+    const promptUserDesignSystemsDir = userDesignSystemsDirForDataDir(runtimeDataDir);
+    let allSkillsPromise: ReturnType<typeof listAllSkillLikeEntriesForUserRoots> | null = null;
     const loadAllSkills = async () => {
-      allSkillsPromise ??= listAllSkillLikeEntries();
+      allSkillsPromise ??= listAllSkillLikeEntriesForUserRoots(
+        promptUserSkillsDir,
+        promptUserDesignTemplatesDir,
+      );
       return await allSkillsPromise;
     };
 
@@ -10874,7 +11243,7 @@ export async function startServer({
     // empty; the composer drops the block on a falsy value.
     let memoryBody = '';
     try {
-      memoryBody = await composeMemoryBody(RUNTIME_DATA_DIR);
+      memoryBody = await composeMemoryBody(runtimeDataDir);
     } catch (err) {
       console.warn('[memory] composeMemoryBody failed', err);
     }
@@ -10882,7 +11251,7 @@ export async function startServer({
     // User-level custom instructions from app-config.json.
     let userInstructions = '';
     try {
-      const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
+      const appCfg = await readAppConfig(runtimeDataDir);
       if (appCfg.customInstructions) userInstructions = appCfg.customInstructions;
     } catch (err) {
       console.warn('[custom-instructions] readAppConfig failed', err);
@@ -10912,11 +11281,18 @@ export async function startServer({
     let designSystemCraftApplies = [];
     let designSystemCraftExemptions = [];
     if (effectiveDesignSystemId) {
-      let systems = await listAllDesignSystems();
+      let systems = await listAllDesignSystemsForUserRoot(promptUserDesignSystemsDir);
       let summary = systems.find((s) => s.id === effectiveDesignSystemId);
       if (summary?.source === 'user') {
-        await ensureUserDesignSystemWorkspaceProject(db, effectiveDesignSystemId);
-        systems = await listAllDesignSystems();
+        await ensureUserDesignSystemWorkspaceProject(
+          db,
+          effectiveDesignSystemId,
+          projectsRoot,
+          promptUserDesignSystemsDir,
+          projectOwnerFields,
+          projectOwnerScope,
+        );
+        systems = await listAllDesignSystemsForUserRoot(promptUserDesignSystemsDir);
         summary = systems.find((s) => s.id === effectiveDesignSystemId);
       }
       const editingOwnDraftDesignSystem =
@@ -10924,8 +11300,17 @@ export async function startServer({
         && project.designSystemId === effectiveDesignSystemId;
       designSystemTitle = summary?.title;
       if (summary && (isProjectUsableDesignSystem(summary) || editingOwnDraftDesignSystem)) {
-        const workspaceBody = await readDesignSystemWorkspaceTextFile(db, summary, 'DESIGN.md');
-        const registryBody = await readAvailableDesignSystem(effectiveDesignSystemId);
+        const workspaceBody = await readDesignSystemWorkspaceTextFile(
+          db,
+          summary,
+          'DESIGN.md',
+          projectsRoot,
+          projectOwnerScope,
+        );
+        const registryBody = await readAvailableDesignSystem(
+          effectiveDesignSystemId,
+          promptUserDesignSystemsDir,
+        );
         designSystemBody = (workspaceBody ?? registryBody) ?? undefined;
         // Single seam: env gate + built-in→user-installed fallback chain
         // live together inside `resolveDesignSystemAssets` so the whole
@@ -10934,7 +11319,7 @@ export async function startServer({
         const assets = await resolveDesignSystemAssets(
           effectiveDesignSystemId,
           DESIGN_SYSTEMS_DIR,
-          USER_DESIGN_SYSTEMS_DIR,
+          promptUserDesignSystemsDir,
         );
         designSystemUsageMd = assets.usageMd;
         designSystemTokensCss = assets.tokensCss;
@@ -10961,7 +11346,7 @@ export async function startServer({
 
     const template =
       metadata?.kind === 'template' && typeof metadata.templateId === 'string'
-        ? (getTemplate(db, metadata.templateId) ?? undefined)
+        ? (getTemplate(db, metadata.templateId, runProjectOwnerScope) ?? undefined)
         : undefined;
     let audioVoiceOptions = [];
     let audioVoiceOptionsError;
@@ -10972,7 +11357,10 @@ export async function startServer({
       !metadata?.voice
     ) {
       try {
-        audioVoiceOptions = await listElevenLabsVoiceOptions(PROJECT_ROOT, { limit: 100 });
+        audioVoiceOptions = await listElevenLabsVoiceOptions(PROJECT_ROOT, {
+          limit: 100,
+          mediaConfigDataDir: runtimeDataDir,
+        });
       } catch (err) {
         audioVoiceOptionsError = err && err.message ? err.message : String(err);
         console.warn('[elevenlabs] voice option lookup failed:', audioVoiceOptionsError);
@@ -11225,6 +11613,7 @@ export async function startServer({
       db: dbHandle,
       runId:           run.id,
       projectId:       projectIdForRun,
+      ...ownerFieldsForUser(run.user ?? null),
       conversationId:  run.conversationId ?? null,
       snapshot,
       pipeline:        snapshot.pipeline,
@@ -11243,13 +11632,20 @@ export async function startServer({
     });
   };
 
-  const startChatRun = async (chatBody, run) => {
+  const startChatRun = async (chatBody, run, authenticatedUser = null) => {
     run.analyticsTelemetry = {
       ...(run.analyticsTelemetry ?? {}),
       startChatRunStartedAt: Date.now(),
     };
     /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
     chatBody = chatBody || {};
+    const runUser = authenticatedUser ?? run.user ?? null;
+    if (runUser) run.user = runUser;
+    const projectsRoot = runUser ? projectsDirForUser(runUser) : PROJECTS_DIR;
+    const artifactsRoot = runUser ? artifactsDirForUser(runUser) : ARTIFACTS_DIR;
+    const runtimeDataDir = runUser ? runtimeDataDirForUser(runUser) : RUNTIME_DATA_DIR;
+    const runProjectOwnerScope = ownerScopeForUser(runUser);
+    const runProjectOwnerFields = ownerFieldsForUser(runUser);
     const {
       agentId,
       message,
@@ -11336,7 +11732,7 @@ export async function startServer({
       message.trim().length > 0
     ) {
       try {
-        await extractFromMessage(RUNTIME_DATA_DIR, message);
+        await extractFromMessage(runtimeDataDir, message);
       } catch (err) {
         console.warn('[memory] extractFromMessage failed', err);
       }
@@ -11353,16 +11749,16 @@ export async function startServer({
     let existingProjectFolders = [];
     if (typeof projectId === 'string' && projectId) {
       try {
-        const chatProject = getProject(db, projectId);
+        const chatProject = getProject(db, projectId, runProjectOwnerScope);
         const chatMeta = chatProject?.metadata;
         // ensureProject/resolveProjectDir now resolve external baseDir folders
         // internally (and assertSandboxProjectRootAvailable rejects imported
         // folders with no managed copy in sandbox mode), so we pass chatMeta
         // through instead of branching on baseDir here.
         assertSandboxProjectRootAvailable(chatMeta);
-        cwd = await ensureProject(PROJECTS_DIR, projectId, chatMeta);
-        existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
-        existingProjectFolders = await listProjectFolders(PROJECTS_DIR, projectId, { metadata: chatMeta });
+        cwd = await ensureProject(projectsRoot, projectId, chatMeta);
+        existingProjectFiles = await listFiles(projectsRoot, projectId, { metadata: chatMeta });
+        existingProjectFolders = await listProjectFolders(projectsRoot, projectId, { metadata: chatMeta });
       } catch (err) {
         if (err instanceof SandboxImportedProjectError) {
           return design.runs.fail(run, 'BAD_REQUEST', err.message);
@@ -11415,7 +11811,7 @@ export async function startServer({
     // doesn't have to guess what the user just dropped in.
     const projectRecord =
       typeof projectId === 'string' && projectId
-        ? getProject(db, projectId)
+        ? getProject(db, projectId, runProjectOwnerScope)
         : null;
     const runContextPrompt = renderRunContextPrompt(context, projectRecord?.metadata);
     const linkedDirs = (() => {
@@ -11451,6 +11847,8 @@ export async function startServer({
       ? toolTokenRegistry.mint({
           runId,
           projectId,
+          ownerEmail: runUser?.email ?? null,
+          ownerDirHash: runUser?.dirHash ?? null,
           allowedEndpoints: CHAT_TOOL_ENDPOINTS,
           allowedOperations: CHAT_TOOL_OPERATIONS,
           ...(pluginGrantContext ?? {}),
@@ -11474,7 +11872,7 @@ export async function startServer({
     let externalMcpConfig = { servers: [] };
     if (!SANDBOX_RUNTIME.enabled) {
       try {
-        externalMcpConfig = await readMcpConfig(RUNTIME_DATA_DIR);
+        externalMcpConfig = await readMcpConfig(runtimeDataDir);
       } catch (err) {
         console.warn(
           '[mcp-config] read failed:',
@@ -11496,7 +11894,7 @@ export async function startServer({
     const oauthTokensForSpawn = {};
     if (persistedTokenServerIds.size > 0) {
       try {
-        const stored = await readAllTokens(RUNTIME_DATA_DIR);
+        const stored = await readAllTokens(runtimeDataDir);
         for (const [serverId, tok] of Object.entries(stored)) {
           if (!persistedTokenServerIds.has(serverId)) continue;
           // Default to the persisted access token; null it out if expired so
@@ -11508,7 +11906,7 @@ export async function startServer({
           if (isTokenExpired(tok) && tok.refreshToken) {
             try {
               const refreshed = await refreshAndPersistToken(
-                RUNTIME_DATA_DIR,
+                runtimeDataDir,
                 serverId,
                 tok,
               );
@@ -11559,6 +11957,10 @@ export async function startServer({
         sessionMode: runSessionMode,
         connectedExternalMcp,
         mediaExecution: run?.mediaExecution,
+        runtimeDataDir,
+        projectsRoot,
+        projectOwnerScope: runProjectOwnerScope,
+        projectOwnerFields: runProjectOwnerFields,
         // Plan §3.M2 / §3.V1 — forward the run's snapshot id so the
         // prompt composer can splice in `## Active stage` blocks.
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
@@ -11796,7 +12198,7 @@ export async function startServer({
     };
     let configuredAgentEnv = {};
     try {
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      const appConfig = await readAppConfig(runtimeDataDir);
       configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
     } catch {
       configuredAgentEnv = {};
@@ -11899,7 +12301,7 @@ export async function startServer({
       run.analyticsTelemetry = {
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
       };
-      void startChatRun(chatBody, run).catch((err) => {
+      void startChatRun(chatBody, run, run.user ?? runUser).catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         design.runs.emit(
           run,
@@ -12117,7 +12519,7 @@ export async function startServer({
     // so the previous silent-failure UX is gone.
     if (
       def.externalMcpInjection === 'claude-mcp-json' &&
-      isManagedProjectCwd(cwd, PROJECTS_DIR)
+      isManagedProjectCwd(cwd, projectsRoot)
     ) {
       {
         const target = path.join(cwd, '.mcp.json');
@@ -13020,7 +13422,7 @@ export async function startServer({
         // same project from overwriting each other's transcript or final HTML.
         // Spec: artifacts/<projectId>/<runId>/transcript.ndjson(.gz).
         const critiqueProjectKey = typeof projectId === 'string' && projectId ? projectId : critiqueRunId;
-        const critiqueArtifactDir = path.join(ARTIFACTS_DIR, critiqueProjectKey, critiqueRunId);
+        const critiqueArtifactDir = path.join(artifactsRoot, critiqueProjectKey, critiqueRunId);
         const stdoutIterable = (async function* () {
           for await (const chunk of child.stdout) yield String(chunk);
         })();
@@ -13894,11 +14296,11 @@ export async function startServer({
       if (run.projectId) {
         (async () => {
           try {
-            const project = getProject(db, run.projectId);
-            const files = await listFiles(PROJECTS_DIR, run.projectId, {
+            const project = getProject(db, run.projectId, runProjectOwnerScope);
+            const files = await listFiles(projectsRoot, run.projectId, {
               metadata: project?.metadata,
             });
-            const dir = resolveProjectDir(PROJECTS_DIR, run.projectId, project?.metadata);
+            const dir = resolveProjectDir(projectsRoot, run.projectId, project?.metadata);
             for (const f of files) {
               const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
               if (ext !== '.html' && ext !== '.htm') continue;
@@ -13907,7 +14309,7 @@ export async function startServer({
                 const st = await fs.promises.stat(filePath);
                 if (!isRunTouchedProjectFile(st.mtimeMs, runStartTimeMs)) continue;
                 await reconcileHtmlArtifactManifest(
-                  PROJECTS_DIR,
+                  projectsRoot,
                   run.projectId,
                   f.name,
                   project?.metadata,
@@ -13996,13 +14398,29 @@ export async function startServer({
     }
   };
 
-  orbitService.setRunHandler(async ({
-    trigger,
-    startedAt,
-    prompt,
-    systemPrompt,
-    template,
-  }) => {
+  // Send a `tool_result` content block into a still-running stream-json
+  // child. Used for interactive tools that the host answers (currently:
+  // Claude's `AskUserQuestion`). The run must still be active and its
+  // stdin must still be open — we never re-spawn a closed child.
+  const submitToolResultToRun = (runId, toolUseId, content, isError = false) => {
+    const run = design.runs.get(runId);
+    if (!run) return { ok: false, reason: 'not_found' };
+    return submitToolResultToRunState(run, {
+      content,
+      isError,
+      isTerminal: design.runs.isTerminal(run.status),
+      toolUseId,
+    });
+  };
+
+  function registerOrbitServiceHandlers(service: OrbitService, serviceUser: DaemonUser | null): void {
+    service.setRunHandler(async ({
+      trigger,
+      startedAt,
+      prompt,
+      systemPrompt,
+      template,
+    }) => {
     // Each Orbit run gets its own project so the conversation, messages, and
     // live artifact are isolated. The handler does the synchronous prep here
     // (insert project/conversation/run rows, kick off the chat run) and
@@ -14011,7 +14429,9 @@ export async function startServer({
     // the new project before the agent has finished. Anything that depends
     // on the agent's final status (live artifact discovery, lastRun summary
     // metadata) lives inside the `completion` promise.
-    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+    const orbitDataDir = serviceUser ? runtimeDataDirForUser(serviceUser) : RUNTIME_DATA_DIR;
+    const orbitProjectsRoot = serviceUser ? projectsDirForUser(serviceUser) : PROJECTS_DIR;
+    const appConfig = await readAppConfig(orbitDataDir);
     let agentId = typeof appConfig.agentId === 'string' && appConfig.agentId
       ? appConfig.agentId
       : null;
@@ -14033,6 +14453,7 @@ export async function startServer({
 
     insertProject(db, {
       id: projectId,
+      ...ownerFieldsForUser(serviceUser),
       name: projectName,
       skillId: 'live-artifact',
       designSystemId: orbitDesignSystemId,
@@ -14074,7 +14495,7 @@ export async function startServer({
     });
 
     if (template?.dir) {
-      const cwd = await ensureProject(PROJECTS_DIR, projectId);
+      const cwd = await ensureProject(orbitProjectsRoot, projectId);
       const result = await stageActiveSkill(
         cwd,
         skillCwdAliasSegment(template.dir),
@@ -14109,14 +14530,14 @@ export async function startServer({
         'Do not ask follow-up questions, do not emit <question-form>, and do not wait for user input. This run is unattended; pick reasonable defaults and complete the artifact.',
         'Keep connector credentials and OD_TOOL_TOKEN private; never print or persist secrets.',
       ].join('\n'),
-    }, run));
+    }, run, serviceUser ?? undefined));
 
     const completion = (async () => {
       const finalStatus = await design.runs.wait(run);
       db.prepare(
         `UPDATE messages SET run_status = ?, ended_at = ? WHERE id = ?`,
       ).run(finalStatus.status, Date.now(), assistantMessageId);
-      const artifacts = await listLiveArtifacts({ projectsRoot: PROJECTS_DIR, projectId });
+      const artifacts = await listLiveArtifacts({ projectsRoot: orbitProjectsRoot, projectId });
       const artifact = artifacts.find((candidate) => candidate.createdByRunId === run.id);
       const status = finalStatus.status === 'succeeded' && !artifact ? 'failed' : finalStatus.status;
       return {
@@ -14132,38 +14553,63 @@ export async function startServer({
     })();
 
     return { projectId, agentRunId: run.id, completion };
-  });
+    });
 
-  orbitService.setTemplateResolver(async (skillId) => {
-    // Orbit templates (live-artifact, etc.) live under design-templates after
-    // the split, but earlier projects may still point at functional-skill
-    // ids for the same purpose — search both roots so a stored project id
-    // keeps resolving through one or the other.
-    const skills = await listAllSkillLikeEntries();
-    const skill = findSkillById(skills, skillId);
-    if (!skill || skill.scenario !== 'orbit') return null;
-    return {
-      id: skill.id,
-      name: skill.name,
-      examplePrompt: skill.examplePrompt,
-      dir: skill.dir,
-      body: skill.body,
-      designSystemRequired: skill.designSystemRequired !== false,
-    };
-  });
+    service.setTemplateResolver(async (skillId) => {
+      // Orbit templates (live-artifact, etc.) live under design-templates after
+      // the split, but earlier projects may still point at functional-skill
+      // ids for the same purpose — search both roots so a stored project id
+      // keeps resolving through one or the other.
+      const templateDataDir = serviceUser ? runtimeDataDirForUser(serviceUser) : RUNTIME_DATA_DIR;
+      const skills = await listAllSkillLikeEntriesForUserRoots(
+        userSkillsDirForDataDir(templateDataDir),
+        userDesignTemplatesDirForDataDir(templateDataDir),
+      );
+      const skill = findSkillById(skills, skillId);
+      if (!skill || skill.scenario !== 'orbit') return null;
+      return {
+        id: skill.id,
+        name: skill.name,
+        examplePrompt: skill.examplePrompt,
+        dir: skill.dir,
+        body: skill.body,
+        designSystemRequired: skill.designSystemRequired !== false,
+      };
+    });
+  }
+  registerOrbitServiceHandlers(orbitService, null);
 
-  function runToolBundleDeliveryTargetForProject(projectId, metadata) {
+  function runToolBundleDeliveryTargetForProject(projectsRoot, projectId, metadata) {
     if (typeof projectId !== 'string' || !projectId || !isSafeId(projectId)) {
       return 'none';
     }
     try {
-      const cwd = resolveProjectDir(PROJECTS_DIR, projectId, metadata, {
+      const cwd = resolveProjectDir(projectsRoot, projectId, metadata, {
         allowUnavailableSandboxImportedProject: true,
       });
-      return isManagedProjectCwd(cwd, PROJECTS_DIR) ? 'managed-project' : 'external-project';
+      return isManagedProjectCwd(cwd, projectsRoot) ? 'managed-project' : 'external-project';
     } catch {
       return 'none';
     }
+  }
+
+  function isRunVisibleToRequest(req, run) {
+    const runOwnerEmail =
+      typeof run?.user?.email === 'string' && run.user.email.length > 0
+        ? run.user.email
+        : null;
+    if (runOwnerEmail) {
+      return req.user?.email === runOwnerEmail;
+    }
+    if (!run?.projectId) return true;
+    if (getProject(db, run.projectId, ownerScopeForRequest(req))) return true;
+    return !getProject(db, run.projectId);
+  }
+
+  function getVisibleRunForRequest(req, runId) {
+    const run = design.runs.get(runId);
+    if (!run || !isRunVisibleToRequest(req, run)) return null;
+    return run;
   }
 
   app.post('/api/runs', async (req, res) => {
@@ -14171,6 +14617,8 @@ export async function startServer({
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
     const requestBody = req.body && typeof req.body === 'object' ? req.body : {};
+    const requestDataDir = runtimeDataDirFor(req);
+    const requestProjectsRoot = projectsDirFor(req);
     const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
     if (!mediaExecution.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
@@ -14178,6 +14626,13 @@ export async function startServer({
     const toolBundle = parseRunToolBundleForRequest(requestBody.toolBundle);
     if (!toolBundle.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
+    }
+    let requestProjectForRun = null;
+    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
+      requestProjectForRun = getProject(db, requestBody.projectId, ownerScopeForRequest(req));
+      if (!requestProjectForRun) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
     }
     // Plan §3.A1 / spec §11.5: resolve any pluginId / appliedPluginSnapshotId
     // before the run is created. The resolver returns null when the body
@@ -14197,7 +14652,7 @@ export async function startServer({
     if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
       let registryView;
       try {
-        registryView = await loadPluginRegistryView();
+        registryView = await loadPluginRegistryView(requestDataDir);
       } catch (err) {
         return res.status(500).json({ error: String(err) });
       }
@@ -14205,7 +14660,7 @@ export async function startServer({
         requestBody.pluginId || requestBody.appliedPluginSnapshotId;
       let runResolveBody = requestBody;
       if (!explicitPlugin) {
-        const projectRow = getProject(db, requestBody.projectId);
+        const projectRow = requestProjectForRun;
         const hasPin =
           typeof projectRow?.appliedPluginSnapshotId === 'string'
           && projectRow.appliedPluginSnapshotId.length > 0;
@@ -14224,7 +14679,7 @@ export async function startServer({
           ? requestBody.conversationId
           : null,
         registry: registryView,
-        connectorProbe: buildConnectorProbe(connectorService),
+        connectorProbe: buildConnectorProbe(connectorServiceForDataDir(requestDataDir)),
       });
       if (resolved && !resolved.ok) {
         if (!explicitPlugin) {
@@ -14257,7 +14712,7 @@ export async function startServer({
     let runProject = null;
     if (typeof meta.projectId === 'string' && meta.projectId) {
       try {
-        runProject = getProject(db, meta.projectId);
+        runProject = requestProjectForRun;
         assertSandboxProjectRootAvailable(runProject?.metadata);
       } catch (err) {
         if (err instanceof SandboxImportedProjectError) {
@@ -14270,7 +14725,7 @@ export async function startServer({
     // side effects so unsupported run-scoped tool bundles can fail cleanly.
     if (typeof meta.agentId !== 'string' || !meta.agentId) {
       try {
-        const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
+        const appCfg = await readAppConfig(requestDataDir);
         const cfgAgent = typeof appCfg.agentId === 'string' && appCfg.agentId
           ? appCfg.agentId
           : null;
@@ -14293,6 +14748,7 @@ export async function startServer({
       typeof meta.agentId === 'string' ? getAgentDef(meta.agentId) : null,
       {
         deliveryTarget: runToolBundleDeliveryTargetForProject(
+          requestProjectsRoot,
           meta.projectId,
           runProject?.metadata,
         ),
@@ -14336,6 +14792,11 @@ export async function startServer({
               const bCreated = Number(b?.createdAt);
               if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
                 return aCreated - bCreated;
+              }
+              const aUpdated = Number(a?.updatedAt);
+              const bUpdated = Number(b?.updatedAt);
+              if (Number.isFinite(aUpdated) && Number.isFinite(bUpdated) && aUpdated !== bUpdated) {
+                return aUpdated - bUpdated;
               }
               return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
             })[0]
@@ -14427,14 +14888,14 @@ export async function startServer({
     reconcileAssistantMessageOnRunEnd(db, design.runs, run);
     if (run.projectId && run.conversationId) {
       try {
-        const project = getProject(db, run.projectId);
-        const projectRoot = resolveProjectDir(PROJECTS_DIR, run.projectId, project?.metadata);
+        const project = getProject(db, run.projectId, ownerScopeForRequest(req));
+        const projectRoot = resolveProjectDir(requestProjectsRoot, run.projectId, project?.metadata);
         detectSkillPluginCandidateOnRunSuccess(db, design.runs, run, req.body || {}, projectRoot);
       } catch (err) {
         console.warn('[plugins] skill candidate hook setup failed', err);
       }
     }
-    design.runs.start(run, () => startChatRun(meta, run));
+    design.runs.start(run, () => startChatRun(meta, run, req.user));
 
     // Analytics v2: emit run_created (daemon-side authoritative) and
     // schedule run_finished on terminal state. The matching `chat-routes.ts`
@@ -14467,7 +14928,7 @@ export async function startServer({
       //   - configure_availability: 'available' when the requested CLI is
       //     installed; 'unavailable' when it's known but not installed;
       //     'unknown' otherwise
-      const appCfgForAnalytics = await readAppConfig(RUNTIME_DATA_DIR).catch(
+      const appCfgForAnalytics = await readAppConfig(requestDataDir).catch(
         () => ({} as Record<string, unknown>),
       );
       const detectedAgentsForAnalytics = await detectAgents(
@@ -14538,10 +14999,12 @@ export async function startServer({
         ? analyticsHints.projectKind
         : null;
       const requestProjectId = typeof reqBody.projectId === 'string' ? reqBody.projectId : null;
-      const runProject = requestProjectId ? getProject(db, requestProjectId) : null;
+      const analyticsRunProject = requestProjectId
+        ? getProject(db, requestProjectId, ownerScopeForRequest(req))
+        : null;
       const runProjectKind = resolveRunProjectKindForAnalytics({
         hintProjectKind,
-        projectMetadata: runProject?.metadata,
+        projectMetadata: analyticsRunProject?.metadata,
       });
       const dsRunContext =
         analyticsHints.designSystemRunContext
@@ -14693,6 +15156,7 @@ export async function startServer({
         appVersion: design.getAppVersion(),
         properties: baseProps,
         insertId: runInsertId,
+        dataDir: requestDataDir,
       });
       design.runs.wait(run).then(async (status: {
         status: string;
@@ -14709,7 +15173,7 @@ export async function startServer({
         // `langfuse_delivery_status` / `langfuse_drop_reason` must read the
         // same completion-time eligibility to stay aligned. See PR #3412
         // review.
-        const appCfgAtFinish = await readAppConfig(RUNTIME_DATA_DIR).catch(
+        const appCfgAtFinish = await readAppConfig(requestDataDir).catch(
           () => ({} as Record<string, unknown>),
         );
         const langfuseDeliveryForAnalytics = deriveLangfuseDeliveryState(
@@ -14769,6 +15233,7 @@ export async function startServer({
             appVersion: design.getAppVersion(),
             properties: retryEvent.data,
             insertId: `${runInsertId}-${retryEvent.event}-${index}`,
+            dataDir: requestDataDir,
           });
         }
         design.analytics.capture({
@@ -14860,6 +15325,7 @@ export async function startServer({
             token_count_source: usageAnalytics.token_count_source,
           },
           insertId: `${runInsertId}-finish`,
+          dataDir: requestDataDir,
         });
       }).catch(() => {
         // wait() can't reject in current runs.ts impl, but guard anyway.
@@ -14869,20 +15335,22 @@ export async function startServer({
 
   app.get('/api/runs', (req, res) => {
     const { projectId, conversationId, status } = req.query;
-    const runs = design.runs.list({ projectId, conversationId, status });
+    const runs = design.runs
+      .list({ projectId, conversationId, status })
+      .filter((run) => isRunVisibleToRequest(req, run));
     /** @type {import('@open-design/contracts').ChatRunListResponse} */
     const body = { runs: runs.map(design.runs.statusBody) };
     res.json(body);
   });
 
   app.get('/api/runs/:id', (req, res) => {
-    const run = design.runs.get(req.params.id);
+    const run = getVisibleRunForRequest(req, req.params.id);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
     res.json(design.runs.statusBody(run));
   });
 
   app.get('/api/runs/:id/events', (req, res) => {
-    const run = design.runs.get(req.params.id);
+    const run = getVisibleRunForRequest(req, req.params.id);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
     design.runs.stream(run, req, res);
   });
@@ -14895,7 +15363,7 @@ export async function startServer({
   // can't map are dropped; the SSE stream stays canonical even when
   // OD adds internal-only events later.
   app.get('/api/runs/:id/agui', async (req, res) => {
-    const run = design.runs.get(req.params.id);
+    const run = getVisibleRunForRequest(req, req.params.id);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
     const { encodeOdEventForAgui } = await import('@open-design/agui-adapter');
     const sse = createSseResponse(res);
@@ -14937,7 +15405,7 @@ export async function startServer({
   });
 
   app.post('/api/runs/:id/cancel', (req, res) => {
-    const run = design.runs.get(req.params.id);
+    const run = getVisibleRunForRequest(req, req.params.id);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
     design.runs.cancel(run);
     /** @type {import('@open-design/contracts').ChatRunCancelResponse} */
@@ -14961,7 +15429,10 @@ export async function startServer({
     let chatProject = null;
     if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
       try {
-        chatProject = getProject(db, requestBody.projectId);
+        chatProject = getProject(db, requestBody.projectId, ownerScopeForRequest(req));
+        if (!chatProject) {
+          return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        }
         assertSandboxProjectRootAvailable(chatProject?.metadata);
       } catch (err) {
         if (err instanceof SandboxImportedProjectError) {
@@ -14975,6 +15446,7 @@ export async function startServer({
       typeof requestBody.agentId === 'string' ? getAgentDef(requestBody.agentId) : null,
       {
         deliveryTarget: runToolBundleDeliveryTargetForProject(
+          projectsDirFor(req),
           requestBody.projectId,
           chatProject?.metadata,
         ),
@@ -14991,13 +15463,15 @@ export async function startServer({
     };
     const run = design.runs.create(meta);
     design.runs.stream(run, req, res);
-    design.runs.start(run, () => startChatRun(meta, run));
+    design.runs.start(run, () => startChatRun(meta, run, req.user));
   });
 
   // Each routine fire resolves an agent, prepares project/conversation state,
   // and dispatches into the same chat runner used by manual runs.
   routineService.setRunHandler(async ({ routine, trigger, startedAt, runId }) => {
-    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+    const routineUser = ownerUserForRoutine(routine);
+    const routineDataDir = runtimeDataDirForUser(routineUser);
+    const appConfig = await readAppConfig(routineDataDir);
     let agentId = routine.agentId
       || (typeof appConfig.agentId === 'string' && appConfig.agentId ? appConfig.agentId : null);
     if (!agentId) {
@@ -15039,12 +15513,18 @@ export async function startServer({
     let createdProjectId: string | null = null;
     let createdConversationId: string | null = null;
     let previousProjectSnapshotId: string | null = null;
+    const routineProjectOwnerScope = {
+      ownerEmail: routineUser.email,
+      includeOwnerless: !authContextMiddleware.multitenant || routineUser.source === 'dev-fallback',
+    };
     const createRoutineProject = () => {
       if (createdProjectId) return;
       projectId = `routine-${randomUUID()}`;
       projectName = `${routine.name} · ${stamp}`;
       insertProject(db, {
         id: projectId,
+        ownerEmail: routineUser.email,
+        ownerDirHash: routineUser.dirHash,
         name: projectName,
         skillId: routineSkillId,
         designSystemId: appConfig.designSystemId ?? null,
@@ -15063,7 +15543,7 @@ export async function startServer({
       createdProjectId = projectId;
     };
     if (routine.target.mode === 'reuse') {
-      const project = getProject(db, routine.target.projectId);
+      const project = getProject(db, routine.target.projectId, routineProjectOwnerScope);
       if (!project) throw new Error(`Routine target project ${routine.target.projectId} not found`);
       assertSandboxProjectRootAvailable(project.metadata);
       projectId = project.id;
@@ -15112,9 +15592,9 @@ export async function startServer({
     const primaryPluginId = routineContext.pluginIds?.[0] ?? null;
     const resolveRoutinePluginSnapshot = async () => {
       if (!primaryPluginId || resolvedRoutineSnapshot) return;
-      const registry = await loadPluginRegistryView();
+      const registry = await loadPluginRegistryView(routineDataDir);
       const projectSnapshotBefore = routine.target.mode === 'reuse'
-        ? getProject(db, routine.target.projectId)?.appliedPluginSnapshotId ?? null
+        ? getProject(db, routine.target.projectId, routineProjectOwnerScope)?.appliedPluginSnapshotId ?? null
         : null;
       let resolved;
       try {
@@ -15139,7 +15619,7 @@ export async function startServer({
         // whatever pin it left behind so `discard()` can roll it back even
         // though `resolvedRoutineSnapshot` will stay null.
         if (routine.target.mode === 'reuse') {
-          const after = getProject(db, routine.target.projectId)?.appliedPluginSnapshotId ?? null;
+          const after = getProject(db, routine.target.projectId, routineProjectOwnerScope)?.appliedPluginSnapshotId ?? null;
           if (after && after !== projectSnapshotBefore) {
             partiallyAppliedSnapshotId = after;
           }
@@ -15230,7 +15710,7 @@ export async function startServer({
           `You are running an unattended scheduled routine named "${routine.name}".`,
           'Do not ask follow-up questions, do not emit <question-form>, and do not wait for user input. Pick reasonable defaults and finish the task.',
         ].join('\n'),
-      }, run));
+      }, run, routineUser));
     };
 
     // Tear-down for the case where the durable routine_run row was never
@@ -15297,7 +15777,7 @@ export async function startServer({
       let evolutionSummary = '';
       if (finalStatus.status === 'succeeded' && routineContext.connectorIds?.length) {
         try {
-          const evolution = await ingestRoutineConnectorEvolution(RUNTIME_DATA_DIR, {
+          const evolution = await ingestRoutineConnectorEvolution(routineDataDir, {
             routine,
             runId,
             trigger,
@@ -15378,7 +15858,7 @@ export async function startServer({
     validation: validationDeps,
     finalize: finalizeDeps,
     handoff: handoffDeps,
-    chat: { startChatRun },
+    chat: { startChatRun, submitToolResultToRun },
     agents: agentDeps,
     critique: critiqueDeps,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
@@ -15386,7 +15866,7 @@ export async function startServer({
 
   registerRoutineRoutes(app, {
     db,
-    paths: { RUNTIME_DATA_DIR },
+    paths: { runtimeDataDirFor },
     routines: { routineService },
   });
 
@@ -15403,7 +15883,7 @@ export async function startServer({
     design,
     http: httpDeps,
     paths: pathDeps,
-    chat: { startChatRun },
+    chat: { startChatRun, submitToolResultToRun },
     agents: agentDeps,
     critique: critiqueDeps,
     validation: validationDeps,

@@ -17,6 +17,12 @@ type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
 type JsonObject = Record<string, unknown>;
 type ChatSessionMode = 'design' | 'chat';
+type HostedOwnerlessTable = 'projects' | 'routines' | 'templates';
+
+export interface HostedOwnerlessDataIssue {
+  table: HostedOwnerlessTable;
+  count: number;
+}
 
 let dbInstance: SqliteDb | null = null;
 let dbFile: string | null = null;
@@ -51,10 +57,38 @@ export function closeDatabase() {
   dbFile = null;
 }
 
+function countOwnerlessRows(db: SqliteDb, table: HostedOwnerlessTable): number {
+  const row = db
+    .prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE owner_email IS NULL OR owner_email = ''`)
+    .get() as DbRow | undefined;
+  return Number(row?.count ?? 0);
+}
+
+export function findOwnerlessHostedData(db: SqliteDb): HostedOwnerlessDataIssue[] {
+  const issues: HostedOwnerlessDataIssue[] = [];
+  for (const table of ['projects', 'routines', 'templates'] as HostedOwnerlessTable[]) {
+    const count = countOwnerlessRows(db, table);
+    if (count > 0) issues.push({ table, count });
+  }
+  return issues;
+}
+
+export function assertNoOwnerlessHostedData(db: SqliteDb): void {
+  const issues = findOwnerlessHostedData(db);
+  if (issues.length === 0) return;
+  const details = issues.map((issue) => `${issue.table}=${issue.count}`).join(', ');
+  throw new Error(
+    `OD_MULTITENANT=1 cannot start with ownerless legacy data (${details}). ` +
+      'Stamp owner_email/owner_dir_hash on existing rows before enabling hosted mode.',
+  );
+}
+
 function migrate(db: SqliteDb): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
+      owner_email TEXT,
+      owner_dir_hash TEXT,
       name TEXT NOT NULL,
       skill_id TEXT,
       design_system_id TEXT,
@@ -66,6 +100,8 @@ function migrate(db: SqliteDb): void {
 
     CREATE TABLE IF NOT EXISTS templates (
       id TEXT PRIMARY KEY,
+      owner_email TEXT,
+      owner_dir_hash TEXT,
       name TEXT NOT NULL,
       description TEXT,
       source_project_id TEXT,
@@ -197,6 +233,8 @@ function migrate(db: SqliteDb): void {
 
     CREATE TABLE IF NOT EXISTS routines (
       id TEXT PRIMARY KEY,
+      owner_email TEXT,
+      owner_dir_hash TEXT,
       name TEXT NOT NULL,
       prompt TEXT NOT NULL,
       schedule_kind TEXT NOT NULL,
@@ -248,6 +286,41 @@ function migrate(db: SqliteDb): void {
   if (!cols.some((c: DbRow) => c.name === 'custom_instructions')) {
     db.exec(`ALTER TABLE projects ADD COLUMN custom_instructions TEXT`);
   }
+  if (!cols.some((c: DbRow) => c.name === 'owner_email')) {
+    db.exec(`ALTER TABLE projects ADD COLUMN owner_email TEXT`);
+  }
+  if (!cols.some((c: DbRow) => c.name === 'owner_dir_hash')) {
+    db.exec(`ALTER TABLE projects ADD COLUMN owner_dir_hash TEXT`);
+  }
+  const templateCols = db.prepare(`PRAGMA table_info(templates)`).all() as DbRow[];
+  if (!templateCols.some((c: DbRow) => c.name === 'owner_email')) {
+    db.exec(`ALTER TABLE templates ADD COLUMN owner_email TEXT`);
+  }
+  if (!templateCols.some((c: DbRow) => c.name === 'owner_dir_hash')) {
+    db.exec(`ALTER TABLE templates ADD COLUMN owner_dir_hash TEXT`);
+  }
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_templates_owner_email ON templates(owner_email)`);
+  db.exec(`
+    UPDATE templates
+       SET owner_email = (
+             SELECT owner_email
+               FROM projects
+              WHERE projects.id = templates.source_project_id
+           ),
+           owner_dir_hash = (
+             SELECT owner_dir_hash
+               FROM projects
+              WHERE projects.id = templates.source_project_id
+           )
+     WHERE owner_email IS NULL
+       AND source_project_id IS NOT NULL
+       AND EXISTS (
+             SELECT 1
+               FROM projects
+              WHERE projects.id = templates.source_project_id
+                AND projects.owner_email IS NOT NULL
+           )
+  `);
   const conversationCols = db.prepare(`PRAGMA table_info(conversations)`).all() as DbRow[];
   if (!conversationCols.some((c: DbRow) => c.name === 'session_mode')) {
     db.exec(`ALTER TABLE conversations ADD COLUMN session_mode TEXT NOT NULL DEFAULT 'design'`);
@@ -338,6 +411,12 @@ function migrate(db: SqliteDb): void {
   }
   if (routineCols.length > 0 && !routineCols.some((c: DbRow) => c.name === 'context_json')) {
     db.exec(`ALTER TABLE routines ADD COLUMN context_json TEXT`);
+  }
+  if (routineCols.length > 0 && !routineCols.some((c: DbRow) => c.name === 'owner_email')) {
+    db.exec(`ALTER TABLE routines ADD COLUMN owner_email TEXT`);
+  }
+  if (routineCols.length > 0 && !routineCols.some((c: DbRow) => c.name === 'owner_dir_hash')) {
+    db.exec(`ALTER TABLE routines ADD COLUMN owner_dir_hash TEXT`);
   }
   const agentSessionCols = db.prepare(`PRAGMA table_info(agent_sessions)`).all() as DbRow[];
   if (agentSessionCols.length > 0 && !agentSessionCols.some((c: DbRow) => c.name === 'stable_prompt_hash')) {
@@ -571,14 +650,46 @@ const PROJECT_COLS = `id, name, skill_id AS skillId,
   created_at AS createdAt,
   updated_at AS updatedAt`;
 
-export function listProjects(db: SqliteDb) {
+export interface ProjectOwnerScope {
+  ownerEmail?: string | null;
+  includeOwnerless?: boolean;
+}
+
+function ownerClause(column: string, scope?: ProjectOwnerScope) {
+  if (!scope) return { where: '', params: [] as unknown[] };
+  const ownerEmail = typeof scope.ownerEmail === 'string' && scope.ownerEmail.length > 0
+    ? scope.ownerEmail
+    : null;
+  if (ownerEmail && scope.includeOwnerless) {
+    return { where: `WHERE (${column} = ? OR ${column} IS NULL)`, params: [ownerEmail] as unknown[] };
+  }
+  if (ownerEmail) {
+    return { where: `WHERE ${column} = ?`, params: [ownerEmail] as unknown[] };
+  }
+  if (scope.includeOwnerless) {
+    return { where: `WHERE ${column} IS NULL`, params: [] as unknown[] };
+  }
+  return { where: 'WHERE 1 = 0', params: [] as unknown[] };
+}
+
+function andOwnerClause(column: string, scope?: ProjectOwnerScope) {
+  const owner = ownerClause(column, scope);
+  return {
+    sql: owner.where ? `AND ${owner.where.replace(/^WHERE\s+/u, '')}` : '',
+    params: owner.params,
+  };
+}
+
+export function listProjects(db: SqliteDb, scope?: ProjectOwnerScope) {
+  const owner = ownerClause('owner_email', scope);
   const rows = db
     .prepare(
       `SELECT ${PROJECT_COLS}
          FROM projects
+        ${owner.where}
         ORDER BY updated_at DESC`,
     )
-    .all() as DbRow[];
+    .all(...owner.params) as DbRow[];
   return rows.map(normalizeProject);
 }
 
@@ -648,21 +759,24 @@ export function listProjectsAwaitingInput(db: SqliteDb) {
   return new Set((rows as DbRow[]).map((row: DbRow) => row.projectId));
 }
 
-export function getProject(db: SqliteDb, id: string) {
+export function getProject(db: SqliteDb, id: string, scope?: ProjectOwnerScope) {
+  const owner = andOwnerClause('owner_email', scope);
   const row = db
-    .prepare(`SELECT ${PROJECT_COLS} FROM projects WHERE id = ?`)
-    .get(id) as DbRow | undefined;
+    .prepare(`SELECT ${PROJECT_COLS} FROM projects WHERE id = ? ${owner.sql}`)
+    .get(id, ...owner.params) as DbRow | undefined;
   return row ? normalizeProject(row) : null;
 }
 
 export function insertProject(db: SqliteDb, p: DbRow) {
   db.prepare(
     `INSERT INTO projects
-       (id, name, skill_id, design_system_id, pending_prompt,
+       (id, owner_email, owner_dir_hash, name, skill_id, design_system_id, pending_prompt,
         metadata_json, custom_instructions, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     p.id,
+    p.ownerEmail ?? null,
+    p.ownerDirHash ?? null,
     p.name,
     p.skillId ?? null,
     p.designSystemId ?? null,
@@ -675,8 +789,8 @@ export function insertProject(db: SqliteDb, p: DbRow) {
   return getProject(db, p.id);
 }
 
-export function updateProject(db: SqliteDb, id: string, patch: DbRow) {
-  const existing = getProject(db, id);
+export function updateProject(db: SqliteDb, id: string, patch: DbRow, scope?: ProjectOwnerScope) {
+  const existing = getProject(db, id, scope);
   if (!existing) return null;
   const merged = {
     ...existing,
@@ -703,11 +817,13 @@ export function updateProject(db: SqliteDb, id: string, patch: DbRow) {
     merged.updatedAt,
     id,
   );
-  return getProject(db, id);
+  return getProject(db, id, scope);
 }
 
-export function deleteProject(db: SqliteDb, id: string) {
-  db.prepare(`DELETE FROM projects WHERE id = ?`).run(id);
+export function deleteProject(db: SqliteDb, id: string, scope?: ProjectOwnerScope): boolean {
+  const owner = andOwnerClause('owner_email', scope);
+  const result = db.prepare(`DELETE FROM projects WHERE id = ? ${owner.sql}`).run(id, ...owner.params);
+  return result.changes > 0;
 }
 
 function normalizeProject(row: DbRow) {
@@ -750,26 +866,29 @@ function normalizeProjectRunStatus(status: unknown) {
 
 // ---------- templates ----------
 
-export function listTemplates(db: SqliteDb) {
+export function listTemplates(db: SqliteDb, scope?: ProjectOwnerScope) {
+  const owner = ownerClause('owner_email', scope);
   return (db
     .prepare(
       `SELECT id, name, description, source_project_id AS sourceProjectId,
               files_json AS filesJson, created_at AS createdAt
          FROM templates
+         ${owner.where}
         ORDER BY created_at DESC`,
     )
-    .all() as DbRow[])
+    .all(...owner.params) as DbRow[])
     .map(normalizeTemplate);
 }
 
-export function getTemplate(db: SqliteDb, id: string) {
+export function getTemplate(db: SqliteDb, id: string, scope?: ProjectOwnerScope) {
+  const owner = andOwnerClause('owner_email', scope);
   const row = db
     .prepare(
       `SELECT id, name, description, source_project_id AS sourceProjectId,
               files_json AS filesJson, created_at AS createdAt
-         FROM templates WHERE id = ?`,
+         FROM templates WHERE id = ? ${owner.sql}`,
     )
-    .get(id) as DbRow | undefined;
+    .get(id, ...owner.params) as DbRow | undefined;
   return row ? normalizeTemplate(row) : null;
 }
 
@@ -777,46 +896,54 @@ export function findTemplateByNameAndProject(
   db: SqliteDb,
   name: string,
   sourceProjectId: string,
+  scope?: ProjectOwnerScope,
 ) {
+  const owner = andOwnerClause('owner_email', scope);
   const row = db
     .prepare(
       `SELECT id, name, description, source_project_id AS sourceProjectId,
               files_json AS filesJson, created_at AS createdAt
          FROM templates
-        WHERE name = ? AND source_project_id = ?`,
+        WHERE name = ? AND source_project_id = ? ${owner.sql}`,
     )
-    .get(name, sourceProjectId) as DbRow | undefined;
+    .get(name, sourceProjectId, ...owner.params) as DbRow | undefined;
   return row ? normalizeTemplate(row) : null;
 }
 
 export function insertTemplate(db: SqliteDb, t: DbRow) {
   db.prepare(
-    `INSERT INTO templates (id, name, description, source_project_id, files_json, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO templates
+       (id, owner_email, owner_dir_hash, name, description, source_project_id, files_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     t.id,
+    t.ownerEmail ?? null,
+    t.ownerDirHash ?? null,
     t.name,
     t.description ?? null,
     t.sourceProjectId ?? null,
     JSON.stringify(t.files ?? []),
     t.createdAt,
   );
-  return getTemplate(db, t.id);
+  return getTemplate(db, t.id, { ownerEmail: t.ownerEmail ?? null, includeOwnerless: true });
 }
 
 export function updateTemplate(
   db: SqliteDb,
   id: string,
   t: { description: string | null; files: unknown[] },
+  scope?: ProjectOwnerScope,
 ) {
+  const owner = andOwnerClause('owner_email', scope);
   db.prepare(
-    `UPDATE templates SET description = ?, files_json = ? WHERE id = ?`,
-  ).run(t.description, JSON.stringify(t.files), id);
-  return getTemplate(db, id);
+    `UPDATE templates SET description = ?, files_json = ? WHERE id = ? ${owner.sql}`,
+  ).run(t.description, JSON.stringify(t.files), id, ...owner.params);
+  return getTemplate(db, id, scope);
 }
 
-export function deleteTemplate(db: SqliteDb, id: string) {
-  db.prepare(`DELETE FROM templates WHERE id = ?`).run(id);
+export function deleteTemplate(db: SqliteDb, id: string, scope?: ProjectOwnerScope) {
+  const owner = andOwnerClause('owner_email', scope);
+  db.prepare(`DELETE FROM templates WHERE id = ? ${owner.sql}`).run(id, ...owner.params);
 }
 
 function normalizeTemplate(row: DbRow) {
@@ -1710,7 +1837,10 @@ function parseJsonOrUndef(s: unknown): any {
 
 // ---------- routines ----------
 
-const ROUTINE_COLS = `id, name, prompt,
+const ROUTINE_COLS = `id,
+  owner_email AS ownerEmail,
+  owner_dir_hash AS ownerDirHash,
+  name, prompt,
   schedule_kind AS scheduleKind, schedule_value AS scheduleValue,
   schedule_json AS scheduleJson,
   project_mode AS projectMode, project_id AS projectId,
@@ -1723,29 +1853,58 @@ const ROUTINE_RUN_COLS = `id, routine_id AS routineId, trigger, status,
   agent_run_id AS agentRunId, started_at AS startedAt,
   completed_at AS completedAt, summary, error, error_code AS errorCode`;
 
-export function listRoutines(db: SqliteDb) {
+export interface RoutineOwnerScope {
+  ownerEmail?: string | null;
+  includeOwnerless?: boolean;
+}
+
+function routineOwnerClause(scope?: RoutineOwnerScope) {
+  if (!scope) return { where: '', params: [] as unknown[] };
+  const ownerEmail = typeof scope.ownerEmail === 'string' && scope.ownerEmail.length > 0
+    ? scope.ownerEmail
+    : null;
+  if (ownerEmail && scope.includeOwnerless) {
+    return { where: 'WHERE (owner_email = ? OR owner_email IS NULL)', params: [ownerEmail] as unknown[] };
+  }
+  if (ownerEmail) {
+    return { where: 'WHERE owner_email = ?', params: [ownerEmail] as unknown[] };
+  }
+  if (scope.includeOwnerless) {
+    return { where: 'WHERE owner_email IS NULL', params: [] as unknown[] };
+  }
+  return { where: 'WHERE 1 = 0', params: [] as unknown[] };
+}
+
+export function listRoutines(db: SqliteDb, scope?: RoutineOwnerScope) {
+  const owner = routineOwnerClause(scope);
   return (db
-    .prepare(`SELECT ${ROUTINE_COLS} FROM routines ORDER BY created_at ASC`)
-    .all() as DbRow[])
+    .prepare(`SELECT ${ROUTINE_COLS} FROM routines ${owner.where} ORDER BY created_at ASC`)
+    .all(...owner.params) as DbRow[])
     .map(normalizeRoutine);
 }
 
-export function getRoutine(db: SqliteDb, id: string) {
+export function getRoutine(db: SqliteDb, id: string, scope?: RoutineOwnerScope) {
+  const owner = routineOwnerClause(scope);
+  const ownerSql = owner.where
+    ? `AND ${owner.where.replace(/^WHERE\s+/u, '')}`
+    : '';
   const r = db
-    .prepare(`SELECT ${ROUTINE_COLS} FROM routines WHERE id = ?`)
-    .get(id) as DbRow | undefined;
+    .prepare(`SELECT ${ROUTINE_COLS} FROM routines WHERE id = ? ${ownerSql}`)
+    .get(id, ...owner.params) as DbRow | undefined;
   return r ? normalizeRoutine(r) : null;
 }
 
 export function insertRoutine(db: SqliteDb, r: DbRow) {
   db.prepare(
     `INSERT INTO routines
-       (id, name, prompt, schedule_kind, schedule_value, schedule_json,
+       (id, owner_email, owner_dir_hash, name, prompt, schedule_kind, schedule_value, schedule_json,
         project_mode, project_id, skill_id, agent_id, context_json, enabled,
         created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     r.id,
+    r.ownerEmail ?? null,
+    r.ownerDirHash ?? null,
     r.name,
     r.prompt,
     r.scheduleKind,
@@ -1797,14 +1956,20 @@ export function updateRoutine(db: SqliteDb, id: string, patch: DbRow) {
   return getRoutine(db, id);
 }
 
-export function deleteRoutine(db: SqliteDb, id: string): boolean {
-  const result = db.prepare(`DELETE FROM routines WHERE id = ?`).run(id);
+export function deleteRoutine(db: SqliteDb, id: string, scope?: RoutineOwnerScope): boolean {
+  const owner = routineOwnerClause(scope);
+  const ownerSql = owner.where
+    ? `AND ${owner.where.replace(/^WHERE\s+/u, '')}`
+    : '';
+  const result = db.prepare(`DELETE FROM routines WHERE id = ? ${ownerSql}`).run(id, ...owner.params);
   return result.changes > 0;
 }
 
 function normalizeRoutine(row: DbRow) {
   return {
     id: row.id,
+    ownerEmail: row.ownerEmail ?? null,
+    ownerDirHash: row.ownerDirHash ?? null,
     name: row.name,
     prompt: row.prompt,
     scheduleKind: row.scheduleKind,

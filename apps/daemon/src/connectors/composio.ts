@@ -419,6 +419,7 @@ export interface ComposioPendingConnection {
   connectorId: string;
   state: string;
   providerConnectionId?: string;
+  dataDir?: string;
   expiresAtMs: number;
 }
 
@@ -645,7 +646,12 @@ export class ComposioConnectorProvider {
     });
   }
 
-  async connect(definition: ConnectorCatalogDefinition, callbackUrl: string, signal?: AbortSignal): Promise<ComposioConnectionStart> {
+  async connect(
+    definition: ConnectorCatalogDefinition,
+    callbackUrl: string,
+    signal?: AbortSignal,
+    dataDir?: string,
+  ): Promise<ComposioConnectionStart> {
     this.pruneExpiredPendingConnections();
 
     let authConfig = await this.getOrCreateManagedAuthConfigId(definition, signal);
@@ -667,7 +673,13 @@ export class ComposioConnectorProvider {
     const providerConnectionId = getComposioConnectionId(response);
     const redirectUrl = getString(response.redirect_url) ?? getString(response.redirectUrl);
     const status = getString(response.status)?.toUpperCase();
-    this.pendingConnections.set(state, { connectorId: definition.id, state, ...(providerConnectionId ? { providerConnectionId } : {}), expiresAtMs });
+    this.pendingConnections.set(state, {
+      connectorId: definition.id,
+      state,
+      ...(providerConnectionId ? { providerConnectionId } : {}),
+      ...(dataDir ? { dataDir } : {}),
+      expiresAtMs,
+    });
 
     const validatedConnection = status === 'ACTIVE' && providerConnectionId
       ? await this.getValidatedConnectedAccount(definition, providerConnectionId, authConfig.authConfigId, signal)
@@ -713,6 +725,13 @@ export class ComposioConnectorProvider {
       cancelled += 1;
     }
     return cancelled;
+  }
+
+  getPendingConnectionDataDir(connectorId: string, state: string): string | undefined {
+    this.pruneExpiredPendingConnections();
+    const pending = this.pendingConnections.get(state);
+    if (!pending || pending.connectorId !== connectorId) return undefined;
+    return pending.dataDir;
   }
 
   async completeConnection(input: { definition: ConnectorCatalogDefinition; state: string; providerConnectionId?: string; status?: string; signal?: AbortSignal }): Promise<ComposioConnectionCompletion> {

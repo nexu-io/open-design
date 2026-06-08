@@ -74,12 +74,14 @@ function cacheCredentialFingerprint(apiKey: string): string {
 
 function voiceCacheKey(input: {
   projectRoot: string;
+  mediaConfigDataDir?: string;
   baseUrl: string;
   apiKey: string;
   pageSize: number;
 }): string {
   return [
     input.projectRoot,
+    input.mediaConfigDataDir ?? '',
     input.baseUrl,
     input.pageSize,
     cacheCredentialFingerprint(input.apiKey),
@@ -97,10 +99,15 @@ export async function listElevenLabsVoiceOptions(
   projectRoot: string,
   options: {
     limit?: number;
+    mediaConfigDataDir?: string;
     requestInit?: Pick<RequestInit, 'dispatcher'>;
   } = {},
 ): Promise<ElevenLabsVoiceOption[]> {
-  const credentials = await resolveProviderConfig(projectRoot, 'elevenlabs');
+  const credentials = await resolveProviderConfig(
+    projectRoot,
+    'elevenlabs',
+    options.mediaConfigDataDir,
+  );
   if (!credentials.apiKey) {
     throw new Error(
       'no ElevenLabs API key - configure it in Settings or set OD_ELEVENLABS_API_KEY',
@@ -117,6 +124,9 @@ export async function listElevenLabsVoiceOptions(
     baseUrl,
     apiKey: credentials.apiKey,
     pageSize,
+    ...(options.mediaConfigDataDir
+      ? { mediaConfigDataDir: options.mediaConfigDataDir }
+      : {}),
   });
   const cached = voiceOptionsCache.get(cacheKey);
   const now = Date.now();

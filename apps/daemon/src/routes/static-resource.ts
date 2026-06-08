@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import type { Request } from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import type { DesignSystemTokenContractRebuildJobResponse } from '@open-design/contracts';
@@ -32,6 +33,7 @@ export interface RegisterStaticResourceRoutesDeps extends RouteDeps<'http' | 'pa
   tokenContractRebuild?: {
     maybeStartForImportedDesignSystem?: (
       designSystemId: string,
+      req?: Request,
     ) => Promise<DesignSystemTokenContractRebuildJobResponse | undefined>;
   };
 }
@@ -49,6 +51,10 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     USER_SKILLS_DIR,
     PROMPT_TEMPLATES_DIR,
     BUNDLED_PETS_DIR,
+    runtimeDataDirFor,
+    userDesignTemplatesDirFor: requestUserDesignTemplatesDirFor,
+    userDesignSystemsDirFor: requestUserDesignSystemsDirFor,
+    userSkillsDirFor: requestUserSkillsDirFor,
   } = ctx.paths;
   const {
     listAllSkills,
@@ -58,15 +64,25 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     mimeFor,
   } = ctx.resources;
   const { isLocalSameOrigin, resolvedPortRef, sendApiError } = ctx.http;
+  const userDesignTemplatesDirFor = (req: Request) =>
+    requestUserDesignTemplatesDirFor?.(req) ?? USER_DESIGN_TEMPLATES_DIR;
+  const userDesignSystemsDirFor = (req: Request) =>
+    requestUserDesignSystemsDirFor?.(req) ?? USER_DESIGN_SYSTEMS_DIR;
+  const userSkillsDirFor = (req: Request) =>
+    requestUserSkillsDirFor?.(req) ?? USER_SKILLS_DIR;
   const requireLocalOrigin = (req: any, res: any) => {
     if (isLocalSameOrigin(req, resolvedPortRef.current)) return true;
     sendApiError(res, 403, 'FORBIDDEN', 'local origin required');
     return false;
   };
-  const importedDesignSystemResponse = async <T extends { id: string }>(designSystem: T) => {
+  const importedDesignSystemResponse = async <T extends { id: string }>(
+    req: Request,
+    designSystem: T,
+  ) => {
     let tokenContractRebuild: DesignSystemTokenContractRebuildJobResponse | undefined;
     try {
-      tokenContractRebuild = await ctx.tokenContractRebuild?.maybeStartForImportedDesignSystem?.(designSystem.id);
+      tokenContractRebuild = await ctx.tokenContractRebuild
+        ?.maybeStartForImportedDesignSystem?.(designSystem.id, req);
     } catch (err) {
       console.warn('[design-systems] import token-contract rebuild auto-queue failed', err);
     }
@@ -81,7 +97,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       req.query.stream === '1' || req.query.stream === 'true';
     let config;
     try {
-      config = await readAppConfig(RUNTIME_DATA_DIR);
+      config = await readAppConfig(runtimeDataDirFor(req));
     } catch (err: any) {
       res.status(500).json({ error: String(err) });
       return;
@@ -129,9 +145,9 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     }
   });
 
-  app.get('/api/skills', async (_req, res) => {
+  app.get('/api/skills', async (req, res) => {
     try {
-      const skills = await listAllSkills();
+      const skills = await listAllSkills(req);
       // Strip full body + on-disk dir from the listing — frontend fetches the
       // body via /api/skills/:id when needed (keeps the listing payload small).
       res.json({
@@ -147,7 +163,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
 
   app.get('/api/skills/:id', async (req, res) => {
     try {
-      const skills = await listAllSkills();
+      const skills = await listAllSkills(req);
       const skill = findSkillById(skills, req.params.id);
       if (!skill) return res.status(404).json({ error: 'skill not found' });
       const { dir: _dir, ...serializable } = skill;
@@ -161,9 +177,9 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   // (so the web client can reuse SkillSummary types) but rooted at
   // DESIGN_TEMPLATE_ROOTS so the listing stays focused on template-style
   // entries without bleeding functional skills into the EntryView gallery.
-  app.get('/api/design-templates', async (_req, res) => {
+  app.get('/api/design-templates', async (req, res) => {
     try {
-      const templates = await listAllDesignTemplates();
+      const templates = await listAllDesignTemplates(req);
       res.json({
         designTemplates: templates.map(({ body, dir: _dir, ...rest }) => ({
           ...rest,
@@ -177,7 +193,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
 
   app.get('/api/design-templates/:id', async (req, res) => {
     try {
-      const templates = await listAllDesignTemplates();
+      const templates = await listAllDesignTemplates(req);
       const template = findSkillById(templates, req.params.id);
       if (!template) return res.status(404).json({ error: 'design template not found' });
       const { dir: _dir, ...serializable } = template;
@@ -192,8 +208,8 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   // automatically because listSkills walks USER_SKILLS_DIR first.
   app.post('/api/skills/import', async (req, res) => {
     try {
-      const result = await importUserSkill(USER_SKILLS_DIR, req.body || {});
-      const skills = await listAllSkills();
+      const result = await importUserSkill(userSkillsDirFor(req), req.body || {});
+      const skills = await listAllSkills(req);
       const skill = findSkillById(skills, result.id);
       if (!skill) {
         return sendApiError(
@@ -226,17 +242,17 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   // the bundled assets/references/scripts/examples). See PR #955 review.
   app.put('/api/skills/:id', async (req, res) => {
     try {
-      const skills = await listAllSkills();
+      const skills = await listAllSkills(req);
       const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return sendApiError(res, 404, 'NOT_FOUND', 'skill not found');
       }
-      const result = await updateUserSkill(USER_SKILLS_DIR, {
+      const result = await updateUserSkill(userSkillsDirFor(req), {
         ...(req.body || {}),
         id: skill.id,
         sourceDir: skill.dir,
       });
-      const next = await listAllSkills();
+      const next = await listAllSkills(req);
       const updated = findSkillById(next, result.id);
       if (!updated) {
         return sendApiError(
@@ -267,7 +283,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   // file tree (capped server-side to keep payload bounded).
   app.get('/api/skills/:id/files', async (req, res) => {
     try {
-      const skills = await listAllSkills();
+      const skills = await listAllSkills(req);
       const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return sendApiError(res, 404, 'NOT_FOUND', 'skill not found');
@@ -354,9 +370,9 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     }
   });
 
-  app.get('/api/design-systems', async (_req, res) => {
+  app.get('/api/design-systems', async (req, res) => {
     try {
-      const systems = await listAllDesignSystems();
+      const systems = await listAllDesignSystems(req);
       res.json({
         designSystems: systems.map(({ body, ...rest }) => rest),
       });
@@ -446,7 +462,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       // HTML rewrites assets to /api/skills/<id>/... and we want those URLs
       // to keep resolving regardless of which root owns the backing folder
       // after the skills/design-templates split.
-      const skills = await listAllSkillLikeEntries();
+      const skills = await listAllSkillLikeEntries(req);
 
       // 1. Derived `<parent>:<child>` id — resolve straight to the matching
       // file under <parentDir>/examples/. Done before findSkillById so the
@@ -570,7 +586,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     try {
       // Same rationale as /example above — assets need to resolve whether
       // the owning skill folder lives under skills/ or design-templates/.
-      const skills = await listAllSkillLikeEntries();
+      const skills = await listAllSkillLikeEntries(req);
       const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return res.status(404).type('text/plain').send('skill not found');
@@ -600,12 +616,12 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   app.post('/api/skills/install', async (req, res) => {
     if (!requireLocalOrigin(req, res)) return;
     try {
-      const result = await installFromTarget(req.body, USER_SKILLS_DIR, 'skill');
+      const result = await installFromTarget(req.body, userSkillsDirFor(req), 'skill');
       if (!result.ok) return res.status(400).json({ error: result.error });
       if (typeof result.dir !== 'string' || !result.dir) {
         return res.status(500).json({ error: 'skill install did not return an installation directory' });
       }
-      const skills = await listAllSkills();
+      const skills = await listAllSkills(req);
       const installedDir = fs.realpathSync.native(result.dir);
       const skill = skills.find((candidate) => fs.realpathSync.native(candidate.dir) === installedDir);
       if (!skill) {
@@ -627,7 +643,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   app.delete('/api/skills/:id', async (req, res) => {
     if (!requireLocalOrigin(req, res)) return;
     try {
-      const result = await uninstallById(req.params.id, USER_SKILLS_DIR, SKILLS_DIR, 'skill');
+      const result = await uninstallById(req.params.id, userSkillsDirFor(req), SKILLS_DIR, 'skill');
       if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
       res.json({ ok: true });
     } catch (err: any) {
@@ -638,12 +654,13 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   app.post('/api/design-systems/install', async (req, res) => {
     if (!requireLocalOrigin(req, res)) return;
     try {
-      const result = await installFromTarget(req.body, USER_DESIGN_SYSTEMS_DIR, 'design-system');
+      const userDesignSystemsRoot = userDesignSystemsDirFor(req);
+      const result = await installFromTarget(req.body, userDesignSystemsRoot, 'design-system');
       if (!result.ok) return res.status(400).json({ error: result.error });
       if (typeof result.dir !== 'string' || !result.dir) {
         return res.status(500).json({ error: 'design system install did not return an installation directory' });
       }
-      const systems = await listAllDesignSystems();
+      const systems = await listAllDesignSystems(req);
       const designSystemId = path.basename(fs.realpathSync.native(result.dir));
       const designSystem = findUserDesignSystemInCatalog(systems, designSystemId);
       if (!designSystem) {
@@ -694,16 +711,17 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         // The runtime data directory may not exist yet in first-run tests.
       }
 
-      const before = await listAllDesignSystems();
+      const userDesignSystemsRoot = userDesignSystemsDirFor(req);
+      const before = await listAllDesignSystems(req);
       const importMode = normalizeDesignSystemImportMode(body.importMode);
       const craftApplies = normalizeDesignSystemCraftApplies(body.craftApplies);
-      const result = await importLocalDesignSystemProject(sourceRoot, USER_DESIGN_SYSTEMS_DIR, {
+      const result = await importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot, {
         ...(typeof body.name === 'string' ? { name: body.name } : {}),
         ...(importMode ? { importMode } : {}),
         ...(craftApplies ? { craftApplies } : {}),
         reservedIds: designSystemDirIdsFromCatalog(before),
       });
-      const systems = await listAllDesignSystems();
+      const systems = await listAllDesignSystems(req);
       const designSystem = findUserDesignSystemInCatalog(systems, result.id);
       if (!designSystem) {
         return sendApiError(
@@ -713,7 +731,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           `imported design system was not found in catalog: ${result.dir}`,
         );
       }
-      res.status(201).json(await importedDesignSystemResponse(designSystem));
+      res.status(201).json(await importedDesignSystemResponse(req, designSystem));
     } catch (err: any) {
       if (err instanceof LocalDesignSystemImportError) {
         return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 500, err.code, err.message);
@@ -732,13 +750,14 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           : typeof body.url === 'string'
             ? body.url
             : '';
-      const before = await listAllDesignSystems();
+      const userDesignSystemsRoot = userDesignSystemsDirFor(req);
+      const before = await listAllDesignSystems(req);
       const importMode = normalizeDesignSystemImportMode(body.importMode);
       const craftApplies = normalizeDesignSystemCraftApplies(body.craftApplies);
       const result = await importGitHubDesignSystemProject(
         githubUrl,
         path.join(PROJECT_ROOT, '.tmp'),
-        USER_DESIGN_SYSTEMS_DIR,
+        userDesignSystemsRoot,
         {
           ...(typeof body.name === 'string' ? { name: body.name } : {}),
           ...(typeof body.branch === 'string' ? { branch: body.branch } : {}),
@@ -747,7 +766,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           reservedIds: designSystemDirIdsFromCatalog(before),
         },
       );
-      const systems = await listAllDesignSystems();
+      const systems = await listAllDesignSystems(req);
       const designSystem = findUserDesignSystemInCatalog(systems, result.id);
       if (!designSystem) {
         return sendApiError(
@@ -757,7 +776,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           `imported GitHub design system was not found in catalog: ${result.dir}`,
         );
       }
-      res.status(201).json(await importedDesignSystemResponse(designSystem));
+      res.status(201).json(await importedDesignSystemResponse(req, designSystem));
     } catch (err: any) {
       if (err instanceof LocalDesignSystemImportError) {
         return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 500, err.code, err.message);
@@ -779,13 +798,14 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       if (!reference.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'a shadcn registry reference is required');
       }
-      const before = await listAllDesignSystems();
+      const userDesignSystemsRoot = userDesignSystemsDirFor(req);
+      const before = await listAllDesignSystems(req);
       const importMode = normalizeDesignSystemImportMode(body.importMode);
       const craftApplies = normalizeDesignSystemCraftApplies(body.craftApplies);
       const result = await importShadcnDesignSystemProject(
         reference,
         path.join(PROJECT_ROOT, '.tmp'),
-        USER_DESIGN_SYSTEMS_DIR,
+        userDesignSystemsRoot,
         {
           ...(typeof body.name === 'string' ? { name: body.name } : {}),
           ...(importMode ? { importMode } : {}),
@@ -793,7 +813,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           reservedIds: designSystemDirIdsFromCatalog(before),
         },
       );
-      const systems = await listAllDesignSystems();
+      const systems = await listAllDesignSystems(req);
       const designSystem = findUserDesignSystemInCatalog(systems, result.id);
       if (!designSystem) {
         return sendApiError(
@@ -803,7 +823,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           `imported shadcn design system was not found in catalog: ${result.dir}`,
         );
       }
-      res.status(201).json(await importedDesignSystemResponse(designSystem));
+      res.status(201).json(await importedDesignSystemResponse(req, designSystem));
     } catch (err: any) {
       if (err instanceof LocalDesignSystemImportError) {
         return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 500, err.code, err.message);
@@ -820,7 +840,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     try {
       const result = await uninstallById(
         req.params.id,
-        USER_DESIGN_SYSTEMS_DIR,
+        userDesignSystemsDirFor(req),
         DESIGN_SYSTEMS_DIR,
         'design-system',
       );

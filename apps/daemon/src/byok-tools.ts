@@ -404,6 +404,8 @@ export interface BYOKToolContext {
   /** Daemon project root — used to look up media-config when the chat
    *  session key is missing. */
   projectRoot: string;
+  /** Request/user-scoped media-config data dir, when hosted auth is active. */
+  mediaConfigDataDir?: string;
   /** Daemon's PROJECTS_DIR (the `<projectRoot>/.od/projects/` folder
    *  that holds per-project file trees). Generated images land in
    *  `<projectsRoot>/<projectId>/byok-<id>.png` so the project's
@@ -628,7 +630,11 @@ export async function executeGenerateImage(
   let apiKey = ctx.upstreamApiKey;
   let baseUrl = ctx.upstreamBaseUrl || SENSEAUDIO_DEFAULT_BASE_URL;
   if (!apiKey) {
-    const resolved = await resolveProviderConfig(ctx.projectRoot, 'senseaudio');
+    const resolved = await resolveProviderConfig(
+      ctx.projectRoot,
+      'senseaudio',
+      ctx.mediaConfigDataDir,
+    );
     apiKey = resolved.apiKey || '';
     if (resolved.baseUrl) baseUrl = resolved.baseUrl;
   }
@@ -812,7 +818,11 @@ export async function executeGenerateVideo(
   let apiKey = ctx.upstreamApiKey;
   let baseUrl = ctx.upstreamBaseUrl || SENSEAUDIO_DEFAULT_BASE_URL;
   if (!apiKey) {
-    const resolved = await resolveProviderConfig(ctx.projectRoot, 'senseaudio');
+    const resolved = await resolveProviderConfig(
+      ctx.projectRoot,
+      'senseaudio',
+      ctx.mediaConfigDataDir,
+    );
     apiKey = resolved.apiKey || '';
     if (resolved.baseUrl) baseUrl = resolved.baseUrl;
   }
@@ -979,7 +989,11 @@ async function resolveAIHubMixCredentials(
   let apiKey = ctx.upstreamApiKey;
   let baseUrl = ctx.upstreamBaseUrl || AIHUBMIX_DEFAULT_BASE_URL;
   if (!apiKey) {
-    const resolved = await resolveProviderConfig(ctx.projectRoot, 'aihubmix');
+    const resolved = await resolveProviderConfig(
+      ctx.projectRoot,
+      'aihubmix',
+      ctx.mediaConfigDataDir,
+    );
     apiKey = resolved.apiKey || '';
     if (resolved.baseUrl) baseUrl = resolved.baseUrl;
   }

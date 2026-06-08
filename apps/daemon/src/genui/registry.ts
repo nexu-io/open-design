@@ -60,6 +60,8 @@ function canonicalize(value: unknown): unknown {
 
 export interface RequestOrReuseInput {
   projectId:        string;
+  ownerEmail?:      string | null | undefined;
+  ownerDirHash?:    string | null | undefined;
   conversationId?:  string | null | undefined;
   runId:            string;
   pluginSnapshotId: string;
@@ -91,6 +93,7 @@ export function requestOrReuseSurface(
       surfaceId:      surface.id,
       persist,
       schemaDigest:   digest,
+      ownerEmail:     input.ownerEmail ?? null,
     });
     if (cached) {
       input.emit?.(
@@ -105,6 +108,8 @@ export function requestOrReuseSurface(
   }
   const row = requestSurface(db, {
     projectId:        input.projectId,
+    ownerEmail:       input.ownerEmail ?? null,
+    ownerDirHash:     input.ownerDirHash ?? null,
     conversationId:   input.conversationId,
     runId:            input.runId,
     pluginSnapshotId: input.pluginSnapshotId,
@@ -156,6 +161,8 @@ export function revokeProjectSurface(db: SqliteDb, input: RevokeInput): number {
 
 export interface PrefillInput {
   projectId:        string;
+  ownerEmail?:      string | null;
+  ownerDirHash?:    string | null;
   pluginSnapshotId: string;
   surfaceId:        string;
   kind:             SurfaceKind;
@@ -169,6 +176,8 @@ export function prefillProjectSurface(db: SqliteDb, input: PrefillInput): Surfac
   const digest = input.schema !== undefined ? schemaDigest(input.schema) : null;
   return prefillSurface(db, {
     projectId:        input.projectId,
+    ownerEmail:       input.ownerEmail ?? null,
+    ownerDirHash:     input.ownerDirHash ?? null,
     pluginSnapshotId: input.pluginSnapshotId,
     surfaceId:        input.surfaceId,
     kind:             input.kind,

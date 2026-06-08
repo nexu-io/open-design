@@ -1,21 +1,22 @@
-import type { Express } from 'express';
+import type { Express, Request } from 'express';
 import fs from 'node:fs';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import { buildMcpInstallPayload, type McpInstallPayload } from './mcp-install-info.js';
 import { installCodexMcp, probeCodexInstall, uninstallCodexMcp } from './codex-cli.js';
-import { MCP_TEMPLATES, buildAcpMcpServers, buildClaudeMcpJson, isManagedProjectCwd, readMcpConfig, writeMcpConfig } from './mcp-config.js';
+import { MCP_TEMPLATES, readMcpConfig, writeMcpConfig } from './mcp-config.js';
 import { beginAuth, exchangeCodeForToken, refreshAccessToken } from './mcp-oauth.js';
-import { clearToken, getToken, isTokenExpired, readAllTokens, setToken } from './mcp-tokens.js';
+import { clearToken, getToken, setToken } from './mcp-tokens.js';
 import type { RouteDeps } from './server-context.js';
 
 export interface RegisterMcpRoutesDeps extends RouteDeps<'http' | 'paths' | 'mcp'> {}
 
 export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   const { isLocalSameOrigin, resolvedPortRef, sendApiError } = ctx.http;
-  const { OD_BIN, RUNTIME_DATA_DIR, PROJECTS_DIR } = ctx.paths;
+  const { OD_BIN, RUNTIME_DATA_DIR, runtimeDataDirFor } = ctx.paths;
   const { pendingAuth, daemonUrlRef } = ctx.mcp;
   const getResolvedPort = () => resolvedPortRef.current;
   const getDaemonUrl = () => daemonUrlRef.current;
+  const dataDirFor = (req: Request): string => runtimeDataDirFor(req);
   // Surfaces the absolute paths to the daemon's Node-compatible runtime and
   // CLI entry so the Settings → MCP server panel can render snippets that work
   // even when `od` isn't on the user's PATH (the common case for source clones
@@ -23,7 +24,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   // anyway). Cached for 5s because the panel pings on every open and these
   // paths cannot change without a daemon restart.
   const INSTALL_INFO_TTL_MS = 5000;
-  let installInfoCache: { t: number; payload: object } | null = null;
+  let installInfoCache: { t: number; dataDir: string; payload: object } | null = null;
 
   // Resolve the install snippet for the current daemon. Shared by the
   // public GET /api/mcp/install-info endpoint (renders TOML/JSON for
@@ -33,7 +34,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   // snippet would). Keeping this in one place is the whole point of
   // the factoring — divergence here would mean Codex behaves
   // differently depending on which install path the user took.
-  function computeInstallPayload(): McpInstallPayload {
+  function computeInstallPayload(dataDir: string): McpInstallPayload {
     const cliPath = OD_BIN;
     // The daemon was bootstrapped as a sidecar (tools-dev, packaged) iff
     // bootstrapSidecarRuntime stamped OD_SIDECAR_IPC_PATH into the env.
@@ -72,7 +73,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       nodeExists: fs.existsSync(process.execPath),
       port: getResolvedPort(),
       platform: process.platform,
-      dataDir: RUNTIME_DATA_DIR,
+      dataDir,
       electronAsNode: process.env.ELECTRON_RUN_AS_NODE === '1',
       isSidecarMode,
       sidecarEnv,
@@ -85,11 +86,16 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const now = Date.now();
-    if (installInfoCache && now - installInfoCache.t < INSTALL_INFO_TTL_MS) {
+    const dataDir = dataDirFor(req);
+    if (
+      installInfoCache
+      && installInfoCache.dataDir === dataDir
+      && now - installInfoCache.t < INSTALL_INFO_TTL_MS
+    ) {
       return res.json(installInfoCache.payload);
     }
-    const payload = computeInstallPayload();
-    installInfoCache = { t: now, payload };
+    const payload = computeInstallPayload(dataDir);
+    installInfoCache = { t: now, dataDir, payload };
     res.json(payload);
   });
 
@@ -115,7 +121,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
-    const payload = computeInstallPayload();
+    const payload = computeInstallPayload(dataDirFor(req));
     if (!payload.cliExists || !payload.nodeExists) {
       return sendApiError(res, 500, 'INSTALL_INFO_INCOMPLETE', payload.buildHint ?? 'install payload not ready');
     }
@@ -153,7 +159,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      const cfg = await readMcpConfig(RUNTIME_DATA_DIR);
+      const cfg = await readMcpConfig(dataDirFor(req));
       res.json({ servers: cfg.servers, templates: MCP_TEMPLATES });
     } catch (err: any) {
       res
@@ -167,7 +173,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      const cfg = await writeMcpConfig(RUNTIME_DATA_DIR, req.body);
+      const cfg = await writeMcpConfig(dataDirFor(req), req.body);
       res.json({ servers: cfg.servers, templates: MCP_TEMPLATES });
     } catch (err: any) {
       res
@@ -197,7 +203,8 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       return res.status(400).json({ error: 'serverId is required' });
     }
     try {
-      const cfg = await readMcpConfig(RUNTIME_DATA_DIR);
+      const dataDir = dataDirFor(req);
+      const cfg = await readMcpConfig(dataDir);
       const server = cfg.servers.find((s) => s.id === serverId);
       if (!server) {
         return res.status(404).json({ error: `unknown serverId ${serverId}` });
@@ -223,7 +230,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
         serverId,
         serverUrl: server.url,
         redirectUri,
-        dataDir: RUNTIME_DATA_DIR,
+        dataDir,
         fetchImpl: fetch,
       });
       pendingAuth.put(result.state, result.pending);
@@ -300,7 +307,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
         redirectUri: pending.redirectUri,
         resourceUrl: pending.resourceUrl,
       };
-      await setToken(RUNTIME_DATA_DIR, pending.serverId, stored);
+      await setToken(pending.dataDir ?? RUNTIME_DATA_DIR, pending.serverId, stored);
       res.type('html').send(renderOAuthResultPage({
         ok: true,
         serverId: pending.serverId,
@@ -325,7 +332,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       typeof req.query.serverId === 'string' ? req.query.serverId.trim() : '';
     if (!serverId) return res.status(400).json({ error: 'serverId is required' });
     try {
-      const tok = await getToken(RUNTIME_DATA_DIR, serverId);
+      const tok = await getToken(dataDirFor(req), serverId);
       if (!tok) return res.json({ connected: false });
       res.json({
         connected: true,
@@ -346,7 +353,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       typeof req.body?.serverId === 'string' ? req.body.serverId.trim() : '';
     if (!serverId) return res.status(400).json({ error: 'serverId is required' });
     try {
-      await clearToken(RUNTIME_DATA_DIR, serverId);
+      await clearToken(dataDirFor(req), serverId);
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: String(err && err.message ? err.message : err) });

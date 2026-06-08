@@ -304,6 +304,7 @@ export async function generateMedia(args: {
   prompt?: string; output?: string; aspect?: string; length?: number; duration?: number; voice?: string;
   audioKind?: AudioKind; language?: string; loop?: boolean; promptInfluence?: number;
   compositionDir?: string; image?: string; images?: string[]; onProgress?: ProgressFn; requestInit?: MediaRequestInit;
+  mediaConfigDataDir?: string;
 }) {
   const {
     projectRoot,
@@ -324,6 +325,7 @@ export async function generateMedia(args: {
     compositionDir,
     image,
     requestInit,
+    mediaConfigDataDir,
   } = args;
 
   if (!projectRoot) throw new Error('projectRoot required');
@@ -458,7 +460,7 @@ export async function generateMedia(args: {
   // capability branches (DALL-E sizing, gpt-image quality, gpt-4o-mini-tts
   // instructions, MINIMAX/FISHAUDIO TTS map) continue to key off the
   // catalog id while the provider's request body carries the alias.
-  const wireModel = await resolveModelAlias(projectRoot, model);
+  const wireModel = await resolveModelAlias(projectRoot, model, mediaConfigDataDir);
   const ctx = {
     surface,
     model,
@@ -487,10 +489,10 @@ export async function generateMedia(args: {
     imageRefs,
   };
 
-  const credentials = await resolveProviderConfig(projectRoot, def.provider);
+  const credentials = await resolveProviderConfig(projectRoot, def.provider, mediaConfigDataDir);
   const customImageCredentials =
     surface === 'image' && def.provider === 'openai'
-      ? await resolveProviderConfig(projectRoot, 'custom-image')
+      ? await resolveProviderConfig(projectRoot, 'custom-image', mediaConfigDataDir)
       : null;
 
   let bytes: Buffer;

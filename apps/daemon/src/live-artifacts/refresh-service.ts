@@ -15,13 +15,17 @@ import {
   withLiveArtifactRefreshRun,
   withLiveArtifactRefreshSourceTimeout,
 } from './refresh.js';
-import { connectorService } from '../connectors/service.js';
+import {
+  connectorService,
+  type ConnectorService,
+} from '../connectors/service.js';
 import type { BoundedJsonObject, LiveArtifactRefreshErrorRecord, LiveArtifactRefreshSourceMetadata, LiveArtifactSource } from './schema.js';
 
 export interface RefreshLiveArtifactOptions {
   projectsRoot: string;
   projectId: string;
   artifactId: string;
+  connectorService?: ConnectorService;
   now?: Date;
   onStarted?: (event: { refreshId: string; artifact: LiveArtifactStoreRecord['artifact'] }) => void | Promise<void>;
 }
@@ -78,6 +82,7 @@ function hasRefreshPermission(source: LiveArtifactSource): boolean {
 async function executeRefreshSource(options: {
   projectsRoot: string;
   projectId: string;
+  connectorService?: ConnectorService;
   source: LiveArtifactSource;
   signal: AbortSignal;
 }): Promise<BoundedJsonObject> {
@@ -85,7 +90,8 @@ async function executeRefreshSource(options: {
   if (source.type === 'connector_tool') {
     const connector = source.connector;
     if (connector === undefined) throw new Error('connector refresh source requires connector metadata');
-    const result = await connectorService.execute(
+    const service = options.connectorService ?? connectorService;
+    const result = await service.execute(
       {
         connectorId: connector.connectorId,
         toolName: connector.toolName,
@@ -185,6 +191,9 @@ export async function refreshLiveArtifact(options: RefreshLiveArtifactOptions): 
                 async (signal) => executeRefreshSource({
                   projectsRoot: options.projectsRoot,
                   projectId: options.projectId,
+                  ...(options.connectorService === undefined
+                    ? {}
+                    : { connectorService: options.connectorService }),
                   source: documentSource,
                   signal,
                 }),

@@ -7,6 +7,18 @@ import * as platform from '@open-design/platform';
 import { startServer } from '../src/server.js';
 import { AIHUBMIX_APP_CODE } from '../src/aihubmix.js';
 
+const platformMocks = vi.hoisted(() => ({
+  resolveSystemProxyEnv: vi.fn(() => ({})),
+}));
+
+vi.mock('@open-design/platform', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@open-design/platform')>();
+  return {
+    ...actual,
+    resolveSystemProxyEnv: platformMocks.resolveSystemProxyEnv,
+  };
+});
+
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
 

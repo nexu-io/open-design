@@ -19,6 +19,7 @@ export const LIVE_ARTIFACT_TEMPLATE_FILE = 'template.html' as const;
 export const LIVE_ARTIFACT_PREVIEW_FILE = 'index.html' as const;
 export const LIVE_ARTIFACT_DATA_FILE = 'data.json' as const;
 export const LIVE_ARTIFACT_PROVENANCE_FILE = 'provenance.json' as const;
+export const LIVE_ARTIFACT_OWNER_FILE = 'owner.json' as const;
 export const LIVE_ARTIFACT_REFRESHES_FILE = 'refreshes.jsonl' as const;
 export const LIVE_ARTIFACT_REFRESH_LOCK_FILE = 'refresh.lock.json' as const;
 export const LIVE_ARTIFACT_REFRESH_STATE_FILE = 'refresh-state.json' as const;
@@ -57,6 +58,7 @@ export interface LiveArtifactStorePaths {
   generatedPreviewHtmlPath: string;
   dataJsonPath: string;
   provenanceJsonPath: string;
+  ownerJsonPath: string;
   refreshesJsonlPath: string;
   refreshLockPath: string;
   refreshStatePath: string;
@@ -86,6 +88,8 @@ export interface CreateLiveArtifactOptions {
   templateHtml?: string;
   provenanceJson?: LiveArtifactProvenance;
   createdByRunId?: string;
+  ownerEmail?: string | null;
+  ownerDirHash?: string | null;
   now?: Date;
 }
 
@@ -199,6 +203,19 @@ export interface LiveArtifactRefreshLockMetadata {
   refreshOrdinal: number;
   acquiredAt: string;
   lockId: string;
+}
+
+export interface LiveArtifactOwnerMetadata {
+  schemaVersion: 1;
+  ownerEmail?: string;
+  ownerDirHash?: string;
+  createdByRunId?: string;
+}
+
+export interface ReadLiveArtifactOwnerMetadataOptions {
+  projectsRoot: string;
+  projectId: string;
+  artifactId: string;
 }
 
 export interface LiveArtifactRefreshState {
@@ -321,6 +338,7 @@ export function liveArtifactStorePaths(
     generatedPreviewHtmlPath: resolveInside(artifactDir, LIVE_ARTIFACT_PREVIEW_FILE, 'live artifact path escapes artifact dir'),
     dataJsonPath: resolveInside(artifactDir, LIVE_ARTIFACT_DATA_FILE, 'live artifact path escapes artifact dir'),
     provenanceJsonPath: resolveInside(artifactDir, LIVE_ARTIFACT_PROVENANCE_FILE, 'live artifact path escapes artifact dir'),
+    ownerJsonPath: resolveInside(artifactDir, LIVE_ARTIFACT_OWNER_FILE, 'live artifact path escapes artifact dir'),
     refreshesJsonlPath: resolveInside(artifactDir, LIVE_ARTIFACT_REFRESHES_FILE, 'live artifact path escapes artifact dir'),
     refreshLockPath: resolveInside(artifactDir, LIVE_ARTIFACT_REFRESH_LOCK_FILE, 'live artifact path escapes artifact dir'),
     refreshStatePath: resolveInside(artifactDir, LIVE_ARTIFACT_REFRESH_STATE_FILE, 'live artifact path escapes artifact dir'),
@@ -377,6 +395,40 @@ function defaultProvenance(nowIso: string): LiveArtifactProvenance {
     notes: 'Created through the live artifact registration service.',
     sources: [{ label: 'Agent-authored live artifact input', type: 'user_input' }],
   };
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function ownerMetadataFromOptions(options: CreateLiveArtifactOptions): LiveArtifactOwnerMetadata | null {
+  const ownerEmail = nonEmptyString(options.ownerEmail);
+  const ownerDirHash = nonEmptyString(options.ownerDirHash);
+  const createdByRunId = nonEmptyString(options.createdByRunId);
+  if (!ownerEmail && !ownerDirHash && !createdByRunId) return null;
+  const metadata: LiveArtifactOwnerMetadata = { schemaVersion: 1 };
+  if (ownerEmail) metadata.ownerEmail = ownerEmail;
+  if (ownerDirHash) metadata.ownerDirHash = ownerDirHash;
+  if (createdByRunId) metadata.createdByRunId = createdByRunId;
+  return metadata;
+}
+
+function normalizeOwnerMetadata(value: unknown): LiveArtifactOwnerMetadata {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw validationError('owner.json', 'live artifact owner metadata must be an object');
+  }
+  const raw = value as Record<string, unknown>;
+  if (raw.schemaVersion !== 1) {
+    throw validationError('owner.json.schemaVersion', 'live artifact owner metadata schemaVersion must be 1');
+  }
+  const metadata: LiveArtifactOwnerMetadata = { schemaVersion: 1 };
+  const ownerEmail = nonEmptyString(raw.ownerEmail);
+  const ownerDirHash = nonEmptyString(raw.ownerDirHash);
+  const createdByRunId = nonEmptyString(raw.createdByRunId);
+  if (ownerEmail) metadata.ownerEmail = ownerEmail;
+  if (ownerDirHash) metadata.ownerDirHash = ownerDirHash;
+  if (createdByRunId) metadata.createdByRunId = createdByRunId;
+  return metadata;
 }
 
 function toSummary(artifact: LiveArtifact): LiveArtifactSummary {
@@ -625,6 +677,7 @@ async function writeLiveArtifactFiles(
   templateHtml: string,
   provenanceJson: LiveArtifactProvenance,
   dataJsonOverride?: BoundedJsonObject,
+  ownerMetadata?: LiveArtifactOwnerMetadata | null,
 ): Promise<LiveArtifact> {
   const dataJson = dataJsonOverride ?? artifact.document?.dataJson ?? {};
   const artifactForWrite = artifactWithDataJson(artifact, dataJson);
@@ -639,6 +692,7 @@ async function writeLiveArtifactFiles(
     writeFile(paths.generatedPreviewHtmlPath, previewHtml, 'utf8'),
     writeFile(paths.dataJsonPath, stableJson(dataJson), 'utf8'),
     writeFile(paths.provenanceJsonPath, stableJson(provenanceJson), 'utf8'),
+    ownerMetadata ? writeFile(paths.ownerJsonPath, stableJson(ownerMetadata), 'utf8') : Promise.resolve(),
     writeFile(paths.refreshesJsonlPath, '', { flag: 'a' }),
   ]);
   return artifactForWrite;
@@ -668,6 +722,22 @@ async function readProvenanceOrDefault(paths: LiveArtifactStorePaths, nowIso: st
   } catch (error) {
     if (error instanceof SyntaxError) throw validationError('provenance.json', 'live artifact provenance file contains invalid JSON');
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') return defaultProvenance(nowIso);
+    throw error;
+  }
+}
+
+export async function readLiveArtifactOwnerMetadata(
+  options: ReadLiveArtifactOwnerMetadataOptions,
+): Promise<LiveArtifactOwnerMetadata | null> {
+  const paths = liveArtifactStorePaths(options.projectsRoot, options.projectId, options.artifactId);
+  const text = await readTextFileOrDefault(paths.ownerJsonPath, '');
+  if (text.trim().length === 0) return null;
+  try {
+    return normalizeOwnerMetadata(JSON.parse(text));
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw validationError('owner.json', 'live artifact owner metadata contains invalid JSON');
+    }
     throw error;
   }
 }
@@ -707,12 +777,20 @@ export async function createLiveArtifact(options: CreateLiveArtifactOptions): Pr
   const tempPaths = liveArtifactStorePaths(options.projectsRoot, options.projectId, tempArtifactId);
   const templateHtml = options.templateHtml ?? defaultTemplateHtml(input.title);
   const provenanceJson = options.provenanceJson ?? defaultProvenance(nowIso);
+  const ownerMetadata = ownerMetadataFromOptions(options);
 
   await rm(tempPaths.artifactDir, { recursive: true, force: true });
   await mkdir(tempPaths.artifactDir, { recursive: false });
 
   try {
-    const writtenArtifact = await writeLiveArtifactFiles(tempPaths, persisted.value, templateHtml, provenanceJson);
+    const writtenArtifact = await writeLiveArtifactFiles(
+      tempPaths,
+      persisted.value,
+      templateHtml,
+      provenanceJson,
+      undefined,
+      ownerMetadata,
+    );
     await rename(tempPaths.artifactDir, finalPaths.artifactDir);
     return { artifact: writtenArtifact, paths: finalPaths };
   } catch (error) {

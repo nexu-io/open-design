@@ -1,9 +1,12 @@
 import fs from 'node:fs';
-import type { Express } from 'express';
+import path from 'node:path';
+import type { Express, Request } from 'express';
 import type { MediaExecutionPolicy } from '@open-design/contracts';
 import { defaultMediaExecutionPolicy, mediaPolicyDenial } from './media-policy.js';
+import type { ProjectOwnerScope } from './db.js';
 import type { RouteDeps } from './server-context.js';
 import { proxyDispatcherRequestInit } from './connectionTest.js';
+import { ownerFieldsForRequest, ownerScopeForRequest } from './project-owner-scope.js';
 import {
   aihubmixCatalogUrl,
   parseAIHubMixCatalog,
@@ -68,17 +71,37 @@ export function resolveLegacyMediaRouteGrant(input: {
 export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, requireLocalDaemonRequest, isLocalSameOrigin, resolvedPortRef } = ctx.http;
-  const { PROJECT_ROOT, PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
+  const { PROJECT_ROOT, RUNTIME_DATA_DIR, projectsDirFor, runtimeDataDirFor } = ctx.paths;
   const { authorizeToolRequest, optionalToolGrantFromRequest, requestProjectOverride } = ctx.auth;
   const { randomUUID } = ctx.ids;
   const { MEDIA_PROVIDERS, IMAGE_MODELS, VIDEO_MODELS, AUDIO_MODELS_BY_KIND, MEDIA_ASPECTS, VIDEO_LENGTHS_SEC, AUDIO_DURATIONS_SEC, readMaskedConfig, writeConfig, generateMedia, createMediaTask, persistMediaTask, appendTaskProgress, notifyTaskWaiters, getLiveMediaTask, mediaTaskSnapshot, listMediaTasksByProject, listElevenLabsVoiceOptions } = ctx.media;
   const { readAppConfig, writeAppConfig } = ctx.appConfig;
-  const { orbitService } = ctx.orbit;
+  const { orbitServiceForRequest } = ctx.orbit;
   const { openNativeFolderDialog } = ctx.nativeDialogs;
   const { getProject } = ctx.projectStore;
   const { insertConversation, upsertMessage } = ctx.conversations;
   const { searchResearch, ResearchError } = ctx.research;
   const getResolvedPort = () => resolvedPortRef.current;
+  const mediaConfigDataDirFor = (req: Request): string | undefined => {
+    const requestDataDir = runtimeDataDirFor(req);
+    return path.resolve(requestDataDir) === path.resolve(RUNTIME_DATA_DIR)
+      ? undefined
+      : requestDataDir;
+  };
+
+  function mediaTaskVisibleToRequest(
+    req: Request,
+    task: { projectId?: unknown; ownerEmail?: unknown },
+  ): boolean {
+    const ownerEmail = typeof task.ownerEmail === 'string' && task.ownerEmail.length > 0
+      ? task.ownerEmail
+      : null;
+    if (ownerEmail) return ownerScopeForRequest(req).ownerEmail === ownerEmail;
+    const projectId = typeof task.projectId === 'string' ? task.projectId : '';
+    if (!projectId) return false;
+    if (getProject(db, projectId, ownerScopeForRequest(req))) return true;
+    return !getProject(db, projectId);
+  }
 
   const mediaPolicyForGrant = (grant: ToolTokenGrant | null):
     | { ok: true; policy: MediaExecutionPolicy }
@@ -98,10 +121,10 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
   const handleGenerate = async (
     req: any,
     res: any,
-    options: { projectId: string; grant: ToolTokenGrant | null },
+    options: { projectId: string; grant: ToolTokenGrant | null; projectScope?: ProjectOwnerScope },
   ) => {
     const projectId = options.projectId;
-    const project = getProject(db, projectId);
+    const project = getProject(db, projectId, options.projectScope);
     if (!project) return res.status(404).json({ error: 'project not found' });
 
     const surface = req.body?.surface;
@@ -128,6 +151,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       task = createMediaTask(taskId, projectId, {
         surface: req.body?.surface,
         model: req.body?.model,
+        ...ownerFieldsForRequest(req),
       });
       console.error(
         `[task ${taskId.slice(0, 8)}] queued model=${req.body?.model} ` +
@@ -144,7 +168,8 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       persistMediaTask(task);
       generateMedia({
         projectRoot: PROJECT_ROOT,
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
+        mediaConfigDataDir: mediaConfigDataDirFor(req),
         projectId,
         surface: req.body?.surface,
         model: req.body?.model,
@@ -290,9 +315,9 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
   });
 
-  app.get('/api/media/config', async (_req, res) => {
+  app.get('/api/media/config', async (req, res) => {
     try {
-      const cfg = await readMaskedConfig(PROJECT_ROOT);
+      const cfg = await readMaskedConfig(PROJECT_ROOT, mediaConfigDataDirFor(req));
       res.json(cfg);
     } catch (err: any) {
       res
@@ -303,7 +328,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
 
   app.put('/api/media/config', async (req, res) => {
     try {
-      const cfg = await writeConfig(PROJECT_ROOT, req.body);
+      const cfg = await writeConfig(PROJECT_ROOT, req.body, mediaConfigDataDirFor(req));
       res.json(cfg);
     } catch (err: any) {
       const status = typeof err?.status === 'number' ? err.status : 400;
@@ -324,6 +349,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       try {
         const voices = await listElevenLabsVoiceOptions(PROJECT_ROOT, {
           limit,
+          mediaConfigDataDir: mediaConfigDataDirFor(req),
           requestInit: proxyDispatcher.requestInit,
         });
         res.json({ voices });
@@ -342,7 +368,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      const config = await readAppConfig(RUNTIME_DATA_DIR);
+      const config = await readAppConfig(runtimeDataDirFor(req));
       res.json({ config });
     } catch (err: any) {
       res
@@ -356,8 +382,8 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      const config = await writeAppConfig(RUNTIME_DATA_DIR, req.body);
-      orbitService.configure(config.orbit);
+      const config = await writeAppConfig(runtimeDataDirFor(req), req.body);
+      orbitServiceForRequest(req).configure(config.orbit);
       res.json({ config });
     } catch (err: any) {
       res
@@ -423,7 +449,10 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      res.json(await orbitService.status());
+      const config = await readAppConfig(runtimeDataDirFor(req));
+      const service = orbitServiceForRequest(req);
+      service.configure(config.orbit);
+      res.json(await service.status());
     } catch (err: any) {
       res
         .status(500)
@@ -437,7 +466,10 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
     try {
       const locale = typeof req.body?.locale === 'string' ? req.body.locale : null;
-      res.json(await orbitService.start('manual', { locale }));
+      const config = await readAppConfig(runtimeDataDirFor(req));
+      const service = orbitServiceForRequest(req);
+      service.configure(config.orbit);
+      res.json(await service.start('manual', { locale }));
     } catch (err: any) {
       res
         .status(500)
@@ -485,7 +517,11 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
           grantDecision.details ? { details: grantDecision.details } : {},
         );
       }
-      await handleGenerate(req, res, { projectId: req.params.id, grant: grantDecision.grant });
+      await handleGenerate(req, res, {
+        projectId: req.params.id,
+        grant: grantDecision.grant,
+        projectScope: ownerScopeForRequest(req),
+      });
     } catch (err: any) {
       const status = typeof err?.status === 'number' ? err.status : 400;
       const code = err?.code;
@@ -499,7 +535,11 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     const grant = authorizeToolRequest(req, res, 'media:generate');
     if (!grant) return;
     try {
-      await handleGenerate(req, res, { projectId: grant.projectId, grant });
+      await handleGenerate(req, res, {
+        projectId: grant.projectId,
+        grant,
+        projectScope: ownerScopeForRequest(req),
+      });
     } catch (err: any) {
       const status = typeof err?.status === 'number' ? err.status : 400;
       const code = err?.code;
@@ -522,6 +562,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       try {
         const result = await searchResearch({
           projectRoot: PROJECT_ROOT,
+          mediaConfigDataDir: mediaConfigDataDirFor(req),
           query: req.body?.query,
           maxSources:
             typeof req.body?.maxSources === 'number'
@@ -558,6 +599,9 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     const taskId = req.params.id;
     const task = getLiveMediaTask(taskId);
     if (!task) return res.status(404).json({ error: 'task not found' });
+    if (!mediaTaskVisibleToRequest(req, task)) {
+      return res.status(404).json({ error: 'task not found' });
+    }
 
     const since = Number.isFinite(req.body?.since) ? Number(req.body.since) : 0;
     const requestedTimeout = Number.isFinite(req.body?.timeoutMs)
@@ -597,6 +641,8 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const projectId = req.params.id;
+    const project = getProject(db, projectId, ownerScopeForRequest(req));
+    if (!project) return res.status(404).json({ error: 'project not found' });
     const includeDone =
       req.query.includeDone === '1' || req.query.includeDone === 'true';
     const tasks = listMediaTasksByProject(db, projectId, {

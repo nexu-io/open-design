@@ -1,6 +1,18 @@
 import * as platform from '@open-design/platform';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const platformMocks = vi.hoisted(() => ({
+  resolveSystemProxyEnv: vi.fn(() => ({})),
+}));
+
+vi.mock('@open-design/platform', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@open-design/platform')>();
+  return {
+    ...actual,
+    resolveSystemProxyEnv: platformMocks.resolveSystemProxyEnv,
+  };
+});
+
 const envHttpProxyAgentConstructor = vi.fn();
 const envHttpProxyAgentDispatch = vi.fn();
 const directAgentConstructor = vi.fn();

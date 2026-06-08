@@ -1,7 +1,7 @@
 import express from 'express';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -59,6 +59,7 @@ import {
   extractUrlCitations,
   registerXaiRoutes,
 } from '../src/routes/xai.js';
+import { mediaConfigDirForDataDir } from '../src/media-config.js';
 import {
   XAI_OAUTH_AUTHORIZATION_ENDPOINT,
   XAI_OAUTH_TOKEN_ENDPOINT,
@@ -78,11 +79,30 @@ async function jsonOf<T = any>(r: Response): Promise<T> {
   return (await r.json()) as T;
 }
 
+async function writeScopedGrokConfig(
+  dataDir: string,
+  entry: { apiKey: string; baseUrl?: string },
+): Promise<void> {
+  const cfgPath = path.join(mediaConfigDirForDataDir(dataDir), 'media-config.json');
+  await mkdir(path.dirname(cfgPath), { recursive: true });
+  await writeFile(
+    cfgPath,
+    JSON.stringify({
+      providers: {
+        grok: entry,
+      },
+    }),
+    'utf8',
+  );
+}
+
 async function startTestApp(projectRoot: string): Promise<TestApp> {
   const app = express();
   app.use(express.json());
 
   const resolvedPortRef = { current: 0 };
+  const artifactsDir = path.join(projectRoot, 'artifacts');
+  const projectsDir = path.join(projectRoot, 'projects');
   const httpDeps = {
     createSseResponse: () => undefined,
     isLocalSameOrigin: () => true,
@@ -93,13 +113,19 @@ async function startTestApp(projectRoot: string): Promise<TestApp> {
     sendMulterError: () => undefined,
   };
   const pathDeps = {
-    ARTIFACTS_DIR: '',
+    ARTIFACTS_DIR: artifactsDir,
     BUNDLED_PETS_DIR: '',
     DESIGN_SYSTEMS_DIR: '',
     DESIGN_TEMPLATES_DIR: '',
     OD_BIN: '',
     PROJECT_ROOT: projectRoot,
-    PROJECTS_DIR: '',
+    PROJECTS_DIR: projectsDir,
+    artifactsDirFor: () => artifactsDir,
+    artifactsDirForUser: () => artifactsDir,
+    projectsDirFor: () => projectsDir,
+    projectsDirForUser: () => projectsDir,
+    runtimeDataDirFor: () => projectRoot,
+    runtimeDataDirForUser: () => projectRoot,
     PROMPT_TEMPLATES_DIR: '',
     RUNTIME_DATA_DIR: '',
     RUNTIME_DATA_DIR_CANONICAL: '',
@@ -355,19 +381,10 @@ describe('xai-routes', () => {
 
   it('POST /api/xai/search forwards bearer + x_search options to xAI Responses API and parses the response', async () => {
     // Pre-stage a stored xAI key the way Settings → Grok would.
-    const { mkdir, writeFile } = await import('node:fs/promises');
-    const { default: pathMod } = await import('node:path');
-    const cfgPath = pathMod.join(projectRoot, '.od', 'media-config.json');
-    await mkdir(pathMod.dirname(cfgPath), { recursive: true });
-    await writeFile(
-      cfgPath,
-      JSON.stringify({
-        providers: {
-          grok: { apiKey: 'stored-test-bearer', baseUrl: 'https://xai.example.test/v1' },
-        },
-      }),
-      'utf8',
-    );
+    await writeScopedGrokConfig(projectRoot, {
+      apiKey: 'stored-test-bearer',
+      baseUrl: 'https://xai.example.test/v1',
+    });
 
     let xaiHit = 0;
     let bodyConsumed = false;
@@ -454,15 +471,7 @@ describe('xai-routes', () => {
   });
 
   it('POST /api/xai/search surfaces upstream errors as 502', async () => {
-    const { mkdir, writeFile } = await import('node:fs/promises');
-    const { default: pathMod } = await import('node:path');
-    const cfgPath = pathMod.join(projectRoot, '.od', 'media-config.json');
-    await mkdir(pathMod.dirname(cfgPath), { recursive: true });
-    await writeFile(
-      cfgPath,
-      JSON.stringify({ providers: { grok: { apiKey: 'k' } } }),
-      'utf8',
-    );
+    await writeScopedGrokConfig(projectRoot, { apiKey: 'k' });
     globalThis.fetch = vi.fn(async (input: any, init?: any) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url.includes('api.x.ai')) {

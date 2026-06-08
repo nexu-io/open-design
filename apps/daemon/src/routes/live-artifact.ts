@@ -1,26 +1,90 @@
-import type { Express } from 'express';
+import type { Express, Request, Response } from 'express';
 import type { RouteDeps } from '../server-context.js';
+import { connectorServiceForDataDir } from '../connectors/service.js';
+import { ownerFieldsForRequest, ownerScopeForRequest } from '../project-owner-scope.js';
 
 export interface RegisterLiveArtifactRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'auth' | 'liveArtifacts' | 'projectStore'> {}
 
 export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifactRoutesDeps) {
   const { db } = ctx;
   const { sendApiError, sendLiveArtifactRouteError, requireLocalDaemonRequest } = ctx.http;
-  const { PROJECTS_DIR } = ctx.paths;
+  const { projectsDirFor, runtimeDataDirFor } = ctx.paths;
   const { authorizeToolRequest, requestProjectOverride, requestRunOverride } = ctx.auth;
-  const { createLiveArtifact, listLiveArtifacts, updateLiveArtifact, refreshLiveArtifact, emitLiveArtifactEvent, emitLiveArtifactRefreshEvent, readLiveArtifactCode, setLiveArtifactCodeHeaders, ensureLiveArtifactPreview, setLiveArtifactPreviewHeaders, getLiveArtifact, listLiveArtifactRefreshLogEntries, deleteLiveArtifact } = ctx.liveArtifacts;
-  const { updateProject } = ctx.projectStore;
+  const { createLiveArtifact, listLiveArtifacts, updateLiveArtifact, refreshLiveArtifact, emitLiveArtifactEvent, emitLiveArtifactRefreshEvent, readLiveArtifactCode, setLiveArtifactCodeHeaders, ensureLiveArtifactPreview, setLiveArtifactPreviewHeaders, getLiveArtifact, listLiveArtifactRefreshLogEntries, readLiveArtifactOwnerMetadata, deleteLiveArtifact } = ctx.liveArtifacts;
+  const { getProject, updateProject } = ctx.projectStore;
+
+  type ProjectVisibility = 'visible' | 'hidden' | 'missing';
+
+  function liveArtifactProjectVisibilityForRequest(req: Request, projectId: string): ProjectVisibility {
+    if (getProject(db, projectId, ownerScopeForRequest(req))) return 'visible';
+    if (getProject(db, projectId)) return 'hidden';
+    return 'missing';
+  }
+
+  async function liveArtifactOwnerVisibleToRequest(
+    req: Request,
+    projectId: string,
+    artifactId: string,
+  ): Promise<boolean | null> {
+    const owner = await readLiveArtifactOwnerMetadata({
+      projectsRoot: projectsDirFor(req),
+      projectId,
+      artifactId,
+    });
+    if (!owner?.ownerEmail) return null;
+    return ownerScopeForRequest(req).ownerEmail === owner.ownerEmail;
+  }
+
+  async function requireVisibleLiveArtifactProject(
+    req: Request,
+    res: Response,
+    artifactId?: string,
+  ): Promise<string | null> {
+    const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+    if (!projectId) {
+      sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+      return null;
+    }
+    const visibility = liveArtifactProjectVisibilityForRequest(req, projectId);
+    if (visibility === 'visible') return projectId;
+    if ((visibility === 'missing' || visibility === 'hidden') && artifactId) {
+      const ownerVisible = await liveArtifactOwnerVisibleToRequest(req, projectId, artifactId);
+      if (ownerVisible === true) return projectId;
+      if (visibility === 'missing' && ownerVisible === null && ownerScopeForRequest(req).includeOwnerless) {
+        return projectId;
+      }
+    }
+    if (visibility === 'missing' && !artifactId && ownerScopeForRequest(req).includeOwnerless) {
+      return projectId;
+    }
+    sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+    return null;
+  }
+
   app.get('/api/live-artifacts', async (req, res) => {
     try {
       const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
       if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+        sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
+        return;
       }
-
-      const artifacts = await listLiveArtifacts({
-        projectsRoot: PROJECTS_DIR,
+      const visibility = liveArtifactProjectVisibilityForRequest(req, projectId);
+      let artifacts = await listLiveArtifacts({
+        projectsRoot: projectsDirFor(req),
         projectId,
       });
+      if (visibility !== 'visible' && !ownerScopeForRequest(req).includeOwnerless) {
+        const filtered = [];
+        for (const artifact of artifacts) {
+          const ownerVisible = await liveArtifactOwnerVisibleToRequest(req, projectId, artifact.id);
+          if (ownerVisible === true) filtered.push(artifact);
+        }
+        artifacts = filtered;
+        if (visibility === 'hidden' && artifacts.length === 0) {
+          sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+          return;
+        }
+      }
       res.json({ artifacts });
     } catch (err: any) {
       sendLiveArtifactRouteError(res, err);
@@ -33,15 +97,13 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
 
   app.get('/api/live-artifacts/:artifactId/preview', requireLocalDaemonRequest, async (req, res) => {
     try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
+      const projectId = await requireVisibleLiveArtifactProject(req, res, req.params.artifactId);
+      if (!projectId) return;
 
       const variant = typeof req.query.variant === 'string' ? req.query.variant : 'rendered';
       if (variant === 'template' || variant === 'rendered-source') {
         const html = await readLiveArtifactCode({
-          projectsRoot: PROJECTS_DIR,
+          projectsRoot: projectsDirFor(req),
           projectId,
           artifactId: req.params.artifactId,
           variant: variant === 'template' ? 'template' : 'rendered',
@@ -54,7 +116,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
       }
 
       const record = await ensureLiveArtifactPreview({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId,
         artifactId: req.params.artifactId,
       });
@@ -67,13 +129,11 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
 
   app.get('/api/live-artifacts/:artifactId', async (req, res) => {
     try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
+      const projectId = await requireVisibleLiveArtifactProject(req, res, req.params.artifactId);
+      if (!projectId) return;
 
       const record = await getLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId,
         artifactId: req.params.artifactId,
       });
@@ -85,13 +145,11 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
 
   app.get('/api/live-artifacts/:artifactId/refreshes', async (req, res) => {
     try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
+      const projectId = await requireVisibleLiveArtifactProject(req, res, req.params.artifactId);
+      if (!projectId) return;
 
       const refreshes = await listLiveArtifactRefreshLogEntries({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId,
         artifactId: req.params.artifactId,
       });
@@ -118,12 +176,13 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
       }
 
       const record = await createLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId: toolGrant.projectId,
         input: input ?? {},
         templateHtml,
         provenanceJson,
         createdByRunId: toolGrant.runId,
+        ...ownerFieldsForRequest(req),
       });
       emitLiveArtifactEvent(toolGrant, 'created', record.artifact);
       res.json({ artifact: record.artifact });
@@ -144,7 +203,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
       }
 
       const artifacts = await listLiveArtifacts({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId: toolGrant.projectId,
       });
       res.json({ artifacts });
@@ -168,7 +227,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
       }
 
       const record = await updateLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId: toolGrant.projectId,
         artifactId,
         input: input ?? {},
@@ -199,9 +258,10 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
       let result;
       try {
         result = await refreshLiveArtifact({
-          projectsRoot: PROJECTS_DIR,
+          projectsRoot: projectsDirFor(req),
           projectId: toolGrant.projectId,
           artifactId,
+          connectorService: connectorServiceForDataDir(runtimeDataDirFor(req)),
           onStarted: ({ refreshId }: any) => {
             emitLiveArtifactRefreshEvent(toolGrant, { phase: 'started', artifactId, refreshId });
           },
@@ -229,13 +289,11 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
 
   app.patch('/api/live-artifacts/:artifactId', async (req, res) => {
     try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
+      const projectId = await requireVisibleLiveArtifactProject(req, res, req.params.artifactId);
+      if (!projectId) return;
 
       const record = await updateLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId,
         artifactId: req.params.artifactId,
         input: req.body ?? {},
@@ -249,22 +307,20 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
 
   app.delete('/api/live-artifacts/:artifactId', async (req, res) => {
     try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
+      const projectId = await requireVisibleLiveArtifactProject(req, res, req.params.artifactId);
+      if (!projectId) return;
 
       const existing = await getLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId,
         artifactId: req.params.artifactId,
       });
       await deleteLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         projectId,
         artifactId: req.params.artifactId,
       });
-      updateProject(db, projectId, {});
+      updateProject(db, projectId, {}, ownerScopeForRequest(req));
       emitLiveArtifactEvent({ projectId }, 'deleted', existing.artifact);
       res.json({ ok: true });
     } catch (err: any) {
@@ -278,17 +334,16 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
 
   app.post('/api/live-artifacts/:artifactId/refresh', requireLocalDaemonRequest, async (req, res) => {
     try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
+      const projectId = await requireVisibleLiveArtifactProject(req, res, req.params.artifactId);
+      if (!projectId) return;
 
       let result;
       try {
         result = await refreshLiveArtifact({
-          projectsRoot: PROJECTS_DIR,
+          projectsRoot: projectsDirFor(req),
           projectId,
           artifactId: req.params.artifactId,
+          connectorService: connectorServiceForDataDir(runtimeDataDirFor(req)),
           onStarted: ({ refreshId }: any) => {
             emitLiveArtifactRefreshEvent({ projectId }, { phase: 'started', artifactId: req.params.artifactId, refreshId });
           },

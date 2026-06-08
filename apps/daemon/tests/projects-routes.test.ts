@@ -50,6 +50,24 @@ describe('GET /api/projects/:id resolvedDir', () => {
     return d;
   }
 
+  const userHeaders = (email: string) => ({
+    'Content-Type': 'application/json',
+    'cf-access-authenticated-user-email': email,
+  });
+
+  async function createProjectAs(email: string, id: string, name: string) {
+    return fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: userHeaders(email),
+      body: JSON.stringify({
+        id,
+        name,
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+  }
+
   it('returns resolvedDir === metadata.baseDir for an imported-folder project', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
@@ -75,6 +93,232 @@ describe('GET /api/projects/:id resolvedDir', () => {
     };
     expect(detail.project.id).toBe(projectId);
     expect(detail.resolvedDir).toBe(baseDir);
+  });
+
+  it('scopes project list, detail, and files to the authenticated owner', async () => {
+    const stamp = Date.now();
+    const aliceProjectId = `proj-owner-alice-${stamp}`;
+    const bobProjectId = `proj-owner-bob-${stamp}`;
+
+    const aliceCreate = await createProjectAs(
+      'alice@example.com',
+      aliceProjectId,
+      'Alice project',
+    );
+    expect(aliceCreate.status).toBe(200);
+
+    const bobCreate = await createProjectAs(
+      'bob@example.com',
+      bobProjectId,
+      'Bob project',
+    );
+    expect(bobCreate.status).toBe(200);
+    const bobWrite = await fetch(`${baseUrl}/api/projects/${bobProjectId}/files`, {
+      method: 'POST',
+      headers: userHeaders('bob@example.com'),
+      body: JSON.stringify({
+        name: 'index.html',
+        content: '<!doctype html><h1>Bob only</h1>',
+      }),
+    });
+    expect(bobWrite.status).toBe(200);
+
+    const bobTemplate = await fetch(`${baseUrl}/api/templates`, {
+      method: 'POST',
+      headers: userHeaders('bob@example.com'),
+      body: JSON.stringify({
+        name: `Bob template ${stamp}`,
+        sourceProjectId: bobProjectId,
+      }),
+    });
+    expect(bobTemplate.status).toBe(200);
+    const bobTemplateJson = (await bobTemplate.json()) as {
+      template: { id: string };
+    };
+    const bobTemplateId = bobTemplateJson.template.id;
+
+    const aliceList = await fetch(`${baseUrl}/api/projects`, {
+      headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
+    });
+    expect(aliceList.status).toBe(200);
+    const aliceListJson = (await aliceList.json()) as {
+      projects: Array<{ id: string }>;
+    };
+    expect(aliceListJson.projects.map((project) => project.id)).toContain(aliceProjectId);
+    expect(aliceListJson.projects.map((project) => project.id)).not.toContain(bobProjectId);
+    expect(JSON.stringify(aliceListJson)).not.toContain('ownerEmail');
+
+    const aliceGetsBob = await fetch(`${baseUrl}/api/projects/${bobProjectId}`, {
+      headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
+    });
+    expect(aliceGetsBob.status).toBe(404);
+
+    const aliceReadsBobFiles = await fetch(`${baseUrl}/api/projects/${bobProjectId}/files`, {
+      headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
+    });
+    expect(aliceReadsBobFiles.status).toBe(404);
+
+    const aliceArchivesBob = await fetch(`${baseUrl}/api/projects/${bobProjectId}/archive`, {
+      headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
+    });
+    expect(aliceArchivesBob.status).toBe(404);
+    await expect(aliceArchivesBob.json()).resolves.toMatchObject({
+      error: { code: 'PROJECT_NOT_FOUND' },
+    });
+
+    const aliceBatchArchivesBob = await fetch(`${baseUrl}/api/projects/${bobProjectId}/archive/batch`, {
+      method: 'POST',
+      headers: userHeaders('alice@example.com'),
+      body: JSON.stringify({ files: ['index.html'] }),
+    });
+    expect(aliceBatchArchivesBob.status).toBe(404);
+    await expect(aliceBatchArchivesBob.json()).resolves.toMatchObject({
+      error: { code: 'PROJECT_NOT_FOUND' },
+    });
+
+    const aliceListsBobPluginSnapshots = await fetch(
+      `${baseUrl}/api/projects/${bobProjectId}/applied-plugins`,
+      { headers: { 'cf-access-authenticated-user-email': 'alice@example.com' } },
+    );
+    expect(aliceListsBobPluginSnapshots.status).toBe(404);
+    await expect(aliceListsBobPluginSnapshots.json()).resolves.toMatchObject({
+      error: { code: 'PROJECT_NOT_FOUND' },
+    });
+
+    const aliceListsBobGenui = await fetch(`${baseUrl}/api/projects/${bobProjectId}/genui`, {
+      headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
+    });
+    expect(aliceListsBobGenui.status).toBe(404);
+    await expect(aliceListsBobGenui.json()).resolves.toMatchObject({
+      error: { code: 'PROJECT_NOT_FOUND' },
+    });
+
+    const alicePrefillsBobGenui = await fetch(`${baseUrl}/api/projects/${bobProjectId}/genui/prefill`, {
+      method: 'POST',
+      headers: userHeaders('alice@example.com'),
+      body: JSON.stringify({ snapshotId: 'snap-1', surfaceId: 'surface-1' }),
+    });
+    expect(alicePrefillsBobGenui.status).toBe(404);
+    await expect(alicePrefillsBobGenui.json()).resolves.toMatchObject({
+      error: { code: 'PROJECT_NOT_FOUND' },
+    });
+
+    const aliceListsBobPluginCandidates = await fetch(
+      `${baseUrl}/api/projects/${bobProjectId}/plugin-candidates`,
+      { headers: { 'cf-access-authenticated-user-email': 'alice@example.com' } },
+    );
+    expect(aliceListsBobPluginCandidates.status).toBe(404);
+    await expect(aliceListsBobPluginCandidates.json()).resolves.toMatchObject({
+      error: { code: 'PROJECT_NOT_FOUND' },
+    });
+
+    const aliceDismissesBobPluginCandidate = await fetch(
+      `${baseUrl}/api/projects/${bobProjectId}/plugin-candidates/candidate-1/dismiss`,
+      {
+        method: 'POST',
+        headers: userHeaders('alice@example.com'),
+      },
+    );
+    expect(aliceDismissesBobPluginCandidate.status).toBe(404);
+    await expect(aliceDismissesBobPluginCandidate.json()).resolves.toMatchObject({
+      error: { code: 'PROJECT_NOT_FOUND' },
+    });
+
+    const aliceListsTemplates = await fetch(`${baseUrl}/api/templates`, {
+      headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
+    });
+    expect(aliceListsTemplates.status).toBe(200);
+    const aliceTemplatesJson = (await aliceListsTemplates.json()) as {
+      templates: Array<{ id: string }>;
+    };
+    expect(aliceTemplatesJson.templates.map((template) => template.id)).not.toContain(bobTemplateId);
+
+    const aliceGetsBobTemplate = await fetch(`${baseUrl}/api/templates/${bobTemplateId}`, {
+      headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
+    });
+    expect(aliceGetsBobTemplate.status).toBe(404);
+
+    const aliceDeletesBobTemplate = await fetch(`${baseUrl}/api/templates/${bobTemplateId}`, {
+      method: 'DELETE',
+      headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
+    });
+    expect(aliceDeletesBobTemplate.status).toBe(404);
+
+    const aliceClonesBobTemplate = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: userHeaders('alice@example.com'),
+      body: JSON.stringify({
+        id: `proj-owner-alice-clone-bob-template-${stamp}`,
+        name: 'Alice clone of Bob template',
+        skillId: null,
+        designSystemId: null,
+        metadata: { kind: 'template', templateId: bobTemplateId },
+      }),
+    });
+    expect(aliceClonesBobTemplate.status).toBe(404);
+    await expect(aliceClonesBobTemplate.json()).resolves.toMatchObject({
+      error: { code: 'NOT_FOUND' },
+    });
+
+    const bobGetsTemplate = await fetch(`${baseUrl}/api/templates/${bobTemplateId}`, {
+      headers: { 'cf-access-authenticated-user-email': 'bob@example.com' },
+    });
+    expect(bobGetsTemplate.status).toBe(200);
+
+    const aliceOpensBob = await fetch(`${baseUrl}/api/projects/${bobProjectId}/open-in`, {
+      method: 'POST',
+      headers: userHeaders('alice@example.com'),
+      body: JSON.stringify({ editorId: 'cursor' }),
+    });
+    expect(aliceOpensBob.status).toBe(404);
+
+    const aliceListsBobTerminals = await fetch(`${baseUrl}/api/projects/${bobProjectId}/terminals`, {
+      headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
+    });
+    expect(aliceListsBobTerminals.status).toBe(404);
+
+    const aliceCreatesBobTerminal = await fetch(`${baseUrl}/api/projects/${bobProjectId}/terminals`, {
+      method: 'POST',
+      headers: userHeaders('alice@example.com'),
+      body: JSON.stringify({ cols: 80, rows: 24 }),
+    });
+    expect(aliceCreatesBobTerminal.status).toBe(404);
+
+    const bobGetsBob = await fetch(`${baseUrl}/api/projects/${bobProjectId}`, {
+      headers: { 'cf-access-authenticated-user-email': 'bob@example.com' },
+    });
+    expect(bobGetsBob.status).toBe(200);
+
+    const bobDeletesSourceProject = await fetch(`${baseUrl}/api/projects/${bobProjectId}`, {
+      method: 'DELETE',
+      headers: userHeaders('bob@example.com'),
+    });
+    expect(bobDeletesSourceProject.status).toBe(200);
+
+    const aliceListsTemplatesAfterSourceDelete = await fetch(`${baseUrl}/api/templates`, {
+      headers: userHeaders('alice@example.com'),
+    });
+    expect(aliceListsTemplatesAfterSourceDelete.status).toBe(200);
+    const aliceTemplatesAfterSourceDeleteJson = (await aliceListsTemplatesAfterSourceDelete.json()) as {
+      templates: Array<{ id: string }>;
+    };
+    expect(aliceTemplatesAfterSourceDeleteJson.templates.map((template) => template.id))
+      .not.toContain(bobTemplateId);
+
+    const aliceGetsBobTemplateAfterSourceDelete = await fetch(
+      `${baseUrl}/api/templates/${bobTemplateId}`,
+      { headers: userHeaders('alice@example.com') },
+    );
+    expect(aliceGetsBobTemplateAfterSourceDelete.status).toBe(404);
+
+    const bobGetsTemplateAfterSourceDelete = await fetch(`${baseUrl}/api/templates/${bobTemplateId}`, {
+      headers: userHeaders('bob@example.com'),
+    });
+    expect(bobGetsTemplateAfterSourceDelete.status).toBe(200);
+    const bobTemplateAfterSourceDeleteJson = (await bobGetsTemplateAfterSourceDelete.json()) as {
+      template: { files: Array<{ content: string }> };
+    };
+    expect(JSON.stringify(bobTemplateAfterSourceDeleteJson.template.files)).toContain('Bob only');
   });
 
   it('keeps imported-folder resolvedDir stable in sandbox mode', async () => {

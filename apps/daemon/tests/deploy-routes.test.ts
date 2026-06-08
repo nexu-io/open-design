@@ -29,6 +29,11 @@ describe('deploy provider routes', () => {
 
   afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
 
+  const userHeaders = (email: string) => ({
+    'Content-Type': 'application/json',
+    'cf-access-authenticated-user-email': email,
+  });
+
   it('dispatches deploy config reads and writes by providerId', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-config-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
@@ -164,6 +169,12 @@ describe('deploy provider routes', () => {
     const dataDir = process.env.OD_DATA_DIR;
     if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
     const projectId = `deploy-route-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Deploy preflight fixture' }),
+    });
+    expect(createResp.status).toBe(200);
     const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
     await writeFile(
       path.join(dir, 'index.html'),
@@ -185,6 +196,66 @@ describe('deploy provider routes', () => {
       entry: 'index.html',
       totalFiles: 1,
     });
+  });
+
+  it('scopes project deploy routes to the authenticated owner', async () => {
+    const projectId = `deploy-owner-bob-${Date.now()}`;
+    const bobCreate = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: userHeaders('bob@example.com'),
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Bob deploy fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(bobCreate.status).toBe(200);
+
+    const bobFile = await fetch(`${baseUrl}/api/projects/${projectId}/files`, {
+      method: 'POST',
+      headers: userHeaders('bob@example.com'),
+      body: JSON.stringify({
+        name: 'index.html',
+        content: '<!doctype html><h1>Bob</h1>',
+      }),
+    });
+    expect(bobFile.status).toBe(200);
+
+    const aliceHeaders = userHeaders('alice@example.com');
+    const preflightResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy/preflight`, {
+      method: 'POST',
+      headers: aliceHeaders,
+      body: JSON.stringify({
+        fileName: 'index.html',
+        providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+      }),
+    });
+    expect(preflightResp.status).toBe(404);
+
+    const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+      method: 'POST',
+      headers: aliceHeaders,
+      body: JSON.stringify({
+        fileName: 'index.html',
+        providerId: VERCEL_PROVIDER_ID,
+      }),
+    });
+    expect(deployResp.status).toBe(404);
+
+    const deploymentsResp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments`, {
+      headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
+    });
+    expect(deploymentsResp.status).toBe(404);
+
+    const checkResp = await fetch(
+      `${baseUrl}/api/projects/${projectId}/deployments/fake-deployment/check-link`,
+      {
+        method: 'POST',
+        headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
+      },
+    );
+    expect(checkResp.status).toBe(404);
   });
 
   it('derives Cloudflare Pages project names from the Open Design project', async () => {

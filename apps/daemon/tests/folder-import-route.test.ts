@@ -1,6 +1,6 @@
 import type http from 'node:http';
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
-import { chmod, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -37,10 +37,10 @@ describe('POST /api/import/folder', () => {
     return d;
   }
 
-  async function importFolder(body: unknown) {
+  async function importFolder(body: unknown, headers: Record<string, string> = {}) {
     return fetch(`${baseUrl}/api/import/folder`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify(body),
     });
   }
@@ -184,6 +184,33 @@ describe('POST /api/import/folder', () => {
       if (previousPath == null) delete process.env.PATH;
       else process.env.PATH = previousPath;
     }
+  });
+
+  it('rejects multi-file uploads to another owner imported-folder project before writing files', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+    const importResp = await importFolder(
+      { baseDir: folder },
+      { 'cf-access-authenticated-user-email': 'bob@example.com' },
+    );
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const form = new FormData();
+    form.append(
+      'files',
+      new Blob(['alice should not write here'], { type: 'text/plain' }),
+      'alice-note.txt',
+    );
+
+    const uploadResp = await fetch(`${baseUrl}/api/projects/${project.id}/upload`, {
+      method: 'POST',
+      headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
+      body: form,
+    });
+    expect(uploadResp.status).toBe(404);
+    expect(await readdir(folder)).toEqual(['index.html']);
   });
 
   it('still opens an imported-folder project record in sandbox mode', async () => {

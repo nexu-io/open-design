@@ -58,6 +58,11 @@ describe('buildDesktopPdfExportInput', () => {
 });
 
 describe('POST /api/projects/:id/export/pdf', () => {
+  const userHeaders = (email: string) => ({
+    'content-type': 'application/json',
+    'cf-access-authenticated-user-email': email,
+  });
+
   it('forwards the project HTML file to the configured desktop PDF exporter', async () => {
     const projectId = `proj-pdf-route-${Date.now()}`;
     const calls: unknown[] = [];
@@ -71,6 +76,18 @@ describe('POST /api/projects/:id/export/pdf', () => {
     }) as { server: { close(cb: () => void): void }; url: string };
 
     try {
+      const create = await fetch(`${started.url}/api/projects`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: projectId,
+          name: 'PDF route project',
+          skillId: null,
+          designSystemId: null,
+        }),
+      });
+      expect(create.status).toBe(200);
+
       await fetch(`${started.url}/api/projects/${encodeURIComponent(projectId)}/files`, {
         body: JSON.stringify({
           content: '<!doctype html><section class="slide">One</section>',
@@ -97,6 +114,57 @@ describe('POST /api/projects/:id/export/pdf', () => {
           title: 'Seed Deck',
         },
       ]);
+    } finally {
+      await new Promise<void>((resolve) => started.server.close(resolve));
+    }
+  });
+
+  it('rejects PDF export for projects outside the caller owner scope before reading files', async () => {
+    const projectId = `proj-pdf-owner-${Date.now()}`;
+    const calls: unknown[] = [];
+    const started = await startServer({
+      port: 0,
+      returnServer: true,
+      desktopPdfExporter: async (input: unknown) => {
+        calls.push(input);
+        return { ok: true, path: '/tmp/seed.pdf' };
+      },
+    }) as { server: { close(cb: () => void): void }; url: string };
+
+    try {
+      const create = await fetch(`${started.url}/api/projects`, {
+        method: 'POST',
+        headers: userHeaders('bob@example.com'),
+        body: JSON.stringify({
+          id: projectId,
+          name: 'Bob PDF project',
+          skillId: null,
+          designSystemId: null,
+        }),
+      });
+      expect(create.status).toBe(200);
+
+      const write = await fetch(`${started.url}/api/projects/${encodeURIComponent(projectId)}/files`, {
+        body: JSON.stringify({
+          content: '<!doctype html><section class="slide">Bob only</section>',
+          name: 'deck/index.html',
+        }),
+        headers: userHeaders('bob@example.com'),
+        method: 'POST',
+      });
+      expect(write.status).toBe(200);
+
+      const response = await fetch(`${started.url}/api/projects/${encodeURIComponent(projectId)}/export/pdf`, {
+        body: JSON.stringify({ deck: true, fileName: 'deck/index.html', title: 'Bob Deck' }),
+        headers: userHeaders('alice@example.com'),
+        method: 'POST',
+      });
+
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: 'PROJECT_NOT_FOUND' },
+      });
+      expect(calls).toEqual([]);
     } finally {
       await new Promise<void>((resolve) => started.server.close(resolve));
     }

@@ -1,8 +1,21 @@
-import type { Express } from 'express';
+import type { Express, Request, Response } from 'express';
 import { createApiError } from '@open-design/contracts';
 import { ACTIVE_CONTEXT_TTL_MS } from '../constants.js';
 import type { RouteDeps } from '../server-context.js';
-import { defineJsonRoute, err, mountJsonRoute, ok, type Result } from '../http/index.js';
+import {
+  defineJsonRoute,
+  err,
+  guardSameOrigin,
+  ok,
+  rawInput,
+  sendApiError,
+  sendJson,
+  statusForError,
+  type JsonRouteSpec,
+  type Result,
+} from '../http/index.js';
+import type { AuthenticatedRequest } from '../auth-context.js';
+import { ownerScopeForRequest } from '../project-owner-scope.js';
 
 export interface RegisterActiveContextRoutesDeps extends RouteDeps<'db' | 'http' | 'projectStore'> {}
 
@@ -115,14 +128,59 @@ export const getActiveRoute = defineJsonRoute<void, GetActiveOutput, ActiveConte
 });
 
 export function registerActiveContextRoutes(app: Express, ctx: RegisterActiveContextRoutesDeps): void {
-  const store: ActiveContextStore = { current: null };
-  const domainDeps: ActiveContextDomainDeps = {
-    store,
-    db: ctx.db,
-    getProject: ctx.projectStore.getProject,
-    now: () => Date.now(),
-  };
+  const storesByOwner = new Map<string, ActiveContextStore>();
   const adapter = { resolvedPortRef: ctx.http.resolvedPortRef };
-  mountJsonRoute(app, postActiveRoute, domainDeps, adapter);
-  mountJsonRoute(app, getActiveRoute, domainDeps, adapter);
+
+  function storeForRequest(req: Request): ActiveContextStore {
+    const user = (req as AuthenticatedRequest).user;
+    const key = user ? `${user.email}:${user.dirHash}` : 'ownerless';
+    const existing = storesByOwner.get(key);
+    if (existing) return existing;
+    const created: ActiveContextStore = { current: null };
+    storesByOwner.set(key, created);
+    return created;
+  }
+
+  function depsForRequest(req: Request): ActiveContextDomainDeps {
+    return {
+      store: storeForRequest(req),
+      db: ctx.db,
+      getProject: (db, projectId) =>
+        ctx.projectStore.getProject(db, projectId, ownerScopeForRequest(req)),
+      now: () => Date.now(),
+    };
+  }
+
+  function mountRequestScopedRoute<Input, Output>(
+    spec: JsonRouteSpec<Input, Output, ActiveContextDomainDeps>,
+  ): void {
+    app[spec.method](spec.path, async (req: Request, res: Response) => {
+      try {
+        if (spec.requireSameOrigin) {
+          const origin = guardSameOrigin(req, adapter);
+          if (!origin.ok) {
+            sendApiError(res, statusForError(origin.error), origin.error);
+            return;
+          }
+        }
+        const parsed = spec.parse(rawInput(req));
+        if (!parsed.ok) {
+          sendApiError(res, statusForError(parsed.error), parsed.error);
+          return;
+        }
+        const result = await spec.handle(parsed.value, depsForRequest(req));
+        if (!result.ok) {
+          sendApiError(res, statusForError(result.error), result.error);
+          return;
+        }
+        sendJson(res, spec.successStatus ?? 200, result.value);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        sendApiError(res, 500, createApiError('INTERNAL_ERROR', message));
+      }
+    });
+  }
+
+  mountRequestScopedRoute(postActiveRoute);
+  mountRequestScopedRoute(getActiveRoute);
 }

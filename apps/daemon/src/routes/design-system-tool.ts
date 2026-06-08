@@ -26,9 +26,10 @@ export type RegisterDesignSystemToolRoutesDeps = {
   paths: {
     DESIGN_SYSTEMS_DIR: string;
     USER_DESIGN_SYSTEMS_DIR: string;
+    userDesignSystemsDirFor?: (req: Request) => string;
   };
   projects: {
-    getProject: (id: string) => ProjectRecord | null | undefined;
+    getProject: (req: Request, id: string) => ProjectRecord | null | undefined;
   };
 };
 
@@ -44,7 +45,7 @@ export function registerDesignSystemToolRoutes(
       const grant = authorizeToolRequest(req, res, 'design-systems:read');
       if (!grant) return;
 
-      const project = ctx.projects.getProject(grant.projectId);
+      const project = ctx.projects.getProject(req, grant.projectId);
       const activeDesignSystemId = project?.designSystemId;
       if (!activeDesignSystemId) {
         return sendApiError(res, 404, 'DESIGN_SYSTEM_NOT_FOUND', 'project has no active design system');
@@ -66,7 +67,7 @@ export function registerDesignSystemToolRoutes(
 
       const file = await readActiveDesignSystemPullFile(
         ctx.paths.DESIGN_SYSTEMS_DIR,
-        ctx.paths.USER_DESIGN_SYSTEMS_DIR,
+        ctx.paths.userDesignSystemsDirFor?.(req) ?? ctx.paths.USER_DESIGN_SYSTEMS_DIR,
         activeDesignSystemId,
         requestedPath,
       );

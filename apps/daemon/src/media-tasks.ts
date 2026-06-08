@@ -16,6 +16,8 @@ export interface MediaTaskError {
 export interface MediaTaskRow {
   id: string;
   projectId: string;
+  ownerEmail: string | null;
+  ownerDirHash: string | null;
   status: MediaTaskStatus;
   surface?: string;
   model?: string;
@@ -31,6 +33,8 @@ export interface MediaTaskRow {
 export interface MediaTaskInsert {
   id: string;
   projectId: string;
+  ownerEmail?: string | null;
+  ownerDirHash?: string | null;
   status?: MediaTaskStatus;
   surface?: string;
   model?: string;
@@ -44,6 +48,8 @@ export interface MediaTaskInsert {
 }
 
 export interface MediaTaskPatch {
+  ownerEmail?: string | null;
+  ownerDirHash?: string | null;
   status?: MediaTaskStatus;
   surface?: string | null;
   model?: string | null;
@@ -58,6 +64,8 @@ export interface MediaTaskPatch {
 interface RawMediaTaskRow {
   id: string;
   projectId: string;
+  ownerEmail: string | null;
+  ownerDirHash: string | null;
   status: string;
   surface: string | null;
   model: string | null;
@@ -83,6 +91,8 @@ const TERMINAL_STATUSES = new Set(['done', 'failed', 'interrupted']);
 const COLS = `
   id,
   project_id AS projectId,
+  owner_email AS ownerEmail,
+  owner_dir_hash AS ownerDirHash,
   status,
   surface,
   model,
@@ -100,6 +110,8 @@ export function migrateMediaTasks(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS media_tasks (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
+      owner_email TEXT,
+      owner_dir_hash TEXT,
       status TEXT NOT NULL CHECK (status IN
         ('queued','running','done','failed','interrupted')),
       surface TEXT,
@@ -120,6 +132,38 @@ export function migrateMediaTasks(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_media_tasks_status
       ON media_tasks(status, updated_at DESC);
   `);
+  const cols = db.prepare(`PRAGMA table_info(media_tasks)`).all() as Array<{ name: string }>;
+  if (!cols.some((col) => col.name === 'owner_email')) {
+    db.exec(`ALTER TABLE media_tasks ADD COLUMN owner_email TEXT`);
+  }
+  if (!cols.some((col) => col.name === 'owner_dir_hash')) {
+    db.exec(`ALTER TABLE media_tasks ADD COLUMN owner_dir_hash TEXT`);
+  }
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_media_tasks_owner_email
+      ON media_tasks(owner_email, updated_at DESC);
+  `);
+  const projectCols = db.prepare(`PRAGMA table_info(projects)`).all() as Array<{ name: string }>;
+  if (
+    projectCols.some((col) => col.name === 'owner_email') &&
+    projectCols.some((col) => col.name === 'owner_dir_hash')
+  ) {
+    db.exec(`
+      UPDATE media_tasks
+         SET owner_email = (
+               SELECT owner_email FROM projects WHERE projects.id = media_tasks.project_id
+             ),
+             owner_dir_hash = (
+               SELECT owner_dir_hash FROM projects WHERE projects.id = media_tasks.project_id
+             )
+       WHERE owner_email IS NULL
+         AND EXISTS (
+               SELECT 1 FROM projects
+                WHERE projects.id = media_tasks.project_id
+                  AND projects.owner_email IS NOT NULL
+             );
+    `);
+  }
 }
 
 export function insertMediaTask(
@@ -132,12 +176,14 @@ export function insertMediaTask(
   const startedAt = input.startedAt ?? now;
   db.prepare(
     `INSERT INTO media_tasks
-       (id, project_id, status, surface, model, progress_json, file_json,
+       (id, project_id, owner_email, owner_dir_hash, status, surface, model, progress_json, file_json,
         error_json, started_at, ended_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.id,
     input.projectId,
+    input.ownerEmail ?? null,
+    input.ownerDirHash ?? null,
     status,
     input.surface ?? null,
     input.model ?? null,
@@ -176,7 +222,9 @@ export function updateMediaTask(
   const updatedAt = patch.updatedAt ?? Date.now();
   db.prepare(
     `UPDATE media_tasks
-        SET status = ?,
+        SET owner_email = ?,
+            owner_dir_hash = ?,
+            status = ?,
             surface = ?,
             model = ?,
             progress_json = ?,
@@ -187,6 +235,8 @@ export function updateMediaTask(
             updated_at = ?
       WHERE id = ?`,
   ).run(
+    'ownerEmail' in patch ? patch.ownerEmail ?? null : existing.ownerEmail ?? null,
+    'ownerDirHash' in patch ? patch.ownerDirHash ?? null : existing.ownerDirHash ?? null,
     status,
     'surface' in patch ? patch.surface ?? null : existing.surface ?? null,
     'model' in patch ? patch.model ?? null : existing.model ?? null,
@@ -282,6 +332,8 @@ function normalizeRow(raw: RawMediaTaskRow): MediaTaskRow {
   const row: MediaTaskRow = {
     id: raw.id,
     projectId: raw.projectId,
+    ownerEmail: raw.ownerEmail ?? null,
+    ownerDirHash: raw.ownerDirHash ?? null,
     status: raw.status as MediaTaskStatus,
     progress: parseArray(raw.progressJson),
     file: parseJson(raw.fileJson),

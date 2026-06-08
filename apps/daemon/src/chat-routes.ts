@@ -187,6 +187,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       hasCustomReason: body.hasCustomReason === true,
       customReason,
       scoreMetadata,
+      dataDir: ctx.paths.runtimeDataDirFor(req),
     });
     res.status(202).json(outcome);
   });
@@ -1494,10 +1495,12 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         : undefined;
 
     let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
+    const mediaConfigDataDir = ctx.paths.runtimeDataDirFor(req);
 
     const toolCtx: BYOKToolContext = {
       projectRoot: ctx.paths.PROJECT_ROOT,
-      projectsRoot: ctx.paths.PROJECTS_DIR,
+      mediaConfigDataDir,
+      projectsRoot: ctx.paths.projectsDirFor(req),
       projectId,
       upstreamApiKey: apiKey,
       upstreamBaseUrl: effectiveBaseUrl,
@@ -2071,10 +2074,15 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     // generate`) picks it up automatically — fire-and-forget; the
     // chat stream must not block on the disk write. seedProviderIfMissing
     // is idempotent and preserves env-var-resolved keys.
-    seedProviderIfMissing(ctx.paths.PROJECT_ROOT, opts.providerId, {
-      apiKey,
-      baseUrl: effectiveBaseUrl,
-    })
+    seedProviderIfMissing(
+      ctx.paths.PROJECT_ROOT,
+      opts.providerId,
+      {
+        apiKey,
+        baseUrl: effectiveBaseUrl,
+      },
+      mediaConfigDataDir,
+    )
       .then((seeded) => {
         if (seeded) {
           console.log(

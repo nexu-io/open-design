@@ -24,6 +24,8 @@ export type SurfaceKind = GenUISurfaceSpec['kind'];
 export interface SurfaceRow {
   id:                string;
   projectId:         string;
+  ownerEmail:        string | null;
+  ownerDirHash:      string | null;
   conversationId:    string | null;
   runId:             string | null;
   pluginSnapshotId:  string;
@@ -41,6 +43,8 @@ export interface SurfaceRow {
 
 export interface RequestSurfaceInput {
   projectId:        string;
+  ownerEmail?:      string | null | undefined;
+  ownerDirHash?:    string | null | undefined;
   conversationId?:  string | null | undefined;
   runId?:           string | null | undefined;
   pluginSnapshotId: string;
@@ -60,6 +64,8 @@ export interface RespondSurfaceInput {
 
 export interface PrefillSurfaceInput {
   projectId:         string;
+  ownerEmail?:       string | null | undefined;
+  ownerDirHash?:     string | null | undefined;
   pluginSnapshotId:  string;
   surfaceId:         string;
   kind:              SurfaceKind;
@@ -72,6 +78,8 @@ export interface PrefillSurfaceInput {
 interface SurfaceDbRow {
   id:                  string;
   project_id:          string;
+  owner_email:         string | null;
+  owner_dir_hash:      string | null;
   conversation_id:     string | null;
   run_id:              string | null;
   plugin_snapshot_id:  string;
@@ -91,6 +99,8 @@ function rowFromDb(row: SurfaceDbRow): SurfaceRow {
   return {
     id:                row.id,
     projectId:         row.project_id,
+    ownerEmail:        row.owner_email,
+    ownerDirHash:      row.owner_dir_hash,
     conversationId:    row.conversation_id,
     runId:             row.run_id,
     pluginSnapshotId:  row.plugin_snapshot_id,
@@ -117,13 +127,15 @@ export function requestSurface(db: SqliteDb, input: RequestSurfaceInput): Surfac
   const runId = input.runId ?? null;
   db.prepare(
     `INSERT INTO genui_surfaces (
-       id, project_id, conversation_id, run_id, plugin_snapshot_id,
+       id, project_id, owner_email, owner_dir_hash, conversation_id, run_id, plugin_snapshot_id,
        surface_id, kind, persist, schema_digest, value_json, status,
        responded_by, requested_at, responded_at, expires_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'pending', NULL, ?, NULL, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'pending', NULL, ?, NULL, ?)`,
   ).run(
     id,
     input.projectId,
+    input.ownerEmail ?? null,
+    input.ownerDirHash ?? null,
     conversationId,
     runId,
     input.pluginSnapshotId,
@@ -168,13 +180,15 @@ export function prefillSurface(db: SqliteDb, input: PrefillSurfaceInput): Surfac
   const now = Date.now();
   db.prepare(
     `INSERT INTO genui_surfaces (
-       id, project_id, conversation_id, run_id, plugin_snapshot_id,
+       id, project_id, owner_email, owner_dir_hash, conversation_id, run_id, plugin_snapshot_id,
        surface_id, kind, persist, schema_digest, value_json, status,
        responded_by, requested_at, responded_at, expires_at
-     ) VALUES (?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, 'resolved', 'auto', ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, 'resolved', 'auto', ?, ?, ?)`,
   ).run(
     id,
     input.projectId,
+    input.ownerEmail ?? null,
+    input.ownerDirHash ?? null,
     input.pluginSnapshotId,
     input.surfaceId,
     input.kind,
@@ -199,24 +213,34 @@ export function lookupResolved(
     surfaceId:       string;
     persist:         SurfaceTier;
     schemaDigest?:   string | null | undefined;
+    ownerEmail?:     string | null | undefined;
     now?:            number;
   },
 ): SurfaceRow | null {
   const now = args.now ?? Date.now();
+  const ownerEmail = typeof args.ownerEmail === 'string' && args.ownerEmail.length > 0
+    ? args.ownerEmail
+    : null;
   let row: SurfaceDbRow | undefined;
   if (args.persist === 'project') {
     row = db.prepare(
       `SELECT * FROM genui_surfaces
         WHERE project_id = ? AND surface_id = ? AND status = 'resolved'
+          AND ${ownerEmail ? 'owner_email = ?' : 'owner_email IS NULL'}
         ORDER BY responded_at DESC LIMIT 1`,
-    ).get(args.projectId, args.surfaceId) as SurfaceDbRow | undefined;
+    ).get(...(ownerEmail
+      ? [args.projectId, args.surfaceId, ownerEmail]
+      : [args.projectId, args.surfaceId])) as SurfaceDbRow | undefined;
   } else if (args.persist === 'conversation') {
     if (!args.conversationId) return null;
     row = db.prepare(
       `SELECT * FROM genui_surfaces
         WHERE conversation_id = ? AND surface_id = ? AND status = 'resolved'
+          AND ${ownerEmail ? 'owner_email = ?' : 'owner_email IS NULL'}
         ORDER BY responded_at DESC LIMIT 1`,
-    ).get(args.conversationId, args.surfaceId) as SurfaceDbRow | undefined;
+    ).get(...(ownerEmail
+      ? [args.conversationId, args.surfaceId, ownerEmail]
+      : [args.conversationId, args.surfaceId])) as SurfaceDbRow | undefined;
   } else {
     // 'run' tier never crosses runs; cache lookup is meaningless.
     return null;

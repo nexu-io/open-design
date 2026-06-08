@@ -74,13 +74,22 @@ function pushNewest(record) {
 // caller can't accidentally mutate buffer state in place. `kind`
 // defaults to 'llm' for backwards compat with the original single-
 // writer call sites in memory-llm.ts.
-export function startExtraction({ userMessage, kind = 'llm' }) {
+export function startExtraction({
+  userMessage,
+  kind = 'llm',
+  dataDir = undefined,
+}: {
+  userMessage: unknown;
+  kind?: string;
+  dataDir?: string;
+}) {
   const record = {
     id: randomUUID(),
     kind,
     startedAt: Date.now(),
     phase: 'running',
     userMessagePreview: trimPreview(userMessage),
+    ...(typeof dataDir === 'string' && dataDir ? { dataDir } : {}),
   };
   pushNewest(record);
   emit(record);
@@ -115,7 +124,17 @@ export function markSkipped(id, reason) {
 // through the running phase (e.g. memory disabled, empty user message,
 // no provider configured). Returns the record's id so the caller can
 // pass it to listExtractions consumers if needed.
-export function recordSkip({ userMessage, reason, kind = 'llm' }) {
+export function recordSkip({
+  userMessage,
+  reason,
+  kind = 'llm',
+  dataDir = undefined,
+}: {
+  userMessage: unknown;
+  reason: string;
+  kind?: string;
+  dataDir?: string;
+}) {
   const record = {
     id: randomUUID(),
     kind,
@@ -124,6 +143,7 @@ export function recordSkip({ userMessage, reason, kind = 'llm' }) {
     phase: 'skipped',
     reason,
     userMessagePreview: trimPreview(userMessage),
+    ...(typeof dataDir === 'string' && dataDir ? { dataDir } : {}),
   };
   pushNewest(record);
   emit(record);
@@ -138,7 +158,17 @@ export function recordSkip({ userMessage, reason, kind = 'llm' }) {
 // 'skipped' with reason 'no-match' so the UI can colour it like the
 // other skip rows ("regex looked, found nothing") instead of pretending
 // the regex never ran.
-export function recordHeuristic({ userMessage, writtenCount, writtenIds }) {
+export function recordHeuristic({
+  userMessage,
+  writtenCount,
+  writtenIds,
+  dataDir = undefined,
+}: {
+  userMessage: unknown;
+  writtenCount: number;
+  writtenIds: string[];
+  dataDir?: string;
+}) {
   const written = Number.isFinite(writtenCount)
     ? Math.max(0, Math.floor(writtenCount))
     : 0;
@@ -153,6 +183,7 @@ export function recordHeuristic({ userMessage, writtenCount, writtenIds }) {
     userMessagePreview: trimPreview(userMessage),
     writtenCount: written,
     writtenIds: ids,
+    ...(typeof dataDir === 'string' && dataDir ? { dataDir } : {}),
     ...(written === 0 ? { reason: 'no-match' } : {}),
   };
   pushNewest(record);
@@ -188,8 +219,10 @@ export function markFailed(id, error) {
 
 // Public — newest-first snapshot. Cloned so callers can't mutate the
 // buffer through the returned reference.
-export function listExtractions() {
-  return records.map(clone);
+export function listExtractions(dataDir?: string) {
+  return records
+    .filter((record) => typeof dataDir !== 'string' || record.dataDir === dataDir)
+    .map(clone);
 }
 
 // Public — drop one record by id. Returns the count actually removed
@@ -197,8 +230,10 @@ export function listExtractions() {
 // HTTP endpoint so a dangling double-click isn't surfaced as an error).
 // Emits a synthetic `extraction` event with `phase: 'deleted'` so any
 // open settings panel can drop the row immediately without a refetch.
-export function removeExtraction(id) {
-  const idx = records.findIndex((r) => r.id === id);
+export function removeExtraction(id: string, dataDir?: string) {
+  const idx = records.findIndex((r) =>
+    r.id === id && (typeof dataDir !== 'string' || r.dataDir === dataDir),
+  );
   if (idx < 0) return 0;
   const [removed] = records.splice(idx, 1);
   setImmediate(() => {
@@ -214,9 +249,17 @@ export function removeExtraction(id) {
 // Public — wipe the whole buffer. Returns the count removed. Emits a
 // single `extractions-cleared` event so the UI can drop everything in
 // one render rather than firing N row-level deletes.
-export function clearExtractions() {
-  const removed = records.length;
-  records.length = 0;
+export function clearExtractions(dataDir?: string) {
+  const removed = typeof dataDir === 'string'
+    ? records.filter((record) => record.dataDir === dataDir).length
+    : records.length;
+  if (typeof dataDir === 'string') {
+    for (let idx = records.length - 1; idx >= 0; idx -= 1) {
+      if (records[idx]?.dataDir === dataDir) records.splice(idx, 1);
+    }
+  } else {
+    records.length = 0;
+  }
   if (removed > 0) {
     setImmediate(() => {
       try {
@@ -225,6 +268,7 @@ export function clearExtractions() {
           phase: 'cleared',
           startedAt: Date.now(),
           finishedAt: Date.now(),
+          ...(typeof dataDir === 'string' && dataDir ? { dataDir } : {}),
         });
       } catch {
         // SSE failures are not the extractor's problem.

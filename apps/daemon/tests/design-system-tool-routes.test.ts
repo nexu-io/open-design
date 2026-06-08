@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Request } from 'express';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
@@ -58,7 +58,12 @@ function writeHybridDesignSystem(root: string, id: string): string {
 async function startRouteServer(options: {
   builtInRoot: string;
   userRoot: string;
+  userRootForRequest?: (req: Request) => string;
   activeDesignSystemId: string | null;
+  projectForRequest?: (
+    req: Request,
+    id: string,
+  ) => { id: string; designSystemId?: string | null } | null | undefined;
 }): Promise<string> {
   const app = express();
   app.use(express.json());
@@ -85,12 +90,18 @@ async function startRouteServer(options: {
     paths: {
       DESIGN_SYSTEMS_DIR: options.builtInRoot,
       USER_DESIGN_SYSTEMS_DIR: options.userRoot,
+      ...(options.userRootForRequest
+        ? { userDesignSystemsDirFor: options.userRootForRequest }
+        : {}),
     },
     projects: {
-      getProject: () => ({
-        id: 'project-1',
-        designSystemId: options.activeDesignSystemId,
-      }),
+      getProject: (req, id) =>
+        options.projectForRequest
+          ? options.projectForRequest(req, id)
+          : {
+              id: 'project-1',
+              designSystemId: options.activeDesignSystemId,
+            },
     },
   });
 
@@ -101,12 +112,17 @@ async function startRouteServer(options: {
   return `http://127.0.0.1:${address.port}`;
 }
 
-async function jsonFetch(url: string, body: Record<string, unknown>): Promise<JsonFetchResult> {
+async function jsonFetch(
+  url: string,
+  body: Record<string, unknown>,
+  headers: Record<string, string> = {},
+): Promise<JsonFetchResult> {
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: 'Bearer token',
+      ...headers,
     },
     body: JSON.stringify(body),
   });
@@ -169,5 +185,70 @@ describe('design-system pull tool route', () => {
     });
     expect(mismatch.status).toBe(403);
     expect(mismatch.body.error.code).toBe('DESIGN_SYSTEM_DENIED');
+  });
+
+  it('resolves the token project through the request-scoped project reader', async () => {
+    const builtInRoot = fresh();
+    const userRoot = fresh();
+    writeHybridDesignSystem(builtInRoot, 'pull-brand');
+    const baseUrl = await startRouteServer({
+      builtInRoot,
+      userRoot,
+      activeDesignSystemId: 'pull-brand',
+      projectForRequest: (req, id) => {
+        if (id !== 'project-1') return null;
+        if (req.get('x-owner') !== 'bob') return null;
+        return { id, designSystemId: 'pull-brand' };
+      },
+    });
+
+    const denied = await jsonFetch(
+      `${baseUrl}/api/tools/design-systems/read`,
+      { path: 'preview/colors.html' },
+      { 'x-owner': 'alice' },
+    );
+    expect(denied.status).toBe(404);
+    expect(denied.body.error.code).toBe('DESIGN_SYSTEM_NOT_FOUND');
+
+    const allowed = await jsonFetch(
+      `${baseUrl}/api/tools/design-systems/read`,
+      { path: 'preview/colors.html' },
+      { 'x-owner': 'bob' },
+    );
+    expect(allowed.status).toBe(200);
+    expect(allowed.body.file.content).toBe('<h1>Colors</h1>');
+  });
+
+  it('reads user design-system files from the request-scoped user root', async () => {
+    const builtInRoot = fresh();
+    const fallbackUserRoot = fresh();
+    const aliceRoot = fresh();
+    const bobRoot = fresh();
+    writeHybridDesignSystem(aliceRoot, 'tenant-brand');
+    writeHybridDesignSystem(bobRoot, 'tenant-brand');
+    writeFileSync(path.join(aliceRoot, 'tenant-brand', 'preview', 'colors.html'), '<h1>Alice Colors</h1>');
+    writeFileSync(path.join(bobRoot, 'tenant-brand', 'preview', 'colors.html'), '<h1>Bob Colors</h1>');
+    const baseUrl = await startRouteServer({
+      builtInRoot,
+      userRoot: fallbackUserRoot,
+      userRootForRequest: (req) => req.get('x-owner') === 'alice' ? aliceRoot : bobRoot,
+      activeDesignSystemId: 'user:tenant-brand',
+    });
+
+    const alice = await jsonFetch(
+      `${baseUrl}/api/tools/design-systems/read`,
+      { path: 'preview/colors.html' },
+      { 'x-owner': 'alice' },
+    );
+    expect(alice.status).toBe(200);
+    expect(alice.body.file.content).toBe('<h1>Alice Colors</h1>');
+
+    const bob = await jsonFetch(
+      `${baseUrl}/api/tools/design-systems/read`,
+      { path: 'preview/colors.html' },
+      { 'x-owner': 'bob' },
+    );
+    expect(bob.status).toBe(200);
+    expect(bob.body.file.content).toBe('<h1>Bob Colors</h1>');
   });
 });

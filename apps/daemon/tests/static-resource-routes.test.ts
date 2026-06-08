@@ -22,6 +22,8 @@ describe('static resource mutation routes', () => {
         tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'od-static-routes-'));
         const app = express();
         app.use(express.json({ limit: '4mb' }));
+        const artifactsDir = path.join(tempRoot, 'artifacts');
+        const projectsDir = path.join(tempRoot, 'projects');
         registerStaticResourceRoutes(app, {
           http: {
             createSseResponse: () => undefined,
@@ -39,13 +41,19 @@ describe('static resource mutation routes', () => {
             sendMulterError: () => undefined,
           },
           paths: {
-            ARTIFACTS_DIR: path.join(tempRoot, 'artifacts'),
+            ARTIFACTS_DIR: artifactsDir,
             BUNDLED_PETS_DIR: path.join(tempRoot, 'pets'),
             DESIGN_SYSTEMS_DIR: path.join(tempRoot, 'design-systems'),
             DESIGN_TEMPLATES_DIR: path.join(tempRoot, 'design-templates'),
             OD_BIN: path.join(tempRoot, 'od'),
             PROJECT_ROOT: tempRoot,
-            PROJECTS_DIR: path.join(tempRoot, 'projects'),
+            PROJECTS_DIR: projectsDir,
+            artifactsDirFor: () => artifactsDir,
+            artifactsDirForUser: () => artifactsDir,
+            projectsDirFor: () => projectsDir,
+            projectsDirForUser: () => projectsDir,
+            runtimeDataDirFor: () => path.join(tempRoot, 'data'),
+            runtimeDataDirForUser: () => path.join(tempRoot, 'data'),
             PROMPT_TEMPLATES_DIR: path.join(tempRoot, 'prompt-templates'),
             RUNTIME_DATA_DIR: path.join(tempRoot, 'data'),
             RUNTIME_DATA_DIR_CANONICAL: path.join(tempRoot, 'data'),
@@ -185,6 +193,8 @@ describe('design system import catalog lookup', () => {
 
         const app = express();
         app.use(express.json({ limit: '4mb' }));
+        const artifactsDir = path.join(tempRoot, 'artifacts');
+        const projectsDir = path.join(tempRoot, 'projects');
         registerStaticResourceRoutes(app, {
           http: {
             createSseResponse: () => undefined,
@@ -202,13 +212,19 @@ describe('design system import catalog lookup', () => {
             sendMulterError: () => undefined,
           },
           paths: {
-            ARTIFACTS_DIR: path.join(tempRoot, 'artifacts'),
+            ARTIFACTS_DIR: artifactsDir,
             BUNDLED_PETS_DIR: path.join(tempRoot, 'pets'),
             DESIGN_SYSTEMS_DIR: path.join(tempRoot, 'design-systems'),
             DESIGN_TEMPLATES_DIR: path.join(tempRoot, 'design-templates'),
             OD_BIN: path.join(tempRoot, 'od'),
             PROJECT_ROOT: tempRoot,
-            PROJECTS_DIR: path.join(tempRoot, 'projects'),
+            PROJECTS_DIR: projectsDir,
+            artifactsDirFor: () => artifactsDir,
+            artifactsDirForUser: () => artifactsDir,
+            projectsDirFor: () => projectsDir,
+            projectsDirForUser: () => projectsDir,
+            runtimeDataDirFor: () => path.join(tempRoot, 'data'),
+            runtimeDataDirForUser: () => path.join(tempRoot, 'data'),
             PROMPT_TEMPLATES_DIR: path.join(tempRoot, 'prompt-templates'),
             RUNTIME_DATA_DIR: path.join(tempRoot, 'data'),
             RUNTIME_DATA_DIR_CANONICAL: path.join(tempRoot, 'data'),

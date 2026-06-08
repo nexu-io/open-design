@@ -34,6 +34,8 @@ export interface PipelineRunnerInput {
   db:        SqliteDb;
   runId:     string;
   projectId: string;
+  ownerEmail?: string | null | undefined;
+  ownerDirHash?: string | null | undefined;
   conversationId?: string | null | undefined;
   snapshot:  AppliedPluginSnapshot;
   pipeline:  PluginPipeline;
@@ -94,6 +96,8 @@ function raiseSurface(input: PipelineRunnerInput, surface: GenUISurfaceSpec): vo
   try {
     requestOrReuseSurface(input.db, {
       projectId:        input.projectId,
+      ownerEmail:       input.ownerEmail ?? null,
+      ownerDirHash:     input.ownerDirHash ?? null,
       conversationId:   input.conversationId ?? null,
       runId:            input.runId,
       pluginSnapshotId: input.snapshot.snapshotId,

@@ -357,6 +357,40 @@ describe('Langfuse message finalization gate', () => {
     ]));
   });
 
+  it('uses the per-call data dir when finalizing request-bound messages', () => {
+    const run = {
+      id: 'run-2',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+    };
+    const report = vi.fn();
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: { runs: { get: vi.fn(() => run) } },
+      db: 'db',
+      dataDir: '/tmp/daemon-data',
+      reportedRuns: new Set<string>(),
+      getAppVersion: () => ({ version: '0.7.0', channel: 'beta', packaged: true }),
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, runId: 'run-2', endedAt: 1234 },
+      { telemetryFinalized: true },
+      { dataDir: '/tmp/user-data' },
+    );
+
+    expect(report).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dataDir: '/tmp/user-data',
+      }),
+    );
+  });
+
   it('captures Langfuse report acceptance after final message reporting resolves', async () => {
     const run = {
       id: 'run-accepted',

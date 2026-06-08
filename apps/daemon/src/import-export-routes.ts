@@ -1,12 +1,14 @@
-import type { Express } from 'express';
+import type { Express, Request } from 'express';
 import nodePath from 'node:path';
 import type { RouteDeps } from './server-context.js';
+import type { ProjectOwnerScope } from './db.js';
 import {
   InlineAssetsLimitError,
   MAX_INLINE_OWNER_BYTES,
   inlineRelativeAssets,
   type InlineAssetReader,
 } from './inline-assets.js';
+import { ownerFieldsForRequest, ownerScopeForRequest } from './project-owner-scope.js';
 import { isSandboxModeEnabled } from './sandbox-mode.js';
 
 export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation'> {}
@@ -17,7 +19,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   const { importUpload } = ctx.uploads;
   const { fs, path } = ctx.node;
   const { randomId } = ctx.ids;
-  const { PROJECTS_DIR, RUNTIME_DATA_DIR_CANONICAL } = ctx.paths;
+  const { RUNTIME_DATA_DIR_CANONICAL, projectsDirFor } = ctx.paths;
   const { importClaudeDesignZip, projectDir, detectEntryFile } = ctx.imports;
   const {
     consumedImportNonces,
@@ -34,6 +36,14 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
     isSandboxModeEnabled(process.env)
       ? 'folder imports are disabled when OD_SANDBOX_MODE is enabled'
       : null;
+
+  function projectOwnerScope(req: Request): ProjectOwnerScope {
+    return ownerScopeForRequest(req);
+  }
+
+  function projectOwnerFields(req: Request) {
+    return ownerFieldsForRequest(req);
+  }
 
   app.post(
     '/api/import/claude-design',
@@ -54,12 +64,13 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           originalName.replace(/\.zip$/i, '').trim() || 'Claude Design import';
         const imported = await importClaudeDesignZip(
           req.file.path,
-          projectDir(PROJECTS_DIR, id),
+          projectDir(projectsDirFor(req), id),
         );
         fs.promises.unlink(req.file.path).catch(() => {});
 
         const project = insertProject(db, {
           id,
+          ...projectOwnerFields(req),
           name: baseName,
           skillId: null,
           designSystemId: null,
@@ -106,7 +117,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   app.post('/api/projects/:id/working-dir', async (req, res) => {
     try {
       const projectId = req.params.id;
-      const existing = getProject(db, projectId);
+      const existing = getProject(db, projectId, projectOwnerScope(req));
       if (!existing) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
@@ -196,7 +207,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         entryFile,
         ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
       };
-      const updated = updateProject(db, projectId, { metadata: nextMeta });
+      const updated = updateProject(db, projectId, { metadata: nextMeta }, projectOwnerScope(req));
       if (!updated) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
@@ -309,7 +320,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           ? name.trim()
           : path.basename(normalizedPath);
       const entryFile = await detectEntryFile(normalizedPath);
-      const designSystemValidation = await validateProjectDesignSystemId(designSystemId);
+      const designSystemValidation = await validateProjectDesignSystemId(designSystemId, req);
       if (!designSystemValidation.ok) {
         return sendApiError(
           res,
@@ -321,6 +332,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
 
       const project = insertProject(db, {
         id,
+        ...projectOwnerFields(req),
         name: projectName,
         skillId: skillId ?? null,
         designSystemId: designSystemValidation.id,
@@ -363,7 +375,7 @@ export interface RegisterProjectExportRoutesDeps extends RouteDeps<'db' | 'http'
 export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectExportRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
-  const { PROJECTS_DIR } = ctx.paths;
+  const { projectsDirFor } = ctx.paths;
   const { getProject } = ctx.projectStore;
   const { listFiles, readProjectFile, resolveProjectFilePath } = ctx.projectFiles;
   const { isSafeId } = ctx.validation;
@@ -375,6 +387,9 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     daemonUrlRef,
     sanitizeArchiveFilename,
   } = ctx.exports;
+  function projectOwnerScope(req: Request): ProjectOwnerScope {
+    return ownerScopeForRequest(req);
+  }
   // Streams a ZIP of the project's on-disk tree so the "Download as .zip"
   // share menu can hand the user the actual files they uploaded — e.g. the
   // imported `ui-design/` folder — instead of a one-file snapshot of the
@@ -383,14 +398,17 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   app.get('/api/projects/:id/archive', async (req, res) => {
     try {
       const root = typeof req.query?.root === 'string' ? req.query.root : '';
-      const project = getProject(db, req.params.id);
+      const project = getProject(db, req.params.id, projectOwnerScope(req));
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
       const { buffer, baseName } = await buildProjectArchive(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         req.params.id,
         root,
-        project?.metadata,
+        project.metadata,
       );
-      const fallbackName = project?.name || req.params.id;
+      const fallbackName = project.name || req.params.id;
       const fileSlug = sanitizeArchiveFilename(baseName || fallbackName) || 'project';
       const filename = `${fileSlug}.zip`;
       // RFC 5987 dance: legacy `filename=` carries an ASCII fallback, while
@@ -425,14 +443,17 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         sendApiError(res, 400, 'BAD_REQUEST', 'files must be a non-empty array');
         return;
       }
-      const project = getProject(db, req.params.id);
+      const project = getProject(db, req.params.id, projectOwnerScope(req));
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
       const { buffer } = await buildBatchArchive(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         req.params.id,
         files,
-        project?.metadata,
+        project.metadata,
       );
-      const fileSlug = sanitizeArchiveFilename(project?.name || req.params.id) || 'project';
+      const fileSlug = sanitizeArchiveFilename(project.name || req.params.id) || 'project';
       const filename = `${fileSlug}.zip`;
       const asciiFallback =
         filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'project.zip';
@@ -459,11 +480,11 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       if (!isSafeId(req.params.id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
       }
-      const project = getProject(db, req.params.id);
+      const project = getProject(db, req.params.id, projectOwnerScope(req));
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      const files = await listFiles(PROJECTS_DIR, req.params.id, {
+      const files = await listFiles(projectsDirFor(req), req.params.id, {
         metadata: project.metadata,
       });
       /** @type {import('@open-design/contracts').ProjectExportManifestResponse} */
@@ -492,12 +513,16 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       if (typeof fileName !== 'string' || fileName.length === 0) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
+      const project = getProject(db, req.params.id, projectOwnerScope(req));
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
       const input = await buildDesktopPdfExportInput({
         daemonUrl: daemonUrlRef.current,
         deck: deck === true,
         fileName,
         projectId: req.params.id,
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         title: typeof title === 'string' ? title : undefined,
       });
       const result = await desktopPdfExporter(input);
@@ -556,7 +581,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         );
       }
 
-      const project = getProject(db, req.params.id);
+      const project = getProject(db, req.params.id, projectOwnerScope(req));
       const splatParam = (req.params as { splat?: string | string[] }).splat;
       const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
 
@@ -576,7 +601,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       let ownerMeta;
       try {
         ownerMeta = await resolveProjectFilePath(
-          PROJECTS_DIR,
+          projectsDirFor(req),
           req.params.id,
           relPath,
           project?.metadata,
@@ -611,7 +636,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
 
       let file;
       try {
-        file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
+        file = await readProjectFile(projectsDirFor(req), req.params.id, relPath, project?.metadata);
       } catch (err: any) {
         const status = err && err.code === 'ENOENT' ? 404 : 400;
         return sendApiError(
@@ -631,7 +656,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         let meta;
         try {
           meta = await resolveProjectFilePath(
-            PROJECTS_DIR,
+            projectsDirFor(req),
             req.params.id,
             sibling,
             project?.metadata,
@@ -644,7 +669,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
           read: async () => {
             try {
               const siblingFile = await readProjectFile(
-                PROJECTS_DIR,
+                projectsDirFor(req),
                 req.params.id,
                 sibling,
                 project?.metadata,
@@ -659,7 +684,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
 
       const exportSource = await resolveHtmlExportSource({
         projectId: req.params.id,
-        projectsRoot: PROJECTS_DIR,
+        projectsRoot: projectsDirFor(req),
         relPath,
         html: file.buffer.toString('utf8'),
         metadata: project?.metadata,
@@ -919,7 +944,7 @@ export interface RegisterFinalizeRoutesDeps extends RouteDeps<'db' | 'http' | 'p
 export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
-  const { PROJECTS_DIR, DESIGN_SYSTEMS_DIR } = ctx.paths;
+  const { DESIGN_SYSTEMS_DIR, projectsDirFor } = ctx.paths;
   const { getProject } = ctx.projectStore;
   const { isSafeId, validateExternalApiBaseUrl } = ctx.validation;
   const {
@@ -930,6 +955,9 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
     isFinalizeProviderProtocol,
     redactSecrets,
   } = ctx.finalize;
+  function projectOwnerScope(req: Request): ProjectOwnerScope {
+    return ownerScopeForRequest(req);
+  }
   app.post('/api/projects/:id/finalize/:provider', async (req, res) => {
     const { apiKey, baseUrl, model, maxTokens, apiVersion, protocol: bodyProtocol } = req.body || {};
     try {
@@ -988,7 +1016,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
         return sendApiError(res, 400, 'BAD_REQUEST', 'apiVersion must be a string when provided');
       }
 
-      const project = getProject(db, req.params.id);
+      const project = getProject(db, req.params.id, projectOwnerScope(req));
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
@@ -1003,7 +1031,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       try {
         result = await finalizeDesignPackage(
           db,
-          PROJECTS_DIR,
+          projectsDirFor(req),
           DESIGN_SYSTEMS_DIR,
           req.params.id,
           {
@@ -1016,6 +1044,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
               ? { apiVersion: apiVersion.trim() }
               : {}),
             signal: finalizeAbort.signal,
+            projectOwnerScope: projectOwnerScope(req),
           },
         );
       } finally {

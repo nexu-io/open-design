@@ -1,4 +1,5 @@
-import type { Express } from 'express';
+import type { Express, Request } from 'express';
+import { ownerScopeForRequest } from '../project-owner-scope.js';
 import type { RouteDeps } from '../server-context.js';
 
 export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {}
@@ -6,11 +7,15 @@ export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'pat
 export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
-  const { PROJECTS_DIR } = ctx.paths;
+  const { projectsDirFor } = ctx.paths;
   const { randomUUID } = ctx.ids;
   const { getProject } = ctx.projectStore;
   const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToVercel, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
   // ---- Deploy --------------------------------------------------------------
+
+  function getProjectForRequest(req: Request, projectId: string) {
+    return getProject(db, projectId, ownerScopeForRequest(req));
+  }
 
   app.get('/api/deploy/config', async (req, res) => {
     try {
@@ -60,6 +65,9 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
 
   app.get('/api/projects/:id/deployments', (req, res) => {
     try {
+      if (!getProjectForRequest(req, req.params.id)) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
       /** @type {import('@open-design/contracts').ProjectDeploymentsResponse} */
       const body = { deployments: publicDeployments(listDeployments(db, req.params.id)) };
       res.json(body);
@@ -83,15 +91,17 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
 
+      const project = getProjectForRequest(req, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
       const prior = getDeployment(db, req.params.id, fileName, providerId);
-      const deployProject = getProject(db, req.params.id);
       const files = await buildDeployFileSet(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         req.params.id,
         fileName,
-        { metadata: deployProject?.metadata, includeProjectFiles: true },
+        { metadata: project.metadata, includeProjectFiles: true },
       );
-      const project = getProject(db, req.params.id);
       const cloudflarePagesProjectName =
         providerId === CLOUDFLARE_PAGES_PROVIDER_ID
           ? cloudflarePagesProjectNameForDeploy(db, req.params.id, project?.name, prior)
@@ -165,10 +175,13 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       if (typeof fileName !== 'string' || !fileName.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
-      const preflightProject = getProject(db, req.params.id);
+      const preflightProject = getProjectForRequest(req, req.params.id);
+      if (!preflightProject) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
       /** @type {import('@open-design/contracts').DeployPreflightResponse} */
       const body = await prepareDeployPreflight(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         req.params.id,
         fileName,
         { metadata: preflightProject?.metadata, providerId, includeProjectFiles: true },
@@ -194,17 +207,21 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
 
 }
 
-export interface RegisterDeploymentCheckRoutesDeps extends RouteDeps<'db' | 'http' | 'deploy'> {}
+export interface RegisterDeploymentCheckRoutesDeps extends RouteDeps<'db' | 'http' | 'deploy' | 'projectStore'> {}
 
 export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploymentCheckRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
+  const { getProject } = ctx.projectStore;
   const { getDeploymentById, CLOUDFLARE_PAGES_PROVIDER_ID, cloudflarePagesProjectNameFromDeployment, checkCloudflarePagesDeploymentLinks, checkDeploymentUrl, upsertDeployment, publicDeployment } = ctx.deploy;
 
   app.post(
     '/api/projects/:id/deployments/:deploymentId/check-link',
     async (req, res) => {
       try {
+        if (!getProject(db, req.params.id, ownerScopeForRequest(req))) {
+          return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        }
         const existing = getDeploymentById(
           db,
           req.params.id,

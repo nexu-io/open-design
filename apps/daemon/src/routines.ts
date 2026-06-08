@@ -43,6 +43,9 @@ export interface RoutineContextSelection {
 
 export interface Routine {
   id: string;
+  /** Daemon-private owner metadata; never serialized in routine API payloads. */
+  ownerEmail?: string | null;
+  ownerDirHash?: string | null;
   name: string;
   prompt: string;
   schedule: RoutineSchedule;

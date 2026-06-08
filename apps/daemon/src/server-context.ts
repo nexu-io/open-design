@@ -1,4 +1,5 @@
-import type { Express } from 'express';
+import type { Express, Request } from 'express';
+import type { DaemonUser } from './auth-context.js';
 import type { SkillInfo } from './skills.js';
 import type { DesignSystemSummary } from './design-systems.js';
 import type { RoutineRoutesService } from './routes/routine.js';
@@ -24,6 +25,15 @@ export interface PathDeps {
   OD_BIN: string;
   PROJECT_ROOT: string;
   PROJECTS_DIR: string;
+  artifactsDirFor: (req: Request) => string;
+  artifactsDirForUser: (user: DaemonUser) => string;
+  projectsDirFor: (req: Request) => string;
+  projectsDirForUser: (user: DaemonUser) => string;
+  runtimeDataDirFor: (req: Request) => string;
+  runtimeDataDirForUser: (user: DaemonUser) => string;
+  userDesignTemplatesDirFor?: (req: Request) => string;
+  userDesignSystemsDirFor?: (req: Request) => string;
+  userSkillsDirFor?: (req: Request) => string;
   PROMPT_TEMPLATES_DIR: string;
   RUNTIME_DATA_DIR: string;
   RUNTIME_DATA_DIR_CANONICAL: string;
@@ -36,16 +46,16 @@ export interface PathDeps {
 }
 
 export interface ResourceDeps {
-  listAllDesignSystems: () => Promise<Array<DesignSystemSummary & { source?: string }>>;
-  listAllSkills: () => Promise<Array<SkillInfo & { source?: string }>>;
+  listAllDesignSystems: (req?: Request) => Promise<Array<DesignSystemSummary & { source?: string }>>;
+  listAllSkills: (req?: Request) => Promise<Array<SkillInfo & { source?: string }>>;
   // Mirrors listAllSkills but scans DESIGN_TEMPLATE_ROOTS so the Templates
   // surface only sees rendering-catalogue entries.
-  listAllDesignTemplates: () => Promise<Array<SkillInfo & { source?: string }>>;
+  listAllDesignTemplates: (req?: Request) => Promise<Array<SkillInfo & { source?: string }>>;
   // Spans both functional skills and design templates so cross-surface
   // resolvers (chat run system prompt, orbit template resolver,
   // /api/skills/:id/example, /api/skills/:id/assets/*) keep working when
   // a stored project.skillId points at either root.
-  listAllSkillLikeEntries: () => Promise<Array<SkillInfo & { source?: string }>>;
+  listAllSkillLikeEntries: (req?: Request) => Promise<Array<SkillInfo & { source?: string }>>;
   mimeFor: (filePath: string) => string;
 }
 
@@ -64,6 +74,7 @@ export interface TelemetryDeps {
     body?: any,
     options?: {
       analyticsContext?: any;
+      dataDir?: string;
       projectId?: string;
       conversationId?: string;
       reportTrigger?: 'final_message' | 'terminal_fallback';
@@ -83,6 +94,7 @@ export interface TelemetryDeps {
     hasCustomReason: boolean;
     customReason: string;
     scoreMetadata?: Record<string, unknown>;
+    dataDir?: string;
   }) => Promise<{ status: 'accepted' | 'skipped_consent' | 'skipped_no_sink' }>;
 }
 

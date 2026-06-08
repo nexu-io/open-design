@@ -12,6 +12,7 @@ import {
   openDatabase,
 } from '../src/db.js';
 import { registerRoutineRoutes } from '../src/routes/routine.js';
+import { upsertUserAutomationTemplate } from '../src/automation-templates.js';
 
 describe('routine routes', () => {
   let tempDir: string;
@@ -42,7 +43,10 @@ describe('routine routes', () => {
     vi.restoreAllMocks();
   });
 
-  function buildApp() {
+  function buildApp(
+    runtimeDataDirFor: (req: express.Request) => string = () => tempDir,
+    options: { attachTestUsers?: boolean } = {},
+  ) {
     const db = openDatabase(tempDir, { dataDir: tempDir });
     const nextRunAt = vi.fn(() => new Date('2026-05-13T01:00:00.000Z'));
     const rescheduleOne = vi.fn();
@@ -68,9 +72,23 @@ describe('routine routes', () => {
 
     const app = express();
     app.use(express.json());
+    if (options.attachTestUsers) {
+      app.use((req, _res, next) => {
+        const email = req.get('x-test-user-email')?.trim().toLowerCase();
+        if (email) {
+          (req as any).user = {
+            email,
+            dirHash: email.startsWith('alice') ? 'alicehash' : 'bobhash',
+            dataDir: path.join(tempDir, 'users', email.startsWith('alice') ? 'alicehash' : 'bobhash'),
+            source: 'trusted-header',
+          };
+        }
+        next();
+      });
+    }
     registerRoutineRoutes(app, {
       db,
-      paths: { RUNTIME_DATA_DIR: tempDir },
+      paths: { runtimeDataDirFor },
       routines: {
         routineService: {
           nextRunAt,
@@ -82,6 +100,23 @@ describe('routine routes', () => {
     } as any);
 
     return { app, db, nextRunAt, rescheduleOne, runNow, unschedule };
+  }
+
+  async function createRoutine(port: number, email: string, name: string) {
+    return fetch(`http://127.0.0.1:${port}/api/routines`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-test-user-email': email,
+      },
+      body: JSON.stringify({
+        name,
+        prompt: `Run ${name}`,
+        schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' },
+        target: { mode: 'create_each_run' },
+        enabled: true,
+      }),
+    });
   }
 
   it('lists and fetches built-in automation templates', async () => {
@@ -112,6 +147,60 @@ describe('routine routes', () => {
 
       const missingRes = await fetch(`http://127.0.0.1:${port}/api/automation-templates/missing`);
       expect(missingRes.status).toBe(404);
+    } finally {
+      server.close();
+    }
+  });
+
+  it('lists user automation templates from the request data dir', async () => {
+    const aliceDir = path.join(tempDir, 'alice-data');
+    const bobDir = path.join(tempDir, 'bob-data');
+    await upsertUserAutomationTemplate(aliceDir, {
+      id: 'alice-only-template',
+      title: 'Alice only template',
+      description: 'Visible only from Alice runtime data.',
+      purpose: 'Prove automation templates are scoped per request.',
+      triggerKinds: ['manual'],
+      sourceKinds: ['chat'],
+      stages: [{ id: 'ingest', kind: 'ingest', title: 'Capture source' }],
+      outputSinks: ['memory'],
+      reviewPolicy: 'always',
+      tokenCompression: 'balanced',
+    });
+    const { app } = buildApp((req) =>
+      req.get('x-test-user') === 'alice' ? aliceDir : bobDir,
+    );
+    const { server, port } = await listen(app);
+    try {
+      const aliceList = await fetch(`http://127.0.0.1:${port}/api/automation-templates`, {
+        headers: { 'x-test-user': 'alice' },
+      });
+      expect(aliceList.status).toBe(200);
+      const aliceJson = await aliceList.json() as {
+        templates: Array<{ id: string }>;
+      };
+      expect(aliceJson.templates.map((template) => template.id)).toContain('alice-only-template');
+
+      const bobList = await fetch(`http://127.0.0.1:${port}/api/automation-templates`, {
+        headers: { 'x-test-user': 'bob' },
+      });
+      expect(bobList.status).toBe(200);
+      const bobJson = await bobList.json() as {
+        templates: Array<{ id: string }>;
+      };
+      expect(bobJson.templates.map((template) => template.id)).not.toContain('alice-only-template');
+
+      const aliceDetail = await fetch(
+        `http://127.0.0.1:${port}/api/automation-templates/alice-only-template`,
+        { headers: { 'x-test-user': 'alice' } },
+      );
+      expect(aliceDetail.status).toBe(200);
+
+      const bobDetail = await fetch(
+        `http://127.0.0.1:${port}/api/automation-templates/alice-only-template`,
+        { headers: { 'x-test-user': 'bob' } },
+      );
+      expect(bobDetail.status).toBe(404);
     } finally {
       server.close();
     }
@@ -181,6 +270,97 @@ describe('routine routes', () => {
       expect(stored?.projectId).toBe('proj-1');
       expect(JSON.parse(stored?.contextJson ?? '{}')).toEqual(json.routine.context);
       expect(rescheduleOne).toHaveBeenCalledWith(json.routine.id);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('scopes routine CRUD to the authenticated owner', async () => {
+    const { app, db, unschedule } = buildApp(undefined, { attachTestUsers: true });
+    const { server, port } = await listen(app);
+    try {
+      const aliceCreate = await createRoutine(port, 'alice@example.com', 'Alice digest');
+      expect(aliceCreate.status).toBe(201);
+      const aliceJson = await aliceCreate.json() as { routine: { id: string; name: string } };
+
+      const bobCreate = await createRoutine(port, 'bob@example.com', 'Bob digest');
+      expect(bobCreate.status).toBe(201);
+      const bobJson = await bobCreate.json() as { routine: { id: string; name: string } };
+
+      expect(getRoutine(db, aliceJson.routine.id)?.ownerEmail).toBe('alice@example.com');
+      expect(getRoutine(db, bobJson.routine.id)?.ownerEmail).toBe('bob@example.com');
+
+      const aliceList = await fetch(`http://127.0.0.1:${port}/api/routines`, {
+        headers: { 'x-test-user-email': 'alice@example.com' },
+      });
+      expect(aliceList.status).toBe(200);
+      const aliceListJson = await aliceList.json() as { routines: Array<{ id: string; name: string }> };
+      expect(aliceListJson.routines.map((routine) => routine.id)).toEqual([aliceJson.routine.id]);
+      expect(JSON.stringify(aliceListJson)).not.toContain('ownerEmail');
+
+      const bobGetAlice = await fetch(`http://127.0.0.1:${port}/api/routines/${aliceJson.routine.id}`, {
+        headers: { 'x-test-user-email': 'bob@example.com' },
+      });
+      expect(bobGetAlice.status).toBe(404);
+
+      const bobDeleteAlice = await fetch(`http://127.0.0.1:${port}/api/routines/${aliceJson.routine.id}`, {
+        method: 'DELETE',
+        headers: { 'x-test-user-email': 'bob@example.com' },
+      });
+      expect(bobDeleteAlice.status).toBe(404);
+      expect(unschedule).not.toHaveBeenCalledWith(aliceJson.routine.id);
+      expect(getRoutine(db, aliceJson.routine.id)).not.toBeNull();
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('rejects reuse-mode targets owned by another authenticated user', async () => {
+    const { app, db } = buildApp(undefined, { attachTestUsers: true });
+    const now = Date.now();
+    insertProject(db, {
+      id: 'bob-target-project',
+      ownerEmail: 'bob@example.com',
+      ownerDirHash: 'bobhash',
+      name: 'Bob target',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const { server, port } = await listen(app);
+    try {
+      const aliceCreate = await fetch(`http://127.0.0.1:${port}/api/routines`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-test-user-email': 'alice@example.com',
+        },
+        body: JSON.stringify({
+          name: 'Cross-owner digest',
+          prompt: 'Should not bind to Bob project.',
+          schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' },
+          target: { mode: 'reuse', projectId: 'bob-target-project' },
+          enabled: true,
+        }),
+      });
+      expect(aliceCreate.status).toBe(400);
+      expect(await aliceCreate.text()).toContain('target project bob-target-project not found');
+
+      const bobCreate = await fetch(`http://127.0.0.1:${port}/api/routines`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-test-user-email': 'bob@example.com',
+        },
+        body: JSON.stringify({
+          name: 'Bob digest',
+          prompt: 'Bind to Bob project.',
+          schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' },
+          target: { mode: 'reuse', projectId: 'bob-target-project' },
+          enabled: true,
+        }),
+      });
+      expect(bobCreate.status).toBe(201);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

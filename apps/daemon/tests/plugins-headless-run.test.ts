@@ -262,6 +262,95 @@ describe('Plan §8 e2e-3 (entry slice) — headless install → project → run'
     expect(fileNames).toContain('plugin-source/sample-plugin/open-design.json');
     expect(fileNames).toContain('plugin-source/sample-plugin/SKILL.md');
 
+    const ownedShareResp = await fetch(`${baseUrl}/api/plugins/sample-plugin/share-project`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'cf-access-authenticated-user-email': 'bob@example.com',
+      },
+      body: JSON.stringify({ action: 'publish-github', locale: 'en' }),
+    });
+    expect(ownedShareResp.status).toBe(200);
+    const ownedShareBody = (await ownedShareResp.json()) as {
+      ok: boolean;
+      project: { id: string };
+      appliedPluginSnapshotId?: string;
+    };
+    expect(ownedShareBody.ok).toBe(true);
+    expect(ownedShareBody.appliedPluginSnapshotId).toBeTruthy();
+
+    const bobReadsOwnedShare = await fetch(
+      `${baseUrl}/api/projects/${encodeURIComponent(ownedShareBody.project.id)}`,
+      { headers: { 'cf-access-authenticated-user-email': 'bob@example.com' } },
+    );
+    expect(bobReadsOwnedShare.status).toBe(200);
+
+    const aliceReadsOwnedShare = await fetch(
+      `${baseUrl}/api/projects/${encodeURIComponent(ownedShareBody.project.id)}`,
+      { headers: { 'cf-access-authenticated-user-email': 'alice@example.com' } },
+    );
+    expect(aliceReadsOwnedShare.status).toBe(404);
+
+    const bobReadsOwnedSnapshot = await fetch(
+      `${baseUrl}/api/applied-plugins/${encodeURIComponent(ownedShareBody.appliedPluginSnapshotId!)}`,
+      { headers: { 'cf-access-authenticated-user-email': 'bob@example.com' } },
+    );
+    expect(bobReadsOwnedSnapshot.status).toBe(200);
+
+    const aliceReadsOwnedSnapshot = await fetch(
+      `${baseUrl}/api/applied-plugins/${encodeURIComponent(ownedShareBody.appliedPluginSnapshotId!)}`,
+      { headers: { 'cf-access-authenticated-user-email': 'alice@example.com' } },
+    );
+    expect(aliceReadsOwnedSnapshot.status).toBe(404);
+
+    const aliceReadsOwnedSnapshotCanon = await fetch(
+      `${baseUrl}/api/applied-plugins/${encodeURIComponent(ownedShareBody.appliedPluginSnapshotId!)}/canon`,
+      { headers: { 'cf-access-authenticated-user-email': 'alice@example.com' } },
+    );
+    expect(aliceReadsOwnedSnapshotCanon.status).toBe(404);
+
+    const bobReplaysOwnedSnapshot = await fetch(`${baseUrl}/api/runs/replay-owned/replay`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'cf-access-authenticated-user-email': 'bob@example.com',
+      },
+      body: JSON.stringify({ snapshotId: ownedShareBody.appliedPluginSnapshotId }),
+    });
+    expect(bobReplaysOwnedSnapshot.status).toBe(200);
+
+    const aliceReplaysOwnedSnapshot = await fetch(`${baseUrl}/api/runs/replay-owned/replay`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'cf-access-authenticated-user-email': 'alice@example.com',
+      },
+      body: JSON.stringify({ snapshotId: ownedShareBody.appliedPluginSnapshotId }),
+    });
+    expect(aliceReplaysOwnedSnapshot.status).toBe(404);
+
+    const bobListsSnapshots = await fetch(`${baseUrl}/api/applied-plugins`, {
+      headers: { 'cf-access-authenticated-user-email': 'bob@example.com' },
+    });
+    expect(bobListsSnapshots.status).toBe(200);
+    const bobSnapshotsBody = (await bobListsSnapshots.json()) as {
+      snapshots: Array<{ snapshotId: string }>;
+    };
+    expect(bobSnapshotsBody.snapshots.map((snapshot) => snapshot.snapshotId)).toContain(
+      ownedShareBody.appliedPluginSnapshotId!,
+    );
+
+    const aliceListsSnapshots = await fetch(`${baseUrl}/api/applied-plugins`, {
+      headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
+    });
+    expect(aliceListsSnapshots.status).toBe(200);
+    const aliceSnapshotsBody = (await aliceListsSnapshots.json()) as {
+      snapshots: Array<{ snapshotId: string }>;
+    };
+    expect(aliceSnapshotsBody.snapshots.map((snapshot) => snapshot.snapshotId)).not.toContain(
+      ownedShareBody.appliedPluginSnapshotId!,
+    );
+
     const snapshotResp = await fetch(
       `${baseUrl}/api/applied-plugins/${encodeURIComponent(shareBody.appliedPluginSnapshotId!)}`,
     );

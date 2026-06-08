@@ -23,6 +23,7 @@ export class ResearchError extends Error {
 export interface SearchResearchInput {
   query: string;
   projectRoot: string;
+  mediaConfigDataDir?: string;
   maxSources?: number;
   providers?: string[];
   requestInit?: Pick<RequestInit, 'dispatcher'>;
@@ -52,7 +53,11 @@ export async function searchResearch(
     );
   }
 
-  const cfg = await resolveProviderConfig(input.projectRoot, 'tavily');
+  const cfg = await resolveProviderConfig(
+    input.projectRoot,
+    'tavily',
+    input.mediaConfigDataDir,
+  );
   if (!cfg.apiKey) {
     throw new ResearchError(
       'Tavily API key not configured (Settings -> Tavily Search)',

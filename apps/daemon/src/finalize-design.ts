@@ -32,6 +32,7 @@ import type {
   FinalizeProviderProtocol,
 } from '@open-design/contracts/api/finalize';
 import { getProject } from './db.js';
+import type { ProjectOwnerScope } from './db.js';
 import { readDesignSystem } from './design-systems.js';
 import {
   listFiles,
@@ -93,6 +94,7 @@ export interface FinalizeOptions {
   now?: () => Date;
   fetchImpl?: typeof globalThis.fetch;
   signal?: AbortSignal;
+  projectOwnerScope?: ProjectOwnerScope;
   // Override the helper-internal upstream-call timeout. Production callers
   // omit this so the helper bounds at DEFAULT_TIMEOUT_MS; tests pass a
   // smaller value to exercise the AbortSignal.any composition without
@@ -267,7 +269,7 @@ export async function finalizeDesignPackage(
   projectId: string,
   options: FinalizeOptions,
 ): Promise<FinalizeAnthropicResponse> {
-  const project = getProject(db, projectId);
+  const project = getProject(db, projectId, options.projectOwnerScope);
   if (!project) {
     // Defensive — the route handler validates this and returns 404 before
     // reaching here. Kept for direct (non-HTTP) callers, e.g. CLI scripts.

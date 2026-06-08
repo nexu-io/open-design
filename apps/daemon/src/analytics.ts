@@ -111,6 +111,7 @@ export interface AnalyticsService {
     appVersion: string;
     properties: Record<string, unknown>;
     insertId: string;
+    dataDir?: string;
   }): void;
   /**
    * Safety / reliability events (renderer crashes, daemon uncaught errors,
@@ -149,10 +150,12 @@ const NOOP_SERVICE: AnalyticsService = {
 // when POSTHOG_KEY is unset.
 //
 // `dataDir` is required so capture can re-read app-config and gate on the
-// user's telemetry.metrics consent. This is defense in depth against PR
-// #1428 reviewer (codex-connector, lefarcen): even if a stale fetch wrapper
-// somehow attaches x-od-analytics-* headers to a request after the user
-// opted out, the daemon will still drop the capture.
+// user's telemetry.metrics consent. Request-bound callers can pass a per-event
+// dataDir override; daemon-background callers fall back to the service dataDir.
+// This is defense in depth against PR #1428 reviewer (codex-connector,
+// lefarcen): even if a stale fetch wrapper somehow attaches x-od-analytics-*
+// headers to a request after the user opted out, the daemon will still drop
+// the capture.
 export function createAnalyticsService(args: {
   env?: NodeJS.ProcessEnv;
   dataDir: string;
@@ -175,7 +178,7 @@ export function createAnalyticsService(args: {
   client.on?.('error', () => undefined);
 
   return {
-    capture: ({ eventName, context, appVersion, properties, insertId }) => {
+    capture: ({ eventName, context, appVersion, properties, insertId, dataDir }) => {
       // Defense-in-depth consent re-check. The route handler already gates
       // on header presence, but a future header leak or a Settings toggle
       // mid-request would still let events through without this. Reading
@@ -183,7 +186,7 @@ export function createAnalyticsService(args: {
       // not on a hot critical path here.
       void (async () => {
         try {
-          const appCfg = await readAppConfig(args.dataDir);
+          const appCfg = await readAppConfig(dataDir ?? args.dataDir);
           if (appCfg.telemetry?.metrics !== true) return;
           client.capture({
             distinctId: context.deviceId,

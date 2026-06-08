@@ -1,6 +1,7 @@
+import { realpathSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
-import type { Express, Response } from 'express';
+import type { Express, Request, Response } from 'express';
 import {
   defaultScenarioPluginIdForProjectMetadata,
   type ChatSessionMode,
@@ -17,7 +18,9 @@ import {
   listInstalledPlugins,
   resolvePluginSnapshot,
 } from './plugins/index.js';
-import { connectorService } from './connectors/service.js';
+import { connectorServiceForDataDir } from './connectors/service.js';
+import type { ProjectOwnerScope } from './db.js';
+import { ownerFieldsForRequest, ownerScopeForRequest } from './project-owner-scope.js';
 import type { RouteDeps } from './server-context.js';
 import { readAnalyticsContext } from './analytics.js';
 import { listSkills } from './skills.js';
@@ -756,7 +759,7 @@ function normalizeChatSessionMode(value: unknown): ChatSessionMode {
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
-  const { DESIGN_SYSTEMS_DIR, PROJECTS_DIR, SKILLS_DIR } = ctx.paths;
+  const { DESIGN_SYSTEMS_DIR, PROJECTS_DIR, SKILLS_DIR, projectsDirFor, runtimeDataDirFor } = ctx.paths;
   const { readAppConfig, writeAppConfig } = ctx.appConfig;
   const { insertProject, validateLinkedDirs, getProject, updateProject, dbDeleteProject, removeProjectDir } = ctx.projectStore;
   const { writeProjectFile, readProjectFile, ensureProject, listFiles, listTabs, setTabs, resolveProjectDir } = ctx.projectFiles;
@@ -766,6 +769,32 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { subscribeFileEvents, activeProjectEventSinks } = ctx.events;
   const { randomId } = ctx.ids;
   const { validateProjectDesignSystemId, validateProjectSkillId } = ctx.validation;
+
+  function projectOwnerScope(req: Request): ProjectOwnerScope {
+    return ownerScopeForRequest(req);
+  }
+
+  function projectOwnerFields(req: Request) {
+    return ownerFieldsForRequest(req);
+  }
+
+  function getProjectForRequest(req: Request, projectId: string) {
+    return getProject(db, projectId, projectOwnerScope(req));
+  }
+
+  function getTemplateForRequest(req: Request, templateId: string) {
+    return getTemplate(db, templateId, projectOwnerScope(req));
+  }
+
+  function templateIdFromProjectMetadata(metadata: unknown): string | null {
+    return metadata &&
+      typeof metadata === 'object' &&
+      (metadata as { kind?: unknown }).kind === 'template' &&
+      typeof (metadata as { templateId?: unknown }).templateId === 'string'
+      ? (metadata as { templateId: string }).templateId
+      : null;
+  }
+
   async function loadPluginRegistryView() {
     const [skills, designSystems] = await Promise.all([
       listSkills(SKILLS_DIR),
@@ -815,30 +844,57 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     return Array.from(byTaskKind.values());
   }
 
-  async function configuredProjectLocations() {
-    const config = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR);
-    const all = allProjectLocations(PROJECTS_DIR, config.projectLocations);
+  function canonicalPath(value: string): string {
+    try {
+      return realpathSync.native(value);
+    } catch {
+      return path.resolve(value);
+    }
+  }
+
+  async function configuredProjectLocations(dataDir: string, projectsRoot: string = PROJECTS_DIR) {
+    const config = await readAppConfig(dataDir);
+    const all = allProjectLocations(projectsRoot, config.projectLocations);
     const valid = all[0] ? [all[0]] : [];
     for (const location of all.slice(1)) {
       const validated = validateLinkedDirs([location.path]);
       if (validated.error) continue;
       const canonical = validated.dirs[0];
       if (!canonical) continue;
-      if (locationOverlapsDaemonData(canonical)) continue;
+      if (locationOverlapsDaemonData(canonical, dataDir)) continue;
       valid.push({ ...location, path: canonical });
     }
     return valid;
   }
 
-  function locationOverlapsDaemonData(locationPath: string): boolean {
-    const runtimeDir = ctx.paths.RUNTIME_DATA_DIR_CANONICAL || ctx.paths.RUNTIME_DATA_DIR;
-    const projectsDir = path.join(runtimeDir, 'projects');
-    const relativeToRuntime = pathRelative(runtimeDir, locationPath);
-    const runtimeInsideLocation = pathRelative(locationPath, runtimeDir);
-    const relativeToProjects = pathRelative(projectsDir, locationPath);
-    const projectsInsideLocation = pathRelative(locationPath, projectsDir);
-    return isInsideOrSame(relativeToRuntime) || isInsideOrSame(runtimeInsideLocation)
-      || isInsideOrSame(relativeToProjects) || isInsideOrSame(projectsInsideLocation);
+  function locationOverlapsDaemonData(locationPath: string, dataDir: string): boolean {
+    const location = canonicalPath(locationPath);
+    const runtimeDirs = new Set(
+      [
+        ctx.paths.RUNTIME_DATA_DIR_CANONICAL || ctx.paths.RUNTIME_DATA_DIR,
+        ctx.paths.RUNTIME_DATA_DIR,
+        dataDir,
+      ]
+        .filter((dir): dir is string => typeof dir === 'string' && dir.length > 0)
+        .map((dir) => canonicalPath(dir)),
+    );
+
+    for (const runtimeDir of runtimeDirs) {
+      const projectsDir = path.join(runtimeDir, 'projects');
+      const relativeToRuntime = pathRelative(runtimeDir, location);
+      const runtimeInsideLocation = pathRelative(location, runtimeDir);
+      const relativeToProjects = pathRelative(projectsDir, location);
+      const projectsInsideLocation = pathRelative(location, projectsDir);
+      if (
+        isInsideOrSame(relativeToRuntime)
+        || isInsideOrSame(runtimeInsideLocation)
+        || isInsideOrSame(relativeToProjects)
+        || isInsideOrSame(projectsInsideLocation)
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   function pathRelative(from: string, to: string): string {
@@ -870,18 +926,22 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     return locations.some((location) => !location.builtIn && projectBelongsToLocation(project, location));
   }
 
-  async function resolveCreateProjectLocationId(explicitProjectLocationId: unknown): Promise<string> {
+  async function resolveCreateProjectLocationId(
+    explicitProjectLocationId: unknown,
+    dataDir: string,
+    projectsRoot: string,
+  ): Promise<string> {
     if (typeof explicitProjectLocationId === 'string' && explicitProjectLocationId.trim()) {
       return explicitProjectLocationId.trim();
     }
-    const config = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR);
+    const config = await readAppConfig(dataDir);
     const configuredDefault = typeof config.defaultProjectLocationId === 'string'
       ? config.defaultProjectLocationId.trim()
       : '';
     if (!configuredDefault || configuredDefault === BUILT_IN_PROJECT_LOCATION_ID) {
       return BUILT_IN_PROJECT_LOCATION_ID;
     }
-    const locations = await configuredProjectLocations();
+    const locations = await configuredProjectLocations(dataDir, projectsRoot);
     return locations.some((location) => !location.builtIn && location.id === configuredDefault)
       ? configuredDefault
       : BUILT_IN_PROJECT_LOCATION_ID;
@@ -890,6 +950,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   function unregisterProjectsForRemovedLocations(
     previousLocations: Array<{ id: string; path: string; builtIn?: boolean }>,
     nextLocations: Array<{ id?: string; path: string }>,
+    scope?: ProjectOwnerScope,
   ): string[] {
     const nextIds = new Set(nextLocations.map((location) => location.id).filter(Boolean));
     const nextPaths = new Set(nextLocations.map((location) => location.path));
@@ -897,14 +958,15 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       (location) => !location.builtIn && !nextIds.has(location.id) && !nextPaths.has(location.path),
     );
     if (removed.length === 0) return [];
-    return listProjects(db)
+    return listProjects(db, scope)
       .filter((project: any) => removed.some((location) => projectBelongsToLocation(project, location)))
       .map((project: any) => project.id);
   }
 
-  app.get('/api/project-locations', async (_req, res) => {
+  app.get('/api/project-locations', async (req, res) => {
     try {
-      const locations = await configuredProjectLocations();
+      const dataDir = runtimeDataDirFor(req);
+      const locations = await configuredProjectLocations(dataDir, projectsDirFor(req));
       /** @type {import('@open-design/contracts').ProjectLocationsResponse} */
       const body = { locations };
       res.json(body);
@@ -917,14 +979,16 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     try {
       const requested = Array.isArray(req.body?.locations) ? req.body.locations : null;
       if (!requested) return sendApiError(res, 400, 'BAD_REQUEST', 'locations must be an array');
-      const previousLocations = await configuredProjectLocations();
+      const dataDir = runtimeDataDirFor(req);
+      const projectsRoot = projectsDirFor(req);
+      const previousLocations = await configuredProjectLocations(dataDir, projectsRoot);
       const prepared = [];
       for (const loc of requested) {
         if (!loc || typeof loc !== 'object' || typeof loc.path !== 'string') continue;
         const canonicalPath = await ensureProjectLocation(loc.path);
         const validated = validateLinkedDirs([canonicalPath]);
         if (validated.error) return sendApiError(res, 400, 'BAD_REQUEST', validated.error);
-        if (locationOverlapsDaemonData(canonicalPath)) {
+        if (locationOverlapsDaemonData(canonicalPath, dataDir)) {
           return sendApiError(res, 400, 'BAD_REQUEST', 'project location cannot overlap daemon data');
         }
         prepared.push({
@@ -933,9 +997,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           path: canonicalPath,
         });
       }
-      const config = await writeAppConfig(ctx.paths.RUNTIME_DATA_DIR, { projectLocations: prepared });
-      const locations = allProjectLocations(PROJECTS_DIR, config.projectLocations);
-      const removedProjectIds = unregisterProjectsForRemovedLocations(previousLocations, config.projectLocations ?? []);
+      const config = await writeAppConfig(dataDir, { projectLocations: prepared });
+      const locations = allProjectLocations(projectsRoot, config.projectLocations);
+      const removedProjectIds = unregisterProjectsForRemovedLocations(
+        previousLocations,
+        config.projectLocations ?? [],
+        projectOwnerScope(req),
+      );
       /** @type {import('@open-design/contracts').ProjectLocationsResponse} */
       const body = { locations, removedProjectIds };
       res.json(body);
@@ -944,9 +1012,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     }
   });
 
-  app.post('/api/project-locations/scan', async (_req, res) => {
+  app.post('/api/project-locations/scan', async (req, res) => {
     try {
-      const locations = (await configuredProjectLocations()).filter((loc: any) => !loc.builtIn);
+      const dataDir = runtimeDataDirFor(req);
+      const locations = (await configuredProjectLocations(dataDir, projectsDirFor(req))).filter((loc: any) => !loc.builtIn);
       const imported = [];
       const existing: string[] = [];
       const skipped: Array<{ path: string; reason: string }> = [];
@@ -963,13 +1032,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         scanned += found.length;
         for (const entry of found) {
           const { manifest } = entry;
-          if (getProject(db, manifest.id)) {
+          if (getProjectForRequest(req, manifest.id)) {
             existing.push(manifest.id);
             continue;
           }
           try {
             const project = insertProject(db, {
               id: manifest.id,
+              ...projectOwnerFields(req),
               name: manifest.name,
               skillId: manifest.skillId ?? null,
               designSystemId: manifest.designSystemId ?? null,
@@ -1005,9 +1075,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     }
   });
 
-  app.get('/api/projects', async (_req, res) => {
+  app.get('/api/projects', async (req, res) => {
     try {
-      const locations = await configuredProjectLocations();
+      const dataDir = runtimeDataDirFor(req);
+      const locations = await configuredProjectLocations(dataDir, projectsDirFor(req));
       const latestRunStatuses = listLatestProjectRunStatuses(db);
       const awaitingInputProjects = listProjectsAwaitingInput(db);
       const activeRunStatuses = new Map();
@@ -1028,7 +1099,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
       /** @type {import('@open-design/contracts').ProjectsResponse} */
       const body = {
-        projects: listProjects(db)
+        projects: listProjects(db, projectOwnerScope(req))
           .filter((project: any) => projectVisibleForLocations(project, locations))
           .map((project: any) => ({
             ...project,
@@ -1109,7 +1180,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (skipDiscoveryBrief !== undefined && typeof skipDiscoveryBrief !== 'boolean') {
         return sendApiError(res, 400, 'BAD_REQUEST', 'skipDiscoveryBrief must be a boolean');
       }
-      const designSystemValidation = await validateProjectDesignSystemId(designSystemId);
+      const designSystemValidation = await validateProjectDesignSystemId(designSystemId, req);
       if (!designSystemValidation.ok) {
         return sendApiError(
           res,
@@ -1119,19 +1190,21 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         );
       }
       const normalizedDesignSystemId = designSystemValidation.id;
-      const skillValidation = await validateProjectSkillId(skillId);
+      const skillValidation = await validateProjectSkillId(skillId, req);
       if (!skillValidation.ok) {
         return sendApiError(res, 400, skillValidation.code, skillValidation.message);
       }
       const normalizedSkillId = skillValidation.id;
-      const selectedLocationId = await resolveCreateProjectLocationId(projectLocationId);
+      const dataDir = runtimeDataDirFor(req);
+      const projectsRoot = projectsDirFor(req);
+      const selectedLocationId = await resolveCreateProjectLocationId(projectLocationId, dataDir, projectsRoot);
       let externalProjectDir: string | null = null;
       if (selectedLocationId !== BUILT_IN_PROJECT_LOCATION_ID) {
-        const location = (await configuredProjectLocations()).find((loc: any) => loc.id === selectedLocationId);
+        const location = (await configuredProjectLocations(dataDir, projectsRoot)).find((loc: any) => loc.id === selectedLocationId);
         if (!location || location.builtIn) {
           return sendApiError(res, 400, 'BAD_REQUEST', 'unknown project location');
         }
-        if (getProject(db, id)) {
+        if (getProjectForRequest(req, id)) {
           return sendApiError(res, 400, 'BAD_REQUEST', 'project id already exists');
         }
         externalProjectDir = await createLocationProjectDir(location, id);
@@ -1174,6 +1247,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                   projectLocationId: selectedLocationId,
                 }
               : null;
+      const sourceTemplateId = templateIdFromProjectMetadata(projectMetadata);
+      const sourceTemplate = sourceTemplateId
+        ? getTemplateForRequest(req, sourceTemplateId)
+        : null;
+      if (sourceTemplateId && !sourceTemplate) {
+        return sendApiError(res, 404, 'NOT_FOUND', 'template not found');
+      }
       const now = Date.now();
       let project;
       try {
@@ -1190,6 +1270,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
         project = insertProject(db, {
           id,
+          ...projectOwnerFields(req),
           name: name.trim(),
           skillId: normalizedSkillId,
           designSystemId: normalizedDesignSystemId,
@@ -1247,7 +1328,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             typeof normalizedDesignSystemId === 'string' && normalizedDesignSystemId.length > 0
               ? { id: normalizedDesignSystemId }
               : undefined,
-          connectorProbe: buildConnectorProbe(connectorService),
+          connectorProbe: buildConnectorProbe(connectorServiceForDataDir(dataDir)),
         });
         if (resolved && !resolved.ok) {
           if (!explicitPlugin) {
@@ -1265,16 +1346,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // HTML into the new project folder so the agent can Read/edit files
       // on disk (the system prompt also embeds them, but a real on-disk
       // copy lets the agent treat them as the project's working state).
-      if (
-        metadata &&
-        typeof metadata === 'object' &&
-        metadata.kind === 'template' &&
-        typeof metadata.templateId === 'string'
-      ) {
-        const tpl = getTemplate(db, metadata.templateId);
-        if (tpl && Array.isArray(tpl.files) && tpl.files.length > 0) {
-          await ensureProject(PROJECTS_DIR, id, projectMetadata);
-          for (const f of tpl.files) {
+      if (sourceTemplate) {
+        if (Array.isArray(sourceTemplate.files) && sourceTemplate.files.length > 0) {
+          await ensureProject(projectsRoot, id, projectMetadata);
+          for (const f of sourceTemplate.files) {
             if (
               !f ||
               typeof f.name !== 'string' ||
@@ -1284,7 +1359,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             }
             try {
               await writeProjectFile(
-                PROJECTS_DIR,
+                projectsRoot,
                 id,
                 f.name,
                 Buffer.from(f.content, 'utf8'),
@@ -1300,7 +1375,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
       /** @type {import('@open-design/contracts').CreateProjectResponse} */
       const body = {
-        project: resolvedSnapshot?.ok ? getProject(db, id) ?? project : project,
+        project: resolvedSnapshot?.ok ? getProjectForRequest(req, id) ?? project : project,
         conversationId: cid,
         ...(resolvedSnapshot?.ok
           ? { appliedPluginSnapshotId: resolvedSnapshot.snapshotId }
@@ -1313,11 +1388,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   });
 
   app.get('/api/projects/:id', async (req, res) => {
-    const project = getProject(db, req.params.id);
-    const locations = await configuredProjectLocations();
+    const project = getProjectForRequest(req, req.params.id);
+    const dataDir = runtimeDataDirFor(req);
+    const projectsRoot = projectsDirFor(req);
+    const locations = await configuredProjectLocations(dataDir, projectsRoot);
     if (!project || !projectVisibleForLocations(project, locations))
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
-    const resolvedDir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
+    const resolvedDir = projectDetailResolvedDir(projectsRoot, project, resolveProjectDir);
     /** @type {import('@open-design/contracts').ProjectResponse} */
     const body = { project, resolvedDir };
     res.json(body);
@@ -1340,7 +1417,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // project record onto the incoming patch so the user can keep
       // patching other metadata without ever losing their import root.
       if (patch.metadata && typeof patch.metadata === 'object') {
-        const existing = getProject(db, req.params.id);
+        const existing = getProjectForRequest(req, req.params.id);
         const existingMeta = existing?.metadata;
         if ('fromTrustedPicker' in patch.metadata
             && patch.metadata.fromTrustedPicker !== existingMeta?.fromTrustedPicker) {
@@ -1382,7 +1459,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
       }
       if (patch.metadata?.linkedDirs) {
-        const existing = getProject(db, req.params.id);
+        const existing = getProjectForRequest(req, req.params.id);
         const validated = validateLinkedDirs(patch.metadata.linkedDirs);
         if (validated.error) {
           return sendApiError(res, 400, 'INVALID_LINKED_DIR', validated.error);
@@ -1401,7 +1478,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions exceeds 5 000 character limit');
       }
       if (Object.prototype.hasOwnProperty.call(patch, 'designSystemId')) {
-        const designSystemValidation = await validateProjectDesignSystemId(patch.designSystemId);
+        const designSystemValidation = await validateProjectDesignSystemId(patch.designSystemId, req);
         if (!designSystemValidation.ok) {
           return sendApiError(
             res,
@@ -1413,13 +1490,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         patch.designSystemId = designSystemValidation.id;
       }
       if (Object.prototype.hasOwnProperty.call(patch, 'skillId')) {
-        const skillValidation = await validateProjectSkillId(patch.skillId);
+        const skillValidation = await validateProjectSkillId(patch.skillId, req);
         if (!skillValidation.ok) {
           return sendApiError(res, 400, skillValidation.code, skillValidation.message);
         }
         patch.skillId = skillValidation.id;
       }
-      const project = updateProject(db, req.params.id, patch);
+      const project = updateProject(db, req.params.id, patch, projectOwnerScope(req));
       if (!project)
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
       /** @type {import('@open-design/contracts').ProjectResponse} */
@@ -1432,8 +1509,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.delete('/api/projects/:id', async (req, res) => {
     try {
-      dbDeleteProject(db, req.params.id);
-      await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
+      const removed = dbDeleteProject(db, req.params.id, projectOwnerScope(req));
+      if (!removed) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      await removeProjectDir(projectsDirFor(req), req.params.id).catch(() => {});
       /** @type {import('@open-design/contracts').OkResponse} */
       const body = { ok: true };
       res.json(body);
@@ -1450,7 +1528,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   // chokidar watcher is refcounted in project-watchers.ts so we never hold
   // descriptors for projects no UI is looking at.
   app.get('/api/projects/:id/events', (req, res) => {
-    if (!getProject(db, req.params.id)) {
+    const project = getProjectForRequest(req, req.params.id);
+    if (!project) {
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
     }
     let sub: any;
@@ -1465,10 +1544,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         activeProjectEventSinks.set(req.params.id, sinks);
       }
       sinks.add(projectEventSink);
-      const watchProject = getProject(db, req.params.id);
-      sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt: any) => {
+      sub = subscribeFileEvents(projectsDirFor(req), req.params.id, (evt: any) => {
         sse.send('file-changed', evt);
-      }, { metadata: watchProject?.metadata });
+      }, { metadata: project.metadata });
       sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => {});
       const cleanup = () => {
         if (sub) {
@@ -1491,14 +1569,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   // ---- Conversations --------------------------------------------------------
 
   app.get('/api/projects/:id/conversations', (req, res) => {
-    if (!getProject(db, req.params.id)) {
+    if (!getProjectForRequest(req, req.params.id)) {
       return res.status(404).json({ error: 'project not found' });
     }
     res.json({ conversations: listConversations(db, req.params.id) });
   });
 
   app.post('/api/projects/:id/conversations', (req, res) => {
-    if (!getProject(db, req.params.id)) {
+    if (!getProjectForRequest(req, req.params.id)) {
       return res.status(404).json({ error: 'project not found' });
     }
     const { title, seedFromConversationId, forkAfterMessageId } = req.body || {};
@@ -1585,6 +1663,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   });
 
   app.patch('/api/projects/:id/conversations/:cid', (req, res) => {
+    if (!getProjectForRequest(req, req.params.id)) {
+      return res.status(404).json({ error: 'not found' });
+    }
     const conv = getConversation(db, req.params.cid);
     if (!conv || conv.projectId !== req.params.id) {
       return res.status(404).json({ error: 'not found' });
@@ -1594,6 +1675,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   });
 
   app.delete('/api/projects/:id/conversations/:cid', (req, res) => {
+    if (!getProjectForRequest(req, req.params.id)) {
+      return res.status(404).json({ error: 'not found' });
+    }
     const conv = getConversation(db, req.params.cid);
     if (!conv || conv.projectId !== req.params.id) {
       return res.status(404).json({ error: 'not found' });
@@ -1605,6 +1689,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   // ---- Messages -------------------------------------------------------------
 
   app.get('/api/projects/:id/conversations/:cid/messages', (req, res) => {
+    if (!getProjectForRequest(req, req.params.id)) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
     const conv = getConversation(db, req.params.cid);
     if (!conv || conv.projectId !== req.params.id) {
       return res.status(404).json({ error: 'conversation not found' });
@@ -1613,6 +1700,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   });
 
   app.put('/api/projects/:id/conversations/:cid/messages/:mid', (req, res) => {
+    if (!getProjectForRequest(req, req.params.id)) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
     const conv = getConversation(db, req.params.cid);
     if (!conv || conv.projectId !== req.params.id) {
       return res.status(404).json({ error: 'conversation not found' });
@@ -1626,11 +1716,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       id: req.params.mid,
     });
     // Bump the parent project's updatedAt so the project list re-orders.
-    updateProject(db, req.params.id, {});
+    updateProject(db, req.params.id, {}, projectOwnerScope(req));
     ctx.telemetry?.reportFinalizedMessage(saved, m, {
       analyticsContext: readAnalyticsContext(req),
-      projectId: req.params.id,
       conversationId: req.params.cid,
+      dataDir: ctx.paths.runtimeDataDirFor(req),
+      projectId: req.params.id,
     });
     res.json({ message: saved });
   });
@@ -1638,6 +1729,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   // ---- Preview comments ----------------------------------------------------
 
   app.get('/api/projects/:id/conversations/:cid/comments', (req, res) => {
+    if (!getProjectForRequest(req, req.params.id)) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
     const conv = getConversation(db, req.params.cid);
     if (!conv || conv.projectId !== req.params.id) {
       return res.status(404).json({ error: 'conversation not found' });
@@ -1648,6 +1742,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   });
 
   app.post('/api/projects/:id/conversations/:cid/comments', (req, res) => {
+    if (!getProjectForRequest(req, req.params.id)) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
     const conv = getConversation(db, req.params.cid);
     if (!conv || conv.projectId !== req.params.id) {
       return res.status(404).json({ error: 'conversation not found' });
@@ -1659,7 +1756,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         req.params.cid,
         req.body || {},
       );
-      updateProject(db, req.params.id, {});
+      updateProject(db, req.params.id, {}, projectOwnerScope(req));
       res.json({ comment });
     } catch (err: any) {
       res.status(400).json({ error: String(err?.message || err) });
@@ -1669,6 +1766,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   app.patch(
     '/api/projects/:id/conversations/:cid/comments/:commentId',
     (req, res) => {
+      if (!getProjectForRequest(req, req.params.id)) {
+        return res.status(404).json({ error: 'conversation not found' });
+      }
       const conv = getConversation(db, req.params.cid);
       if (!conv || conv.projectId !== req.params.id) {
         return res.status(404).json({ error: 'conversation not found' });
@@ -1683,7 +1783,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         );
         if (!comment)
           return res.status(404).json({ error: 'comment not found' });
-        updateProject(db, req.params.id, {});
+        updateProject(db, req.params.id, {}, projectOwnerScope(req));
         res.json({ comment });
       } catch (err: any) {
         res.status(400).json({ error: String(err?.message || err) });
@@ -1694,6 +1794,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   app.delete(
     '/api/projects/:id/conversations/:cid/comments/:commentId',
     (req, res) => {
+      if (!getProjectForRequest(req, req.params.id)) {
+        return res.status(404).json({ error: 'conversation not found' });
+      }
       const conv = getConversation(db, req.params.cid);
       if (!conv || conv.projectId !== req.params.id) {
         return res.status(404).json({ error: 'conversation not found' });
@@ -1705,7 +1808,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         req.params.commentId,
       );
       if (!ok) return res.status(404).json({ error: 'comment not found' });
-      updateProject(db, req.params.id, {});
+      updateProject(db, req.params.id, {}, projectOwnerScope(req));
       res.json({ ok: true });
     },
   );
@@ -1713,14 +1816,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   // ---- Tabs -----------------------------------------------------------------
 
   app.get('/api/projects/:id/tabs', (req, res) => {
-    if (!getProject(db, req.params.id)) {
+    if (!getProjectForRequest(req, req.params.id)) {
       return res.status(404).json({ error: 'project not found' });
     }
     res.json(listTabs(db, req.params.id));
   });
 
   app.put('/api/projects/:id/tabs', (req, res) => {
-    if (!getProject(db, req.params.id)) {
+    if (!getProjectForRequest(req, req.params.id)) {
       return res.status(404).json({ error: 'project not found' });
     }
     const { tabs = [], active = null, browserTabs = [] } = req.body || {};
@@ -1749,12 +1852,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   // starting point. Created via the project's Share menu (snapshots
   // every .html file in the project folder at the moment of save).
 
-  app.get('/api/templates', (_req, res) => {
-    res.json({ templates: listTemplates(db) });
+  app.get('/api/templates', (req, res) => {
+    res.json({
+      templates: listTemplates(db, projectOwnerScope(req)),
+    });
   });
 
   app.get('/api/templates/:id', (req, res) => {
-    const t = getTemplate(db, req.params.id);
+    const t = getTemplateForRequest(req, req.params.id);
     if (!t) return res.status(404).json({ error: 'not found' });
     res.json({ template: t });
   });
@@ -1771,14 +1876,15 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (typeof sourceProjectId !== 'string') {
         return res.status(400).json({ error: 'sourceProjectId required' });
       }
-      const sourceProject = getProject(db, sourceProjectId);
+      const sourceProject = getProjectForRequest(req, sourceProjectId);
       if (!sourceProject) {
         return res.status(404).json({ error: 'source project not found' });
       }
       // Snapshot every HTML / sketch / text file in the source project.
       // We deliberately skip binary uploads — templates are about the
       // generated design, not the user's reference imagery.
-      const files = await listFiles(PROJECTS_DIR, sourceProjectId, {
+      const projectsRoot = projectsDirFor(req);
+      const files = await listFiles(projectsRoot, sourceProjectId, {
         metadata: sourceProject.metadata,
       });
       const snapshot = [];
@@ -1786,7 +1892,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         if (f.kind !== 'html' && f.kind !== 'text' && f.kind !== 'code')
           continue;
         const entry = await readProjectFile(
-          PROJECTS_DIR,
+          projectsRoot,
           sourceProjectId,
           f.name,
           sourceProject.metadata,
@@ -1800,16 +1906,22 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
       const trimmedName = name.trim();
       const descValue = typeof description === 'string' ? description : null;
-      const existing = findTemplateByNameAndProject(db, trimmedName, sourceProjectId);
+      const existing = findTemplateByNameAndProject(
+        db,
+        trimmedName,
+        sourceProjectId,
+        projectOwnerScope(req),
+      );
       let t;
       if (existing) {
         t = updateTemplate(db, existing.id, {
           description: descValue,
           files: snapshot,
-        });
+        }, projectOwnerScope(req));
       } else {
         t = insertTemplate(db, {
           id: randomId(),
+          ...projectOwnerFields(req),
           name: trimmedName,
           description: descValue,
           sourceProjectId,
@@ -1824,7 +1936,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   });
 
   app.delete('/api/templates/:id', (req, res) => {
-    deleteTemplate(db, req.params.id);
+    const t = getTemplateForRequest(req, req.params.id);
+    if (!t) return res.status(404).json({ error: 'not found' });
+    deleteTemplate(db, req.params.id, projectOwnerScope(req));
     res.json({ ok: true });
   });
 
@@ -1834,7 +1948,7 @@ export interface RegisterProjectArtifactRoutesDeps extends RouteDeps<'http' | 'u
 
 export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProjectArtifactRoutesDeps) {
   const { upload } = ctx.uploads;
-  const { ARTIFACTS_DIR } = ctx.paths;
+  const { artifactsDirFor } = ctx.paths;
   const { path, fs } = ctx.node;
   const { sanitizeSlug, lintArtifact, renderFindingsForAgent } = ctx.artifacts;
   app.post('/api/upload', upload.array('images', 8), (req, res) => {
@@ -1859,7 +1973,7 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
       }
       const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
       const slug = sanitizeSlug(identifier || title || 'artifact');
-      const dir = path.join(ARTIFACTS_DIR, `${stamp}-${slug}`);
+      const dir = path.join(artifactsDirFor(req), `${stamp}-${slug}`);
       fs.mkdirSync(dir, { recursive: true });
       const file = path.join(dir, 'index.html');
       fs.writeFileSync(file, html, 'utf8');
@@ -1900,7 +2014,7 @@ export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' |
 export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFileRoutesDeps) {
   const { db } = ctx;
   const { sendApiError, sendMulterError } = ctx.http;
-  const { PROJECTS_DIR } = ctx.paths;
+  const { projectsDirFor } = ctx.paths;
   const { upload } = ctx.uploads;
   const { fs } = ctx.node;
   const { getProject } = ctx.projectStore;
@@ -1908,6 +2022,17 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   const { buildDocumentPreview } = ctx.documents;
   const { validateArtifactManifestInput } = ctx.artifacts;
   const { projectPreviewScopes } = ctx;
+  function projectOwnerScope(req: Request): ProjectOwnerScope {
+    return ownerScopeForRequest(req);
+  }
+  function getProjectForRequest(req: Request, projectId: string) {
+    return getProject(db, projectId, projectOwnerScope(req));
+  }
+  function projectFilesVisibleToRequest(req: Request, projectId: string): { metadata?: unknown } | null {
+    const project = getProjectForRequest(req, projectId);
+    if (project) return { metadata: project.metadata };
+    return getProject(db, projectId) ? null : {};
+  }
   const projectPreviewIframeSandbox = 'allow-scripts allow-forms';
   const projectPreviewCsp = [
     `sandbox ${projectPreviewIframeSandbox}`,
@@ -1940,7 +2065,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     transformFile?: (file: { mime: string; buffer: Buffer }) => Buffer | string | Promise<Buffer | string>,
   ) {
     const meta = await resolveProjectFilePath(
-      PROJECTS_DIR,
+      projectsDirFor(req),
       projectId,
       relPath,
       metadata,
@@ -1991,7 +2116,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       return;
     }
 
-    const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, metadata);
+    const file = await readProjectFile(projectsDirFor(req), projectId, relPath, metadata);
     res.type(file.mime).send(transformFile ? await transformFile(file) : file.buffer);
   }
 
@@ -2054,10 +2179,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   app.get('/api/projects/:id/files', async (req, res) => {
     try {
       const since = Number(req.query?.since);
-      const project = getProject(db, req.params.id);
-      const files = await listFiles(PROJECTS_DIR, req.params.id, {
+      const project = getProjectForRequest(req, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      const files = await listFiles(projectsDirFor(req), req.params.id, {
         since: Number.isFinite(since) ? since : undefined,
-        metadata: project?.metadata,
+        metadata: project.metadata,
       });
       /** @type {import('@open-design/contracts').ProjectFilesResponse} */
       const body = { files };
@@ -2076,11 +2204,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       }
       const pattern = req.query.pattern ? String(req.query.pattern) : null;
       const max = Math.min(Number(req.query.max) || 200, 1000);
-      const searchProject = getProject(db, req.params.id);
-      const matches = await searchProjectFiles(PROJECTS_DIR, req.params.id, query, {
+      const searchProject = getProjectForRequest(req, req.params.id);
+      if (!searchProject) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      const matches = await searchProjectFiles(projectsDirFor(req), req.params.id, query, {
         pattern,
         max,
-        metadata: searchProject?.metadata,
+        metadata: searchProject.metadata,
       });
       res.json({ query, matches });
     } catch (err: any) {
@@ -2090,11 +2221,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
   app.get('/api/projects/:id/folders', async (req, res) => {
     try {
-      const project = getProject(db, req.params.id);
+      const project = getProjectForRequest(req, req.params.id);
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      const folders = await listProjectFolders(PROJECTS_DIR, req.params.id, {
+      const folders = await listProjectFolders(projectsDirFor(req), req.params.id, {
         metadata: project.metadata,
       });
       /** @type {import('@open-design/contracts').ProjectFoldersResponse} */
@@ -2111,12 +2242,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (typeof name !== 'string' || !name.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'name required');
       }
-      const project = getProject(db, req.params.id);
+      const project = getProjectForRequest(req, req.params.id);
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
       const folder = await createProjectFolder(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         req.params.id,
         name,
         project.metadata,
@@ -2135,12 +2266,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (typeof folderPath !== 'string' || !folderPath.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'path required');
       }
-      const project = getProject(db, req.params.id);
+      const project = getProjectForRequest(req, req.params.id);
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
       await deleteProjectFolder(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         req.params.id,
         folderPath,
         project.metadata,
@@ -2155,12 +2286,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
   app.get('/api/projects/:id/design-system-package-audit', async (req, res) => {
     try {
-      const project = getProject(db, req.params.id);
+      const project = getProjectForRequest(req, req.params.id);
       if (!project) {
         sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         return;
       }
-      const projectRoot = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
+      const projectRoot = resolveProjectDir(projectsDirFor(req), project.id, project.metadata);
       const audit = await auditDesignSystemPackage(projectRoot);
       res.setHeader('Cache-Control', 'no-store');
       res.json({ audit });
@@ -2171,14 +2302,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
   app.get('/api/projects/:id/preview-url', async (req, res) => {
     try {
-      const project = getProject(db, req.params.id);
+      const project = getProjectForRequest(req, req.params.id);
       if (!project) {
         sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         return;
       }
       const requestedPath = previewFilePathForProject(project, req.query.file);
       const meta = await resolveProjectFilePath(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         project.id,
         requestedPath,
         project.metadata,
@@ -2215,7 +2346,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         sendApiError(res, 400, 'BAD_REQUEST', 'invalid preview scope');
         return;
       }
-      const project = getProject(db, projectId);
+      const project = getProjectForRequest(req, projectId);
       if (!project) {
         sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         return;
@@ -2239,7 +2370,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           projectId: project.id,
           relPath,
           metadata: project.metadata,
-          projectsRoot: PROJECTS_DIR,
+          projectsRoot: projectsDirFor(req),
           readProjectFile,
         }),
       );
@@ -2272,7 +2403,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const params = req.params as unknown as { 0?: string; 1?: string };
       const projectId = String(params[0] ?? '');
       const relPath = String(params[1] ?? '');
-      const project = getProject(db, projectId);
+      const access = projectFilesVisibleToRequest(req, projectId);
+      if (!access) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
       // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
       // data: URIs, file://, and some sandboxed iframes also send null — all are
       // local-only callers, so this is safe. Real cross-origin sites send a real
@@ -2286,15 +2420,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         res,
         projectId,
         relPath,
-        project?.metadata,
+        access.metadata,
         undefined,
         async (file) => {
           let transformed = await maybeResolveVitePreviewHtml({
             file,
             projectId,
             relPath,
-            metadata: project?.metadata,
-            projectsRoot: PROJECTS_DIR,
+            metadata: access.metadata,
+            projectsRoot: projectsDirFor(req),
             readProjectFile,
           });
           if (
@@ -2334,8 +2468,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const params = req.params as unknown as { 0?: string; 1?: string };
       const projectId = String(params[0] ?? '');
       const rawSplat = String(params[1] ?? '');
-      const project = getProject(db, projectId);
-      await deleteProjectFile(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
+      const project = getProjectForRequest(req, projectId);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      await deleteProjectFile(projectsDirFor(req), projectId, rawSplat, project.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -2352,12 +2489,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
   app.get('/api/projects/:id/files/:name/preview', async (req, res) => {
     try {
-      const project = getProject(db, req.params.id);
+      const project = getProjectForRequest(req, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
       const file = await readProjectFile(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         req.params.id,
         req.params.name,
-        project?.metadata,
+        project.metadata,
       );
       const preview = await buildDocumentPreview(file);
       res.json(preview);
@@ -2382,12 +2522,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const params = req.params as unknown as { 0?: string; 1?: string };
       const projectId = String(params[0] ?? '');
       const fileSplat = String(params[1] ?? '');
-      const project = getProject(db, projectId);
+      const access = projectFilesVisibleToRequest(req, projectId);
+      if (!access) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
       const file = await readProjectFile(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         projectId,
         fileSplat,
-        project?.metadata,
+        access.metadata,
       );
       res.type(file.mime).send(file.buffer);
     } catch (err: any) {
@@ -2414,20 +2557,23 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     },
     async (req, res) => {
       try {
-        const uploadProject = getProject(db, req.params.id);
-        await ensureProject(PROJECTS_DIR, req.params.id, uploadProject?.metadata);
+        const uploadProject = getProjectForRequest(req, req.params.id);
+        if (!uploadProject) {
+          return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        }
+        await ensureProject(projectsDirFor(req), req.params.id, uploadProject.metadata);
         if (req.file) {
           const buf = await fs.promises.readFile(req.file.path);
           const desiredName = sanitizeName(
             req.body?.name || req.file.originalname,
           );
           const meta = await writeProjectFile(
-            PROJECTS_DIR,
+            projectsDirFor(req),
             req.params.id,
             desiredName,
             buf,
             {},
-            uploadProject?.metadata,
+            uploadProject.metadata,
           );
           fs.promises.unlink(req.file.path).catch(() => {});
           /** @type {import('@open-design/contracts').ProjectFileResponse} */
@@ -2463,14 +2609,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             : Buffer.from(content, 'utf8');
         const meta = artifact === true
           ? await createProjectArtifactFile({
-              projectsRoot: PROJECTS_DIR,
+              projectsRoot: projectsDirFor(req),
               projectId: req.params.id,
               input: { name, content, encoding, artifactManifest },
-              metadata: uploadProject?.metadata,
+              metadata: uploadProject.metadata,
               writeProjectFile,
             })
           : await writeProjectFile(
-              PROJECTS_DIR,
+              projectsDirFor(req),
               req.params.id,
               name,
               buf,
@@ -2478,7 +2624,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
                 artifactManifest,
                 ...(overwrite === false ? { overwrite: false } : {}),
               },
-              uploadProject?.metadata,
+              uploadProject.metadata,
             );
         /** @type {import('@open-design/contracts').ProjectFileResponse} */
         const body = { file: meta };
@@ -2519,13 +2665,16 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (typeof from !== 'string' || typeof to !== 'string') {
         return sendApiError(res, 400, 'BAD_REQUEST', 'from and to required');
       }
-      const project = getProject(db, req.params.id);
+      const project = getProjectForRequest(req, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
       const result = await renameProjectFile(
-        PROJECTS_DIR,
+        projectsDirFor(req),
         req.params.id,
         from,
         to,
-        project?.metadata,
+        project.metadata,
       );
       /** @type {import('@open-design/contracts').RenameProjectFileResponse} */
       const body = result;
@@ -2544,8 +2693,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
   app.delete('/api/projects/:id/files/:name', async (req, res) => {
     try {
-      const delProject = getProject(db, req.params.id);
-      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
+      const delProject = getProjectForRequest(req, req.params.id);
+      if (!delProject) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      await deleteProjectFile(projectsDirFor(req), req.params.id, req.params.name, delProject.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -2562,15 +2714,22 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
 }
 
-export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'http' | 'uploads' | 'node'> {}
+export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'projectStore'> {}
 
 export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUploadRoutesDeps) {
   const { sendApiError } = ctx.http;
   const { handleProjectUpload } = ctx.uploads;
   const { fs } = ctx.node;
+  const { getProject } = ctx.projectStore;
 
   app.post(
     '/api/projects/:id/upload',
+    (req, res, next) => {
+      if (!getProject(ctx.db, req.params.id, ownerScopeForRequest(req))) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      next();
+    },
     handleProjectUpload,
     async (req, res) => {
       try {

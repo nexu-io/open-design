@@ -70,6 +70,8 @@ export interface OAuthTokenResponse {
  * approves in their browser. */
 export interface PendingAuthState {
   serverId: string;
+  /** Runtime data dir that initiated the OAuth flow, used by public callbacks. */
+  dataDir?: string;
   authServerIssuer: string;
   tokenEndpoint: string;
   clientId: string;
@@ -586,6 +588,7 @@ export async function beginAuth(
 
   const pending: PendingAuthState = {
     serverId: input.serverId,
+    dataDir: input.dataDir,
     authServerIssuer: authServer.issuer,
     tokenEndpoint: authServer.token_endpoint,
     clientId: client.clientId,

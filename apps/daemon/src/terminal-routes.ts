@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { ownerScopeForRequest } from './project-owner-scope.js';
 import type { RouteDeps } from './server-context.js';
 import type { createTerminalService } from './terminals.js';
 
@@ -20,14 +21,18 @@ export interface RegisterTerminalRoutesDeps
 export function registerTerminalRoutes(app: Express, ctx: RegisterTerminalRoutesDeps) {
   const { db, terminals } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
-  const { PROJECTS_DIR } = ctx.paths;
+  const { projectsDirFor } = ctx.paths;
   const { getProject } = ctx.projectStore;
   const { resolveProjectDir } = ctx.projectFiles;
+
+  const getProjectForRequest = (req: any, projectId: string) => {
+    return getProject(db, projectId, ownerScopeForRequest(req));
+  };
 
   // Resolve the session and assert it belongs to the path project. Returns
   // null and sends a 404 when missing/foreign so callers can early-return.
   const resolveSession = (req: any, res: any) => {
-    if (!getProject(db, req.params.id)) {
+    if (!getProjectForRequest(req, req.params.id)) {
       sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       return null;
     }
@@ -40,19 +45,19 @@ export function registerTerminalRoutes(app: Express, ctx: RegisterTerminalRoutes
   };
 
   app.get('/api/projects/:id/terminals', (req, res) => {
-    if (!getProject(db, req.params.id)) {
+    if (!getProjectForRequest(req, req.params.id)) {
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
     }
     res.json({ terminals: terminals.list({ projectId: req.params.id }).map((s) => terminals.statusBody(s)) });
   });
 
   app.post('/api/projects/:id/terminals', async (req, res) => {
-    const project = getProject(db, req.params.id);
+    const project = getProjectForRequest(req, req.params.id);
     if (!project) {
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
     }
     const body = req.body || {};
-    const cwd = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
+    const cwd = resolveProjectDir(projectsDirFor(req), project.id, project.metadata);
     try {
       const session = await terminals.create({
         projectId: project.id,

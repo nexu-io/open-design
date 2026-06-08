@@ -26,6 +26,18 @@ import { listProviderModels } from '../src/providerModels.js';
 import { startServer } from '../src/server.js';
 import { rememberLiveModels } from '../src/runtimes/models.js';
 
+const platformMocks = vi.hoisted(() => ({
+  resolveSystemProxyEnv: vi.fn(() => ({})),
+}));
+
+vi.mock('@open-design/platform', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@open-design/platform')>();
+  return {
+    ...actual,
+    resolveSystemProxyEnv: platformMocks.resolveSystemProxyEnv,
+  };
+});
+
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
 

@@ -487,7 +487,11 @@ describe('extractDesignMd', () => {
 
 describe('finalizeDesignPackage (pipeline integration)', () => {
   function setupPipeline(
-    opts: { designSystemId?: string | null; designSystemBody?: string | null } = {},
+    opts: {
+      designSystemId?: string | null;
+      designSystemBody?: string | null;
+      ownerEmail?: string | null;
+    } = {},
   ): { db: any; projectsRoot: string; designSystemsRoot: string } {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-finalize-pipe-'));
     const designSystemsRoot = path.join(tempDir, 'design-systems');
@@ -505,6 +509,7 @@ describe('finalizeDesignPackage (pipeline integration)', () => {
       id: PROJECT_ID,
       name: 'Project',
       designSystemId: opts.designSystemId === undefined ? 'shadcn' : opts.designSystemId,
+      ownerEmail: opts.ownerEmail ?? null,
       createdAt: 1,
       updatedAt: 1,
     });
@@ -545,6 +550,23 @@ describe('finalizeDesignPackage (pipeline integration)', () => {
       ),
     ) as any;
   }
+
+  it('rejects projects outside the caller owner scope before reading project files', async () => {
+    const { db, projectsRoot, designSystemsRoot } = setupPipeline({
+      ownerEmail: 'bob@example.com',
+    });
+    const fetchImpl = happyFetch('# DESIGN.md\n## Summary\nshould not run\n');
+
+    await expect(
+      finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+        apiKey: 'sk-test',
+        model: 'claude-opus-4-7',
+        fetchImpl,
+        projectOwnerScope: { ownerEmail: 'alice@example.com', includeOwnerless: false },
+      }),
+    ).rejects.toThrow(`project not found: ${PROJECT_ID}`);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 
   it('writes DESIGN.md atomically on the happy path', async () => {
     const { db, projectsRoot, designSystemsRoot } = setupPipeline({

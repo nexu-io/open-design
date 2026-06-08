@@ -329,6 +329,70 @@ describe('pipeline-runner: GenUI cross-conversation cache (e2e-5)', () => {
     }
   });
 
+  it('does not reuse project-tier surface answers across owners', async () => {
+    const surface: GenUISurfaceSpec = {
+      id: '__auto_connector_slack',
+      kind: 'oauth-prompt',
+      persist: 'project',
+      capabilitiesRequired: ['connector:slack'],
+      oauth: { route: 'connector', connectorId: 'slack' },
+    };
+    const snap = snapshotWith({
+      genuiSurfaces: [surface],
+      pipeline: { stages: [{ id: 'connect', atoms: ['todo-write'] }] },
+    });
+
+    await runPipelineForRun({
+      db,
+      runId: 'run-owner-A',
+      projectId: 'project-1',
+      ownerEmail: 'alice@example.com',
+      ownerDirHash: 'alice-hash',
+      conversationId: 'conv-A',
+      snapshot: snap,
+      pipeline: snap.pipeline!,
+      env: { maxIterations: 1 },
+      runStage: () => ({ signals: {} }),
+    });
+    const alicePending = findPendingByRunAndSurfaceId(db, {
+      runId: 'run-owner-A',
+      surfaceId: surface.id,
+    });
+    expect(alicePending).not.toBeNull();
+    respondSurface(db, {
+      rowId: alicePending!.id,
+      value: { connectorId: 'slack', accountLabel: 'Alice' },
+      respondedBy: 'user',
+      runId: 'run-owner-A',
+    });
+
+    const eventsB: GenUISurfaceEvent[] = [];
+    await runPipelineForRun({
+      db,
+      runId: 'run-owner-B',
+      projectId: 'project-1',
+      ownerEmail: 'bob@example.com',
+      ownerDirHash: 'bob-hash',
+      conversationId: 'conv-B',
+      snapshot: snap,
+      pipeline: snap.pipeline!,
+      env: { maxIterations: 1 },
+      runStage: () => ({ signals: {} }),
+      emitGenui: (e) => {
+        if (e.kind.startsWith('genui_')) eventsB.push(e as GenUISurfaceEvent);
+      },
+    });
+
+    const surfaceEventsB = eventsB.filter((e) => e.surfaceId === surface.id);
+    expect(surfaceEventsB.find((e) => e.kind === 'genui_surface_response')).toBeUndefined();
+    expect(surfaceEventsB.find((e) => e.kind === 'genui_surface_request')).toBeDefined();
+    const bobPending = findPendingByRunAndSurfaceId(db, {
+      runId: 'run-owner-B',
+      surfaceId: surface.id,
+    });
+    expect(bobPending?.ownerEmail).toBe('bob@example.com');
+  });
+
   it('raises a stage-bound surface only when the matching stage starts', async () => {
     const surface: GenUISurfaceSpec = {
       id: 'audience-clarify',

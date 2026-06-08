@@ -123,6 +123,8 @@ export function migratePlugins(db: SqliteDb): void {
     CREATE TABLE IF NOT EXISTS genui_surfaces (
       id                    TEXT PRIMARY KEY,
       project_id            TEXT NOT NULL,
+      owner_email           TEXT,
+      owner_dir_hash        TEXT,
       conversation_id       TEXT,
       run_id                TEXT,
       plugin_snapshot_id    TEXT NOT NULL,
@@ -143,6 +145,7 @@ export function migratePlugins(db: SqliteDb): void {
     CREATE INDEX IF NOT EXISTS idx_genui_proj_surface ON genui_surfaces(project_id, surface_id);
     CREATE INDEX IF NOT EXISTS idx_genui_conv_surface ON genui_surfaces(conversation_id, surface_id);
     CREATE INDEX IF NOT EXISTS idx_genui_run          ON genui_surfaces(run_id);
+    CREATE INDEX IF NOT EXISTS idx_genui_owner_email  ON genui_surfaces(owner_email);
 
     CREATE TABLE IF NOT EXISTS skill_plugin_candidates (
       id                   TEXT PRIMARY KEY,
@@ -168,6 +171,35 @@ export function migratePlugins(db: SqliteDb): void {
     CREATE INDEX IF NOT EXISTS idx_skill_plugin_candidates_project
       ON skill_plugin_candidates(project_id, status, created_at DESC);
   `);
+
+  const genuiSurfaceCols = db.prepare(`PRAGMA table_info(genui_surfaces)`).all() as DbRow[];
+  if (!genuiSurfaceCols.some((c) => c['name'] === 'owner_email')) {
+    db.exec(`ALTER TABLE genui_surfaces ADD COLUMN owner_email TEXT`);
+  }
+  if (!genuiSurfaceCols.some((c) => c['name'] === 'owner_dir_hash')) {
+    db.exec(`ALTER TABLE genui_surfaces ADD COLUMN owner_dir_hash TEXT`);
+  }
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_genui_owner_email ON genui_surfaces(owner_email)
+  `);
+  const genuiBackfillProjectCols = db.prepare(`PRAGMA table_info(projects)`).all() as DbRow[];
+  const hasProjectOwnerColumns =
+    genuiBackfillProjectCols.some((c) => c['name'] === 'owner_email')
+    && genuiBackfillProjectCols.some((c) => c['name'] === 'owner_dir_hash');
+  if (hasProjectOwnerColumns) {
+    db.exec(`
+    UPDATE genui_surfaces
+      SET owner_email = COALESCE(
+            owner_email,
+            (SELECT owner_email FROM projects WHERE projects.id = genui_surfaces.project_id)
+          ),
+          owner_dir_hash = COALESCE(
+            owner_dir_hash,
+            (SELECT owner_dir_hash FROM projects WHERE projects.id = genui_surfaces.project_id)
+          )
+      WHERE owner_email IS NULL OR owner_dir_hash IS NULL
+    `);
+  }
 
   const marketplaceCols = db.prepare(`PRAGMA table_info(plugin_marketplaces)`).all() as DbRow[];
   if (!marketplaceCols.some((c) => c['name'] === 'spec_version')) {

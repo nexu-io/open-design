@@ -65,6 +65,7 @@ export function xaiRedirectUri(): string {
 
 export interface BeginXAIAuthInput {
   pending: PendingAuthCache;
+  dataDir?: string;
 }
 
 export interface BeginXAIAuthResult {
@@ -105,6 +106,7 @@ export function beginXAIAuth(input: BeginXAIAuthInput): BeginXAIAuthResult {
     scope: XAI_OAUTH_SCOPE,
     createdAt: Date.now(),
   };
+  if (input.dataDir) pendingState.dataDir = input.dataDir;
 
   input.pending.put(state, pendingState);
   return { authorizeUrl, state };
@@ -114,6 +116,7 @@ export interface CompleteXAIAuthInput {
   pending: PendingAuthCache;
   state: string;
   code: string;
+  onPending?: (pending: PendingAuthState) => void;
   fetchImpl?: typeof fetch;
 }
 
@@ -135,6 +138,7 @@ export async function completeXAIAuth(
       `xAI OAuth state mismatch: expected serverId=${XAI_PROVIDER_ID}, got ${consumed.serverId}`,
     );
   }
+  input.onPending?.(consumed);
   return exchangeCodeForToken(
     {
       tokenEndpoint: consumed.tokenEndpoint,

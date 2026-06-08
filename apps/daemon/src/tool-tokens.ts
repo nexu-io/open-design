@@ -38,6 +38,8 @@ export interface ToolTokenGrant {
   token: string;
   runId: string;
   projectId: string;
+  ownerEmail?: string;
+  ownerDirHash?: string;
   allowedEndpoints: readonly ToolEndpoint[];
   allowedOperations: readonly ToolOperation[];
   issuedAt: string;
@@ -56,6 +58,8 @@ export interface ToolTokenGrant {
 export interface MintToolTokenOptions {
   runId: string;
   projectId: string;
+  ownerEmail?: string | null;
+  ownerDirHash?: string | null;
   allowedEndpoints?: readonly ToolEndpoint[];
   allowedOperations?: readonly ToolOperation[];
   ttlMs?: number;
@@ -141,6 +145,8 @@ export class ToolTokenRegistry {
       tokenHash: hash,
       runId: options.runId,
       projectId: options.projectId,
+      ...(options.ownerEmail ? { ownerEmail: options.ownerEmail } : {}),
+      ...(options.ownerDirHash ? { ownerDirHash: options.ownerDirHash } : {}),
       allowedEndpoints: [...(options.allowedEndpoints ?? CHAT_TOOL_ENDPOINTS)],
       allowedOperations: [...(options.allowedOperations ?? CHAT_TOOL_OPERATIONS)],
       issuedAt: new Date(nowMs).toISOString(),

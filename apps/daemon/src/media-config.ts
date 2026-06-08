@@ -151,8 +151,16 @@ export function mediaConfigDir(projectRoot: string): string {
   );
 }
 
-function configFile(projectRoot: string): string {
-  return path.join(mediaConfigDir(projectRoot), 'media-config.json');
+export function mediaConfigDirForDataDir(dataDir: string): string {
+  return path.resolve(dataDir);
+}
+
+function configDir(projectRoot: string, dataDir?: string): string {
+  return dataDir ? mediaConfigDirForDataDir(dataDir) : mediaConfigDir(projectRoot);
+}
+
+function configFile(projectRoot: string, dataDir?: string): string {
+  return path.join(configDir(projectRoot, dataDir), 'media-config.json');
 }
 
 /**
@@ -172,9 +180,9 @@ function coerceAliasMap(raw: unknown): ModelAliasMap {
   return out;
 }
 
-async function readStoredFile(projectRoot: string): Promise<JsonRecord> {
+async function readStoredFile(projectRoot: string, dataDir?: string): Promise<JsonRecord> {
   try {
-    const raw = await readFile(configFile(projectRoot), 'utf8');
+    const raw = await readFile(configFile(projectRoot, dataDir), 'utf8');
     const parsed = JSON.parse(raw);
     return isRecord(parsed) ? parsed : {};
   } catch (err) {
@@ -183,13 +191,13 @@ async function readStoredFile(projectRoot: string): Promise<JsonRecord> {
   }
 }
 
-async function readStored(projectRoot: string): Promise<ProviderMap> {
-  const parsed = await readStoredFile(projectRoot);
+async function readStored(projectRoot: string, dataDir?: string): Promise<ProviderMap> {
+  const parsed = await readStoredFile(projectRoot, dataDir);
   return isRecord(parsed.providers) ? (parsed.providers as ProviderMap) : {};
 }
 
-async function readStoredAliases(projectRoot: string): Promise<ModelAliasMap> {
-  const parsed = await readStoredFile(projectRoot);
+async function readStoredAliases(projectRoot: string, dataDir?: string): Promise<ModelAliasMap> {
+  const parsed = await readStoredFile(projectRoot, dataDir);
   return coerceAliasMap(parsed.aliases);
 }
 
@@ -197,15 +205,16 @@ async function writeStored(
   projectRoot: string,
   providers: ProviderMap,
   aliases?: ModelAliasMap,
+  dataDir?: string,
 ): Promise<void> {
-  const file = configFile(projectRoot);
+  const file = configFile(projectRoot, dataDir);
   await mkdir(path.dirname(file), { recursive: true });
   // Preserve any existing aliases when the caller doesn't pass them.
   // The Settings UI writes providers only; without this, every
   // provider edit would silently wipe the user's model aliases (issue
   // #1277 introduces aliases but the Settings UI surface for editing
   // them lands in a follow-up PR).
-  const resolvedAliases = aliases ?? (await readStoredAliases(projectRoot));
+  const resolvedAliases = aliases ?? (await readStoredAliases(projectRoot, dataDir));
   const body: JsonRecord = { providers };
   if (Object.keys(resolvedAliases).length > 0) {
     body.aliases = resolvedAliases;
@@ -236,10 +245,11 @@ function readEnvAliases(): ModelAliasMap {
 export async function resolveModelAlias(
   projectRoot: string,
   modelId: string,
+  dataDir?: string,
 ): Promise<string> {
   const envAliases = readEnvAliases();
   if (envAliases[modelId]) return envAliases[modelId]!;
-  const stored = await readStoredAliases(projectRoot);
+  const stored = await readStoredAliases(projectRoot, dataDir);
   return stored[modelId] ?? modelId;
 }
 
@@ -250,9 +260,10 @@ export async function resolveModelAlias(
  */
 export async function readAliasMap(
   projectRoot: string,
+  dataDir?: string,
 ): Promise<{ effective: ModelAliasMap; env: ModelAliasMap; stored: ModelAliasMap }> {
   const env = readEnvAliases();
-  const stored = await readStoredAliases(projectRoot);
+  const stored = await readStoredAliases(projectRoot, dataDir);
   const effective: ModelAliasMap = { ...stored, ...env };
   return { effective, env, stored };
 }
@@ -309,10 +320,11 @@ async function resolveOpenAIAuthFileCredential(): Promise<OAuthCredential | null
 
 async function resolveXAIOAuthCredential(
   projectRoot: string,
+  dataDir?: string,
 ): Promise<OAuthCredential | null> {
   // 1. OD-native xAI OAuth tokens (written by the daemon's own
   //    xai-oauth.ts client when the user authorizes inside OD).
-  const odBearer = await resolveXAIBearer(mediaConfigDir(projectRoot)).catch(
+  const odBearer = await resolveXAIBearer(configDir(projectRoot, dataDir)).catch(
     () => null,
   );
   if (odBearer) {
@@ -353,8 +365,12 @@ async function resolveXAIOAuthCredential(
  * not valid proof that the Images API can be called.
  * Returns { apiKey, baseUrl } where either may be empty string.
  */
-export async function resolveProviderConfig(projectRoot: string, providerId: string): Promise<ProviderEntry> {
-  const stored = await readStored(projectRoot);
+export async function resolveProviderConfig(
+  projectRoot: string,
+  providerId: string,
+  dataDir?: string,
+): Promise<ProviderEntry> {
+  const stored = await readStored(projectRoot, dataDir);
   const entry = stored[providerId] || {};
   const envKey = readEnvKey(providerId);
   const needsExternalCredential = !envKey && !entry.apiKey;
@@ -362,7 +378,7 @@ export async function resolveProviderConfig(projectRoot: string, providerId: str
     ? providerId === 'openai'
       ? await resolveOpenAIAuthFileCredential()
       : providerId === 'grok'
-        ? await resolveXAIOAuthCredential(projectRoot)
+        ? await resolveXAIOAuthCredential(projectRoot, dataDir)
         : null
     : null;
   return {
@@ -390,8 +406,11 @@ export interface MaskedConfigResponse {
   aliases: { effective: ModelAliasMap; env: ModelAliasMap; stored: ModelAliasMap };
 }
 
-export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfigResponse> {
-  const stored = await readStored(projectRoot);
+export async function readMaskedConfig(
+  projectRoot: string,
+  dataDir?: string,
+): Promise<MaskedConfigResponse> {
+  const stored = await readStored(projectRoot, dataDir);
   const providers: MaskedConfigResponse['providers'] = {};
   for (const id of PROVIDER_IDS) {
     const entry = stored[id] || {};
@@ -402,7 +421,7 @@ export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfi
       ? id === 'openai'
         ? await resolveOpenAIAuthFileCredential()
         : id === 'grok'
-          ? await resolveXAIOAuthCredential(projectRoot)
+          ? await resolveXAIOAuthCredential(projectRoot, dataDir)
           : null
       : null;
     providers[id] = {
@@ -418,7 +437,7 @@ export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfi
         : {}),
     };
   }
-  const aliases = await readAliasMap(projectRoot);
+  const aliases = await readAliasMap(projectRoot, dataDir);
   return { providers, aliases };
 }
 
@@ -434,10 +453,10 @@ export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfi
  * pushing `{providers: {}}` onto a daemon that had keys from a
  * previous session) without silently destroying the user's data.
  */
-export async function writeConfig(projectRoot: string, body: unknown) {
+export async function writeConfig(projectRoot: string, body: unknown, dataDir?: string) {
   const incoming = isRecord(body) && isRecord(body.providers) ? body.providers : {};
   const force = Boolean(isRecord(body) && body.force === true);
-  const prior = await readStored(projectRoot);
+  const prior = await readStored(projectRoot, dataDir);
   const next: ProviderMap = {};
   for (const id of PROVIDER_IDS) {
     const entry = incoming[id];
@@ -488,8 +507,8 @@ export async function writeConfig(projectRoot: string, body: unknown) {
       }
     }
   }
-  await writeStored(projectRoot, next);
-  return readMaskedConfig(projectRoot);
+  await writeStored(projectRoot, next, undefined, dataDir);
+  return readMaskedConfig(projectRoot, dataDir);
 }
 
 /**
@@ -515,6 +534,7 @@ export async function seedProviderIfMissing(
   projectRoot: string,
   providerId: string,
   entry: { apiKey?: string; baseUrl?: string; model?: string },
+  dataDir?: string,
 ): Promise<boolean> {
   if (!PROVIDER_IDS.includes(providerId)) return false;
   const apiKey = entry.apiKey?.trim() ?? '';
@@ -523,7 +543,7 @@ export async function seedProviderIfMissing(
   // be invisible to the user. Skip to avoid confusing on-disk state.
   if (readEnvKey(providerId)) return false;
 
-  const prior = await readStored(projectRoot);
+  const prior = await readStored(projectRoot, dataDir);
   const priorApiKey =
     typeof prior[providerId]?.apiKey === 'string' && prior[providerId].apiKey.trim()
       ? prior[providerId].apiKey.trim()
@@ -538,6 +558,6 @@ export async function seedProviderIfMissing(
     ...(baseUrl ? { baseUrl } : {}),
     ...(model ? { model } : {}),
   };
-  await writeStored(projectRoot, next);
+  await writeStored(projectRoot, next, undefined, dataDir);
   return true;
 }

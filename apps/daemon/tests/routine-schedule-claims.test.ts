@@ -697,6 +697,12 @@ describe('routine prepare failure cleanup', () => {
       });
       expect(db.prepare(`SELECT COUNT(*) AS n FROM projects WHERE id = ?`).get(runJson.projectId))
         .toEqual({ n: 1 });
+      expect(db.prepare(
+        `SELECT owner_email AS ownerEmail, owner_dir_hash AS ownerDirHash FROM projects WHERE id = ?`,
+      ).get(runJson.projectId)).toMatchObject({
+        ownerEmail: 'local@dev',
+        ownerDirHash: expect.any(String),
+      });
       expect(db.prepare(`SELECT COUNT(*) AS n FROM conversations WHERE id = ?`).get(runJson.conversationId))
         .toEqual({ n: 1 });
     } finally {
