@@ -19,7 +19,23 @@ export interface GitCommandBlockedReasonOptions {
   checkoutRefExists?: (arg: string) => boolean;
 }
 
+export interface GitWorkspaceStatusOptions {
+  env?: NodeJS.ProcessEnv;
+  realGit?: string;
+  maxEntries?: number;
+  timeoutMs?: number;
+}
+
+export type GitWorkspaceStatus =
+  | { state: 'clean'; cwd: string }
+  | { state: 'dirty'; cwd: string; entries: string[]; totalEntries: number }
+  | { state: 'not_git'; cwd: string }
+  | { state: 'unknown'; cwd: string; error: string };
+
+export const GIT_COMMAND_GUARD_BLOCKED_PREFIX = 'Open Design git command guard blocked:';
+
 const DISABLED_VALUES = new Set(['', '0', 'false', 'no', 'off']);
+const ENABLED_VALUES = new Set(['1', 'true', 'yes', 'on']);
 const FORCE_PUSH_ARGS = new Set(['-f', '--force']);
 const STASH_DESTRUCTIVE_SUBCOMMANDS = new Set(['drop', 'clear']);
 const GIT_GLOBAL_OPTIONS_WITH_SEPARATE_VALUE = new Set([
@@ -36,6 +52,75 @@ const GIT_GLOBAL_OPTIONS_WITH_SEPARATE_VALUE = new Set([
 export function isGitCommandGuardEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const raw = String(env.OD_GIT_COMMAND_GUARD ?? '').trim().toLowerCase();
   return !DISABLED_VALUES.has(raw);
+}
+
+export function isImportedFolderWorkspaceSafetyEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = String(env.OD_IMPORTED_FOLDER_WORKSPACE_SAFETY ?? '1').trim().toLowerCase();
+  return !DISABLED_VALUES.has(raw);
+}
+
+export function allowsDirtyImportedFolderWorkspace(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = String(env.OD_IMPORTED_FOLDER_ALLOW_DIRTY ?? '').trim().toLowerCase();
+  return ENABLED_VALUES.has(raw);
+}
+
+export function inspectGitWorkspace(
+  cwd: string,
+  options: GitWorkspaceStatusOptions = {},
+): GitWorkspaceStatus {
+  const resolvedCwd = path.resolve(cwd);
+  const git = options.realGit ?? options.env?.OD_REAL_GIT_BIN ?? process.env.OD_REAL_GIT_BIN ?? 'git';
+  const timeout = options.timeoutMs ?? 2000;
+  try {
+    const inside = spawnSync(git, ['-C', resolvedCwd, 'rev-parse', '--is-inside-work-tree'], {
+      env: options.env,
+      encoding: 'utf8',
+      timeout,
+      windowsHide: true,
+    });
+    if (inside.status !== 0 || String(inside.stdout ?? '').trim() !== 'true') {
+      return { state: 'not_git', cwd: resolvedCwd };
+    }
+    const status = spawnSync(git, ['-C', resolvedCwd, 'status', '--porcelain=v1', '--untracked-files=all'], {
+      env: options.env,
+      encoding: 'utf8',
+      timeout,
+      windowsHide: true,
+      maxBuffer: 256 * 1024,
+    });
+    if (status.status !== 0) {
+      const error = String(status.stderr || status.stdout || 'git status failed').trim();
+      return { state: 'unknown', cwd: resolvedCwd, error };
+    }
+    const entries = String(status.stdout ?? '')
+      .split(/\r?\n/u)
+      .map((line) => line.trimEnd())
+      .filter(Boolean);
+    if (entries.length === 0) return { state: 'clean', cwd: resolvedCwd };
+    return {
+      state: 'dirty',
+      cwd: resolvedCwd,
+      entries: entries.slice(0, options.maxEntries ?? 20),
+      totalEntries: entries.length,
+    };
+  } catch (err) {
+    return {
+      state: 'unknown',
+      cwd: resolvedCwd,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export function gitCommandGuardBlockedMessagesFromText(text: string): string[] {
+  const messages: string[] = [];
+  for (const line of String(text).split(/\r?\n/u)) {
+    const index = line.indexOf(GIT_COMMAND_GUARD_BLOCKED_PREFIX);
+    if (index === -1) continue;
+    const message = line.slice(index + GIT_COMMAND_GUARD_BLOCKED_PREFIX.length).trim();
+    if (message) messages.push(message);
+  }
+  return messages;
 }
 
 export function gitCommandBlockedReason(
@@ -489,7 +574,7 @@ case "$cmd" in
 esac
 
 if [ -n "$blocked" ]; then
-  printf 'Open Design git command guard blocked: %s\\n' "$blocked" >&2
+  printf 'Open Design git command guard blocked: %s; command: git %s\\n' "$blocked" "$cmd" >&2
   exit 126
 fi
 
@@ -502,7 +587,7 @@ if errorlevel 1 (
   echo Open Design git command guard requires node on PATH. 1>&2
   exit /b 126
 )
-node -e "const cp=require('node:child_process'); const args=process.argv.slice(1); const realGit=process.env.OD_REAL_GIT_BIN||'git'; const valueOptions=new Set(['-C','-c','--exec-path','--git-dir','--namespace','--object-directory','--super-prefix','--work-tree']); const inlineValueOptions=['--exec-path','--git-dir','--namespace','--object-directory','--super-prefix','--work-tree']; const checkoutValueOptions=new Set(['-b','--orphan']); const contextArgs=[]; let cmd='',cmdIndex=-1; for(let i=0;i<args.length;i++){const a=args[i]||''; if(valueOptions.has(a)){contextArgs.push(a); if(i+1<args.length) contextArgs.push(args[i+1]||''); i++; continue} if(inlineValueOptions.some(o=>a.startsWith(o+'='))){contextArgs.push(a); continue} if(a.startsWith('-')){contextArgs.push(a); continue} cmd=a; cmdIndex=i; break} const c=cmd.toLowerCase(); const gitOk=a=>cp.spawnSync(realGit,[...contextArgs,...a],{stdio:'ignore',windowsHide:true,timeout:1000}).status===0; const hasShort=(a,f)=>a.startsWith('-')&&!a.startsWith('--')&&a.slice(1).includes(f); const isClean=a=>a==='--force'||a==='--interactive'||a==='-f'||a==='-d'||a==='-i'||a==='-x'||a==='-X'||(a.startsWith('-')&&!a.startsWith('--')&&/[dfixX]/.test(a.slice(1))); const isCleanDryRun=a=>a==='--dry-run'||a==='-n'||(a.startsWith('-')&&!a.startsWith('--')&&a.slice(1).includes('n')); const isPush=a=>a==='--force'||hasShort(a,'f')||a.startsWith('--force-with-lease')||a.startsWith('+'); const isSwitch=a=>a==='--force'||a==='--discard-changes'||hasShort(a,'f')||hasShort(a,'C'); const isCheckoutPathspecFile=a=>a==='--pathspec-from-file'||a.startsWith('--pathspec-from-file='); const isCheckoutPath=a=>{if(a==='.'||a==='..'||a.startsWith('./')||a.startsWith('../')) return true; if(gitOk(['rev-parse','--verify','--quiet',a+'^{commit}'])) return false; return gitOk(['ls-files','--error-unmatch','--',a])}; const isCheckout=()=>{let operands=0,skip=false; for(let i=cmdIndex+1;i<args.length;i++){const a=args[i]||''; if(skip){skip=false; continue} if(a==='--force'||hasShort(a,'f')||hasShort(a,'B')||a==='-p'||a==='--patch') return true; if(a==='--'&&i+1<args.length) return true; if(isCheckoutPathspecFile(a)) return true; if(checkoutValueOptions.has(a)){skip=true; continue} if(a.startsWith('-')) continue; operands++; if(operands>1||isCheckoutPath(a)) return true} return false}; const commandArgs=args.slice(cmdIndex+1); const cleanArgs=args.slice(cmdIndex+1); const blocked=(c==='reset'&&args.includes('--hard'))||(c==='clean'&&!cleanArgs.some(isCleanDryRun)&&cleanArgs.some(isClean))||(c==='stash'&&['drop','clear'].includes((args[cmdIndex+1]||'').toLowerCase()))||(c==='push'&&commandArgs.some(isPush))||(c==='checkout'&&isCheckout())||(c==='switch'&&commandArgs.some(isSwitch))||c==='restore'; if(blocked){console.error('Open Design git command guard blocked destructive git command'); process.exit(126)}" %*
+node -e "const cp=require('node:child_process'); const args=process.argv.slice(1); const realGit=process.env.OD_REAL_GIT_BIN||'git'; const valueOptions=new Set(['-C','-c','--exec-path','--git-dir','--namespace','--object-directory','--super-prefix','--work-tree']); const inlineValueOptions=['--exec-path','--git-dir','--namespace','--object-directory','--super-prefix','--work-tree']; const checkoutValueOptions=new Set(['-b','--orphan']); const contextArgs=[]; let cmd='',cmdIndex=-1; for(let i=0;i<args.length;i++){const a=args[i]||''; if(valueOptions.has(a)){contextArgs.push(a); if(i+1<args.length) contextArgs.push(args[i+1]||''); i++; continue} if(inlineValueOptions.some(o=>a.startsWith(o+'='))){contextArgs.push(a); continue} if(a.startsWith('-')){contextArgs.push(a); continue} cmd=a; cmdIndex=i; break} const c=cmd.toLowerCase(); const gitOk=a=>cp.spawnSync(realGit,[...contextArgs,...a],{stdio:'ignore',windowsHide:true,timeout:1000}).status===0; const hasShort=(a,f)=>a.startsWith('-')&&!a.startsWith('--')&&a.slice(1).includes(f); const isClean=a=>a==='--force'||a==='--interactive'||a==='-f'||a==='-d'||a==='-i'||a==='-x'||a==='-X'||(a.startsWith('-')&&!a.startsWith('--')&&/[dfixX]/.test(a.slice(1))); const isCleanDryRun=a=>a==='--dry-run'||a==='-n'||(a.startsWith('-')&&!a.startsWith('--')&&a.slice(1).includes('n')); const isPush=a=>a==='--force'||hasShort(a,'f')||a.startsWith('--force-with-lease')||a.startsWith('+'); const isSwitch=a=>a==='--force'||a==='--discard-changes'||hasShort(a,'f')||hasShort(a,'C'); const isCheckoutPathspecFile=a=>a==='--pathspec-from-file'||a.startsWith('--pathspec-from-file='); const isCheckoutPath=a=>{if(a==='.'||a==='..'||a.startsWith('./')||a.startsWith('../')) return true; if(gitOk(['rev-parse','--verify','--quiet',a+'^{commit}'])) return false; return gitOk(['ls-files','--error-unmatch','--',a])}; const isCheckout=()=>{let operands=0,skip=false; for(let i=cmdIndex+1;i<args.length;i++){const a=args[i]||''; if(skip){skip=false; continue} if(a==='--force'||hasShort(a,'f')||hasShort(a,'B')||a==='-p'||a==='--patch') return true; if(a==='--'&&i+1<args.length) return true; if(isCheckoutPathspecFile(a)) return true; if(checkoutValueOptions.has(a)){skip=true; continue} if(a.startsWith('-')) continue; operands++; if(operands>1||isCheckoutPath(a)) return true} return false}; const commandArgs=args.slice(cmdIndex+1); const cleanArgs=args.slice(cmdIndex+1); let reason=''; if(c==='reset'&&args.includes('--hard')) reason='git reset --hard discards workspace changes'; else if(c==='clean'&&!cleanArgs.some(isCleanDryRun)&&cleanArgs.some(isClean)) reason='git clean with force/delete flags removes untracked files'; else if(c==='stash'&&['drop','clear'].includes((args[cmdIndex+1]||'').toLowerCase())) reason='git stash drop/clear discards saved work'; else if(c==='push'&&commandArgs.some(isPush)) reason='git push --force can rewrite remote history'; else if(c==='checkout'&&isCheckout()) reason='git checkout can discard workspace changes'; else if(c==='switch'&&commandArgs.some(isSwitch)) reason='git switch can discard workspace changes'; else if(c==='restore') reason='git restore can discard workspace changes'; if(reason){console.error('Open Design git command guard blocked: '+reason+'; command: git '+(c||'unknown')); process.exit(126)}" %*
 if errorlevel 1 exit /b %errorlevel%
 "%OD_REAL_GIT_BIN%" %*
 `;

@@ -28,7 +28,13 @@ import {
 import { expandHomePrefix, resolveProjectRelativePath } from './home-expansion.js';
 import { resolveProjectRoot } from './project-root.js';
 import { userFacingAgentLabel } from './user-facing-agent-label.js';
-import { installGitCommandGuard } from './git-command-guard.js';
+import {
+  allowsDirtyImportedFolderWorkspace,
+  gitCommandGuardBlockedMessagesFromText,
+  inspectGitWorkspace,
+  installGitCommandGuard,
+  isImportedFolderWorkspaceSafetyEnabled,
+} from './git-command-guard.js';
 
 export { resolveProjectRoot };
 import { createCommandInvocation } from '@open-design/platform';
@@ -11045,9 +11051,11 @@ export async function startServer({
     let cwd = null;
     let existingProjectFiles = [];
     let existingProjectFolders = [];
+    let projectRecord = null;
     if (typeof projectId === 'string' && projectId) {
       try {
         const chatProject = getProject(db, projectId);
+        projectRecord = chatProject;
         const chatMeta = chatProject?.metadata;
         // ensureProject/resolveProjectDir now resolve external baseDir folders
         // internally (and assertSandboxProjectRootAvailable rejects imported
@@ -11106,10 +11114,39 @@ export async function startServer({
     // systemPrompt. We also stitch in the cwd hint so the agent knows
     // where its file tools should write, and the attachment list so it
     // doesn't have to guess what the user just dropped in.
-    const projectRecord =
-      typeof projectId === 'string' && projectId
+    projectRecord =
+      projectRecord ??
+      (typeof projectId === 'string' && projectId
         ? getProject(db, projectId)
-        : null;
+        : null);
+    const importedFolderProject =
+      projectRecord?.metadata?.importedFrom === 'folder' &&
+      typeof projectRecord?.metadata?.baseDir === 'string';
+    const importedFolderWorkspaceSafetyEnabled =
+      importedFolderProject && isImportedFolderWorkspaceSafetyEnabled(process.env);
+    const emitWorkspaceSafetyStatus = (detail) => {
+      const payload = {
+        type: 'status',
+        label: 'workspace_safety',
+        detail,
+      };
+      persistRunEventToAssistantMessage(db, run, 'agent', payload);
+      design.runs.emit(run, 'agent', payload);
+    };
+    if (cwd && importedFolderWorkspaceSafetyEnabled && !allowsDirtyImportedFolderWorkspace(process.env)) {
+      const workspace = inspectGitWorkspace(cwd, { env: process.env });
+      if (workspace.state === 'dirty') {
+        const sample = workspace.entries.slice(0, 5).join(', ');
+        const more = workspace.totalEntries > workspace.entries.length
+          ? `; ${workspace.totalEntries - workspace.entries.length} more`
+          : '';
+        const detail =
+          `Imported-folder Git workspace has uncommitted changes before launch: ${sample}${more}. ` +
+          'Commit, stash, or set OD_IMPORTED_FOLDER_ALLOW_DIRTY=1 to opt into running anyway.';
+        emitWorkspaceSafetyStatus(detail);
+        return design.runs.fail(run, 'WORKSPACE_DIRTY', detail);
+      }
+    }
     const runContextPrompt = renderRunContextPrompt(context, projectRecord?.metadata);
     const linkedDirs = (() => {
       if (!Array.isArray(projectRecord?.metadata?.linkedDirs)) return [];
@@ -12386,6 +12423,13 @@ export async function startServer({
           ? { OPENCODE_CONFIG_CONTENT: opencodeConfigContent }
           : {}),
       }, agentLaunch);
+      if (
+        importedFolderWorkspaceSafetyEnabled &&
+        env.OD_GIT_COMMAND_GUARD === undefined &&
+        env.od_git_command_guard === undefined
+      ) {
+        env = { ...env, OD_GIT_COMMAND_GUARD: '1' };
+      }
       const gitCommandGuard = installGitCommandGuard(env);
       env = gitCommandGuard.env;
       gitCommandGuardCleanup = gitCommandGuard.cleanup;
@@ -13085,9 +13129,21 @@ export async function startServer({
     // Wire the acpSession onto the run so cancel() can call abort()
     // instead of raw SIGTERM (applies to pi-rpc and acp-json-rpc).
     run.acpSession = acpSession;
+    let gitGuardStderrLineBuffer = '';
     child.stderr.on('data', (chunk) => {
       noteAgentActivity();
-      agentStderrTail = `${agentStderrTail}${chunk}`.slice(-2000);
+      const stderrText = String(chunk);
+      agentStderrTail = `${agentStderrTail}${stderrText}`.slice(-2000);
+      gitGuardStderrLineBuffer += stderrText;
+      const guardStderrLines = gitGuardStderrLineBuffer.split(/\r?\n/u);
+      gitGuardStderrLineBuffer = guardStderrLines.pop() ?? '';
+      for (const message of gitCommandGuardBlockedMessagesFromText(guardStderrLines.join('\n'))) {
+        send('agent', {
+          type: 'status',
+          label: 'workspace_safety',
+          detail: message,
+        });
+      }
       send('stderr', { chunk });
     });
 

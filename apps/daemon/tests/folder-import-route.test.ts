@@ -1,4 +1,5 @@
 import type http from 'node:http';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { chmod, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -11,6 +12,10 @@ describe('POST /api/import/folder', () => {
   let server: http.Server;
   let baseUrl: string;
   const tempDirs: string[] = [];
+  const originalPath = process.env.PATH;
+  const originalGitCommandGuard = process.env.OD_GIT_COMMAND_GUARD;
+  const originalImportedFolderWorkspaceSafety = process.env.OD_IMPORTED_FOLDER_WORKSPACE_SAFETY;
+  const originalImportedFolderAllowDirty = process.env.OD_IMPORTED_FOLDER_ALLOW_DIRTY;
 
   beforeAll(async () => {
     const started = (await startServer({ port: 0, returnServer: true })) as {
@@ -25,6 +30,10 @@ describe('POST /api/import/folder', () => {
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
+    restoreEnv('PATH', originalPath);
+    restoreEnv('OD_GIT_COMMAND_GUARD', originalGitCommandGuard);
+    restoreEnv('OD_IMPORTED_FOLDER_WORKSPACE_SAFETY', originalImportedFolderWorkspaceSafety);
+    restoreEnv('OD_IMPORTED_FOLDER_ALLOW_DIRTY', originalImportedFolderAllowDirty);
   });
 
   afterAll(() => {
@@ -35,6 +44,72 @@ describe('POST /api/import/folder', () => {
     const d = mkdtempSync(path.join(tmpdir(), 'od-import-'));
     tempDirs.push(d);
     return d;
+  }
+
+  function restoreEnv(name: string, value: string | undefined): void {
+    if (value == null) delete process.env[name];
+    else process.env[name] = value;
+  }
+
+  function gitAvailable(): boolean {
+    return spawnSync('git', ['--version'], { stdio: 'ignore' }).status === 0;
+  }
+
+  function runGit(cwd: string, args: string[]): void {
+    const result = spawnSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+    });
+    if (result.status !== 0) {
+      throw new Error(`git ${args.join(' ')} failed: ${result.stderr || result.stdout}`);
+    }
+  }
+
+  async function withFakeAgent<T>(
+    binName: string,
+    script: string,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    const dir = makeFolder();
+    if (process.platform === 'win32') {
+      const runner = path.join(dir, `${binName}-test-runner.cjs`);
+      await writeFile(runner, script);
+      await writeFile(
+        path.join(dir, `${binName}.cmd`),
+        `@echo off\r\nnode "${runner}" %*\r\n`,
+      );
+    } else {
+      const bin = path.join(dir, binName);
+      await writeFile(bin, `#!/usr/bin/env node\n${script}`);
+      await chmod(bin, 0o755);
+    }
+    process.env.PATH = `${dir}${path.delimiter}${process.env.PATH ?? ''}`;
+    return run();
+  }
+
+  async function readSseUntil(response: Response, marker: string): Promise<string> {
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let body = '';
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const { done, value } = await reader.read();
+      if (done) return body;
+      body += decoder.decode(value, { stream: true });
+      if (body.includes(marker)) return body;
+    }
+    return body;
+  }
+
+  async function waitForRunStatus(runId: string): Promise<{ status: string; errorCode?: string | null }> {
+    let lastStatus = 'unknown';
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
+      const statusBody = await statusResponse.json() as { status: string; errorCode?: string | null };
+      lastStatus = statusBody.status;
+      if (statusBody.status !== 'queued' && statusBody.status !== 'running') return statusBody;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`run did not finish; last status: ${lastStatus}`);
   }
 
   async function importFolder(body: unknown) {
@@ -147,6 +222,99 @@ describe('POST /api/import/folder', () => {
       const runsBody = (await runsResp.json()) as { runs: unknown[] };
       expect(runsBody.runs).toHaveLength(0);
     });
+  });
+
+  it('fails imported-folder runs before launch when the Git worktree is dirty', async () => {
+    if (!gitAvailable()) return;
+    const folder = makeFolder();
+    runGit(folder, ['init']);
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+    delete process.env.OD_GIT_COMMAND_GUARD;
+    delete process.env.OD_IMPORTED_FOLDER_WORKSPACE_SAFETY;
+    delete process.env.OD_IMPORTED_FOLDER_ALLOW_DIRTY;
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const createRunResp = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'opencode',
+        projectId: project.id,
+        message: 'Inspect the imported project.',
+      }),
+    });
+    expect(createRunResp.status).toBe(202);
+    const { runId } = (await createRunResp.json()) as { runId: string };
+
+    const status = await waitForRunStatus(runId);
+    expect(status.status).toBe('failed');
+    expect(status.errorCode).toBe('WORKSPACE_DIRTY');
+
+    const eventsResp = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+    const events = await readSseUntil(eventsResp, 'event: end');
+    expect(events).toContain('workspace_safety');
+    expect(events).toContain('OD_IMPORTED_FOLDER_ALLOW_DIRTY=1');
+    expect(events).toContain('WORKSPACE_DIRTY');
+  });
+
+  it('enables the git command guard by default for imported-folder runs and surfaces blocked commands', async () => {
+    if (!gitAvailable()) return;
+    const folder = makeFolder();
+    runGit(folder, ['init']);
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+    runGit(folder, ['add', 'index.html']);
+    runGit(folder, ['-c', 'user.name=Open Design Test', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'init']);
+
+    delete process.env.OD_GIT_COMMAND_GUARD;
+    delete process.env.OD_IMPORTED_FOLDER_WORKSPACE_SAFETY;
+    delete process.env.OD_IMPORTED_FOLDER_ALLOW_DIRTY;
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    await withFakeAgent(
+      'opencode',
+      `
+const cp = require('node:child_process');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  const result = cp.spawnSync('git', ['checkout', '--', 'index.html'], { encoding: 'utf8' });
+  if (result.stderr) process.stderr.write(result.stderr);
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'checkout-status:' + result.status } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createRunResp = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId: project.id,
+            message: 'Try a destructive checkout.',
+          }),
+        });
+        expect(createRunResp.status).toBe(202);
+        const { runId } = (await createRunResp.json()) as { runId: string };
+
+        const eventsResp = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const events = await readSseUntil(eventsResp, 'event: end');
+        const status = await waitForRunStatus(runId);
+
+        expect(status.status).toBe('succeeded');
+        expect(events).toContain('checkout-status:126');
+        expect(events).toContain('workspace_safety');
+        expect(events).toContain('command: git checkout');
+        expect(events).toContain('Open Design git command guard blocked');
+      },
+    );
   });
 
   it('opens imported-folder projects through host editor routes in sandbox mode', async () => {

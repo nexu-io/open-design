@@ -4,8 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  allowsDirtyImportedFolderWorkspace,
   gitCommandBlockedReason,
+  gitCommandGuardBlockedMessagesFromText,
+  inspectGitWorkspace,
   installGitCommandGuard,
+  isImportedFolderWorkspaceSafetyEnabled,
   isGitCommandGuardEnabled,
 } from '../src/git-command-guard.js';
 
@@ -22,6 +26,37 @@ describe('git command guard', () => {
     expect(isGitCommandGuardEnabled({ OD_GIT_COMMAND_GUARD: undefined })).toBe(false);
     expect(isGitCommandGuardEnabled({ OD_GIT_COMMAND_GUARD: '0' })).toBe(false);
     expect(isGitCommandGuardEnabled({ OD_GIT_COMMAND_GUARD: '1' })).toBe(true);
+  });
+
+  it('defaults imported-folder workspace safety on with explicit env opt-outs', () => {
+    expect(isImportedFolderWorkspaceSafetyEnabled({})).toBe(true);
+    expect(isImportedFolderWorkspaceSafetyEnabled({ OD_IMPORTED_FOLDER_WORKSPACE_SAFETY: '0' })).toBe(false);
+    expect(isImportedFolderWorkspaceSafetyEnabled({ OD_IMPORTED_FOLDER_WORKSPACE_SAFETY: 'off' })).toBe(false);
+    expect(allowsDirtyImportedFolderWorkspace({})).toBe(false);
+    expect(allowsDirtyImportedFolderWorkspace({ OD_IMPORTED_FOLDER_ALLOW_DIRTY: '1' })).toBe(true);
+  });
+
+  it('parses blocked git guard stderr lines for run-event visibility', () => {
+    expect(gitCommandGuardBlockedMessagesFromText('ordinary stderr')).toEqual([]);
+    expect(gitCommandGuardBlockedMessagesFromText(
+      'Open Design git command guard blocked: git checkout can discard workspace changes; command: git checkout\n',
+    )).toEqual(['git checkout can discard workspace changes; command: git checkout']);
+  });
+
+  it('detects dirty Git workspaces before imported-folder launch', () => {
+    if (spawnSync('git', ['--version'], { stdio: 'ignore' }).status !== 0) return;
+    const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-git-dirty-'));
+    tempDirs.push(repoDir);
+    spawnSync('git', ['init'], { cwd: repoDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(repoDir, 'index.html'), '<!doctype html>');
+
+    const status = inspectGitWorkspace(repoDir);
+
+    expect(status.state).toBe('dirty');
+    if (status.state === 'dirty') {
+      expect(status.totalEntries).toBeGreaterThan(0);
+      expect(status.entries.join('\n')).toContain('index.html');
+    }
   });
 
   it('classifies destructive git invocations', () => {
@@ -218,6 +253,7 @@ describe('git command guard', () => {
     });
     expect(destructive.status).toBe(126);
     expect(destructive.stderr).toContain('git command guard blocked');
+    expect(destructive.stderr).toContain('command: git reset');
 
     const destructiveWithGlobalOption = spawnSync('git', ['--git-dir', '/tmp/repo/.git', 'reset', '--hard'], {
       env: guardEnv,
