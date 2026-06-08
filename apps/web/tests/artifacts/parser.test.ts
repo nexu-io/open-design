@@ -26,6 +26,18 @@ describe('createArtifactParser', () => {
     expect(trailing).toContain('Done.');
   });
 
+  it('parses an optional artifact lineage token', () => {
+    const events = collect(
+      '<artifact identifier="hello" type="text/html" title="Hi" lineageToken="site-123">\n<h1>Hi</h1>\n</artifact>',
+    );
+    expect(events.find((e) => e.type === 'artifact:start')).toMatchObject({
+      identifier: 'hello',
+      artifactType: 'text/html',
+      title: 'Hi',
+      lineageToken: 'site-123',
+    });
+  });
+
   it('does not enter artifact mode for a tag inside inline backticks', () => {
     const events = collect(
       'To emit an artifact, wrap output in `<artifact identifier="x" type="text/html" title="X">` and continue writing normal prose afterwards.',

@@ -13,6 +13,11 @@ import {
 import { AnimatePresence } from 'motion/react';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
 import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
+import {
+  canOverwriteHtmlArtifactEntry,
+  resolveHtmlArtifactFileName,
+  rewriteHtmlLinksToCurrentProjectFiles,
+} from '../artifacts/html-links';
 import { validateHtmlArtifact } from '../artifacts/validate';
 import { createArtifactParser } from '../artifacts/parser';
 import {
@@ -1021,6 +1026,9 @@ export function ProjectView({
   // last name we persisted so re-renders during streaming don't spawn
   // duplicate writes.
   const savedArtifactRef = useRef<string | null>(null);
+  // Preserve HTML artifact ownership across user turns without using it for
+  // the same-turn duplicate-write guard above.
+  const lastHtmlArtifactLineageRef = useRef<HtmlArtifactLineage | null>(null);
   // Pending Write tool invocations: tool_use_id -> destination basename.
   // When the matching tool_result lands we refresh the file list and open
   // the file as a tab once. Keying off the tool_use_id (rather than
@@ -1250,6 +1258,7 @@ export function ProjectView({
     setAudioVoiceOptionsError(null);
     setArtifact(null);
     savedArtifactRef.current = null;
+    lastHtmlArtifactLineageRef.current = null;
     pendingWritesRef.current.clear();
     (async () => {
       try {
@@ -1354,6 +1363,7 @@ export function ProjectView({
     streamingConversationIdRef.current = null;
     setStreamingConversationId(null);
     savedArtifactRef.current = null;
+    lastHtmlArtifactLineageRef.current = null;
     pendingWritesRef.current.clear();
     if (messagesConversationIdRef.current !== activeConversationId) {
       messagesConversationIdRef.current = null;
@@ -1372,6 +1382,7 @@ export function ProjectView({
         setArtifact(null);
         setError(null);
         savedArtifactRef.current = null;
+        lastHtmlArtifactLineageRef.current = null;
         pendingWritesRef.current.clear();
         messagesConversationIdRef.current = activeConversationId;
         setMessagesConversationId(activeConversationId);
@@ -1385,6 +1396,7 @@ export function ProjectView({
         setArtifact(null);
         setError(message);
         savedArtifactRef.current = null;
+        lastHtmlArtifactLineageRef.current = null;
         pendingWritesRef.current.clear();
         messagesConversationIdRef.current = null;
         setMessagesConversationId(null);
@@ -1666,26 +1678,69 @@ export function ProjectView({
     async (art: Artifact, projectFilesSnapshot?: ProjectFile[]) => {
       const baseName = artifactBaseNameFor(art);
       const ext = artifactExtensionFor(art);
-      // Pick a name that doesn't collide with an existing project file.
-      // The first run uses `<base>.<ext>`; subsequent runs append `-2`, `-3`…
-      // so prior artifacts aren't silently overwritten.
+      // Pick a name that doesn't collide with an existing project file while
+      // keeping index.html stable for multi-page HTML artifacts.
       const currentProjectFiles = projectFilesSnapshot ?? projectFilesRef.current;
       const existing = new Set(currentProjectFiles.map((f) => f.name));
-      let fileName = `${baseName}${ext}`;
-      let n = 2;
-      while (existing.has(fileName) && savedArtifactRef.current !== fileName) {
-        fileName = `${baseName}-${n}${ext}`;
-        n += 1;
-      }
+      const htmlArtifactLineageMatch =
+        ext === '.html' && !savedArtifactRef.current
+          ? matchingHtmlArtifactLineage(art, lastHtmlArtifactLineageRef.current, currentProjectFiles)
+          : null;
+      const savedArtifactName =
+        savedArtifactRef.current ?? htmlArtifactLineageMatch?.fileName ?? null;
+      const artifactLineageToken =
+        ext === '.html'
+          ? normalizeHtmlArtifactLineageToken(art.lineageToken) ||
+            normalizeHtmlArtifactLineageToken(htmlArtifactLineageMatch?.lineageToken) ||
+            randomUUID()
+          : '';
+      const canOverwriteExistingEntry = canOverwriteHtmlArtifactEntry({
+        baseName,
+        ext,
+        projectFiles: currentProjectFiles,
+        savedArtifactName,
+      });
+      const fileName = resolveHtmlArtifactFileName({
+        baseName,
+        ext,
+        existingFileNames: existing,
+        savedArtifactName,
+        canOverwriteExistingEntry,
+      });
+      const artifactGroupIdentifier =
+        ext === '.html'
+          ? htmlArtifactGroupIdentifierFor(currentProjectFiles, fileName, {
+              canReuseExistingGroup:
+                canOverwriteExistingEntry || savedArtifactName === fileName,
+              savedArtifactName,
+            })
+          : undefined;
+      const html =
+        ext === '.html'
+          ? rewriteHtmlLinksToCurrentProjectFiles(art.html, currentProjectFiles, {
+              artifactGroupIdentifier,
+            })
+          : art.html;
       if (ext === '.html') {
         const pointerTarget = resolveHtmlPointerArtifactTarget({
-          content: art.html,
+          content: html,
           candidateFileName: fileName,
           projectFiles: currentProjectFiles,
         });
         if (pointerTarget) {
           if (savedArtifactRef.current === pointerTarget) return;
           savedArtifactRef.current = pointerTarget;
+          const pointerFile = currentProjectFiles.find((f) => f.name === pointerTarget || f.path === pointerTarget);
+          const pointerGroup = pointerFile?.artifactManifest?.metadata?.artifactGroupIdentifier ?? '';
+          const pointerLineageToken = normalizeHtmlArtifactLineageToken(
+            pointerFile?.artifactManifest?.metadata?.artifactLineageToken,
+          );
+          lastHtmlArtifactLineageRef.current = htmlArtifactLineageFor(
+            art,
+            pointerTarget,
+            String(pointerGroup),
+            pointerLineageToken || artifactLineageToken,
+          );
           requestOpenFile(pointerTarget);
           return;
         }
@@ -1696,7 +1751,7 @@ export function ProjectView({
       // when only Edit-tool changes happened this turn. Without this guard,
       // such content lands as a phantom HTML file in the project panel.
       if (ext === '.html') {
-        const validation = validateHtmlArtifact(art.html);
+        const validation = validateHtmlArtifact(html);
         if (!validation.ok) {
           setError(`Refused to save artifact "${art.identifier || art.title || 'untitled'}": ${validation.reason}`);
           return;
@@ -1709,6 +1764,8 @@ export function ProjectView({
         identifier: art.identifier,
         artifactType: art.artifactType,
         inferred: false,
+        ...(artifactGroupIdentifier ? { artifactGroupIdentifier } : {}),
+        ...(ext === '.html' ? { artifactLineageToken } : {}),
       };
       const manifest =
         ext === '.html'
@@ -1728,7 +1785,7 @@ export function ProjectView({
                 designSystemId: project.designSystemId,
               },
             });
-      const file = await writeProjectTextFile(project.id, fileName, art.html, {
+      const file = await writeProjectTextFile(project.id, fileName, html, {
         artifactManifest: manifest ?? undefined,
       });
       if (file) {
@@ -1746,6 +1803,18 @@ export function ProjectView({
         // Auto-open the freshly-persisted artifact as a tab so the user
         // sees it without an extra click. The Write-tool path already does
         // this for tool-emitted files; this handles the artifact-tag path.
+        if (ext === '.html') {
+          const groupId = file.artifactManifest?.metadata?.artifactGroupIdentifier ?? artifactGroupIdentifier ?? '';
+          const fileLineageToken =
+            normalizeHtmlArtifactLineageToken(file.artifactManifest?.metadata?.artifactLineageToken) ||
+            artifactLineageToken;
+          lastHtmlArtifactLineageRef.current = htmlArtifactLineageFor(
+            art,
+            file.name,
+            String(groupId),
+            fileLineageToken,
+          );
+        }
         requestOpenFile(file.name);
       } else {
         // writeProjectTextFile collapses all failure paths (non-OK HTTP
@@ -2538,6 +2607,7 @@ export function ProjectView({
                 identifier: ev.identifier,
                 artifactType: ev.artifactType,
                 title: ev.title,
+                lineageToken: ev.lineageToken,
                 html: '',
               };
               setArtifact(parsedArtifact);
@@ -2649,6 +2719,16 @@ export function ProjectView({
                   );
                   if (recoveredExistingArtifact) {
                     savedArtifactRef.current = recoveredExistingArtifact.name;
+                    const recoveredGroupId = recoveredExistingArtifact.artifactManifest?.metadata?.artifactGroupIdentifier ?? '';
+                    const recoveredLineageToken = normalizeHtmlArtifactLineageToken(
+                      recoveredExistingArtifact.artifactManifest?.metadata?.artifactLineageToken,
+                    );
+                    lastHtmlArtifactLineageRef.current = htmlArtifactLineageFor(
+                      parsedArtifact,
+                      recoveredExistingArtifact.name,
+                      String(recoveredGroupId),
+                      recoveredLineageToken,
+                    );
                     requestOpenFile(recoveredExistingArtifact.name);
                   } else {
                     await persistArtifact(parsedArtifact, nextFiles);
@@ -3200,6 +3280,7 @@ export function ProjectView({
               identifier: ev.identifier,
               artifactType: ev.artifactType,
               title: ev.title,
+              lineageToken: ev.lineageToken,
               html: '',
             };
             setArtifact(parsedArtifact);
@@ -5657,6 +5738,152 @@ function artifactBaseNameFor(art: Artifact): string {
       .replace(/^-+|-+$/g, '')
       .slice(0, 60) || 'artifact'
   );
+}
+
+interface HtmlArtifactLineage {
+  fileName: string;
+  identifier: string;
+  title: string;
+  artifactType: string;
+  artifactGroupIdentifier: string;
+  documentTitle: string;
+  lineageToken: string;
+}
+
+interface HtmlArtifactLineageMatch {
+  fileName: string;
+  lineageToken: string;
+}
+
+function htmlDocumentTitle(html: string): string {
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const rawTitle = titleMatch?.[1] ?? '';
+  return rawTitle.replace(/\s+/g, ' ').trim();
+}
+
+function normalizeHtmlArtifactLineageToken(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function htmlArtifactLineageFor(
+  art: Artifact,
+  fileName: string,
+  artifactGroupIdentifier: string,
+  lineageToken?: string,
+): HtmlArtifactLineage {
+  return {
+    fileName,
+    identifier: art.identifier ?? '',
+    title: art.title ?? '',
+    artifactType: art.artifactType ?? '',
+    artifactGroupIdentifier,
+    documentTitle: htmlDocumentTitle(art.html ?? ''),
+    lineageToken: normalizeHtmlArtifactLineageToken(lineageToken ?? art.lineageToken),
+  };
+}
+
+function htmlArtifactLineageTitleFallbackMatches(art: Artifact, lineage: HtmlArtifactLineage): boolean {
+  const currentTitle = art.title ?? '';
+  const currentDocumentTitle = htmlDocumentTitle(art.html ?? '');
+  return (
+    currentTitle !== '' &&
+    currentTitle === lineage.title &&
+    currentDocumentTitle !== '' &&
+    currentDocumentTitle === lineage.documentTitle
+  );
+}
+
+function htmlArtifactLineageTokenlessFallbackMatches(
+  art: Artifact,
+  lineage: HtmlArtifactLineage,
+): boolean {
+  const currentTitle = art.title ?? '';
+  const currentDocumentTitle = htmlDocumentTitle(art.html ?? '');
+  const wrapperTitleMatches = currentTitle !== '' && currentTitle === lineage.title;
+  const documentTitleMatches =
+    currentDocumentTitle !== '' && currentDocumentTitle === lineage.documentTitle;
+  const lineageHadIndependentWrapperTitle =
+    lineage.title !== '' &&
+    lineage.documentTitle !== '' &&
+    lineage.title !== lineage.documentTitle;
+  return wrapperTitleMatches || (documentTitleMatches && lineageHadIndependentWrapperTitle);
+}
+
+function matchingHtmlArtifactLineage(
+  art: Artifact,
+  lineage: HtmlArtifactLineage | null,
+  projectFiles: ProjectFile[],
+): HtmlArtifactLineageMatch | null {
+  if (!lineage) return null;
+  if ((art.identifier ?? '') !== lineage.identifier) return null;
+  if ((art.artifactType ?? '') !== lineage.artifactType) return null;
+  if (lineage.artifactGroupIdentifier === '') return null;
+
+  // Verify the lineage file still exists and has the same group
+  const lineageFile = projectFiles.find(
+    (f) => f.name === lineage.fileName || f.path === lineage.fileName,
+  );
+  if (!lineageFile) return null;
+  const currentGroup =
+    lineageFile.artifactManifest?.metadata?.artifactGroupIdentifier ?? '';
+  if (currentGroup !== lineage.artifactGroupIdentifier) return null;
+
+  const lineageFileToken = normalizeHtmlArtifactLineageToken(
+    lineageFile.artifactManifest?.metadata?.artifactLineageToken,
+  );
+  if (lineage.lineageToken !== '' && lineageFileToken !== lineage.lineageToken) return null;
+
+  const currentToken = normalizeHtmlArtifactLineageToken(art.lineageToken);
+  if (currentToken !== '' && lineage.lineageToken !== '' && currentToken !== lineage.lineageToken) {
+    return null;
+  }
+  const tokenMatches =
+    currentToken !== '' && lineage.lineageToken !== '' && currentToken === lineage.lineageToken;
+  const titleFallbackMatches =
+    currentToken === '' && lineage.lineageToken !== ''
+      ? htmlArtifactLineageTokenlessFallbackMatches(art, lineage)
+      : htmlArtifactLineageTitleFallbackMatches(art, lineage);
+  if (!tokenMatches && !titleFallbackMatches) return null;
+
+  return { fileName: lineage.fileName, lineageToken: lineage.lineageToken };
+}
+
+function htmlArtifactGroupIdentifierFor(
+  projectFiles: ProjectFile[],
+  fileName: string,
+  options: { canReuseExistingGroup: boolean; savedArtifactName?: string | null },
+): string {
+  const existingFile = projectFiles.find((file) => file.name === fileName || file.path === fileName);
+  const existingFileGroup = existingArtifactGroupIdentifier(
+    existingFile?.artifactManifest?.metadata?.artifactGroupIdentifier,
+  );
+  if (options.canReuseExistingGroup && existingFileGroup) {
+    return existingFileGroup;
+  }
+  const savedArtifactFile = options.savedArtifactName
+    ? projectFiles.find((file) => file.name === options.savedArtifactName || file.path === options.savedArtifactName)
+    : null;
+  const savedArtifactGroup = existingArtifactGroupIdentifier(
+    savedArtifactFile?.artifactManifest?.metadata?.artifactGroupIdentifier,
+  );
+  if (options.canReuseExistingGroup && savedArtifactGroup) {
+    return savedArtifactGroup;
+  }
+
+  return `html-artifact:${fileName}`;
+}
+
+function existingArtifactGroupIdentifier(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  return normalizeArtifactGroupSegment(value).length > 0 ? value : null;
+}
+
+function normalizeArtifactGroupSegment(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 export function findExistingArtifactProjectFile(

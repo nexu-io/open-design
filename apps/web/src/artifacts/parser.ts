@@ -10,7 +10,7 @@
 
 export type ArtifactEvent =
   | { type: 'text'; delta: string }
-  | { type: 'artifact:start'; identifier: string; artifactType: string; title: string }
+  | { type: 'artifact:start'; identifier: string; artifactType: string; title: string; lineageToken: string }
   | { type: 'artifact:chunk'; identifier: string; delta: string }
   | { type: 'artifact:end'; identifier: string; fullContent: string };
 
@@ -23,6 +23,7 @@ interface ParserState {
   identifier: string;
   artifactType: string;
   title: string;
+  lineageToken: string;
   content: string;
 }
 
@@ -165,6 +166,7 @@ export function createArtifactParser() {
     identifier: '',
     artifactType: '',
     title: '',
+    lineageToken: '',
     content: '',
   };
 
@@ -194,6 +196,7 @@ export function createArtifactParser() {
         state.identifier = attrs['identifier'] ?? '';
         state.artifactType = attrs['type'] ?? '';
         state.title = attrs['title'] ?? '';
+        state.lineageToken = attrs['lineageToken'] ?? '';
         state.content = '';
         state.buffer = state.buffer.slice(open.end);
         yield {
@@ -201,6 +204,7 @@ export function createArtifactParser() {
           identifier: state.identifier,
           artifactType: state.artifactType,
           title: state.title,
+          lineageToken: state.lineageToken,
         };
         continue;
       }
@@ -228,6 +232,7 @@ export function createArtifactParser() {
       state.identifier = '';
       state.artifactType = '';
       state.title = '';
+      state.lineageToken = '';
       state.content = '';
     }
   }
