@@ -1545,13 +1545,15 @@
 .app .composer-import,
 .app .composer-research,
 .app .composer-send {
-  border-radius: var(--radius);
+  /* radius-sm to match the unified 28px composer-row control system; this is
+     the later/winning stylesheet, so it owns the + and Send radius. */
+  border-radius: var(--radius-sm);
 }
 .chat-composer-fixed-layer .composer-row .icon-btn,
 .chat-composer-fixed-layer .composer-import,
 .chat-composer-fixed-layer .composer-research,
 .chat-composer-fixed-layer .composer-send {
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
 }
 .app .composer-row .icon-btn {
   width: 28px;
