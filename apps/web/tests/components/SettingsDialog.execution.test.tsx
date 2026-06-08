@@ -477,7 +477,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
     selectGatewayPreset('DeepSeek — OpenAI');
 
-    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('deepseek-chat');
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('deepseek-v4-pro');
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe('https://api.deepseek.com');
   });
 

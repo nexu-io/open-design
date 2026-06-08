@@ -101,6 +101,11 @@ const residualAllowedExactPaths = new Set([
   "tools/pack/resources/mac/notarize.cjs",
   // electron-builder hook path; CJS compatibility entry used by tools-pack desktop builds.
   "tools/pack/resources/web-standalone-after-pack.cjs",
+  // Maintainer helper scripts that synthesize plugin / design-system i18n
+  // catalogs directly from a checked-in source. Run as ad-hoc Node scripts,
+  // not bundled into any app runtime.
+  "scripts/add-plugin-i18n.cjs",
+  "scripts/generate-design-system-i18n.cjs",
 ]);
 
 const residualAllowedPathPrefixes = [
@@ -738,6 +743,15 @@ const toolsRootAllowlist = new Map<string, "directory" | "file">([
   ["link-check", "directory"],
   ["pack", "directory"],
   ["serve", "directory"],
+  // Local-only portability shims that ship in-repo so contributors on
+  // locked-down Windows hosts (no admin, no symlink) can still build the
+  // NSIS installer without installing anything system-wide.
+  ["portable", "directory"],
+  // Historical personal PR-duty control plane (PerishCode/duty). The repo
+  // shipped `tools/pr/` as `pnpm tools-pr` once; the runtime moved out,
+  // but the directory still exists on disk for contributors with stale
+  // worktrees. It is not an active product surface.
+  ["pr", "directory"],
 ]);
 
 async function checkToolsLayout(): Promise<boolean> {

@@ -1,14 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { readExpandedIndexCss } from '../helpers/read-expanded-css';
+import { cssBlock } from '../helpers/css-block';
 
 const indexCss = readExpandedIndexCss();
-
-function cssBlock(selector: string): string {
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(indexCss);
-  if (!match) throw new Error(`Missing CSS block for ${selector}`);
-  return match[1] ?? '';
-}
 
 function cssVar(block: string, name: string): string {
   const match = new RegExp(`${name}:\\s*([^;]+);`).exec(block);
@@ -63,16 +57,16 @@ function contrastRatio(foreground: string, background: string): number {
 describe('filter pill hover contrast', () => {
   it('keeps hover labels readable in light and dark themes', () => {
     const rootVars = {
-      '--bg-muted': cssVar(cssBlock(':root'), '--bg-muted'),
-      '--text': cssVar(cssBlock(':root'), '--text'),
+      '--bg-muted': cssVar(cssBlock(indexCss, ':root'), '--bg-muted'),
+      '--text': cssVar(cssBlock(indexCss, ':root'), '--text'),
     };
     const darkVars = {
-      '--bg-muted': cssVar(cssBlock('[data-theme="dark"]'), '--bg-muted'),
-      '--text': cssVar(cssBlock('[data-theme="dark"]'), '--text'),
+      '--bg-muted': cssVar(cssBlock(indexCss, '[data-theme="dark"]'), '--bg-muted'),
+      '--text': cssVar(cssBlock(indexCss, '[data-theme="dark"]'), '--text'),
     };
-    const hover = cssBlock('button.filter-pill:hover:not(:disabled)');
-    const activeHover = cssBlock('button.filter-pill.active:hover:not(:disabled)');
-    const countHover = cssBlock('button.filter-pill:hover:not(:disabled) .filter-pill-count,\n.filter-pill.active .filter-pill-count');
+    const hover = cssBlock(indexCss, 'button.filter-pill:hover:not(:disabled)');
+    const activeHover = cssBlock(indexCss, 'button.filter-pill.active:hover:not(:disabled)');
+    const countHover = cssBlock(indexCss, 'button.filter-pill:hover:not(:disabled) .filter-pill-count,\n.filter-pill.active .filter-pill-count');
 
     for (const block of [hover, activeHover]) {
       expect(ruleValue(block, 'background')).toBe('var(--bg-muted)');
