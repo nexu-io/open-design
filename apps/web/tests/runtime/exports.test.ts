@@ -8,8 +8,10 @@ import {
   downloadImageDataUrl,
   buildSandboxedPreviewDocument,
   exportAsImage,
+  exportAsHtml,
   exportAsMd,
   exportAsPdf,
+  exportAsZip,
   exportProjectAsPdf,
   openSandboxedPreviewInNewTab,
   prepareImageExportTarget,
@@ -18,6 +20,26 @@ import {
 
 function mockResponse(headers: Record<string, string>): Response {
   return { headers: new Headers(headers) } as Response;
+}
+
+async function storedZipEntryText(blob: Blob, path: string): Promise<string | null> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const pathBytes = new TextEncoder().encode(path);
+  for (let offset = 0; offset + 30 <= bytes.length; offset++) {
+    const view = new DataView(bytes.buffer, bytes.byteOffset + offset, bytes.byteLength - offset);
+    if (view.getUint32(0, true) !== 0x04034b50) continue;
+    const method = view.getUint16(8, true);
+    const compressedSize = view.getUint32(18, true);
+    const nameLength = view.getUint16(26, true);
+    const extraLength = view.getUint16(28, true);
+    const nameStart = offset + 30;
+    const dataStart = nameStart + nameLength + extraLength;
+    const name = bytes.slice(nameStart, nameStart + nameLength);
+    if (method === 0 && name.length === pathBytes.length && name.every((b, i) => b === pathBytes[i])) {
+      return new TextDecoder().decode(bytes.slice(dataStart, dataStart + compressedSize));
+    }
+  }
+  return null;
 }
 
 describe('archiveRootFromFilePath', () => {
@@ -307,6 +329,61 @@ describe('exportAsMd', () => {
   });
 });
 
+describe('watermarked artifact downloads', () => {
+  let capturedBlob: Blob | undefined;
+  let capturedFilename: string | undefined;
+
+  beforeEach(() => {
+    capturedBlob = undefined;
+    capturedFilename = undefined;
+    vi.stubGlobal('URL', {
+      createObjectURL: (blob: Blob) => {
+        capturedBlob = blob;
+        return 'blob:test';
+      },
+      revokeObjectURL: () => {},
+    });
+    vi.stubGlobal('document', {
+      createElement: () => {
+        const anchor = { href: '', click: () => {} } as { href: string; download?: string; click: () => void };
+        Object.defineProperty(anchor, 'download', {
+          set(value: string) {
+            capturedFilename = value;
+          },
+          get() {
+            return capturedFilename ?? '';
+          },
+        });
+        return anchor;
+      },
+      body: { appendChild: () => {}, removeChild: () => {} },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('injects Open Design attribution into HTML downloads', async () => {
+    exportAsHtml('<!doctype html><body><main>Demo</main></body>', 'Demo');
+
+    expect(capturedFilename).toBe('Demo.html');
+    const html = await capturedBlob!.text();
+    expect(html).toContain('data-open-design-attribution="true"');
+    expect(html).toContain('Made with Open Design');
+    expect(html).toContain('Remix');
+  });
+
+  it('injects Open Design attribution into ZIP index.html', async () => {
+    exportAsZip('<!doctype html><body><main>Demo</main></body>', 'Demo');
+
+    expect(capturedFilename).toBe('Demo.zip');
+    const html = await storedZipEntryText(capturedBlob!, 'Demo/index.html');
+    expect(html).toContain('data-open-design-attribution="true"');
+    expect(html).toContain('Made with Open Design');
+  });
+});
+
 describe('sandboxed preview Blob exports', () => {
   let capturedBlob: Blob | undefined;
   let openedFeatures: string | undefined;
@@ -388,6 +465,8 @@ describe('sandboxed preview Blob exports', () => {
     expect(wrapper).toContain('sandbox="allow-scripts allow-modals"');
     expect(wrapper).not.toContain('allow-same-origin');
     expect(wrapper).toContain('&lt;script&gt;window.parent.document.body.innerHTML=&quot;owned&quot;&lt;/script&gt;');
+    expect(wrapper).toContain('data-open-design-attribution=&quot;true&quot;');
+    expect(wrapper).toContain('Made with Open Design');
     expect(wrapper).not.toContain('<script>window.parent.document.body.innerHTML="owned"</script>');
   });
 
@@ -416,6 +495,7 @@ describe('sandboxed preview Blob exports', () => {
     const doc = await capturedBlob!.text();
     expect(doc).not.toContain('sandbox="allow-scripts allow-modals"');
     expect(doc).toContain('<main>Trusted local document</main>');
+    expect(doc).toContain('data-open-design-attribution="true"');
   });
 
   it('shows an alert and revokes the blob URL when the popup is blocked', async () => {
@@ -452,6 +532,7 @@ describe('sandboxed preview Blob exports', () => {
     expect(htmlArg).toContain('sandbox="allow-scripts"');
     expect(htmlArg).not.toContain('allow-modals');
     expect(htmlArg).toContain('&lt;script&gt;window.parent.document.body.innerHTML=&quot;owned&quot;&lt;/script&gt;');
+    expect(htmlArg).toContain('data-open-design-attribution=&quot;true&quot;');
     expect(htmlArg).not.toContain('<script>window.parent.document.body.innerHTML="owned"</script>');
     // Verify the readiness handshake is present — the sandboxed iframe posts
     // 'OD_PRINT_READY' to the parent once fonts and images are loaded.

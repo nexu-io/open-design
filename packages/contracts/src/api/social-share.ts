@@ -1,4 +1,5 @@
 export const OPEN_DESIGN_GITHUB_REPO_URL = 'https://github.com/nexu-io/open-design';
+const OPEN_DESIGN_PROJECT_ATTRIBUTION = `Built with Open Design. Repo: ${OPEN_DESIGN_GITHUB_REPO_URL}`;
 
 export type SocialShareTargetKind = 'open-design-repo' | 'project-html';
 
@@ -164,8 +165,8 @@ export function buildSocialSharePayload(input: SocialShareRequest): SocialShareR
   const fallbackText = kind === 'project-html'
     ? `Built with Open Design: ${title}. Open Design repo: ${OPEN_DESIGN_GITHUB_REPO_URL}`
     : 'Open Design is an open-source workspace for creating, editing, deploying, and handing off design artifacts.';
-  const text = cleanText(input.text, fallbackText);
-  const copyText = cleanText(input.copyText, `${text}\n${url}`);
+  const text = withProjectAttribution(kind, cleanText(input.text, fallbackText));
+  const copyText = withProjectAttribution(kind, cleanText(input.copyText, `${text}\n${url}`));
   const platforms = PLATFORM_DESCRIPTORS.map((descriptor) => ({
     platform: descriptor.platform,
     mode: descriptor.mode,
@@ -192,4 +193,10 @@ export function buildSocialSharePayload(input: SocialShareRequest): SocialShareR
     githubRepoUrl: OPEN_DESIGN_GITHUB_REPO_URL,
     platforms,
   };
+}
+
+function withProjectAttribution(kind: SocialShareTargetKind, value: string): string {
+  if (kind !== 'project-html') return value;
+  if (value.includes(OPEN_DESIGN_GITHUB_REPO_URL) || /Built with Open Design/i.test(value)) return value;
+  return `${value}\n${OPEN_DESIGN_PROJECT_ATTRIBUTION}`;
 }

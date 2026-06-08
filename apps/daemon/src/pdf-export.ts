@@ -1,5 +1,6 @@
 import path from 'node:path';
 
+import { injectOpenDesignAttribution } from '@open-design/contracts';
 import type { DesktopExportPdfInput } from '@open-design/sidecar-proto';
 
 import { readProjectFile } from './projects.js';
@@ -22,7 +23,7 @@ export async function buildDesktopPdfExportInput(
     baseHref: rawBaseHref(options.daemonUrl, options.projectId, options.fileName),
     deck: options.deck === true,
     defaultFilename: `${safeFilename(title, 'artifact')}.pdf`,
-    html: file.buffer.toString('utf8'),
+    html: injectOpenDesignAttribution(file.buffer.toString('utf8')),
     title,
   };
 }

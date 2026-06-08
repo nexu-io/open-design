@@ -37,6 +37,8 @@ describe('buildProjectArchive', () => {
       .map((entry) => entry.name)
       .sort();
     expect(fileEntries).toEqual(['DESIGN-HANDOFF.md', 'DESIGN-MANIFEST.json', 'frames/phone.html', 'index.html', 'src/app.css']);
+    expect(await zip.file('index.html')?.async('string')).toContain('data-open-design-attribution="true"');
+    expect(await zip.file('frames/phone.html')?.async('string')).toContain('Made with Open Design');
   });
 
   it('zips the whole project when no root is given', async () => {

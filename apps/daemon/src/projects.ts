@@ -10,6 +10,7 @@
 import { link, lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import JSZip from 'jszip';
+import { injectOpenDesignAttribution } from '@open-design/contracts';
 import {
   inferLegacyManifest,
   parsePersistedManifest,
@@ -312,9 +313,9 @@ export async function buildProjectArchive(projectsRoot, projectId, root, metadat
   const zip = new JSZip();
   for (const entry of entries) {
     const buf = await readFile(entry.fullPath);
-    zip.file(entry.relPath, buf, {
+    zip.file(entry.relPath, archiveFileContent(entry.relPath, buf), {
       date: new Date(entry.mtime),
-      binary: true,
+      binary: !isHtmlArchiveFile(entry.relPath),
     });
   }
   addDesignHandoff(zip, entries, archiveBaseName || path.basename(projectRoot));
@@ -416,9 +417,9 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames, meta
     }
 
     const buf = await readFile(filePath);
-    zip.file(name, buf, {
+    zip.file(name, archiveFileContent(name, buf), {
       date: new Date(st.mtimeMs),
-      binary: true,
+      binary: !isHtmlArchiveFile(name),
     });
     packed += 1;
   }
@@ -469,6 +470,15 @@ async function collectArchiveEntries(dir, relDir, out) {
     const st = await stat(full);
     out.push({ relPath: rel, fullPath: full, mtime: st.mtimeMs });
   }
+}
+
+function isHtmlArchiveFile(name) {
+  return /\.html?$/i.test(String(name || ''));
+}
+
+function archiveFileContent(name, buf) {
+  if (!isHtmlArchiveFile(name)) return buf;
+  return injectOpenDesignAttribution(buf.toString('utf8'));
 }
 
 function addDesignHandoff(zip, entries, projectLabel) {

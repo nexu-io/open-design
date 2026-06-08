@@ -21,6 +21,7 @@ import {
   isOpenDesignHostAvailable,
   printHostPdf,
 } from '@open-design/host';
+import { injectOpenDesignAttribution } from '@open-design/contracts';
 
 const DESIGN_HANDOFF_FILENAME = 'DESIGN-HANDOFF.md';
 const DESIGN_MANIFEST_FILENAME = 'DESIGN-MANIFEST.json';
@@ -51,7 +52,7 @@ function triggerDownload(blob: Blob, filename: string): void {
 }
 
 export function exportAsHtml(html: string, title: string): void {
-  const doc = buildSrcdoc(html);
+  const doc = injectOpenDesignAttribution(buildSrcdoc(html));
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
   triggerDownload(blob, `${safeFilename(title, 'artifact')}.html`);
 }
@@ -293,7 +294,7 @@ ${list(assetFiles)}
 }
 
 export function exportAsZip(html: string, title: string): void {
-  const doc = buildSrcdoc(html);
+  const doc = injectOpenDesignAttribution(buildSrcdoc(html));
   const slug = safeFilename(title, 'artifact');
   const blob = buildZip([
     { path: `${slug}/index.html`, content: doc },
@@ -912,7 +913,7 @@ export async function exportAsPdf(
   // Generate a per-export nonce so the print-ready handshake is resistant to
   // spoofing by untrusted scripts inside the exported artifact.
   const nonce = randomUUID();
-  let doc = buildSrcdoc(html, opts);
+  let doc = injectOpenDesignAttribution(buildSrcdoc(html, opts));
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
   doc = injectPrintReadyHandshake(doc, nonce);
 

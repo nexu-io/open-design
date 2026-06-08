@@ -36,4 +36,19 @@ describe('social-share contract', () => {
     expect(payload.platforms.find((target) => target.platform === 'telegram')?.shareUrl)
       .toContain('https%3A%2F%2Fexample.com%2Fopen-design-demo');
   });
+
+  it('adds Open Design attribution to custom deployed-project share copy', () => {
+    const payload = buildSocialSharePayload({
+      kind: 'project-html',
+      url: 'https://example.com/open-design-demo',
+      title: 'Demo',
+      text: 'Check out this prototype',
+      copyText: 'Check out this prototype\nhttps://example.com/open-design-demo',
+    });
+
+    expect(payload.text).toContain('Built with Open Design');
+    expect(payload.text).toContain(OPEN_DESIGN_GITHUB_REPO_URL);
+    expect(payload.copyText).toContain('Built with Open Design');
+    expect(payload.copyText).toContain(OPEN_DESIGN_GITHUB_REPO_URL);
+  });
 });

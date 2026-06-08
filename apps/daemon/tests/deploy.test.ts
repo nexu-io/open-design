@@ -233,6 +233,8 @@ describe('deploy file set', () => {
     const files = await buildDeployFileSet(projectsRoot, projectId, 'page.html');
 
     expect(files.map((f) => f.file)).toEqual(['index.html']);
+    expect(files[0]?.data.toString('utf8')).toContain('data-open-design-attribution="true"');
+    expect(files[0]?.data.toString('utf8')).toContain('Made with Open Design');
   });
 
   it('can include all visible project files while keeping the selected entry at index.html', async () => {

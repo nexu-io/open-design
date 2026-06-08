@@ -38,9 +38,11 @@ describe('buildDesktopPdfExportInput', () => {
       baseHref: 'http://127.0.0.1:7456/api/projects/proj-pdf-test/raw/deck/',
       deck: true,
       defaultFilename: 'Seed-Deck.pdf',
-      html: '<!doctype html><section class="slide">One</section>',
+      html: expect.stringContaining('data-open-design-attribution="true"'),
       title: 'Seed Deck',
     });
+    expect(input.html).toContain('<!doctype html><section class="slide">One</section>');
+    expect(input.html).toContain('Made with Open Design');
   });
 
   it('falls back to the file basename when the caller omits a title', async () => {
@@ -93,10 +95,11 @@ describe('POST /api/projects/:id/export/pdf', () => {
           baseHref: `${started.url}/api/projects/${encodeURIComponent(projectId)}/raw/deck/`,
           deck: true,
           defaultFilename: 'Seed-Deck.pdf',
-          html: '<!doctype html><section class="slide">One</section>',
+          html: expect.stringContaining('data-open-design-attribution="true"'),
           title: 'Seed Deck',
         },
       ]);
+      expect((calls[0] as { html: string }).html).toContain('Made with Open Design');
     } finally {
       await new Promise<void>((resolve) => started.server.close(resolve));
     }

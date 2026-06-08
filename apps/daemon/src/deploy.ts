@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
+import { injectOpenDesignAttribution } from '@open-design/contracts';
 import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
@@ -248,7 +249,7 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
   const html = entry.buffer.toString('utf8');
   const entryBase = path.posix.dirname(entryPath);
   const deployHtml = injectDeployHookScript(
-    rewriteEntryHtmlReferences(html, entryBase),
+    injectOpenDesignAttribution(rewriteEntryHtmlReferences(html, entryBase)),
     options.hookScriptUrl ?? process.env.OD_DEPLOY_HOOK_SCRIPT_URL,
   );
   const files = new Map<string, DeployFile>();
