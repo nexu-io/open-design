@@ -18,7 +18,7 @@ export interface ClaudeCliDiagnostic {
   retryable: boolean;
 }
 
-function envValue(
+export function envValue(
   env: Record<string, unknown> | null | undefined,
   key: string,
 ): string | null {

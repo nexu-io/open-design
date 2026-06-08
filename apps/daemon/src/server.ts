@@ -241,6 +241,8 @@ import {
   classifyAgentServiceFailure,
   cursorAuthGuidance,
 } from './runtimes/auth.js';
+import { invokeAnthropicAgent, invokeOpenaiAgent } from './runtimes/invoke-http.js';
+import { ANTHROPIC_SSE_FORMAT, HTTP_RUNTIME_BIN, OPENAI_SSE_FORMAT } from './runtimes/sentinels.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createQoderStreamHandler } from './qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
@@ -11236,8 +11238,15 @@ export async function startServer({
         'AGENT_UNAVAILABLE',
         `unknown agent: ${agentId}`,
       );
-    if (!def.bin)
+    if (!def.bin || def.bin === '') {
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    }
+    // HTTP-runtime sentinel: the launch path below skips `child_process.spawn`
+    // entirely and routes through `invokeHttpAgent` (runtimes/invoke-http.ts).
+    // The streamFormat dispatch in the consumer block below keys on
+    // ANTHROPIC_SSE_FORMAT; this `isHttpRuntime` flag is used by every guard
+    // that would otherwise assume a child process exists.
+    const isHttpRuntime = def.bin === HTTP_RUNTIME_BIN;
     const safeCommentAttachments =
       normalizeCommentAttachments(commentAttachments);
     if (
@@ -12250,8 +12259,10 @@ export async function startServer({
     // If detection can't find the binary, surface a friendly SSE error
     // pointing at /api/agents instead of silently falling back to
     // spawn(def.bin) — that fallback re-introduces the exact ENOENT symptom
-    // from issue #10.
-    if (!resolvedBin || !agentLaunch.launchPath) {
+    // from issue #10. HTTP runtimes don't have a binary; the `isHttpRuntime`
+    // check above (L11241) flagged them so they can fall through to the
+    // invokeHttpAgent path with no launchPath.
+    if (!isHttpRuntime && (!resolvedBin || !agentLaunch.launchPath)) {
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       send('error', createSseErrorPayload(
@@ -12316,6 +12327,168 @@ export async function startServer({
       toolTokenExpiresAt: toolTokenGrant?.expiresAt ?? null,
     });
     noteAgentActivity();
+
+    // HTTP runtimes (the `anthropic` and `openai-compatible`
+    // adapters) skip the spawn block entirely — they have no child
+    // process and no stdout pipe. The run already sent its 'start'
+    // SSE frame above, so we fire the HTTP request from a self-
+    // contained inline event-sink and `return` early. The sink
+    // inlines the first-token stamping + substantive-output tracking
+    // that `sendAgentEvent` (declared below the spawn block) would
+    // otherwise centralize, because we cannot reach those helpers
+    // from a TDZ-safe `return` site. The role-marker guard is
+    // instantiated locally so the HTTP path can still abort on a
+    // fabricated role marker even though we never reach the spawn
+    // block.
+    //
+    // Both adapters share the entire inline event-sink; the only
+    // thing that varies is which `invokeXxxAgent` we call. Helper
+    // `runHttpBranch` extracts the shared wiring so adding a third
+    // HTTP runtime (e.g. gemini) is a single new branch plus the
+    // matching `invokeXxxAgent` wrapper in `runtimes/invoke-http.ts`.
+    if (isHttpRuntime) {
+      const runHttpBranch = (
+        invoke: (input: {
+          def: typeof def;
+          prompt: string;
+          model: string | null;
+          runId: string;
+          env: NodeJS.ProcessEnv;
+          lifecycle: Parameters<typeof invokeAnthropicAgent>[0]['lifecycle'];
+        }) => Promise<{ httpStatus: number; error: Error | null }>,
+        failureMessage: string,
+      ): void => {
+        let httpErrored = false;
+        let httpProducedOutput = false;
+        let httpStreamError: string | null = null;
+        // Inline mirror of FIRST_TOKEN_AGENT_EVENT_TYPES (declared later at
+        // L12726). Keep the two in sync if a new event type qualifies.
+        const HTTP_FIRST_TOKEN_TYPES = new Set(['text_delta', 'thinking_delta']);
+        // Inline mirror of SUBSTANTIVE_AGENT_EVENT_TYPES (L12712). Same
+        // reasoning — duplicate for the same reason.
+        const HTTP_SUBSTANTIVE_TYPES = new Set([
+          'text_delta',
+          'thinking_delta',
+          'tool_use',
+          'tool_result',
+          'artifact',
+        ]);
+        // Per-run role-marker guard (#3247). Same `createRoleMarkerGuard`
+        // instance the spawn block builds later — instantiated here so the
+        // HTTP path can still abort on a fabricated role marker even
+        // though we never reach the spawn block.
+        const httpRunGuard = createRoleMarkerGuard('run');
+        let httpRunWarned = false;
+        let httpRoleMarkerAbortFired = false;
+        const httpAbortForRoleMarker = (marker: string) => {
+          if (httpRoleMarkerAbortFired) return;
+          httpRoleMarkerAbortFired = true;
+          send(
+            'error',
+            createSseErrorPayload(
+              'ROLE_MARKER_HALLUCINATION',
+              `Run terminated: model emitted fabricated role marker (\`${marker}\`). ` +
+                'No further tokens or tool calls accepted from this turn. ' +
+                'See https://github.com/nexu-io/open-design/issues/3247.',
+              { retryable: true },
+            ),
+          );
+          // The HTTP path has no child to kill and no ACP session to abort.
+          // Setting cancelRequested makes `shouldAbort` return true, which
+          // trips the AbortController in the invokeXxxAgent and ends the
+          // stream at the next chunk boundary; `onDone` then finalizes.
+          run.cancelRequested = true;
+        };
+        void invoke({
+          def,
+          prompt: composed,
+          model: safeModel,
+          runId,
+          env: process.env,
+          lifecycle: {
+            // The 'start' SSE frame was already sent above; nothing to do.
+            onStart: () => {},
+            onActivity: () => noteAgentActivity(),
+            onEvent: (ev) => {
+              if (!ev || typeof ev !== 'object') return;
+              if (ev.type === 'error') {
+                if (!httpStreamError) httpStreamError = String(ev.message || 'Agent stream error');
+                return;
+              }
+              lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
+              noteAgentActivity();
+              if (ev.type && HTTP_FIRST_TOKEN_TYPES.has(ev.type) && run.analyticsTelemetry && !run.analyticsTelemetry.firstTokenAt) {
+                run.analyticsTelemetry = { ...run.analyticsTelemetry, firstTokenAt: Date.now() };
+              }
+              if (ev.type && HTTP_SUBSTANTIVE_TYPES.has(ev.type)) {
+                httpProducedOutput = true;
+              }
+              if (ev.type === 'text_delta' && typeof ev.delta === 'string') {
+                const safe = httpRunGuard.feedText(ev.delta);
+                if (safe.length > 0) send('agent', { type: 'text_delta', delta: safe });
+                if (httpRunGuard.contaminated && !httpRunWarned) {
+                  httpRunWarned = true;
+                  const warn = httpRunGuard.warningEvent();
+                  if (warn) {
+                    send('agent', warn);
+                    httpAbortForRoleMarker(warn.marker);
+                  }
+                }
+                return;
+              }
+              send('agent', ev);
+            },
+            onError: (err) => {
+              httpErrored = true;
+              if (!httpStreamError) httpStreamError = err.message;
+            },
+            onDone: ({ httpStatus }) => {
+              clearInactivityWatchdog();
+              revokeToolToken('http_done');
+              unregisterChatAgentEventSink();
+              if (run.cancelRequested) return design.runs.finish(run, 'canceled', 0, null);
+              if (httpErrored) {
+                send('error', createSseErrorPayload(
+                  'AGENT_EXECUTION_FAILED',
+                  httpStreamError || failureMessage,
+                ));
+                return design.runs.finish(run, 'failed', 1, null);
+              }
+              if (httpStatus >= 400) {
+                send('error', createSseErrorPayload('AGENT_STREAM_ERROR', `upstream returned HTTP ${httpStatus}`));
+                return design.runs.finish(run, 'failed', 1, null);
+              }
+              if (!httpProducedOutput) {
+                send('error', createSseErrorPayload(
+                  'AGENT_EXECUTION_FAILED',
+                  `${failureMessage} (completed without producing any output.)`,
+                  { retryable: true },
+                ));
+                return design.runs.finish(run, 'failed', 0, null);
+              }
+              return design.runs.finish(run, 'succeeded', 0, null);
+            },
+            shouldAbort: () => run.cancelRequested,
+          },
+        });
+      };
+
+      if (def.streamFormat === OPENAI_SSE_FORMAT) {
+        runHttpBranch(
+          ({ def: d, prompt, model, runId: rid, env, lifecycle }) => invokeOpenaiAgent({ def: d, prompt, model, runId: rid, env, lifecycle }),
+          'OpenAI-compatible agent failed before completion.',
+        );
+        return;
+      }
+      // Default to Anthropic for any other HTTP stream format. New
+      // HTTP adapters should be added as explicit `if` branches above
+      // so the dispatch stays readable.
+      runHttpBranch(
+        ({ def: d, prompt, model, runId: rid, env, lifecycle }) => invokeAnthropicAgent({ def: d, prompt, model, runId: rid, env, lifecycle }),
+        'Anthropic-compatible agent failed before completion.',
+      );
+      return;
+    }
 
     let child;
     let acpSession = null;
