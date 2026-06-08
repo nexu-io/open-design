@@ -17,6 +17,16 @@ type OnboardingConfig = {
   agentModels: Record<string, { model: string; reasoning: string }>;
 };
 
+declare global {
+  interface Window {
+    __amrOnboardingCancelCalls?: number;
+    __amrOnboardingDelayNextSignedOutStatus?: boolean;
+    __amrOnboardingLoginCalls?: number;
+    __amrOnboardingSlowStatusResolved?: boolean;
+    __amrOnboardingStatusCalls?: number;
+  }
+}
+
 test.describe.configure({ timeout: 30_000 });
 
 test('[P0] onboarding lets AMR Cloud sign in and complete setup after the login poll succeeds', async ({ page }) => {
@@ -104,6 +114,68 @@ test('[P0] onboarding recovers from a transient AMR status failure and still con
   await page.getByRole('button', { name: /sign in to continue/i }).click();
 
   await expect(page.getByRole('button', { name: /Continue/i })).toBeVisible({ timeout: 12_000 });
+});
+
+test('[P0] onboarding lets the user cancel an incomplete AMR sign-in and retry', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: false,
+    keepAmrLoginIncomplete: true,
+  });
+
+  await seedOnboardingConfig(page, config);
+  await gotoOnboarding(page);
+
+  await page.getByRole('button', { name: /sign in to continue/i }).click();
+
+  await expect(page.getByRole('button', { name: /Signing in/i })).toBeVisible();
+  const cancelSignIn = page.getByRole('button', { name: /Cancel sign-in/i });
+  await expect(cancelSignIn).toBeVisible();
+  await cancelSignIn.click();
+
+  await expect(page.getByRole('button', { name: /sign in to continue/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Signing in/i })).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.__amrOnboardingCancelCalls ?? 0)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0)).toBe(1);
+
+  await page.getByRole('button', { name: /sign in to continue/i }).click();
+
+  await expect.poll(() => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0)).toBe(2);
+  await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toBeVisible();
+});
+
+test('[P0] onboarding cancel during a slow AMR status check does not start login', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: false,
+    keepAmrLoginIncomplete: true,
+    delaySignedOutStatusMs: 350,
+  });
+
+  await seedOnboardingConfig(page, config);
+  await gotoOnboarding(page);
+  await expect
+    .poll(() => page.evaluate(() => window.__amrOnboardingStatusCalls ?? 0))
+    .toBeGreaterThanOrEqual(1);
+
+  await page.evaluate(() => {
+    window.__amrOnboardingDelayNextSignedOutStatus = true;
+    window.__amrOnboardingSlowStatusResolved = false;
+  });
+  await page.getByRole('button', { name: /sign in to continue/i }).click();
+
+  const cancelSignIn = page.getByRole('button', { name: /Cancel sign-in/i });
+  await expect(cancelSignIn).toBeVisible();
+  await cancelSignIn.click();
+
+  await expect(page.getByRole('button', { name: /sign in to continue/i })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__amrOnboardingCancelCalls ?? 0)).toBe(1);
+  await expect
+    .poll(() => page.evaluate(() => window.__amrOnboardingSlowStatusResolved ?? false))
+    .toBe(true);
+  await page.waitForTimeout(250);
+  await expect(page.getByRole('button', { name: /Signing in/i })).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0)).toBe(0);
 });
 
 test('[P0] onboarding AMR card lets the user pick a live runtime model before continuing', async ({ page }) => {
@@ -286,6 +358,8 @@ async function wireOnboardingMocks(
     amrAvailable: boolean;
     initialLoggedIn: boolean;
     failFirstStatusPollAfterLogin?: boolean;
+    keepAmrLoginIncomplete?: boolean;
+    delaySignedOutStatusMs?: number;
     amrModels?: Array<{ id: string; label: string }>;
     codexModels?: Array<{ id: string; label: string }>;
   },
@@ -306,7 +380,11 @@ async function wireOnboardingMocks(
   };
 
   let loggedIn = options.initialLoggedIn;
+  let loginInFlight = false;
+  let statusCalls = 0;
   let statusCallsAfterLogin = 0;
+  let loginCalls = 0;
+  let cancelCalls = 0;
 
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
@@ -359,6 +437,24 @@ async function wireOnboardingMocks(
   });
 
   await page.route('**/api/integrations/vela/status', async (route) => {
+    statusCalls += 1;
+    await page.evaluate((calls) => {
+      window.__amrOnboardingStatusCalls = calls;
+    }, statusCalls);
+    const shouldDelaySignedOutStatus =
+      !loggedIn
+      && typeof options.delaySignedOutStatusMs === 'number'
+      && options.delaySignedOutStatusMs > 0
+      && await page.evaluate(() => {
+        if (!window.__amrOnboardingDelayNextSignedOutStatus) return false;
+        window.__amrOnboardingDelayNextSignedOutStatus = false;
+        return true;
+      });
+    if (shouldDelaySignedOutStatus) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, options.delaySignedOutStatusMs),
+      );
+    }
     if (loggedIn) {
       statusCallsAfterLogin += 1;
       if (options.failFirstStatusPollAfterLogin && statusCallsAfterLogin === 1) {
@@ -374,25 +470,49 @@ async function wireOnboardingMocks(
       json: loggedIn
         ? {
             loggedIn: true,
+            loginInFlight: false,
             profile: 'local',
             configPath: '/tmp/.amr/config.json',
             user: { id: 'user-1', email: 'onboarding@example.com', plan: 'free' },
           }
         : {
             loggedIn: false,
+            loginInFlight,
             profile: 'local',
             configPath: '/tmp/.amr/config.json',
             user: null,
           },
     });
+    if (shouldDelaySignedOutStatus) {
+      await page.evaluate(() => {
+        window.__amrOnboardingSlowStatusResolved = true;
+      });
+    }
   });
 
   await page.route('**/api/integrations/vela/login', async (route) => {
-    loggedIn = true;
+    loginCalls += 1;
+    loginInFlight = true;
+    if (!options.keepAmrLoginIncomplete) {
+      loggedIn = true;
+      loginInFlight = false;
+    }
+    await page.evaluate((calls) => {
+      window.__amrOnboardingLoginCalls = calls;
+    }, loginCalls);
     await route.fulfill({
       status: 202,
       json: { pid: 4242, startedAt: new Date().toISOString(), profile: 'local' },
     });
+  });
+
+  await page.route('**/api/integrations/vela/login/cancel', async (route) => {
+    cancelCalls += 1;
+    loginInFlight = false;
+    await page.evaluate((calls) => {
+      window.__amrOnboardingCancelCalls = calls;
+    }, cancelCalls);
+    await route.fulfill({ json: { canceled: true, pids: [4242] } });
   });
 
   return config;

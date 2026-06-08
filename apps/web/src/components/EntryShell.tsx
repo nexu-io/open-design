@@ -126,7 +126,9 @@ import {
 import {
   AMR_LOGIN_POLL_INTERVAL_MS,
   amrLoginPollOutcome,
+  notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
+import { closeAmrActivationWindowBestEffort } from './AmrLoginPill';
 import { AnimatePresence } from 'motion/react';
 import { renderModelOptions } from './modelOptions';
 import {
@@ -918,6 +920,7 @@ function OnboardingView({
   const [cliScanStatus, setCliScanStatus] = useState<'idle' | 'scanning' | 'done'>('idle');
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
+  const [amrLoginCancelPending, setAmrLoginCancelPending] = useState(false);
   const [newsletterSubmitting, setNewsletterSubmitting] = useState(false);
   const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
   const [visibleAgentIds, setVisibleAgentIds] = useState<string[]>([]);
@@ -1069,6 +1072,7 @@ function OnboardingView({
     if (runtime === 'amr') return;
     amrLoginPollCancelledRef.current = true;
     setAmrLoginPending(false);
+    setAmrLoginCancelPending(false);
   }, [runtime]);
 
   // Onboarding step exposure. Design-system intake used to live here
@@ -1430,18 +1434,32 @@ function OnboardingView({
   async function handleAmrSignInToContinue(
     attribution?: AmrEntryAttribution | null,
   ) {
-    if (amrLoginPending) return;
+    if (amrLoginPending || amrLoginCancelPending) return;
     amrLoginPollCancelledRef.current = false;
     setAmrLoginError(null);
     setAmrLoginPending(true);
     try {
       const currentStatus = await fetchVelaLoginStatus();
+      if (amrLoginPollCancelledRef.current) return;
       if (currentStatus) setAmrStatus(currentStatus);
       if (currentStatus?.loggedIn) {
         setStep((current) => current + 1);
         return;
       }
+      if (amrLoginPollCancelledRef.current) return;
       const loginResult = await startVelaLogin(attribution);
+      if (amrLoginPollCancelledRef.current) {
+        if (loginResult.ok || loginResult.alreadyRunning) {
+          const cancelResult = await cancelVelaLogin();
+          closeAmrActivationWindowBestEffort();
+          if (!cancelResult.ok) {
+            setAmrLoginError(t('settings.amrLoginErrorCompact'));
+            return;
+          }
+          notifyAmrLoginStatusChanged('login-canceled');
+        }
+        return;
+      }
       if (!loginResult.ok && !loginResult.alreadyRunning) {
         setAmrLoginError(loginResult.error || t('settings.amrLoginErrorCompact'));
         return;
@@ -1452,6 +1470,27 @@ function OnboardingView({
     } finally {
       setAmrLoginPending(false);
     }
+  }
+
+  async function handleCancelAmrLogin() {
+    if (!amrLoginPending || amrLoginCancelPending) return;
+    amrLoginPollCancelledRef.current = true;
+    setAmrLoginError(null);
+    setAmrLoginCancelPending(true);
+    setAmrStatus((current) => (
+      current
+        ? { ...current, loggedIn: false, loginInFlight: false, user: null }
+        : current
+    ));
+    setAmrLoginPending(false);
+    const result = await cancelVelaLogin();
+    closeAmrActivationWindowBestEffort();
+    setAmrLoginCancelPending(false);
+    if (!result.ok) {
+      setAmrLoginError(t('settings.amrLoginErrorCompact'));
+      return;
+    }
+    notifyAmrLoginStatusChanged('login-canceled');
   }
 
   async function pollAmrLoginCompletion(): Promise<boolean> {
@@ -1967,11 +2006,21 @@ function OnboardingView({
             >
               {step === 0 ? t('settings.onboardingSkip') : t('settings.onboardingBack')}
             </button>
+            {step === 0 && amrLoginPending ? (
+              <button
+                type="button"
+                className="onboarding-view__secondary"
+                onClick={handleCancelAmrLogin}
+                disabled={amrLoginCancelPending}
+              >
+                {t('settings.amrCancelSignIn')}
+              </button>
+            ) : null}
             <button
               type="button"
               className="onboarding-view__primary"
               onClick={handlePrimaryAction}
-              disabled={amrLoginPending || newsletterSubmitting}
+              disabled={amrLoginPending || amrLoginCancelPending || newsletterSubmitting}
               aria-busy={newsletterSubmitting ? true : undefined}
             >
               <span>{primaryActionLabel}</span>

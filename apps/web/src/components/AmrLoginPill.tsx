@@ -73,7 +73,7 @@ export interface AmrAccountControlProps {
 
 const AMR_CANCELED_RESET_MS = 1500;
 
-function closeAmrActivationWindowBestEffort(): boolean {
+export function closeAmrActivationWindowBestEffort(): boolean {
   if (typeof window === 'undefined') return false;
   if (window.opener == null) return false;
   try {

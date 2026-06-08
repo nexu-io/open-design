@@ -2453,8 +2453,8 @@
   grid-row: 1;
   display: grid;
   min-width: 0;
-  width: min(100%, 430px);
-  justify-self: start;
+  width: 100%;
+  justify-self: stretch;
 }
 
 .onboarding-view__benefit-aside .onboarding-view__benefit-stack {
@@ -2560,8 +2560,10 @@
 }
 
 .onboarding-view__benefit-aside .onboarding-view__benefits {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 7px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .onboarding-view__benefit-aside
