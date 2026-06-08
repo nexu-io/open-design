@@ -10,9 +10,11 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type Dispatch,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
@@ -2487,7 +2489,7 @@ type OnboardingDropdownProps =
       multiple: true;
     });
 
-function OnboardingDropdown(props: OnboardingDropdownProps) {
+export function OnboardingDropdown(props: OnboardingDropdownProps) {
   const {
     label,
     placeholder,
@@ -2497,6 +2499,8 @@ function OnboardingDropdown(props: OnboardingDropdownProps) {
     multiple = false,
   } = props;
   const [open, setOpen] = useState(false);
+  const [resolvedPlacement, setResolvedPlacement] = useState(placement);
+  const [menuMaxHeight, setMenuMaxHeight] = useState(240);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const selectedValues = Array.isArray(value) ? value : value ? [value] : [];
   const selectedOptions = options.filter((option) => selectedValues.includes(option.value));
@@ -2505,6 +2509,36 @@ function OnboardingDropdown(props: OnboardingDropdownProps) {
   const selectedLabel = multiple
     ? selectedOptions.map((option) => option.label).join(', ')
     : selectedOption?.label;
+  const triggerLabel = selectedLabel || placeholder;
+
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    function measureMenu() {
+      const root = rootRef.current;
+      if (!root) return;
+
+      const rect = root.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
+      const spaceBelow = viewportHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const nextPlacement =
+        placement === 'top' || (spaceBelow < 260 && spaceAbove > spaceBelow)
+          ? 'top'
+          : 'bottom';
+      const availableSpace = nextPlacement === 'top' ? spaceAbove : spaceBelow;
+      setResolvedPlacement(nextPlacement);
+      setMenuMaxHeight(Math.max(48, Math.min(240, availableSpace - 16)));
+    }
+
+    measureMenu();
+    window.addEventListener('resize', measureMenu);
+    window.addEventListener('scroll', measureMenu, true);
+    return () => {
+      window.removeEventListener('resize', measureMenu);
+      window.removeEventListener('scroll', measureMenu, true);
+    };
+  }, [open, placement, options.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -2530,7 +2564,12 @@ function OnboardingDropdown(props: OnboardingDropdownProps) {
   }, [open]);
 
   return (
-    <div className="onboarding-view__select-field" data-placement={placement} ref={rootRef}>
+    <div
+      className="onboarding-view__select-field"
+      data-placement={resolvedPlacement}
+      data-open={open || undefined}
+      ref={rootRef}
+    >
       <span className="onboarding-view__select-label">{label}</span>
       <button
         type="button"
@@ -2539,9 +2578,10 @@ function OnboardingDropdown(props: OnboardingDropdownProps) {
         }`}
         aria-haspopup="listbox"
         aria-expanded={open}
+        title={triggerLabel}
         onClick={() => setOpen((current) => !current)}
       >
-        <span>{selectedLabel || placeholder}</span>
+        <span>{triggerLabel}</span>
         <Icon name="chevron-down" size={16} />
       </button>
       {open ? (
@@ -2550,6 +2590,7 @@ function OnboardingDropdown(props: OnboardingDropdownProps) {
           role="listbox"
           aria-label={label}
           aria-multiselectable={multiple || undefined}
+          style={{ '--onboarding-select-menu-max-height': `${menuMaxHeight}px` } as CSSProperties}
         >
           {options.map((option) => {
             const selected = selectedValues.includes(option.value);
