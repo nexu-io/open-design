@@ -1169,6 +1169,162 @@ describe('ChatPane imported folder surfaces', () => {
     expect(within(surface).getByText('Home screen')).toBeTruthy();
   });
 
+  it('clears stale imported surfaces and preview URLs when switching imported folder projects', async () => {
+    const metadata: ProjectMetadata = {
+      kind: 'prototype',
+      importedFrom: 'folder',
+      entryFile: 'app/page.tsx',
+    };
+    let resolveSecondSurfaces!: (response: Response) => void;
+    const secondSurfacesPromise = new Promise<Response>((resolve) => {
+      resolveSecondSurfaces = resolve;
+    });
+    const fetchMock = vi.fn(async (url) => {
+      if (typeof url !== 'string') throw new Error(`unexpected fetch ${url}`);
+      if (url.includes('/api/projects/project-1/ui-surfaces')) {
+        return json({
+          surfaces: [
+            {
+              id: 'home',
+              label: 'First project home',
+              route: '/',
+              kind: 'next-route',
+              confidence: 'high',
+              framework: 'Next.js',
+              entryFile: 'app/page.tsx',
+              previewFile: null,
+              previewRuntimeRoot: '',
+              previewPath: '/',
+              previewStatus: 'source-mapped',
+              sourceFiles: ['app/page.tsx'],
+              styleFiles: ['app/globals.css'],
+              scriptFiles: [],
+              assetFiles: [],
+              fontFiles: [],
+              externalDependencies: [
+                { packageName: 'next', importPath: 'next', kind: 'runtime' },
+              ],
+              reasons: ['Next.js route file detected'],
+              mtime: 20,
+            },
+          ],
+          generatedAt: '2026-06-02T00:00:00.000Z',
+        });
+      }
+      if (url.includes('/api/projects/project-2/ui-surfaces')) {
+        return await secondSurfacesPromise;
+      }
+      if (url.includes('/api/projects/project-1/ui-preview')) {
+        return json({
+          status: 'ready',
+          runtimeRoot: '',
+          baseUrl: '/api/projects/project-1/ui-preview/proxy/project-1-token',
+          url: '/api/projects/project-1/ui-preview/proxy/project-1-token/',
+          upstreamBaseUrl: 'http://127.0.0.1:43210',
+          route: '/',
+        });
+      }
+      if (url.includes('/api/projects/project-2/ui-preview')) {
+        return json({
+          status: 'ready',
+          runtimeRoot: '',
+          baseUrl: '/api/projects/project-2/ui-preview/proxy/project-2-token',
+          url: '/api/projects/project-2/ui-preview/proxy/project-2-token/',
+          upstreamBaseUrl: 'http://127.0.0.1:43211',
+          route: '/',
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    function Harness() {
+      const [projectId, setProjectId] = useState('project-1');
+      return (
+        <>
+          <button
+            type="button"
+            data-testid="switch-project"
+            onClick={() => setProjectId('project-2')}
+          >
+            switch
+          </button>
+          <ChatPane
+            projectKindForTracking="prototype"
+            messages={[]}
+            streaming={false}
+            error={null}
+            projectId={projectId}
+            projectFiles={[
+              file('app/page.tsx', 'code', 20),
+              file('app/globals.css', 'code', 18),
+            ]}
+            onEnsureProject={async () => projectId}
+            onSend={vi.fn()}
+            onStop={vi.fn()}
+            conversations={[
+              { id: 'conv-1', projectId: 'project-1', title: 'Project 1', createdAt: 1, updatedAt: 1 },
+              { id: 'conv-2', projectId: 'project-2', title: 'Project 2', createdAt: 1, updatedAt: 1 },
+            ]}
+            activeConversationId={projectId === 'project-1' ? 'conv-1' : 'conv-2'}
+            onSelectConversation={vi.fn()}
+            onDeleteConversation={vi.fn()}
+            projectMetadata={metadata}
+          />
+        </>
+      );
+    }
+
+    render(<Harness />);
+
+    const firstSurface = await screen.findByTestId('chat-ui-surface-0');
+    expect(within(firstSurface).getByText('First project home')).toBeTruthy();
+    await waitFor(() => {
+      expect(document.querySelector('iframe[src*="project-1-token"]')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('switch-project'));
+
+    expect(await screen.findByTestId('chat-ui-surfaces-loading')).toBeTruthy();
+    expect(screen.queryByText('First project home')).toBeNull();
+    expect(document.querySelector('iframe[src*="project-1-token"]')).toBeNull();
+
+    resolveSecondSurfaces(json({
+      surfaces: [
+        {
+          id: 'home',
+          label: 'Second project home',
+          route: '/',
+          kind: 'next-route',
+          confidence: 'high',
+          framework: 'Next.js',
+          entryFile: 'app/page.tsx',
+          previewFile: null,
+          previewRuntimeRoot: '',
+          previewPath: '/',
+          previewStatus: 'source-mapped',
+          sourceFiles: ['app/page.tsx'],
+          styleFiles: ['app/globals.css'],
+          scriptFiles: [],
+          assetFiles: [],
+          fontFiles: [],
+          externalDependencies: [
+            { packageName: 'next', importPath: 'next', kind: 'runtime' },
+          ],
+          reasons: ['Next.js route file detected'],
+          mtime: 30,
+        },
+      ],
+      generatedAt: '2026-06-02T00:00:00.000Z',
+    }));
+
+    const secondSurface = await screen.findByTestId('chat-ui-surface-0');
+    expect(within(secondSurface).getByText('Second project home')).toBeTruthy();
+    await waitFor(() => {
+      expect(document.querySelector('iframe[src*="project-2-token"]')).toBeTruthy();
+    });
+  });
+
   it('marks a runtime preview failed when the preview start request times out', async () => {
     vi.useFakeTimers();
     const metadata: ProjectMetadata = {

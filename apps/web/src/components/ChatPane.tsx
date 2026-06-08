@@ -1452,10 +1452,15 @@ export function ChatPane({
       startedSurfacePreviewGroupsRef.current.clear();
       return;
     }
+    const projectChanged = activeImportedProjectIdRef.current !== projectId;
     activeImportedProjectIdRef.current = projectId;
+    if (projectChanged) {
+      setImportedSurfacePreviewStates({});
+      startedSurfacePreviewGroupsRef.current.clear();
+    }
     setImportedProjectSurfacesState((current) => ({
       status: 'loading',
-      surfaces: current.surfaces,
+      surfaces: projectChanged ? [] : current.surfaces,
     }));
     void fetchProjectUiSurfaces(projectId).then((surfaces) => {
       if (!cancelled) setImportedProjectSurfacesState({ status: 'loaded', surfaces });
