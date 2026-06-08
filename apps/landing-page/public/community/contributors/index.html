@@ -274,9 +274,9 @@
     <div class="section-head">
       <div>
         <span class="kicker"><span class="dot"></span>Pick your first contribution</span>
-        <h2 class="h-display">Open issues, <em>tagged for you</em>.</h2>
+        <h2 class="h-display">Open issues, <em>curated for you</em>.</h2>
       </div>
-      <p class="right">Live from <span class="num">label:&ldquo;good first issue&rdquo;</span> on the Open Design repo. Comment on an issue to claim it, and a maintainer will assign it within a day.</p>
+      <p class="right">A maintainer-curated path into the repo: clear UI polish, focused bugs, and live <span class="num">good first issue</span> picks from GitHub. Comment on an issue to claim it.</p>
     </div>
 
     <div class="issue-list" id="issue-list">
@@ -301,7 +301,7 @@
     </div>
 
     <div class="issues-foot">
-      <span>Showing first <span class="num" id="issue-count">—</span> open good-first-issues</span>
+      <span>Showing <span class="num" id="issue-count">—</span> beginner-friendly issues</span>
       <a href="https://github.com/nexu-io/open-design/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22" target="_blank" rel="noopener" style="color:var(--coral)">See all on GitHub →</a>
     </div>
   </div>
@@ -468,6 +468,51 @@ const RANKING_SNAPSHOT = {
   ]
 };
 
+const CURATED_FIRST_ISSUES = [
+  {
+    number: 3863,
+    title: 'Polish project name presentation and selected-state styling in the workspace header',
+    html_url: 'https://github.com/nexu-io/open-design/issues/3863',
+    labels: [{ name: 'good first issue' }, { name: 'help wanted' }, { name: 'ux' }],
+    skill: 'UI polish'
+  },
+  {
+    number: 3858,
+    title: 'Home design system picker bleeds content above the search field',
+    html_url: 'https://github.com/nexu-io/open-design/issues/3858',
+    labels: [{ name: 'good first issue' }, { name: 'help wanted' }, { name: 'bug' }],
+    skill: 'CSS/UI'
+  },
+  {
+    number: 3849,
+    title: 'Keep the @ mention picker anchored after switching tabs',
+    html_url: 'https://github.com/nexu-io/open-design/issues/3849',
+    labels: [{ name: 'good first issue' }, { name: 'help wanted' }, { name: 'bug' }],
+    skill: 'Popover'
+  },
+  {
+    number: 3847,
+    title: 'Remove redundant metadata from project chat messages',
+    html_url: 'https://github.com/nexu-io/open-design/issues/3847',
+    labels: [{ name: 'good first issue' }, { name: 'help wanted' }, { name: 'bug' }],
+    skill: 'React'
+  },
+  {
+    number: 3846,
+    title: 'Require confirmation before deleting elements in manual edit mode',
+    html_url: 'https://github.com/nexu-io/open-design/issues/3846',
+    labels: [{ name: 'good first issue' }, { name: 'help wanted' }, { name: 'bug' }],
+    skill: 'UX safety'
+  },
+  {
+    number: 3845,
+    title: 'Remove duplicate tooltips on workspace tab hover',
+    html_url: 'https://github.com/nexu-io/open-design/issues/3845',
+    labels: [{ name: 'good first issue' }, { name: 'help wanted' }, { name: 'bug' }],
+    skill: 'UI polish'
+  }
+];
+
 async function gh(path) {
   const res = await fetch(`${API}${path}`, { headers: HEADERS });
   if (!res.ok) throw new Error(`GitHub ${path} → ${res.status}`);
@@ -523,23 +568,26 @@ async function loadAllTimeTop(){
 }
 
 async function loadGoodFirstIssues(){
+  const curated = CURATED_FIRST_ISSUES.map((issue) => ({ ...issue, curated: true }));
   try {
     const r = await gh(`/search/issues?q=repo:${REPO}+is:issue+is:open+label:%22good+first+issue%22&sort=created&order=desc&per_page=8`);
-    const items = r.items || [];
+    const seen = new Set(curated.map((item) => item.number));
+    const live = (r.items || []).filter((item) => !seen.has(item.number));
+    const items = [...curated, ...live].slice(0, 10);
     setText('issue-count', items.length);
     if (!items.length){
-      document.getElementById('issue-list').innerHTML = '<div class="issue" style="color:var(--ink-faint);padding:36px 0">No open good-first-issues right now. Check back tomorrow, or open one yourself ↗</div>';
+      document.getElementById('issue-list').innerHTML = '<div class="issue" style="color:var(--ink-faint);padding:36px 0">No beginner-friendly issues right now. Check back tomorrow, or open one yourself ↗</div>';
       return;
     }
     const html = items.map((it,i) => {
-      const lang = inferLang(it.title);
+      const lang = it.skill || inferLang(it.title);
       return `
         <a class="issue" href="${it.html_url}" target="_blank" rel="noopener">
           <span class="num">${pad2(i+1)}</span>
           <div class="body">
             <div class="title">${escapeHtml(it.title)}</div>
             <div class="meta">
-              <span class="label good">good first issue</span>
+              <span class="label good">${it.curated ? 'curated first issue' : 'good first issue'}</span>
               ${(it.labels||[]).filter(l=>l.name!=='good first issue').slice(0,3).map(l=>`<span class="label ${inferLabelClass(l.name)}">${escapeHtml(l.name)}</span>`).join('')}
             </div>
           </div>
@@ -550,9 +598,21 @@ async function loadGoodFirstIssues(){
     document.getElementById('issue-list').innerHTML = html;
   } catch(e){
     console.warn('issues failed', e);
-    setText('issue-count', '—');
+    setText('issue-count', CURATED_FIRST_ISSUES.length);
     const list = document.getElementById('issue-list');
-    if (list) list.innerHTML = '<a class="issue" href="https://github.com/nexu-io/open-design/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22" target="_blank" rel="noopener"><span class="num">—</span><div class="body"><div class="title">GitHub rate limit reached in preview. Open the live good-first-issue search on GitHub.</div><div class="meta"><span class="label good">good first issue</span><span class="label docs">live GitHub search</span></div></div><span class="lang">WEB</span><span class="arr">→</span></a>';
+    if (list) list.innerHTML = CURATED_FIRST_ISSUES.map((it, i) => `
+      <a class="issue" href="${it.html_url}" target="_blank" rel="noopener">
+        <span class="num">${pad2(i+1)}</span>
+        <div class="body">
+          <div class="title">${escapeHtml(it.title)}</div>
+          <div class="meta">
+            <span class="label good">curated first issue</span>
+            ${(it.labels||[]).filter(l=>l.name!=='good first issue').slice(0,3).map(l=>`<span class="label ${inferLabelClass(l.name)}">${escapeHtml(l.name)}</span>`).join('')}
+          </div>
+        </div>
+        <span class="lang">${escapeHtml(it.skill)}</span>
+        <span class="arr">→</span>
+      </a>`).join('');
   }
 }
 
