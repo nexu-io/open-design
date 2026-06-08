@@ -12,6 +12,7 @@
   "scripts": {
     "postinstall": "node ./scripts/postinstall.mjs",
     "tools-dev": "pnpm exec tools-dev",
+    "tools-link-check": "pnpm exec tools-link-check",
     "tools-pack": "pnpm exec tools-pack",
     "tools-serve": "pnpm exec tools-serve",
     "nix:update-hash": "node --experimental-strip-types ./scripts/update-nix-pnpm-deps-hash.ts",
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@open-design/daemon": "workspace:*",
     "@open-design/tools-dev": "workspace:*",
+    "@open-design/tools-link-check": "workspace:*",
     "@open-design/tools-pack": "workspace:*",
     "@open-design/tools-serve": "workspace:*",
     "@types/node": "20.19.39",

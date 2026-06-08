@@ -92,6 +92,8 @@ const residualAllowedExactPaths = new Set([
   "apps/daemon/tests/fixtures/fake-vela.mjs",
   "tools/dev/bin/tools-dev.mjs",
   "tools/dev/esbuild.config.mjs",
+  "tools/link-check/bin/tools-link-check.mjs",
+  "tools/link-check/esbuild.config.mjs",
   "tools/pack/bin/tools-pack.mjs",
   "tools/pack/esbuild.config.mjs",
   "tools/serve/bin/tools-serve.mjs",
@@ -733,6 +735,7 @@ const toolsRootAllowlist = new Map<string, "directory" | "file">([
   // Windows shim experiment from PR #683 and is not an active repo boundary.
   ["AGENTS.md", "file"],
   ["dev", "directory"],
+  ["link-check", "directory"],
   ["pack", "directory"],
   ["serve", "directory"],
 ]);

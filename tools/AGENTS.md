@@ -10,6 +10,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `pnpm tools-dev inspect desktop ...` inspects the desktop runtime through sidecar IPC.
 - `tools/pack` provides `@open-design/tools-pack` and the `tools-pack` bin. The active slice is packaged artifact build/install/start/stop/logs/uninstall/cleanup/list/reset plus beta release artifact preparation for mac and Windows lanes, plus a Linux AppImage lane with optional containerized builds.
 - `tools/serve` provides `@open-design/tools-serve` and the `tools-serve` bin. It owns local fixture services such as `tools-serve start updater`.
+- `tools/link-check` provides `@open-design/tools-link-check` and the `tools-link-check` bin. It audits `.od/projects/*/` for dead cross-page references, `artifact.json` schema violations, and orphan HTML files. It is a stop-gap for the editor's append-only workflow; see the linked GitHub issue for the root-cause discussion. Exit code 0 = clean, 1 = issues (CI-friendly).
 
 ## Retired tools
 
@@ -38,6 +39,11 @@ pnpm --filter @open-design/tools-pack typecheck
 pnpm --filter @open-design/tools-pack build
 pnpm --filter @open-design/tools-serve typecheck
 pnpm --filter @open-design/tools-serve build
+pnpm --filter @open-design/tools-link-check typecheck
+pnpm --filter @open-design/tools-link-check build
+pnpm tools-link-check                # audit .od/projects
+pnpm tools-link-check --json         # CI output
+pnpm tools-link-check path/to/.od/projects
 pnpm tools-dev status --json
 pnpm tools-dev logs --json
 pnpm tools-dev check

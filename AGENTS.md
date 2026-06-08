@@ -24,6 +24,7 @@ This file is the single source of truth for agents entering this repository. Rea
 - `tools/dev` is the local development lifecycle control plane.
 - `tools/pack` is the local packaged build/start/stop/logs control plane, packaged updater harness, installer identity/registry validation surface, and mac beta release artifact preparation surface.
 - `tools/serve` is the local fixture-service control plane; first service is `tools-serve start updater` for deterministic updater metadata and artifacts.
+- `tools/link-check` is the local `.od/projects/*/` auditor for dead cross-page references, `artifact.json` schema violations, and orphan HTML files; `pnpm tools-link-check` is the only entry point. Stop-gap for the editor's append-only workflow.
 - `e2e` owns user-level end-to-end smoke tests and Playwright UI automation; read `e2e/AGENTS.md` before editing its tests or commands.
 
 ## Inactive or placeholder directories
@@ -57,7 +58,7 @@ This file is the single source of truth for agents entering this repository. Rea
 
 ## Root command boundary
 
-- Keep root scripts reserved for true repo-level checks and tools control-plane entrypoints: `pnpm guard`, `pnpm typecheck`, `pnpm tools-dev`, `pnpm tools-pack`, and `pnpm tools-serve`.
+- Keep root scripts reserved for true repo-level checks and tools control-plane entrypoints: `pnpm guard`, `pnpm typecheck`, `pnpm tools-dev`, `pnpm tools-link-check`, `pnpm tools-pack`, and `pnpm tools-serve`.
 - Do not add root aggregate `pnpm build` or `pnpm test` aliases. Build/test commands must stay package-scoped (`pnpm --filter <package> ...`) or tool-scoped (`pnpm tools-pack ...`).
 - Do not add root e2e aliases; e2e package commands and ownership rules live in `e2e/AGENTS.md`.
 

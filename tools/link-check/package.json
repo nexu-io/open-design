@@ -1,0 +1,29 @@
+{
+  "name": "@open-design/tools-link-check",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Audit .od/projects/* for dead cross-page references, schema violations, and orphan HTML files. Stop-gap for the editor's append-only workflow.",
+  "bin": {
+    "tools-link-check": "./bin/tools-link-check.mjs"
+  },
+  "scripts": {
+    "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "dev": "tsx ./src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {
+    "cac": "6.7.14"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "esbuild": "0.28.0",
+    "tsx": "4.22.3",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}
