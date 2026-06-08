@@ -62,10 +62,10 @@ import {
 import type { ProjectFilePreview } from '../providers/registry';
 import {
   downloadImageDataUrl,
-  exportAsHtml,
   exportAsJsx,
   exportAsMd,
   exportAsPdf,
+  exportProjectAsHtml,
   exportProjectAsPdf,
   exportProjectAsZip,
   copyImageDataUrlToClipboard,
@@ -8385,7 +8385,12 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setDownloadMenuOpen(false);
-                      fireShareExport('html', () => exportAsHtml(source ?? '', exportTitle));
+                      fireShareExport('html', () => exportProjectAsHtml({
+                        projectId,
+                        filePath: file.name,
+                        fallbackHtml: source ?? '',
+                        fallbackTitle: exportTitle,
+                      }));
                     }}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-code-line" size={15} /></span>

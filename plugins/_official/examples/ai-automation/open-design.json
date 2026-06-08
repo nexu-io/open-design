@@ -1,0 +1,90 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-ai-automation",
+  "title": "AI Automation — COGNITRA",
+  "title_i18n": {
+    "zh-CN": "AI Automation — COGNITRA 智能体落地页",
+    "en": "AI Automation — COGNITRA"
+  },
+  "version": "0.1.0",
+  "description": "Premium dark, video-backed AI-agency landing page (COGNITRA): fixed fullscreen background video, transparent navbar, a half-gray-panel hero, a word-by-word fade-in statement over the video, and a 3-card services grid with looping video thumbnails.",
+  "description_i18n": {
+    "zh-CN": "高端深色视频背景的 AI 机构落地页（COGNITRA）：全屏固定背景视频、透明导航栏、上半部灰色面板的 Hero、逐词淡入的 Statement，以及带循环视频缩略图的三卡片 Services 网格。",
+    "en": "Premium dark, video-backed AI-agency landing page (COGNITRA): fixed fullscreen background video, transparent navbar, a half-gray-panel hero, a word-by-word fade-in statement over the video, and a 3-card services grid with looping video thumbnails."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Eli"
+  },
+  "homepage": "https://motionsites.ai/sections",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "landing-page",
+    "ai-agency",
+    "video-background",
+    "editorial"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a React + Vite + Tailwind CSS landing page for an AI agency called \"COGNITRA\". Use `framer-motion` for animations and `lucide-react` for icons. The design uses \"Helvetica Now Var\" font throughout. Here is the exact specification:\n\n---\n\n## FONT\n\nImport via CSS:`@import url('https://db.onlinewebfonts.com/c/e66905e07608167a84e6ad52f638c3c6?family=Helvetica+Now+Var');`\nApply globally: `font-family: 'Helvetica Now Var', 'Helvetica Neue', Helvetica, Arial, sans-serif;`\n\n---\n\n## FadeUp ANIMATION COMPONENT\n\nCreate a reusable `FadeUp` component wrapping Framer Motion with these exact values:\n- Props: `children`, `delay` (default 0), `duration` (default 0.7), `y` (default 24), `className`, `style`, `as` (polymorphic: div/section/span/h1/h2/h3/p/nav), `once` (default true)\n- `initial={{ opacity: 0, y }}`\n- `whileInView={{ opacity: 1, y: 0 }}`\n- `viewport={{ once, amount: 0.2 }}`\n- `transition={{ duration, delay, ease: [0.22, 1, 0.36, 1] }}`\n\n---\n\n## LAYOUT STRUCTURE\n\nThe page is a single `<div style={{ position: 'relative' }}>` containing:\n\n- A fixed full-viewport background video (z-index 0)\n- A fixed transparent navbar (z-index 10)\n- Section 1 -- Hero (100vh, z-index 1)\n- Section 2 -- Statement (100vh, z-index 1, transparent bg over video)\n- Section 3 -- Services (auto height, z-index 2, #C5C5C5 bg)\n- Fixed scroll indicator (bottom center, z-index 5)\n- Fixed share/repost button (bottom right, z-index 5)\n\n---\n\n## FIXED BACKGROUND VIDEO\n\n`position: fixed, top: 0, left: 0, width: 100%, height: 100vh, objectFit: cover, zIndex: 0src: \"https://plugin-assets.open-design.ai/plugins/ai-automation/hf_20260514_135830_bb6491d1-9b66-4aec-9722-13b4dfe3fb46-350788.mp4\"autoPlay, muted, loop, playsInline`\n\n---\n\n## NAVBAR (fixed, transparent)\n\n- `position: fixed; top:0; left:0; right:0; z-index:10; background: transparent; border-bottom: 1px solid rgba(0,0,0,0.18); display:flex; align-items:center; justify-content:space-between; padding: 20px 32px;`\n- Left: Brand \"COGNITRA\" -- FadeUp delay=0, fontSize 13px, fontWeight 700, letterSpacing 0.12em, uppercase, color #1a1a1a\n- Center: Links ['MAIN', 'OFFERING', 'CASE', 'RATES'] in a flex row gap 48px. Each link wrapped in FadeUp with delay = 0.05 + i*0.05. Links: fontSize 11px, letterSpacing 0.06em, color #1a1a1a, fontWeight 400\n- Right: Links ['CREW', 'CONNECT'] same style, FadeUp delay = 0.3 + i*0.05\n- Hover on all links: opacity 0.6\n\n---\n\n## SECTION 1 -- HERO (100vh)\n\n- `position: relative; zIndex: 1; height: 100vh;`\n- Top overlay div (absolute, top:0, left:0, right:0, height: 48%, background: #C5C5C5, flex column, paddingTop: 70px)\n- Inner content area: `flex:1; display:flex; alignItems:flex-end; padding: 0 32px 24px 32px;`\n- Hero row (flex, stretch, width 100%, gap 48px):\n- Left column (width 32%, flex-column, justify space-between, gap 80px):\n- `<h1>` FadeUp as=\"h1\" delay=0.1 -- \"SCALING\\nFASTER USING AI\" -- fontSize clamp(26px, 3vw, 42px), fontWeight 700, lineHeight 1.05, letterSpacing -0.01em, uppercase, color #1a1a1a\n- Slide counter FadeUp delay=0.5 -- \"001 / 005\" -- fontSize 11px, letterSpacing 0.08em, color #666\n- Right column (flex:1, flex-column, justify space-between, gap 80px):\n- `<p>` FadeUp as=\"p\" delay=0.25 -- \"We engineer custom automation flows and personalized AI products for ambitious modern businesses.\" -- fontSize 18px, lineHeight 1.6, color #5a5a5a, maxWidth 340px\n- Buttons row (flex, gap 10px) FadeUp delay=0.4:\n- \"BOOK A CALL!\" -- btn-primary: bg #1a1a1a, color #fff, border 1px solid #1a1a1a, border-radius 9999px, padding 12px 36px, fontSize 11px, fontWeight 500, letterSpacing 0.08em, uppercase\n- \"OUR PRODUCTS\" -- btn-secondary: bg transparent, color #1a1a1a, border 1px solid #1a1a1a, same radius/padding/fontSize/weight/spacing. Hover: bg #1a1a1a, color #fff\n- Bottom-left text (absolute, top 74%, transform translateY(-50%), left 32px, maxWidth 260px) FadeUp delay=0.6:\n- \"Guiding future-minded companies forward with bespoke AI products and streamlined workflows.\" -- fontSize 14px, lineHeight 1.65, color rgba(255,255,255,0.9)\n\n---\n\n## SECTION 2 -- STATEMENT (100vh, transparent over video)\n\n- `position:relative; zIndex:1; height:100vh; display:flex; flexDirection:column; justify-content:center; padding: 70px 32px 32px 32px;`\n- Inner div: flex-column, align flex-start, maxWidth 720px, padding 80px 0\n- `<h2>` -- fontSize clamp(26px, 3vw, 42px), fontWeight 700, lineHeight 1.08, letterSpacing -0.01em, uppercase, color #fff, display flex, flexWrap wrap, gap 0.25em\n- Text \"WE BUILD END-TO-END AI AUTOMATION SYSTEMS.\" split by space, each word wrapped in FadeUp as=\"span\" delay = 0.15 + i*0.08, y=32\n- `<p>` FadeUp as=\"p\" delay=0.9 -- \"We provide all-in-one AI automation services in one place.\" -- marginTop 24px, fontSize 14px, lineHeight 1.65, color rgba(255,255,255,0.85), maxWidth 260px\n\n---\n\n## SECTION 3 -- SERVICES (gray bg)\n\n- `position:relative; zIndex:2; background:#C5C5C5; display:flex; flexDirection:column; padding: 70px 32px 80px 32px; min-height:auto;`\n- Counter: FadeUp delay=0 -- \"003 / 005\" -- fontSize 11px, letterSpacing 0.08em, color #666, marginBottom 20px\n- Head row (flex, gap 48px, align flex-start, marginBottom 32px):\n- Left col (width 32%): `<h2>` \"EXPLORE WHAT WE OFFER\" -- fontSize clamp(26px, 3vw, 42px), fontWeight 700, lineHeight 1.05, letterSpacing -0.01em, uppercase, color #1a1a1a, maxWidth 320px, display flex, flexWrap wrap, gap 0.25em. Each word FadeUp as=\"span\" delay = 0.1 + i*0.1, y=28\n- Right col (flex:1, paddingTop 8px): FadeUp as=\"p\" delay=0.25 -- \"We provide all-in-one AI automation services in one place.\" -- fontSize 14px, lineHeight 1.65, color #3a3a3a, maxWidth 320px\n- Cards grid (CSS grid, 3 columns 1fr, gap 20px, grid-auto-rows 1fr):\n- 3 cards, each FadeUp delay = 0.4 + idx*0.15:\n- Card container: bg transparent, border 1px solid rgba(0,0,0,0.18), borderRadius 20px, overflow hidden, flex column, paddingTop 16px\n- Video area: width 100%, aspectRatio 4/3, position relative, overflow hidden. Video inside: absolute inset 0, objectFit cover\n- Text area: padding 24px 28px 28px 28px\n- `<h3>` fontSize 18px, fontWeight 600, color #1a1a1a, marginBottom 14px\n- `<p>` fontSize 13px, lineHeight 1.6, color #3a3a3a\n- Card data:\n- video: `https://plugin-assets.open-design.ai/plugins/ai-automation/hf_20260513_220333_48163edc-995f-4513-9f44-48dbb07a7329-327964.mp4`, title: \"Process Streamlining\", text: \"We automate your processes by linking together the daily tools you rely upon. Lifting throughput and improving overall output.\"\n- video: `https://plugin-assets.open-design.ai/plugins/ai-automation/hf_20260513_221040_e6ba7c5a-864e-46e9-871e-341a176a7e3e-2c404d.mp4`, title: \"Strategic advisory\", text: \"We craft intelligent assistants that are adaptive, grasp context, and are skilled enough to handle highly intricate customer requests.\"\n- video: `https://plugin-assets.open-design.ai/plugins/ai-automation/hf_20260513_221104_fb538584-5b87-495f-952e-09ddd5a1792a-7be906.mp4`, title: \"Assistant engineering\", text: \"Through our knowledge, we explore deep into your business and advise you on how AI powered automations may transform your operations.\"\n\n---\n\n## FIXED SCROLL INDICATOR (bottom center)\n\n- `position:fixed; bottom:32px; left:50%; transform:translateX(-50%); zIndex:5;`\n- CSS animation `scrollBounce`: `0%,100% { transform: translateY(0); } 50% { transform: translateY(6px); }` -- 2s ease-in-out infinite\n- Pill shape: width 22px, height 36px, border 1.5px solid rgba(0,0,0,0.75), borderRadius 11px, flex, justify center, paddingTop 6px\n- Inner dot: width 3px, height 8px, background rgba(0,0,0,0.85), borderRadius 2px\n\n---\n\n## FIXED REPOST BUTTON (bottom right)\n\n- `position:fixed; bottom:32px; right:32px; zIndex:5; display:flex; alignItems:center; gap:6px; color:rgba(0,0,0,0.8); fontSize:11px; letterSpacing:0.08em; uppercase; cursor:pointer;`\n- Inline SVG (share icon), width 14, height 14, viewBox \"0 0 24 24\", fill none, stroke currentColor, strokeWidth 2, strokeLinecap round, strokeLinejoin round:`<circle cx=\"18\" cy=\"5\" r=\"3\"/><circle cx=\"6\" cy=\"12\" r=\"3\"/><circle cx=\"18\" cy=\"19\" r=\"3\"/><line x1=\"8.59\" y1=\"13.51\" x2=\"15.42\" y2=\"17.49\"/><line x1=\"15.41\" y1=\"6.51\" x2=\"8.59\" y2=\"10.49\"/>`\n- Text: \"REPOST\"\n\n---\n\n## RESPONSIVE BREAKPOINTS\n\n@media (max-width: 900px):\n- nav padding: 16px 18px; nav-links gap: 18px; hide .nav-links-secondary\n- hero-row: flex-direction column, gap 24px; hero-col-left/right: width 100%, gap 24px\n- section-pad: 90px 18px 32px 18px; section-pad-lg: 90px 18px 60px 18px\n- services-head-row: flex-direction column, gap 16px, marginBottom 24px; services-head-col: width 100%\n- cards-grid: 1 column, gap 16px\n- section-3: height auto, min-height 100vh\n- hero-bottom-text: top auto, bottom 80px, transform none, left 18px, right 18px, maxWidth none\n- btn-primary/secondary: padding 11px 22px, fontSize 10px\n\n@media (max-width: 600px):\n- nav-links gap: 14px; nav-brand fontSize: 12px\n- hero-overlay height: 56%, paddingTop: 64px\n- hero-buttons: flex-wrap wrap\n\n---\n\n## PACKAGES\n\n- react, react-dom\n- framer-motion\n- lucide-react\n- tailwindcss, postcss, autoprefixer\n- vite, @vitejs/plugin-react\n",
+        "zh-CN": "构建 COGNITRA AI 机构落地页（深色视频背景 + 灰色面板 Hero + 逐词淡入 Statement + 三卡片视频 Services）。完整规格以 en 字段为准。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "AI Automation — COGNITRA"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "network"
+    ]
+  }
+}

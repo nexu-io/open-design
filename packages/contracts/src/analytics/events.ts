@@ -1178,9 +1178,30 @@ export interface AutomationsClickProps {
     | 'history'
     | 'cancel'
     | 'create'
-    | 'save';
+    | 'save'
+    | 'crystallize'
+    | 'proposal_apply'
+    | 'proposal_reject';
   type_id?: 'orbit' | 'routines' | 'schedules' | 'live_artifacts';
-  filter_id?: 'all' | 'scheduled' | 'running' | 'done';
+  // filter_id mirrors the template category tabs actually rendered in the
+  // Automations tab; the legacy run-status values stay for forward-compat.
+  filter_id?:
+    | 'all'
+    | 'scheduled'
+    | 'running'
+    | 'done'
+    | 'orbit'
+    | 'live-artifact'
+    | 'routine'
+    | 'memory'
+    | 'design-system'
+    | 'skills'
+    | 'connectors'
+    | 'compression'
+    | 'release'
+    | 'quality';
+  // Kind of the template whose card was clicked (element=type_card).
+  template_kind?: 'orbit' | 'live-artifact' | 'routine';
 }
 
 // PLUGINS

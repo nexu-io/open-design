@@ -89,7 +89,7 @@
 .project-actions-chip {
   font-size: 11.5px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--warning, #d97706) 14%, transparent);
   color: var(--warning, #d97706);
 }
@@ -284,7 +284,7 @@
   font-size: 14px;
   color: var(--text);
   font-family: inherit;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
 }
 
 /* Restore custom dropdown chevron for select elements in routines form.
@@ -356,7 +356,7 @@
   font-weight: 500;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 120ms ease;
+  transition: all 120ms var(--ease-out);
 }
 .routines-weekday:hover { color: var(--text); border-color: var(--text-soft); }
 .routines-weekday.active {
@@ -397,7 +397,7 @@
   border: 1px solid var(--border);
   background: var(--bg-panel);
   cursor: pointer;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition: border-color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
 
 .routines-radio:hover {
@@ -624,13 +624,13 @@
   gap: 6px;
   padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+  transition: border-color 140ms var(--ease-out), background 140ms var(--ease-out), color 140ms var(--ease-out);
 }
 .newproj-aspect-pill:hover { color: var(--text); background: var(--bg-subtle); }
 .newproj-aspect-pill.active {
@@ -684,7 +684,7 @@
   padding: 1px 5px;
   background: var(--accent-tint);
   color: var(--accent);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   margin-left: 6px;
 }
 .model-picker .ds-picker-group-head {
@@ -699,7 +699,7 @@
 
 .palette-tweaks-anchor { position: relative; display: inline-flex; }
 .palette-tweaks-badge {
-  width: 8px; height: 8px; border-radius: 999px; margin-left: 4px;
+  width: 8px; height: 8px; border-radius: var(--radius-pill); margin-left: 4px;
   box-shadow: 0 0 0 1px var(--bg-panel);
 }
 .palette-tweaks {
@@ -721,12 +721,12 @@
   display: flex; align-items: center; gap: 10px;
   padding: 6px 8px; border-radius: var(--radius-sm, 6px);
   cursor: pointer; font-size: 12.5px; color: var(--text);
-  transition: background 100ms ease;
+  transition: background 100ms var(--ease-out);
 }
 .palette-tweaks-item:hover, .palette-tweaks-item.hovered { background: var(--bg-subtle); }
 .palette-tweaks-item.selected { background: var(--bg-muted); }
 .palette-tweaks-stripe {
-  display: inline-flex; border-radius: 4px; overflow: hidden;
+  display: inline-flex; border-radius: var(--radius-xs); overflow: hidden;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06); flex-shrink: 0;
 }
 .palette-tweaks-chip { width: 14px; height: 18px; display: inline-block; }
@@ -740,7 +740,7 @@
     var(--text-muted) calc(50% + 1px),
     transparent calc(50% + 1px)
   );
-  border: 1px dashed var(--border-strong, var(--border)); border-radius: 4px;
+  border: 1px dashed var(--border-strong, var(--border)); border-radius: var(--radius-xs);
 }
 .palette-tweaks-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .palette-tweaks-check { display: inline-flex; align-items: center; color: var(--text-muted); }
@@ -778,6 +778,8 @@
   flex: 0 0 156px;
   grid-template-columns: minmax(0, 1fr) 22px;
   align-self: center;
+  /* Intentional compact-chrome value (26px tab); kept off the radius scale
+     and pinned by workspace-tabs-chrome.test.ts. */
   border-radius: 7px;
   border: 1px solid transparent;
   background: transparent;
@@ -830,13 +832,13 @@
 .workspace-shell .workspace-tab__close {
   width: 18px;
   height: 18px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 .workspace-shell .workspace-tabs-new-btn,
 .workspace-shell .workspace-tabs-icon-btn {
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .app {
@@ -857,7 +859,7 @@
 .app .project-instructions-toggle {
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .app .app-chrome-content {
   gap: 8px;
@@ -931,7 +933,7 @@
 .app .chat-header-tab {
   min-height: 28px;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-size: 12.5px;
 }
 .app .chat-header-tab.active {
@@ -942,7 +944,7 @@
 .app .chat-header-actions .icon-only {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .app .chat-log {
   gap: 14px;
@@ -998,7 +1000,7 @@
 }
 .app .msg.assistant .role .role-agent-icon {
   flex: 0 0 auto;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 .app .msg-time {
   font-size: 10.5px;
@@ -1054,7 +1056,7 @@
   font-size: 11px;
   color: var(--text-faint);
   opacity: 0;
-  transition: opacity 150ms ease;
+  transition: opacity 150ms var(--ease-out);
 }
 .app .msg.assistant:hover .assistant-footer,
 .app .assistant-footer[data-streaming="true"],
@@ -1100,7 +1102,7 @@
   min-height: 36px;
   padding: 4px;
   gap: 6px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-size: 13px;
 }
 .app .action-card-toggle:hover {
@@ -1109,7 +1111,7 @@
 .app .action-card-status {
   width: 24px;
   height: 24px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   border: 1px solid var(--border-soft);
   background: var(--bg-panel);
 }
@@ -1125,7 +1127,7 @@
   border-radius: 0;
   background: none;
   box-shadow: none;
-  transition: background 160ms ease;
+  transition: background 160ms var(--ease-out);
 }
 .app .op-card:hover {
   background: none;
@@ -1133,7 +1135,7 @@
 .app .op-card-head {
   padding: 4px;
   gap: 6px;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .app .op-card-head:hover {
   background: var(--bg-fill-tertiary);
@@ -1142,7 +1144,7 @@
    code box framing inside the app scope so the streaming panel stays boxed. */
 .app .live-code-box {
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-fill-secondary);
 }
 .app .live-code-box .live-code-head {
@@ -1156,7 +1158,7 @@
   width: 24px;
   height: 24px;
   padding: 0;
-  border-radius: 8px;
+  border-radius: var(--radius);
   border: 1px solid var(--border-soft);
   background: var(--bg-panel);
 }
@@ -1170,7 +1172,7 @@
   min-height: 36px;
   padding: 4px;
   gap: 6px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-size: 13px;
 }
 .app .thinking-toggle:hover {
@@ -1179,7 +1181,7 @@
 .app .thinking-status {
   width: 24px;
   height: 24px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   border: 1px solid var(--border-soft);
   background: var(--bg-panel);
 }
@@ -1209,12 +1211,12 @@
 }
 .app .produced-file {
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   gap: 10px;
   background: none;
   border: none;
   box-shadow: none;
-  transition: background 160ms ease;
+  transition: background 160ms var(--ease-out);
 }
 .app .produced-file:hover {
   background: var(--bg-fill-tertiary);
@@ -1240,7 +1242,7 @@
 .app .produced-file-actions .ghost-link {
   font-size: 11px;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: none;
   background: none;
   color: var(--text-muted);
@@ -1287,7 +1289,7 @@
   min-height: 0;
   padding: 10px 12px;
   gap: 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   box-shadow: none;
   animation: none;
   opacity: 1;
@@ -1302,7 +1304,7 @@
 .app .chat-example-icon {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-fill-secondary);
   box-shadow: none;
 }
@@ -1327,15 +1329,15 @@
 .app .chat-design-artifact {
   min-width: 0;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
   color: var(--text);
   overflow: hidden;
   cursor: default;
   box-shadow: none;
   transition:
-    border-color 120ms ease,
-    background 120ms ease;
+    border-color 120ms var(--ease-out),
+    background 120ms var(--ease-out);
 }
 .app .chat-design-artifact[role='button'] {
   cursor: pointer;
@@ -1441,7 +1443,7 @@
   display: grid;
   place-items: center;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12.5px;
@@ -1450,7 +1452,7 @@
   max-width: none;
   padding: 10px 12px;
   gap: 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   box-shadow: none;
   animation: none;
   opacity: 1;
@@ -1459,7 +1461,7 @@
 .app .chat-connect-repo-icon {
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .app .chat-connect-repo-title {
   font-size: 12.8px;
@@ -1485,14 +1487,14 @@
 .app .composer-shell {
   padding: 7px;
   border-color: color-mix(in srgb, var(--border) 84%, var(--border-strong));
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-panel) 96%, var(--bg-subtle));
   box-shadow: var(--shadow-sm);
 }
 .chat-composer-fixed-layer .composer-shell {
   padding: 0;
   border-color: var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   box-shadow: none;
 }
 .app .composer-shell:focus-within {
@@ -1543,13 +1545,15 @@
 .app .composer-import,
 .app .composer-research,
 .app .composer-send {
-  border-radius: 7px;
+  /* radius-sm to match the unified 28px composer-row control system; this is
+     the later/winning stylesheet, so it owns the + and Send radius. */
+  border-radius: var(--radius-sm);
 }
 .chat-composer-fixed-layer .composer-row .icon-btn,
 .chat-composer-fixed-layer .composer-import,
 .chat-composer-fixed-layer .composer-research,
 .chat-composer-fixed-layer .composer-send {
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
 }
 .app .composer-row .icon-btn {
   width: 28px;
@@ -1609,7 +1613,7 @@
   height: 28px;
   padding: 3px 9px 3px 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   cursor: pointer;
@@ -1640,7 +1644,7 @@
   max-width: 340px;
   padding: 6px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
   box-shadow: var(--shadow-md, 0 12px 32px rgba(0, 0, 0, 0.12));
 }
@@ -1659,7 +1663,7 @@
   width: 100%;
   padding: 6px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -1771,7 +1775,7 @@
 .app .ws-focus-expand {
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: var(--radius);
 }
 .app .ws-tabs-bar {
   gap: 6px;
@@ -1783,7 +1787,7 @@
 .app .ws-tab {
   min-height: 30px;
   padding: 0 11px;
-  border-radius: 9px;
+  border-radius: var(--radius);
   border: 1px solid transparent;
   box-shadow: none;
 }
@@ -1841,7 +1845,7 @@
   width: 31px;
   height: 31px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   box-shadow: none;
   flex: 0 0 auto;
@@ -1858,7 +1862,7 @@
   min-height: 31px;
   padding: 0 12px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   box-shadow: none;
 }
@@ -1871,7 +1875,7 @@
   margin: 0;
   padding: 2px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-subtle);
   box-shadow: none;
 }
@@ -1881,7 +1885,7 @@
 .app .df-group-toggle button {
   min-height: 26px;
   padding: 2px 11px;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .app .df-group-toggle button.active {
   background: var(--bg-panel);
@@ -1915,12 +1919,12 @@
 .app .df-pagination select,
 .app .df-page-btn {
   min-height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background-color: var(--bg-panel);
   box-shadow: none;
 }
 .app .df-select-all {
-  border-radius: 7px;
+  border-radius: var(--radius);
 }
 .app .df-table {
   width: 100%;
@@ -2018,7 +2022,7 @@
 .app .df-row-icon {
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .app .df-row-name {
   font-size: 13px;
@@ -2043,7 +2047,7 @@
 .app .df-drop {
   margin: 18px 0 0;
   padding: 18px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
 }
 .app .df-drop .label {
@@ -2065,7 +2069,7 @@
 .app .handoff-split {
   display: inline-flex;
   align-items: stretch;
-  border-radius: 7px;
+  border-radius: var(--radius);
   border: 1px solid transparent;
   background: transparent;
   overflow: hidden;
@@ -2103,7 +2107,7 @@
   align-items: center;
   gap: 8px;
   padding: 3px 12px 3px 4px;
-  border-radius: 7px;
+  border-radius: var(--radius);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text);
@@ -2148,7 +2152,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   flex: 0 0 auto;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent) inset;
@@ -2162,7 +2166,7 @@
   overflow: auto;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow-md, 0 12px 32px rgba(0, 0, 0, 0.12));
   padding: 7px;
   z-index: 50;
@@ -2176,14 +2180,14 @@
   gap: 3px;
   padding: 3px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: color-mix(in srgb, var(--text-muted) 5%, transparent);
 }
 .app .handoff-menu-tab {
   height: 28px;
   padding: 0 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   font: inherit;
@@ -2216,7 +2220,7 @@
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: color-mix(in srgb, var(--bg-panel) 94%, var(--text) 3%);
   color: var(--text);
   font: inherit;
@@ -2254,7 +2258,7 @@
   width: 20px;
   height: 20px;
   flex: 0 0 20px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--text);
 }
@@ -2287,7 +2291,7 @@
   background: transparent;
   font-size: 12px;
   color: var(--text);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
   width: 100%;
@@ -2410,7 +2414,7 @@
   min-height: 30px;
   padding: 5px 8px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   color: var(--text);
   background: color-mix(in srgb, var(--accent) 7%, var(--bg-panel));
   font-size: 11.5px;
@@ -2435,7 +2439,7 @@
 .app .handoff-framework-chip {
   height: 22px;
   padding: 0 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text-muted);
@@ -2498,7 +2502,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 9px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--border);
   background: var(--bg-panel);
   color: var(--text);
@@ -2537,7 +2541,7 @@
 .project-ds-picker-swatch {
   width: 10px;
   height: 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
 }
 .project-ds-picker-popover {
@@ -2547,7 +2551,7 @@
      within the viewport. */
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-md, 0 18px 48px rgba(0, 0, 0, 0.16));
   display: flex;
   flex-direction: column;
@@ -2596,7 +2600,7 @@
   padding: 6px 8px;
   border: 0;
   background: transparent;
-  border-radius: 7px;
+  border-radius: var(--radius);
   text-align: left;
   cursor: pointer;
 }
@@ -2625,7 +2629,7 @@
 .project-ds-picker-option-cat {
   font-size: 10.5px;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text-muted) 12%, transparent);
   color: var(--text-muted);
 }
@@ -2684,7 +2688,7 @@
   width: 100%;
   aspect-ratio: 16 / 9;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   overflow: hidden;
   background: var(--bg-panel);
 }
@@ -2698,7 +2702,7 @@
   gap: 5px;
   height: 28px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
   -webkit-backdrop-filter: saturate(1.1) blur(8px);
@@ -2736,7 +2740,7 @@
 .project-ds-picker-preview-cat {
   font-size: 10.5px;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text-muted) 12%, transparent);
   color: var(--text-muted);
 }
@@ -2754,7 +2758,7 @@
 .project-ds-picker-preview-swatch {
   width: 20px;
   height: 20px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   border: 1px solid var(--border);
 }
 .project-ds-picker-preview-frame {
@@ -2803,7 +2807,7 @@
   height: min(820px, calc(100vh - 56px));
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg, 0 32px 80px rgba(0, 0, 0, 0.24));
   display: flex;
   flex-direction: column;
@@ -2827,7 +2831,7 @@
   margin-left: auto;
   width: 36px;
   height: 36px;
-  border-radius: 9px;
+  border-radius: var(--radius);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text);
@@ -2875,6 +2879,6 @@
   .project-ds-picker-fullscreen-frame {
     width: calc(100vw - 24px);
     height: calc(100vh - 24px);
-    border-radius: 10px;
+    border-radius: var(--radius-md);
   }
 }

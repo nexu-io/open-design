@@ -18,10 +18,7 @@ import SiteFooter from '../../_components/site-footer.astro';
 import Topbar from '../../_components/topbar.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { getGithubRepoMeta } from '../../_lib/github';
-import {
-  explicitLocalizedString,
-  localizeBlogPostText,
-} from '../../content-i18n';
+import { localizeBlogPostText } from '../../content-i18n';
 import {
   getLandingUiCopy,
   getLocaleDefinition,
@@ -55,16 +52,32 @@ const fallbackPost = localizeBlogPostText({
   category: post.data.category,
   locale,
 });
-const localizedPostField = (field: 'title' | 'summary' | 'category') => {
-  return explicitLocalizedString(
-    localizedPostI18n?.[field] as Parameters<typeof explicitLocalizedString>[0],
-    locale,
-  ) ?? fallbackPost[field];
+// `localizedPostI18n` is already `i18n[locale]`, so each field is the resolved
+// string for this locale rather than a locale→string map. It must not go through
+// explicitLocalizedString (which expects the map shape and returns undefined for a
+// bare string on non-default locales — the reason post translations never
+// rendered). Use the field directly and fall back to the English source text.
+const explicitField = (field: 'title' | 'summary' | 'category' | 'bodyHtml') => {
+  const value = localizedPostI18n?.[field];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 };
-const localizedBodyHtml = explicitLocalizedString(
-  localizedPostI18n?.bodyHtml as Parameters<typeof explicitLocalizedString>[0],
-  locale,
-) ?? fallbackPost.bodyHtml;
+const localizedPostField = (field: 'title' | 'summary' | 'category') =>
+  explicitField(field) ?? fallbackPost[field];
+// Translated `bodyHtml` is authored with root-relative internal links
+// (`href="/blog/..."`), which point at the default English routes. On a
+// localized page (`/zh/blog/...`) those links would bounce the reader back to
+// English, so rewrite each internal `href` through `localizedHref` before the
+// HTML is injected verbatim via `set:html`. Only `href` is rewritten — `src`
+// (images and other locale-agnostic static assets) is left untouched, and
+// `localizedHref` already passes through absolute/external/anchor URLs.
+const localizeBodyHtmlLinks = (html: string): string =>
+  html.replace(
+    /(\bhref=)(["'])(\/[^"']*)\2/g,
+    (_match, attr: string, quote: string, path: string) =>
+      `${attr}${quote}${href(path)}${quote}`,
+  );
+const rawBodyHtml = explicitField('bodyHtml') ?? fallbackPost.bodyHtml;
+const localizedBodyHtml = rawBodyHtml ? localizeBodyHtmlLinks(rawBodyHtml) : rawBodyHtml;
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
 const sourceUrl = `https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/blog/${post.id}.md`;
 const category = post.data.category.toLowerCase();
@@ -299,6 +312,25 @@ const fmtDate = (d: Date) =>
       }
       .post-body :global(p) {
         margin: 0 0 1.4em;
+      }
+      .post-body :global(figure) {
+        margin: 2.5rem 0;
+      }
+      .post-body :global(figure img),
+      .post-body :global(img) {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        height: auto;
+        border-radius: 6px;
+      }
+      .post-body :global(figure figcaption) {
+        margin-top: 0.6rem;
+        font-size: 0.85rem;
+        line-height: 1.4;
+        opacity: 0.7;
+        text-align: center;
+        font-family: var(--sans);
       }
       .post-body :global(h2) {
         font-family: var(--serif);

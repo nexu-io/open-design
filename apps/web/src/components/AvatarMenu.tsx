@@ -341,6 +341,7 @@ export function AvatarMenu({
                     type="button"
                     key={a.id}
                     className={`avatar-item${selected ? ' active' : ''}`}
+                    data-testid={`avatar-agent-option-${a.id}`}
                     aria-current={selected ? 'true' : undefined}
                     onClick={() => {
                       onAgentChange(a.id);

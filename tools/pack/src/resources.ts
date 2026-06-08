@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
-import { access, cp, mkdir } from "node:fs/promises";
-import { createRequire } from "node:module";
-import { basename, dirname, join } from "node:path";
+import { cp } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 function resolveToolsPackRoot(startDir: string): string {
@@ -51,9 +50,6 @@ export const linuxResources = {
   desktopTemplate: join(resourcesRoot, "linux", "open-design.desktop.template"),
 } as const;
 
-const CHROMIUM_BUNDLE_ROOT_RE = /^chromium(?:_headless_shell)?-\d+$/i;
-const HEADED_CHROMIUM_BUNDLE_ROOT_RE = /^chromium-\d+$/i;
-
 const BUNDLED_RESOURCE_TREES = [
   { from: "skills", to: "skills" },
   // After the skills/design-templates split (specs/current/skills-and-design-templates.md)
@@ -82,100 +78,4 @@ export async function copyBundledResourceTrees({
       recursive: true,
     });
   }
-}
-
-export async function copyBundledPlaywrightChromium({
-  resourceRoot,
-  sourceExecutablePath,
-  workspaceRoot,
-}: {
-  resourceRoot: string;
-  sourceExecutablePath?: string;
-  workspaceRoot: string;
-}): Promise<{ sourceRoots: string[]; targetRoots: string[] }> {
-  const { sourceRoots } = await resolveBundledPlaywrightChromiumSourceRoots({
-    sourceExecutablePath,
-    workspaceRoot,
-  });
-  const targetRoots: string[] = [];
-  for (const sourceRoot of sourceRoots) {
-    const targetRoot = join(resourceRoot, "ms-playwright", basename(sourceRoot));
-    await mkdir(dirname(targetRoot), { recursive: true });
-    await cp(sourceRoot, targetRoot, { recursive: true });
-    targetRoots.push(targetRoot);
-  }
-  return { sourceRoots, targetRoots };
-}
-
-export function resolveDaemonPlaywrightChromiumExecutablePath(workspaceRoot: string): string {
-  const daemonPackagePath = join(workspaceRoot, "apps", "daemon", "package.json");
-  const requireFromDaemon = createRequire(daemonPackagePath);
-  const playwrightModule = requireFromDaemon("playwright") as {
-    chromium?: { executablePath?: () => string };
-  };
-  const executablePath = playwrightModule.chromium?.executablePath?.();
-  if (!executablePath) {
-    throw new Error("tools-pack: daemon Playwright Chromium executable path is unavailable");
-  }
-  return executablePath;
-}
-
-function resolveChromiumBundleRoot(executablePath: string): string {
-  let current = dirname(executablePath);
-  while (true) {
-    const name = basename(current);
-    if (CHROMIUM_BUNDLE_ROOT_RE.test(name)) return current;
-    const parent = dirname(current);
-    if (parent === current) break;
-    current = parent;
-  }
-  throw new Error(`tools-pack: unable to locate Chromium bundle root for ${executablePath}`);
-}
-
-export async function resolveChromiumBundleRoots(executablePath: string): Promise<string[]> {
-  const primaryRoot = resolveChromiumBundleRoot(executablePath);
-  const match = basename(primaryRoot).match(/^chromium(?:_headless_shell)?-(\d+)$/i);
-  if (!match) return [primaryRoot];
-  const revision = match[1];
-  const parent = dirname(primaryRoot);
-  const roots = [primaryRoot];
-  const optionalVariants = [
-    join(parent, `chromium-${revision}`),
-    join(parent, `chromium_headless_shell-${revision}`),
-  ].filter((variantRoot) => variantRoot !== primaryRoot);
-  for (const variantRoot of optionalVariants) {
-    try {
-      await access(variantRoot);
-      roots.push(variantRoot);
-    } catch {
-      // Some Playwright installs ship only one Chromium variant. Keep
-      // packaging the variant that actually backs chromium.launch().
-    }
-  }
-  assertBundledChromiumRootsSupportChannelLaunch(roots, executablePath);
-  return roots;
-}
-
-function assertBundledChromiumRootsSupportChannelLaunch(
-  roots: readonly string[],
-  executablePath: string,
-): void {
-  if (roots.some((root) => HEADED_CHROMIUM_BUNDLE_ROOT_RE.test(basename(root)))) return;
-  throw new Error(
-    `tools-pack: bundled Playwright Chromium for ${executablePath} is missing the chromium-* bundle required by channel: 'chromium'; reinstall Playwright without --only-shell or add the headed Chromium bundle`,
-  );
-}
-
-export async function resolveBundledPlaywrightChromiumSourceRoots({
-  sourceExecutablePath,
-  workspaceRoot,
-}: {
-  sourceExecutablePath?: string;
-  workspaceRoot: string;
-}): Promise<{ executablePath: string; sourceRoots: string[] }> {
-  const executablePath =
-    sourceExecutablePath ?? resolveDaemonPlaywrightChromiumExecutablePath(workspaceRoot);
-  await access(executablePath);
-  const sourceRoots = await resolveChromiumBundleRoots(executablePath);
-  return { executablePath, sourceRoots };
 }

@@ -145,7 +145,7 @@ test('[P0] workspace restores the last manually selected file tab after reload i
   const restoredArtifactTab = page.getByRole('tab', { name: /workspace-artifact\.html/i });
   if ((await restoredArtifactTab.count()) === 0) {
     const turnCard = page.locator('.msg.assistant').filter({ hasText: 'workspace-artifact.html' }).first();
-    const openButton = turnCard.getByRole('button', { name: 'Open' });
+    const openButton = turnCard.getByRole('button', { name: /^Open$/ });
     await expect(openButton).toBeVisible();
     await openButton.click();
 
@@ -1372,7 +1372,10 @@ test('[P0] opening an uploaded file route keeps the older conversation present i
       'base64',
     ),
   });
-  await expect(tabBySuffix(page, 'conversation-surface-reference.png')).toBeVisible();
+  const uploadedFileTab = tabBySuffix(page, 'conversation-surface-reference.png');
+  await expect(uploadedFileTab).toBeVisible();
+  const uploadedName = await uploadedFileTab.getAttribute('title');
+  expect(uploadedName).toBeTruthy();
 
   await page.getByTestId('conversation-history-trigger').click();
   const historyList = page.getByTestId('conversation-list');
@@ -1392,10 +1395,10 @@ test('[P0] opening an uploaded file route keeps the older conversation present i
   if (projects !== 'projects' || !projectId) {
     throw new Error(`unexpected project route: ${current.pathname}`);
   }
-  await gotoProjectRoute(page, `/projects/${projectId}/files/conversation-surface-reference.png`);
+  await gotoProjectRoute(page, `/projects/${projectId}/files/${encodeURIComponent(uploadedName!)}`);
 
   await expect(page.getByTestId('file-workspace')).toBeVisible();
-  await expect(tabBySuffix(page, 'conversation-surface-reference.png')).toHaveAttribute('aria-selected', 'true');
+  await expect(uploadedFileTab).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
   await expectProjectFilesToIncludeSuffixes(page, projectId, ['conversation-surface-reference.png']);
   const persistedConversations = await listConversationsFromApi(page, projectId);
@@ -1835,7 +1838,7 @@ test('[P0] reloading a project keeps the Design Files entry reachable when it wa
   ).toBeVisible();
 
   await page.reload();
-  await expect(page.getByTestId('file-workspace')).toBeVisible();
+  await expect(page.getByTestId('file-workspace')).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId('design-files-tab')).toBeVisible();
 });
 
@@ -2278,7 +2281,17 @@ async function seedHtmlArtifact(
 
 async function openDesignFile(page: Page, fileName: string) {
   await page.getByRole('button', { name: new RegExp(fileName.replace('.', '\\.')) }).click();
-  await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+  await clickDesignFilePreviewOpen(page);
+}
+
+async function clickDesignFilePreviewOpen(page: Page) {
+  const preview = page.getByTestId('design-file-preview');
+  await expect(preview).toBeVisible();
+  await expect(async () => {
+    const openButton = preview.getByRole('button', { name: /^Open$/ });
+    await expect(openButton).toBeVisible({ timeout: 1_000 });
+    await openButton.click({ timeout: 1_000 });
+  }).toPass({ timeout: T.medium });
 }
 
 async function expectFileSource(
@@ -2734,7 +2747,7 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();

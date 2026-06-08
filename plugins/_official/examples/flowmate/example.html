@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlowMate — Transform your workflow using plain English</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* PPMondwest custom display serif (the FlowMate brand face) */
+    @font-face {
+      font-family: 'PPMondwest';
+      src: url('https://www.generalintelligencecompany.com/_next/static/media/17330fd087386262-s.p.woff2') format('woff2');
+      font-weight: 400;
+      font-display: swap;
+    }
+
+    :root {
+      --bg: #fefffc;
+      --text-primary: #2c2c2c;
+      --text-secondary: #444141;
+      --text-tertiary: #646464;
+      --text-muted: #b4b8b4;
+      --border-1: #dde3dd;
+      --border-2: #dee2de;
+      --border-3: #e8e8e8;
+      --border-hover: #b8beb8;
+      --hover-bg: #eef1ed;
+      --sidebar-w: 240px;
+      --display: 'PPMondwest', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+      --sys: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--sys);
+      background: var(--bg);
+      color: var(--text-primary);
+      font-kerning: none;
+      letter-spacing: -0.04em;
+      -webkit-font-smoothing: antialiased;
+    }
+    img { display: block; max-width: 100%; }
+    button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; letter-spacing: -0.04em; }
+    a { color: inherit; text-decoration: none; }
+    .display { font-family: var(--display); font-weight: 400; letter-spacing: -0.04em; }
+
+    /* ─────────────── SIDEBAR (desktop only) ─────────────── */
+    .sidebar {
+      position: fixed; top: 0; left: 0; width: var(--sidebar-w); height: 100vh;
+      border-right: 2px solid var(--border-1);
+      background: var(--bg);
+      padding: 28px 20px; display: none; flex-direction: column; gap: 8px; z-index: 40;
+    }
+    .sidebar-logo { width: 132px; margin-bottom: 36px; }
+    .sidebar-logo img { width: 100%; height: auto; border-radius: 8px; }
+    .nav-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 14px; border-radius: 12px;
+      color: var(--text-muted); font-size: 0.95rem; font-weight: 500;
+      transition: background 0.25s ease, color 0.25s ease;
+    }
+    .nav-item svg { width: 18px; height: 18px; stroke: currentColor; }
+    .nav-item:hover { background: var(--hover-bg); color: var(--text-secondary); }
+    .nav-item.active { background: var(--hover-bg); color: var(--text-primary); }
+
+    /* ─────────────── NAVBAR ─────────────── */
+    .navbar {
+      position: fixed; top: 0; left: 0; right: 0; height: 72px; z-index: 50;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px;
+      background: rgba(254, 255, 252, 0.9);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border-3);
+    }
+    .brand { font-family: var(--display); font-size: 28px; letter-spacing: -0.04em; line-height: 1; }
+    .nav-right { display: flex; align-items: center; gap: 18px; }
+    .nav-link { font-size: 0.95rem; color: var(--text-secondary); display: none; }
+    .nav-link:hover { color: var(--text-primary); }
+    .btn {
+      border-radius: 999px; padding: 9px 20px; font-size: 0.9rem; font-weight: 500;
+      transition: background 0.25s ease, border-color 0.25s ease, transform 0.2s ease;
+    }
+    .btn-login { background: #fff; border: 2px solid var(--border-1); color: var(--text-primary); }
+    .btn-login:hover { background: var(--hover-bg); }
+    .btn-signup { background: #000; color: #fff; }
+    .btn-signup:hover { background: var(--text-primary); }
+
+    /* ─────────────── CONTENT WRAP ─────────────── */
+    .content { margin-left: 0; padding-top: 72px; }
+    .section { padding: 0 24px; border-top: 1px solid var(--border-3); }
+    .section:first-child { border-top: none; }
+    .wrap { max-width: 1120px; margin: 0 auto; }
+
+    /* fade animation (Framer-Motion whileInView -> IntersectionObserver) */
+    .fade { opacity: 0; transform: translateY(18px); transition: opacity 0.7s cubic-bezier(0.22,1,0.36,1), transform 0.7s cubic-bezier(0.22,1,0.36,1); }
+    .fade.in { opacity: 1; transform: translateY(0); }
+
+    /* ─────────────── HERO ─────────────── */
+    .hero { padding-top: 48px; padding-bottom: 48px; }
+    .hero h1 {
+      font-family: var(--display); font-weight: 400; letter-spacing: -0.04em;
+      font-size: 32px; line-height: 0.95; max-width: 900px; color: var(--text-primary);
+    }
+    .hero p {
+      margin-top: 28px; max-width: 620px; color: var(--text-secondary);
+      font-size: 1.05rem; line-height: 1.5;
+    }
+    .hero-cta {
+      margin-top: 32px; display: inline-flex; align-items: center; gap: 10px;
+      background: #000; color: #fff; border-radius: 999px; padding: 13px 24px;
+      font-size: 0.95rem; font-weight: 500; transition: background 0.25s ease, transform 0.2s ease;
+    }
+    .hero-cta:hover { background: var(--text-primary); transform: translateY(-1px); }
+    .hero-cta svg { width: 16px; height: 16px; }
+
+    /* ─────────────── VIDEO / LIQUID GLASS ─────────────── */
+    .video-sec { padding-top: 56px; padding-bottom: 56px; }
+    .video-frame {
+      position: relative; width: 100%; border-radius: 28px; overflow: hidden;
+      aspect-ratio: 16 / 9; background: #1a1a1a;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.12);
+    }
+    .video-frame video { width: 100%; height: 100%; object-fit: cover; }
+    .glass-card {
+      position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%);
+      width: min(560px, 86%);
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px 16px 16px 22px; border-radius: 20px;
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      background-image: linear-gradient(in oklab, rgba(255,255,255,0.35) 0px, rgba(255,255,255,0.12) 100%);
+      background-color: rgba(255,255,255,0.18);
+      border: 6px solid rgba(255,255,255,0.2);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.5);
+    }
+    .glass-card .gc-text { flex: 1; color: #fff; font-size: 0.98rem; line-height: 1.35; min-height: 1.35em; text-shadow: 0 1px 2px rgba(0,0,0,0.25); }
+    .gc-caret { display: inline-block; width: 2px; background: #fff; height: 1.1em; vertical-align: -2px; margin-left: 1px; animation: blink 1s steps(1) infinite; }
+    @keyframes blink { 0%,50% { opacity: 1; } 50.01%,100% { opacity: 0; } }
+    .gc-clip { width: 22px; height: 22px; color: rgba(255,255,255,0.85); flex: 0 0 auto; }
+    .gc-clip svg { width: 100%; height: 100%; }
+    .gc-send {
+      flex: 0 0 auto; width: 38px; height: 38px; border-radius: 50%;
+      background: #fff; color: #000; display: grid; place-items: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.18); transition: transform 0.2s ease;
+    }
+    .gc-send:hover { transform: scale(1.08); }
+    .gc-send svg { width: 18px; height: 18px; }
+
+    /* ─────────────── FEATURES GRID ─────────────── */
+    .features-sec { padding-top: 64px; padding-bottom: 64px; }
+    .features-sec h2 {
+      font-family: var(--display); font-weight: 400; letter-spacing: -0.04em;
+      font-size: 30px; line-height: 1.02; max-width: 680px; margin-bottom: 40px;
+    }
+    .feature-grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
+    .feature-card {
+      border: 2px solid var(--border-2); border-radius: 20px;
+      padding: 24px; display: flex; flex-direction: column; min-height: 200px;
+      transition: border-color 0.3s ease, transform 0.3s ease;
+      background: var(--bg);
+    }
+    .feature-card:hover { border-color: var(--border-hover); transform: translateY(-2px); }
+    .feature-card h3 { font-size: 1.1rem; font-weight: 600; letter-spacing: -0.04em; margin-bottom: 10px; }
+    .feature-card p { color: var(--text-tertiary); font-size: 0.92rem; line-height: 1.45; }
+    .feature-icons { margin-top: auto; padding-top: 20px; display: flex; gap: 8px; }
+    .ficon {
+      width: 38px; height: 38px; border-radius: 50%; background: var(--hover-bg);
+      display: grid; place-items: center; color: var(--text-secondary);
+    }
+    .ficon svg { width: 18px; height: 18px; }
+    .ficon img { width: 20px; height: 20px; border-radius: 4px; }
+
+    /* ─────────────── CARDS CAROUSEL ─────────────── */
+    .carousel-sec { padding-top: 64px; padding-bottom: 80px; }
+    .carousel-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 28px; gap: 16px; }
+    .carousel-head h2 {
+      font-family: var(--display); font-weight: 400; letter-spacing: -0.04em;
+      font-size: 30px; line-height: 1.02; max-width: 560px;
+    }
+    .carousel-nav { display: flex; gap: 10px; flex: 0 0 auto; }
+    .cnav-btn {
+      width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--border-1);
+      background: #fff; display: grid; place-items: center; color: var(--text-primary);
+      transition: background 0.25s ease, border-color 0.25s ease;
+    }
+    .cnav-btn:hover { background: var(--hover-bg); border-color: var(--border-hover); }
+    .cnav-btn svg { width: 18px; height: 18px; }
+    .carousel-viewport { overflow: hidden; }
+    .carousel-track { display: flex; gap: 20px; transition: transform 0.7s cubic-bezier(0.32, 0.72, 0, 1); }
+    .ccard {
+      position: relative; flex: 0 0 calc((100% - 40px) / 3); height: 500px;
+      border-radius: 24px; overflow: hidden; background: #1a1a1a;
+      transition: transform 0.4s ease;
+    }
+    .ccard:hover { transform: scale(1.01); }
+    .ccard img { width: 100%; height: 100%; object-fit: cover; }
+    .ccard::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.08) 48%, rgba(0,0,0,0) 100%);
+    }
+    .ccard-body { position: absolute; left: 0; right: 0; bottom: 0; padding: 28px; z-index: 2; color: #fff; }
+    .ccard-tag { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.85; margin-bottom: 8px; }
+    .ccard-title { font-family: var(--display); font-weight: 400; letter-spacing: -0.04em; font-size: 1.7rem; line-height: 1.05; }
+
+    /* ─────────────── RESPONSIVE ─────────────── */
+    @media (min-width: 768px) {
+      .hero h1 { font-size: 50px; }
+      .features-sec h2, .carousel-head h2 { font-size: 38px; }
+      .feature-grid { grid-template-columns: repeat(2, 1fr); }
+      .ccard { flex: 0 0 calc((100% - 20px) / 2); }
+    }
+    @media (min-width: 1024px) {
+      .sidebar { display: flex; }
+      .navbar { left: var(--sidebar-w); }
+      .content { margin-left: var(--sidebar-w); }
+      .nav-link { display: inline; }
+      .brand { font-size: 32px; }
+      .hero h1 { font-size: 70px; max-width: 700px; }
+      .hero p { max-width: 520px; }
+      .feature-grid { grid-template-columns: repeat(3, 1fr); }
+      .ccard { flex: 0 0 calc((100% - 40px) / 3); }
+    }
+  </style>
+</head>
+<body>
+  <!-- ─────────────── SIDEBAR ─────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="https://plugin-assets.open-design.ai/plugins/flowmate/hf_20260405_072635_e0ca60b6-0b6c-49a3-825d-b2b6a53dd63d-871e7b.webp&w=1280&q=85" alt="FlowMate logo" />
+    </div>
+    <a class="nav-item active" href="#home" data-nav="home">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5"/><path d="M5 10v10h14V10"/></svg>
+      Home
+    </a>
+    <a class="nav-item" href="#video" data-nav="video">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="m22 8-6 4 6 4V8Z"/></svg>
+      Video
+    </a>
+    <a class="nav-item" href="#features" data-nav="features">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Features
+    </a>
+    <a class="nav-item" href="#cards" data-nav="cards">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>
+      Cards
+    </a>
+  </aside>
+
+  <!-- ─────────────── NAVBAR ─────────────── -->
+  <nav class="navbar">
+    <div class="brand">FlowMate</div>
+    <div class="nav-right">
+      <a class="nav-link" href="#">Pricing</a>
+      <a class="nav-link" href="#">Community</a>
+      <button class="btn btn-login">Log in</button>
+      <button class="btn btn-signup">Sign up</button>
+    </div>
+  </nav>
+
+  <div class="content">
+    <!-- ─────────────── HERO ─────────────── -->
+    <section class="section hero" id="home">
+      <div class="wrap">
+        <h1 class="fade">Transform your workflow using plain English</h1>
+        <p class="fade">FlowMate connects to your current apps, builds smart workflows, and manages operations. Powering the platforms you already know and trust.</p>
+        <button class="hero-cta fade">
+          View our intro video
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- ─────────────── VIDEO / LIQUID GLASS ─────────────── -->
+    <section class="section video-sec" id="video">
+      <div class="wrap">
+        <div class="video-frame fade">
+          <video autoplay muted loop playsinline poster="">
+            <source src="https://plugin-assets.open-design.ai/plugins/flowmate/hf_20260405_073438_071156e5-2a7a-45d8-a8d9-c628d2144e88-988708.mp4" type="video/mp4">
+          </video>
+          <div class="glass-card">
+            <span class="gc-clip" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            </span>
+            <span class="gc-text" id="typewriter"></span>
+            <button class="gc-send" aria-label="Send">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────── FEATURES ─────────────── -->
+    <section class="section features-sec" id="features">
+      <div class="wrap">
+        <h2 class="fade">Discover what FlowMate can accomplish for your team</h2>
+        <div class="feature-grid" id="featureGrid"></div>
+      </div>
+    </section>
+
+    <!-- ─────────────── CARDS CAROUSEL ─────────────── -->
+    <section class="section carousel-sec" id="cards">
+      <div class="wrap">
+        <div class="carousel-head fade">
+          <h2>One platform, every kind of team</h2>
+          <div class="carousel-nav">
+            <button class="cnav-btn" id="prevBtn" aria-label="Previous">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <button class="cnav-btn" id="nextBtn" aria-label="Next">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="carousel-viewport">
+          <div class="carousel-track" id="carouselTrack"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // ───── Generic tool icon (inline SVG markup reused by feature cards) ─────
+    var ICON_TOOL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.6 5.6L3 18l3 3 6.1-6.1a4 4 0 0 0 5.6-5.6l-2.6 2.6-2.1-2.1 2.7-2.5Z"/></svg>';
+    // Brand glyphs as tiny inline-SVG data URIs (no remote logo hosts)
+    function brand(bg, glyph) {
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="' + bg + '"/><text x="12" y="16.5" font-family="Inter,sans-serif" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">' + glyph + '</text></svg>';
+      return 'data:image/svg+xml;base64,' + btoa(svg);
+    }
+    var LOGO = {
+      linear: brand('#5e6ad2', 'L'),
+      slack: brand('#4a154b', 'S'),
+      gmail: brand('#ea4335', 'M'),
+      gcal: brand('#1a73e8', 'C')
+    };
+
+    // ───── Feature cards data ─────
+    var FEATURES = [
+      { t: 'Research this company', d: 'Execute investor-grade business analysis: generate detailed spreadsheets, gather web intel, compare rivals, and build team dossiers.', icons: [{ type: 'tool' }] },
+      { t: "Check the dev team's progress", d: "View a quick overview of your developer squad's activity, goals, and blockers.", icons: [{ type: 'img', src: LOGO.linear, alt: 'Linear' }, { type: 'img', src: LOGO.slack, alt: 'Slack' }] },
+      { t: 'Build my CV from available information', d: 'Generate a shareable PDF curriculum using stored facts and web sources, excluding any private contact info.', icons: [{ type: 'tool' }] },
+      { t: 'Turn this into retro pixels', d: 'Transform any photo into vintage pixelated graphics with custom resolution.', icons: [] },
+      { t: 'Track Industry Sites and Send Weekly Digest Each Monday', d: 'Watch leading tech and development sources for fresh content then deliver Monday briefings with main insights and URLs.', icons: [{ type: 'tool' }] },
+      { t: 'Morning schedule digest', d: 'Every AM, outline your agenda with important background and recommended preparation.', icons: [{ type: 'img', src: LOGO.gmail, alt: 'Gmail' }, { type: 'img', src: LOGO.gcal, alt: 'Google Calendar' }] }
+    ];
+
+    (function renderFeatures() {
+      var grid = document.getElementById('featureGrid');
+      FEATURES.forEach(function (f) {
+        var card = document.createElement('div');
+        card.className = 'feature-card fade';
+        var iconsHtml = '';
+        if (f.icons.length) {
+          iconsHtml = '<div class="feature-icons">' + f.icons.map(function (ic) {
+            if (ic.type === 'tool') return '<span class="ficon">' + ICON_TOOL + '</span>';
+            return '<span class="ficon"><img src="' + ic.src + '" alt="' + ic.alt + '"/></span>';
+          }).join('') + '</div>';
+        }
+        card.innerHTML = '<h3>' + f.t + '</h3><p>' + f.d + '</p>' + iconsHtml;
+        grid.appendChild(card);
+      });
+    })();
+
+    // ───── Carousel data ─────
+    var CARDS = [
+      { tag: 'For Everyone', title: 'Unleash your creative vision', img: 'https://plugin-assets.open-design.ai/plugins/flowmate/hf_20260405_081328_19f48c5b-ea4d-4f23-8f80-7374f31015d4-082174.webp&w=1280&q=85' },
+      { tag: 'For Teams', title: 'Smart helper supporting each teammate daily', img: 'https://plugin-assets.open-design.ai/plugins/flowmate/hf_20260405_081342_ad378347-1ebd-4b17-a716-ee895bf739c0-b87507.webp&w=1280&q=85' },
+      { tag: 'For Enterprises', title: 'Elevate your whole organization using business AI', img: 'https://plugin-assets.open-design.ai/plugins/flowmate/hf_20260405_081415_a6e8a76c-224e-417b-bf99-6b86d6494644-27b05b.webp&w=1280&q=85' },
+      { tag: 'Platform', title: 'Enhanced with FlowMate', img: 'https://plugin-assets.open-design.ai/plugins/flowmate/hf_20260405_081513_cf1cd2c1-2122-4de6-90ed-acae8bfbdb00-53daec.webp&w=1280&q=85' },
+      { tag: 'Security', title: 'Creating trusted and helpful AI', img: 'https://plugin-assets.open-design.ai/plugins/flowmate/hf_20260405_081541_9d2d28bf-d6a3-4b31-b0bb-cfc5202d4fcd-6dfc75.webp&w=1280&q=85' }
+    ];
+
+    (function renderCarousel() {
+      var track = document.getElementById('carouselTrack');
+      CARDS.forEach(function (c) {
+        var el = document.createElement('div');
+        el.className = 'ccard';
+        el.innerHTML = '<img src="' + c.img + '" alt="' + c.tag + '"/><div class="ccard-body"><div class="ccard-tag">' + c.tag + '</div><div class="ccard-title">' + c.title + '</div></div>';
+        track.appendChild(el);
+      });
+    })();
+
+    // ───── Carousel logic (Framer AnimatePresence slide -> transform on track) ─────
+    var track = document.getElementById('carouselTrack');
+    var index = 0;
+    function perView() {
+      if (window.innerWidth >= 1024) return 3;
+      if (window.innerWidth >= 768) return 2;
+      return 1;
+    }
+    function maxIndex() { return Math.max(0, CARDS.length - perView()); }
+    function applyTransform() {
+      if (index > maxIndex()) index = maxIndex();
+      var card = track.children[0];
+      if (!card) return;
+      var step = card.getBoundingClientRect().width + 20; // card width + gap
+      track.style.transform = 'translateX(' + (-index * step) + 'px)';
+    }
+    document.getElementById('nextBtn').addEventListener('click', function () {
+      index = index >= maxIndex() ? 0 : index + 1;
+      applyTransform();
+    });
+    document.getElementById('prevBtn').addEventListener('click', function () {
+      index = index <= 0 ? maxIndex() : index - 1;
+      applyTransform();
+    });
+    window.addEventListener('resize', applyTransform);
+    applyTransform();
+    // Auto-rotate every 4 seconds
+    setInterval(function () {
+      index = index >= maxIndex() ? 0 : index + 1;
+      applyTransform();
+    }, 4000);
+
+    // ───── TextFade -> IntersectionObserver staggered reveal ─────
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.12 });
+    document.querySelectorAll('.fade').forEach(function (el, i) {
+      el.style.transitionDelay = (Math.min(i, 6) * 0.08) + 's';
+      io.observe(el);
+    });
+
+    // ───── Typewriter effect (50ms per char) ─────
+    (function typewriter() {
+      var target = document.getElementById('typewriter');
+      var full = 'Daily check rival companies and ping me on messenger';
+      var i = 0;
+      function tick() {
+        if (i <= full.length) {
+          target.innerHTML = full.slice(0, i) + '<span class="gc-caret"></span>';
+          i++;
+          setTimeout(tick, 50);
+        } else {
+          setTimeout(function () { i = 0; tick(); }, 2600); // loop
+        }
+      }
+      tick();
+    })();
+
+    // ───── Sidebar active state via IntersectionObserver (smooth scroll spy) ─────
+    var navItems = Array.prototype.slice.call(document.querySelectorAll('.nav-item'));
+    var sectionIds = ['home', 'video', 'features', 'cards'];
+    var spy = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          navItems.forEach(function (n) { n.classList.toggle('active', n.getAttribute('data-nav') === e.target.id); });
+        }
+      });
+    }, { rootMargin: '-40% 0px -55% 0px' });
+    sectionIds.forEach(function (id) { var s = document.getElementById(id); if (s) spy.observe(s); });
+  </script>
+</body>
+</html>

@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>COGNITRA — AI Automation</title>
+  <style>
+    @import url('https://db.onlinewebfonts.com/c/e66905e07608167a84e6ad52f638c3c6?family=Helvetica+Now+Var');
+
+    :root {
+      --ink: #1a1a1a;
+      --gray-panel: #C5C5C5;
+      --muted: #5a5a5a;
+      --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body { width: 100%; }
+    body {
+      font-family: 'Helvetica Now Var', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      color: var(--ink);
+      background: #000;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    video { display: block; }
+
+    /* ───── FadeUp (framer-motion whileInView → IntersectionObserver) ───── */
+    .fade {
+      opacity: 0;
+      transform: translateY(var(--fy, 24px));
+      transition:
+        opacity var(--fd, 0.7s) var(--ease) var(--fdelay, 0s),
+        transform var(--fd, 0.7s) var(--ease) var(--fdelay, 0s);
+      will-change: opacity, transform;
+    }
+    .fade.in-view {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ───── FIXED BACKGROUND VIDEO ───── */
+    #bg-video {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100vh;
+      object-fit: cover;
+      z-index: 0;
+    }
+
+    /* ───── NAVBAR ───── */
+    .nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 10;
+      background: transparent;
+      border-bottom: 1px solid rgba(0,0,0,0.18);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 32px;
+    }
+    .nav-brand {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--ink);
+    }
+    .nav-links {
+      display: flex;
+      flex-direction: row;
+      gap: 48px;
+    }
+    .nav-links a, .nav-links-secondary a {
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      color: var(--ink);
+      font-weight: 400;
+      text-decoration: none;
+      transition: opacity 0.3s var(--ease);
+    }
+    .nav-links a:hover, .nav-links-secondary a:hover { opacity: 0.6; }
+    .nav-links-secondary { display: flex; gap: 48px; }
+
+    /* ───── SHARED SECTION HELPERS ───── */
+    .section-pad { padding: 70px 32px 32px 32px; }
+    .heading-xl {
+      font-size: clamp(26px, 3vw, 42px);
+      font-weight: 700;
+      line-height: 1.05;
+      letter-spacing: -0.01em;
+      text-transform: uppercase;
+    }
+    .words { display: flex; flex-wrap: wrap; gap: 0.25em; }
+    .btn {
+      border-radius: 9999px;
+      padding: 12px 36px;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.3s var(--ease);
+      white-space: nowrap;
+    }
+    .btn-primary { background: var(--ink); color: #fff; border: 1px solid var(--ink); }
+    .btn-secondary { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+    .btn-secondary:hover { background: var(--ink); color: #fff; }
+
+    /* ───── SECTION 1 — HERO ───── */
+    .hero {
+      position: relative;
+      z-index: 1;
+      height: 100vh;
+    }
+    .hero-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 48%;
+      background: var(--gray-panel);
+      display: flex;
+      flex-direction: column;
+      padding-top: 70px;
+    }
+    .hero-inner {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .hero-content {
+      flex: 1;
+      display: flex;
+      align-items: flex-end;
+      padding: 0 32px 24px 32px;
+    }
+    .hero-row {
+      display: flex;
+      align-items: stretch;
+      width: 100%;
+      gap: 48px;
+    }
+    .hero-col-left {
+      width: 32%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 80px;
+    }
+    .hero-col-right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 80px;
+    }
+    .hero-h1 { color: var(--ink); white-space: pre-line; }
+    .slide-counter {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      color: #666;
+    }
+    .hero-lede {
+      font-size: 18px;
+      line-height: 1.6;
+      color: var(--muted);
+      max-width: 340px;
+    }
+    .hero-buttons {
+      display: flex;
+      gap: 10px;
+    }
+    .hero-bottom-text {
+      position: absolute;
+      top: 74%;
+      transform: translateY(-50%);
+      left: 32px;
+      max-width: 260px;
+      font-size: 14px;
+      line-height: 1.65;
+      color: rgba(255,255,255,0.9);
+    }
+
+    /* ───── SECTION 2 — STATEMENT ───── */
+    .statement {
+      position: relative;
+      z-index: 1;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 70px 32px 32px 32px;
+    }
+    .statement-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      max-width: 720px;
+      padding: 80px 0;
+    }
+    .statement-h2 {
+      font-size: clamp(26px, 3vw, 42px);
+      font-weight: 700;
+      line-height: 1.08;
+      letter-spacing: -0.01em;
+      text-transform: uppercase;
+      color: #fff;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25em;
+    }
+    .statement-p {
+      margin-top: 24px;
+      font-size: 14px;
+      line-height: 1.65;
+      color: rgba(255,255,255,0.85);
+      max-width: 260px;
+    }
+
+    /* ───── SECTION 3 — SERVICES ───── */
+    .services {
+      position: relative;
+      z-index: 2;
+      background: var(--gray-panel);
+      display: flex;
+      flex-direction: column;
+      padding: 70px 32px 80px 32px;
+      min-height: auto;
+    }
+    .services-counter {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      color: #666;
+      margin-bottom: 20px;
+    }
+    .services-head-row {
+      display: flex;
+      gap: 48px;
+      align-items: flex-start;
+      margin-bottom: 32px;
+    }
+    .services-head-col { width: 32%; }
+    .services-h2 {
+      color: var(--ink);
+      max-width: 320px;
+    }
+    .services-head-right {
+      flex: 1;
+      padding-top: 8px;
+    }
+    .services-intro {
+      font-size: 14px;
+      line-height: 1.65;
+      color: #3a3a3a;
+      max-width: 320px;
+    }
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      grid-auto-rows: 1fr;
+    }
+    .card {
+      background: transparent;
+      border: 1px solid rgba(0,0,0,0.18);
+      border-radius: 20px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      padding-top: 16px;
+    }
+    .card-video-wrap {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      position: relative;
+      overflow: hidden;
+    }
+    .card-video-wrap video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .card-text { padding: 24px 28px 28px 28px; }
+    .card-text h3 {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 14px;
+    }
+    .card-text p {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #3a3a3a;
+    }
+
+    /* ───── FIXED SCROLL INDICATOR ───── */
+    .scroll-indicator {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 5;
+      animation: scrollBounce 2s ease-in-out infinite;
+    }
+    @keyframes scrollBounce {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50% { transform: translateX(-50%) translateY(6px); }
+    }
+    .scroll-pill {
+      width: 22px;
+      height: 36px;
+      border: 1.5px solid rgba(0,0,0,0.75);
+      border-radius: 11px;
+      display: flex;
+      justify-content: center;
+      padding-top: 6px;
+    }
+    .scroll-dot {
+      width: 3px;
+      height: 8px;
+      background: rgba(0,0,0,0.85);
+      border-radius: 2px;
+    }
+
+    /* ───── FIXED REPOST BUTTON ───── */
+    .repost {
+      position: fixed;
+      bottom: 32px;
+      right: 32px;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: rgba(0,0,0,0.8);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-family: inherit;
+    }
+
+    /* ───── RESPONSIVE ───── */
+    @media (max-width: 900px) {
+      .nav { padding: 16px 18px; }
+      .nav-links { gap: 18px; }
+      .nav-links-secondary { display: none; }
+      .hero-row { flex-direction: column; gap: 24px; }
+      .hero-col-left, .hero-col-right { width: 100%; gap: 24px; }
+      .section-pad { padding: 90px 18px 32px 18px; }
+      .statement { padding: 90px 18px 32px 18px; }
+      .services { padding: 90px 18px 60px 18px; }
+      .services-head-row { flex-direction: column; gap: 16px; margin-bottom: 24px; }
+      .services-head-col { width: 100%; }
+      .cards-grid { grid-template-columns: 1fr; gap: 16px; }
+      .services { min-height: 100vh; }
+      .hero-bottom-text {
+        top: auto;
+        bottom: 80px;
+        transform: none;
+        left: 18px;
+        right: 18px;
+        max-width: none;
+      }
+      .btn { padding: 11px 22px; font-size: 10px; }
+    }
+    @media (max-width: 600px) {
+      .nav-links { gap: 14px; }
+      .nav-brand { font-size: 12px; }
+      .hero-overlay { height: 56%; padding-top: 64px; }
+      .hero-buttons { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <!-- FIXED BACKGROUND VIDEO -->
+  <video id="bg-video" autoplay muted loop playsinline
+    src="https://plugin-assets.open-design.ai/plugins/ai-automation/hf_20260514_135830_bb6491d1-9b66-4aec-9722-13b4dfe3fb46-350788.mp4"></video>
+
+  <!-- NAVBAR -->
+  <nav class="nav">
+    <div class="nav-brand fade" style="--fdelay:0s;--fy:24px;">COGNITRA</div>
+    <div class="nav-links">
+      <a class="fade" style="--fdelay:0.05s;--fy:24px;" href="#">MAIN</a>
+      <a class="fade" style="--fdelay:0.10s;--fy:24px;" href="#">OFFERING</a>
+      <a class="fade" style="--fdelay:0.15s;--fy:24px;" href="#">CASE</a>
+      <a class="fade" style="--fdelay:0.20s;--fy:24px;" href="#">RATES</a>
+    </div>
+    <div class="nav-links-secondary">
+      <a class="fade" style="--fdelay:0.30s;--fy:24px;" href="#">CREW</a>
+      <a class="fade" style="--fdelay:0.35s;--fy:24px;" href="#">CONNECT</a>
+    </div>
+  </nav>
+
+  <!-- SECTION 1 — HERO -->
+  <section class="hero">
+    <div class="hero-overlay"></div>
+    <div class="hero-inner">
+      <div class="hero-content">
+        <div class="hero-row">
+          <div class="hero-col-left">
+            <h1 class="heading-xl hero-h1 fade" style="--fdelay:0.1s;--fy:24px;">SCALING
+FASTER USING AI</h1>
+            <div class="slide-counter fade" style="--fdelay:0.5s;--fy:24px;">001 / 005</div>
+          </div>
+          <div class="hero-col-right">
+            <p class="hero-lede fade" style="--fdelay:0.25s;--fy:24px;">We engineer custom automation flows and personalized AI products for ambitious modern businesses.</p>
+            <div class="hero-buttons fade" style="--fdelay:0.4s;--fy:24px;">
+              <button class="btn btn-primary">BOOK A CALL!</button>
+              <button class="btn btn-secondary">OUR PRODUCTS</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="hero-bottom-text fade" style="--fdelay:0.6s;--fy:24px;">Guiding future-minded companies forward with bespoke AI products and streamlined workflows.</div>
+    </div>
+  </section>
+
+  <!-- SECTION 2 — STATEMENT -->
+  <section class="statement">
+    <div class="statement-inner">
+      <h2 class="statement-h2" id="statement-h2"></h2>
+      <p class="statement-p fade" style="--fdelay:0.9s;--fy:24px;">We provide all-in-one AI automation services in one place.</p>
+    </div>
+  </section>
+
+  <!-- SECTION 3 — SERVICES -->
+  <section class="services">
+    <div class="services-counter fade" style="--fdelay:0s;--fy:24px;">003 / 005</div>
+    <div class="services-head-row">
+      <div class="services-head-col">
+        <h2 class="heading-xl services-h2 words" id="services-h2"></h2>
+      </div>
+      <div class="services-head-right">
+        <p class="services-intro fade" style="--fdelay:0.25s;--fy:24px;">We provide all-in-one AI automation services in one place.</p>
+      </div>
+    </div>
+    <div class="cards-grid" id="cards-grid"></div>
+  </section>
+
+  <!-- FIXED SCROLL INDICATOR -->
+  <div class="scroll-indicator">
+    <div class="scroll-pill"><div class="scroll-dot"></div></div>
+  </div>
+
+  <!-- FIXED REPOST BUTTON -->
+  <button class="repost">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+    <span>REPOST</span>
+  </button>
+
+  <script>
+    (function () {
+      // ── Word-split headings (framer-motion per-word FadeUp spans) ──
+      function splitWords(el, text, baseDelay, step) {
+        el.innerHTML = '';
+        text.split(' ').forEach(function (word, i) {
+          var span = document.createElement('span');
+          span.className = 'fade';
+          span.style.setProperty('--fdelay', (baseDelay + i * step) + 's');
+          span.style.setProperty('--fy', '32px');
+          span.textContent = word;
+          el.appendChild(span);
+        });
+      }
+
+      var stmt = document.getElementById('statement-h2');
+      // delay = 0.15 + i*0.08, y = 32
+      splitWords(stmt, 'WE BUILD END-TO-END AI AUTOMATION SYSTEMS.', 0.15, 0.08);
+
+      var svcH2 = document.getElementById('services-h2');
+      // delay = 0.1 + i*0.1, y = 28
+      (function () {
+        svcH2.innerHTML = '';
+        'EXPLORE WHAT WE OFFER'.split(' ').forEach(function (word, i) {
+          var span = document.createElement('span');
+          span.className = 'fade';
+          span.style.setProperty('--fdelay', (0.1 + i * 0.1) + 's');
+          span.style.setProperty('--fy', '28px');
+          span.textContent = word;
+          svcH2.appendChild(span);
+        });
+      })();
+
+      // ── Service cards ──
+      var cards = [
+        {
+          video: 'https://plugin-assets.open-design.ai/plugins/ai-automation/hf_20260513_220333_48163edc-995f-4513-9f44-48dbb07a7329-327964.mp4',
+          title: 'Process Streamlining',
+          text: 'We automate your processes by linking together the daily tools you rely upon. Lifting throughput and improving overall output.'
+        },
+        {
+          video: 'https://plugin-assets.open-design.ai/plugins/ai-automation/hf_20260513_221040_e6ba7c5a-864e-46e9-871e-341a176a7e3e-2c404d.mp4',
+          title: 'Strategic advisory',
+          text: 'We craft intelligent assistants that are adaptive, grasp context, and are skilled enough to handle highly intricate customer requests.'
+        },
+        {
+          video: 'https://plugin-assets.open-design.ai/plugins/ai-automation/hf_20260513_221104_fb538584-5b87-495f-952e-09ddd5a1792a-7be906.mp4',
+          title: 'Assistant engineering',
+          text: 'Through our knowledge, we explore deep into your business and advise you on how AI powered automations may transform your operations.'
+        }
+      ];
+      var grid = document.getElementById('cards-grid');
+      cards.forEach(function (c, idx) {
+        var card = document.createElement('div');
+        card.className = 'card fade';
+        // FadeUp delay = 0.4 + idx*0.15
+        card.style.setProperty('--fdelay', (0.4 + idx * 0.15) + 's');
+        card.style.setProperty('--fy', '24px');
+
+        var vwrap = document.createElement('div');
+        vwrap.className = 'card-video-wrap';
+        var v = document.createElement('video');
+        v.src = c.video;
+        v.autoplay = true; v.muted = true; v.loop = true;
+        v.setAttribute('playsinline', '');
+        vwrap.appendChild(v);
+
+        var txt = document.createElement('div');
+        txt.className = 'card-text';
+        var h3 = document.createElement('h3');
+        h3.textContent = c.title;
+        var p = document.createElement('p');
+        p.textContent = c.text;
+        txt.appendChild(h3);
+        txt.appendChild(p);
+
+        card.appendChild(vwrap);
+        card.appendChild(txt);
+        grid.appendChild(card);
+      });
+
+      // ── IntersectionObserver = framer-motion whileInView (viewport amount 0.2, once true) ──
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('in-view');
+            io.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.2 });
+
+      document.querySelectorAll('.fade').forEach(function (el) { io.observe(el); });
+
+      // Navbar fades are above-the-fold; reveal immediately on load so they animate in.
+      requestAnimationFrame(function () {
+        document.querySelectorAll('.nav .fade').forEach(function (el) {
+          el.classList.add('in-view');
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -23,7 +23,7 @@
   border: none;
   background: transparent;
   color: var(--text-muted);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -67,7 +67,7 @@
      No negative margin — the parent clips overflow, which would shave the
      left edge of the focus ring. */
   padding: 1px 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   outline: none;
   caret-color: var(--accent);
   transition: background 120ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -112,7 +112,7 @@
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   display: inline-flex;
   align-items: center;
@@ -163,7 +163,7 @@
   border: none;
   background: transparent;
   color: var(--text-faint);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -183,7 +183,7 @@
   height: 28px;
   padding: 3px 8px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--text);
   font-size: 13px;
@@ -200,7 +200,7 @@
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   display: inline-flex;
   align-items: center;
@@ -220,17 +220,6 @@
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--text-muted) 18%, transparent) transparent;
 }
-/* Bottom-anchor the transcript so a short conversation (e.g. a fresh fork)
-   rests against the composer instead of stranding its messages at the top with
-   a large blank area below. The auto top margin absorbs the free space above
-   the first row when the content is shorter than the viewport; once the content
-   outgrows the viewport the auto margin resolves to 0 and the log scrolls
-   normally with the top fully reachable (unlike `justify-content: flex-end`,
-   which clips overflowing content above the scroll range). The empty/loading
-   states own their own vertical layout, so they're excluded. */
-.chat-log > :first-child:not(.chat-empty-wrap):not(.chat-loading-state) {
-  margin-top: auto;
-}
 .chat-log::-webkit-scrollbar {
   width: 8px;
 }
@@ -240,7 +229,7 @@
 }
 .chat-log::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--text-muted) 18%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
@@ -279,7 +268,7 @@
 .chat-loading-mark span {
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
   opacity: 0.32;
   animation: chat-loading-dot 900ms cubic-bezier(0.23, 1, 0.32, 1) infinite;
@@ -298,7 +287,7 @@
 }
 .chat-loading-lines span {
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: linear-gradient(
     90deg,
     color-mix(in srgb, var(--text-muted) 10%, transparent),
@@ -392,7 +381,7 @@
   color: var(--text);
   background: var(--bg-fill-tertiary);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 8px 12px;
   line-height: 1.5;
   font-size: 14.5px;
@@ -417,7 +406,7 @@
   height: 18px;
   flex: 0 0 auto;
   padding: 1px 5px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
   background: color-mix(in srgb, var(--accent-tint) 72%, var(--bg));
   color: color-mix(in srgb, var(--accent) 72%, var(--text-strong));
@@ -452,7 +441,7 @@
   gap: 8px;
   margin: 4px 0 6px;
   padding: 4px 10px 4px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-fill-tertiary);
   border: none;
   font-size: 11.5px;
@@ -563,7 +552,7 @@
   height: 18px;
   max-width: 190px;
   overflow: hidden;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   font-size: 9px;
   line-height: 12px;
 }
@@ -613,7 +602,7 @@
   gap: 7px;
   padding: 6px 10px;
   border: 1px solid color-mix(in srgb, var(--text-muted) 16%, var(--border));
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg-subtle));
   box-shadow: none;
   color: var(--text-muted);
@@ -632,7 +621,7 @@
 .msg.assistant .op-waiting-detail {
   max-width: 180px;
   padding: 1px 5px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--text) 5%, var(--bg-subtle));
   overflow: hidden;
   text-overflow: ellipsis;
@@ -660,7 +649,7 @@
 .user-status-card__icon {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -692,7 +681,7 @@
   margin-top: 4px;
   min-height: 20px;
   opacity: 0;
-  transition: opacity 140ms ease;
+  transition: opacity 140ms var(--ease-out);
 }
 .msg.user .user-text-wrap:hover .user-actions,
 .msg.user .user-text-wrap:focus-within .user-actions {
@@ -709,11 +698,11 @@
   padding: 4px;
   border: none;
   background: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--text-soft);
   cursor: pointer;
   display: inline-flex;
-  transition: color 120ms ease, background 120ms ease;
+  transition: color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
 .msg.user .user-copy-btn:hover {
   color: var(--text);
@@ -736,7 +725,7 @@
   font-size: 11px;
   background: var(--accent);
   color: white;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 /* Run-failure error card. Neutral gray (not red): the actionable next step
    lives in the AMR card below it; this card just states what happened. */
@@ -745,7 +734,7 @@
   background: var(--bg-fill-tertiary);
   color: var(--text-muted);
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -795,7 +784,7 @@
   padding: 12px 14px;
   border: none;
   background: var(--bg-fill-tertiary);
-  border-radius: 8px;
+  border-radius: var(--radius);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -837,7 +826,7 @@
   font-size: 11px;
   line-height: 1.4;
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
   border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
@@ -904,7 +893,11 @@
   position: fixed;
   z-index: 45;
   pointer-events: none;
-  contain: layout style paint;
+  /* `contain: paint` would clip the composer "+" menu, which pops UP and out of
+     this fixed layer's box — the overflow got cut and revealed the chat log
+     behind it. Keep layout/style containment but drop paint so the menu draws
+     fully above the transcript. */
+  contain: layout style;
   transform: translateZ(0);
 }
 .chat-composer-fixed-layer .composer {
@@ -928,14 +921,14 @@
 }
 .composer-shell {
   border: 1px solid var(--bg-fill-secondary);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--bg-fill-tertiary);
   box-shadow: none;
   padding: 8px 10px 6px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition: border-color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
 .composer-shell:focus-within {
   border-color: color-mix(in srgb, var(--accent) 22%, var(--border-strong));
@@ -969,7 +962,7 @@
   margin: 0 12px;
   padding: 5px 8px;
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: color-mix(in srgb, var(--accent) 7%, var(--bg-panel));
   color: var(--text);
   font-size: 12px;
@@ -1140,8 +1133,11 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding-top: 6px;
-  margin-top: 2px;
+  /* Center the divider between the input above (8px composer gap) and the
+     controls below (8px padding) so the toolbar isn't cramped against the
+     border. */
+  margin-top: 0;
+  padding-top: 8px;
   border-top: 1px solid var(--border-soft);
 }
 .composer-row .icon-btn {
@@ -1172,6 +1168,48 @@
 .composer-row .icon-btn:active:not(:disabled) { background: var(--bg-muted); }
 .composer-row .icon-btn:disabled { opacity: 0.45; cursor: default; }
 .composer-spacer { flex: 1; }
+
+/* --- Composer footer: one control system ----------------------------------
+   The toolbar mixes five controls authored in five different components —
+   the + icon (.icon-btn), the working-dir pill (.working-dir-pill-trigger),
+   the agent avatar (.avatar-agent-trigger), the "Design" session-mode toggle
+   (.session-mode-toggle__trigger) and Send (.composer-send) — which had
+   drifted to three heights (28/32px) and three corner radii (full-pill / 8 /
+   6). Normalize the interactive controls to one 32px, radius-sm pill so the
+   row reads as a single system. Send keeps its accent fill and + stays a
+   ghost icon; only geometry/elevation is unified, not color. `.app` raises
+   specificity above the per-component base rules in routines/shell.css. */
+.app .composer-row .working-dir-pill-trigger,
+.app .composer-row .avatar-agent-trigger,
+.app .composer-row .session-mode-toggle__trigger,
+.app .composer-row .composer-send,
+.app .composer-row .icon-btn {
+  height: 28px;
+  border-radius: var(--radius-sm);
+  box-sizing: border-box;
+}
+.app .composer-row .working-dir-pill-trigger {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.app .composer-row .session-mode-toggle__trigger {
+  box-shadow: none;
+}
+/* The agent avatar is a 32px round image; shrink it (and the trigger grid)
+   so it fits the 28px control height without being clipped. */
+.app .composer-row .avatar-agent-trigger {
+  width: 48px;
+  grid-template-columns: 26px 20px;
+}
+.app .composer-row .avatar-btn {
+  width: 22px;
+  height: 22px;
+}
+.app .composer-row .icon-btn {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+}
 .session-mode-toggle {
   position: relative;
   display: inline-flex;
@@ -1205,7 +1243,7 @@
   height: 32px;
   max-width: 132px;
   padding: 0 9px;
-  border-radius: 7px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow-xs);
 }
 .session-mode-toggle__trigger:hover:not(:disabled),
@@ -1234,7 +1272,7 @@
   min-width: 168px;
   padding: 4px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: var(--shadow-md);
 }
@@ -1249,7 +1287,7 @@
   text-align: left;
   padding: 0 8px;
   border-color: transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
 }
 .session-mode-toggle__option:hover:not(:disabled) {
@@ -1277,7 +1315,7 @@
 .session-mode-card {
   padding: 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-panel);
   color: var(--text);
   box-shadow: var(--shadow-md);
@@ -1305,7 +1343,7 @@
   flex: 0 0 24px;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--text-strong);
 }
@@ -1352,7 +1390,7 @@
 .session-mode-card__query {
   padding: 6px 7px;
   border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-panel);
   color: var(--text);
   font-size: 11.5px;
@@ -1376,7 +1414,7 @@
 .composer-import {
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 4px 12px;
   font-size: 12px;
   color: var(--text-muted);
@@ -1388,7 +1426,7 @@
   gap: 6px;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 4px 10px;
   font-size: 12px;
   color: var(--text-muted);
@@ -1459,7 +1497,7 @@
   padding: 7px;
   overflow: visible;
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg-subtle));
   box-shadow:
     0 10px 24px -18px rgba(0, 0, 0, 0.32),
@@ -1520,7 +1558,7 @@
   padding: 2px 4px;
   overflow: hidden;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: transparent;
   transition:
     background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -1548,7 +1586,7 @@
   left: 28px;
   right: 8px;
   height: 2px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--selected);
   box-shadow: 0 0 0 2px var(--selected-soft);
 }
@@ -1597,7 +1635,7 @@
   min-width: 0;
   max-width: 124px;
   padding: 0 5px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   background: color-mix(in srgb, var(--bg) 78%, transparent);
   color: var(--text-muted);
@@ -1625,7 +1663,7 @@
   justify-content: center;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
 }
@@ -1683,7 +1721,7 @@
   z-index: 20;
   max-width: 180px;
   padding: 5px 7px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--text-strong) 92%, #000);
   color: var(--bg-panel);
   font-size: 11px;
@@ -1741,7 +1779,7 @@
   padding: 2px 5px 2px 3px;
   background: color-mix(in srgb, var(--bg-panel) 96%, var(--bg-subtle));
   border: 1px solid var(--border-soft);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   max-width: min(190px, 100%);
   overflow: hidden;
   white-space: nowrap;
@@ -1763,7 +1801,7 @@
   width: 14px;
   height: 14px;
   flex: 0 0 14px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--text) 7%, var(--bg-subtle));
   color: var(--text-muted);
   font-size: 8px;
@@ -1785,7 +1823,7 @@
   max-width: 232px;
   padding: 0 7px;
   gap: 5px;
-  border-radius: 7px;
+  border-radius: var(--radius);
   font-size: 11px;
   box-shadow: none;
 }
@@ -1795,7 +1833,7 @@
   min-height: 22px;
   max-width: min(190px, 100%);
   padding: 2px 5px 2px 3px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 10.5px;
   background: color-mix(in srgb, var(--accent-tint) 30%, var(--bg-panel));
   border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
@@ -1804,7 +1842,7 @@
   width: 14px;
   height: 14px;
   flex-basis: 14px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--accent) 9%, var(--bg-subtle));
   color: var(--accent);
 }
@@ -1820,7 +1858,7 @@
   width: 16px;
   height: 16px;
   flex-basis: 16px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .staged-context .staged-remove svg {
   width: 8px;
@@ -1841,6 +1879,39 @@
 .staged-context--connector .staged-icon {
   background: color-mix(in srgb, var(--green) 10%, var(--bg-subtle));
   color: var(--green);
+}
+/* Applied-plugin chip — accent-tinted, sitting inline in the staged-context
+   row next to the design-system picker. The chip itself is a plain container;
+   its two controls (open-details + remove) are real sibling buttons. */
+.staged-context--plugin {
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+.staged-context--plugin .staged-icon {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-subtle));
+  color: var(--accent);
+}
+.staged-context--plugin:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+/* The chip's "open details" trigger: icon + name as a real <button> so it is a
+   sibling of the remove button, not a role=button wrapper around it (nested
+   interactive controls break focus order + assistive-tech announcements).
+   Unstyled so it reads as the chip's content rather than a nested button. */
+.staged-context-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  overflow: hidden;
 }
 .staged-context--workspace {
   background: color-mix(in srgb, var(--bg-subtle) 48%, var(--bg-panel));
@@ -1912,7 +1983,7 @@
   padding: 12px;
   background: var(--bg-panel);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
 }
 .staged-preview-head {
@@ -2037,7 +2108,7 @@
   padding: 4px 8px;
   background: var(--bg-fill-tertiary);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 11.5px;
   color: var(--text-muted);
   max-width: 220px;
@@ -2063,7 +2134,7 @@
   padding: 4px 10px 4px 4px;
   background: var(--bg-fill-tertiary);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-size: 11.5px;
   max-width: 240px;
   color: var(--text);

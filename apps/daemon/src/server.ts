@@ -103,6 +103,12 @@ import { validateLinkedDirs } from './linked-dirs.js';
 import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
+import {
+  AssetCacheError,
+  assetCacheRewriteUrl,
+  createPluginAssetCache,
+  isCacheableExternalUrl,
+} from './plugin-asset-cache.js';
 import { syncCommunityPets } from './community-pets-sync.js';
 import { defaultMediaExecutionPolicy, parseMediaExecutionPolicyInput } from './media-policy.js';
 import {
@@ -157,7 +163,6 @@ import {
   restoreProjectSnapshotLink,
   resolvePluginSnapshot,
   runPipelineForRun,
-  splitPipelineSnapshotByExecutionBoundary,
   runStageWithRegistry,
   startSnapshotGc,
   uninstallPlugin,
@@ -1577,6 +1582,11 @@ const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 const USER_SKILLS_DIR = path.join(RUNTIME_DATA_DIR, 'skills');
 const USER_DESIGN_SYSTEMS_DIR = path.join(RUNTIME_DATA_DIR, 'design-systems');
 const PLUGIN_REGISTRY_ROOTS = registryRootsForDataDir(RUNTIME_DATA_DIR);
+// Disk cache + same-origin proxy for external preview media (cross-border CDN
+// images/videos referenced by plugin example.html). See plugin-asset-cache.ts.
+const pluginAssetCache = createPluginAssetCache({
+  cacheDir: path.join(RUNTIME_DATA_DIR, 'plugin-asset-cache'),
+});
 // User-imported design templates mirror USER_SKILLS_DIR but are scanned
 // against DESIGN_TEMPLATES_DIR rather than SKILLS_DIR so the EntryView
 // Templates surface and the Settings → Skills surface stay decoupled.
@@ -7760,10 +7770,20 @@ export async function startServer({
   function rewritePluginAssetUrls(html: string, pluginId: string, baseDir: string) {
     if (typeof html !== 'string' || html.length === 0) return html;
     const safeBase = baseDir === '.' ? '' : baseDir;
-    return html.replace(
+    const withAttrs = html.replace(
       /(\s(?:src|href|poster)\s*=\s*)(['"])([^'"]+)(\2)/gi,
       (match, attr, quote, rawValue, closeQuote) => {
         const value = String(rawValue).trim();
+        // External media (cross-border CDN images/videos) is blocked by the
+        // sandbox CSP and is slow; route src/poster through the same-origin
+        // asset cache. href stays untouched (anchors + external stylesheets).
+        if (
+          /^https?:\/\//i.test(value) &&
+          !/\bhref\b/i.test(String(attr)) &&
+          isCacheableExternalUrl(value)
+        ) {
+          return `${attr}${quote}${assetCacheRewriteUrl(value)}${closeQuote}`;
+        }
         if (
           !value ||
           value.startsWith('#') ||
@@ -7788,6 +7808,30 @@ export async function startServer({
         }
         const url = `/api/plugins/${encodeURIComponent(pluginId)}/asset/${normalized}${suffix}`;
         return `${attr}${quote}${url}${closeQuote}`;
+      },
+    );
+    // Preview seeds also pull external media outside src/poster: CSS
+    // `background-image: url(...)`, and — most commonly in these templates —
+    // JS string constants like `const HERO = 'https://cdn/.../bg.png'` that get
+    // assigned to `style.backgroundImage` at runtime. Rewrite any quoted
+    // absolute media URL (covers JS literals + quoted CSS url() + quoted attrs)
+    // and any unquoted `url(...)`. Gating on a media extension keeps this from
+    // touching scripts, stylesheets, or fonts. URLs already rewritten by the
+    // attribute pass are percent-encoded inside `?url=` and no longer match.
+    const withQuoted = withAttrs.replace(
+      /(['"])(https?:\/\/[^'"]+)\1/g,
+      (match, quote, rawValue) => {
+        const value = String(rawValue).trim();
+        if (!isCacheableExternalUrl(value)) return match;
+        return `${quote}${assetCacheRewriteUrl(value)}${quote}`;
+      },
+    );
+    return withQuoted.replace(
+      /url\(\s*(https?:\/\/[^)'"\s]+)\s*\)/gi,
+      (match, rawValue) => {
+        const value = String(rawValue).trim();
+        if (!isCacheableExternalUrl(value)) return match;
+        return `url(${assetCacheRewriteUrl(value)})`;
       },
     );
   }
@@ -8014,6 +8058,34 @@ export async function startServer({
       res.send(buf);
     } catch (err) {
       res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Same-origin proxy + disk cache for the external media that plugin preview
+  // HTML references on cross-border CDNs. `rewritePluginAssetUrls` rewrites
+  // those URLs to this route so they satisfy the sandbox CSP (`img-src 'self'`)
+  // and load from local cache instead of re-paying cross-border latency.
+  // SSRF guards live in plugin-asset-cache.ts (scheme + private-address checks).
+  app.get('/api/asset-cache', async (req, res) => {
+    const rawUrl =
+      typeof req.query.url === 'string'
+        ? req.query.url
+        : Array.isArray(req.query.url) && typeof req.query.url[0] === 'string'
+          ? req.query.url[0]
+          : '';
+    if (!rawUrl) {
+      return res.status(400).json({ error: 'missing url query parameter' });
+    }
+    try {
+      const { buf, contentType } = await pluginAssetCache.get(rawUrl);
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Security-Policy', "default-src 'none'");
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      return res.send(buf);
+    } catch (err) {
+      const status = err instanceof AssetCacheError ? err.status : 502;
+      return res.status(status).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -10972,13 +11044,10 @@ export async function startServer({
   // back to the canned v1 stub for diagnostic bisection or replay
   // of pre-Stage-D runs. Errors are swallowed (logged) so a bad
   // pipeline never blocks the agent run.
-  const executePipelineForRun = async (args) => {
+  const firePipelineForRun = (args) => {
     const { run, snapshot, runs, db: dbHandle } = args;
-    if (!snapshot?.pipeline) {
-      return { outcomes: [], lastSignalsByStage: new Map() };
-    }
+    if (!snapshot?.pipeline?.stages?.length) return;
     const env = { maxIterations: readPluginEnvKnobs().maxDevloopIterations };
-    const lastSignalsByStage = new Map();
     const emitPipeline = (evt) => {
       try { runs.emit(run, evt.kind, evt); } catch {/* ignore */}
     };
@@ -10993,47 +11062,32 @@ export async function startServer({
       : 'registry';
     let runStage;
     if (runnerMode === 'stub') {
-      runStage = ({ stage, iteration }) => {
-        const outcome = {
-          signals: {
-            'critique.score':  iteration >= 0 ? 4 : 0,
-            'preview.ok':      true,
-            'user.confirmed':  true,
-          },
-        };
-        lastSignalsByStage.set(stage.id, outcome.signals);
-        return outcome;
-      };
+      runStage = ({ iteration }) => ({
+        signals: {
+          'critique.score':  iteration >= 0 ? 4 : 0,
+          'preview.ok':      true,
+          'user.confirmed':  true,
+        },
+      });
     } else {
       registerBuiltInAtomWorkers();
       runStage = async ({ stage, iteration, snapshot: stageSnapshot }) => {
-        const projectRecord = getProject(dbHandle, projectIdForRun);
-        const cwd = projectRecord
-          ? resolveProjectDir(PROJECTS_DIR, projectIdForRun, projectRecord.metadata)
-          : null;
-        const entryFile = typeof projectRecord?.metadata?.entryFile === 'string'
-          ? projectRecord.metadata.entryFile
-          : null;
         const outcome = await runStageWithRegistry({
           db:             dbHandle,
           runId:          run.id,
           projectId:      projectIdForRun,
           conversationId: run.conversationId ?? null,
-          daemonUrl,
-          cwd,
-          entryFile,
           stage,
           iteration,
           snapshot:       stageSnapshot,
         });
-        lastSignalsByStage.set(stage.id, outcome.signals ?? {});
         return {
           signals:         outcome.signals,
           critiqueSummary: outcome.critiqueSummary,
         };
       };
     }
-    const outcomes = await runPipelineForRun({
+    void runPipelineForRun({
       db: dbHandle,
       runId:           run.id,
       projectId:       projectIdForRun,
@@ -11044,13 +11098,7 @@ export async function startServer({
       runStage,
       emitPipeline,
       emitGenui,
-    });
-    return { outcomes, lastSignalsByStage };
-  };
-
-  const firePipelineForRun = (args) => {
-    const { run, snapshot, runs } = args;
-    void executePipelineForRun(args).catch((err) => {
+    }).catch((err) => {
       try {
         runs.emit(run, 'pipeline_stage_failed', {
           runId:      run.id,
@@ -11226,6 +11274,7 @@ export async function startServer({
     const safeAttachments = cwd
       ? resolveSafeProjectAttachments(cwd, attachments)
       : [];
+    run.projectAttachmentPaths = safeAttachments;
 
     // Local code agents don't accept a separate "system" channel the way the
     // Messages API does — we fold the skill + design-system prompt into the
@@ -12277,6 +12326,10 @@ export async function startServer({
             : '';
         return `${type}:${text.length} chars`;
       }
+      if (type === 'status') {
+        const label = payload?.label ? String(payload.label) : 'unknown';
+        return `status:${label}`;
+      }
       return type;
     };
     const clearInactivityWatchdog = () => {
@@ -13172,6 +13225,9 @@ export async function startServer({
         mcpServers,
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
         send: (event, data) => {
+          if (event === 'agent') {
+            lastAgentEventPhase = summarizeAgentEventForInactivity(data);
+          }
           noteAgentActivity();
           if (event === 'agent') noteFirstTokenFromAgentEvent(data);
           if (def.id === 'amr' && event === 'error') {
@@ -13592,67 +13648,25 @@ export async function startServer({
       for (const chunk of plaintextStdoutBuffer) {
         send('stdout', { chunk });
       }
-      let finalStatus = status;
-      if (
-        finalStatus === 'succeeded'
-        && run.postRunPipelineSnapshot?.pipeline?.stages?.length
-      ) {
-        try {
-          const { outcomes, lastSignalsByStage } = await executePipelineForRun({
-            run,
-            snapshot: run.postRunPipelineSnapshot,
-            runs: design.runs,
-            db,
+      // Capture the pi session file path for conversational continuity.
+      // The session path is discovered by attachPiRpcSession when it
+      // processes agent_end; persist it under (conversationId, agentId) so
+      // another conversation in the same cwd cannot inherit this history.
+      if (acpSession && typeof acpSession.getLastSessionPath === 'function') {
+        const sessionPath = acpSession.getLastSessionPath();
+        if (status === 'succeeded' && def.streamFormat === 'pi-rpc') {
+          persistCapturedAgentSession(db, {
+            conversationId: run.conversationId,
+            agentId: def.id,
+            sessionId: sessionPath,
+            stablePromptHash: currentStableHash,
           });
-          const failedStage = outcomes.find((outcome) => {
-            if (!outcome.converged) return true;
-            const stage = run.postRunPipelineSnapshot.pipeline.stages.find(
-              (candidate) => candidate.id === outcome.stageId,
-            );
-            if (!stage?.atoms.includes('visual-validation')) return false;
-            const signals = lastSignalsByStage.get(outcome.stageId) ?? {};
-            if (signals['preview.ok'] === false) return true;
-            return typeof signals['critique.score'] === 'number'
-              && signals['critique.score'] < 4;
-          });
-          if (failedStage) {
-            const failedSignals = lastSignalsByStage.get(failedStage.stageId) ?? {};
-            const failedScore = failedSignals['critique.score'];
-            send('error', createSseErrorPayload(
-              'PLUGIN_PIPELINE_FAILED',
-              typeof failedScore === 'number'
-                ? `Post-run visual validation scored ${failedScore}, so the run cannot finish successfully.`
-                : `Post-run pipeline stage "${failedStage.stageId}" did not finish successfully.`,
-            ));
-            finalStatus = 'failed';
-          }
-        } catch (err) {
-          send('error', createSseErrorPayload(
-            'PLUGIN_PIPELINE_FAILED',
-            err instanceof Error ? err.message : String(err),
-          ));
-          finalStatus = 'failed';
         }
       }
-      if (finalStatus === 'succeeded') {
-        // Capture the pi session file path for conversational continuity.
-        // The session path is discovered by attachPiRpcSession when it
-        // processes agent_end; persist it under (conversationId, agentId) so
-        // another conversation in the same cwd cannot inherit this history.
-        if (acpSession && typeof acpSession.getLastSessionPath === 'function') {
-          const sessionPath = acpSession.getLastSessionPath();
-          if (def.streamFormat === 'pi-rpc') {
-            persistCapturedAgentSession(db, {
-              conversationId: run.conversationId,
-              agentId: def.id,
-              sessionId: sessionPath,
-              stablePromptHash: currentStableHash,
-            });
-          }
-        }
+      if (status === 'succeeded') {
         persistDeliveredAgentSessionState();
       }
-      finishWithRetryDecision(finalStatus, code, signal);
+      finishWithRetryDecision(status, code, signal);
       } finally {
         // Best-effort cleanup of the per-run agy log file on every close
         // path — successful, failed, cancelled, or non-zero exit — so
@@ -14020,6 +14034,9 @@ export async function startServer({
     if (!toolBundleSupport.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
     }
+    if (runProject?.metadata) {
+      meta.projectMetadata = runProject.metadata;
+    }
     // MCP / SDK callers POST /api/runs with just a projectId — no
     // conversationId, no pre-created assistantMessageId — because they
     // don't know about OD's chat-row lifecycle. The web flow
@@ -14123,17 +14140,19 @@ export async function startServer({
         : {}),
     };
     res.status(202).json(body);
-    const pipelineSchedule = resolvedSnapshot?.ok
-      ? splitPipelineSnapshotByExecutionBoundary(resolvedSnapshot.snapshot)
-      : { preRun: null, postRun: null };
-    // Fire only pre-run-safe stages before the agent starts. Stages that
-    // depend on agent-produced artifacts (`visual-validation`) are
-    // deferred until the run succeeds so they inspect the current output
-    // instead of the untouched pre-run workspace.
-    if (resolvedSnapshot?.ok && pipelineSchedule.preRun) {
+    // Plan §3.I1 / spec §10.1 — fire the pipeline schedule on the run's
+    // SSE stream BEFORE the agent process is started. The first
+    // pipeline_stage_started event is emitted synchronously (before
+    // the first await inside runPipelineForRun), so any SSE consumer
+    // that subscribes between create() and start() sees a stage event
+    // ahead of the agent's message_chunk stream — exactly what §8 e2e-3
+    // expects. The stub stage runner returns immediately so a
+    // non-loop pipeline walks through every stage in O(stages) time;
+    // the audit row in `run_devloop_iterations` records the timeline.
+    if (resolvedSnapshot?.ok && resolvedSnapshot.snapshot.pipeline) {
       firePipelineForRun({
         run,
-        snapshot: pipelineSchedule.preRun,
+        snapshot: resolvedSnapshot.snapshot,
         runs: design.runs,
         db,
       });
@@ -14148,7 +14167,6 @@ export async function startServer({
         console.warn('[plugins] skill candidate hook setup failed', err);
       }
     }
-    run.postRunPipelineSnapshot = pipelineSchedule.postRun;
     design.runs.start(run, () => startChatRun(meta, run));
 
     // Analytics v2: emit run_created (daemon-side authoritative) and
@@ -14616,6 +14634,7 @@ export async function startServer({
       ...requestBody,
       mediaExecution: mediaExecution.policy,
       toolBundle: toolBundle.bundle,
+      ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
     };
     const run = design.runs.create(meta);
     design.runs.stream(run, req, res);

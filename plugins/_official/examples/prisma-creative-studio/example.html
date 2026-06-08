@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prisma Creative Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@300;400;700;800&family=Instrument+Serif:ital@1&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #DEDBC8;      /* warm cream — Tailwind primary */
+      --text-cream: #E1E0CC;   /* primary text (inline-style equivalent) */
+      --about-card: #101010;
+      --feature-card: #212121;
+      --ease-cine: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-card: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Almarai', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+      background: #000000;
+      color: var(--text-cream);
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    .serif { font-family: 'Instrument Serif', serif; font-style: italic; }
+    img, video { display: block; }
+    a { text-decoration: none; }
+
+    /* ── Noise textures (inline SVG data URIs) ── */
+    .noise-overlay {
+      background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxmaWx0ZXIgaWQ9Im4iPjxmZVR1cmJ1bGVuY2UgdHlwZT0iZnJhY3RhbE5vaXNlIiBiYXNlRnJlcXVlbmN5PSIwLjg1IiBudW1PY3RhdmVzPSIzIiBzdGl0Y2hUaWxlcz0ic3RpdGNoIi8+PC9maWx0ZXI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsdGVyPSJ1cmwoI24pIi8+PC9zdmc+");
+      background-size: 200px 200px;
+    }
+    .bg-noise {
+      background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxmaWx0ZXIgaWQ9Im4iPjxmZVR1cmJ1bGVuY2UgdHlwZT0iZnJhY3RhbE5vaXNlIiBiYXNlRnJlcXVlbmN5PSIwLjkiIG51bU9jdGF2ZXM9IjQiIHN0aXRjaFRpbGVzPSJzdGl0Y2giLz48L2ZpbHRlcj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWx0ZXI9InVybCgjbikiLz48L3N2Zz4=");
+      background-size: 180px 180px;
+    }
+
+    /* ════════ SECTION 1 — HERO ════════ */
+    .hero { height: 100vh; padding: 16px; }
+    .hero-frame {
+      position: relative; width: 100%; height: 100%;
+      border-radius: 2rem; overflow: hidden;
+    }
+    .hero-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .hero-overlay-noise {
+      position: absolute; inset: 0; opacity: 0.7;
+      mix-blend-mode: overlay; pointer-events: none;
+    }
+    .hero-overlay-grad {
+      position: absolute; inset: 0; pointer-events: none;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.60) 100%);
+    }
+
+    /* Navbar pill hanging from top */
+    .navbar {
+      position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+      background: #000; border-radius: 0 0 1.5rem 1.5rem;
+      padding: 8px 32px; z-index: 10;
+      display: flex; align-items: center;
+    }
+    .navbar ul { list-style: none; display: flex; gap: 3.5rem; align-items: center; }
+    .navbar a {
+      font-size: 0.875rem; letter-spacing: 0.01em;
+      color: rgba(225, 224, 204, 0.8); transition: color 0.3s var(--ease-cine);
+      white-space: nowrap;
+    }
+    .navbar a:hover { color: #E1E0CC; }
+
+    /* Hero content bottom-aligned 12-col grid */
+    .hero-content {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      display: grid; grid-template-columns: repeat(12, 1fr);
+      gap: 24px; align-items: end;
+      padding: 0 40px 40px;
+    }
+    .hero-heading-col { grid-column: 1 / span 8; }
+    .hero-side-col { grid-column: 9 / span 4; display: flex; flex-direction: column; gap: 24px; }
+
+    .hero-title {
+      position: relative; display: inline-flex; flex-wrap: wrap;
+      font-size: 20vw; font-weight: 500; line-height: 0.85;
+      letter-spacing: -0.07em; color: #E1E0CC;
+    }
+    .hero-title .asterisk {
+      position: absolute; top: 0.65em; right: -0.3em;
+      font-size: 0.31em; line-height: 1;
+    }
+
+    .hero-desc {
+      color: rgba(222, 219, 200, 0.7);
+      font-size: 1rem; line-height: 1.2; font-weight: 300;
+    }
+
+    .cta {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--primary); color: #000;
+      border-radius: 9999px; padding: 8px 8px 8px 24px;
+      font-weight: 500; font-size: 1rem; width: fit-content;
+      transition: gap 0.35s var(--ease-cine);
+      cursor: pointer; border: none;
+    }
+    .cta:hover { gap: 12px; }
+    .cta .circle {
+      width: 40px; height: 40px; border-radius: 9999px;
+      background: #000; display: grid; place-items: center;
+      transition: transform 0.35s var(--ease-cine);
+    }
+    .cta:hover .circle { transform: scale(1.1); }
+    .cta .circle svg { stroke: var(--text-cream); }
+
+    /* ════════ SECTION 2 — ABOUT ════════ */
+    .about { background: #000; padding: 120px 24px; }
+    .about-card {
+      background: var(--about-card); max-width: 72rem; margin: 0 auto;
+      border-radius: 2rem; padding: 96px 48px; text-align: center;
+    }
+    .about-label {
+      color: var(--primary); font-size: 0.75rem; font-weight: 700;
+      letter-spacing: 0.04em; margin-bottom: 32px; text-transform: none;
+    }
+    .about-heading {
+      display: inline-flex; flex-wrap: wrap; justify-content: center;
+      font-size: 4.5rem; line-height: 0.9; max-width: 48rem; margin: 0 auto;
+      font-weight: 400; color: var(--text-cream);
+    }
+    .about-heading .seg-serif { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; }
+    .about-body {
+      max-width: 48rem; margin: 56px auto 0;
+      color: #DEDBC8; font-size: 1rem; line-height: 1.5; font-weight: 300;
+    }
+    .about-body .char { transition: opacity 0.1s linear; }
+
+    /* ════════ SECTION 3 — FEATURES ════════ */
+    .features {
+      position: relative; min-height: 100vh; background: #000;
+      padding: 100px 24px 120px;
+    }
+    .features-noise {
+      position: absolute; inset: 0; opacity: 0.15; pointer-events: none;
+    }
+    .features-inner { position: relative; max-width: 80rem; margin: 0 auto; }
+    .features-header {
+      display: inline-flex; flex-wrap: wrap; justify-content: center;
+      width: 100%; text-align: center;
+      font-size: 2.25rem; font-weight: 400; line-height: 1.15;
+      margin-bottom: 64px;
+    }
+    .features-header .line2 { color: #6b7280; }
+
+    .feature-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+      height: 480px;
+    }
+    .feature-card {
+      position: relative; border-radius: 1.5rem; overflow: hidden;
+      opacity: 0; transform: scale(0.95);
+      transition: opacity 0.7s var(--ease-card), transform 0.7s var(--ease-card);
+    }
+    .feature-card.in { opacity: 1; transform: scale(1); }
+
+    /* Card 1 — video */
+    .fc-video { background: #111; }
+    .fc-video video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .fc-video .label {
+      position: absolute; left: 24px; bottom: 24px; right: 24px;
+      color: #E1E0CC; font-size: 1.5rem; font-weight: 400; line-height: 1.1;
+    }
+
+    /* Cards 2-4 — content */
+    .fc-content {
+      background: var(--feature-card); padding: 28px 24px;
+      display: flex; flex-direction: column;
+    }
+    .fc-icon {
+      width: 48px; height: 48px; border-radius: 12px; object-fit: cover;
+      margin-bottom: 24px;
+    }
+    .fc-title {
+      font-size: 1.5rem; font-weight: 400; line-height: 1.05;
+      color: var(--text-cream); margin-bottom: 4px;
+      display: flex; align-items: baseline; gap: 10px;
+    }
+    .fc-title .num { font-size: 0.8rem; color: #6b7280; font-weight: 400; }
+    .fc-list { list-style: none; margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+    .fc-list li { display: flex; align-items: flex-start; gap: 10px; }
+    .fc-list svg { flex-shrink: 0; margin-top: 2px; stroke: var(--primary); }
+    .fc-list span { color: #9ca3af; font-size: 0.85rem; line-height: 1.3; font-weight: 300; }
+    .fc-more {
+      margin-top: auto; padding-top: 24px;
+      display: inline-flex; align-items: center; gap: 8px;
+      color: var(--text-cream); font-size: 0.9rem; font-weight: 400;
+      background: none; border: none; cursor: pointer;
+    }
+    .fc-more svg { transform: rotate(-45deg); stroke: var(--text-cream); transition: transform 0.3s var(--ease-cine); }
+    .fc-more:hover svg { transform: rotate(-45deg) translateX(2px); }
+
+    /* ── Word pull-up base ── */
+    .pull-word { display: inline-block; overflow: hidden; }
+    .pull-word > span {
+      display: inline-block;
+      transform: translateY(20px); opacity: 0;
+      transition: transform 0.6s var(--ease-card), opacity 0.6s var(--ease-card);
+    }
+    .pull-word.in > span { transform: translateY(0); opacity: 1; }
+
+    /* ── Responsive ── */
+    @media (max-width: 1024px) {
+      .feature-grid { grid-template-columns: repeat(2, 1fr); height: auto; }
+      .feature-card { min-height: 360px; }
+      .features-header { font-size: 1.875rem; }
+      .about-heading { font-size: 3.75rem; }
+    }
+    @media (max-width: 768px) {
+      .hero { padding: 16px; }
+      .hero-frame { border-radius: 1rem; }
+      .navbar { padding: 8px 16px; border-radius: 0 0 1rem 1rem; }
+      .navbar ul { gap: 0.75rem; }
+      .navbar a { font-size: 10px; }
+      .hero-content { grid-template-columns: 1fr; padding: 0 20px 24px; gap: 16px; }
+      .hero-heading-col, .hero-side-col { grid-column: 1 / -1; }
+      .hero-title { font-size: 26vw; }
+      .about-card { padding: 56px 24px; }
+      .about-heading { font-size: 1.875rem; }
+      .feature-grid { grid-template-columns: 1fr; }
+      .features-header { font-size: 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ════════ SECTION 1 — HERO ════════ -->
+  <section class="hero">
+    <div class="hero-frame">
+      <video class="hero-video" autoplay loop muted playsinline
+        src="https://plugin-assets.open-design.ai/plugins/prisma-creative-studio/hf_20260405_170732_8a9ccda6-5cff-4628-b164-059c500a2b41-ee5471.mp4"></video>
+      <div class="hero-overlay-noise noise-overlay"></div>
+      <div class="hero-overlay-grad"></div>
+
+      <nav class="navbar">
+        <ul>
+          <li><a href="#">Our story</a></li>
+          <li><a href="#">Collective</a></li>
+          <li><a href="#">Workshops</a></li>
+          <li><a href="#">Programs</a></li>
+          <li><a href="#">Inquiries</a></li>
+        </ul>
+      </nav>
+
+      <div class="hero-content">
+        <div class="hero-heading-col">
+          <h1 class="hero-title" data-pull data-asterisk>Prisma</h1>
+        </div>
+        <div class="hero-side-col">
+          <p class="hero-desc" data-fade data-delay="500">Prisma is a worldwide network of visual artists, filmmakers and storytellers bound not by place, status or labels but by passion and hunger to unlock potential through our unique perspectives.</p>
+          <button class="cta" data-fade data-delay="700">
+            Join the lab
+            <span class="circle">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ SECTION 2 — ABOUT ════════ -->
+  <section class="about">
+    <div class="about-card">
+      <div class="about-label">Visual arts</div>
+      <h2 class="about-heading" data-pull-multi>
+        <span data-seg>I am Marcus Chen,</span>
+        <span data-seg class="seg-serif">a self-taught director.</span>
+        <span data-seg>I have skills in color grading, visual effects, and narrative design.</span>
+      </h2>
+      <p class="about-body" data-scroll-reveal>Over the last seven years, I have worked with Parallax, a Berlin-based production house that crafts cinema, series, and Noir Studio in Paris. Together, we have created work that has earned international acclaim at several major festivals.</p>
+    </div>
+  </section>
+
+  <!-- ════════ SECTION 3 — FEATURES ════════ -->
+  <section class="features">
+    <div class="features-noise bg-noise"></div>
+    <div class="features-inner">
+      <h2 class="features-header" data-pull-multi>
+        <span data-seg>Studio-grade workflows for visionary creators.</span>
+        <span data-seg class="line2">Built for pure vision. Powered by art.</span>
+      </h2>
+
+      <div class="feature-grid">
+        <!-- Card 1 — Video -->
+        <div class="feature-card fc-video" data-card style="--i:0">
+          <video autoplay loop muted playsinline
+            src="https://plugin-assets.open-design.ai/plugins/prisma-creative-studio/hf_20260406_133058_0504132a-0cf3-4450-a370-8ea3b05c95d4-4401cf.mp4"></video>
+          <div class="label">Your creative canvas.</div>
+        </div>
+
+        <!-- Card 2 — Project Storyboard -->
+        <div class="feature-card fc-content" data-card style="--i:1">
+          <img class="fc-icon" alt="" src="https://plugin-assets.open-design.ai/plugins/prisma-creative-studio/hf_20260405_171918_4a5edc79-d78f-4637-ac8b-53c43c220606-ba6cc6.webp&w=1280&q=85">
+          <div class="fc-title">Project Storyboard. <span class="num">01</span></div>
+          <ul class="fc-list">
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Sequence scenes on a visual timeline.</span></li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Drag frames to restructure the narrative.</span></li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Attach references and mood to every beat.</span></li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Export boards as a shareable deck.</span></li>
+          </ul>
+          <button class="fc-more">Learn more <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+        </div>
+
+        <!-- Card 3 — Smart Critiques -->
+        <div class="feature-card fc-content" data-card style="--i:2">
+          <img class="fc-icon" alt="" src="https://plugin-assets.open-design.ai/plugins/prisma-creative-studio/hf_20260405_171741_ed9845ab-f5b2-4018-8ce7-07cc01823522-2e2011.webp&w=1280&q=85">
+          <div class="fc-title">Smart Critiques. <span class="num">02</span></div>
+          <ul class="fc-list">
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>AI analysis of pacing, color, and composition.</span></li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Creative notes timestamped to the frame.</span></li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Tool integrations across your edit suite.</span></li>
+          </ul>
+          <button class="fc-more">Learn more <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+        </div>
+
+        <!-- Card 4 — Immersion Capsule -->
+        <div class="feature-card fc-content" data-card style="--i:3">
+          <img class="fc-icon" alt="" src="https://plugin-assets.open-design.ai/plugins/prisma-creative-studio/hf_20260405_171809_f56666dc-c099-4778-ad82-9ad4f209567b-1a966e.webp&w=1280&q=85">
+          <div class="fc-title">Immersion Capsule. <span class="num">03</span></div>
+          <ul class="fc-list">
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Notification silencing for deep focus.</span></li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Ambient soundscapes tuned to your scene.</span></li>
+            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Schedule syncing across the collective.</span></li>
+          </ul>
+          <button class="fc-more">Learn more <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ── WordsPullUp: split heading text into per-word animated spans ──
+      function buildPullWord(text, delayBase, asterisk) {
+        var words = text.split(/\s+/).filter(Boolean);
+        var frag = document.createDocumentFragment();
+        words.forEach(function (w, i) {
+          var wrap = document.createElement('span');
+          wrap.className = 'pull-word';
+          var inner = document.createElement('span');
+          inner.style.transitionDelay = (delayBase + i * 0.08) + 's';
+          if (asterisk && i === words.length - 1) {
+            // place superscript asterisk after last 'a'
+            inner.textContent = w;
+            var star = document.createElement('span');
+            star.className = 'asterisk';
+            star.textContent = '*';
+            wrap.appendChild(inner);
+            wrap.appendChild(star);
+          } else {
+            inner.textContent = w;
+            wrap.appendChild(inner);
+          }
+          frag.appendChild(wrap);
+          frag.appendChild(document.createTextNode(' '));
+        });
+        return frag;
+      }
+
+      // Single-text pull-up (hero title)
+      document.querySelectorAll('[data-pull]').forEach(function (el) {
+        var txt = el.textContent.trim();
+        var asterisk = el.hasAttribute('data-asterisk');
+        el.textContent = '';
+        el.appendChild(buildPullWord(txt, 0, asterisk));
+      });
+
+      // Multi-segment pull-up (about + features headers)
+      document.querySelectorAll('[data-pull-multi]').forEach(function (el) {
+        var segs = Array.prototype.slice.call(el.querySelectorAll('[data-seg]'));
+        var globalIndex = 0;
+        var newChildren = [];
+        segs.forEach(function (seg) {
+          var words = seg.textContent.trim().split(/\s+/).filter(Boolean);
+          words.forEach(function (w) {
+            var wrap = document.createElement('span');
+            wrap.className = 'pull-word';
+            if (seg.classList.contains('seg-serif')) wrap.classList.add('seg-serif');
+            if (seg.classList.contains('line2')) wrap.classList.add('line2');
+            var inner = document.createElement('span');
+            inner.style.transitionDelay = (globalIndex * 0.08) + 's';
+            inner.textContent = w;
+            wrap.appendChild(inner);
+            newChildren.push(wrap);
+            newChildren.push(document.createTextNode(' '));
+            globalIndex++;
+          });
+        });
+        el.textContent = '';
+        newChildren.forEach(function (n) { el.appendChild(n); });
+      });
+
+      // ── IntersectionObserver: trigger pull-up + fade on view ──
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (!e.isIntersecting) return;
+          var el = e.target;
+          io.unobserve(el);
+          if (el.hasAttribute('data-pull') || el.hasAttribute('data-pull-multi')) {
+            el.querySelectorAll('.pull-word').forEach(function (w) { w.classList.add('in'); });
+          }
+          if (el.hasAttribute('data-fade')) {
+            var delay = parseInt(el.getAttribute('data-delay') || '0', 10);
+            el.style.transition = 'opacity 0.8s cubic-bezier(0.16,1,0.3,1), transform 0.8s cubic-bezier(0.16,1,0.3,1)';
+            el.style.transitionDelay = (delay / 1000) + 's';
+            requestAnimationFrame(function () {
+              el.style.opacity = '1';
+              el.style.transform = 'translateY(0)';
+            });
+          }
+        });
+      }, { threshold: 0.2 });
+
+      // prime fade elements (whileInView fade-up from y:20)
+      document.querySelectorAll('[data-fade]').forEach(function (el) {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(20px)';
+        io.observe(el);
+      });
+      document.querySelectorAll('[data-pull],[data-pull-multi]').forEach(function (el) {
+        io.observe(el);
+      });
+
+      // ── Feature cards: staggered scale+fade entrance ──
+      var cardIo = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (!e.isIntersecting) return;
+          cardIo.unobserve(e.target);
+          var i = parseInt(e.target.style.getPropertyValue('--i') || '0', 10);
+          e.target.style.transitionDelay = (i * 0.15) + 's';
+          e.target.classList.add('in');
+        });
+      }, { threshold: 0.15, rootMargin: '0px 0px -100px 0px' });
+      document.querySelectorAll('[data-card]').forEach(function (el) { cardIo.observe(el); });
+
+      // ── Scroll-linked character opacity reveal (useScroll/useTransform) ──
+      var reveal = document.querySelector('[data-scroll-reveal]');
+      if (reveal) {
+        var text = reveal.textContent;
+        reveal.textContent = '';
+        var chars = [];
+        for (var i = 0; i < text.length; i++) {
+          var c = document.createElement('span');
+          c.className = 'char';
+          c.style.opacity = '0.2';
+          c.textContent = text[i];
+          reveal.appendChild(c);
+          chars.push(c);
+        }
+        var total = chars.length;
+        var onScroll = function () {
+          var rect = reveal.getBoundingClientRect();
+          var vh = window.innerHeight;
+          // offset ['start 0.8', 'end 0.2'] → progress 0..1
+          var start = vh * 0.8;
+          var end = vh * 0.2;
+          var progress = (start - rect.top) / ((start - end) + rect.height);
+          progress = Math.max(0, Math.min(1, progress));
+          for (var j = 0; j < total; j++) {
+            var cp = j / total;
+            var lo = cp - 0.1, hi = cp + 0.05;
+            var t = (progress - lo) / (hi - lo);
+            t = Math.max(0, Math.min(1, t));
+            chars[j].style.opacity = (0.2 + t * 0.8).toFixed(3);
+          }
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('resize', onScroll, { passive: true });
+        onScroll();
+      }
+    })();
+  </script>
+</body>
+</html>

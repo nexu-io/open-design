@@ -1,0 +1,90 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-innovation",
+  "title": "Innovation — Dark Editorial Landing",
+  "title_i18n": {
+    "zh-CN": "Innovation — 暗色衬线液态玻璃落地页",
+    "en": "Innovation — Dark Editorial Landing"
+  },
+  "version": "0.1.0",
+  "description": "Premium dark editorial agency landing page: an Instrument-Serif hero headline over a self-crossfading fullscreen hero video, liquid-glass nav and buttons, and scroll-revealed About / Featured-Video / Philosophy / Services sections.",
+  "description_i18n": {
+    "zh-CN": "高端暗色编辑风代理商落地页：Instrument Serif 衬线大标题叠在自动淡入淡出的全屏视频上，液态玻璃导航与按钮，滚动渐显的关于 / 特色视频 / 理念 / 服务板块。",
+    "en": "Premium dark editorial agency landing page: an Instrument-Serif hero headline over a self-crossfading fullscreen hero video, liquid-glass nav and buttons, and scroll-revealed About / Featured-Video / Philosophy / Services sections."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Eli"
+  },
+  "homepage": "https://motionsites.ai/sections",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "landing-page",
+    "liquid-glass",
+    "editorial",
+    "agency"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "RECREATION PROMPT\n\nBuild a single-page landing site using React + TypeScript + Vite + Tailwind CSS + framer-motion + lucide-react. The entire page has a bg-black background. The font loaded via Google Fonts is Instrument Serif (italic and regular). Import it in index.css:\n\n@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');\nLIQUID GLASS CSS (in index.css, inside @layer components)\nCreate a reusable .liquid-glass class used on every glass element:\n\n.liquid-glass {\n  background: rgba(255, 255, 255, 0.01);\n  background-blend-mode: luminosity;\n  backdrop-filter: blur(4px);\n  -webkit-backdrop-filter: blur(4px);\n  border: none;\n  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);\n  position: relative;\n  overflow: hidden;\n}\n\n.liquid-glass::before {\n  content: '';\n  position: absolute;\n  inset: 0;\n  border-radius: inherit;\n  padding: 1.4px;\n  background: linear-gradient(\n    180deg,\n    rgba(255, 255, 255, 0.45) 0%,\n    rgba(255, 255, 255, 0.15) 20%,\n    rgba(255, 255, 255, 0) 40%,\n    rgba(255, 255, 255, 0) 60%,\n    rgba(255, 255, 255, 0.15) 80%,\n    rgba(255, 255, 255, 0.45) 100%\n  );\n  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);\n  -webkit-mask-composite: xor;\n  mask-composite: exclude;\n  pointer-events: none;\n}\nSECTION 1 -- HERO (full-viewport, in Index.tsx)\nFull-screen (min-h-screen) container with overflow-hidden relative flex flex-col.\n\nBackground video: absolute, covers the entire viewport (absolute inset-0 w-full h-full object-cover object-bottom). URL:\n\nhttps://plugin-assets.open-design.ai/plugins/innovation/hf_20260405_074625_a81f018a-956b-43fb-9aee-4d1508e30e6a-6993b9.mp4\nAttributes: muted, autoPlay, playsInline, preload=\"auto\". Starts at opacity: 0.\n\nVideo fade logic (vanilla JS via refs, no CSS transitions):\n\nOn canplay: play the video, then animate opacity from 0 to 1 over 500ms using requestAnimationFrame.\nOn timeupdate: when remaining time <= 0.55s, animate opacity from current to 0 over 500ms.\nOn ended: set opacity to 0, wait 100ms, reset currentTime to 0, play again, fade back to 1 over 500ms.\nThis creates a seamless loop with smooth crossfade to black between plays.\nNavbar (relative z-20, px-6 py-6):\n\nA liquid-glass rounded-full pill, max-w-5xl mx-auto, px-6 py-3, flex between left/right.\nLeft: Globe icon (24px, white) + \"Asme\" text (white, font-semibold, text-lg). Hidden on mobile: nav links \"Features\", \"Pricing\", \"About\" (text-white/80 hover:text-white text-sm font-medium, gap-8 ml-8).\nRight: \"Sign Up\" text button (white, text-sm, font-medium) + \"Login\" button (liquid-glass rounded-full px-6 py-2, white text-sm font-medium).\nHero content (relative z-10, flex-1 flex flex-col items-center justify-center, px-6 py-12 text-center, -translate-y-[20%]):\n\nHeading: text-7xl md:text-8xl lg:text-9xl, white, tracking-tight whitespace-nowrap, font-family 'Instrument Serif', serif. Text: Know it then <em className=\"italic\">all</em>.\nEmail input: max-w-xl w-full. A liquid-glass rounded-full pill with pl-6 pr-2 py-2 flex items-center gap-3. Inside: transparent <input> with placeholder \"Enter your email\" (text-white placeholder:text-white/40). A white circular submit button (bg-white rounded-full p-3 text-black) containing ArrowRight icon (20px).\nSubtitle: text-white text-sm leading-relaxed px-4. Text: \"Stay updated with the latest news and insights. Subscribe to our newsletter today and never miss out on exciting updates.\"\nManifesto button: liquid-glass rounded-full px-8 py-3 text-white text-sm font-medium hover:bg-white/5 transition-colors.\nSocial icons footer (relative z-10, flex justify-center gap-4 pb-12):\n\nThree liquid-glass rounded-full p-4 buttons for Instagram, Twitter, Globe icons (20px). text-white/80 hover:text-white hover:bg-white/5 transition-all.\nSECTION 2 -- ABOUT SECTION (separate component AboutSection.tsx)\nUses framer-motion useInView (ref, { once: true, margin: \"-100px\" }).\nbg-black pt-32 md:pt-44 pb-10 md:pb-14 px-6 overflow-hidden.\nSubtle radial gradient overlay: bg-[radial-gradient(ellipse_at_top,_rgba(255,255,255,0.03)_0%,_transparent_70%)].\nLabel: \"About Us\" -- text-white/40 text-sm tracking-widest uppercase. Animates: opacity: 0, y: 20 -> opacity: 1, y: 0, duration 0.6.\nHeading: text-4xl md:text-6xl lg:text-7xl text-white leading-[1.1] tracking-tight. Animates: opacity: 0, y: 40 -> opacity: 1, y: 0, duration 0.8, delay 0.1. Text structure:\nPioneering then ideas (Instrument Serif italic, text-white/60) for\nLine break (hidden on mobile)\nminds that then create, build, and inspire. (all Instrument Serif italic, text-white/60)\nSECTION 3 -- FEATURED VIDEO (separate component FeaturedVideoSection.tsx)\nbg-black pt-6 md:pt-10 pb-20 md:pb-32 px-6 overflow-hidden. Max-w-6xl.\nA rounded-3xl overflow-hidden aspect-video container that animates opacity: 0, y: 60 -> opacity: 1, y: 0, duration 0.9.\nVideo: w-full h-full object-cover, muted, autoPlay, loop, playsInline, preload=\"auto\". URL:\n\nhttps://plugin-assets.open-design.ai/plugins/innovation/hf_20260402_054547_9875cfc5-155a-4229-8ec8-b7ba7125cbf8-eee511.mp4\nGradient overlay on video: bg-gradient-to-t from-black/60 via-transparent to-transparent.\nBottom overlay content (absolute bottom-0 left-0 right-0 p-6 md:p-10):\nFlex row on desktop, column on mobile.\nLeft: a liquid-glass rounded-2xl p-6 md:p-8 max-w-md card. Label \"Our Approach\" (text-white/50 text-xs tracking-widest uppercase mb-3). Body text (text-white text-sm md:text-base leading-relaxed): \"We believe in the power of curiosity-driven exploration. Every project starts with a question, and every answer opens a new door to innovation.\"\nRight: \"Explore more\" button (liquid-glass rounded-full px-8 py-3, white text-sm font-medium) with whileHover={{ scale: 1.05 }} and whileTap={{ scale: 0.95 }}.\nSECTION 4 -- PHILOSOPHY / INNOVATION x VISION (separate component PhilosophySection.tsx)\nbg-black py-28 md:py-40 px-6 overflow-hidden. Max-w-6xl.\nHeading: text-5xl md:text-7xl lg:text-8xl text-white tracking-tight mb-16 md:mb-24. Animates opacity: 0, y: 40 -> opacity: 1, y: 0, duration 0.8. Text: Innovation then x in Instrument Serif italic text-white/40, then Vision.\nTwo-column grid (grid-cols-1 md:grid-cols-2 gap-8 md:gap-12):\nLeft: Video in rounded-3xl overflow-hidden aspect-[4/3]. Animates from opacity: 0, x: -40. URL:\n\nhttps://plugin-assets.open-design.ai/plugins/liquid-glass-agency/hf_20260307_083826_e938b29f-a43a-41ec-a153-3d4730578ab8-b7258e.mp4\nmuted, autoPlay, loop, playsInline, preload=\"auto\".\nRight: Animates from opacity: 0, x: 40. Two text blocks separated by a w-full h-px bg-white/10 divider.\nBlock 1: Label \"Choose your space\" (text-white/40 text-xs tracking-widest uppercase mb-4). Body (text-white/70 text-base md:text-lg leading-relaxed): \"Every meaningful breakthrough begins at the intersection of disciplined strategy and remarkable creative vision. We operate at that crossroads, turning bold thinking into tangible outcomes that move people and reshape industries.\"\nBlock 2: Label \"Shape the future\". Body: \"We believe that the best work emerges when curiosity meets conviction. Our process is designed to uncover hidden opportunities and translate them into experiences that resonate long after the first impression.\"\nSECTION 5 -- SERVICES / WHAT WE DO (separate component ServicesSection.tsx)\nbg-black py-28 md:py-40 px-6 overflow-hidden. Max-w-6xl.\nSubtle radial gradient: bg-[radial-gradient(ellipse_at_center,_rgba(255,255,255,0.02)_0%,_transparent_60%)].\nHeader row: flex between \"What we do\" (text-3xl md:text-5xl text-white tracking-tight) and \"Our services\" label (text-white/40 text-sm, hidden on mobile). Animates opacity: 0, y: 30 -> visible, duration 0.7.\nTwo-card grid (grid-cols-1 md:grid-cols-2 gap-6 md:gap-8):\nEach card: liquid-glass rounded-3xl overflow-hidden with group class. Animates opacity: 0, y: 50 -> visible, duration 0.8, staggered by 0.15s.\nCard video area: aspect-video, object-cover, transition-transform duration-700 group-hover:scale-105. Gradient overlay: bg-gradient-to-t from-black/40 to-transparent.\nCard body (p-6 md:p-8): tag label (uppercase, tracking-widest, text-white/40 text-xs), ArrowUpRight icon in a liquid-glass rounded-full p-2 circle, title (text-white text-xl md:text-2xl mb-3 tracking-tight), description (text-white/50 text-sm leading-relaxed).\nCard 1: Video URL:\n\nhttps://plugin-assets.open-design.ai/plugins/innovation/hf_20260314_131748_f2ca2a28-fed7-44c8-b9a9-bd9acdd5ec31-b2a357.mp4\nTag: \"Strategy\". Title: \"Research & Insight\". Description: \"We dig deep into data, culture, and human behavior to surface the insights that drive meaningful, lasting change.\"\nCard 2: Video URL:\n\nhttps://plugin-assets.open-design.ai/plugins/innovation/hf_20260324_151826_c7218672-6e92-402c-9e45-f1e0f454bdc4-c2f128.mp4\nTag: \"Craft\". Title: \"Design & Execution\". Description: \"From concept to launch, we obsess over every detail to deliver experiences that feel effortless and look extraordinary.\"\n",
+        "zh-CN": "构建 Innovation 暗色编辑风落地页（衬线大标题 + 自动淡入淡出全屏视频 + 液态玻璃导航 + 滚动渐显的关于/特色视频/理念/服务板块）。完整规格以 en 字段为准。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Innovation — Dark Editorial Landing"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "network"
+    ]
+  }
+}

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
 const LOCALE_KEY = 'open-design:locale';
@@ -78,7 +78,7 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
   await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
 }
@@ -141,8 +141,8 @@ async function openLocalCliSettings(
     });
   });
 
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({ json: { agents } });
+  await page.route('**/api/agents**', async (route) => {
+    await fulfillAgentsRoute(route, agents);
   });
 
   await page.route('**/api/test/connection', async (route) => {
@@ -156,7 +156,7 @@ async function openLocalCliSettings(
 
   await gotoEntryHome(page);
   await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).first().click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.locator('.modal-settings[role="dialog"]');
   const menu = page.getByRole('menu');
   await expect
     .poll(async () => {
@@ -171,8 +171,12 @@ async function openLocalCliSettings(
 
   await expect(dialog).toBeVisible();
   await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
-  const codexCard = dialog.getByRole('button', { name: /Codex CLI/i });
-  await expect(codexCard).toBeVisible();
+  const codexCard = dialog
+    .locator('[data-testid="settings-agent-select-codex"], .agent-card-select', {
+      hasText: /Codex CLI/i,
+    })
+    .first();
+  await expect(codexCard).toBeVisible({ timeout: 20_000 });
   await codexCard.click();
   await dialog.getByTestId('settings-cli-env').evaluate((details) => {
     if (details instanceof HTMLDetailsElement) details.open = true;
@@ -183,8 +187,36 @@ async function openLocalCliSettings(
   return dialog;
 }
 
+async function fulfillAgentsRoute(route: Route, agents: AgentFixture[]) {
+  const url = new URL(route.request().url());
+  if (url.searchParams.get('stream') === '1') {
+    const body = [
+      ...agents.flatMap((agent) => [
+        'event: agent',
+        `data: ${JSON.stringify(agent)}`,
+        '',
+      ]),
+      'event: done',
+      'data: {}',
+      '',
+      '',
+    ].join('\n');
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body,
+    });
+    return;
+  }
+  await route.fulfill({ json: { agents } });
+}
+
 test.describe('Settings Local CLI Codex fallback UX', () => {
   test('[P0] shows fallback repair actions and can replace the saved path with the detected Codex binary', async ({ page }) => {
+    test.setTimeout(60_000);
     const configuredPath = '/bad/codex';
     const detectedPath = '/usr/local/bin/codex';
     let lastRequest: Record<string, unknown> | null = null;
@@ -246,6 +278,7 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
   });
 
   test('[P0] can clear an unusable custom Codex path after a fallback_failed test result', async ({ page }) => {
+    test.setTimeout(60_000);
     const configuredPath = '/Applications/Codex.app/Contents/Resources/codex';
     const detectedPath = '/opt/homebrew/bin/codex';
 

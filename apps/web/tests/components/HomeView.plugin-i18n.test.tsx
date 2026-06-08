@@ -147,16 +147,20 @@ describe('HomeView plugin i18n', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(
+    const view = render(
       <I18nProvider initial="zh-CN">
-        <HomeView
-          projects={[]}
-          onSubmit={() => undefined}
-          onOpenProject={() => undefined}
-          onViewAllProjects={() => undefined}
-        />
+        <div className="entry-main--scroll">
+          <HomeView
+            projects={[]}
+            onSubmit={() => undefined}
+            onOpenProject={() => undefined}
+            onViewAllProjects={() => undefined}
+          />
+        </div>
       </I18nProvider>,
     );
+    const scrollContainer = view.container.querySelector('.entry-main--scroll') as HTMLElement;
+    scrollContainer.scrollTop = 240;
 
     fireEvent.click(await waitFor(() => screen.getByTestId('plugins-home-use-menu-localized-plugin')));
     fireEvent.click(screen.getByTestId('plugins-home-use-with-query-localized-plugin'));
@@ -168,6 +172,9 @@ describe('HomeView plugin i18n', () => {
     // selectionStart/End, and the caret is placed by the editor's own model.
     await waitFor(() => {
       expect(homeHeroPromptText()).toBe('生成一份关于 设计系统 的简报。');
+    });
+    await waitFor(() => {
+      expect(scrollContainer.scrollTop).toBe(0);
     });
     // use-with-query now also routes the plugin as the active driver, so it
     // applies (binding its pipeline/context for submit).

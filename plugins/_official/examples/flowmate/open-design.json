@@ -1,0 +1,90 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-flowmate",
+  "title": "FlowMate — AI Workflow Automation Landing",
+  "title_i18n": {
+    "zh-CN": "FlowMate — AI 工作流自动化落地页",
+    "en": "FlowMate — AI Workflow Automation Landing"
+  },
+  "version": "0.1.0",
+  "description": "Production-ready AI-automation SaaS landing page: a fixed 240px sidebar, blurred sticky navbar, PPMondwest serif hero, a liquid-glass typewriter card over a looping product video, a 6-card features grid, and an auto-rotating 5-card carousel.",
+  "description_i18n": {
+    "zh-CN": "可直接上线的 AI 自动化 SaaS 落地页：固定 240px 侧栏、毛玻璃吸顶导航、PPMondwest 衬线 Hero、产品视频上的液态玻璃打字机卡片、6 张功能卡网格，以及自动轮播的 5 卡轮播。",
+    "en": "Production-ready AI-automation SaaS landing page: a fixed 240px sidebar, blurred sticky navbar, PPMondwest serif hero, a liquid-glass typewriter card over a looping product video, a 6-card features grid, and an auto-rotating 5-card carousel."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Eli"
+  },
+  "homepage": "https://motionsites.ai/sections",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "landing-page",
+    "saas",
+    "automation",
+    "glassmorphism"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a modern, production-ready landing page for \"FlowMate\" - an AI workflow automation platform. Use React, TypeScript, Vite, Tailwind CSS, Framer Motion, and Lucide React.\n\n## Design System\n\nColors:\n- Background: `#fefffc` (off-white)\n- Text Primary: `#2c2c2c` (dark gray)\n- Text Secondary: `#444141`\n- Text Tertiary: `#646464`\n- Text Muted: `#b4b8b4`\n- Borders: `#dde3dd`, `#dee2de`, `#e8e8e8`\n- Hover Background: `#eef1ed`\n- Button Black: `black` with hover `#2c2c2c`\n\nTypography:\n- Custom Font: PPMondwest (serif) from URL: `https://www.generalintelligencecompany.com/_next/static/media/17330fd087386262-s.p.woff2`\n- Font settings: `fontKerning: 'none'`, `letterSpacing: '-0.04em'`\n- System fonts as fallback\n\n## Layout Structure\n\nDesktop (1024px+):\n- Fixed sidebar: 240px width, left side\n- Content area: margin-left 240px\n- Fixed navbar: positioned at top of content area (left: 240px)\n\nMobile/Tablet:\n- No sidebar\n- Full-width navbar at top\n- Stacked content\n\n## Components\n\n## 1. Sidebar (Desktop Only)\n\n- Fixed position, 240px wide, full height\n- Border: 2px solid `#dde3dd`\n- Logo image at top: `https://plugin-assets.open-design.ai/plugins/flowmate/hf_20260405_072635_e0ca60b6-0b6c-49a3-825d-b2b6a53dd63d-871e7b.webp&w=1280&q=85`\n- Navigation items: Home, Video, Features, Cards\n- Active state: `bg-[#eef1ed]` with `text-[#2c2c2c]`\n- Inactive: `text-[#b4b8b4]` with hover effects\n- Smooth scroll with IntersectionObserver tracking\n\n## 2. Navbar\n\n- Fixed at top, semi-transparent background: `bg-[#fefffc]/90` with `backdrop-blur-sm`\n- Desktop positioning: `left-0 lg:left-[240px]`\n- Logo/Brand: \"FlowMate\" in PPMondwest, 28px mobile, 32px desktop\n- Right side items:\n- \"Pricing\" link (hidden on mobile)\n- \"Community\" link (hidden on mobile)\n- \"Log in\" button: white background, 2px border `#dde3dd`, rounded-full\n- \"Sign up\" button: black background, white text, rounded-full\n\n## 3. Hero Section\n\n- Padding: responsive (pt-12 to pt-20, pb-12 to pb-20)\n- Heading: \"Transform your workflow using plain English\"\n- Font: PPMondwest\n- Size: 32px mobile → 50px tablet → 70px desktop\n- Line height: 0.95\n- Max width: 900px (700px on lg)\n- Subheading: \"FlowMate connects to your current apps, builds smart workflows, and manages operations. Powering the platforms you already know and trust.\"\n- Color: `#444141`\n- Max width: 620px (520px on lg)\n- CTA button: \"View our intro video\" with custom arrow SVG icon\n- Use TextFade animation (direction: up, stagger: 0.15s)\n\n## 4. Video Section (Liquid Glass Effect)\n\nVideo URL: `https://plugin-assets.open-design.ai/plugins/flowmate/hf_20260405_073438_071156e5-2a7a-45d8-a8d9-c628d2144e88-988708.mp4`\n\nGlass morphism overlay card:\n- Centered over video\n- Typewriter effect text: \"Daily check rival companies and ping me on messenger\"\n- Speed: 50ms per character\n- Styling:`backdrop-filter: blur(16px)background-image: linear-gradient(in oklab, rgba(255, 255, 255, 0.35) 0px, rgba(255, 255, 255, 0.12) 100%)border: 6px solid rgba(255, 255, 255, 0.2)box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.5)`\n- Icons: Paperclip (lucide) and circular send button with ArrowUp\n- Framer Motion spring animation on scroll\n\n## 5. Features Grid\n\nTitle: \"Discover what FlowMate can accomplish for your team\"\n\n6 Feature Cards (3 columns on desktop, 2 on tablet, 1 on mobile):\n\n- Research this company (FlowMate)\n- Description: \"Execute investor-grade business analysis: generate detailed spreadsheets, gather web intel, compare rivals, and build team dossiers.\"\n- Icon: Generic tool icon\n\n- Check the dev team's progress\n- Description: \"View a quick overview of your developer squad's activity, goals, and blockers.\"\n- Icons: Linear + Slack logos\n\n- Build my CV from available information\n- Description: \"Generate a shareable PDF curriculum using stored facts and web sources, excluding any private contact info.\"\n- Icon: Generic tool icon\n\n- Turn this into retro pixels\n- Description: \"Transform any photo into vintage pixelated graphics with custom resolution.\"\n- No icons\n\n- Track Industry Sites and Send Weekly Digest Each Monday\n- Description: \"Watch leading tech and development sources for fresh content then deliver Monday briefings with main insights and URLs.\"\n- Icon: Generic tool icon\n\n- Morning schedule digest\n- Description: \"Every AM, outline your agenda with important background and recommended preparation.\"\n- Icons: Gmail + Google Calendar logos\n\nCard Styling:\n- Border: 2px solid `#dee2de`\n- Rounded: 2xl\n- Hover: border color changes to `#b8beb8`\n- Icons in circular gray backgrounds at bottom\n\n## 6. Cards Carousel\n\nAuto-rotating carousel (4 second intervals) with 5 cards:\n\nCard 1: For Everyone\n- Text: \"Unleash your creative vision\"\n- Image: `https://plugin-assets.open-design.ai/plugins/flowmate/hf_20260405_081328_19f48c5b-ea4d-4f23-8f80-7374f31015d4-082174.webp&w=1280&q=85`\n\nCard 2: For Teams\n- Text: \"Smart helper supporting each teammate daily\"\n- Image: `https://plugin-assets.open-design.ai/plugins/flowmate/hf_20260405_081342_ad378347-1ebd-4b17-a716-ee895bf739c0-b87507.webp&w=1280&q=85`\n\nCard 3: For Enterprises\n- Text: \"Elevate your whole organization using business AI\"\n- Image: `https://plugin-assets.open-design.ai/plugins/flowmate/hf_20260405_081415_a6e8a76c-224e-417b-bf99-6b86d6494644-27b05b.webp&w=1280&q=85`\n\nCard 4: Platform\n- Text: \"Enhanced with FlowMate\"\n- Image: `https://plugin-assets.open-design.ai/plugins/flowmate/hf_20260405_081513_cf1cd2c1-2122-4de6-90ed-acae8bfbdb00-53daec.webp&w=1280&q=85`\n\nCard 5: Security\n- Text: \"Creating trusted and helpful AI\"\n- Image: `https://plugin-assets.open-design.ai/plugins/flowmate/hf_20260405_081541_9d2d28bf-d6a3-4b31-b0bb-cfc5202d4fcd-6dfc75.webp&w=1280&q=85`\n\nCarousel Features:\n- Shows 3 cards at a time (1 on mobile)\n- Manual navigation: Previous/Next buttons with ChevronLeft/Right icons\n- Framer Motion AnimatePresence with slide animations\n- Transition: `duration: 0.7, ease: [0.32, 0.72, 0, 1]`\n- Cards: 500px height, gradient overlay, hover scale effect\n\n## Animations\n\nTextFade Component:\n- Spring animation on scroll into view\n- Stagger children with configurable delay\n- Direction: up or down\n- Default variants: `y: 18` offset, opacity fade\n\nVideo Section:\n- Spring animation: `{ opacity: 1, y: 0 }` from `{ opacity: 0, y: 18 }`\n\nCarousel:\n- Entry: slide from right/left with scale 0.95\n- Exit: slide opposite direction\n- Smooth transitions with custom easing\n\n## Technical Requirements\n\nDependencies:\n- React 18.3+\n- Framer Motion 12.38+\n- Lucide React 0.344+\n- Tailwind CSS 3.4+\n- TypeScript 5.5+\n\nBuild Setup:\n- Vite bundler\n- ESLint configuration\n- PostCSS with Autoprefixer\n\nResponsive Breakpoints:\n- Mobile: default\n- Tablet: md (768px)\n- Desktop: lg (1024px)\n\nAll sections have proper border separation (`border-t border-[#e8e8e8]`) and the entire page uses smooth scrolling behavior with section anchors.",
+        "zh-CN": "构建 FlowMate —— 一个 AI 工作流自动化平台的现代落地页（侧栏 + 导航 + Hero + 液态玻璃视频卡片 + 功能网格 + 卡片轮播）。完整规格以 en 字段为准。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "FlowMate — AI Workflow Automation Landing"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "network"
+    ]
+  }
+}

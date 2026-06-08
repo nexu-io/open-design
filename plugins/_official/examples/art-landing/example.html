@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Art Landing — Effortless Growth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Italiana&family=Manrope:wght@400;600&family=Marck+Script&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --font-manrope: "Manrope", -apple-system, system-ui, sans-serif;
+      --font-italiana: "Italiana", serif;
+      --font-marck: "Marck Script", cursive;
+      --red: #FF0000;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: var(--font-manrope);
+      background: #000;
+      color: #fff;
+    }
+    img, video, svg { display: block; }
+
+    /* Root scroll container (maps to <main> with containerRef) */
+    .main {
+      height: 100vh;
+      overflow-y: auto;
+      overflow-x: hidden;
+      background: #000;
+      position: relative;
+    }
+
+    /* ─────────── SECTION 1 — VIDEO HERO ─────────── */
+    .hero {
+      position: relative;
+      height: 100vh;
+      width: 100%;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .hero-video {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .hero-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 30;
+      pointer-events: none;
+    }
+
+    /* Top-left logo block */
+    .logo-block {
+      position: absolute;
+      top: 24px;
+      left: 20px;
+      z-index: 40;
+      pointer-events: auto;
+      max-width: calc(100vw - 140px);
+      display: flex;
+      flex-direction: row;
+      gap: 16px;
+      align-items: center;
+    }
+    .logo-svg { width: 48px; height: 48px; fill: #fff; flex-shrink: 0; }
+    .tagline {
+      color: #fff;
+      font-size: 11px;
+      width: 112px;
+      line-height: 1.2;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .tagline-desktop { display: none; }
+    .tagline-mobile { display: block; }
+
+    /* Left description (desktop only) */
+    .left-desc {
+      position: absolute;
+      top: 24px;
+      left: 20px;
+      z-index: 40;
+      display: none;
+      margin-top: 400px;
+      flex-direction: column;
+      gap: 24px;
+      width: 100%;
+      max-width: 320px;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 400;
+      line-height: 1.625;
+      pointer-events: auto;
+    }
+
+    /* Top-right CTA */
+    .cta {
+      position: absolute;
+      top: 24px;
+      right: 20px;
+      z-index: 40;
+      padding: 12px 20px;
+      border: 1px solid #fff;
+      border-radius: 100%;
+      color: #fff;
+      font-size: 12px;
+      font-family: var(--font-italiana);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      background: rgba(0, 0, 0, 0.1);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      pointer-events: auto;
+    }
+    .cta:hover {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(48px);
+      -webkit-backdrop-filter: blur(48px);
+    }
+
+    /* Bottom heading container */
+    .hero-bottom {
+      position: absolute;
+      bottom: 32px;
+      left: 20px;
+      right: 20px;
+      z-index: 40;
+      text-align: left;
+      pointer-events: none;
+    }
+    .hero-bottom-paras {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-width: 280px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 400;
+      margin-bottom: 32px;
+    }
+    .hero-bottom-paras-desktop { display: none; }
+    .hero-h1 {
+      color: #fff;
+      font-size: 36px;
+      line-height: 1.1;
+      font-family: var(--font-italiana);
+      font-weight: 400;
+    }
+    .hero-h1-desktop { display: none; }
+    .hero-h1-mobile { display: block; }
+
+    /* ─────────── SECTION 2 — RED BACKGROUND ─────────── */
+    .red {
+      position: relative;
+      min-height: 100vh;
+      width: 100%;
+      background: var(--red);
+      display: flex;
+      flex-direction: column;
+      z-index: 10;
+    }
+
+    /* Cloud overlays */
+    .cloud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      z-index: 100;
+      pointer-events: none;
+      transform: translateY(-50%);
+      will-change: transform;
+    }
+    .cloud img { width: 100%; height: auto; display: block; }
+    .cloud-desktop { display: none; }
+    .cloud-mobile { display: block; }
+
+    .red-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      padding-top: 100px;
+    }
+    .red-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      padding: 0 32px;
+      text-align: center;
+      z-index: 20;
+      position: relative;
+      max-width: 900px;
+      height: auto;
+      margin: 0 auto;
+    }
+    .red-logo { width: 80px; height: 80px; fill: #fff; }
+    .red-lead {
+      color: #fff;
+      font-size: 16px;
+      height: 100px;
+      max-width: 400px;
+      line-height: 1.6;
+      margin-bottom: 40px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .signature {
+      font-family: var(--font-marck);
+      color: #fff;
+      font-size: 120px;
+      line-height: 1;
+      margin-bottom: 32px;
+    }
+    .red-paras {
+      margin-bottom: 100px;
+    }
+    .red-para {
+      color: #fff;
+      font-size: 16px;
+      width: 400px;
+      max-width: 100%;
+      font-weight: 300;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .red-para.first { margin-bottom: 24px; }
+
+    /* Bottom video block */
+    .red-video-block {
+      position: relative;
+      width: 100%;
+      flex-shrink: 0;
+    }
+    .red-video-fade {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100px;
+      background: linear-gradient(to bottom, var(--red), transparent);
+      z-index: 10;
+      pointer-events: none;
+    }
+    .red-video {
+      width: 100%;
+      height: auto;
+      display: block;
+      object-fit: contain;
+    }
+
+    /* ─────────── RESPONSIVE (md: >=768px) ─────────── */
+    @media (min-width: 768px) {
+      .logo-block {
+        top: 64px;
+        left: 64px;
+        gap: 24px;
+        max-width: none;
+      }
+      .logo-svg { width: 64px; height: 64px; }
+      .tagline { font-size: 16px; width: auto; }
+      .tagline-desktop { display: block; }
+      .tagline-mobile { display: none; }
+
+      .left-desc { display: flex; left: 64px; top: 64px; }
+
+      .cta {
+        top: 64px;
+        right: 64px;
+        padding: 28px 40px;
+        font-size: 18px;
+        background: transparent;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+
+      .hero-bottom {
+        left: auto;
+        bottom: 64px;
+        right: 64px;
+        max-width: 1200px;
+        text-align: right;
+      }
+      .hero-bottom-paras-mobile { display: none; }
+      .hero-h1 { font-size: 96px; line-height: 88px; }
+      .hero-h1-desktop { display: block; }
+      .hero-h1-mobile { display: none; }
+
+      .red-wrap { padding-top: 400px; }
+      .red-inner { height: 620px; }
+
+      .cloud-desktop { display: block; }
+      .cloud-mobile { display: none; }
+
+      .red-paras { margin-bottom: 6rem; }
+    }
+  </style>
+</head>
+<body>
+  <main class="main" id="main">
+
+    <!-- ───── SECTION 1 — VIDEO HERO ───── -->
+    <section class="hero">
+      <video class="hero-video" autoplay loop muted playsinline
+        src="https://plugin-assets.open-design.ai/plugins/cinematic-landing-page/hf_20260515_113235_88e0d62e-8103-40c1-948e-f0a4f886ffd1-e00afb.mp4"></video>
+      <div class="hero-overlay"></div>
+
+      <!-- Logo block -->
+      <div class="logo-block">
+        <svg class="logo-svg" viewBox="0 0 120 120" aria-label="SPD logo">
+          <path d="M60 120C26.8629 120 0 93.1371 0 60V0C22.5654 0 42.2213 12.4569 52.4662 30.8691C38.4788 34.2089 28.0787 46.7902 28.0787 61.8006V63.1443C28.0787 79.9648 41.7146 93.6006 58.5353 93.6006H59.8789L59.8785 61.8006C59.8785 79.3633 74.1159 93.6006 91.6787 93.6006L91.6787 61.8006C91.6787 44.2783 77.5071 30.0661 60 30.0008L60 0H62.5352C94.2722 0 120 25.7279 120 57.4648V60C120 93.1371 93.1371 120 60 120Z"/>
+        </svg>
+        <div class="tagline">
+          <span class="tagline-desktop">Effortless Growth<br />Operations. We Handle All Tasks.<br />Stay Calm.</span>
+          <span class="tagline-mobile">Complete Business<br />Automation. We Handle All<br />Tasks. You Relax.</span>
+        </div>
+      </div>
+
+      <!-- Left description (desktop) -->
+      <div class="left-desc">
+        <p>We orchestrate the operational work behind your SaaS — onboarding flows, billing, reporting, and the endless small tasks — so your team can focus on the product.</p>
+        <p>Set it up once and let the platform run your daily routine on autopilot, with full visibility and zero busywork.</p>
+      </div>
+
+      <!-- Top-right CTA -->
+      <button class="cta">Get started</button>
+
+      <!-- Bottom heading -->
+      <div class="hero-bottom">
+        <div class="hero-bottom-paras hero-bottom-paras-mobile">
+          <p>Automated operations for modern SaaS teams.</p>
+          <p>Less busywork. More calm.</p>
+        </div>
+        <h1 class="hero-h1">
+          <span class="hero-h1-desktop">Intelligent Daily<br />Routine Automation<br />For Your Business.<br />You Relax</span>
+          <span class="hero-h1-mobile">Intelligent Daily Routine<br />Automation For Your<br />Business. You Relax</span>
+        </h1>
+      </div>
+    </section>
+
+    <!-- ───── SECTION 2 — RED BACKGROUND ───── -->
+    <section class="red">
+      <!-- Cloud overlays (parallax) -->
+      <div class="cloud cloud-desktop" id="cloud-desktop">
+        <img src="https://plugin-assets.open-design.ai/plugins/art-landing/cloude_ws7l3z-bd818d.webp"
+          referrerpolicy="no-referrer" alt="">
+      </div>
+      <div class="cloud cloud-mobile" id="cloud-mobile">
+        <img src="https://plugin-assets.open-design.ai/plugins/art-landing/cloude_ws7l3z-bd818d.webp"
+          referrerpolicy="no-referrer" alt="">
+      </div>
+
+      <div class="red-wrap">
+        <div class="red-inner">
+          <svg class="red-logo" viewBox="0 0 120 120" aria-label="SPD logo">
+            <path d="M60 120C26.8629 120 0 93.1371 0 60V0C22.5654 0 42.2213 12.4569 52.4662 30.8691C38.4788 34.2089 28.0787 46.7902 28.0787 61.8006V63.1443C28.0787 79.9648 41.7146 93.6006 58.5353 93.6006H59.8789L59.8785 61.8006C59.8785 79.3633 74.1159 93.6006 91.6787 93.6006L91.6787 61.8006C91.6787 44.2783 77.5071 30.0661 60 30.0008L60 0H62.5352C94.2722 0 120 25.7279 120 57.4648V60C120 93.1371 93.1371 120 60 120Z"/>
+          </svg>
+          <p class="red-lead">We built this platform with a single purpose to eliminate operational chaos and restore balance to your daily business routine</p>
+          <div class="signature">S.P.D</div>
+          <div class="red-paras">
+            <p class="red-para first">Every workflow, every recurring task, every report — handled quietly in the background while you stay focused on what matters.</p>
+            <p class="red-para">No dashboards to babysit. No fires to fight. Just steady, intelligent operations that keep moving on their own.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom video block -->
+      <div class="red-video-block">
+        <div class="red-video-fade"></div>
+        <video class="red-video" autoplay loop muted playsinline
+          src="https://plugin-assets.open-design.ai/plugins/cinematic-landing-page/hf_20260515_114315_ee3663e6-bd79-41b4-9e5b-0fae62827eb9-b97001.mp4"></video>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // useScroll({ container }) + useTransform → passive scroll listener writing inline transform.
+    // Desktop: scrollY 0→300px maps cloud translateY 0→-100px.
+    // Mobile:  scrollY 0→300px maps cloud translateY 0→-24px.
+    (function () {
+      var main = document.getElementById('main');
+      var cloudDesktop = document.getElementById('cloud-desktop');
+      var cloudMobile = document.getElementById('cloud-mobile');
+
+      function lerpRange(value, inMin, inMax, outMin, outMax) {
+        var t = (value - inMin) / (inMax - inMin);
+        if (t < 0) t = 0;
+        if (t > 1) t = 1;
+        return outMin + (outMax - outMin) * t;
+      }
+
+      function update() {
+        var y = main.scrollTop;
+        var desktopY = lerpRange(y, 0, 300, 0, -100);
+        var mobileY = lerpRange(y, 0, 300, 0, -24);
+        // base -50% translate from CSS is reproduced here so the inline transform composes correctly.
+        cloudDesktop.style.transform = 'translateY(calc(-50% + ' + desktopY + 'px))';
+        cloudMobile.style.transform = 'translateY(calc(-50% + ' + mobileY + 'px))';
+      }
+
+      main.addEventListener('scroll', update, { passive: true });
+      update();
+    })();
+  </script>
+</body>
+</html>

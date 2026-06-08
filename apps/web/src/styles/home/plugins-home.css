@@ -56,10 +56,10 @@
   width: 200px;
   max-width: 100%;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
-  transition: border-color 120ms ease, background-color 120ms ease,
-    box-shadow 120ms ease;
+  transition: border-color 120ms var(--ease-out), background-color 120ms var(--ease-out),
+    box-shadow 120ms var(--ease-out);
 }
 .plugins-home__search:focus-within {
   border-color: var(--border-strong);
@@ -87,7 +87,7 @@
   color: var(--text);
   outline: none;
   box-shadow: none;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-family: inherit;
 }
 .plugins-home__search-input::placeholder {
@@ -115,7 +115,7 @@
   background: var(--bg-subtle);
   color: var(--text-muted);
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .plugins-home__search-clear:hover {
   background: var(--border-soft, var(--border));
@@ -172,12 +172,12 @@
   gap: 5px;
   padding: 4px 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
-  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+  transition: border-color 120ms var(--ease-out), background-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .plugins-home__chip:hover {
   border-color: var(--border-strong);
@@ -294,12 +294,12 @@
   gap: 5px;
   padding: 5px 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
-  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+  transition: border-color 120ms var(--ease-out), background-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .plugins-home__pill:hover {
   border-color: var(--border-strong);
@@ -416,8 +416,8 @@
   border-radius: var(--radius);
   background: var(--bg-panel);
   overflow: hidden;
-  transition: border-color 120ms ease, box-shadow 160ms ease,
-    transform 160ms ease;
+  transition: border-color 120ms var(--ease-out), box-shadow 160ms var(--ease-out),
+    transform 160ms var(--ease-out);
   isolation: isolate;
   content-visibility: auto;
   contain: layout paint style;
@@ -532,7 +532,7 @@
 }
 .plugins-home__html-skeleton span {
   height: 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: linear-gradient(90deg, var(--bg-subtle), var(--border-soft), var(--bg-subtle));
   background-size: 200% 100%;
 }
@@ -718,7 +718,7 @@
     linear-gradient(180deg, rgba(0, 0, 0, 0.0) 0%, rgba(0, 0, 0, 0.42) 55%, rgba(0, 0, 0, 0.78) 100%);
   color: white;
   opacity: 0;
-  transition: opacity 180ms ease;
+  transition: opacity 180ms var(--ease-out);
   pointer-events: none;
   z-index: 3;
 }
@@ -779,7 +779,7 @@
 .plugins-home__overlay-tag {
   font-size: 10.5px;
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.18);
   color: white;
   backdrop-filter: blur(6px);
@@ -831,8 +831,8 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: background-color 120ms ease, border-color 120ms ease,
-    color 120ms ease;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
 }
 .plugins-home__card-save:hover,
 .plugins-home__card-save:focus-visible {
@@ -875,8 +875,8 @@
   font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 120ms ease, border-color 120ms ease,
-    color 120ms ease;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
 }
 .plugins-home__action--compact {
   flex: 1;
@@ -1023,7 +1023,7 @@ button.plugins-home__use-menu-item:focus-visible {
   gap: 7px;
   padding: 6px 12px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-faint);
   font-size: 12px;
@@ -1089,7 +1089,7 @@ button.plugins-home__use-menu-item:focus-visible {
   gap: 6px;
   padding: 7px 15px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12px;

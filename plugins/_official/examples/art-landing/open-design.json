@@ -1,0 +1,90 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-art-landing",
+  "title": "Art Landing — Video Hero",
+  "title_i18n": {
+    "zh-CN": "艺术风落地页 — 视频主视觉",
+    "en": "Art Landing — Video Hero"
+  },
+  "version": "0.1.0",
+  "description": "Two-section scroll landing page: a fullscreen video hero with an Italiana display headline, then a bold #FF0000 red section with a parallax cloud transition, a Marck Script signature, and a bottom looping video.",
+  "description_i18n": {
+    "zh-CN": "两段式滚动落地页：全屏视频主视觉配 Italiana 大标题，下接纯红 #FF0000 区块，含视差云层过渡、Marck Script 手写签名与底部循环视频。",
+    "en": "Two-section scroll landing page: a fullscreen video hero with an Italiana display headline, then a bold #FF0000 red section with a parallax cloud transition, a Marck Script signature, and a bottom looping video."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Eli"
+  },
+  "homepage": "https://motionsites.ai/sections",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "landing",
+    "video",
+    "scroll",
+    "parallax"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a two-section scroll-based landing page using React 19, TypeScript, Vite, Tailwind CSS v4, and `motion/react` (Framer Motion). The page uses Manrope, Italiana, and Marck Script fonts, with a video hero and a red second section featuring a cloud transition.\n\n## Setup\n\npackage.json dependencies:\n- `react` ^19, `react-dom` ^19\n- `motion` ^12 (for `motion/react`)\n- `tailwindcss` ^4.1, `@tailwindcss/vite` ^4.1\n- `vite` ^6, `@vitejs/plugin-react` ^5\n- `lucide-react`, `typescript` ~5.8\n\nvite.config.ts: include `@vitejs/plugin-react` and `@tailwindcss/vite` plugins.\n\n## src/index.css\n\n`@import url('https://fonts.googleapis.com/css2?family=Italiana&family=Manrope:wght@400;600&family=Marck+Script&display=swap');@import \"tailwindcss\";@theme {  --font-manrope: \"Manrope\", sans-serif;  --font-italiana: \"Italiana\", serif;  --font-marck: \"Marck Script\", cursive;}`\n\n## src/App.tsx — Structure\n\nRoot: `<main>` with ref `containerRef`, classes `h-screen overflow-y-auto overflow-x-hidden font-manrope bg-black relative`.\n\nScroll setup:`const containerRef = useRef<HTMLDivElement>(null);const { scrollY } = useScroll({ container: containerRef });const cloudYDesktop = useTransform(scrollY, [0, 300], [0, -100]);const cloudYMobile  = useTransform(scrollY, [0, 300], [0, -24]);`\n\n## Section 1 — Video Hero\n\n`<section className=\"relative h-screen w-full flex-shrink-0 overflow-hidden\">`\n\n- Background video (absolute inset-0, z-10, `w-full h-full object-cover`, autoPlay loop muted playsInline):\n- src: `https://plugin-assets.open-design.ai/plugins/cinematic-landing-page/hf_20260515_113235_88e0d62e-8103-40c1-948e-f0a4f886ffd1-e00afb.mp4`\n- Overlay `absolute inset-0 z-30 pointer-events-none`.\n\nTop-left logo block (`absolute top-[24px] left-[20px] md:top-[64px] md:left-[64px] pointer-events-auto max-w-[calc(100vw-140px)] md:max-w-none`):\n- Flex row, gap-[16px] md:gap-[24px], items-center.\n- SVG logo, white fill, 48x48 mobile / 64x64 desktop, viewBox `0 0 120 120`, path:\n`M60 120C26.8629 120 0 93.1371 0 60V0C22.5654 0 42.2213 12.4569 52.4662 30.8691C38.4788 34.2089 28.0787 46.7902 28.0787 61.8006V63.1443C28.0787 79.9648 41.7146 93.6006 58.5353 93.6006H59.8789L59.8785 61.8006C59.8785 79.3633 74.1159 93.6006 91.6787 93.6006L91.6787 61.8006C91.6787 44.2783 77.5071 30.0661 60 30.0008L60 0H62.5352C94.2722 0 120 25.7279 120 57.4648V60C120 93.1371 93.1371 120 60 120Z`\n- Tagline: white, `text-[11px] md:text-[16px] w-[112px] md:w-auto leading-[1.2] font-semibold tracking-[0.02em]`.\n- Desktop (`hidden md:block`): \"Effortless Growth / Operations. We Handle All Tasks. / Stay Calm.\" with `<br />` after each.\n- Mobile (`block md:hidden`): \"Complete Business / Automation. We Handle All / Tasks. You Relax.\"\n\nLeft description (desktop only, below logo): `hidden md:flex mt-[400px] flex-col gap-[24px] w-full max-w-[320px] text-white text-[14px] font-normal leading-relaxed`. Two paragraphs about SaaS automation.\n\nTop-right CTA button (`absolute top-[24px] right-[20px] md:top-[64px] md:right-[64px]`):\n`px-5 py-3 md:px-10 md:py-7 border border-white rounded-[100%] text-white text-[12px] md:text-[18px] font-italiana uppercase tracking-widest hover:bg-white/10 hover:backdrop-blur-[48px] transition-all duration-300 cursor-pointer bg-black/10 backdrop-blur-sm md:bg-transparent md:backdrop-blur-none`\nLabel: \"Get started\".\n\nBottom heading container (`absolute bottom-[32px] left-[20px] right-[20px] md:left-auto md:bottom-[64px] md:right-[64px] md:max-w-[1200px] text-left md:text-right`):\n- Mobile paragraphs (`md:hidden flex flex-col gap-[16px] max-w-[280px] text-white text-[12px] font-normal mb-[32px]`).\n- `<h1 className=\"text-white text-[36px] leading-[1.1] md:text-[96px] font-italiana md:leading-[88px]\">`:\n- Desktop: \"Intelligent Daily / Routine Automation / For Your Business. / You Relax\".\n- Mobile (`text-[32px]`): \"Intelligent Daily Routine / Automation For Your / Business. You Relax\".\n\n## Section 2 — Red Background\n\n`<section className=\"relative min-h-screen w-full bg-[#FF0000] flex flex-col z-10\">`\n\nCloud overlays (two `motion.div`, one desktop, one mobile, both absolute top-0 left-0 w-full z-[100] pointer-events-none `-translate-y-1/2`):\n- style `y: cloudYDesktop` / `y: cloudYMobile`.\n- `<img src=\"https://plugin-assets.open-design.ai/plugins/art-landing/cloude_ws7l3z-bd818d.webp\" className=\"w-full h-auto block\" referrerPolicy=\"no-referrer\" />`\n\nContent wrapper: `flex-1 flex flex-col items-center w-full pt-[100px] md:pt-[400px]`.\n\nInner content block (`flex flex-col items-center w-full px-8 text-center z-20 relative max-w-[900px] h-auto md:h-[620px] mx-auto`):\n- Same SVG logo, 80x80, white.\n- Paragraph: `text-white text-[16px] h-[100px] max-w-[400px] leading-[1.6] mb-[40px] uppercase tracking-wider mx-auto`. Text: \"We built this platform with a single purpose to eliminate operational chaos and restore balance to your daily business routine\".\n- Signature: `font-marck text-white text-[120px] leading-none mb-[32px]` reading `S.P.D`.\n- Two centered paragraphs: white, `text-[16px] w-[400px] max-w-full`, font-light, first with `mb-[24px]`, container `mb-[100px] md:mb-24`.\n\nBottom video block (`relative w-full shrink-0`):\n- Top fade: `absolute top-0 left-0 w-full h-[100px] bg-gradient-to-b from-[#FF0000] to-transparent z-10 pointer-events-none`.\n- Video (autoPlay loop muted playsInline, `w-full h-auto block object-contain`):\n- src: `https://plugin-assets.open-design.ai/plugins/cinematic-landing-page/hf_20260515_114315_ee3663e6-bd79-41b4-9e5b-0fae62827eb9-b97001.mp4`\n\n## Animations\n\n- Cloud parallax: maps scroll 0→300px to translateY 0→-100px (desktop) and 0→-24px (mobile), via `useTransform` with the section's container scroll.\n- Button hover: background fades to `white/10` with `backdrop-blur-[48px]` over 300ms.\n\n## Notes\n\n- Videos are Cloudinary, not CloudFront. There are no CloudFront URLs in this project.\n- All assets above are the only external URLs used.\n",
+        "zh-CN": "构建 Art Landing 两段式滚动落地页（视频主视觉 + 纯红云层过渡区块）。完整规格以 en 字段为准（逐字遵循）。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Art Landing — Video Hero"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "network"
+    ]
+  }
+}

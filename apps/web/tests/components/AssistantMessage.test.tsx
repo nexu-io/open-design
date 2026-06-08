@@ -256,7 +256,7 @@ describe('AssistantMessage re-renders on live tool input changes', () => {
         liveToolInput={{ t1: { name: 'AskUserQuestion', text: '{"questions":[{"question":"Which databa","options":[]}]}', seq: 0 } }}
       />,
     );
-    expect(container.querySelector('.op-ask-question-prompt')?.textContent).toBe('Which databa');
+    expect(container.querySelector('.qf-label')?.textContent).toBe('Which databa');
 
     rerender(
       <AssistantMessage
@@ -267,7 +267,7 @@ describe('AssistantMessage re-renders on live tool input changes', () => {
       />,
     );
     // Re-rendered to the grown prompt rather than frozen at "Which databa".
-    expect(container.querySelector('.op-ask-question-prompt')?.textContent).toBe('Which database?');
+    expect(container.querySelector('.qf-label')?.textContent).toBe('Which database?');
   });
 });
 

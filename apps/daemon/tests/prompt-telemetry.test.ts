@@ -355,16 +355,16 @@ describe('prompt telemetry builder', () => {
       ],
     });
 
-    expect(telemetry.redactedContentBytes).toBe(96 * 1024);
+    expect(telemetry.redactedContentBytes).toBe(512 * 1024);
     expect(telemetry.sections.find((s) => s.kind === 'formOverride')?.redactedContent)
-      .toHaveLength(16 * 1024);
+      .toHaveLength(64 * 1024);
     expect(
       telemetry.sections.find((s) => s.kind === 'daemonSystemPrompt')?.redactedContent,
-    ).toHaveLength(32 * 1024);
+    ).toHaveLength(120 * 1024);
     expect(telemetry.sections.find((s) => s.kind === 'clientSystemPrompt')?.redactedContent)
-      .toHaveLength(16 * 1024);
+      .toHaveLength(64 * 1024);
     expect(telemetry.sections.find((s) => s.kind === 'skillPrompt')?.redactedContent)
-      .toHaveLength(16 * 1024);
+      .toHaveLength(64 * 1024);
     const userRequest = telemetry.sections.find((s) => s.kind === 'userRequest')!;
     expect(userRequest.redactedContent).toBeUndefined();
     expect(userRequest.truncationReason).toBe('total_budget_exceeded');
@@ -395,19 +395,19 @@ describe('prompt telemetry builder', () => {
     expect(metadataOnlySection.redactedContent).toBeUndefined();
     expect(metadataOnlySection.fingerprint).toMatch(/^sha256:/);
     expect(telemetry.sections.find((s) => s.kind === 'skillPrompt')?.redactedContent)
-      .toHaveLength(16 * 1024);
+      .toHaveLength(64 * 1024);
     expect(
       telemetry.sections.find((s) => s.kind === 'designSystemPrompt')?.redactedContent,
-    ).toHaveLength(16 * 1024);
+    ).toHaveLength(64 * 1024);
     expect(
       telemetry.sections.find((s) => s.kind === 'pluginStagePrompt')?.redactedContent,
-    ).toHaveLength(16 * 1024);
+    ).toHaveLength(64 * 1024);
     expect(
       telemetry.sections.find((s) => s.kind === 'runContextPrompt')?.redactedContent,
-    ).toHaveLength(16 * 1024);
+    ).toHaveLength(64 * 1024);
     expect(telemetry.sections.find((s) => s.kind === 'echoGuard')?.redactedContent)
-      .toHaveLength(16 * 1024);
-    expect(telemetry.redactedContentBytes).toBe(80 * 1024);
+      .toHaveLength(64 * 1024);
+    expect(telemetry.redactedContentBytes).toBe(320 * 1024);
   });
 
   it('removes redactedContent when content consent is unavailable', () => {

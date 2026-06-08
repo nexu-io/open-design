@@ -3,12 +3,7 @@ import { dirname, join } from "node:path";
 
 import { hashJson, hashPath, ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
-import {
-  copyBundledPlaywrightChromium,
-  copyBundledResourceTrees,
-  resolveBundledPlaywrightChromiumSourceRoots,
-  winResources,
-} from "../resources.js";
+import { copyBundledResourceTrees, winResources } from "../resources.js";
 import {
   copyOptionalVelaCliBinary,
   resolveOptionalVelaCliBinary,
@@ -26,9 +21,6 @@ async function createResourceTreeCacheKey(config: ToolPackConfig): Promise<strin
     velaCliBin == null
       ? null
       : await resolveOptionalVelaCliOpenCodeCompanionTree(velaCliBin);
-  const playwrightSource = await resolveBundledPlaywrightChromiumSourceRoots({
-    workspaceRoot: config.workspaceRoot,
-  });
   return hashJson({
     assetsCommunityPets: await hashPath(join(config.workspaceRoot, "assets", "community-pets")),
     assetsFrames: await hashPath(join(config.workspaceRoot, "assets", "frames")),
@@ -38,12 +30,6 @@ async function createResourceTreeCacheKey(config: ToolPackConfig): Promise<strin
     node: "win.resource-tree",
     pluginOfficial: await hashPath(join(config.workspaceRoot, "plugins", "_official")),
     pluginRegistry: await hashPath(join(config.workspaceRoot, "plugins", "registry")),
-    playwrightChromium: await Promise.all(
-      playwrightSource.sourceRoots.map(async (sourceRoot) => ({
-        hash: await hashPath(sourceRoot),
-        root: sourceRoot,
-      })),
-    ),
     promptTemplates: await hashPath(join(config.workspaceRoot, "prompt-templates")),
     schemaVersion: RESOURCE_TREE_CACHE_SCHEMA_VERSION,
     skills: await hashPath(join(config.workspaceRoot, "skills")),
@@ -78,10 +64,6 @@ export async function prepareResourceTree(
       const resourceRoot = join(entryRoot, "open-design");
       await mkdir(resourceRoot, { recursive: true });
       await copyBundledResourceTrees({
-        workspaceRoot: config.workspaceRoot,
-        resourceRoot,
-      });
-      await copyBundledPlaywrightChromium({
         workspaceRoot: config.workspaceRoot,
         resourceRoot,
       });

@@ -11,7 +11,7 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
 }
 /* New project panel triggers run a tighter 38px row so the dropdowns sit
    close to the project-name input and the Companion toggle. Other call
@@ -51,7 +51,7 @@
   padding: 1px 6px;
   background: var(--accent-soft);
   color: var(--accent);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 .ds-picker-sub {
   font-size: 11px;
@@ -64,7 +64,7 @@
 .ds-picker-chevron {
   flex: none;
   color: var(--text-muted);
-  transition: transform 160ms ease;
+  transition: transform 160ms var(--ease-out);
 }
 .ds-picker-trigger.empty .ds-picker-title { color: var(--text-muted); font-weight: 500; }
 
@@ -74,7 +74,7 @@
   flex: none;
   width: 24px;
   height: 24px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   border: 1px solid var(--border);
   background: var(--bg-panel);
@@ -100,7 +100,7 @@
   padding: 1px 5px;
   background: var(--text-strong);
   color: #fff;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 2px solid var(--bg-panel);
 }
 .ds-avatar-none {
@@ -234,7 +234,7 @@
   background: transparent;
   color: var(--text-muted);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .ds-picker-item-sub {
   font-size: 11px;
@@ -275,7 +275,7 @@
   background: var(--text);
 }
 .ds-picker-mark.check {
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   border: 1.5px solid var(--border-strong);
   background: var(--bg-panel);
   color: var(--bg-panel);
@@ -373,7 +373,7 @@
   width: 10px;
   height: 10px;
   opacity: 0.55;
-  transition: opacity 120ms ease;
+  transition: opacity 120ms var(--ease-out);
 }
 .entry-side-foot .foot-pill:hover svg {
   opacity: 0.75;
@@ -400,7 +400,7 @@
   padding: 4px;
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
 }
 .lang-menu-item {
@@ -411,7 +411,7 @@
   padding: 7px 10px;
   background: transparent;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius);
   font-size: 12.5px;
   color: var(--text);
   text-align: left;
@@ -491,7 +491,7 @@
 .entry-tab:focus-visible {
   outline: 2px solid var(--selected);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   color: var(--text);
 }
 .entry-tab:hover:not(:disabled) {
@@ -601,11 +601,11 @@
   height: 20px;
   padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-faint);
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .tab-panel-toolbar .toolbar-search .toolbar-search-clear:hover {
   background: var(--bg-subtle);
@@ -635,7 +635,7 @@
   margin: 0 0 12px;
   padding: 10px 12px;
   border: 1px solid color-mix(in oklab, #ff6b6b 45%, var(--line) 55%);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: color-mix(in oklab, #ff6b6b 10%, var(--panel) 90%);
   color: color-mix(in oklab, #ff6b6b 70%, var(--fg) 30%);
   font-size: 13px;
@@ -703,10 +703,10 @@
   cursor: pointer;
   text-align: left;
   transition:
-    transform 140ms ease,
-    border-color 140ms ease,
-    box-shadow 180ms ease,
-    background 140ms ease;
+    transform 140ms var(--ease-out),
+    border-color 140ms var(--ease-out),
+    box-shadow 180ms var(--ease-out),
+    background 140ms var(--ease-out);
 }
 .connector-card:hover:not(.is-locked) {
   transform: translateY(-1px);
@@ -798,7 +798,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--bg-panel);
   overflow: hidden;
@@ -813,7 +813,7 @@
 .connector-logo.size-lg {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
 }
 .connector-logo-img {
   position: absolute;
@@ -982,7 +982,7 @@
 .connectors-panel-embedded .connector-logo.size-sm {
   width: 24px;
   height: 24px;
-  border-radius: 7px;
+  border-radius: var(--radius);
 }
 .connectors-panel-embedded .connector-logo.size-sm .connector-logo-img {
   padding: 3px;
@@ -1090,7 +1090,7 @@
 .connector-status-dot {
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: currentColor;
   box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 22%, transparent);
 }
@@ -1154,7 +1154,7 @@ button.connector-action {
   font-size: 12px;
   font-weight: 500;
   border-radius: var(--radius);
-  transition: transform 120ms ease, background 140ms ease, border-color 140ms ease;
+  transition: transform 120ms var(--ease-out), background 140ms var(--ease-out), border-color 140ms var(--ease-out);
 }
 button.connector-action.is-connect {
   min-width: 92px;
@@ -1229,7 +1229,7 @@ button.connector-action.is-loading {
   width: 24px;
   height: 24px;
   padding: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--red);
   border-color: color-mix(in srgb, var(--red) 22%, var(--border));
   background: color-mix(in srgb, var(--red) 7%, transparent);
@@ -1252,7 +1252,7 @@ button.connector-action.is-loading {
   min-height: 26px;
   padding: 4px 9px;
   border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   appearance: none;
@@ -1276,7 +1276,7 @@ button.connector-action.is-loading {
   opacity: 0.55;
   pointer-events: none;
   user-select: none;
-  transition: filter 160ms ease, opacity 160ms ease;
+  transition: filter 160ms var(--ease-out), opacity 160ms var(--ease-out);
 }
 /* When the gate is shown, anchor it to the visible first screen of the
    connectors tab instead of centering across the full (potentially long)
@@ -1363,7 +1363,7 @@ button.connector-action.is-loading {
   align-items: center;
   gap: 2px;
   padding: 3px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   flex: 0 0 auto;
@@ -1382,13 +1382,13 @@ button.connector-action.is-loading {
   font-weight: 500;
   letter-spacing: 0.005em;
   padding: 5px 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   cursor: pointer;
   white-space: nowrap;
   transition:
-    background 140ms ease,
-    color 140ms ease,
-    box-shadow 180ms ease;
+    background 140ms var(--ease-out),
+    color 140ms var(--ease-out),
+    box-shadow 180ms var(--ease-out);
 }
 .connectors-provider-tab:hover:not(.is-active) {
   color: var(--text);
@@ -1485,7 +1485,7 @@ button.connector-action.is-loading {
   width: 32px;
   height: 1px;
   background: color-mix(in srgb, var(--text) 10%, transparent);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 /* The dot separator was only meaningful when the meta was a single
    inline row; in the stacked layout it would float orphaned at the
@@ -1498,7 +1498,7 @@ button.connector-action.is-loading {
 .connectors-panel-embedded .connector-tools-badge {
   padding: 1px 6px;
   font-size: 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 /* Anchor the action column to the top now that the meta block can be
    one or two rows tall — center alignment used to make the action
@@ -1545,18 +1545,18 @@ button.connector-action.is-loading {
      text. */
   min-width: 0;
   padding: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease,
-    transform 120ms ease,
-    box-shadow 160ms ease,
-    opacity 160ms ease;
+    background 160ms var(--ease-out),
+    border-color 160ms var(--ease-out),
+    color 160ms var(--ease-out),
+    transform 120ms var(--ease-out),
+    box-shadow 160ms var(--ease-out),
+    opacity 160ms var(--ease-out);
 }
 /* Soft default fill so the ghost button still has a visible target on
    the lightest card backgrounds. We tint with `--text` rather than a
@@ -1664,7 +1664,7 @@ button.connector-action.is-loading {
   display: inline-block;
   width: 7px;
   height: 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--text-muted);
   flex: 0 0 auto;
 }
