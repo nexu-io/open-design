@@ -158,7 +158,7 @@ import { AvatarMenu } from './AvatarMenu';
 import { EntrySettingsMenu } from './EntrySettingsMenu';
 import { HandoffButton } from './HandoffButton';
 import { Icon } from './Icon';
-import { ProjectDesignSystemPicker } from './ProjectDesignSystemPicker';
+import { DesignSystemPicker } from './DesignSystemPicker';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { ChatPane } from './ChatPane';
@@ -5578,7 +5578,7 @@ export function ProjectView({
                 </span>
               )}
               designSystemPicker={(
-                <ProjectDesignSystemPicker
+                <DesignSystemPicker
                   designSystems={designSystems}
                   selectedId={project.designSystemId ?? null}
                   onChange={handleChangeDesignSystemId}

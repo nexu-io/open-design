@@ -10,7 +10,7 @@ vi.mock('../../src/providers/registry', () => ({
   fetchDesignSystemPreview: vi.fn(),
 }));
 
-import { ProjectDesignSystemPicker } from '../../src/components/ProjectDesignSystemPicker';
+import { DesignSystemPicker } from '../../src/components/DesignSystemPicker';
 import { I18nProvider, type Locale } from '../../src/i18n';
 import { fetchDesignSystemPreview } from '../../src/providers/registry';
 
@@ -42,14 +42,14 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('ProjectDesignSystemPicker', () => {
+describe('DesignSystemPicker', () => {
   function renderPicker(
-    props: Partial<ComponentProps<typeof ProjectDesignSystemPicker>> = {},
+    props: Partial<ComponentProps<typeof DesignSystemPicker>> = {},
     locale: Locale = 'zh-CN',
   ) {
     return render(
       <I18nProvider initial={locale}>
-        <ProjectDesignSystemPicker
+        <DesignSystemPicker
           designSystems={designSystems}
           selectedId="noir"
           onChange={vi.fn()}

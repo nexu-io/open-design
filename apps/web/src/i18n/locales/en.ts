@@ -591,7 +591,7 @@ export const en: Dict = {
   'designSystemPicker.searchPlaceholder': 'Search design systems (title / category / summary)',
   'designSystemPicker.searchCompactPlaceholder': 'Search design systems',
   'designSystemPicker.noneTitle': 'No design system',
-  'designSystemPicker.noneSummary': 'Let the model choose freely',
+  'designSystemPicker.noneSummary': 'No design system — the model freely improvises the visual style from your prompt.',
   'designSystemPicker.empty': 'No matching design systems',
   'designSystemPicker.openPreview': 'Open preview',
   'designSystemPicker.loadingPreview': 'Loading preview…',
