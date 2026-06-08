@@ -109,10 +109,12 @@ export function isLocalManagementRequest(req: {
   if (!isLoopbackAddress(tcpPeer)) return false;
   if (!isProxyTrusted()) return true;
   const xff = req.headers['x-forwarded-for'];
-  // No XFF header — the TCP peer is loopback and no proxy header is present,
-  // so this is a direct localhost connection (not forwarded through a proxy).
-  // Treat as local so the admin can reach management endpoints.
-  if (xff === undefined) return true;
+  // No XFF header — when proxy trust is enabled and the TCP peer is loopback,
+  // a missing XFF is ambiguous. It could be a direct localhost connection, or
+  // a same-host proxy that omits the header. Fail closed to prevent a remote
+  // client from reaching management endpoints through a misconfigured proxy.
+  // Direct-localhost admin access still works without OD_TRUST_PROXY set.
+  if (xff === undefined) return false;
   // XFF present — verify the real client behind the proxy is also loopback.
   const first = String(xff).split(',')[0]?.trim();
   if (!first) return false;
