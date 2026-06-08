@@ -89,7 +89,7 @@
   margin-right: 0;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   display: inline-flex;
@@ -97,7 +97,7 @@
   justify-content: center;
   flex: 0 0 auto;
   -webkit-app-region: no-drag;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background 100ms var(--ease-out), color 100ms var(--ease-out);
 }
 .workspace-tabs-strip.is-overflowing .workspace-tabs-new-btn {
   position: sticky;
@@ -114,7 +114,7 @@
   width: 28px;
   height: 28px;
   padding: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border-color: transparent;
   background: transparent;
   color: var(--text-muted);
@@ -170,7 +170,7 @@
   grid-template-columns: minmax(0, 1fr) 22px;
   align-items: center;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   overflow: visible;
@@ -282,7 +282,7 @@
   margin-right: 4px;
   padding: 0;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-faint);
   display: inline-flex;
@@ -326,7 +326,7 @@
   max-height: min(620px, calc(100vh - var(--workspace-tabs-chrome-height, 38px) - 24px));
   padding: 8px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: var(--shadow-lg);
   display: flex;
@@ -346,7 +346,7 @@
   gap: 7px;
   padding: 0 9px;
   border: 1px solid var(--selected);
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: var(--bg);
   color: var(--text-muted);
   box-shadow: 0 0 0 3px var(--selected-soft);
@@ -386,7 +386,7 @@
 }
 .workspace-tabs-list__item {
   min-height: 34px;
-  border-radius: 7px;
+  border-radius: var(--radius);
   display: grid;
   grid-template-columns: minmax(0, 1fr) 26px;
   align-items: center;
@@ -401,7 +401,7 @@
   height: 34px;
   padding: 0 7px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: transparent;
   color: var(--text);
   display: flex;
@@ -456,7 +456,7 @@
   height: 22px;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-faint);
   display: inline-flex;
@@ -482,7 +482,7 @@
   gap: 9px;
   padding: 9px 11px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: var(--shadow-lg);
   pointer-events: none;
@@ -491,7 +491,7 @@
 .workspace-tab-preview__icon {
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-subtle);
   color: var(--text-muted);
   display: inline-flex;
@@ -649,7 +649,7 @@
   top: 50%;
   width: 1px;
   height: 20px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--border) 82%, transparent);
   transform: translateY(-50%);
 }
@@ -659,7 +659,7 @@
   gap: 6px;
   height: 30px;
   padding: 0 12px;
-  border-radius: 7px;
+  border-radius: var(--radius);
   font-size: 12.5px;
   font-weight: 500;
   line-height: 1;
@@ -668,7 +668,7 @@
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text);
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition: background var(--dur-quick) var(--ease-out), border-color var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
 }
 .chrome-action svg {
   display: block;
@@ -858,7 +858,7 @@
   height: 20px;
   padding: 0 8px;
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
   background: color-mix(in srgb, var(--bg-subtle) 88%, transparent);
   font-size: 11px;
@@ -894,7 +894,7 @@
   cursor: pointer;
   padding: 2px 4px;
   margin-left: 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   opacity: 0.6;
   transition: opacity 0.15s;
   flex-shrink: 0;
@@ -919,7 +919,7 @@
   gap: 12px;
   padding: 16px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
   color: var(--text);
   box-shadow: var(--shadow-lg, 0 22px 70px rgba(15, 23, 42, 0.2));
@@ -953,7 +953,7 @@
   flex: 0 0 auto;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -972,7 +972,7 @@
   font-size: 13px;
   line-height: 1.45;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--text);
   resize: vertical;
@@ -1002,7 +1002,7 @@
   color: var(--text-muted);
   background: var(--bg-hover, rgba(128, 128, 128, 0.1));
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
   flex-shrink: 0;
@@ -1043,7 +1043,7 @@
   white-space: pre-wrap;
   word-break: break-word;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--text);
 }
@@ -1057,7 +1057,7 @@
   font-size: 13px;
   line-height: 1.5;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg);
   color: var(--text);
   resize: vertical;
@@ -1127,7 +1127,7 @@
   align-items: center;
   justify-items: center;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: var(--bg-panel);
   color: var(--text);
   cursor: pointer;
@@ -1152,7 +1152,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  transition: box-shadow 120ms ease, transform 120ms ease;
+  transition: box-shadow var(--dur-quick) var(--ease-out), transform var(--dur-quick) var(--ease-out);
 }
 .avatar-btn:hover:not(:disabled) {
   box-shadow: 0 0 0 3px rgba(194, 83, 45, 0.18);

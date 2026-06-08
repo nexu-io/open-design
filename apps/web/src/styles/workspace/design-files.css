@@ -241,7 +241,7 @@
   letter-spacing: 0;
 }
 .df-file-row {
-  transition: background 120ms ease;
+  transition: background 120ms var(--ease-out);
 }
 .df-file-row:hover { background: var(--blue-bg); }
 .df-file-row.active:not(.selected) { background: var(--blue-bg); }
@@ -341,7 +341,7 @@
   min-height: 28px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   cursor: pointer;
@@ -397,9 +397,9 @@
   user-select: none;
   width: 24px;
   height: 24px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   opacity: 0;
-  transition: opacity 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms ease, color 120ms ease;
+  transition: opacity 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .df-row:hover .df-row-check,
 .df-row-check:focus-visible,
@@ -416,7 +416,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 14px;
@@ -457,7 +457,7 @@
   width: 100%;
   min-width: 0;
   border: 1px solid var(--accent);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--bg-panel);
   color: var(--text);
   font: inherit;
@@ -500,9 +500,9 @@
   padding: 4px 6px;
   color: var(--text-muted);
   font-size: 16px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   opacity: 0;
-  transition: opacity 120ms ease;
+  transition: opacity 120ms var(--ease-out);
 }
 .df-row:hover .df-row-menu { opacity: 1; }
 .df-row-menu:focus { opacity: 1; }
@@ -583,7 +583,7 @@
   gap: 6px;
   padding: 7px 14px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg);
   color: var(--text);
   font: inherit;
@@ -591,7 +591,7 @@
   font-weight: 500;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: background 120ms var(--ease-out), border-color 120ms var(--ease-out);
 }
 .df-empty-cta:hover {
   background: var(--bg-subtle);
@@ -816,14 +816,14 @@
   height: 30px;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
   color: var(--text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   box-shadow: var(--shadow-xs);
-  transition: opacity 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition: opacity 120ms var(--ease-out), background 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -870,7 +870,7 @@
   padding: 7px 10px;
   font-size: 12.5px;
   text-align: left;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   color: var(--text);
 }
 .df-row-popover button:hover { background: var(--bg-subtle); }

@@ -35,7 +35,7 @@
   gap: 0;
   padding: 5px;
   border: 1px solid var(--border-strong, var(--border));
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.04),
@@ -50,7 +50,7 @@
   gap: 9px;
   padding: 0 9px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: transparent;
   color: var(--text-strong);
   font: inherit;
@@ -102,7 +102,7 @@
   gap: 0;
   padding: 5px;
   border: 1px solid var(--border-strong, var(--border));
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.04),
@@ -126,7 +126,7 @@
   padding: 0 8px;
   height: 30px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: var(--bg);
   color: var(--text-muted);
   flex: 0 0 auto;

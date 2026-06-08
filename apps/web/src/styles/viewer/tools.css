@@ -41,14 +41,14 @@
   gap: 2px;
   padding: 7px 11px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-fill-tertiary);
   color: var(--text);
   font-size: 12.5px;
   font-family: inherit;
   cursor: pointer;
   text-align: left;
-  transition: background 120ms ease;
+  transition: background 120ms var(--ease-out);
 }
 .op-ask-question-option:hover { background: var(--bg-fill-secondary); }
 .op-ask-question-option.on {
@@ -163,7 +163,7 @@
 .op-path {
   background: var(--bg-fill-tertiary);
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 11px;
   font-family: var(--mono);
   color: var(--text);
@@ -178,7 +178,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 0;
   border: 1px solid var(--border-soft);
   background: var(--bg-panel);
@@ -194,7 +194,7 @@
   font-size: 10.5px;
   padding: 2px 8px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: none;
   color: var(--text-muted);
 }
@@ -202,7 +202,7 @@
   font-size: 10.5px;
   padding: 2px 8px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: none;
   color: var(--text-muted);
   cursor: pointer;
@@ -233,12 +233,12 @@
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: none;
   border: none;
   font-size: 12.5px;
   box-shadow: none;
-  transition: background 160ms ease;
+  transition: background 160ms var(--ease-out);
 }
 .produced-file:hover {
   background: var(--bg-fill-tertiary);
@@ -265,7 +265,7 @@
   border: none;
   background: none;
   color: var(--text-muted);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 .produced-file-actions .ghost:hover,
 .produced-file-actions .ghost-link:hover {
@@ -293,7 +293,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: var(--accent-soft);
   color: var(--accent);
   flex-shrink: 0;
@@ -338,7 +338,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-subtle);
   color: var(--text-muted);
   flex-shrink: 0;
@@ -355,7 +355,7 @@
 .plugin-action-card__path {
   max-width: 220px;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
   color: var(--text);
@@ -379,7 +379,7 @@
   max-width: 100%;
   padding: 5px 10px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: var(--bg-panel);
   color: var(--text);
   font-size: 11.5px;
@@ -405,7 +405,7 @@
 }
 .plugin-action-card__notice {
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
   color: var(--text-muted);
@@ -472,7 +472,7 @@
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
   padding: 1px 6px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-subtle);
   border: 1px solid var(--border);
 }
@@ -495,7 +495,7 @@
   align-items: center;
   gap: 8px;
   padding: 5px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   min-width: 0;
 }
@@ -511,7 +511,7 @@
   min-width: 18px;
   height: 18px;
   padding: 0 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 10px;
   font-weight: 700;
   font-family: var(--mono);
@@ -563,7 +563,7 @@
   letter-spacing: 0.04em;
   font-weight: 600;
   padding: 1px 6px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   flex-shrink: 0;
 }
 .file-ops-row-status--running {
@@ -579,7 +579,7 @@
   padding: 3px 9px;
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--text);
   cursor: pointer;
   flex-shrink: 0;
@@ -622,7 +622,7 @@
   line-height: 1.45;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
-  transition: background-color 120ms ease, border-color 120ms ease;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out);
 }
 .todo-check {
   width: 16px;
@@ -699,7 +699,7 @@
   padding: 8px 10px;
   font-size: 12px;
   text-align: left;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -800,7 +800,7 @@
   text-align: left;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--text);
 }
@@ -842,7 +842,7 @@
   gap: 3px;
   padding: 10px 10px 9px;
   border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-subtle);
 }
 .template-share-summary__eyebrow {
@@ -898,7 +898,7 @@
   min-height: 36px;
   padding: 7px 9px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-panel);
   color: var(--text);
   font-size: 12.5px;
@@ -921,7 +921,7 @@
   flex: 0 0 22px;
   width: 22px;
   height: 22px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1057,7 +1057,7 @@
   gap: 2px;
   padding: 2px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-subtle);
 }
 .image-export-format-option {
@@ -1069,7 +1069,7 @@
   min-height: 38px;
   padding: 0 8px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: transparent;
   cursor: pointer;
   transition:
@@ -1239,14 +1239,14 @@
   color: var(--text-muted);
   text-decoration: none;
   white-space: nowrap;
-  transition: color 120ms ease;
+  transition: color 120ms var(--ease-out);
 }
 .field-label-link:hover {
   color: var(--accent);
 }
 .field-label-link svg {
   opacity: 0.75;
-  transition: transform 120ms ease, opacity 120ms ease;
+  transition: transform 120ms var(--ease-out), opacity 120ms var(--ease-out);
 }
 .field-label-link:hover svg {
   opacity: 1;
