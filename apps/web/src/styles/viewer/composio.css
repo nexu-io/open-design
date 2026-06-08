@@ -1299,7 +1299,7 @@
 .ds-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 900;
+  z-index: 1700;
   background: rgba(28, 27, 26, 0.42);
   backdrop-filter: blur(2px);
   -webkit-app-region: no-drag;
