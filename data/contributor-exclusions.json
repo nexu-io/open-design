@@ -1,0 +1,29 @@
+{
+  "_comment": "Excluded from public contributor leaderboards on /community/contributors. Loaded by scripts/refresh-contributor-rankings.mjs. Comparison is case-insensitive. Maintainers (the nexu-io/core-maintainers GitHub team) are resolved live by the workflow and are NOT listed here.",
+  "_lastSyncedFromHrFeishu": "2026-06-08",
+  "internalStaff": [
+    "522700967-wq",
+    "alchemistklk",
+    "anthhub",
+    "ashleyashli",
+    "elihahah666",
+    "kokisanai",
+    "lefarcen",
+    "Mason",
+    "mrcfps",
+    "nettee",
+    "PerishCode",
+    "pftom",
+    "qiongyu1999",
+    "shangxinyu1",
+    "Siri-Ray",
+    "Sophia",
+    "tuola",
+    "Tuola-waj",
+    "yinjialu",
+    "zoeforfun"
+  ],
+  "trustIssue": [
+    "xxiaoxiong"
+  ]
+}
