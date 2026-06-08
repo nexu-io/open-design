@@ -2175,7 +2175,6 @@ export interface Dict {
   "chat.designToolbox.title": string;
   "chat.designToolbox.tooltip": string;
   "chat.designToolbox.aria": string;
-  "chat.designToolbox.lucky": string;
   "chat.designToolbox.searchPlaceholder": string;
   "chat.designToolbox.searchAria": string;
   "chat.designToolbox.followupSection": string;

@@ -12,59 +12,11 @@
   gap: 14px;
   padding: 4px 12px 12px;
 }
-.op-ask-question-field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.op-ask-question-header {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-.op-ask-question-prompt {
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--text);
-}
-.op-ask-question-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.op-ask-question-option {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 7px 11px;
-  border: none;
-  border-radius: var(--radius);
-  background: var(--bg-fill-tertiary);
-  color: var(--text);
-  font-size: 12.5px;
-  font-family: inherit;
-  cursor: pointer;
-  text-align: left;
-  transition: background 120ms var(--ease-out);
-}
-.op-ask-question-option:hover { background: var(--bg-fill-secondary); }
-.op-ask-question-option.on {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-}
-.op-ask-question-option:disabled {
-  cursor: default;
-  opacity: 0.85;
-}
-.op-ask-question-option-label { font-weight: 500; }
-.op-ask-question-option-desc {
-  font-size: 11px;
-  color: var(--text-muted);
-  white-space: normal;
-}
+/* The question fields + option chips now reuse the QuestionForm visual
+   language (.qf-field / .qf-options / .qf-chip — see composio.css) so the
+   inline AskUserQuestion card and the right-side Questions panel read as one
+   surface. Only the card frame (head / body / foot / submit / typing) keeps
+   its op-ask-question styling here. */
 .op-ask-question-foot {
   display: flex;
   justify-content: flex-end;
@@ -96,26 +48,6 @@
   cursor: default;
 }
 /*
- * Locked card state: unchosen options fade back into the card surface
- * while the user's pick keeps its accent outline so the answer stays
- * legible after submission. Without the `:not(.on)` qualifier the lock
- * would wipe the selected state and the card would look unanswered.
- */
-.op-ask-question-locked .op-ask-question-option:not(.on) {
-  background: var(--bg-fill-tertiary);
-  color: var(--text-muted);
-  opacity: 0.6;
-}
-.op-ask-question-locked .op-ask-question-option.on {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-  cursor: default;
-}
-.op-ask-question-locked .op-ask-question-option.on .op-ask-question-option-desc {
-  color: var(--text-muted);
-}
-
-/*
  * Streaming state: the tool's input JSON is still arriving token-by-token
  * (rendered from the live `tool_input_delta` accumulation, before the full
  * tool_use lands). The card frame paints immediately; each question field and
@@ -127,8 +59,8 @@
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
-.op-ask-question-streaming .op-ask-question-field,
-.op-ask-question-streaming .op-ask-question-option {
+.op-ask-question-streaming .qf-field,
+.op-ask-question-streaming .qf-chip {
   animation: op-auq-reveal 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 /* Three pulsing dots standing in for the "still writing" status pill — no
@@ -153,8 +85,8 @@
   50% { opacity: 0.9; transform: translateY(-2px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .op-ask-question-streaming .op-ask-question-field,
-  .op-ask-question-streaming .op-ask-question-option { animation: none; }
+  .op-ask-question-streaming .qf-field,
+  .op-ask-question-streaming .qf-chip { animation: none; }
   .op-ask-question-typing i { animation: none; opacity: 0.6; }
 }
 

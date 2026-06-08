@@ -220,17 +220,6 @@
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--text-muted) 18%, transparent) transparent;
 }
-/* Bottom-anchor the transcript so a short conversation (e.g. a fresh fork)
-   rests against the composer instead of stranding its messages at the top with
-   a large blank area below. The auto top margin absorbs the free space above
-   the first row when the content is shorter than the viewport; once the content
-   outgrows the viewport the auto margin resolves to 0 and the log scrolls
-   normally with the top fully reachable (unlike `justify-content: flex-end`,
-   which clips overflowing content above the scroll range). The empty/loading
-   states own their own vertical layout, so they're excluded. */
-.chat-log > :first-child:not(.chat-empty-wrap):not(.chat-loading-state) {
-  margin-top: auto;
-}
 .chat-log::-webkit-scrollbar {
   width: 8px;
 }
@@ -904,7 +893,11 @@
   position: fixed;
   z-index: 45;
   pointer-events: none;
-  contain: layout style paint;
+  /* `contain: paint` would clip the composer "+" menu, which pops UP and out of
+     this fixed layer's box — the overflow got cut and revealed the chat log
+     behind it. Keep layout/style containment but drop paint so the menu draws
+     fully above the transcript. */
+  contain: layout style;
   transform: translateZ(0);
 }
 .chat-composer-fixed-layer .composer {
@@ -1886,6 +1879,39 @@
 .staged-context--connector .staged-icon {
   background: color-mix(in srgb, var(--green) 10%, var(--bg-subtle));
   color: var(--green);
+}
+/* Applied-plugin chip — accent-tinted, sitting inline in the staged-context
+   row next to the design-system picker. The chip itself is a plain container;
+   its two controls (open-details + remove) are real sibling buttons. */
+.staged-context--plugin {
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+.staged-context--plugin .staged-icon {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-subtle));
+  color: var(--accent);
+}
+.staged-context--plugin:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+/* The chip's "open details" trigger: icon + name as a real <button> so it is a
+   sibling of the remove button, not a role=button wrapper around it (nested
+   interactive controls break focus order + assistive-tech announcements).
+   Unstyled so it reads as the chip's content rather than a nested button. */
+.staged-context-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  overflow: hidden;
 }
 .staged-context--workspace {
   background: color-mix(in srgb, var(--bg-subtle) 48%, var(--bg-panel));

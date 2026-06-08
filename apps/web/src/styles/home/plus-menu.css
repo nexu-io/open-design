@@ -38,8 +38,9 @@
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 10px 28px -10px rgba(0, 0, 0, 0.18);
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 2px 6px rgba(0, 0, 0, 0.08),
+    0 16px 40px -12px rgba(0, 0, 0, 0.32);
 }
 .plus-menu__item {
   appearance: none;
@@ -97,6 +98,8 @@
   z-index: 91;
   min-width: 220px;
   max-width: 280px;
+  max-height: min(440px, calc(100vh - 56px));
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -105,8 +108,15 @@
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 10px 28px -10px rgba(0, 0, 0, 0.18);
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 2px 6px rgba(0, 0, 0, 0.08),
+    0 16px 40px -12px rgba(0, 0, 0, 0.32);
+}
+/* When the row sits too low for a downward flyout, anchor to the row's bottom
+   and grow upward instead (set by PlusSubmenuRow after measuring). */
+.plus-menu__flyout--up {
+  top: auto;
+  bottom: -5px;
 }
 /* Invisible bridge so the cursor can cross the gap into the flyout without
    triggering the row's mouseleave. */
@@ -161,15 +171,64 @@
   color: var(--text-muted);
   font-size: 12px;
 }
-/* The design-toolbox panel sits inside a flyout; give the flyout room and
-   let the panel's own styling (composer-design-toolbox-*) drive the rest. */
-.plus-menu__flyout .composer-design-toolbox-menu {
-  position: static;
-  width: auto;
-  min-width: 320px;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  padding: 0;
-  background: transparent;
+/* Design-toolbox flyout: head (title) + search + a Connectors-
+   style single-line list. Section labels group follow-up actions vs resources;
+   each row's full detail shows in a portaled third-level panel on hover. */
+.plus-menu__section-label {
+  padding: 6px 9px 2px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.plus-menu__subitem {
+  position: relative;
+}
+.plus-menu__item.is-active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text-strong);
+}
+/* Third-level detail panel — portaled to <body> and fixed-positioned next to
+   the hovered row, because the parent flyout's overflow:auto (height-capped
+   scroll) would otherwise clip a nested absolutely-positioned panel. */
+.plus-menu__detail {
+  position: fixed;
+  z-index: 92;
+  width: 264px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 12px;
+  background: var(--bg-panel);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 2px 6px rgba(0, 0, 0, 0.08),
+    0 16px 40px -12px rgba(0, 0, 0, 0.32);
+}
+.plus-menu__detail-title {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-strong);
+}
+.plus-menu__detail-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.plus-menu__detail-skill {
+  font-size: 11.5px;
+  color: var(--accent);
+}
+.plus-menu__detail-badge {
+  align-self: flex-start;
+  margin-top: 1px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
 }

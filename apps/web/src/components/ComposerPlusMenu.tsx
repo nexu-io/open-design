@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type {
   ConnectorDetail,
   InstalledPluginRecord,
@@ -90,6 +90,7 @@ export function ComposerPlusMenu({
   >(null);
   const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const submenuCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // The plugin and MCP flyouts share one `query`, but it is scoped to whichever
   // submenu is open. Reset it whenever the active submenu changes so a stale
@@ -99,7 +100,36 @@ export function ComposerPlusMenu({
     setQuery('');
   }, [submenu]);
 
+  useEffect(() => () => {
+    if (submenuCloseTimer.current) clearTimeout(submenuCloseTimer.current);
+  }, []);
+
+  // Hover intent: a flyout sits to the row's side with a small visual gap, so
+  // moving the cursor diagonally from the parent row toward the flyout briefly
+  // crosses dead space and used to fire mouseleave -> instant close. Open
+  // cancels any pending close; close is DEFERRED so the cursor has time to land
+  // on the flyout (whose own mouseenter cancels it). Same-frame open-after-close
+  // when sliding between sibling rows also resolves cleanly.
+  function cancelSubmenuClose() {
+    if (submenuCloseTimer.current) {
+      clearTimeout(submenuCloseTimer.current);
+      submenuCloseTimer.current = null;
+    }
+  }
+  function openSubmenu(key: 'connectors' | 'plugins' | 'mcp' | 'toolbox') {
+    cancelSubmenuClose();
+    setSubmenu(key);
+  }
+  function scheduleCloseSubmenu() {
+    cancelSubmenuClose();
+    submenuCloseTimer.current = setTimeout(() => {
+      setSubmenu(null);
+      submenuCloseTimer.current = null;
+    }, 200);
+  }
+
   function close() {
+    cancelSubmenuClose();
     setOpen(false);
     setSubmenu(null);
   }
@@ -180,8 +210,8 @@ export function ComposerPlusMenu({
             label={t('connectors.title')}
             icon="link"
             open={submenu === 'connectors'}
-            onOpen={() => setSubmenu('connectors')}
-            onClose={() => setSubmenu(null)}
+            onOpen={() => openSubmenu('connectors')}
+            onClose={scheduleCloseSubmenu}
           >
             <div className="plus-menu__list">
               {connectors.length === 0 ? (
@@ -229,8 +259,8 @@ export function ComposerPlusMenu({
             label={t('entry.navPlugins')}
             icon="sparkles"
             open={submenu === 'plugins'}
-            onOpen={() => setSubmenu('plugins')}
-            onClose={() => setSubmenu(null)}
+            onOpen={() => openSubmenu('plugins')}
+            onClose={scheduleCloseSubmenu}
           >
             <div className="plus-menu__search">
               <Icon name="search" size={13} />
@@ -285,8 +315,8 @@ export function ComposerPlusMenu({
             label="MCP"
             icon="link"
             open={submenu === 'mcp'}
-            onOpen={() => setSubmenu('mcp')}
-            onClose={() => setSubmenu(null)}
+            onOpen={() => openSubmenu('mcp')}
+            onClose={scheduleCloseSubmenu}
           >
             <div className="plus-menu__search">
               <Icon name="search" size={13} />
@@ -342,8 +372,8 @@ export function ComposerPlusMenu({
               label={toolboxLabel ?? t('chat.designToolbox.tooltip')}
               icon="lightbulb"
               open={submenu === 'toolbox'}
-              onOpen={() => setSubmenu('toolbox')}
-              onClose={() => setSubmenu(null)}
+              onOpen={() => openSubmenu('toolbox')}
+              onClose={scheduleCloseSubmenu}
             >
               {renderToolbox(close)}
             </PlusSubmenuRow>
@@ -369,9 +399,30 @@ function PlusSubmenuRow({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const flyoutRef = useRef<HTMLDivElement | null>(null);
+  // Flyouts default to dropping DOWN from the row's top. When a row sits low in
+  // the viewport (e.g. the last "Design toolbox" entry, whose panel is tall),
+  // dropping down runs off-screen — so anchor to the row's BOTTOM and grow UP
+  // instead. Measured after open so the decision uses the real flyout height.
+  const [placeUp, setPlaceUp] = useState(false);
+  useLayoutEffect(() => {
+    if (!open) return;
+    const row = rowRef.current;
+    const flyout = flyoutRef.current;
+    if (!row || !flyout) return;
+    const rowRect = row.getBoundingClientRect();
+    const flyoutH = flyout.offsetHeight;
+    const margin = 8;
+    const spaceBelow = window.innerHeight - rowRect.top - margin;
+    const spaceAbove = rowRect.bottom - margin;
+    // Flip up only when down can't fit AND up has more room.
+    setPlaceUp(flyoutH > spaceBelow && spaceAbove > spaceBelow);
+  }, [open, children]);
   return (
     <div
       className="plus-menu__submenu-row"
+      ref={rowRef}
       onMouseEnter={onOpen}
       onMouseLeave={onClose}
     >
@@ -388,7 +439,13 @@ function PlusSubmenuRow({
         <Icon name="chevron-right" size={13} className="plus-menu__chevron" />
       </button>
       {open ? (
-        <div className="plus-menu__flyout" role="menu">
+        <div
+          className={`plus-menu__flyout${placeUp ? ' plus-menu__flyout--up' : ''}`}
+          role="menu"
+          ref={flyoutRef}
+          onMouseEnter={onOpen}
+          onMouseLeave={onClose}
+        >
           {children}
         </div>
       ) : null}

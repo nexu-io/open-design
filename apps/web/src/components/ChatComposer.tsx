@@ -1122,17 +1122,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       applyDesignToolboxDraft(prompt);
     }
 
-    function applyLuckyDesignToolboxAction() {
-      applyDesignToolboxAction(
-        pickLuckyDesignToolboxAction({
-          actions: DESIGN_TOOLBOX_ACTIONS,
-          draft,
-          projectFiles,
-          workspaceItem: visibleWorkspaceContext,
-        }),
-      );
-    }
-
     function removeStagedSkill(id: string) {
       const skill = stagedSkills.find((s) => s.id === id) ?? null;
       setStagedSkills((prev) => prev.filter((s) => s.id !== id));
@@ -1932,6 +1921,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               ref={pluginsSectionRef}
               projectId={projectId}
               showRail={false}
+              renderActiveChip={false}
               onApplied={(brief, applied) => {
                 setActiveAppliedPlugin(applied.appliedPlugin);
                 // Use functional setState so stale closures from the @-mention
@@ -1949,7 +1939,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               }}
             />
           ) : null}
-          {designSystemPicker || selectedWorkspaceContexts.length > 0 || stagedSkills.length > 0 || stagedMcpServers.length > 0 || stagedConnectors.length > 0 ? (
+          {designSystemPicker || selectedWorkspaceContexts.length > 0 || stagedSkills.length > 0 || stagedMcpServers.length > 0 || stagedConnectors.length > 0 || staged.length > 0 || activeAppliedPlugin ? (
             <StagedRunContexts
               designSystemPicker={designSystemPicker}
               workspaceItems={selectedWorkspaceContexts}
@@ -1957,18 +1947,29 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               skills={stagedSkills}
               mcpServers={stagedMcpServers}
               connectors={stagedConnectors}
+              attachments={staged}
+              pluginChip={
+                activeAppliedPlugin
+                  ? {
+                      id: activeAppliedPlugin.pluginId,
+                      title: activeAppliedPlugin.pluginTitle ?? activeAppliedPlugin.pluginId,
+                    }
+                  : null
+              }
+              projectId={projectId}
               onRemoveWorkspace={removeWorkspaceContext}
               onRemoveSkill={removeStagedSkill}
               onRemoveMcp={removeStagedMcpServer}
               onRemoveConnector={removeStagedConnector}
-              t={t}
-            />
-          ) : null}
-          {staged.length > 0 ? (
-            <StagedAttachments
-              attachments={staged}
-              projectId={projectId}
-              onRemove={removeStaged}
+              onRemoveAttachment={removeStaged}
+              onRemovePlugin={() => {
+                pluginsSectionRef.current?.clear();
+                setActiveAppliedPlugin(null);
+              }}
+              onPluginDetails={(id) => {
+                const record = installedPlugins.find((plugin) => plugin.id === id);
+                if (record) setDetailsRecord(record);
+              }}
               t={t}
             />
           ) : null}
@@ -2117,6 +2118,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 fileInputRef.current?.click();
               }}
               attachLoading={uploading}
+              toolboxLabel={t('chat.designToolbox.title')}
               renderToolbox={(close) => (
                 <DesignToolboxPanel
                   actions={DESIGN_TOOLBOX_ACTIONS}
@@ -2131,7 +2133,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   activeMcpServerIds={stagedMcpServers.map((server) => server.id)}
                   activeConnectorIds={stagedConnectors.map((connector) => connector.id)}
                   activeFilePaths={staged.map((item) => item.path)}
-                  onLucky={() => { applyLuckyDesignToolboxAction(); close(); }}
                   onPickAction={(action) => { applyDesignToolboxAction(action); close(); }}
                   onPickSkill={(skill) => { applyDesignToolboxSkill(skill); close(); }}
                   onPickResource={(resource) => { applyDesignToolboxResource(resource); close(); }}
@@ -2380,110 +2381,6 @@ function sortChatCommentAttachmentsByOrder(attachments: ChatCommentAttachment[])
     .map((entry) => entry.attachment);
 }
 
-function StagedAttachments({
-  attachments,
-  projectId,
-  onRemove,
-  t,
-}: {
-  attachments: ChatAttachment[];
-  projectId: string | null;
-  onRemove: (path: string) => void;
-  t: TranslateFn;
-}) {
-  const [preview, setPreview] = useState<ChatAttachment | null>(null);
-  const previewUrl = preview && projectId ? projectRawUrl(projectId, preview.path) : null;
-
-  useEffect(() => {
-    if (!preview) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setPreview(null);
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [preview]);
-
-  return (
-    <>
-      <div className="staged-row" data-testid="staged-attachments">
-        {attachments.map((a, index) => {
-          const canPreview = a.kind === "image" && Boolean(projectId);
-          const imageUrl = canPreview ? projectRawUrl(projectId!, a.path) : null;
-          return (
-            <div key={a.path} className={`staged-chip staged-${a.kind}`}>
-              <span className="staged-order" aria-label={`Attachment ${index + 1}`}>
-                {index + 1}
-              </span>
-              {canPreview && imageUrl ? (
-                <button
-                  type="button"
-                  className="staged-preview-trigger"
-                  onClick={() => setPreview(a)}
-                  title={a.path}
-                  aria-label={`Preview ${a.name}`}
-                >
-                  <img src={imageUrl} alt="" aria-hidden />
-                  <span className="staged-name">
-                    {a.name}
-                  </span>
-                </button>
-              ) : (
-                <>
-                  <span className="staged-icon" aria-hidden>
-                    <Icon name="file" size={13} />
-                  </span>
-                  <span className="staged-name" title={a.path}>
-                    {a.name}
-                  </span>
-                </>
-              )}
-              <button
-                type="button"
-                className="staged-remove od-tooltip"
-                onClick={() => onRemove(a.path)}
-                title={t('common.delete')}
-                data-tooltip={t('common.delete')}
-                aria-label={t('chat.removeAria', { name: a.name })}
-              >
-                <Icon name="close" size={11} />
-              </button>
-            </div>
-          );
-        })}
-      </div>
-      {preview && previewUrl ? createPortal(
-        <div
-          className="staged-preview-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-label={preview.name}
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setPreview(null);
-          }}
-        >
-          <div className="staged-preview-card">
-            <div className="staged-preview-head">
-              <span title={preview.path}>{preview.name}</span>
-              <button
-                type="button"
-                className="icon-only od-tooltip"
-                onClick={() => setPreview(null)}
-                aria-label={t('common.close')}
-                title={t('common.close')}
-                data-tooltip={t('common.close')}
-              >
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-            <img src={previewUrl} alt={preview.name} />
-          </div>
-        </div>,
-        document.body
-      ) : null}
-    </>
-  );
-}
-
 function workspaceContextIcon(item: WorkspaceContextItem): IconName {
   if (item.kind === 'browser') return 'globe';
   if (item.kind === 'folder' || item.kind === 'design-files') return 'folder';
@@ -2566,10 +2463,16 @@ function StagedRunContexts({
   skills,
   mcpServers,
   connectors,
+  attachments,
+  pluginChip,
+  projectId,
   onRemoveWorkspace,
   onRemoveSkill,
   onRemoveMcp,
   onRemoveConnector,
+  onRemoveAttachment,
+  onRemovePlugin,
+  onPluginDetails,
   t,
 }: {
   designSystemPicker?: ReactNode;
@@ -2578,13 +2481,34 @@ function StagedRunContexts({
   skills: SkillSummary[];
   mcpServers: McpServerConfig[];
   connectors: ConnectorDetail[];
+  attachments: ChatAttachment[];
+  pluginChip?: { id: string; title: string } | null;
+  projectId: string | null;
   onRemoveWorkspace: (id: string) => void;
   onRemoveSkill: (id: string) => void;
   onRemoveMcp: (id: string) => void;
   onRemoveConnector: (id: string) => void;
+  onRemoveAttachment: (path: string) => void;
+  onRemovePlugin?: () => void;
+  onPluginDetails?: (id: string) => void;
   t: TranslateFn;
 }) {
+  // Attachment thumbnails preview in a portal modal; keep that state here so the
+  // file chips can live in the same wrap row as the design-system picker and
+  // other run-context chips (so files flow to the picker's right, wrapping to a
+  // new line only when the row fills) instead of forcing a separate row below.
+  const [preview, setPreview] = useState<ChatAttachment | null>(null);
+  const previewUrl = preview && projectId ? projectRawUrl(projectId, preview.path) : null;
+  useEffect(() => {
+    if (!preview) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setPreview(null);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [preview]);
   return (
+    <>
     <div
       className="staged-row staged-context-row"
       data-testid="staged-contexts"
@@ -2592,6 +2516,36 @@ function StagedRunContexts({
       {designSystemPicker ? (
         <div className="staged-context-picker staged-context-picker--design-system">
           {designSystemPicker}
+        </div>
+      ) : null}
+      {pluginChip ? (
+        <div className="staged-chip staged-context staged-context--plugin">
+          {/* Two sibling controls — a details button (icon + name) and the
+              remove button — rather than a role=button wrapper containing the
+              remove button. Nested interactive controls break focus order and
+              assistive-tech announcements. */}
+          <button
+            type="button"
+            className="staged-context-open"
+            onClick={() => onPluginDetails?.(pluginChip.id)}
+            title={pluginChip.title}
+            aria-label={pluginChip.title}
+          >
+            <span className="staged-icon" aria-hidden>
+              <Icon name="sparkles" size={12} />
+            </span>
+            <span className="staged-name">{pluginChip.title}</span>
+          </button>
+          <button
+            type="button"
+            className="staged-remove od-tooltip"
+            onClick={() => onRemovePlugin?.()}
+            title={t('common.delete')}
+            data-tooltip={t('common.delete')}
+            aria-label={t('chat.removeAria', { name: pluginChip.title })}
+          >
+            <Icon name="close" size={11} />
+          </button>
         </div>
       ) : null}
       {workspaceItems.map((workspaceItem) => {
@@ -2696,7 +2650,79 @@ function StagedRunContexts({
           </button>
         </div>
       ))}
+      {attachments.map((a, index) => {
+        const canPreview = a.kind === 'image' && Boolean(projectId);
+        const imageUrl = canPreview ? projectRawUrl(projectId!, a.path) : null;
+        return (
+          <div key={a.path} className={`staged-chip staged-${a.kind}`}>
+            <span className="staged-order" aria-label={`Attachment ${index + 1}`}>
+              {index + 1}
+            </span>
+            {canPreview && imageUrl ? (
+              <button
+                type="button"
+                className="staged-preview-trigger"
+                onClick={() => setPreview(a)}
+                title={a.path}
+                aria-label={`Preview ${a.name}`}
+              >
+                <img src={imageUrl} alt="" aria-hidden />
+                <span className="staged-name">{a.name}</span>
+              </button>
+            ) : (
+              <>
+                <span className="staged-icon" aria-hidden>
+                  <Icon name="file" size={13} />
+                </span>
+                <span className="staged-name" title={a.path}>
+                  {a.name}
+                </span>
+              </>
+            )}
+            <button
+              type="button"
+              className="staged-remove od-tooltip"
+              onClick={() => onRemoveAttachment(a.path)}
+              title={t('common.delete')}
+              data-tooltip={t('common.delete')}
+              aria-label={t('chat.removeAria', { name: a.name })}
+            >
+              <Icon name="close" size={11} />
+            </button>
+          </div>
+        );
+      })}
     </div>
+    {preview && previewUrl ? createPortal(
+      <div
+        className="staged-preview-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={preview.name}
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) setPreview(null);
+        }}
+      >
+        <div className="staged-preview-card">
+          <div className="staged-preview-head">
+            <span title={preview.path}>{preview.name}</span>
+            <button
+              type="button"
+              className="icon-only od-tooltip"
+              onClick={() => setPreview(null)}
+              aria-label={t('common.close')}
+              title={t('common.close')}
+              data-tooltip={t('common.close')}
+            >
+              <Icon name="close" size={14} />
+            </button>
+          </div>
+          <img src={previewUrl} alt={preview.name} />
+        </div>
+      </div>,
+      document.body
+    ) : null}
+    </>
   );
 }
 
@@ -2987,7 +3013,6 @@ function DesignToolboxPanel({
   activeMcpServerIds,
   activeConnectorIds,
   activeFilePaths,
-  onLucky,
   onPickAction,
   onPickSkill,
   onPickResource,
@@ -3004,7 +3029,6 @@ function DesignToolboxPanel({
   activeMcpServerIds: string[];
   activeConnectorIds: string[];
   activeFilePaths: string[];
-  onLucky: () => void;
   onPickAction: (action: DesignToolboxAction) => void;
   onPickSkill: (skill: SkillSummary) => void;
   onPickResource: (resource: DesignToolboxResource) => void;
@@ -3046,6 +3070,42 @@ function DesignToolboxPanel({
     [actions, query, resources],
   );
 
+  // One shared hover-detail panel for the whole list — swapping a single
+  // portaled panel as the cursor sweeps rows, instead of one panel per row
+  // (which ghosted: the close delay left several stacked on screen at once).
+  const [toolboxDetail, setToolboxDetail] = useState<{
+    key: string;
+    left: number;
+    top: number;
+    node: ReactNode;
+  } | null>(null);
+  const detailCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function cancelDetailClose() {
+    if (detailCloseTimer.current) {
+      clearTimeout(detailCloseTimer.current);
+      detailCloseTimer.current = null;
+    }
+  }
+  function showToolboxDetail(key: string, rect: DOMRect, node: ReactNode) {
+    cancelDetailClose();
+    const detailWidth = 264;
+    const gap = 8;
+    const toRight = rect.right + gap;
+    const left =
+      toRight + detailWidth > window.innerWidth - 8
+        ? rect.left - gap - detailWidth
+        : toRight;
+    setToolboxDetail({ key, left, top: rect.top, node });
+  }
+  function scheduleToolboxDetailClose(key: string) {
+    cancelDetailClose();
+    detailCloseTimer.current = setTimeout(() => {
+      setToolboxDetail((cur) => (cur?.key === key ? null : cur));
+      detailCloseTimer.current = null;
+    }, 160);
+  }
+  useEffect(() => () => cancelDetailClose(), []);
+
   return (
     <>
       <div className="composer-design-toolbox-head">
@@ -3053,64 +3113,59 @@ function DesignToolboxPanel({
           <Icon name="lightbulb" size={14} />
           <span>{t('chat.designToolbox.title')}</span>
         </div>
-        <button
-          type="button"
-          className="composer-design-toolbox-lucky"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={onLucky}
-        >
-          {t('chat.designToolbox.lucky')}
-        </button>
       </div>
-      <div className="composer-tools-filter">
+      <div className="plus-menu__search">
+        <Icon name="search" size={13} />
         <input
-          className="composer-tools-search"
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
           placeholder={t('chat.designToolbox.searchPlaceholder')}
           aria-label={t('chat.designToolbox.searchAria')}
         />
       </div>
-      {visibleActions.length > 0 ? (
-        <div className="composer-tools-list">
-          <div className="composer-tools-section-label">{t('chat.designToolbox.followupSection')}</div>
+      {visibleActions.length > 0 || visibleResources.length > 0 ? (
+        <div className="plus-menu__list">
+          {visibleActions.length > 0 ? (
+            <div className="plus-menu__section-label">
+              {t('chat.designToolbox.followupSection')}
+            </div>
+          ) : null}
           {visibleActions.map((action) => {
             const skill = findDesignToolboxSkill(action, skills);
             const actionTitle = designToolboxActionTitle(action, t);
             const actionDescription = designToolboxActionDescription(action, t);
+            const skillName = skill ? localizeSkillName(locale, skill) : null;
             return (
-              <button
+              <ToolboxItemRow
                 key={action.id}
-                type="button"
-                role="menuitem"
-                className="composer-tools-row composer-design-toolbox-row"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onPickAction(action)}
-                title={skill ? localizeSkillDescription(locale, skill) : actionDescription}
-              >
-                <span className="composer-design-toolbox-icon" aria-hidden>
-                  <Icon name={action.icon} size={13} />
-                </span>
-                <span className="composer-tools-row-body">
-                  <strong>{actionTitle}</strong>
-                  <span className="composer-tools-row-meta">
-                    {actionDescription}
-                  </span>
-                  {skill ? (
-                    <span className="composer-design-toolbox-skill">
-                      @{localizeSkillName(locale, skill)}
-                    </span>
-                  ) : null}
-                </span>
-                <span className="composer-design-toolbox-badge">{designToolboxActionBadge(action, t)}</span>
-              </button>
+                detailKey={action.id}
+                icon={action.icon}
+                name={actionTitle}
+                onHover={showToolboxDetail}
+                onLeave={scheduleToolboxDetailClose}
+                onPick={() => onPickAction(action)}
+                detail={
+                  <>
+                    <div className="plus-menu__detail-title">{actionTitle}</div>
+                    {actionDescription ? (
+                      <div className="plus-menu__detail-desc">{actionDescription}</div>
+                    ) : null}
+                    {skillName ? (
+                      <div className="plus-menu__detail-skill">@{skillName}</div>
+                    ) : null}
+                    <div className="plus-menu__detail-badge">
+                      {designToolboxActionBadge(action, t)}
+                    </div>
+                  </>
+                }
+              />
             );
           })}
-        </div>
-      ) : null}
-      {visibleResources.length > 0 ? (
-        <div className="composer-tools-list">
-          <div className="composer-tools-section-label">{t('chat.designToolbox.resourcesSection')}</div>
+          {visibleResources.length > 0 ? (
+            <div className="plus-menu__section-label">
+              {t('chat.designToolbox.resourcesSection')}
+            </div>
+          ) : null}
           {visibleResources.map((resource) => {
             const active = designToolboxResourceIsActive(resource, {
               skillIds: activeSkillSet,
@@ -3120,47 +3175,113 @@ function DesignToolboxPanel({
               filePaths: activeFileSet,
             });
             return (
-              <button
+              <ToolboxItemRow
                 key={resource.key}
-                type="button"
-                role="menuitem"
-                className={`composer-tools-row composer-design-toolbox-row${active ? ' active' : ''}`}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
+                detailKey={resource.key}
+                icon={resource.icon}
+                name={resource.title}
+                active={active}
+                onHover={showToolboxDetail}
+                onLeave={scheduleToolboxDetailClose}
+                onPick={() => {
                   if (resource.kind === 'skill') {
                     onPickSkill(resource.skill);
                   } else {
                     onPickResource(resource);
                   }
                 }}
-                title={resource.subtitle || resource.title}
-              >
-                <span className="composer-design-toolbox-icon" aria-hidden>
-                  <Icon name={resource.icon} size={13} />
-                </span>
-                <span className="composer-tools-row-body">
-                  <strong>{resource.title}</strong>
-                  <span className="composer-tools-row-meta">
-                    {resource.subtitle}
-                  </span>
-                  <span className="composer-design-toolbox-skill">
-                    {designToolboxResourceKindLabel(resource.kind, t)}
-                  </span>
-                </span>
-                <span className="composer-design-toolbox-badge">
-                  {active ? t('chat.designToolbox.selected') : resource.badge}
-                </span>
-              </button>
+                detail={
+                  <>
+                    <div className="plus-menu__detail-title">{resource.title}</div>
+                    {resource.subtitle ? (
+                      <div className="plus-menu__detail-desc">{resource.subtitle}</div>
+                    ) : null}
+                    <div className="plus-menu__detail-skill">
+                      {designToolboxResourceKindLabel(resource.kind, t)}
+                    </div>
+                    <div className="plus-menu__detail-badge">
+                      {active ? t('chat.designToolbox.selected') : resource.badge}
+                    </div>
+                  </>
+                }
+              />
             );
           })}
         </div>
-      ) : null}
-      {visibleActions.length === 0 && visibleResources.length === 0 ? (
-        <div className="composer-tools-empty">
+      ) : (
+        <div className="plus-menu__empty">
           {t('chat.designToolbox.noResources', { query })}
         </div>
-      ) : null}
+      )}
+      {toolboxDetail
+        ? createPortal(
+            <div
+              className="plus-menu__detail"
+              style={{ left: toolboxDetail.left, top: toolboxDetail.top }}
+              onMouseEnter={cancelDetailClose}
+              onMouseLeave={() => scheduleToolboxDetailClose(toolboxDetail.key)}
+            >
+              {toolboxDetail.node}
+            </div>,
+            document.body,
+          )
+        : null}
     </>
+  );
+}
+
+// A single toolbox row, styled like the Connectors/Plugins submenu rows
+// (single line: icon + name). Clicking applies the entry; hovering shows a
+// third-level detail panel (title / description / @skill / badge). The detail
+// panel is PORTALED to <body> because the parent flyout uses `overflow-y: auto`
+// (height-capped scroll) which would otherwise clip a nested panel.
+// The hover detail panel is owned by the PARENT
+// (DesignToolboxPanel) as ONE shared panel — not per-row — so sweeping across
+// rows swaps the single panel in place instead of stacking several portaled
+// panels that briefly coexist (the close delay would otherwise leave 2-4 of
+// them on screen at once, reading as ghosting). The row just reports hover
+// enter/leave with its rect + detail node.
+function ToolboxItemRow({
+  icon,
+  name,
+  active,
+  detailKey,
+  detail,
+  onHover,
+  onLeave,
+  onPick,
+}: {
+  icon: IconName;
+  name: string;
+  active?: boolean;
+  detailKey: string;
+  detail: ReactNode;
+  onHover: (key: string, rect: DOMRect, detail: ReactNode) => void;
+  onLeave: (key: string) => void;
+  onPick: () => void;
+}) {
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  return (
+    <div
+      ref={rowRef}
+      className="plus-menu__subitem"
+      onMouseEnter={() => {
+        const r = rowRef.current?.getBoundingClientRect();
+        if (r) onHover(detailKey, r, detail);
+      }}
+      onMouseLeave={() => onLeave(detailKey)}
+    >
+      <button
+        type="button"
+        role="menuitem"
+        className={`plus-menu__item${active ? ' is-active' : ''}`}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={onPick}
+      >
+        <Icon name={icon} size={15} className="plus-menu__item-icon" />
+        <span>{name}</span>
+      </button>
+    </div>
   );
 }
 
@@ -3657,51 +3778,6 @@ function designToolboxSkillIcon(skill: SkillSummary): IconName {
   if (skill.category === 'animation-motion') return 'sliders';
   if (skill.category === 'creative-direction') return 'sparkles';
   return 'file';
-}
-
-function pickLuckyDesignToolboxAction({
-  actions,
-  draft,
-  projectFiles,
-  workspaceItem,
-}: {
-  actions: DesignToolboxAction[];
-  draft: string;
-  projectFiles: ProjectFile[];
-  workspaceItem: WorkspaceContextItem | null;
-}): DesignToolboxAction {
-  const haystack = [
-    draft,
-    workspaceItem?.label ?? '',
-    workspaceItem?.path ?? '',
-    workspaceItem?.title ?? '',
-    ...projectFiles.slice(0, 20).map((file) => file.path ?? file.name),
-  ]
-    .join(' ')
-    .toLowerCase();
-  const preferredId = keywordPick(
-    haystack,
-    [
-      ['video-gen', ['video', 'sora', 'mp4', 'remotion', 'hyperframes', '视频', '生视频']],
-      ['image-gen', ['image', 'png', 'jpg', 'illustration', 'moodboard', '生图', '图片']],
-      ['motion', ['animation', 'motion', 'gsap', 'scroll', 'animate', '动效', '动画']],
-      ['anti-ai-polish', ['anti', 'slop', 'generic', 'ai味', 'ai 味', '反 ai', '美化']],
-      ['visual-polish', ['polish', 'critique', 'audit', 'responsive', '润色', '检查']],
-    ],
-    haystack.includes('.html') || haystack.includes('browser') ? 'visual-polish' : 'auto-match',
-  );
-  return actions.find((action) => action.id === preferredId) ?? actions[0]!;
-}
-
-function keywordPick(
-  haystack: string,
-  choices: Array<[DesignToolboxActionId, string[]]>,
-  fallback: DesignToolboxActionId,
-): DesignToolboxActionId {
-  for (const [id, keywords] of choices) {
-    if (keywords.some((keyword) => haystack.includes(keyword))) return id;
-  }
-  return fallback;
 }
 
 function designToolboxContextLine(

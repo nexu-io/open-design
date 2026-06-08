@@ -194,22 +194,22 @@ export function StreamingAskUserQuestionCard({ raw }: { raw: string }) {
             append during streaming, so the index is stable and each node
             mounts once and updates its text in place. */}
         {questions.map((q, qi) => (
-          <div key={qi} className="op-ask-question-field">
-            {q.header ? <div className="op-ask-question-header">{q.header}</div> : null}
-            <div className="op-ask-question-prompt">{q.question}</div>
-            <div className="op-ask-question-options">
+          <div key={qi} className="qf-field">
+            <label className="qf-label">
+              <span>{q.question}</span>
+            </label>
+            {q.header ? <div className="qf-help">{q.header}</div> : null}
+            <div className="qf-options">
               {q.options.map((opt, oi) => (
-                <button
-                  key={`${qi}:${oi}`}
-                  type="button"
-                  className="op-ask-question-option"
-                  disabled
-                >
-                  <span className="op-ask-question-option-label">{opt.label}</span>
-                  {opt.description ? (
-                    <span className="op-ask-question-option-desc">{opt.description}</span>
-                  ) : null}
-                </button>
+                <label key={`${qi}:${oi}`} className="qf-chip" title={opt.description}>
+                  <input type={q.multiSelect ? 'checkbox' : 'radio'} disabled aria-label={opt.label} />
+                  <span className="qf-chip-copy">
+                    {opt.label}
+                    {opt.description ? (
+                      <span className="qf-chip-desc">{opt.description}</span>
+                    ) : null}
+                  </span>
+                </label>
               ))}
             </div>
           </div>
@@ -370,33 +370,40 @@ function AskUserQuestionCard({
         ) : null}
       </div>
       <div className="op-ask-question-body">
-        {questions.map((q) => {
+        {questions.map((q, qi) => {
           const selected = effectiveSelections[q.question];
           return (
-            <div key={q.question} className="op-ask-question-field">
-              {q.header ? (
-                <div className="op-ask-question-header">{q.header}</div>
-              ) : null}
-              <div className="op-ask-question-prompt">{q.question}</div>
-              <div className="op-ask-question-options">
+            <div key={q.question} className="qf-field">
+              <label className="qf-label">
+                <span>{q.question}</span>
+              </label>
+              {q.header ? <div className="qf-help">{q.header}</div> : null}
+              <div className="qf-options">
                 {q.options.map((opt) => {
                   const isOn = Array.isArray(selected)
                     ? selected.includes(opt.label)
                     : selected === opt.label;
                   return (
-                    <button
+                    <label
                       key={opt.label}
-                      type="button"
-                      className={`op-ask-question-option${isOn ? ' on' : ''}`}
-                      aria-pressed={isOn}
-                      disabled={locked}
-                      onClick={() => (q.multiSelect ? toggleMulti(q.question, opt.label) : pickSingle(q.question, opt.label))}
+                      className={`qf-chip${isOn ? ' qf-chip-on' : ''}`}
+                      title={opt.description}
                     >
-                      <span className="op-ask-question-option-label">{opt.label}</span>
-                      {opt.description ? (
-                        <span className="op-ask-question-option-desc">{opt.description}</span>
-                      ) : null}
-                    </button>
+                      <input
+                        type={q.multiSelect ? 'checkbox' : 'radio'}
+                        name={`auq-${toolUseId}-q${qi}`}
+                        checked={isOn}
+                        disabled={locked}
+                        aria-label={opt.label}
+                        onChange={() => (q.multiSelect ? toggleMulti(q.question, opt.label) : pickSingle(q.question, opt.label))}
+                      />
+                      <span className="qf-chip-copy">
+                        {opt.label}
+                        {opt.description ? (
+                          <span className="qf-chip-desc">{opt.description}</span>
+                        ) : null}
+                      </span>
+                    </label>
                   );
                 })}
               </div>

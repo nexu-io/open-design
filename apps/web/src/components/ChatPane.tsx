@@ -32,7 +32,7 @@ import {
 import { latestTodoWriteInputForPinnedCard } from '../runtime/todos';
 import { TodoCard } from './ToolCard';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, Project, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
-import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong, shortTime } from '../utils/chatTime';
+import { exactDateTime, messageTime, shortTime } from '../utils/chatTime';
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
 import { AmrGuidance } from './AmrGuidance';
@@ -2162,17 +2162,11 @@ interface AssistantCallbacks {
   onShareToOpenDesign: (() => void) | undefined;
 }
 
-type ChatRenderItem =
-  | {
-      kind: 'separator';
-      key: string;
-      timestamp: number;
-    }
-  | {
-      kind: 'message';
-      key: string;
-      message: ChatMessage;
-    };
+type ChatRenderItem = {
+  kind: 'message';
+  key: string;
+  message: ChatMessage;
+};
 
 function ChatConversationLoading({ t }: { t: TranslateFn }) {
   return (
@@ -2279,9 +2273,6 @@ function ChatRows({
   });
 
   const renderItem = (item: ChatRenderItem) => {
-    if (item.kind === 'separator') {
-      return <DaySeparator ts={item.timestamp} />;
-    }
     const m = item.message;
     const messageStreaming = isAssistantMessageStreaming(
       m,
@@ -2449,15 +2440,6 @@ function buildChatRenderItems(messages: ChatMessage[]): ChatRenderItem[] {
   const items: ChatRenderItem[] = [];
   for (let i = 0; i < messages.length; i += 1) {
     const message = messages[i]!;
-    if (shouldShowDaySeparator(messages[i - 1], message)) {
-      const timestamp = messageTime(message);
-      if (timestamp === undefined) continue;
-      items.push({
-        kind: 'separator',
-        key: `day:${dayKey(timestamp)}:${message.id}`,
-        timestamp,
-      });
-    }
     items.push({
       kind: 'message',
       key: `message:${message.id}`,
@@ -2468,7 +2450,6 @@ function buildChatRenderItems(messages: ChatMessage[]): ChatRenderItem[] {
 }
 
 function estimateChatRenderItemHeight(item: ChatRenderItem): number {
-  if (item.kind === 'separator') return 34 + CHAT_VIRTUAL_ROW_GAP_PX;
   const message = item.message;
   const contentLength = message.content?.length ?? 0;
   const attachmentCount = (message.attachments?.length ?? 0) + (message.commentAttachments?.length ?? 0);
@@ -3267,7 +3248,6 @@ function UserMessageImpl({
     <div className="msg user">
       <div className="role">
         <span>{t('chat.you')}</span>
-        <MessageTimestamp message={message} t={t} />
       </div>
       {hasRunContext ? (
         <div className="msg-run-context-row" data-testid="msg-run-context-row">
@@ -3497,33 +3477,6 @@ function ActiveDesignSystemChip({
       {content}
     </button>
   );
-}
-
-function DaySeparator({ ts }: { ts: number | undefined }) {
-  if (!ts) return null;
-  return (
-    <div className="chat-day-separator" role="separator">
-      <time dateTime={new Date(ts).toISOString()}>{dayLabel(ts)}</time>
-    </div>
-  );
-}
-
-function MessageTimestamp({ message, t }: { message: ChatMessage; t: TranslateFn }) {
-  const ts = messageTime(message);
-  if (!ts) return null;
-  return (
-    <time className="msg-time" dateTime={new Date(ts).toISOString()} title={exactDateTime(ts)}>
-      {relativeTimeLong(ts, t)}
-    </time>
-  );
-}
-
-function shouldShowDaySeparator(prev: ChatMessage | undefined, curr: ChatMessage): boolean {
-  const currTime = messageTime(curr);
-  if (!currTime) return false;
-  const prevTime = prev ? messageTime(prev) : undefined;
-  if (!prevTime) return true;
-  return dayKey(prevTime) !== dayKey(currTime);
 }
 
 const WORKSPACE_DESIGN_FILES_TAB = '__design_files__';

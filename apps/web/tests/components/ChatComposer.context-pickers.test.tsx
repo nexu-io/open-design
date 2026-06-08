@@ -356,7 +356,7 @@ describe('ChatComposer context pickers', () => {
     pressEnter();
 
     await waitFor(() => expect(composerText()).toBe('@designs/landing.html '));
-    expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('landing.html');
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
   });
 
@@ -512,9 +512,16 @@ describe('ChatComposer context pickers', () => {
     fireEvent.click(screen.getByText('My Export'));
 
     await waitFor(() => expect(composerText()).toBe('@My Export '));
-    await waitFor(() =>
-      expect(screen.getByTestId('context-chip-strip').textContent).toContain('My Export'),
-    );
+    // The applied-plugin chip now rides the shared staged-context row as a
+    // `.staged-context--plugin` chip (rendered by the host, not PluginsSection's
+    // own ContextChipStrip). It is keyed off the plugin id when no display title
+    // is present in the applied snapshot.
+    await waitFor(() => {
+      const chip = screen
+        .getByTestId('staged-contexts')
+        .querySelector('.staged-chip.staged-context--plugin');
+      expect(chip?.textContent).toContain(USER_PLUGIN.id);
+    });
 
     fireEvent.click(screen.getByTestId('chat-send'));
 
@@ -528,8 +535,11 @@ describe('ChatComposer context pickers', () => {
       }),
       context: { pluginIds: [USER_PLUGIN.id] },
     });
+    // After sending, the applied plugin clears, so its staged chip is gone.
     await waitFor(() => {
-      expect(screen.queryByTestId('context-chip-strip')).toBeNull();
+      expect(
+        screen.queryByTestId('staged-contexts')?.querySelector('.staged-context--plugin') ?? null,
+      ).toBeNull();
     });
   });
 
@@ -554,7 +564,7 @@ describe('ChatComposer context pickers', () => {
     fireEvent.click(screen.getByText('designs/landing.html'));
 
     await waitFor(() => expect(composerText()).toBe('Use @designs/landing.html '));
-    expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('landing.html');
 
     await act(async () => {
       fireEvent.click(screen.getByLabelText('Remove landing.html'));
@@ -562,7 +572,7 @@ describe('ChatComposer context pickers', () => {
     });
 
     await waitFor(() => expect(composerText()).toBe('Use '));
-    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+    expect(screen.queryByTestId('staged-contexts')).toBeNull();
   });
 
   it('preserves surrounding draft formatting when removing a design file token', async () => {
@@ -591,7 +601,7 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() =>
       expect(composerText()).toBe('Plan:\n\n@designs/landing.html '),
     );
-    expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('landing.html');
 
     // The user keeps typing after the trailing space; re-seed the full draft to
     // capture that, then remove the staged chip.
@@ -606,7 +616,7 @@ describe('ChatComposer context pickers', () => {
     });
 
     await waitFor(() => expect(composerText()).toBe('Plan:\n\n\n\nKeep spacing'));
-    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+    expect(screen.queryByTestId('staged-contexts')).toBeNull();
   });
 
   it('removes a design file token when punctuation follows it', async () => {
@@ -638,7 +648,7 @@ describe('ChatComposer context pickers', () => {
     });
 
     await waitFor(() => expect(composerText()).toBe('Use , please'));
-    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+    expect(screen.queryByTestId('staged-contexts')).toBeNull();
   });
 
   it('removes a quoted design file token when its chip is removed', async () => {
@@ -670,7 +680,7 @@ describe('ChatComposer context pickers', () => {
     });
 
     await waitFor(() => expect(composerText()).toBe('""'));
-    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+    expect(screen.queryByTestId('staged-contexts')).toBeNull();
   });
 
   it('clears an attachment upload error after a later retry succeeds', async () => {
@@ -725,7 +735,7 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() => {
       expect(screen.getByText('Attachment upload failed for 1 file(s) (storage offline).')).toBeTruthy();
     });
-    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+    expect(screen.queryByTestId('staged-contexts')).toBeNull();
 
     fireEvent.change(input, {
       target: {
@@ -736,7 +746,7 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() => {
       expect(screen.queryByText('Attachment upload failed for 1 file(s) (storage offline).')).toBeNull();
     });
-    expect(screen.getByTestId('staged-attachments').textContent).toContain('recovered.txt');
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('recovered.txt');
   });
 
   // The sliders "tools" popover (Official / My plugins switch, plugin search)

@@ -777,22 +777,6 @@
   font-size: 12.5px;
   font-weight: 650;
 }
-.composer-design-toolbox-lucky {
-  height: 26px;
-  padding: 0 8px;
-  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  color: var(--text);
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 650;
-  cursor: pointer;
-}
-.composer-design-toolbox-lucky:hover {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
-}
 .composer-design-toolbox-row {
   align-items: flex-start;
   gap: 9px;
