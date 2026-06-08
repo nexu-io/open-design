@@ -1056,89 +1056,91 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 </button>
               ))}
             </div>
-            {visibleLoading && visiblePickerOptions.length === 0 ? (
-              <div className="home-hero__plugin-picker-empty">{t('homeHero.loadingContext')}</div>
-            ) : null}
-            {!visibleLoading && visiblePickerOptions.length === 0 ? (
-              <div className="home-hero__plugin-picker-empty">
-                {mentionQuery ? (
-                  <>{t('homeHero.noResults', { query: mentionQuery })}</>
-                ) : (
-                  <>{t('homeHero.searchPrompt')}</>
-                )}
-              </div>
-            ) : null}
-            {visibleSections.map((section) => (
-              <div key={section.id} className="home-hero__mention-section">
-                <div className="home-hero__mention-section-label">{section.label}</div>
-                {section.options.map((item) => {
-                  const optionIndex = optionRenderIndex;
-                  optionRenderIndex += 1;
-                  return (
-                    <button
-                      key={item.id}
-                      id={`home-hero-option-${optionIndex}`}
-                      type="button"
-                      role="option"
-                      aria-selected={optionIndex === selectedIndex}
-                      className={`home-hero__plugin-option${
-                        optionIndex === selectedIndex ? ' is-active' : ''
-                      }`}
-                      onMouseEnter={() => {
-                        setSelectedIndex(optionIndex);
-                        setHoveredPlugin(item.pluginRecord ?? null);
-                      }}
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        if (!item.disabled) item.onPick();
-                      }}
-                      disabled={item.disabled}
-                    >
-                      <span className="home-hero__plugin-option-icon" aria-hidden>
-                        <Icon name={item.icon} size={13} />
-                      </span>
-                      <span className="home-hero__plugin-option-main">
-                        <span>{item.title}</span>
-                        <span>{item.description}</span>
-                      </span>
-                      <span className="home-hero__plugin-option-meta">
-                        {item.meta}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-            {hoveredPlugin ? (
-              <div
-                className="home-hero__plugin-hover-card"
-                data-testid="home-hero-plugin-hover-card"
-              >
-                <div>
-                  <span className="home-hero__plugin-hover-kicker">
-                    {getPluginSourceLabel(hoveredPlugin)}
-                  </span>
-                  <strong>{localizePluginTitle(locale, hoveredPlugin)}</strong>
-                  <p>{localizePluginDescription(locale, hoveredPlugin) || hoveredPlugin.id}</p>
+            <div className="home-hero__plugin-picker-results">
+              {visibleLoading && visiblePickerOptions.length === 0 ? (
+                <div className="home-hero__plugin-picker-empty">{t('homeHero.loadingContext')}</div>
+              ) : null}
+              {!visibleLoading && visiblePickerOptions.length === 0 ? (
+                <div className="home-hero__plugin-picker-empty">
+                  {mentionQuery ? (
+                    <>{t('homeHero.noResults', { query: mentionQuery })}</>
+                  ) : (
+                    <>{t('homeHero.searchPrompt')}</>
+                  )}
                 </div>
-                <div className="home-hero__plugin-hover-meta">
-                  <span>{t('homeHero.parameters', { n: (hoveredPlugin.manifest?.od?.inputs ?? []).length })}</span>
-                  {getPluginQueryPreview(hoveredPlugin) ? (
-                    <span>{getPluginQueryPreview(hoveredPlugin)}</span>
-                  ) : null}
+              ) : null}
+              {visibleSections.map((section) => (
+                <div key={section.id} className="home-hero__mention-section">
+                  <div className="home-hero__mention-section-label">{section.label}</div>
+                  {section.options.map((item) => {
+                    const optionIndex = optionRenderIndex;
+                    optionRenderIndex += 1;
+                    return (
+                      <button
+                        key={item.id}
+                        id={`home-hero-option-${optionIndex}`}
+                        type="button"
+                        role="option"
+                        aria-selected={optionIndex === selectedIndex}
+                        className={`home-hero__plugin-option${
+                          optionIndex === selectedIndex ? ' is-active' : ''
+                        }`}
+                        onMouseEnter={() => {
+                          setSelectedIndex(optionIndex);
+                          setHoveredPlugin(item.pluginRecord ?? null);
+                        }}
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          if (!item.disabled) item.onPick();
+                        }}
+                        disabled={item.disabled}
+                      >
+                        <span className="home-hero__plugin-option-icon" aria-hidden>
+                          <Icon name={item.icon} size={13} />
+                        </span>
+                        <span className="home-hero__plugin-option-main">
+                          <span>{item.title}</span>
+                          <span>{item.description}</span>
+                        </span>
+                        <span className="home-hero__plugin-option-meta">
+                          {item.meta}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
-                <button
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    dismissMentionPicker();
-                    onOpenPluginDetails(hoveredPlugin);
-                  }}
+              ))}
+              {hoveredPlugin ? (
+                <div
+                  className="home-hero__plugin-hover-card"
+                  data-testid="home-hero-plugin-hover-card"
                 >
-                  {t('homeHero.details')}
-                </button>
-              </div>
-            ) : null}
+                  <div>
+                    <span className="home-hero__plugin-hover-kicker">
+                      {getPluginSourceLabel(hoveredPlugin)}
+                    </span>
+                    <strong>{localizePluginTitle(locale, hoveredPlugin)}</strong>
+                    <p>{localizePluginDescription(locale, hoveredPlugin) || hoveredPlugin.id}</p>
+                  </div>
+                  <div className="home-hero__plugin-hover-meta">
+                    <span>{t('homeHero.parameters', { n: (hoveredPlugin.manifest?.od?.inputs ?? []).length })}</span>
+                    {getPluginQueryPreview(hoveredPlugin) ? (
+                      <span>{getPluginQueryPreview(hoveredPlugin)}</span>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      dismissMentionPicker();
+                      onOpenPluginDetails(hoveredPlugin);
+                    }}
+                  >
+                    {t('homeHero.details')}
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </CaretFloatingLayer>
         <div className="home-hero__input-foot">

@@ -636,7 +636,7 @@
   flex-direction: column;
   gap: 3px;
   max-height: 280px;
-  overflow: auto;
+  overflow: hidden;
   padding: 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -653,7 +653,16 @@
   right: auto;
   top: auto;
   width: 100%;
+  height: var(--cfl-max-h, 60vh);
   max-height: var(--cfl-max-h, 60vh);
+}
+.home-hero__plugin-picker-results {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
 }
 .home-hero__plugin-hover-card {
   display: grid;

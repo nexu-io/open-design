@@ -26,6 +26,16 @@ function ruleValue(block: string, property: string): string {
 }
 
 describe('mention popover styles', () => {
+  it('keeps the panel height stable while tabs swap between long and short results', () => {
+    const popover = cssBlock('.mention-popover');
+    const results = cssBlock('.mention-results');
+
+    expect(ruleValue(popover, 'height')).toBe('var(--cfl-max-h, 460px)');
+    expect(ruleValue(popover, 'max-height')).toBe('var(--cfl-max-h, 460px)');
+    expect(ruleValue(results, 'flex')).toBe('1 1 auto');
+    expect(ruleValue(results, 'overflow-y')).toBe('auto');
+  });
+
   it('wraps category tabs inside the panel without clipping labels', () => {
     const tabs = cssBlock('.mention-tabs');
     const tab = cssBlock('.mention-tab');
