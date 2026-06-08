@@ -271,23 +271,23 @@ importers:
         specifier: 0.32.1
         version: 0.32.1
       '@capacitor/android':
-        specifier: ^8.4.0
-        version: 8.4.0(@capacitor/core@8.4.0)
+        specifier: ^7.0.0
+        version: 7.6.6(@capacitor/core@7.6.6)
       '@capacitor/cli':
-        specifier: ^8.4.0
-        version: 8.4.0
+        specifier: ^7.0.0
+        version: 7.6.6
       '@capacitor/core':
-        specifier: ^8.4.0
-        version: 8.4.0
+        specifier: ^7.0.0
+        version: 7.6.6
       '@capacitor/keyboard':
-        specifier: ^8.0.3
-        version: 8.0.3(@capacitor/core@8.4.0)
+        specifier: ^7.0.0
+        version: 7.0.6(@capacitor/core@7.6.6)
       '@capacitor/status-bar':
-        specifier: ^8.0.2
-        version: 8.0.2(@capacitor/core@8.4.0)
+        specifier: ^7.0.0
+        version: 7.0.6(@capacitor/core@7.6.6)
       '@capacitor/toast':
-        specifier: ^8.0.1
-        version: 8.0.1(@capacitor/core@8.4.0)
+        specifier: ^7.0.0
+        version: 7.0.4(@capacitor/core@7.6.6)
       '@formkit/auto-animate':
         specifier: 0.9.0
         version: 0.9.0
@@ -323,7 +323,7 @@ importers:
         version: 5.5.0
       capacitor-voice-recorder:
         specifier: ^7.0.6
-        version: 7.0.6(@capacitor/core@8.4.0)(@capacitor/filesystem@8.1.2(@capacitor/core@8.4.0))
+        version: 7.0.6(@capacitor/core@7.6.6)(@capacitor/filesystem@8.1.2(@capacitor/core@7.6.6))
       lexical:
         specifier: 0.36.2
         version: 0.36.2
@@ -949,41 +949,41 @@ packages:
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
     hasBin: true
 
-  '@capacitor/android@8.4.0':
-    resolution: {integrity: sha512-K1ZPkQzvRzPEALz9nBdLx5p5nAPzp5fsTYWk7LRiKZeH/NXqjDvqfTv7lrLgrziQNoDeaL6ijg64oBREzXiV+g==}
+  '@capacitor/android@7.6.6':
+    resolution: {integrity: sha512-PnO8NFjpJJmMINjQQicPwS+hTMWFReIYJcfj8dzb/rRPgElxj+PBJi+6p9X4LUHd2yin8O5FGuqjNOT5BrvWvw==}
     peerDependencies:
-      '@capacitor/core': ^8.4.0
+      '@capacitor/core': ^7.6.0
 
-  '@capacitor/cli@8.4.0':
-    resolution: {integrity: sha512-5Z9RKHxiqJYRTLrfMeZmzR4qrlg5B85MxsWZ5goyXsLkO3bgpW9a1qV/6fR1SX9s5gwLza5y7PZVwITl/hDJ7g==}
-    engines: {node: '>=22.0.0'}
+  '@capacitor/cli@7.6.6':
+    resolution: {integrity: sha512-gZm1c40trhPKi4r6cGdgd/WaW20+yunq5XEmWm/ylHzG6Qd72gAxarihIdXptoxTz4rs9JIU6f60EnTNncvXeQ==}
+    engines: {node: '>=20.0.0'}
     hasBin: true
 
-  '@capacitor/core@8.4.0':
-    resolution: {integrity: sha512-LrS1xPIrqLtJABBIPDGXxxKmI9OyesrzWw8DiHbxhSC9JoiLUleUAJlX1a0LWIVLRbuY4Szgf9huFeRqYH2SAQ==}
+  '@capacitor/core@7.6.6':
+    resolution: {integrity: sha512-TCxNTpi9bWlM31n8hkLKGrugDGcgJpSqafpDoEEn/Hj6KWxjxes7m0ASfrZ2pOmsqMNGjE6bYGZr905CueVAIw==}
 
   '@capacitor/filesystem@8.1.2':
     resolution: {integrity: sha512-doaaMfGoFR2hWU6aV6u83I+5ZsGyJVq+Gz4r9lMpJzUKMm1eMu0hLnFdV1aXZlU9FlK/RndFrVD8oRZfNOqWgQ==}
     peerDependencies:
       '@capacitor/core': '>=8.0.0'
 
-  '@capacitor/keyboard@8.0.3':
-    resolution: {integrity: sha512-27Bv5/2w1Ss2njguBgTS98O0Bb8DRJhAARyzXYib0JlT/n6BrJw/EZ0CokM4C8GFUjFDjJnEKF1Ie01buTMEXQ==}
+  '@capacitor/keyboard@7.0.6':
+    resolution: {integrity: sha512-mH9EHo4EnBA9zJAi6domGVB/PdEkcm0h27nJDHG4Y3fd2oKsheCxDRXlYrbgj8hcyQPe0cGWqAfzfwKzkWQoFQ==}
     peerDependencies:
-      '@capacitor/core': '>=8.0.0'
+      '@capacitor/core': '>=7.0.0'
 
-  '@capacitor/status-bar@8.0.2':
-    resolution: {integrity: sha512-WXs8YB8B9eEaPZz+bcdY6t2nForF1FLoj/JU0Dl9RRgQnddnS98FEEyDooQhaY7wivr000j4+SC1FyeJkrFO7A==}
+  '@capacitor/status-bar@7.0.6':
+    resolution: {integrity: sha512-7AVqj46b26QikImQzWfsJmzG8NUJZBGkrVSuoeTo+SX/YH3hXH0MqwwFgMqMGHfa/BICDgSvTjM9miVFlq0+RQ==}
     peerDependencies:
-      '@capacitor/core': '>=8.0.0'
+      '@capacitor/core': '>=7.0.0'
 
   '@capacitor/synapse@1.0.4':
     resolution: {integrity: sha512-/C1FUo8/OkKuAT4nCIu/34ny9siNHr9qtFezu4kxm6GY1wNFxrCFWjfYx5C1tUhVGz3fxBABegupkpjXvjCHrw==}
 
-  '@capacitor/toast@8.0.1':
-    resolution: {integrity: sha512-0uoyftoAeFjtOMiozBo7YXEo+zcpQCAxtBONSvrljJ05SKdlb1A8OFHaV/DZfIpGt+19kzUGaEaUemLdll4wUw==}
+  '@capacitor/toast@7.0.4':
+    resolution: {integrity: sha512-0odSSzgKHhIyszjE9PhzQkYO+0ELNGm9HcZeO5hWYUXSYWlxkYIkzhDnK7h4QyJcgpL3/kwlLYGH2MahvYWSJw==}
     peerDependencies:
-      '@capacitor/core': '>=8.0.0'
+      '@capacitor/core': '>=7.0.0'
 
   '@capsizecss/unpack@4.0.0':
     resolution: {integrity: sha512-VERIM64vtTP1C4mxQ5thVT9fK0apjPFobqybMtA1UdUujWka24ERHbRHFGmpbbhp73MhV+KSsHQH9C6uOTdEQA==}
@@ -5945,11 +5945,11 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
-  '@capacitor/android@8.4.0(@capacitor/core@8.4.0)':
+  '@capacitor/android@7.6.6(@capacitor/core@7.6.6)':
     dependencies:
-      '@capacitor/core': 8.4.0
+      '@capacitor/core': 7.6.6
 
-  '@capacitor/cli@8.4.0':
+  '@capacitor/cli@7.6.6':
     dependencies:
       '@ionic/cli-framework-output': 2.2.8
       '@ionic/utils-subprocess': 3.0.1
@@ -5971,28 +5971,28 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@capacitor/core@8.4.0':
+  '@capacitor/core@7.6.6':
     dependencies:
       tslib: 2.8.1
 
-  '@capacitor/filesystem@8.1.2(@capacitor/core@8.4.0)':
+  '@capacitor/filesystem@8.1.2(@capacitor/core@7.6.6)':
     dependencies:
-      '@capacitor/core': 8.4.0
+      '@capacitor/core': 7.6.6
       '@capacitor/synapse': 1.0.4
 
-  '@capacitor/keyboard@8.0.3(@capacitor/core@8.4.0)':
+  '@capacitor/keyboard@7.0.6(@capacitor/core@7.6.6)':
     dependencies:
-      '@capacitor/core': 8.4.0
+      '@capacitor/core': 7.6.6
 
-  '@capacitor/status-bar@8.0.2(@capacitor/core@8.4.0)':
+  '@capacitor/status-bar@7.0.6(@capacitor/core@7.6.6)':
     dependencies:
-      '@capacitor/core': 8.4.0
+      '@capacitor/core': 7.6.6
 
   '@capacitor/synapse@1.0.4': {}
 
-  '@capacitor/toast@8.0.1(@capacitor/core@8.4.0)':
+  '@capacitor/toast@7.0.4(@capacitor/core@7.6.6)':
     dependencies:
-      '@capacitor/core': 8.4.0
+      '@capacitor/core': 7.6.6
 
   '@capsizecss/unpack@4.0.0':
     dependencies:
@@ -7841,15 +7841,15 @@ snapshots:
 
   caniuse-lite@1.0.30001791: {}
 
-  capacitor-blob-writer@1.1.20(@capacitor/core@8.4.0)(@capacitor/filesystem@8.1.2(@capacitor/core@8.4.0)):
+  capacitor-blob-writer@1.1.20(@capacitor/core@7.6.6)(@capacitor/filesystem@8.1.2(@capacitor/core@7.6.6)):
     dependencies:
-      '@capacitor/core': 8.4.0
-      '@capacitor/filesystem': 8.1.2(@capacitor/core@8.4.0)
+      '@capacitor/core': 7.6.6
+      '@capacitor/filesystem': 8.1.2(@capacitor/core@7.6.6)
 
-  capacitor-voice-recorder@7.0.6(@capacitor/core@8.4.0)(@capacitor/filesystem@8.1.2(@capacitor/core@8.4.0)):
+  capacitor-voice-recorder@7.0.6(@capacitor/core@7.6.6)(@capacitor/filesystem@8.1.2(@capacitor/core@7.6.6)):
     dependencies:
-      '@capacitor/core': 8.4.0
-      capacitor-blob-writer: 1.1.20(@capacitor/core@8.4.0)(@capacitor/filesystem@8.1.2(@capacitor/core@8.4.0))
+      '@capacitor/core': 7.6.6
+      capacitor-blob-writer: 1.1.20(@capacitor/core@7.6.6)(@capacitor/filesystem@8.1.2(@capacitor/core@7.6.6))
       get-blob-duration: 1.2.0
     transitivePeerDependencies:
       - '@capacitor/filesystem'

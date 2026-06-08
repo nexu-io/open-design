@@ -1,4 +1,4 @@
-package com.getcapacitor.myapp;
+package ai.opendesign.app;
 
 import static org.junit.Assert.*;
 

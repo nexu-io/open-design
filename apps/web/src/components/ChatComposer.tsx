@@ -40,6 +40,7 @@ import type {
   RunContextSelection,
   WorkspaceContextItem,
 } from '@open-design/contracts';
+import { detectOpenDesignHostClientType, OPEN_DESIGN_HOST_CLIENT_TYPES } from '@open-design/host';
 import { buildVisualAnnotationAttachment, commentTargetDisplayName } from '../comments';
 import { Icon, type IconName } from "./Icon";
 import { SessionModeToggle } from './SessionModeToggle';
@@ -398,6 +399,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         : null;
     const activeFileDisplayName = activeFileContext ? lastPathSegment(activeFileContext) : null;
     const [draft, setDraft] = useState(() => initialDraft ?? loadComposerDraft(draftStorageKey) ?? "");
+    const isAndroid = useMemo(() => detectOpenDesignHostClientType() === OPEN_DESIGN_HOST_CLIENT_TYPES.ANDROID, []);
     const composerRootRef = useRef<HTMLDivElement | null>(null);
     // Synchronous mirror of `draft`. Event handlers that mutate the draft off
     // a captured render closure (notably the annotation listener, where two
@@ -2135,14 +2137,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               )}
             />
             <span className="composer-spacer" />
-            <button
-                type="button"
-                className={`ghost icon-btn voice-input-btn ${isRecording ? 'is-recording' : ''}`}
-                onClick={isRecording ? () => void stopRecording() : () => void startRecording()}
-                title={isRecording ? "Stop recording" : "Voice input"}
-            >
-                <Icon name={isRecording ? 'stop' : 'mic'} size={14} color={isRecording ? 'red' : 'currentColor'} />
-            </button>
+            {isAndroid && (
+              <button
+                  type="button"
+                  className={`ghost icon-btn voice-input-btn ${isRecording ? 'is-recording' : ''}`}
+                  onClick={isRecording ? () => void stopRecording() : () => void startRecording()}
+                  title={isRecording ? "Stop recording" : "Voice input"}
+              >
+                  <Icon name={isRecording ? 'stop' : 'mic'} size={14} color={isRecording ? 'red' : 'currentColor'} />
+              </button>
+            )}
             {footerAccessory}
             <SessionModeToggle
               mode={sessionMode}
