@@ -778,7 +778,9 @@
   flex: 0 0 156px;
   grid-template-columns: minmax(0, 1fr) 22px;
   align-self: center;
-  border-radius: var(--radius);
+  /* Intentional compact-chrome value (26px tab); kept off the radius scale
+     and pinned by workspace-tabs-chrome.test.ts. */
+  border-radius: 7px;
   border: 1px solid transparent;
   background: transparent;
   box-shadow: none;
@@ -796,7 +798,7 @@
 }
 .workspace-shell .workspace-tab:not(.is-active):hover,
 .workspace-shell .workspace-tab:not(.is-active):focus-within {
-  border-radius: var(--radius);
+  border-radius: 7px;
   background:
     linear-gradient(
       color-mix(in srgb, var(--bg-panel) 78%, transparent),
