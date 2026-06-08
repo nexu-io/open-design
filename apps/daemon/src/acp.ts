@@ -800,6 +800,11 @@ export function attachAcpSession({
       },
       'session/prompt',
     );
+    send('agent', {
+      type: 'status',
+      label: 'waiting_for_first_output',
+      elapsedMs: Date.now() - runStartedAt,
+    });
     nextId += 1;
   };
 
@@ -869,6 +874,13 @@ export function attachAcpSession({
     }
     const update = asObject(params?.update);
     if (obj.method === 'session/update' && update) {
+      if (update.sessionUpdate !== 'agent_message_chunk' && update.sessionUpdate !== 'agent_thought_chunk') {
+        send('agent', {
+          type: 'status',
+          label: String(update.sessionUpdate || 'session_update'),
+          elapsedMs: Date.now() - runStartedAt,
+        });
+      }
       if (update.sessionUpdate === 'agent_thought_chunk') {
         const text = asObject(update.content)?.text;
         if (typeof text === 'string' && text.length > 0) {

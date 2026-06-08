@@ -1529,6 +1529,38 @@ describe('streamViaDaemon', () => {
       detail: 'tavily · shallow',
     });
   });
+
+  it('maps transient ACP progress labels to hidden running status events', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          'event: agent\ndata: {"type":"status","label":"waiting_for_first_output","elapsedMs":12}\n\n' +
+            'event: agent\ndata: {"type":"status","label":"tool_call_update","elapsedMs":34}\n\n' +
+            'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        ),
+      ));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onAgentEvent).toHaveBeenCalledWith({
+      kind: 'status',
+      label: 'running',
+    });
+    const statusLabels = handlers.onAgentEvent.mock.calls
+      .map(([event]) => event)
+      .filter((event) => event.kind === 'status')
+      .map((event) => event.label);
+    expect(statusLabels).not.toContain('waiting_for_first_output');
+    expect(statusLabels).not.toContain('tool_call_update');
+  });
 });
 
 describe('streamMessageOpenAI', () => {

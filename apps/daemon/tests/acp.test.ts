@@ -436,6 +436,55 @@ test('attachAcpSession recovers when bracket-prefixed logs precede JSON frames',
   assert.equal(events.some((entry) => entry.event === 'error'), false);
 });
 
+test('attachAcpSession emits a waiting status after submitting the prompt', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'make a simple deck',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+
+  const promptRequest = parseRpcWrites(writes).find((entry) => entry.method === 'session/prompt');
+  assert.ok(promptRequest, 'expected session/prompt to be submitted');
+  assert.ok(
+    hasAgentStatus(events, 'waiting_for_first_output'),
+    `expected waiting status after session/prompt, got ${JSON.stringify(events)}`,
+  );
+});
+
+test('attachAcpSession surfaces non-text ACP updates as status progress', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'make a simple deck',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, { sessionUpdate: 'tool_call_update', toolCallId: 'call-1', status: 'in_progress' });
+
+  assert.ok(
+    hasAgentStatus(events, 'tool_call_update'),
+    `expected tool_call_update status progress, got ${JSON.stringify(events)}`,
+  );
+});
+
 function parseRpcWrites(writes: string[]): Array<Record<string, unknown>> {
   return writes
     .join('')
@@ -464,6 +513,13 @@ function agentModelStatuses(events: Array<{ event: string; payload: unknown }>):
       return entry.event === 'agent' && payload.type === 'status' && payload.label === 'model';
     })
     .map((entry) => (entry.payload as { model?: unknown }).model);
+}
+
+function hasAgentStatus(events: Array<{ event: string; payload: unknown }>, label: string): boolean {
+  return events.some((entry) => {
+    const payload = entry.payload as { type?: unknown; label?: unknown };
+    return entry.event === 'agent' && payload.type === 'status' && payload.label === label;
+  });
 }
 
 test('attachAcpSession force-terminates the child after a clean prompt completion if it does not exit on stdin.end()', async () => {
