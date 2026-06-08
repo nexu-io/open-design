@@ -123,16 +123,14 @@ type SkillPluginCandidateBlock = Extract<Block, { kind: "plugin-candidate" }>;
 function SkillPluginCandidateCard({
   block,
   projectId,
-  onDismissed,
   onRequestOpenFile,
 }: {
   block: SkillPluginCandidateBlock;
   projectId: string | null;
-  onDismissed: (candidateId: string) => void;
   onRequestOpenFile?: (name: string) => void;
 }) {
   const t = useT();
-  const [busy, setBusy] = useState<null | "draft" | "publish" | "contribute" | "dismiss">(null);
+  const [busy, setBusy] = useState<null | "draft" | "contribute">(null);
   const [notice, setNotice] = useState<ActionNotice | null>(null);
   const disabled = !projectId || busy !== null;
   const description =
@@ -193,9 +191,9 @@ function SkillPluginCandidateCard({
     }
   }
 
-  async function share(action: "publish-github" | "contribute-open-design") {
+  async function share(action: "contribute-open-design") {
     if (!projectId) return;
-    setBusy(action === "publish-github" ? "publish" : "contribute");
+    setBusy("contribute");
     setNotice(null);
     try {
       const data = await post(
@@ -203,28 +201,11 @@ function SkillPluginCandidateCard({
         { action },
       );
       setNotice({
-        message:
-          action === "publish-github"
-            ? `GitHub publish task started for ${data?.path ?? "the draft"}.`
-            : `Open Design contribution task started for ${data?.path ?? "the draft"}.`,
+        message: `Open Design contribution task started for ${data?.path ?? "the draft"}.`,
       });
     } catch (err) {
       setNotice({ message: err instanceof Error ? err.message : String(err) });
     } finally {
-      setBusy(null);
-    }
-  }
-
-  async function dismiss() {
-    if (!projectId) return;
-    setBusy("dismiss");
-    try {
-      await post(
-        `/api/projects/${encodeURIComponent(projectId)}/plugin-candidates/${encodeURIComponent(block.candidateId)}/dismiss`,
-      );
-      onDismissed(block.candidateId);
-    } catch (err) {
-      setNotice({ message: err instanceof Error ? err.message : String(err) });
       setBusy(null);
     }
   }
@@ -245,15 +226,6 @@ function SkillPluginCandidateCard({
               type="button"
               className="plugin-action-button plugin-action-button--primary"
               disabled={disabled}
-              onClick={() => void createDraft()}
-            >
-              <Icon name={busy === "draft" ? "spinner" : "plus"} size={13} />
-              <span>{busy === "draft" ? "Creating..." : t("skillPluginCandidate.createForMe")}</span>
-            </button>
-            <button
-              type="button"
-              className="plugin-action-button"
-              disabled={disabled}
               onClick={() => void share("contribute-open-design")}
             >
               <Icon name={busy === "contribute" ? "spinner" : "share"} size={13} />
@@ -263,19 +235,10 @@ function SkillPluginCandidateCard({
               type="button"
               className="plugin-action-button"
               disabled={disabled}
-              onClick={() => void share("publish-github")}
+              onClick={() => void createDraft()}
             >
-              <Icon name={busy === "publish" ? "spinner" : "github"} size={13} />
-              <span>{busy === "publish" ? "Starting..." : t("skillPluginCandidate.publishRepo")}</span>
-            </button>
-            <button
-              type="button"
-              className="plugin-action-button"
-              disabled={disabled}
-              onClick={() => void dismiss()}
-            >
-              <Icon name={busy === "dismiss" ? "spinner" : "close"} size={13} />
-              <span>{t("skillPluginCandidate.dismiss")}</span>
+              <Icon name={busy === "draft" ? "spinner" : "plus"} size={13} />
+              <span>{busy === "draft" ? "Creating..." : t("skillPluginCandidate.createForMe")}</span>
             </button>
           </div>
           {notice ? (
@@ -623,20 +586,10 @@ function AssistantMessageImpl({
     canFork;
   // Pre-output vs working: before any real content (text / thinking / tools /
   // files) the footer shimmers "Preparing…"; the moment content lands it
-  // flips to "Working" and the elapsed clock restarts from that instant.
+  // flips to "Working". The elapsed clock stays anchored to the persisted run
+  // start so switching project tabs or remounting the message cannot restart it.
   const hasContent = blocks.some((b) => b.kind !== "status") || fileOps.length > 0;
   const preparing = streaming && !hasContent;
-  const [outputStartedAt, setOutputStartedAt] = useState<number | undefined>(undefined);
-  useEffect(() => {
-    if (streaming && hasContent) {
-      setOutputStartedAt((prev) => prev ?? Date.now());
-    } else if (!streaming) {
-      setOutputStartedAt(undefined);
-    }
-  }, [streaming, hasContent]);
-  const [dismissedCandidateIds, setDismissedCandidateIds] = useState<Set<string>>(
-    () => new Set()
-  );
   // Route interactive tool answers (currently AskUserQuestion) back to the
   // still-open stream-json child via the daemon. We resolve to `true` on
   // success so the card can flip into its answered state; on `false` (run
@@ -730,19 +683,11 @@ function AssistantMessageImpl({
             return <LiveCodeBox key={b.id} name={b.name} raw={b.raw} />;
           }
           if (b.kind === "plugin-candidate") {
-            if (dismissedCandidateIds.has(b.candidateId)) return null;
             return (
               <SkillPluginCandidateCard
                 key={i}
                 block={b}
                 projectId={projectId}
-                onDismissed={(candidateId) =>
-                  setDismissedCandidateIds((prev) => {
-                    const next = new Set(prev);
-                    next.add(candidateId);
-                    return next;
-                  })
-                }
                 onRequestOpenFile={onRequestOpenFile}
               />
             );
@@ -843,7 +788,6 @@ function AssistantMessageImpl({
                   hasUnfinishedTodos: unfinishedTodos.length > 0,
                   hasEmptyResponse,
                   preparing,
-                  outputStartedAt,
                   copyMarkdown,
                   onFork: canFork ? onForkFromMessage : undefined,
                   forking,
@@ -861,7 +805,6 @@ function AssistantMessageImpl({
                 hasUnfinishedTodos={unfinishedTodos.length > 0}
                 hasEmptyResponse={hasEmptyResponse}
                 preparing={preparing}
-                outputStartedAt={outputStartedAt}
                 copyMarkdown={copyMarkdown}
                 onFork={canFork ? onForkFromMessage : undefined}
                 forking={forking}
@@ -1045,10 +988,8 @@ interface AssistantFooterProps {
   hasUnfinishedTodos: boolean;
   hasEmptyResponse: boolean;
   // Pre-output phase: streaming but nothing rendered yet. The label shimmers
-  // "Preparing…"; once content lands it flips to "Working" and the elapsed
-  // counter restarts from `outputStartedAt` (the moment content appeared).
+  // "Preparing…"; once content lands it flips to "Working".
   preparing?: boolean;
-  outputStartedAt?: number | undefined;
   copyMarkdown?: string;
   onFork?: () => void;
   forking?: boolean;
@@ -1068,7 +1009,6 @@ function AssistantFooter({
   hasUnfinishedTodos,
   hasEmptyResponse,
   preparing = false,
-  outputStartedAt,
   copyMarkdown,
   onFork,
   forking = false,
@@ -1078,12 +1018,7 @@ function AssistantFooter({
   isLast = false,
 }: AssistantFooterProps) {
   const t = useT();
-  // While "working" (streaming with content) the timer counts from when
-  // content first appeared, not from the run start, so it reads as a fresh
-  // generation clock. Preparing and the final done state both use startedAt.
-  const elapsedStart =
-    streaming && !preparing ? outputStartedAt ?? startedAt : startedAt;
-  const elapsed = useLiveElapsed(streaming, elapsedStart, endedAt, usage?.durationMs);
+  const elapsed = useLiveElapsed(streaming, startedAt, endedAt, usage?.durationMs);
   const formattedCost =
     typeof usage?.costUsd === "number" &&
     Number.isFinite(usage.costUsd) &&

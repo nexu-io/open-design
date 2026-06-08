@@ -12,6 +12,7 @@ import {
   DesignSystemCreationFlow,
   DesignSystemDetailView,
 } from '../../src/components/DesignSystemFlow';
+import { CONNECTORS_CHANGED_EVENT } from '../../src/components/connectors-events';
 import type { AppConfig, Conversation, DesignSystemDetail, Project, ProjectFile } from '../../src/types';
 import { I18nProvider } from '../../src/i18n';
 
@@ -1617,33 +1618,40 @@ describe('DesignSystemCreationFlow', () => {
     const config = {
       composio: { apiKeyConfigured: true, apiKeyTail: 'uQEg' },
     } as AppConfig;
+    const onConnectorsChanged = vi.fn();
+    window.addEventListener(CONNECTORS_CHANGED_EVENT, onConnectorsChanged);
 
-    render(
-      <DesignSystemCreationFlow
-        onBack={() => {}}
-        onCreated={() => {}}
-        config={config}
-      />,
-    );
+    try {
+      render(
+        <DesignSystemCreationFlow
+          onBack={() => {}}
+          onCreated={() => {}}
+          config={config}
+        />,
+      );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Show access methods' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Connect via Composio' })).toBeTruthy());
-    expect((screen.getByPlaceholderText('https://github.com/owner/repo') as HTMLInputElement).disabled).toBe(false);
+      fireEvent.click(screen.getByRole('button', { name: 'Show access methods' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Connect via Composio' })).toBeTruthy());
+      expect((screen.getByPlaceholderText('https://github.com/owner/repo') as HTMLInputElement).disabled).toBe(false);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Connect via Composio' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Connect via Composio' }));
 
-    await waitFor(() => expect(mocks.connectConnector).toHaveBeenCalledWith('github'));
-    await waitFor(() => expect(screen.getByText(/Connected as qiongyu1999/i)).toBeTruthy());
-    expect(screen.queryByRole('button', { name: 'Configure' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeTruthy();
-    const input = screen.getByPlaceholderText('https://github.com/owner/repo') as HTMLInputElement;
-    expect(input.disabled).toBe(false);
+      await waitFor(() => expect(mocks.connectConnector).toHaveBeenCalledWith('github'));
+      await waitFor(() => expect(screen.getByText(/Connected as qiongyu1999/i)).toBeTruthy());
+      await waitFor(() => expect(onConnectorsChanged).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole('button', { name: 'Configure' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Disconnect' })).toBeTruthy();
+      const input = screen.getByPlaceholderText('https://github.com/owner/repo') as HTMLInputElement;
+      expect(input.disabled).toBe(false);
 
-    fireEvent.change(input, { target: { value: 'https://github.com/nexu-io/open-design/' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+      fireEvent.change(input, { target: { value: 'https://github.com/nexu-io/open-design/' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
-    expect(screen.getByText('nexu-io/open-design')).toBeTruthy();
-    expect(input.value).toBe('');
+      expect(screen.getByText('nexu-io/open-design')).toBeTruthy();
+      expect(input.value).toBe('');
+    } finally {
+      window.removeEventListener(CONNECTORS_CHANGED_EVENT, onConnectorsChanged);
+    }
   });
 
   it('hides Composio connection ids in the connected GitHub label', async () => {

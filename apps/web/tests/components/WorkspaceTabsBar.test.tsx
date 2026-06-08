@@ -24,6 +24,9 @@ vi.mock('../../src/i18n', () => ({
       'entry.navDesignSystems': 'Design systems',
       'entry.navHome': 'Home',
       'entry.navProjects': 'Projects',
+      'entry.navTasks': 'Automations',
+      'entry.navPlugins': 'Plugins',
+      'entry.navIntegrations': 'Integrations',
     };
     return labels[key] ?? key;
   },
@@ -154,6 +157,83 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       expect(tabs).toHaveLength(2);
       expect(labels.filter((label) => label.includes('Home'))).toHaveLength(1);
       expect(labels.filter((label) => label.includes('Project Alpha'))).toHaveLength(1);
+    });
+  });
+
+  it('collapses every entry section into the single leftmost tab (no new tab per section)', async () => {
+    const { rerender } = render(
+      <WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />,
+    );
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
+
+    const sections: Array<{ view: 'projects' | 'tasks' | 'design-systems' | 'plugins' | 'integrations'; label: string }> = [
+      { view: 'projects', label: 'Projects' },
+      { view: 'tasks', label: 'Automations' },
+      { view: 'design-systems', label: 'Design systems' },
+      { view: 'plugins', label: 'Plugins' },
+      { view: 'integrations', label: 'Integrations' },
+    ];
+
+    for (const section of sections) {
+      rerender(<WorkspaceTabsBar route={{ kind: 'home', view: section.view }} projects={[project]} />);
+      await waitFor(() => {
+        const tabs = screen.getAllByRole('tab');
+        // Exactly one tab the whole time — the section just switches the view.
+        expect(tabs).toHaveLength(1);
+        expect(tabs[0]?.textContent ?? '').toContain(section.label);
+      });
+    }
+
+    // The single entry tab in a non-home view is still permanent (no close btn).
+    expect(screen.queryByRole('button', { name: 'Close tab' })).toBeNull();
+  });
+
+  it('keeps the entry tab when opening a project from a non-home entry view', async () => {
+    const { rerender } = render(
+      <WorkspaceTabsBar route={{ kind: 'home', view: 'design-systems' }} projects={[project]} />,
+    );
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(1);
+      expect(labels[0]).toContain('Design systems');
+    });
+
+    // Opening a project from the design-systems view must APPEND a project tab,
+    // not replace the entry tab.
+    rerender(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(2);
+      expect(labels.some((label) => label.includes('Design systems'))).toBe(true);
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
+    });
+
+    // Switching to another section keeps the SAME entry tab and the project tab.
+    rerender(<WorkspaceTabsBar route={{ kind: 'home', view: 'tasks' }} projects={[project]} />);
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(2);
+      expect(labels.some((label) => label.includes('Automations'))).toBe(true);
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
+    });
+  });
+
+  it('collapses a restored two-entry-tab workspace into a single entry tab', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'entry:projects:1',
+        tabs: [
+          { id: 'entry:home:1', kind: 'entry', view: 'home', createdAt: 1, lastActiveAt: 1 },
+          { id: 'entry:projects:1', kind: 'entry', view: 'projects', createdAt: 2, lastActiveAt: 2 },
+        ],
+      }),
+    );
+    render(<WorkspaceTabsBar route={{ kind: 'home', view: 'projects' }} projects={[project]} />);
+    await waitFor(() => {
+      const tabs = screen.getAllByRole('tab');
+      expect(tabs).toHaveLength(1);
+      expect(tabs[0]?.textContent ?? '').toContain('Projects');
     });
   });
 

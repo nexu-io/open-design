@@ -17,6 +17,7 @@ import {
   readBuiltAppManifest,
   readPackagedVersion,
 } from "./manifest.js";
+import { buildWinLauncherPayloadArchive } from "./payload.js";
 import { resolveWinPaths } from "./paths.js";
 import {
   collectWinSizeReport,
@@ -25,6 +26,13 @@ import {
 } from "./report.js";
 import { copyWinIcon, prepareResourceTree } from "./resources.js";
 import type { WinPackResult, WinPackTiming, WinPaths } from "./types.js";
+
+function logWinBuildProgress(message: string, fields: Record<string, unknown> = {}): void {
+  const suffix = Object.entries(fields)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ");
+  process.stderr.write(`[tools-pack win] ${message}${suffix.length === 0 ? "" : ` ${suffix}`}\n`);
+}
 
 async function writeLocalLatestYml(config: ToolPackConfig, paths: WinPaths): Promise<void> {
   if (!(await pathExists(paths.setupPath))) return;
@@ -59,8 +67,18 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
   const hasZipTarget = shouldBuildWinPortableZip(config.to);
   const runPhase = async <T>(phase: string, task: () => Promise<T>): Promise<T> => {
     const startedAt = Date.now();
+    logWinBuildProgress("phase:start", { phase });
     try {
-      return await task();
+      const result = await task();
+      logWinBuildProgress("phase:done", { durationMs: Date.now() - startedAt, phase });
+      return result;
+    } catch (error) {
+      logWinBuildProgress("phase:failed", {
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+        phase,
+      });
+      throw error;
     } finally {
       timings.push({ durationMs: Date.now() - startedAt, phase });
     }
@@ -102,12 +120,17 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
     await writeLocalLatestYml(config, paths);
   });
   const builtApp = await readBuiltAppManifest(paths);
+  await runPhase("payload-artifact", async () => {
+    if (builtApp == null) throw new Error("cannot build Windows launcher payload without a built app manifest");
+    segments.push(...await buildWinLauncherPayloadArchive(config, paths, builtApp));
+  });
   const sizeReport = await runPhase("size-report", async () => collectWinSizeReport(config, paths, builtApp));
   return {
     blockmapPath: (await pathExists(paths.blockmapPath)) ? paths.blockmapPath : null,
     installerPath: hasNsisTarget && await pathExists(paths.setupPath) ? paths.setupPath : null,
     latestYmlPath: hasNsisTarget && await pathExists(paths.latestYmlPath) ? paths.latestYmlPath : null,
     outputRoot: config.roots.output.namespaceRoot,
+    payloadPath: (await pathExists(paths.launcherPayloadPath)) ? paths.launcherPayloadPath : null,
     portableZipPath: hasZipTarget && await pathExists(paths.setupZipPath) ? paths.setupZipPath : null,
     resourceRoot: builtApp == null ? paths.resourceRoot : join(builtApp.unpackedRoot, "resources", "open-design"),
     runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,

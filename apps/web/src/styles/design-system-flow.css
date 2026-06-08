@@ -978,6 +978,30 @@
 .ds-evidence-stats small {
   color: var(--text-muted);
 }
+.ds-token-contract-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-subtle));
+}
+.ds-token-contract-row > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.ds-token-contract-row small {
+  color: var(--text-muted);
+}
+.ds-token-contract-row > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .ds-package-pill {
   flex: 0 0 auto;
   padding: 4px 8px;
@@ -1674,6 +1698,13 @@
   .ds-package-metrics,
   .ds-evidence-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ds-token-contract-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .ds-token-contract-row > div {
+    justify-content: flex-start;
   }
   .ds-github-access-methods {
     grid-template-columns: 1fr;

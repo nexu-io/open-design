@@ -19,6 +19,7 @@
 }
 
 .workspace-shell {
+  --workspace-tabs-chrome-height: 38px;
   width: 100vw;
   max-width: 100vw;
   height: 100vh;

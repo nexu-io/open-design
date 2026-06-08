@@ -67,6 +67,13 @@ const WIN_ARCHIVE_CACHE_VERSION = 3;
 const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 6;
 const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 1;
 
+function logWinBuildProgress(message: string, fields: Record<string, unknown> = {}): void {
+  const suffix = Object.entries(fields)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ");
+  process.stderr.write(`[tools-pack win] ${message}${suffix.length === 0 ? "" : ` ${suffix}`}\n`);
+}
+
 async function assertWebStandaloneOutput(config: ToolPackConfig): Promise<void> {
   const webRoot = join(config.workspaceRoot, "apps", "web");
   const standaloneSourceRoot = join(webRoot, ".next", "standalone");
@@ -123,8 +130,18 @@ async function runElectronBuilderRaw(
     details?: Record<string, unknown>,
   ): Promise<T> => {
     const startedAt = Date.now();
+    logWinBuildProgress("segment:start", { phase });
     try {
-      return await task();
+      const result = await task();
+      logWinBuildProgress("segment:done", { durationMs: Date.now() - startedAt, phase });
+      return result;
+    } catch (error) {
+      logWinBuildProgress("segment:failed", {
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+        phase,
+      });
+      throw error;
     } finally {
       segments.push({ details, durationMs: Date.now() - startedAt, phase });
     }
@@ -446,8 +463,18 @@ export async function runElectronBuilder(
     details?: Record<string, unknown>,
   ): Promise<T> => {
     const startedAt = Date.now();
+    logWinBuildProgress("segment:start", { phase });
     try {
-      return await task();
+      const result = await task();
+      logWinBuildProgress("segment:done", { durationMs: Date.now() - startedAt, phase });
+      return result;
+    } catch (error) {
+      logWinBuildProgress("segment:failed", {
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+        phase,
+      });
+      throw error;
     } finally {
       segments.push({ details, durationMs: Date.now() - startedAt, phase });
     }

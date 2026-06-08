@@ -307,7 +307,10 @@
 
 .present-overlay {
   position: fixed;
-  inset: 0;
+  top: var(--workspace-tabs-chrome-height, 38px);
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 1000;
   background: black;
   display: flex;

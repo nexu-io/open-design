@@ -12,6 +12,7 @@ import {
 import { createPortal } from 'react-dom';
 import { Button } from '@open-design/components';
 import { useI18n, useT } from '../i18n';
+import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import type { Dict, Locale } from '../i18n/types';
 import {
   localizeSkillDescription,
@@ -66,6 +67,8 @@ import {
 import { CaretFloatingLayer } from './composer/CaretFloatingLayer';
 import { ANNOTATION_EVENT, type AnnotationEventDetail } from "./PreviewDrawOverlay";
 import { DesignSystemSwitchPicker } from "./DesignSystemSwitchPicker";
+import { listenForConnectorsChanged } from './connectors-events';
+import { fetchConnectorCatalogSnapshot } from './connectors-state';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -296,6 +299,10 @@ interface Props {
   // ChatPane). Pass `null` (or omit) to render the full rail.
   pinnedPluginId?: string | null;
   footerAccessory?: ReactNode;
+  // Slot rendered in the composer's bottom toolbar, immediately right of the
+  // "+" menu. Hosts the working-directory pill so the folder selector sits by
+  // the composer (mirroring the home input) instead of the file-panel header.
+  leadingAccessory?: ReactNode;
   // Design-system picker slot rendered at the top of the composer (above
   // the textarea). The former standalone chrome header row was removed;
   // ProjectView owns the project record so it renders the picker as a slot.
@@ -721,6 +728,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onProjectSkillChange,
       pinnedPluginId = null,
       footerAccessory,
+      leadingAccessory,
       designSystemPicker,
       currentDesignSystemId = null,
       onActiveDesignSystemChange,
@@ -918,12 +926,27 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     useEffect(() => {
       if (!composerEngaged) return;
       let cancelled = false;
-      void fetchConnectors().then((rows) => {
+      void fetchConnectorCatalogSnapshot().then((rows) => {
         if (cancelled) return;
         setConnectors(rows.filter((connector) => connector.status === 'connected'));
       });
       return () => {
         cancelled = true;
+      };
+    }, [composerEngaged]);
+
+    useEffect(() => {
+      if (!composerEngaged) return;
+      let cancelled = false;
+      async function refreshConnectors() {
+        const rows = await fetchConnectorCatalogSnapshot({ refreshDiscovery: true });
+        if (cancelled) return;
+        setConnectors(rows.filter((connector) => connector.status === 'connected'));
+      }
+      const stopListening = listenForConnectorsChanged(() => void refreshConnectors());
+      return () => {
+        cancelled = true;
+        stopListening();
       };
     }, [composerEngaged]);
 
@@ -2457,6 +2480,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 />
               )}
             />
+            {leadingAccessory}
             <span className="composer-spacer" />
             {footerAccessory}
             <SessionModeToggle
@@ -3067,6 +3091,7 @@ function ToolsPluginsPanel({
   onApply: (record: InstalledPluginRecord) => void | Promise<void>;
   onShowDetails: (record: InstalledPluginRecord) => void;
 }) {
+  const { locale } = useI18n();
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [source, setSource] = useState<'community' | 'mine'>('community');
   const [query, setQuery] = useState('');
@@ -3132,7 +3157,10 @@ function ToolsPluginsPanel({
         </div>
       ) : (
         <div className="composer-tools-list">
-          {visiblePlugins.map((p) => (
+          {visiblePlugins.map((p) => {
+            const pluginTitle = localizePluginTitle(locale, p);
+            const pluginDescription = localizePluginDescription(locale, p);
+            return (
             <div
               key={p.id}
               className={`composer-tools-row composer-tools-row--plugin${
@@ -3153,14 +3181,14 @@ function ToolsPluginsPanel({
                 }}
                 disabled={pendingId !== null}
                 aria-busy={pendingId === p.id ? 'true' : undefined}
-                title={p.manifest?.description ?? p.title}
+                title={pluginDescription || pluginTitle}
               >
                 <Icon name="sparkles" size={12} />
                 <span className="composer-tools-row-body">
-                  <strong>{p.title}</strong>
-                  {p.manifest?.description ? (
+                  <strong>{pluginTitle}</strong>
+                  {pluginDescription ? (
                     <span className="composer-tools-row-meta">
-                      {p.manifest.description}
+                      {pluginDescription}
                     </span>
                   ) : (
                     <span className="composer-tools-row-meta">{p.id}</span>
@@ -3175,13 +3203,14 @@ function ToolsPluginsPanel({
                 className="composer-tools-row-side"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onShowDetails(p)}
-                title={`View details for ${p.title}`}
-                aria-label={`View details for ${p.title}`}
+                title={`View details for ${pluginTitle}`}
+                aria-label={`View details for ${pluginTitle}`}
               >
                 <Icon name="eye" size={12} />
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </>
@@ -3642,12 +3671,12 @@ function buildDesignToolboxResources({
   }
 
   for (const plugin of plugins) {
-    const subtitle = plugin.manifest?.description ?? plugin.id;
+    const subtitle = localizePluginDescription(locale, plugin) || plugin.id;
     resources.push({
       key: `plugin:${plugin.id}`,
       kind: 'plugin',
       id: plugin.id,
-      title: plugin.title,
+      title: localizePluginTitle(locale, plugin),
       subtitle,
       badge: plugin.manifest?.od?.kind ?? 'plugin',
       icon: 'sparkles',
@@ -4618,6 +4647,8 @@ function MentionPopover({
               const flat = optionIndex;
               optionIndex += 1;
               const active = flat === activeIndex;
+              const pluginTitle = localizePluginTitle(locale, p);
+              const pluginDescription = localizePluginDescription(locale, p);
               return (
                 <button
                   key={`plugin-${p.id}`}
@@ -4628,13 +4659,13 @@ function MentionPopover({
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onPickPlugin(p)}
-                  title={p.manifest?.description ?? p.title}
+                  title={pluginDescription || pluginTitle}
                 >
                   <Icon name="sparkles" size={12} />
                   <span className="mention-item-body">
-                    <strong>{p.title}</strong>
+                    <strong>{pluginTitle}</strong>
                     <span className="mention-meta mention-meta--desc">
-                      {p.manifest?.description ?? p.id}
+                      {pluginDescription || p.id}
                     </span>
                   </span>
                   <span className="mention-meta mention-item-kind">{pluginSourceLabel(p, t)}</span>

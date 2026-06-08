@@ -13,6 +13,12 @@
 }
 .plus-menu__trigger {
   position: relative;
+  background: transparent;
+  border-color: transparent;
+}
+.plus-menu__trigger:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: transparent;
 }
 .plus-menu__trigger.is-active {
   background: var(--bg-subtle);

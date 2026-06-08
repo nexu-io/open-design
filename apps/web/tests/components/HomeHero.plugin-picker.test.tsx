@@ -451,6 +451,41 @@ describe('HomeHero plugin picker', () => {
     expect(screen.queryByTestId('home-hero-plugin-picker')).toBeNull();
   });
 
+  it('closes the @ picker when opening plugin details from the hover card', async () => {
+    const onOpenPluginDetails = vi.fn();
+    const plugin = makePlugin('sample-plugin', 'Sample Plugin');
+    render(
+      <HomeHero
+        prompt=""
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+        activePluginTitle={null}
+        activeChipId={null}
+        onClearActivePlugin={() => undefined}
+        onOpenPluginDetails={onOpenPluginDetails}
+        pluginOptions={[plugin]}
+        pluginsLoading={false}
+        pendingPluginId={null}
+        pendingChipId={null}
+        onPickPlugin={() => undefined}
+        onPickChip={() => undefined}
+        contextItemCount={0}
+        error={null}
+      />,
+    );
+
+    setHomeHeroPrompt('@sam');
+    await settle();
+    fireEvent.mouseEnter(screen.getByRole('option', { name: /sample plugin/i }));
+    await settle();
+
+    expect(screen.getByTestId('home-hero-plugin-picker')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+
+    expect(onOpenPluginDetails).toHaveBeenCalledWith(plugin);
+    expect(screen.queryByTestId('home-hero-plugin-picker')).toBeNull();
+  });
+
   it('opens active plugin details from the active plugin chip', () => {
     const onOpenPluginDetails = vi.fn();
     const active = makePlugin('prototype-plugin', 'Prototype Plugin');

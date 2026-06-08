@@ -7,7 +7,9 @@ import {
   localizeSkillDescription,
   localizeSkillName,
   localizeSkillPrompt,
+  hasLocalizedContent,
 } from '../../src/i18n/content';
+import { LOCALES } from '../../src/i18n/types';
 
 describe('localized resource content', () => {
   it('derives localized ids only from localized dictionaries', () => {
@@ -110,5 +112,24 @@ describe('localized resource content', () => {
       category: 'Général',
       tags: ['unknown-tag'],
     });
+  });
+
+  // Coverage lock (PR #3755 review): every supported non-English locale must
+  // resolve a built-in-content bundle — either its own `content.<locale>.ts`
+  // (or inline `XX_*` tables) registered in LOCALIZED_CONTENT, or an
+  // intentional script fallback (zh-TW -> zh-CN via getLocalizedContent).
+  // When a locale has no bundle, built-in skill / design-system /
+  // prompt-template copy silently renders English for that locale — the exact
+  // gap this PR fixes (it was missing for `it`). This locks every non-English
+  // locale to a resolvable bundle so a future locale addition can't regress.
+  it('resolves a built-in-content bundle for every supported non-English locale', () => {
+    const missing = LOCALES.filter(
+      (locale) => locale !== 'en' && !hasLocalizedContent(locale),
+    );
+    expect(
+      missing,
+      `These locales have no built-in-content bundle (add content.<locale>.ts and ` +
+        `register it in LOCALIZED_CONTENT, or add an intentional fallback): ${missing.join(', ')}`,
+    ).toEqual([]);
   });
 });

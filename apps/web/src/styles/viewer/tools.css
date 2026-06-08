@@ -669,6 +669,10 @@
 }
 
 /* Present / Share menus */
+.present-wrap,
+.share-menu {
+  --viewer-action-menu-z: 220;
+}
 .present-wrap { position: relative; display: inline-block; }
 .present-trigger .caret {
   margin-left: 4px;
@@ -679,7 +683,7 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 60;
+  z-index: var(--viewer-action-menu-z);
   min-width: 168px;
   padding: 4px;
   background: var(--bg-panel);
@@ -776,7 +780,7 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 50;
+  z-index: var(--viewer-action-menu-z);
   min-width: 300px;
   padding: 4px;
   background: var(--bg-panel);
@@ -990,6 +994,9 @@
 .deploy-flow-backdrop.modal-backdrop {
   box-sizing: border-box;
   padding: clamp(48px, 7vh, 88px) 16px;
+}
+.viewer-modal-backdrop.modal-backdrop {
+  z-index: 1700;
 }
 .deploy-flow-modal.modal {
   /* --modal-padding feeds the .deploy-form horizontal padding below. */

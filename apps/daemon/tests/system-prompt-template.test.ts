@@ -81,6 +81,18 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('license MIT');
   });
 
+  it('asks for image model and aspect ratio when they are unset (not silently defaulted)', () => {
+    const out = composeSystemPrompt({
+      metadata: { kind: 'image' },
+    });
+
+    // The composer no longer seeds imageModel/imageAspect — the agent must ask.
+    expect(out).toContain('**imageModel**: (unknown — ask: which image model/provider to use)');
+    expect(out).toContain('**aspectRatio**: (unknown — ask: 1:1, 16:9 for landscape, 9:16 for portrait)');
+    expect(out).not.toContain('gpt-image-2 (default');
+    expect(out).not.toContain('1:1 (default');
+  });
+
   it('inlines the prompt body for video projects too', () => {
     const out = composeSystemPrompt({
       metadata: {

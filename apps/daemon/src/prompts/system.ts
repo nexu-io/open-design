@@ -1114,13 +1114,13 @@ function renderMetadataBlock(
   }
   if (metadata.kind === 'image') {
     lines.push(
-      `- **imageModel**: ${metadata.imageModel ?? 'gpt-image-2 (default — override if the user asks for a specific model or provider)'}`,
+      `- **imageModel**: ${metadata.imageModel ?? '(unknown — ask: which image model/provider to use)'}`,
     );
     if (metadata.imageSize) {
       lines.push(`- **size**: ${metadata.imageSize} (exact documented pixel size; pass it verbatim via --size; it already encodes the aspect — do NOT also state a separate aspect ratio)`);
     } else {
       lines.push(
-        `- **aspectRatio**: ${metadata.imageAspect ?? '1:1 (default — use 16:9 for landscape/outdoor scenes, 9:16 for portrait/vertical)'}`,
+        `- **aspectRatio**: ${metadata.imageAspect ?? '(unknown — ask: 1:1, 16:9 for landscape, 9:16 for portrait)'}`,
       );
     }
     if (metadata.imageStyle) {

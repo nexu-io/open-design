@@ -17,7 +17,7 @@ import {
   shouldInstallInternalPackageForMacPrebundle,
   shouldUseMacStandalonePrebundle,
 } from "../mac-prebundle.js";
-import { copyBundledResourceTrees } from "../resources.js";
+import { copyBundledPlaywrightChromium, copyBundledResourceTrees } from "../resources.js";
 import { copyOptionalVelaCliBinary } from "../vela-cli.js";
 import { electronBuilderVersionForAppVersion } from "../versions.js";
 import { runEsbuild, runNpmInstall, runPnpm } from "./commands.js";
@@ -135,6 +135,10 @@ export async function copyResourceTree(config: ToolPackConfig, paths: MacPaths):
   await mkdir(paths.resourceRoot, { recursive: true });
 
   await copyBundledResourceTrees({
+    workspaceRoot: config.workspaceRoot,
+    resourceRoot: paths.resourceRoot,
+  });
+  await copyBundledPlaywrightChromium({
     workspaceRoot: config.workspaceRoot,
     resourceRoot: paths.resourceRoot,
   });

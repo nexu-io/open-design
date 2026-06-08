@@ -483,6 +483,7 @@ fsTest('detectAgents marks Codex available when nvm exposes a node shim but laun
       const wrapperPkgDir = join(home, '.nvm', 'versions', 'node', '24.14.1', 'lib', 'node_modules', '@openai', 'codex');
       const wrapperRealPath = join(wrapperPkgDir, 'bin', 'codex.js');
       const wrapperLinkPath = join(wrapperBinDir, 'codex');
+      const pathBin = join(home, 'path-bin');
       const nativePkgDir = join(
         wrapperPkgDir,
         'node_modules',
@@ -495,6 +496,7 @@ fsTest('detectAgents marks Codex available when nvm exposes a node shim but laun
 
       mkdirSync(join(wrapperPkgDir, 'bin'), { recursive: true });
       mkdirSync(wrapperBinDir, { recursive: true });
+      mkdirSync(pathBin, { recursive: true });
       mkdirSync(join(nativePkgDir, 'vendor', nativeTargetTriple, 'codex'), { recursive: true });
       mkdirSync(nativePathDir, { recursive: true });
       writeFileSync(
@@ -507,7 +509,7 @@ fsTest('detectAgents marks Codex available when nvm exposes a node shim but laun
       symlinkSync(wrapperRealPath, wrapperLinkPath);
 
       process.env.HOME = home;
-      process.env.PATH = '/usr/bin:/bin';
+      process.env.PATH = pathBin;
       process.env.OD_AGENT_HOME = home;
 
       const agents = await detectAgents();

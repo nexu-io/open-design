@@ -7,7 +7,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
-import { useT } from '../../i18n';
+import { useI18n } from '../../i18n';
+import { localizePluginDescription, localizePluginTitle } from '../plugins-home/localization';
 import {
   fetchPluginExampleHtml,
   fetchPluginPreviewHtml,
@@ -33,7 +34,8 @@ export function PluginExampleDetail({
   onUse,
   isApplying,
 }: Props) {
-  const t = useT();
+  const { t, locale } = useI18n();
+  const localizedTitle = localizePluginTitle(locale, record);
   const [html, setHtml] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [unavailableKind, setUnavailableKind] = useState<string | null>(null);
@@ -82,12 +84,12 @@ export function PluginExampleDetail({
     void load();
   }, [load]);
 
-  const description = record.manifest?.description ?? '';
+  const description = localizePluginDescription(locale, record);
   const isDeck = record.manifest?.od?.mode === 'deck';
 
   return (
     <PreviewModal
-      title={record.title}
+      title={localizedTitle}
       subtitle={description || undefined}
       views={[
         {
@@ -105,9 +107,9 @@ export function PluginExampleDetail({
         },
       ]}
       onView={onView}
-      exportTitleFor={() => record.title}
+      exportTitleFor={() => localizedTitle}
       shareTarget={{
-        title: record.title,
+        title: localizedTitle,
         description: description || undefined,
         url: buildPluginShareUrl(record),
       }}

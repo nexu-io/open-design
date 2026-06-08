@@ -79,7 +79,9 @@ function openImageExportDialog() {
 
 async function waitForSaveButton() {
   const button = await screen.findByRole('button', { name: /^save$/i });
-  expect((button as HTMLButtonElement).disabled).toBe(false);
+  await waitFor(() => {
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+  });
   return button;
 }
 
@@ -87,6 +89,27 @@ describe('FileViewer image export', () => {
   afterEach(() => {
     cleanup();
     vi.resetAllMocks();
+  });
+
+  it('portals the image export dialog above fixed chat composer layers', async () => {
+    requestPreviewSnapshotMock.mockResolvedValueOnce({
+      dataUrl: 'data:image/png;base64,ok',
+      w: 800,
+      h: 600,
+    });
+    imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
+
+    const { container } = renderHtmlPreview();
+    openImageExportDialog();
+
+    const backdrop = document.body.querySelector('.viewer-modal-backdrop');
+    expect(backdrop).toBeTruthy();
+    expect(backdrop?.classList.contains('image-export-backdrop')).toBe(true);
+    expect(backdrop?.parentElement).toBe(document.body);
+    expect(container.querySelector('.viewer-modal-backdrop')).toBeNull();
+    await waitFor(() => {
+      expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,ok', 'png');
+    });
   });
 
   it('lets users choose an image format before saving URL-loaded HTML previews', async () => {
@@ -131,6 +154,38 @@ describe('FileViewer image export', () => {
     expect(requestPreviewSnapshotMock).toHaveBeenCalledTimes(1);
     expect(saveImageBlobMock).toHaveBeenCalledWith(imageBlob);
     expect(screen.getByText('workspace.jpg')).toBeTruthy();
+  });
+
+  it('keeps the Save label stable while a format change prepares the next image', async () => {
+    const pngBlob = new Blob(['png'], { type: 'image/png' });
+    let resolveJpegBlob: ((blob: Blob) => void) | undefined;
+    requestPreviewSnapshotMock.mockResolvedValueOnce({
+      dataUrl: 'data:image/png;base64,ok',
+      w: 800,
+      h: 600,
+    });
+    imageDataUrlToBlobMock
+      .mockResolvedValueOnce(pngBlob)
+      .mockImplementationOnce(async () => new Promise<Blob>((resolve) => {
+        resolveJpegBlob = resolve;
+      }));
+
+    renderHtmlPreview();
+    openImageExportDialog();
+
+    await waitForSaveButton();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'JPEG' }));
+    await waitFor(() => {
+      expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,ok', 'jpeg');
+    });
+
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /saving image/i })).toBeNull();
+    expect((screen.getByRole('button', { name: /^save$/i }) as HTMLButtonElement).disabled).toBe(true);
+
+    resolveJpegBlob?.(new Blob(['jpeg'], { type: 'image/jpeg' }));
+    await waitForSaveButton();
   });
 
   it('retries the srcDoc snapshot bridge before giving up on URL-loaded previews', async () => {

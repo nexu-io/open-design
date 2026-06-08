@@ -15,6 +15,15 @@ on:
         description: "Required when channel=stable: exact validated nightly version to promote, for example 0.5.1.nightly.3."
         required: false
         type: string
+      release_version:
+        description: "Stable base version to publish, for example 0.5.1. Required when ref is not release/vX.Y.Z."
+        required: false
+        type: string
+      dry_run:
+        description: "Validate release inputs and read-only remote gates without building or publishing."
+        required: false
+        type: boolean
+        default: false
       ref:
         description: "Optional git ref (branch/tag/SHA) to build. Empty builds the ref this workflow was dispatched on."
         required: false
@@ -32,6 +41,16 @@ on:
         required: false
         type: string
         default: ""
+      release_version:
+        description: "Stable base version to publish. Required when ref is not release/vX.Y.Z."
+        required: false
+        type: string
+        default: ""
+      dry_run:
+        description: "Validate release inputs and read-only remote gates without building or publishing."
+        required: false
+        type: boolean
+        default: false
       ref:
         description: "Optional git ref (branch/tag/SHA) to build. Empty builds the caller's ref."
         required: false
@@ -50,6 +69,9 @@ on:
       commit:
         description: "The commit SHA that was built."
         value: ${{ jobs.metadata.outputs.commit }}
+      dry_run:
+        description: "Whether this run stopped after metadata/preflight validation."
+        value: ${{ jobs.metadata.outputs.dry_run }}
       previous_commit:
         description: "Commit SHA of the previously published nightly (changelog baseline); empty on cold start."
         value: ${{ jobs.metadata.outputs.previous_commit }}
@@ -74,7 +96,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: open-design-release-stable-${{ inputs.channel }}
+  group: open-design-release-stable-${{ inputs.channel }}-${{ inputs.dry_run && 'dry-run' || 'publish' }}
   cancel-in-progress: false
 
 env:
@@ -102,14 +124,17 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GITHUB_REPOSITORY: ${{ github.repository }}
       OPEN_DESIGN_NIGHTLY_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/nightly/latest/metadata.json
+      OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run }}
       OPEN_DESIGN_RELEASE_CHANNEL: ${{ inputs.channel }}
       OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
       OPEN_DESIGN_STABLE_NIGHTLY_VERSION: ${{ inputs.nightly_version }}
+      OPEN_DESIGN_STABLE_VERSION: ${{ inputs.release_version }}
     outputs:
       base_version: ${{ steps.stable.outputs.base_version }}
       branch: ${{ steps.stable.outputs.branch }}
       channel: ${{ steps.stable.outputs.channel }}
       commit: ${{ steps.stable.outputs.commit }}
+      dry_run: ${{ steps.stable.outputs.dry_run }}
       github_release_enabled: ${{ steps.stable.outputs.github_release_enabled }}
       linux_namespace: ${{ steps.stable.outputs.linux_namespace }}
       mac_intel_namespace: ${{ steps.stable.outputs.mac_intel_namespace }}
@@ -161,6 +186,7 @@ jobs:
         run: node --experimental-strip-types ./scripts/release-stable.ts
 
       - name: Validate R2 release access
+        if: ${{ steps.stable.outputs.dry_run != 'true' }}
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
@@ -176,6 +202,7 @@ jobs:
   verify:
     name: Verify build (typecheck + tests)
     needs: metadata
+    if: ${{ needs.metadata.outputs.dry_run != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -828,6 +855,7 @@ jobs:
       ${{
         always() &&
         !cancelled() &&
+        needs.metadata.outputs.dry_run != 'true' &&
         needs.metadata.result == 'success' &&
         needs.verify.result == 'success' &&
         needs.build_mac.result == 'success' &&
@@ -1032,12 +1060,13 @@ jobs:
   cleanup_partial_release_assets:
     name: Cleanup unpublished release asset artifacts
     needs:
+      - metadata
       - build_mac
       - build_mac_intel
       - build_win
       - build_linux
       - publish
-    if: ${{ always() && needs.publish.result != 'success' }}
+    if: ${{ always() && needs.metadata.outputs.dry_run != 'true' && needs.publish.result != 'success' }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}

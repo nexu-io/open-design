@@ -30,7 +30,10 @@ import {
 const REPO = 'https://github.com/nexu-io/open-design';
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
 const X_TWITTER = 'https://x.com/nexudotio';
-const AMR_URL = 'https://open-design.ai/amr/';
+// Canonical AMR destination. Exported so the homepage AMR band CTA
+// (app/page.tsx) links to the same URL the nav uses, without a second
+// hand-maintained copy of the literal.
+export const AMR_URL = 'https://open-design.ai/amr/';
 
 const ext = {
   target: '_blank',
@@ -543,8 +546,14 @@ export function Header({
             data-download-cta
             data-download-page
           >
+            {/*
+              The CPU-arch chip (（Apple Silicon）/（Apple Intel）) is
+              intentionally NOT rendered in the nav CTA — at mid widths it
+              pushed the row over the available space and crowded the bar.
+              The arch suffix still appears on the homepage hero download
+              button (page.tsx) and the /download/ page, where there is room.
+            */}
             {headerCopy.download}
-            <span className='download-arch' data-download-arch hidden />
           </a>
           <details className='locale-switch nav-locale' data-locale-switch>
             <summary

@@ -147,6 +147,17 @@ function rpcErrorMessage(raw: unknown): string {
     : message;
 }
 
+function rpcErrorData(raw: unknown): unknown {
+  const obj = asObject(raw);
+  const error = asObject(obj?.error);
+  return error && 'data' in error ? error.data : undefined;
+}
+
+function rpcErrorRetryable(data: unknown): boolean | undefined {
+  const details = asObject(data);
+  return typeof details?.retryable === 'boolean' ? details.retryable : undefined;
+}
+
 interface FormattedUsage {
   input_tokens?: number;
   output_tokens?: number;
@@ -740,7 +751,7 @@ export function attachAcpSession({
 
   const fail = (
     message: string,
-    options: { forceModelUnavailable?: boolean } = {},
+    options: { forceModelUnavailable?: boolean; details?: unknown; retryable?: boolean } = {},
   ) => {
     if (finished) return;
     finished = true;
@@ -751,7 +762,19 @@ export function attachAcpSession({
       (options.forceModelUnavailable || isModelUnavailableError(message));
     send(
       'error',
-      useModelUnavailable ? amrModelUnavailablePayload(message) : { message },
+      useModelUnavailable
+        ? amrModelUnavailablePayload(message)
+        : options.details === undefined && options.retryable === undefined
+          ? { message }
+          : {
+              message,
+              error: {
+                code: 'AGENT_EXECUTION_FAILED',
+                message,
+                retryable: options.retryable ?? false,
+                ...(options.details === undefined ? {} : { details: options.details }),
+              },
+            },
     );
     if (!child.killed) child.kill('SIGTERM');
   };
@@ -832,7 +855,12 @@ export function attachAcpSession({
       if (error?.code === -32603 && obj.id !== expectedId) {
         return;
       }
-      fail(rpcErr);
+      const details = rpcErrorData(obj);
+      const retryable = rpcErrorRetryable(details);
+      fail(rpcErr, {
+        details,
+        ...(retryable === undefined ? {} : { retryable }),
+      });
       return;
     }
     if (obj.method === 'session/request_permission') {

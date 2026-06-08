@@ -998,6 +998,8 @@ export function ProjectView({
     tabs: [],
     active: null,
   });
+  const routeFileNameRef = useRef(routeFileName);
+  routeFileNameRef.current = routeFileName;
   const [activeWorkspaceContext, setActiveWorkspaceContext] =
     useState<WorkspaceContextItem | null>(null);
   const [workspaceContexts, setWorkspaceContexts] = useState<WorkspaceContextItem[]>([]);
@@ -1533,8 +1535,22 @@ export function ProjectView({
     (async () => {
       const state = await loadTabs(project.id);
       if (cancelled) return;
+      const routeActive = routeFileNameRef.current;
+      let nextState = routeActive
+        ? {
+            ...state,
+            tabs: state.tabs.includes(routeActive)
+              ? state.tabs
+              : [...state.tabs, routeActive],
+            active: routeActive,
+          }
+        : state;
+      if (routeActive) {
+        nextState = cacheTabsLocally(project.id, nextState);
+        void persistTabsToDaemonNow(project.id, nextState);
+      }
       tabsHydratedFromSavedStateRef.current = state.hasSavedState === true;
-      setOpenTabsState(state);
+      setOpenTabsState(nextState);
       tabsLoadedRef.current = true;
     })();
     return () => {
@@ -4495,26 +4511,6 @@ export function ProjectView({
     [activeConversationId, handleConversationSessionModeChange],
   );
 
-  // Side Chat launcher: create a NEW conversation seeded with the current
-  // chat's context (the daemon copies the source conversation's messages) and
-  // resolve its id. The new conversation is a normal conversation, so it shows
-  // up in the header ConversationsMenu the moment we prepend it here. The
-  // FileWorkspace launcher action then opens it as a `chat:<id>` tab.
-  const handleCreateSideChat = useCallback(
-    async (seedFromConversationId: string | null): Promise<string | null> => {
-      const fresh = await createConversation(
-        project.id,
-        t('workspace.sideChatDefaultTitle'),
-        { seedFromConversationId },
-      );
-      if (!fresh) return null;
-      setConversations((curr) => [fresh, ...curr]);
-      onProjectsRefresh();
-      return fresh.id;
-    },
-    [project.id, t, onProjectsRefresh],
-  );
-
   const handleForkFromMessage = useCallback(
     async (assistantMessage: ChatMessage) => {
       if (!activeConversationId || forkingMessageId) return;
@@ -4607,6 +4603,23 @@ export function ProjectView({
     },
     [project, onProjectChange],
   );
+
+  const handleSaveProjectInstructions = useCallback(async () => {
+    if (instructionsSaving) return;
+    const nextInstructions = instructionsDraft.trim();
+    setInstructionsSaving(true);
+    const saved = await patchProject(project.id, {
+      customInstructions: nextInstructions || null,
+    });
+    setInstructionsSaving(false);
+    if (saved) {
+      onProjectChange(saved);
+      setInstructionsDraft(saved.customInstructions ?? '');
+      setInstructionsMode(saved.customInstructions?.trim() ? 'review' : 'closed');
+      return;
+    }
+    setError('Could not save project instructions.');
+  }, [instructionsDraft, instructionsSaving, onProjectChange, project]);
 
   const activeConversationChatState = useMemo(
     () =>
@@ -5319,6 +5332,98 @@ export function ProjectView({
         projectId={project.id}
         enabled={critiqueTheaterEnabled}
       />
+      {instructionsMode !== 'closed' ? (
+        <div
+          className="project-instructions-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setInstructionsDraft(project.customInstructions ?? '');
+              setInstructionsMode('closed');
+            }
+          }}
+        >
+          <section
+            className="project-instructions-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="project-instructions-title"
+          >
+            <div className="project-instructions-modal-head">
+              <div className="project-instructions-modal-title-wrap">
+                <h2 id="project-instructions-title" className="project-instructions-modal-title">
+                  {t('project.customInstructions')}
+                </h2>
+                {project.customInstructions?.trim() ? (
+                  <span className="project-instructions-status">
+                    <Icon name="check" size={12} />
+                    {t('sketch.saved')}
+                  </span>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                className="project-instructions-modal-close"
+                aria-label={t('common.close')}
+                title={t('common.close')}
+                onClick={() => {
+                  setInstructionsDraft(project.customInstructions ?? '');
+                  setInstructionsMode('closed');
+                }}
+              >
+                <Icon name="close" size={16} />
+              </button>
+            </div>
+            {instructionsMode === 'edit' ? (
+              <>
+                <textarea
+                  className="project-instructions-input"
+                  data-testid="project-instructions-textarea"
+                  value={instructionsDraft}
+                  placeholder={t('project.customInstructionsPlaceholder')}
+                  onChange={(event) => setInstructionsDraft(event.target.value)}
+                />
+                <div className="project-instructions-actions">
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    onClick={() => {
+                      setInstructionsDraft(project.customInstructions ?? '');
+                      setInstructionsMode(project.customInstructions?.trim() ? 'review' : 'closed');
+                    }}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn primary"
+                    data-testid="project-instructions-save"
+                    disabled={instructionsSaving}
+                    onClick={() => void handleSaveProjectInstructions()}
+                  >
+                    {instructionsSaving ? t('sketch.saving') : t('common.save')}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="project-instructions-preview" data-testid="project-instructions-preview">
+                  {project.customInstructions}
+                </div>
+                <div className="project-instructions-actions">
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    onClick={() => setInstructionsMode('edit')}
+                  >
+                    {t('common.edit')}
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+      ) : null}
       {/* ProjectActionsToolbar removed per 00efdcba — hide finalize-design
           toolbar from project header. Restore from cf1cd9bb if product
           wants the Finalize + Continue-in-CLI buttons back in the chrome. */}
@@ -5469,6 +5574,28 @@ export function ProjectView({
               onBack={onBack}
               backLabel={t('project.backToProjects')}
               composerFooterAccessory={executionControls}
+              composerLeadingAccessory={(
+                <WorkingDirPill
+                  projectId={project.id}
+                  resolvedDir={projectDetail.resolvedDir}
+                  onReplaced={({ project: updated }) => {
+                    if (updated) onProjectChange(updated);
+                    // The new working dir has a different file tree, so the
+                    // current listing, breadcrumb nav, and open tabs are all
+                    // stale. Refetch files; DesignFilesPanel's self-heal then
+                    // drops the now-unmatched currentDir back to root.
+                    // projectDetail.refresh() repulls resolvedDir so the
+                    // breadcrumb root + pill show the new folder name even on
+                    // the Electron path, which reports no updated project.
+                    setWorkingDirReplacing(true);
+                    refreshFilesAndDesignMd();
+                    void Promise.all([
+                      refreshWorkspaceItems(),
+                      projectDetail.refresh(),
+                    ]).finally(() => setWorkingDirReplacing(false));
+                  }}
+                />
+              )}
               projectHeader={(
                 <span className="chat-project-title-line">
                   <span
@@ -5489,6 +5616,36 @@ export function ProjectView({
                   >
                     {project.name}
                   </span>
+                  {project.customInstructions?.trim() ? (
+                    <button
+                      type="button"
+                      className={[
+                        'project-instructions-chip',
+                        instructionsMode === 'review' ? 'is-open' : '',
+                      ].filter(Boolean).join(' ')}
+                      onClick={() => {
+                        setInstructionsDraft(project.customInstructions ?? '');
+                        setInstructionsMode('review');
+                      }}
+                    >
+                      <Icon name="comment" size={12} />
+                      <span>{project.customInstructions}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="project-instructions-toggle"
+                      data-testid="project-instructions-add"
+                      aria-label={t('project.customInstructions')}
+                      title={t('project.customInstructions')}
+                      onClick={() => {
+                        setInstructionsDraft(project.customInstructions ?? '');
+                        setInstructionsMode('edit');
+                      }}
+                    >
+                      <Icon name="plus" size={14} />
+                    </button>
+                  )}
                   {projectMeta !== t('project.metaFreeform') ? (
                     <span className="meta" data-testid="project-meta">{projectMeta}</span>
                   ) : null}
@@ -5591,7 +5748,6 @@ export function ProjectView({
           onConversationSessionModeChange={handleConversationSessionModeChange}
           onNewConversation={handleNewConversation}
           activeConversationChat={activeConversationChatState}
-          onCreateSideChat={handleCreateSideChat}
           onActiveContextChange={handleActiveWorkspaceContextChange}
           onWorkspaceContextsChange={handleWorkspaceContextsChange}
           messages={messages}
@@ -5603,26 +5759,6 @@ export function ProjectView({
           conversationId={activeConversationId}
           headerActions={(
             <>
-              <WorkingDirPill
-                projectId={project.id}
-                resolvedDir={projectDetail.resolvedDir}
-                onReplaced={({ project: updated }) => {
-                  if (updated) onProjectChange(updated);
-                  // The new working dir has a different file tree, so the
-                  // current listing, breadcrumb nav, and open tabs are all
-                  // stale. Refetch files; DesignFilesPanel's self-heal then
-                  // drops the now-unmatched currentDir back to root.
-                  // projectDetail.refresh() repulls resolvedDir so the
-                  // breadcrumb root + pill show the new folder name even on
-                  // the Electron path, which reports no updated project.
-                  setWorkingDirReplacing(true);
-                  refreshFilesAndDesignMd();
-                  void Promise.all([
-                    refreshWorkspaceItems(),
-                    projectDetail.refresh(),
-                  ]).finally(() => setWorkingDirReplacing(false));
-                }}
-              />
               <EntrySettingsMenu
                 config={config}
                 onThemeChange={handleThemeChange}

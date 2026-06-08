@@ -32,6 +32,10 @@ Design System Project folders use fixed v1 file names:
 - `manifest.json` — machine-readable project entry.
 - `DESIGN.md` — canonical design prose.
 - `tokens.css` — canonical compiled tokens.
+- `design-tokens.json` — optional Design Tokens JSON derived from
+  `tokens.css` + `source/token-contract.report.json`.
+- `tailwind-v4.css` — optional Tailwind v4 `@theme` CSS derived from
+  `tokens.css`; it must not redefine source values independently.
 - `components.html` — optional standalone component fixture.
 - `assets/` — optional brand assets.
 - `preview/` — optional static preview pages.

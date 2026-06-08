@@ -89,6 +89,7 @@ import type {
   AppTheme,
   AppVersionInfo,
   ConnectionTestResponse,
+  DesignSystemGenerationJob,
   OrbitRunSummary,
   OrbitStatusResponse,
   ExecMode,
@@ -244,6 +245,7 @@ interface Props {
   onSkillsChanged?: (affectedSkillId?: string) => void;
   /** Same channel for design-system registry mutations. */
   onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
+  onDesignSystemImportRebuildJob?: (designSystemId: string, job: DesignSystemGenerationJob) => void;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
 }
 
@@ -283,6 +285,18 @@ function codexPathStrings(locale: Locale) {
         `已設定的 Codex 路徑無效或不可執行：${configuredPath}。本次測試改用 PATH 中的 Codex CLI：${detectedPath}。建議更新 CODEX_BIN 或清除自訂路徑。`,
       failedFallback: (configuredPath: string, detectedPath: string) =>
         `已設定的 Codex 路徑啟動失敗：${configuredPath}。本次測試改用 PATH 中的 Codex CLI：${detectedPath}。建議更新 CODEX_BIN 或清除自訂路徑。`,
+    };
+  }
+  if (locale === 'ja') {
+    return {
+      repairHint: '保存されている Codex のパスは、このテストで使用すべきバイナリではありません。',
+      useDetected: '検出された Codex を使用',
+      clearCustom: 'カスタムパスをクリア',
+      configuredSuccess: (path: string) => `このテストでは設定済みの Codex パスを使用しました：${path}。`,
+      invalidFallback: (configuredPath: string, detectedPath: string) =>
+        `設定された Codex パスが無効か実行できません：${configuredPath}。このテストでは PATH 上の Codex CLI（${detectedPath}）を使用しました。CODEX_BIN を更新するか、カスタムパスをクリアしてください。`,
+      failedFallback: (configuredPath: string, detectedPath: string) =>
+        `設定された Codex パスの起動に失敗しました：${configuredPath}。このテストは PATH 上の Codex CLI（${detectedPath}）で成功しました。CODEX_BIN を更新するか、カスタムパスをクリアしてください。`,
     };
   }
   return {
@@ -980,6 +994,7 @@ export function SettingsDialog({
   onProjectsRefresh,
   onSkillsChanged,
   onDesignSystemsChanged,
+  onDesignSystemImportRebuildJob,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
 }: Props) {
@@ -2613,8 +2628,8 @@ export function SettingsDialog({
   const sectionHeader: Record<SettingsSection, { title: string; subtitle: string }> = {
     execution: { title: t('settings.title'), subtitle: t('settings.subtitle') },
     instructions: {
-      title: 'Instructions / Rules',
-      subtitle: 'Fixed behavior the assistant should follow',
+      title: t('settings.instructionsTitle'),
+      subtitle: t('settings.instructionsSubtitle'),
     },
     media: { title: t('settings.mediaProviders'), subtitle: t('settings.mediaProvidersHint') },
     composio: { title: t('connectors.title'), subtitle: t('connectors.subtitle') },
@@ -2977,8 +2992,8 @@ export function SettingsDialog({
             >
               <Icon name="edit" size={18} />
               <span>
-                <strong>Instructions / Rules</strong>
-                <small>Fixed assistant behavior</small>
+                <strong>{t('settings.instructionsTitle')}</strong>
+                <small>{t('settings.instructionsNavSub')}</small>
               </span>
             </button>
             <button
@@ -4413,6 +4428,7 @@ export function SettingsDialog({
               cfg={cfg}
               setCfg={setCfg}
               onDesignSystemsChanged={onDesignSystemsChanged}
+              onDesignSystemImportRebuildJob={onDesignSystemImportRebuildJob}
             />
           ) : null}
 
@@ -4427,9 +4443,7 @@ export function SettingsDialog({
                   <div>
                     <h4>{t('settings.customInstructionsTitle')}</h4>
                     <p className="hint">
-                      Fixed instructions OpenDesign follows in every chat. These are
-                      not saved memories; use Memory for facts, preferences, and
-                      project context.
+                      {t('settings.customInstructionsDesc')}
                     </p>
                   </div>
                 </div>

@@ -15,7 +15,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
-import { useT } from '../../i18n';
+import { useI18n } from '../../i18n';
+import { localizePluginDescription, localizePluginTitle } from '../plugins-home/localization';
 import {
   fetchDesignSystemPreview,
   fetchDesignSystemShowcase,
@@ -64,7 +65,9 @@ export function PluginDesignSystemDetail({
   onUse,
   isApplying,
 }: Props) {
-  const t = useT();
+  const { t, locale } = useI18n();
+  const localizedTitle = localizePluginTitle(locale, record);
+  const localizedDescription = localizePluginDescription(locale, record);
   const dsRef = designSystemRef(record);
   const assetPath = specAssetPath(record);
 
@@ -125,15 +128,15 @@ export function PluginDesignSystemDetail({
 
   return (
     <PreviewModal
-      title={record.title}
-      subtitle={record.manifest?.description || dsRef || undefined}
+      title={localizedTitle}
+      subtitle={localizedDescription || dsRef || undefined}
       views={views}
       initialViewId={dsRef ? 'showcase' : 'spec'}
       onView={handleView}
-      exportTitleFor={(viewId) => `${record.title} — ${viewId}`}
+      exportTitleFor={(viewId) => `${localizedTitle} — ${viewId}`}
       shareTarget={{
-        title: record.title,
-        description: record.manifest?.description || dsRef || undefined,
+        title: localizedTitle,
+        description: localizedDescription || dsRef || undefined,
         url: buildPluginShareUrl(record),
       }}
       onClose={onClose}

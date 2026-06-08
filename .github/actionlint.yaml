@@ -6,6 +6,8 @@ paths:
 self-hosted-runner:
   labels:
     - agent-pr-explore
+    - nexu-spark
     - nexu-mac
     - nexu-win
+    - open-design-ci
     - release-beta

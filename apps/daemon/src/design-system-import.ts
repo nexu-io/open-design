@@ -2,6 +2,7 @@ import { copyFile, mkdir, readFile, readdir, realpath, stat, writeFile } from 'n
 import path from 'node:path';
 
 import { extractComponentsManifest } from '@open-design/contracts/design-systems/components-manifest';
+import { renderDesignTokensJson, renderTailwindV4Css } from '@open-design/contracts/design-systems/derived-token-outputs';
 import {
   buildDesignTokenContract,
   buildReportWithSelfCheck,
@@ -135,7 +136,16 @@ export async function importLocalDesignSystemProject(
   const craftApplies = normalizeCraftList(options.craftApplies);
   const now = options.now ?? new Date();
 
-  const files = ['USAGE.md', 'DESIGN.md', 'tokens.css', 'components.html', 'components.manifest.json', 'manifest.json'];
+  const files = [
+    'USAGE.md',
+    'DESIGN.md',
+    'tokens.css',
+    'design-tokens.json',
+    'tailwind-v4.css',
+    'components.html',
+    'components.manifest.json',
+    'manifest.json',
+  ];
   const designMd = renderDesignMd(id, displayName, scan);
   const tokenContract = buildDesignTokenContract({ sourceTokens: scan.cssVariables, generatedAt: now });
   const tokensCss = tokenContract.tokensCss;
@@ -153,6 +163,11 @@ export async function importLocalDesignSystemProject(
   await writeFile(path.join(outDir, 'USAGE.md'), renderUsageMd(displayName, scan), 'utf8');
   await writeFile(path.join(outDir, 'DESIGN.md'), designMd, 'utf8');
   await writeFile(path.join(outDir, 'tokens.css'), tokensCss, 'utf8');
+  await writeFile(path.join(outDir, 'design-tokens.json'), renderDesignTokensJson({
+    bindings: tokenContract.bindings,
+    report: tokenContractReport,
+  }), 'utf8');
+  await writeFile(path.join(outDir, 'tailwind-v4.css'), renderTailwindV4Css(tokenContract.bindings), 'utf8');
   await writeFile(path.join(outDir, 'components.html'), componentsHtml, 'utf8');
   await writeFile(
     path.join(outDir, 'components.manifest.json'),
@@ -432,6 +447,8 @@ function renderManifest(
     files: {
       design: 'DESIGN.md',
       tokens: 'tokens.css',
+      designTokens: 'design-tokens.json',
+      tailwind: 'tailwind-v4.css',
       components: 'components.html',
     },
     usage: 'USAGE.md',

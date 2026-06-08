@@ -17,6 +17,7 @@ import { bootstrapSidecarRuntime, createJsonIpcServer, resolveAppIpcPath } from 
 
 import { PACKAGED_NAMESPACE_ENV, type PackagedConfig } from "./config.js";
 import { writePackagedDesktopIdentity, writePackagedWebIdentity } from "./identity.js";
+import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "./launcher-runtime.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
 import { startPackagedSidecars } from "./sidecars.js";
 
@@ -96,7 +97,10 @@ function colorize(text: string): string {
 
 async function main(): Promise<void> {
   const config = resolveHeadlessConfig();
-  const paths = resolvePackagedNamespacePaths(config);
+  const initialPaths = resolvePackagedNamespacePaths(config);
+  const launcherRuntime = await resolvePackagedLauncherRuntime(config, initialPaths);
+  const activeConfig = launcherRuntime.config;
+  const paths = launcherRuntime.paths;
   const stamp = createHeadlessStamp(config.namespace);
 
   await mkdir(paths.runtimeRoot, { recursive: true });
@@ -117,14 +121,14 @@ async function main(): Promise<void> {
   });
 
   const sidecars = await startPackagedSidecars(runtime, paths, {
-    appVersion: config.appVersion,
-    amrProfile: config.amrProfile,
-    daemonCliEntry: config.daemonCliEntry,
-    daemonSidecarEntry: config.daemonSidecarEntry,
-    nodeCommand: config.nodeCommand,
-    telemetryRelayUrl: config.telemetryRelayUrl,
-    posthogKey: config.posthogKey,
-    posthogHost: config.posthogHost,
+    appVersion: activeConfig.appVersion,
+    amrProfile: activeConfig.amrProfile,
+    daemonCliEntry: activeConfig.daemonCliEntry,
+    daemonSidecarEntry: activeConfig.daemonSidecarEntry,
+    nodeCommand: activeConfig.nodeCommand,
+    telemetryRelayUrl: activeConfig.telemetryRelayUrl,
+    posthogKey: activeConfig.posthogKey,
+    posthogHost: activeConfig.posthogHost,
     // PR #974 round-5 (lefarcen P2): headless packaged mode runs daemon
     // + web only, no Electron, no privileged shell.openPath surface.
     // Pinning OD_REQUIRE_DESKTOP_AUTH here would arm a gate no client
@@ -133,9 +137,9 @@ async function main(): Promise<void> {
     // The Electron entry counterpart in `apps/packaged/src/index.ts`
     // passes `true` because it does start desktop main.
     requireDesktopAuth: false,
-    webSidecarEntry: config.webSidecarEntry,
-    webStandaloneRoot: config.webStandaloneRoot,
-    webOutputMode: config.webOutputMode,
+    webSidecarEntry: activeConfig.webSidecarEntry,
+    webStandaloneRoot: activeConfig.webStandaloneRoot,
+    webOutputMode: activeConfig.webOutputMode,
   });
 
   const webUrl = sidecars.web.url;
@@ -174,6 +178,7 @@ async function main(): Promise<void> {
     pid: process.pid,
     url: webUrl,
   });
+  await confirmPackagedLauncherRuntime(launcherRuntime);
 
   process.stdout.write(`\n Open Design is running\n\n`);
   process.stdout.write(` ➜ ${colorize(webUrl)}\n\n`);

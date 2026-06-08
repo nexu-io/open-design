@@ -584,6 +584,8 @@ interface Props {
   audioModel?: string;
   onChangeAudioModel?: (model: string) => void;
   composerFooterAccessory?: ReactNode;
+  // Slot rendered next to the composer's "+" menu (e.g. the working-dir pill).
+  composerLeadingAccessory?: ReactNode;
   // Forwarded straight to the chat composer's mid-chat design-system
   // switcher. ProjectView owns the project record so the parent is the
   // natural place to mirror the patched project after a PATCH lands.
@@ -740,6 +742,7 @@ export function ChatPane({
   onChangeVideoModel,
   audioModel,
   onChangeAudioModel,
+  composerLeadingAccessory,
   composerFooterAccessory,
   currentDesignSystemId,
   onActiveDesignSystemChange,
@@ -1693,6 +1696,7 @@ export function ChatPane({
       onProjectSkillChange={onProjectSkillChange}
       pinnedPluginId={activePluginSnapshot?.pluginId ?? null}
       footerAccessory={composerFooterAccessory}
+      leadingAccessory={composerLeadingAccessory}
       currentDesignSystemId={currentDesignSystemId}
       onActiveDesignSystemChange={onActiveDesignSystemChange}
       onShowToast={onShowToast}

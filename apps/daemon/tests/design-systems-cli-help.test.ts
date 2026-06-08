@@ -26,5 +26,6 @@ describe('od design-systems help surface', () => {
     expect(DESIGN_SYSTEMS_USAGE).toContain('import-local');
     expect(DESIGN_SYSTEMS_USAGE).toContain('import-github');
     expect(DESIGN_SYSTEMS_USAGE).toContain('import-shadcn');
+    expect(DESIGN_SYSTEMS_USAGE).toContain('rebuild-token-contract');
   });
 });

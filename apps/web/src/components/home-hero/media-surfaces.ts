@@ -1,5 +1,5 @@
 import type { InputFieldSpec, ProjectKind } from '@open-design/contracts';
-import type { AudioKind, MediaAspect, ProjectMetadata, PromptTemplateSummary } from '../../types';
+import type { AudioKind, ProjectMetadata, PromptTemplateSummary } from '../../types';
 import {
   AUDIO_DURATIONS_SEC,
   AUDIO_MODELS_BY_KIND,
@@ -195,40 +195,26 @@ export function metadataForHomeMediaComposer(
       }
     : undefined;
 
+  // Media surfaces no longer seed ratio / duration / model / audio kind from
+  // the composer footer — those are asked for by the agent during the run
+  // (system.ts prints "(unknown — ask: …)" when a field is unset). We only
+  // seed `kind` (+ the hyperframes route discriminator) and any picked prompt
+  // template, mirroring how prototype/deck defer their settings.
   if (surface === 'image') {
-    const imageSize = stringValue(inputs.size);
     return {
       kind: 'image',
-      imageModel: stringValue(inputs.model) || DEFAULT_IMAGE_MODEL,
-      // Size already encodes the aspect for discrete-size models, so set one OR
-      // the other — never a Size alongside a contradictory imageAspect.
-      ...(imageSize
-        ? { imageSize }
-        : { imageAspect: (stringValue(inputs.ratio) || '16:9') as MediaAspect }),
       ...(promptTemplate ? { promptTemplate } : {}),
     };
   }
   if (surface === 'video' || surface === 'hyperframes') {
-    const videoModel = surface === 'hyperframes' ? 'hyperframes-html' : stringValue(inputs.model) || DEFAULT_VIDEO_MODEL;
     return {
       kind: 'video',
-      videoModel,
-      videoAspect: (stringValue(inputs.ratio) || '16:9') as MediaAspect,
-      videoLength: validNumber(inputs.duration, videoDurationsForModel(videoModel), surface === 'hyperframes' ? 10 : 5),
-      ...(stringValue(inputs.resolution) ? { videoResolution: stringValue(inputs.resolution) } : {}),
+      ...(surface === 'hyperframes' ? { videoModel: 'hyperframes-html' as const } : {}),
       ...(promptTemplate ? { promptTemplate } : {}),
     };
   }
-  const audioKind = (stringValue(inputs.audioType) || 'speech') as AudioKind;
-  const audioModel = stringValue(inputs.model) || defaultHomeAudioModel(audioKind);
   return {
     kind: 'audio',
-    audioKind,
-    audioModel,
-    audioDuration: validAudioDuration(audioKind, inputs.duration),
-    ...(audioModel === 'elevenlabs-v3' && stringValue(inputs.voice)
-      ? { voice: stringValue(inputs.voice) }
-      : {}),
   };
 }
 
@@ -320,23 +306,21 @@ function fieldsForSurface(
 }
 
 function queryTemplateForSurface(surface: HomeComposerMediaSurface, inputs: Record<string, unknown>): string {
+  // No ratio / duration / model / resolution / voice slots — those are asked
+  // for by the agent during the run rather than baked into the prompt body.
   if (surface === 'image') {
-    const dimensionClause = stringValue(inputs.size) ? 'at exact size {{size}} px' : 'at {{ratio}}';
-    return `Create a premium product-studio image using {{designSystem}}: elegant composition, refined lighting, restrained color, rich material detail, and commercial campaign-level polish. Render with {{model}} ${dimensionClause}.`;
+    return 'Create a premium product-studio image using {{designSystem}}: elegant composition, refined lighting, restrained color, rich material detail, and commercial campaign-level polish.';
   }
   if (surface === 'video') {
-    const resolutionClause = stringValue(inputs.resolution) ? ' at {{resolution}}' : '';
-    return `Create a premium product-studio video using {{designSystem}}: cinematic product pacing, elegant motion, refined lighting, and a polished launch-film feel. Render with {{model}} at {{ratio}} for {{duration}} seconds${resolutionClause}.`;
+    return 'Create a premium product-studio video using {{designSystem}}: cinematic product pacing, elegant motion, refined lighting, and a polished launch-film feel.';
   }
   if (surface === 'hyperframes') {
-    return 'Create a premium product-studio HyperFrames video at {{ratio}} for {{duration}} seconds: refined kinetic typography, elegant transitions, restrained motion language, and studio-grade timing.';
+    return 'Create a premium product-studio HyperFrames video: refined kinetic typography, elegant transitions, restrained motion language, and studio-grade timing.';
   }
   if (stringValue(inputs.audioType) === 'sfx') {
-    return 'Create premium product-studio audio from {{prompt}} using {{model}} for {{duration}} seconds: crisp, elegant, memorable, and brand-ready.';
+    return 'Create premium product-studio audio from {{prompt}}: crisp, elegant, memorable, and brand-ready.';
   }
-  return stringValue(inputs.model) === 'elevenlabs-v3'
-    ? 'Create premium product-studio audio from {{text}} using {{model}} for {{duration}} seconds with {{voice}}: polished, restrained, clear, and brand-ready.'
-    : 'Create premium product-studio audio from {{text}} using {{model}} for {{duration}} seconds: polished, restrained, clear, and brand-ready.';
+  return 'Create premium product-studio audio from {{text}}: polished, restrained, clear, and brand-ready.';
 }
 
 function defaultInputsForSurface(

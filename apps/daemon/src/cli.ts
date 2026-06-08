@@ -6390,6 +6390,7 @@ async function runDesignSystems(args) {
   if (args[0] === 'import-local') return runDesignSystemImportLocal(args.slice(1));
   if (args[0] === 'import-github') return runDesignSystemImportGithub(args.slice(1));
   if (args[0] === 'import-shadcn') return runDesignSystemImportShadcn(args.slice(1));
+  if (args[0] === 'rebuild-token-contract') return runDesignSystemTokenContractRebuild(args.slice(1));
   if (!args[0] || isDesignSystemsHelpArg(args[0])) {
     console.log(DESIGN_SYSTEMS_USAGE);
     process.exit(isDesignSystemsHelpArg(args[0]) ? 0 : 2);
@@ -6489,6 +6490,53 @@ async function postDesignSystemImport(flags, endpoint, body) {
   if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
   const imported = data.designSystem ?? data;
   console.log(`Imported ${imported.id ?? '(unknown id)'}${imported.title ? ` -> ${imported.title}` : ''}`);
+  if (data.tokenContractRebuild?.job) {
+    console.log(`Token contract rebuild queued: ${data.tokenContractRebuild.job.id}`);
+  } else if (data.tokenContractRebuild?.decision?.reason) {
+    console.log(`Token contract rebuild: ${data.tokenContractRebuild.decision.reason}`);
+  }
+}
+
+// od design-systems rebuild-token-contract <id> [--force] [--json]
+//
+// Starts the same review-gated token contract rebuild job exposed in the web
+// design-system detail view. Without --force the daemon only queues a job when
+// source/token-contract.report.json recommends it.
+async function runDesignSystemTokenContractRebuild(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od design-systems rebuild-token-contract <id> [--force] [--json] [--daemon-url <url>]
+
+Starts a review-gated TOKEN_SCHEMA token contract rebuild for an editable imported design system.
+
+  <id>       Editable design-system id, e.g. user:acme-product.
+  --force    Queue the review even when the quality report is already usable.`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const flags = parseFlags(args, {
+    string: LIBRARY_STRING_FLAGS,
+    boolean: new Set([...LIBRARY_BOOLEAN_FLAGS, 'force']),
+  });
+  const id = positionalArgs(args, LIBRARY_STRING_FLAGS)[0];
+  if (!id) {
+    console.error('Usage: od design-systems rebuild-token-contract <id>');
+    process.exit(2);
+  }
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  const resp = await fetch(`${base}/api/design-systems/${encodeURIComponent(id)}/token-contract/rebuild-jobs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force: flags.force === true }),
+  });
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  if (data.job) {
+    console.log(`Token contract rebuild queued for ${id}: ${data.job.id}`);
+    return;
+  }
+  const decision = data.decision;
+  console.log(`Token contract rebuild not queued for ${id}: ${decision?.reason ?? 'no rebuild needed'}`);
 }
 
 // od design-systems import-shadcn <reference> [--name <name>]

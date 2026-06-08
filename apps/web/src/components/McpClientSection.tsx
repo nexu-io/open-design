@@ -1381,6 +1381,7 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
  * Rendered above the picker so it is the first thing the user reads.
  */
 function McpAgentSupportBanner({ agents }: { agents: AgentInfo[] }) {
+  const t = useT();
   // Empty payload = either still loading or daemon unreachable. Either
   // way, render nothing — the error banner below already covers the
   // "daemon unreachable" path and we don't want to flash an empty hint
@@ -1424,24 +1425,13 @@ function McpAgentSupportBanner({ agents }: { agents: AgentInfo[] }) {
     <div className="mcp-agent-support">
       {supported.length > 0 ? (
         <p className="hint mcp-agent-support-line">
-          <strong>Forwarded to:</strong> {renderNames(supported)}.
-          {hasAcpSupported ? (
-            <>
-              {' '}
-              ACP adapters marked <em>stdio only</em> receive
-              <code>stdio</code> MCP servers from this list; HTTP and SSE
-              entries are dropped at spawn time.
-            </>
-          ) : null}
+          <strong>{t('mcpClient.forwardedToLabel')}</strong> {renderNames(supported)}.
+          {hasAcpSupported ? <> {t('mcpClient.forwardedAcpNote')}</> : null}
         </p>
       ) : null}
       {unsupported.length > 0 ? (
         <p className="hint mcp-agent-support-line mcp-agent-support-unsupported">
-          <strong>Not forwarded to:</strong> {renderNames(unsupported)}. For
-          those agents, configure MCP servers in the agent's own config file
-          (e.g.&nbsp;<code>~/.codex/config.toml</code>,&nbsp;
-          <code>~/.gemini/settings.json</code>); the servers below are
-          silently unused there.
+          <strong>{t('mcpClient.notForwardedToLabel')}</strong> {renderNames(unsupported)}. {t('mcpClient.notForwardedNote')}
         </p>
       ) : null}
     </div>
