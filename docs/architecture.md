@@ -265,6 +265,8 @@ GET  /api/projects
 POST /api/projects
 POST /api/import/folder                    # see Folder import
 GET  /api/projects/:id/files
+POST /api/projects/:id/files
+GET  /api/projects/:id/files/:path
 POST /api/projects/:id/upload
 POST /api/chat              -> text/event-stream
 POST /api/artifacts/save
@@ -294,6 +296,21 @@ Safety:
 
 Request / response types: `ImportFolderRequest`, `ImportFolderResponse`
 in `@open-design/contracts`.
+
+### Project files
+
+Project file writes use `POST /api/projects/:id/files`.
+
+- Multipart uploads are accepted with a `file` part and optional `name`.
+- JSON uploads use `{ "name": "<relative/path>", "content": "<string>",
+  "encoding": "utf8" | "base64" }`. Omitted `encoding` is treated as UTF-8.
+- Successful uploads return `ProjectFileResponse` with `{ file }`, where
+  `file.name`, `file.path`, and `file.mime` identify the persisted project
+  file.
+
+Project file reads use `GET /api/projects/:id/files/:path` and return the raw
+file bytes with the file MIME type. Callers that need JSON metadata should use
+`GET /api/projects/:id/files` for the file list before fetching content.
 
 #### Desktop folder-import auth (PR #974)
 
