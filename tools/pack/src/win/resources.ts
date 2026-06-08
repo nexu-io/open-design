@@ -3,7 +3,12 @@ import { dirname, join } from "node:path";
 
 import { hashJson, hashPath, ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
-import { copyBundledResourceTrees, winResources } from "../resources.js";
+import {
+  copyBundledPlaywrightChromium,
+  copyBundledResourceTrees,
+  resolveBundledPlaywrightChromiumSourceRoots,
+  winResources,
+} from "../resources.js";
 import {
   copyOptionalVelaCliBinary,
   resolveOptionalVelaCliBinary,
@@ -11,7 +16,7 @@ import {
 } from "../vela-cli.js";
 import type { WinPaths, ResourceTreeCacheMetadata } from "./types.js";
 
-const RESOURCE_TREE_CACHE_SCHEMA_VERSION = 4;
+const RESOURCE_TREE_CACHE_SCHEMA_VERSION = 5;
 
 async function createResourceTreeCacheKey(config: ToolPackConfig): Promise<string> {
   const velaCliBin = await resolveOptionalVelaCliBinary({
@@ -21,6 +26,9 @@ async function createResourceTreeCacheKey(config: ToolPackConfig): Promise<strin
     velaCliBin == null
       ? null
       : await resolveOptionalVelaCliOpenCodeCompanionTree(velaCliBin);
+  const playwrightSource = await resolveBundledPlaywrightChromiumSourceRoots({
+    workspaceRoot: config.workspaceRoot,
+  });
   return hashJson({
     assetsCommunityPets: await hashPath(join(config.workspaceRoot, "assets", "community-pets")),
     assetsFrames: await hashPath(join(config.workspaceRoot, "assets", "frames")),
@@ -30,9 +38,17 @@ async function createResourceTreeCacheKey(config: ToolPackConfig): Promise<strin
     node: "win.resource-tree",
     pluginOfficial: await hashPath(join(config.workspaceRoot, "plugins", "_official")),
     pluginRegistry: await hashPath(join(config.workspaceRoot, "plugins", "registry")),
+    playwrightChromium: await Promise.all(
+      playwrightSource.sourceRoots.map(async (sourceRoot) => ({
+        hash: await hashPath(sourceRoot),
+        root: sourceRoot,
+      })),
+    ),
     promptTemplates: await hashPath(join(config.workspaceRoot, "prompt-templates")),
     schemaVersion: RESOURCE_TREE_CACHE_SCHEMA_VERSION,
     skills: await hashPath(join(config.workspaceRoot, "skills")),
+    sevenZipDll: await hashPath(winResources.sevenZipDll),
+    sevenZipExe: await hashPath(winResources.sevenZipExe),
     requireVelaCli: config.requireVelaCli,
     velaCliBin: velaCliBin ? await hashPath(velaCliBin) : null,
     velaOpenCodeCompanion: velaOpenCodeCompanion
@@ -65,6 +81,13 @@ export async function prepareResourceTree(
         workspaceRoot: config.workspaceRoot,
         resourceRoot,
       });
+      await copyBundledPlaywrightChromium({
+        workspaceRoot: config.workspaceRoot,
+        resourceRoot,
+      });
+      await mkdir(join(resourceRoot, "bin"), { recursive: true });
+      await cp(winResources.sevenZipExe, join(resourceRoot, "bin", "7z.exe"));
+      await cp(winResources.sevenZipDll, join(resourceRoot, "bin", "7z.dll"));
       await copyOptionalVelaCliBinary({
         platform: "win",
         requireBundled: config.requireVelaCli,

@@ -822,8 +822,12 @@ export interface Dict {
   'updater.installerOpened': string;
   'updater.later': string;
   'updater.openFailedFallback': string;
+  'updater.installRestart': string;
+  'updater.installingRestart': string;
   'updater.openInstaller': string;
   'updater.opening': string;
+  'updater.payloadReadyGeneric': string;
+  'updater.payloadReadyVersion': string;
   'updater.quitButton': string;
   'updater.quitFailedBody': string;
   'updater.quitFailedTitle': string;
@@ -951,6 +955,7 @@ export interface Dict {
   'workingDirPicker.showInFileManager': string;
   'workingDirPicker.replace': string;
   'workingDirPicker.recent': string;
+  'workingDirPicker.defaultLabel': string;
   'handoff.toTarget': string;
   'handoff.openInTarget': string;
   'handoff.openAction': string;
@@ -1113,8 +1118,6 @@ export interface Dict {
   'pluginCard.contributeTitle': string;
   'skillPluginCandidate.createForMe': string;
   'skillPluginCandidate.contributeToMain': string;
-  'skillPluginCandidate.publishRepo': string;
-  'skillPluginCandidate.dismiss': string;
   'skillPluginCandidate.repoDescription': string;
   'integrations.kicker': string;
   'integrations.lede': string;

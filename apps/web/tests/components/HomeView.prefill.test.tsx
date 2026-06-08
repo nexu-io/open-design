@@ -732,9 +732,6 @@ describe('HomeView prompt handoff', () => {
       designSystem: 'Refly Design System',
       template: 'the bundled web prototype seed',
     });
-    // Fidelity is deferred to first-turn discovery, so its plugin default must
-    // NOT be forwarded with the run.
-    expect(protoApplyInputs).not.toHaveProperty('fidelity');
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       pluginId: 'example-web-prototype',
       projectKind: 'prototype',
@@ -744,6 +741,13 @@ describe('HomeView prompt handoff', () => {
         kind: 'prototype',
       }),
     })));
+    // Fidelity is deferred to first-turn discovery: the plugin is still applied
+    // with its full inputs, but its default must NOT be forwarded to the run, so
+    // the AskUserQuestion flow collects it instead of inheriting a baked-in value.
+    const [{ pluginInputs: protoSubmittedInputs }] = onSubmit.mock.calls[0] as [
+      { pluginInputs?: Record<string, unknown> },
+    ];
+    expect(protoSubmittedInputs).not.toHaveProperty('fidelity');
     expect(screen.queryByRole('alert')).toBeNull();
   });
 

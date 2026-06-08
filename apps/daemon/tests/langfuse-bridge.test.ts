@@ -10,6 +10,7 @@ interface FakeMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  attachments?: Array<Record<string, unknown>>;
   producedFiles?: Array<Record<string, unknown>>;
 }
 
@@ -185,11 +186,39 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     });
     const messages: FakeMessage[] = [
       {
+        id: 'user-1',
+        role: 'user',
+        content: 'Use this reference.',
+        attachments: [
+          {
+            path: 'uploads/brand.pdf',
+            name: 'brand.pdf',
+            kind: 'file',
+            size: 2_481_032,
+            mime: 'application/pdf',
+            sha256: '1234abcd',
+          },
+        ],
+      },
+      {
         id: 'msg-1',
         role: 'assistant',
         content: 'Here is a draft …',
         producedFiles: [
-          { name: 'index.html', kind: 'html', size: 4096 },
+          {
+            name: 'index.html',
+            path: '/Users/alice/private/project/index.html',
+            kind: 'html',
+            mime: 'text/html',
+            size: 4096,
+            hash: 'sha256:artifacthash',
+            artifactManifest: {
+              version: 1,
+              kind: 'html',
+              status: 'complete',
+              exports: ['html'],
+            },
+          },
           { name: 'style.css', kind: 'code', size: 800 },
         ],
       },
@@ -203,7 +232,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       await reportRunCompletedFromDaemon({
         db: makeDbWithListMessages({ 'conv-1': messages }),
         dataDir,
-        run: makeRun() as any,
+        run: makeRun({ agentId: 'qoder' }) as any,
         fetchImpl: fetchSpy as any,
       });
     } finally {
@@ -217,6 +246,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       'trace-create',
       'span-create',
       'generation-create',
+      'event-create',
       'span-create',
       'span-create',
       'event-create',
@@ -226,6 +256,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     const generation = bodyOf(batch, 'generation-create', 'llm');
     const bash = bodyOf(batch, 'span-create', 'tool:Bash');
     const write = bodyOf(batch, 'span-create', 'tool:Write');
+    const usage = bodyOf(batch, 'event-create', 'agent-usage');
     const artifacts = bodyOf(batch, 'event-create', 'artifact-summary');
     expect(trace.userId).toBe('install-uuid-1');
     expect(trace.sessionId).toBe('conv-1');
@@ -241,17 +272,101 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(bash.output).toBe('total 0');
     expect(write.parentObservationId).toBe('run-id-1-agent');
     expect(write.metadata.toolName).toBe('Write');
+    expect(usage.parentObservationId).toBe('run-id-1-agent');
+    expect(usage.input).toEqual({
+      source: 'qoder',
+      event_type: 'usage',
+    });
+    expect(usage.output.usage).toEqual({ input_tokens: 100, output_tokens: 200 });
     expect(artifacts.parentObservationId).toBe('run-id-1-agent');
+    expect(artifacts.input).toEqual({
+      source: 'agent_generated_artifacts',
+      artifact_count: 2,
+      artifact_manifest_enabled: true,
+    });
+    expect(artifacts.output).toEqual({
+      artifacts: [
+        { slug: 'index.html', type: 'html', sizeBytes: 4096 },
+        { slug: 'style.css', type: 'code', sizeBytes: 800 },
+      ],
+      manifest_completeness: 'complete',
+    });
     expect(artifacts.metadata.artifacts).toEqual([
       { slug: 'index.html', type: 'html', sizeBytes: 4096 },
       { slug: 'style.css', type: 'code', sizeBytes: 800 },
     ]);
+    expect(trace.metadata.attachment_manifest).toEqual([
+      expect.objectContaining({
+        attachment_id: expect.stringMatching(/^att_[0-9a-f]{16}$/),
+        object_class: 'attachment',
+        storage_ref: expect.stringMatching(
+          /^od:\/\/objects\/workspaces\/unknown\/projects\/proj-1\/runs\/run-id-1\/attachment\/att_[0-9a-f]{16}$/,
+        ),
+        project_id: 'proj-1',
+        run_id: 'run-id-1',
+        workspace_id: null,
+        status: 'ok',
+        size_bytes: 2_481_032,
+        sha256: 'sha256:1234abcd',
+        mime_type: 'application/pdf',
+        extension: 'pdf',
+        redacted: false,
+        truncated: false,
+        stored_in_open_design: true,
+        retention_policy: 'project_lifetime',
+        access_scope: 'project',
+        sensitivity: 'private',
+        source: 'user_upload',
+        expires_at: null,
+        approved_by: null,
+      }),
+    ]);
+    expect(trace.metadata.artifact_manifest).toEqual([
+      expect.objectContaining({
+        artifact_id: expect.stringMatching(/^art_[0-9a-f]{16}$/),
+        object_class: 'artifact',
+        type: 'html',
+        storage_ref: expect.stringMatching(
+          /^od:\/\/objects\/workspaces\/unknown\/projects\/proj-1\/runs\/run-id-1\/artifact\/art_[0-9a-f]{16}$/,
+        ),
+        project_id: 'proj-1',
+        run_id: 'run-id-1',
+        workspace_id: null,
+        status: 'ok',
+        size_bytes: 4096,
+        sha256: 'sha256:artifacthash',
+        mime_type: 'text/html',
+        extension: 'html',
+        build_status: 'complete',
+        preview_status: 'unavailable',
+        export_status: 'available',
+        redacted: false,
+        truncated: false,
+        stored_in_open_design: true,
+        retention_policy: 'project_lifetime',
+        access_scope: 'project',
+        sensitivity: 'private',
+        source: 'agent_generated',
+        expires_at: null,
+        approved_by: null,
+      }),
+      expect.objectContaining({
+        object_class: 'artifact',
+        type: 'code',
+        size_bytes: 800,
+        extension: 'css',
+        export_status: 'unavailable',
+      }),
+    ]);
+    expect(trace.metadata.manifest_completeness).toBe('complete');
+    expect(JSON.stringify(batch)).not.toContain('/Users/alice/private/project');
+    expect(JSON.stringify(batch)).not.toContain('brand.pdf');
     // Core tags must be present. The bridge also tacks on an `os:<...>`
     // tag derived from the host (`darwin` / `linux` / `win32`), which is
     // useful telemetry but varies between dev / CI environments — assert
     // its presence by prefix rather than pinning a value.
     expect(trace.tags).toEqual(
-      expect.arrayContaining(['open-design', 'project:proj-1', 'agent:claude']),
+      expect.arrayContaining(['open-design', 'project:proj-1', 'agent:qoder']),
     );
     expect((trace.tags as string[]).some((t) => t.startsWith('os:'))).toBe(true);
     expect(trace.metadata.eventsSummary.toolCalls).toBe(2);
@@ -270,6 +385,330 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       { slug: 'style.css', type: 'code', sizeBytes: 800 },
     ]);
     expect(trace.metadata.success).toBe(true);
+  });
+
+  it('marks trace-safe object manifests partial when object accounting is incomplete', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-1',
+      telemetry: { metrics: true, content: true, artifactManifest: true },
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 207 }));
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({
+          'conv-1': [
+            {
+              id: 'user-1',
+              role: 'user',
+              content: 'Use this reference.',
+              attachments: [{ path: 'uploads/brand.pdf', kind: 'file' }],
+            },
+            {
+              id: 'msg-1',
+              role: 'assistant',
+              content: 'Here is a draft …',
+              producedFiles: [{ name: 'index.html', kind: 'html' }],
+            },
+          ],
+        }),
+        dataDir,
+        run: makeRun() as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    const batch = JSON.parse(init.body as string).batch as any[];
+    const trace = batch[0].body;
+    expect(trace.metadata.manifest_completeness).toBe('partial');
+    expect(trace.metadata.attachment_manifest[0]).toMatchObject({
+      object_class: 'attachment',
+      status: 'partial',
+      reason: 'size_unavailable',
+    });
+    expect(trace.metadata.artifact_manifest[0]).toMatchObject({
+      object_class: 'artifact',
+      status: 'partial',
+      reason: 'size_unavailable',
+    });
+  });
+
+  it('carries prior user attachments into follow-up generation traces', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-1',
+      telemetry: { metrics: true, content: true, artifactManifest: true },
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 207 }));
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({
+          'conv-1': [
+            {
+              id: 'user-1',
+              role: 'user',
+              content: 'Use this private reference.',
+              attachments: [
+                {
+                  path: 'uploads/private-reference.md',
+                  name: 'private-reference.md',
+                  size: 562,
+                },
+              ],
+            },
+            {
+              id: 'assistant-1',
+              role: 'assistant',
+              content: 'Please answer the discovery form.',
+            },
+            {
+              id: 'user-2',
+              role: 'user',
+              content: '[form answers — discovery]\nBuild the artifact.',
+            },
+            {
+              id: 'msg-1',
+              role: 'assistant',
+              content: 'Done.',
+              producedFiles: [
+                { name: 'index.html', kind: 'html', size: 4096 },
+              ],
+            },
+          ],
+        }),
+        dataDir,
+        run: (() => {
+          const now = Date.now();
+          return makeRun({
+            analyticsTelemetry: {
+              promptBuildStartAt: now - 4300,
+              promptBuildEndAt: now - 4200,
+            },
+            promptTelemetry: buildPromptStackTelemetry({
+              composedPrompt:
+                '# Instructions\n\nBuild the artifact.\n\n---\n# User request\n\n[form answers — discovery]\nBuild the artifact.',
+              sections: [
+                { kind: 'daemonSystemPrompt', content: 'Build the artifact.' },
+                {
+                  kind: 'userRequest',
+                  content: '[form answers — discovery]\nBuild the artifact.',
+                },
+              ],
+            }),
+          });
+        })() as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    const batch = JSON.parse(init.body as string).batch as any[];
+    const trace = batch[0].body;
+    const promptBuild = bodyOf(batch, 'span-create', 'prompt-build');
+    expect(trace.metadata.attachment_manifest).toHaveLength(1);
+    expect(trace.metadata.attachment_manifest[0]).toMatchObject({
+      object_class: 'attachment',
+      status: 'ok',
+      size_bytes: 562,
+      extension: 'md',
+      source: 'user_upload',
+      project_id: 'proj-1',
+      run_id: 'run-id-1',
+    });
+    expect(promptBuild.input.ingredients.attachment_refs).toEqual([
+      expect.objectContaining({
+        object_class: 'attachment',
+        status: 'ok',
+        size_bytes: 562,
+        extension: 'md',
+        source: 'user_upload',
+        attachment_id: trace.metadata.attachment_manifest[0].attachment_id,
+      }),
+    ]);
+    const payload = JSON.stringify(batch);
+    expect(payload).not.toContain('private-reference.md');
+    expect(payload).not.toContain('uploads/private-reference.md');
+  });
+
+  it('counts duplicate streamed tool_use records by unique tool id', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-1',
+      telemetry: { metrics: true, content: true, artifactManifest: false },
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 207 }));
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({
+          'conv-1': [
+            { id: 'user-1', role: 'user', content: 'Create a file.' },
+            { id: 'msg-1', role: 'assistant', content: 'Done.', producedFiles: [] },
+          ],
+        }),
+        dataDir,
+        run: makeRun({
+          events: [
+            {
+              id: 1,
+              event: 'agent',
+              timestamp: Date.now() - 3000,
+              data: {
+                type: 'tool_use',
+                id: 'write-1',
+                name: 'Write',
+                input: { path: 'index.html', content: '<!doctype html>' },
+              },
+            },
+            {
+              id: 2,
+              event: 'agent',
+              timestamp: Date.now() - 2900,
+              data: {
+                type: 'tool_use',
+                id: 'write-1',
+                name: 'Write',
+                input: { path: 'index.html', content: '<!doctype html>' },
+              },
+            },
+            {
+              id: 3,
+              event: 'agent',
+              timestamp: Date.now() - 2500,
+              data: {
+                type: 'tool_result',
+                toolUseId: 'write-1',
+                content: 'wrote index.html',
+                isError: false,
+              },
+            },
+          ],
+        }) as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    const batch = JSON.parse(init.body as string).batch as any[];
+    const trace = batch[0].body;
+    const toolSpans = batch.filter(
+      (item) => item.type === 'span-create' && item.body.name === 'tool:Write',
+    );
+    expect(trace.metadata.eventsSummary.toolCalls).toBe(1);
+    expect(trace.metadata.eventsSummary.errors).toBe(0);
+    expect(toolSpans).toHaveLength(1);
+  });
+
+  it('redacts content-tool payloads and local paths from tool observations', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-1',
+      telemetry: { metrics: true, content: true, artifactManifest: true },
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 207 }));
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({
+          'conv-1': [
+            {
+              id: 'user-1',
+              role: 'user',
+              content: 'Use this private reference.',
+              attachments: [{ path: 'uploads/private-brand-reference.txt', name: 'private-brand-reference.txt', size: 247 }],
+            },
+            {
+              id: 'msg-1',
+              role: 'assistant',
+              content: 'Done.',
+              producedFiles: [],
+            },
+          ],
+        }),
+        dataDir,
+        run: makeRun({
+          events: [
+            {
+              id: 1,
+              event: 'agent',
+              data: {
+                type: 'tool_use',
+                id: 'read-1',
+                name: 'Read',
+                input: { file_path: '/Users/alice/project/private-brand-reference.txt' },
+              },
+            },
+            {
+              id: 2,
+              event: 'agent',
+              data: {
+                type: 'tool_result',
+                toolUseId: 'read-1',
+                content: 'Private brand reference: do not upload raw content',
+                isError: false,
+              },
+            },
+            {
+              id: 3,
+              event: 'agent',
+              data: {
+                type: 'tool_use',
+                id: 'write-1',
+                name: 'Write',
+                input: { file_path: '/Users/alice/project/index.html', content: '<!doctype html><html>heavy</html>' },
+              },
+            },
+            {
+              id: 4,
+              event: 'agent',
+              data: {
+                type: 'tool_result',
+                toolUseId: 'write-1',
+                content: 'File created successfully at: /Users/alice/project/index.html',
+                isError: false,
+              },
+            },
+          ],
+        }) as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    const batch = JSON.parse(init.body as string).batch as any[];
+    const read = bodyOf(batch, 'span-create', 'tool:Read');
+    const write = bodyOf(batch, 'span-create', 'tool:Write');
+    expect(read.input).toBe('[REDACTED:tool_input:content_tool:Read]');
+    expect(read.output).toBe('[REDACTED:tool_output:content_tool:Read]');
+    expect(write.input).toBe('[REDACTED:tool_input:content_tool:Write]');
+    expect(write.output).toBe('[REDACTED:tool_output:content_tool:Write]');
+    const payload = JSON.stringify(batch);
+    expect(payload).not.toContain('Private brand reference');
+    expect(payload).not.toContain('/Users/alice/project');
+    expect(payload).not.toContain('<!doctype html>');
   });
 
   it('forwards run prompt telemetry into trace and generation metadata', async () => {
@@ -790,7 +1229,9 @@ function makeDbWithListMessages(messagesByConvo: Record<string, FakeMessage[]>) 
             runStatus: null,
             lastRunEventId: null,
             eventsJson: null,
-            attachmentsJson: null,
+            attachmentsJson: m.attachments
+              ? JSON.stringify(m.attachments)
+              : null,
             commentAttachmentsJson: null,
             producedFilesJson: m.producedFiles
               ? JSON.stringify(m.producedFiles)

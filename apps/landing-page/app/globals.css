@@ -424,11 +424,11 @@ body.newsletter-popup-visible .side-rail.right {
  * Desktop header: keep the logo, primary nav, and side actions in one row
  * without forcing the nav onto the page center. The primary nav should follow
  * the logo; the side actions consume the remaining room by pinning themselves
- * to the right edge. Scoped to desktop only — at ≤1080px the nav becomes an
+ * to the right edge. Scoped to desktop only — at ≤1280px the nav becomes an
  * absolutely positioned hamburger panel (rules further below), which must not
  * inherit this flex layout.
  */
-@media (min-width: 1081px) {
+@media (min-width: 1281px) {
   /* Header spans the full viewport width (overriding the shared .container
    * max-width) so the brand sits near the left edge and the side actions
    * near the right edge, rather than aligned to the 1360px content column. */
@@ -461,7 +461,7 @@ body.newsletter-popup-visible .side-rail.right {
 
   /* Scale the header chrome up a step so the bar reads as substantial across
    * the now-full-width layout, rather than small elements floating in extra
-   * whitespace. Desktop-only; sizes return to base below 1081px. Selectors
+   * whitespace. Desktop-only; sizes return to base below 1281px. Selectors
    * are deliberately one level more specific than the base rules below
    * (which appear later in source) so these win without !important. */
   .nav .nav-inner .brand-logo { height: 44px; }
@@ -675,7 +675,7 @@ body.newsletter-popup-visible .side-rail.right {
 }
 
 /*
- * Hamburger toggle. Hidden at desktop widths (≥1080px). At narrower
+ * Hamburger toggle. Hidden at desktop widths (≥1281px). At narrower
  * viewports it replaces the inline nav-links and toggles a panel
  * underneath the header bar via a small handler in `header-enhancer`.
  */
@@ -758,7 +758,12 @@ body.newsletter-popup-visible .side-rail.right {
   display: block;
 }
 .nav-amr {
-  display: inline-flex;
+  /* AMR pill is a "nice to have" entry point — AMR is also reachable via the
+   * Agent dropdown. It only earns its slot in the side actions at wide
+   * viewports (≥1520px); below that it is hidden so longer-copy locales
+   * (Japanese, German, Russian) never get their nav links pushed into the
+   * right-hand CTAs. Shown by the min-width:1520 block further down. */
+  display: none;
   align-items: center;
   justify-content: center;
   height: 40.1484px;
@@ -790,6 +795,16 @@ body.newsletter-popup-visible .side-rail.right {
   height: 24px;
   display: block;
   flex: 0 0 auto;
+}
+/* Reveal the AMR pill only at wide viewports, where every locale's nav row
+ * still has room for it beside the Star + Download CTAs. The threshold is
+ * 1520px: the widest-copy locale (Japanese) only clears the pill's ~90px
+ * without crowding the Star CTA above this width. Below it the pill stays
+ * hidden (default above) so the nav never overlaps. */
+@media (min-width: 1520px) {
+  .nav-side .nav-amr {
+    display: inline-flex;
+  }
 }
 .nav-amr-copy {
   display: flex;
@@ -856,6 +871,138 @@ body.newsletter-popup-visible .side-rail.right {
   font-weight: 500;
 }
 .btn[data-download-cta] { gap: 2px; }
+
+/* ====== AMR band ======
+ * Homepage model band for Open Design AMR: a centered headline + lead +
+ * four feature chips, followed by an edge-to-edge infinite marquee of
+ * frontier-model cards (vendor logo + model/vendor name in a soft pill).
+ * Sits directly under the testimonial. Hairline rules top/bottom keep it
+ * reading as a supporting band rather than a competing hero. */
+.amr-band {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+}
+.amr-band-inner {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 18px 0 0;
+  text-align: center;
+}
+.amr-band-kicker {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.amr-band-title {
+  font-family: var(--sans);
+  font-size: clamp(30px, 5vw, 52px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  margin: 16px auto 0;
+  max-width: 720px;
+  color: var(--ink);
+}
+.amr-band-lead {
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-mute);
+  margin: 16px auto 0;
+  max-width: 620px;
+}
+.amr-band-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  list-style: none;
+  margin: 24px 0 0;
+  padding: 0;
+}
+.amr-band-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--paper) 60%, transparent);
+}
+.amr-band-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent, var(--ink-soft));
+  flex: none;
+}
+
+/* Static monochrome vendor-logo row, centered, trailing with an ellipsis
+ * that signals "and more" beyond the marks shown. The logos are <img>-loaded
+ * SVGs (fill="currentColor"), which render in an isolated context and cannot
+ * inherit this stylesheet's color — they paint in the SVG's own default ink
+ * (near-black). The opacity below is what softens the row to read alongside
+ * the warm body type; recoloring would need inlined SVGs or a CSS mask. */
+.amr-band-logos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  list-style: none;
+  margin: 30px 0 0;
+  padding: 0;
+}
+.amr-band-logos li {
+  display: inline-flex;
+  align-items: center;
+}
+.amr-band-logo {
+  width: 26px;
+  height: 26px;
+  display: block;
+  opacity: 0.74;
+  transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.amr-band-logos li:hover .amr-band-logo {
+  opacity: 1;
+}
+.amr-band-more {
+  font-family: var(--sans);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+  transform: translateY(-4px);
+}
+.amr-band-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 30px;
+}
+.amr-band-cta {
+  /* Reuse the dark .nav-cta pill; add the trailing arrow the nav CTAs use. */
+  padding: 11px 22px;
+  font-size: 14px;
+}
+.amr-band-cta::after {
+  content: '→';
+  color: var(--paper);
+  font-size: 13px;
+  margin-left: 7px;
+}
+
 .nav-locale {
   display: inline-flex;
   align-items: center;
@@ -2744,24 +2891,29 @@ footer {
 @media (max-width: 1200px) {
   .topbar-inner .mid { display: none; }
 }
-/* nav: between 1080 and 1180 the brand tail + nav links + 2 CTAs + dot
- * crowd the row. Drop the brand sub-meta first, then tighten link spacing,
- * so the Star CTA never has to compress. */
-@media (max-width: 1180px) {
+/* nav: 1281–1519px is the desktop band after the ≤1280px hamburger but
+ * before the AMR pill is allowed in (≥1520px). The brand tail + six nav
+ * dropdowns + Star + Download still crowd the row in longer-copy locales
+ * (Japanese, German), so drop the brand sub-meta and the social icons and
+ * tighten link spacing so the Star CTA never has to compress. */
+@media (min-width: 1281px) and (max-width: 1519px) {
   .nav-inner { gap: 18px; }
   .brand-meta { display: none; }
-  .nav-links { gap: 28px; }
+  .nav-links { gap: 26px; }
   .nav-side .nav-icon { display: none; }
 }
 
-/* nav: at ≤1080px there's no clean way to fit Product · Skills · Systems ·
- * Templates · Craft · Blog · Contact + Download + Star + dot in one row,
- * so swap to a hamburger panel. Star CTA stays visible in the bar (it's
- * the social-proof CTA); Download moves into the panel. The Product
- * submenu flattens from a hover-popup to an always-expanded inline list,
- * since hover doesn't translate to touch.
+/* nav: at ≤1280px there's no clean way to fit the six localized nav
+ * dropdowns + Download + Star in one row — and longer-copy locales
+ * (German "Lösungen / Ressourcen", French, Russian, pt-BR, Japanese)
+ * overran the row and collided with the right-hand CTAs in the desktop
+ * band even after the AMR pill was retired. So swap to a hamburger panel
+ * at ≤1280px for every locale. Star CTA stays visible in the bar (it's the
+ * social-proof CTA); Download moves into the panel. The Product submenu
+ * flattens from a hover-popup to an always-expanded inline list, since
+ * hover doesn't translate to touch.
  */
-@media (max-width: 1080px) {
+@media (max-width: 1280px) {
   .nav-toggle { display: inline-flex; }
   .brand { white-space: nowrap; }
   /* Hide AMR, Star + Discord/X icon buttons from the bar (Download stays). */
@@ -2918,7 +3070,7 @@ footer {
   .foot-bottom { flex-direction: column; align-items: flex-start; gap: 12px; }
   .foot-bottom .right { flex-wrap: wrap; gap: 12px 20px; }
   /* nav — at ≤880px tighten padding; nav-links stay reachable through
-   * the hamburger panel introduced at ≤1080px. Brand meta, Star, AMR,
+   * the hamburger panel introduced at ≤1280px. Brand meta, Star, AMR,
    * and the Discord/X icon buttons stay hidden; Download CTA stays
    * reachable in the bar. */
   .nav { padding: 16px 0; }

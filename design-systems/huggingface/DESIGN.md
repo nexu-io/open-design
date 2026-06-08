@@ -147,3 +147,9 @@ Shapes are crisp, not soft: 4–6px radii, 1px solid borders that announce thems
 - **Duration**: 120ms for hover; 200ms for menu open.
 - **Easing**: `ease-out`.
 - **Tag pop**: a 1.05× scale on hover at 120ms — the only exception to flat-on-hover.
+
+## 7. Usage Guardrails
+
+- Preserve the yellow accent, mono metadata, and dense model-card layout together; yellow alone does not create a Hugging Face-like surface.
+- Use tags, tables, and repository-style metadata for model browsing or evaluation contexts rather than decorative marketing cards.
+- Keep motion minimal and functional, reserving the small tag pop for interactive taxonomy chips.

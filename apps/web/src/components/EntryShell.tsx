@@ -132,6 +132,30 @@ import {
   type ProviderModelsCache,
 } from './providerModelsCache';
 
+// Persist the entry nav-rail open/collapsed state so it survives both a
+// home -> project -> home navigation (EntryShell unmounts on the project
+// route) and a full reload. Without this the rail always reset to its
+// collapsed default on return.
+const RAIL_OPEN_STORAGE_KEY = 'od.entry.railOpen';
+
+function readStoredRailOpen(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(RAIL_OPEN_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writeStoredRailOpen(open: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(RAIL_OPEN_STORAGE_KEY, open ? 'true' : 'false');
+  } catch {
+    /* ignore quota / disabled storage */
+  }
+}
+
 const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
 const X_URL = 'https://x.com/nexudotio';
 
@@ -421,7 +445,13 @@ export function EntryShell({
   // The entry nav rail is collapsed by default (Manus-style) so the entry
   // view opens clean and full-width; the panel toggle in the topbar opens it
   // as an overlay that dismisses on selection / backdrop click / Escape.
-  const [railOpen, setRailOpen] = useState(false);
+  // Its open/collapsed state is persisted (localStorage) so it survives a
+  // home -> project -> home round trip (EntryShell unmounts on the project
+  // route) and a reload, instead of snapping back to collapsed.
+  const [railOpen, setRailOpen] = useState<boolean>(readStoredRailOpen);
+  useEffect(() => {
+    writeStoredRailOpen(railOpen);
+  }, [railOpen]);
   const [localProviderModelsCache, setLocalProviderModelsCache] =
     useState<ProviderModelsCache>({});
   const hasSharedProviderModelsCache =

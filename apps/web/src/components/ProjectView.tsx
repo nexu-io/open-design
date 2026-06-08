@@ -5500,6 +5500,28 @@ export function ProjectView({
               onBack={onBack}
               backLabel={t('project.backToProjects')}
               composerFooterAccessory={executionControls}
+              composerLeadingAccessory={(
+                <WorkingDirPill
+                  projectId={project.id}
+                  resolvedDir={projectDetail.resolvedDir}
+                  onReplaced={({ project: updated }) => {
+                    if (updated) onProjectChange(updated);
+                    // The new working dir has a different file tree, so the
+                    // current listing, breadcrumb nav, and open tabs are all
+                    // stale. Refetch files; DesignFilesPanel's self-heal then
+                    // drops the now-unmatched currentDir back to root.
+                    // projectDetail.refresh() repulls resolvedDir so the
+                    // breadcrumb root + pill show the new folder name even on
+                    // the Electron path, which reports no updated project.
+                    setWorkingDirReplacing(true);
+                    refreshFilesAndDesignMd();
+                    void Promise.all([
+                      refreshWorkspaceItems(),
+                      projectDetail.refresh(),
+                    ]).finally(() => setWorkingDirReplacing(false));
+                  }}
+                />
+              )}
               projectHeader={(
                 <span className="chat-project-title-line">
                   <span
@@ -5663,26 +5685,6 @@ export function ProjectView({
           conversationId={activeConversationId}
           headerActions={(
             <>
-              <WorkingDirPill
-                projectId={project.id}
-                resolvedDir={projectDetail.resolvedDir}
-                onReplaced={({ project: updated }) => {
-                  if (updated) onProjectChange(updated);
-                  // The new working dir has a different file tree, so the
-                  // current listing, breadcrumb nav, and open tabs are all
-                  // stale. Refetch files; DesignFilesPanel's self-heal then
-                  // drops the now-unmatched currentDir back to root.
-                  // projectDetail.refresh() repulls resolvedDir so the
-                  // breadcrumb root + pill show the new folder name even on
-                  // the Electron path, which reports no updated project.
-                  setWorkingDirReplacing(true);
-                  refreshFilesAndDesignMd();
-                  void Promise.all([
-                    refreshWorkspaceItems(),
-                    projectDetail.refresh(),
-                  ]).finally(() => setWorkingDirReplacing(false));
-                }}
-              />
               <EntrySettingsMenu
                 config={config}
                 onThemeChange={handleThemeChange}

@@ -92,6 +92,7 @@ function Write-Index([string]$Status) {
       installerPath = $build.installerPath
       latestYmlPath = $build.latestYmlPath
       outputRoot = $build.outputRoot
+      payloadPath = $build.payloadPath
       portableZipPath = $build.portableZipPath
     }
   }
@@ -139,6 +140,69 @@ function Invoke-CommandChecked([string[]]$Arguments, [string]$WorkingDirectory =
   }
 }
 
+function Convert-ArchiveRelativePath([string]$Value) {
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    throw "archive relative path must not be empty"
+  }
+  if ([System.IO.Path]::IsPathRooted($Value) -or $Value.Contains("..")) {
+    throw "unsafe archive relative path: $Value"
+  }
+  return $Value.Replace("/", [System.IO.Path]::DirectorySeparatorChar).Replace("\", [System.IO.Path]::DirectorySeparatorChar)
+}
+
+function Test-JsonString([object]$Value, [string]$Name, [string]$Expected) {
+  $actual = [string]$Value
+  if ($actual -ne $Expected) {
+    throw "launcher payload manifest $Name expected '$Expected' but got '$actual'"
+  }
+}
+
+function Validate-WinLauncherPayloadArchive([string]$PayloadPath, [string]$ExpectedVersion, [string]$Label) {
+  if ([string]::IsNullOrWhiteSpace($PayloadPath) -or -not (Test-Path -LiteralPath $PayloadPath)) {
+    throw "expected launcher payload path for $Label not found at $PayloadPath"
+  }
+
+  $sevenZipExe = Join-Path (Get-Location).Path "tools\pack\resources\win\7zip\7z.exe"
+  if (-not (Test-Path -LiteralPath $sevenZipExe)) {
+    throw "bundled 7z.exe not found at $sevenZipExe"
+  }
+
+  $extractRoot = Join-Path $WorkRoot "validate-launcher-payload-$Label"
+  Remove-Item -LiteralPath $extractRoot -Recurse -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $extractRoot | Out-Null
+  try {
+    & $sevenZipExe x $PayloadPath "-o$extractRoot" -y | Write-Host
+    if ($LASTEXITCODE -ne 0) {
+      throw "launcher payload extraction failed with exit code $LASTEXITCODE for $PayloadPath"
+    }
+
+    $manifestPath = Join-Path $extractRoot "manifest.json"
+    if (-not (Test-Path -LiteralPath $manifestPath)) {
+      throw "launcher payload manifest not found after extraction: $manifestPath"
+    }
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding utf8 | ConvertFrom-Json
+    Test-JsonString $manifest.schemaVersion "schemaVersion" "1"
+    Test-JsonString $manifest.channel "channel" "beta"
+    Test-JsonString $manifest.namespace "namespace" $ReleaseNamespace
+    Test-JsonString $manifest.version "version" $ExpectedVersion
+    Test-JsonString $manifest.platform "platform" "win32"
+    Test-JsonString $manifest.payloadRoot "payloadRoot" "payload"
+    Test-JsonString $manifest.entry.cwd "entry.cwd" "payload"
+    Test-JsonString $manifest.entry.executable "entry.executable" "payload/Open Design.exe"
+
+    $entryPath = Join-Path $extractRoot (Convert-ArchiveRelativePath "payload/Open Design.exe")
+    if (-not (Test-Path -LiteralPath $entryPath)) {
+      throw "launcher payload entry executable not found after extraction: $entryPath"
+    }
+    $configPath = Join-Path $extractRoot (Convert-ArchiveRelativePath "payload/resources/open-design-config.json")
+    if (-not (Test-Path -LiteralPath $configPath)) {
+      throw "launcher payload packaged config not found after extraction: $configPath"
+    }
+  } finally {
+    Remove-Item -LiteralPath $extractRoot -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
 New-Item -ItemType Directory -Force -Path $WorkRoot, $ToolsPackDir, $CacheDir, $ReportRoot, (Split-Path -Parent $BuildJsonPath), (Split-Path -Parent $IndexPath), (Split-Path -Parent $OutputsPath) | Out-Null
 Remove-Item -LiteralPath $BuildJsonPath -Force -ErrorAction SilentlyContinue
 
@@ -163,6 +227,13 @@ try {
       throw "tools-pack win build failed with exit code $LASTEXITCODE"
     }
     $buildOutput | Set-Content -LiteralPath $BuildJsonPath -Encoding utf8
+  }
+  Measure-Step "validate launcher payload artifact" {
+    $build = Read-BuildJson
+    if ($build -eq $null) {
+      throw "build json missing before launcher payload validation: $BuildJsonPath"
+    }
+    Validate-WinLauncherPayloadArchive -PayloadPath ([string]$build.payloadPath) -ExpectedVersion $ReleaseVersion -Label "primary"
   }
 
   $localUpdateArtifactPath = $null
@@ -204,6 +275,10 @@ try {
       if ([string]::IsNullOrWhiteSpace($localUpdateArtifactPath)) {
         throw "tools-pack win build update fixture did not report installerPath"
       }
+    }
+    Measure-Step "validate launcher payload update fixture" {
+      $updateBuild = Get-Content -LiteralPath $fixtureJsonPath -Raw | ConvertFrom-Json
+      Validate-WinLauncherPayloadArchive -PayloadPath ([string]$updateBuild.payloadPath) -ExpectedVersion $localUpdateVersion -Label "update-fixture"
     }
   }
 

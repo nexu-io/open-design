@@ -134,6 +134,58 @@ export interface ArtifactSummary {
   createdAt?: string;
 }
 
+export type ObjectManifestCompleteness = 'complete' | 'partial' | 'unavailable';
+
+export type ObjectManifestStatus = 'ok' | 'partial' | 'unavailable';
+
+export type ObjectManifestSensitivity = 'public' | 'internal' | 'private' | 'sensitive';
+
+export type ObjectManifestAccessScope = 'owner' | 'project' | 'workspace' | 'evaluator';
+
+export type ObjectManifestRetentionPolicy =
+  | 'ephemeral'
+  | 'project_lifetime'
+  | 'eval_fixture'
+  | 'legal_hold';
+
+export interface TraceSafeObjectManifestBase {
+  object_class: 'attachment' | 'artifact';
+  storage_ref: string;
+  status: ObjectManifestStatus;
+  reason?: string;
+  project_id: string | null;
+  run_id: string;
+  workspace_id: string | null;
+  size_bytes?: number;
+  sha256?: string;
+  mime_type?: string;
+  extension?: string;
+  redacted: boolean;
+  truncated: boolean;
+  stored_in_open_design: boolean;
+  retention_policy: ObjectManifestRetentionPolicy;
+  access_scope: ObjectManifestAccessScope;
+  sensitivity: ObjectManifestSensitivity;
+  source: 'user_upload' | 'agent_generated';
+  expires_at: string | null;
+  approved_by: string | null;
+}
+
+export interface AttachmentManifestEntry extends TraceSafeObjectManifestBase {
+  object_class: 'attachment';
+  attachment_id: string;
+}
+
+export interface ArtifactManifestEntry extends TraceSafeObjectManifestBase {
+  object_class: 'artifact';
+  artifact_id: string;
+  type: string;
+  artifact_kind?: string;
+  build_status?: string;
+  preview_status?: string;
+  export_status?: string;
+}
+
 export interface ToolCallSummary {
   id: string;
   name: string;
@@ -142,6 +194,17 @@ export interface ToolCallSummary {
   input?: string;
   output?: string;
   isError?: boolean;
+}
+
+export interface AgentEventSummary {
+  id: string;
+  name: string;
+  timestamp: number;
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  level?: 'DEFAULT' | 'WARNING' | 'ERROR';
+  statusMessage?: string;
 }
 
 export interface EventsSummary {
@@ -188,7 +251,11 @@ export interface ReportContext {
   run: RunSummary;
   message: MessageSummary;
   artifacts: ArtifactSummary[];
+  attachmentManifest?: AttachmentManifestEntry[];
+  artifactManifest?: ArtifactManifestEntry[];
+  manifestCompleteness?: ObjectManifestCompleteness;
   tools?: ToolCallSummary[];
+  agentEvents?: AgentEventSummary[];
   eventsSummary: EventsSummary;
   prefs: TelemetryPrefs;
   langfuse?: LangfuseDeliveryState;
@@ -367,11 +434,14 @@ function timingSpanBody(input: {
   name: string;
   start: number | undefined;
   end: number | undefined;
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }): Record<string, unknown> | null {
   const start = validTimestamp(input.start);
   const end = validTimestamp(input.end);
   if (start === undefined || end === undefined || end < start) return null;
+  const durationMs = Math.round(end - start);
   return {
     id: `${input.runId}-phase-${input.name}`,
     traceId: input.traceId,
@@ -379,43 +449,438 @@ function timingSpanBody(input: {
     name: input.name,
     startTime: new Date(start).toISOString(),
     endTime: new Date(end).toISOString(),
+    input: input.input,
+    output: {
+      duration_ms: durationMs,
+      ...(input.output ?? {}),
+    },
     metadata: {
-      durationMs: Math.round(end - start),
+      durationMs,
       ...(input.metadata ?? {}),
     },
   };
 }
 
-function buildTimingSpanBodies(ctx: ReportContext, generationId: string): Record<string, unknown>[] {
+function promptBuildSummary(
+  promptTelemetry: PromptStackTelemetry | undefined,
+): Record<string, unknown> {
+  if (!promptTelemetry) {
+    return {
+      prompt_stack_available: false,
+    };
+  }
+  return {
+    prompt_stack_available: true,
+    section_count: promptTelemetry.sectionCount,
+    stack_fingerprint: promptTelemetry.stackFingerprint,
+    prompt_fingerprint: promptTelemetry.promptFingerprint,
+    raw_bytes: promptTelemetry.rawBytes,
+    redacted_bytes: promptTelemetry.redactedBytes,
+    redacted_content_bytes: promptTelemetry.redactedContentBytes,
+  };
+}
+
+function objectRefSummary(
+  entries: Array<AttachmentManifestEntry | ArtifactManifestEntry> | undefined,
+): Array<Record<string, unknown>> | undefined {
+  if (!entries?.length) return undefined;
+  return entries.map((entry) => ({
+    object_class: entry.object_class,
+    storage_ref: entry.storage_ref,
+    status: entry.status,
+    size_bytes: entry.size_bytes,
+    sha256: entry.sha256,
+    mime_type: entry.mime_type,
+    extension: entry.extension,
+    redacted: entry.redacted,
+    truncated: entry.truncated,
+    retention_policy: entry.retention_policy,
+    access_scope: entry.access_scope,
+    sensitivity: entry.sensitivity,
+    source: entry.source,
+    ...(entry.object_class === 'attachment'
+      ? { attachment_id: entry.attachment_id }
+      : { artifact_id: entry.artifact_id, type: entry.type }),
+  }));
+}
+
+function cappedManifestEntries<T>(entries: T[] | undefined): T[] | undefined {
+  return entries ? entries.slice(0, ARTIFACTS_MAX_ITEMS) : undefined;
+}
+
+function manifestTruncated(entries: unknown[] | undefined): true | undefined {
+  return entries && entries.length > ARTIFACTS_MAX_ITEMS ? true : undefined;
+}
+
+function tokenUsageSummary(
+  usage: MessageSummary['usage'],
+): Record<string, unknown> | undefined {
+  if (!usage) return undefined;
+  return {
+    input: usage.inputTokens,
+    input_provider: usage.inputTokensProvider,
+    input_effective: usage.inputTokensEffective,
+    output: usage.outputTokens,
+    total: usage.totalTokens,
+    cache_read_input: usage.cacheReadInputTokens,
+    cache_creation_input: usage.cacheCreationInputTokens,
+    uncached_input: usage.uncachedInputTokens,
+    cache_hit_ratio: usage.cacheHitRatio,
+    cache_token_source: usage.cacheTokenSource,
+  };
+}
+
+function latestAgentCostUsd(ctx: ReportContext): number | undefined {
+  if (!ctx.agentEvents?.length) return undefined;
+  for (let i = ctx.agentEvents.length - 1; i >= 0; i -= 1) {
+    const event = ctx.agentEvents[i]!;
+    const cost = event.output?.cost_usd;
+    if (typeof cost === 'number' && Number.isFinite(cost) && cost >= 0) {
+      return cost;
+    }
+  }
+  return undefined;
+}
+
+function phaseCost(
+  phase: string,
+  costUsd: number | null,
+  status: string,
+  source: string,
+  note?: string,
+): Record<string, unknown> {
+  return {
+    phase,
+    cost_usd: costUsd,
+    cost_status: status,
+    cost_source: source,
+    ...(note ? { note } : {}),
+  };
+}
+
+function buildCostBreakdown(ctx: ReportContext): Record<string, unknown> {
+  const costUsd = latestAgentCostUsd(ctx);
+  const hasCost = costUsd !== undefined;
+  return {
+    cost_usd: costUsd ?? null,
+    currency: 'USD',
+    pricing_version: hasCost ? 'provider_reported' : 'unavailable',
+    cost_source: hasCost ? 'agent_usage_event' : 'unavailable',
+    cost_status: hasCost ? 'available' : 'unavailable',
+    unavailable_reason: hasCost
+      ? undefined
+      : 'agent runtime did not report total_cost_usd',
+    token_usage: tokenUsageSummary(ctx.message.usage),
+    phase_costs: {
+      prompt_build: phaseCost(
+        'prompt-build',
+        null,
+        'not_metered',
+        'not_applicable',
+        'local prompt assembly; no provider call in this phase',
+      ),
+      agent_call: phaseCost(
+        'agent-call',
+        costUsd ?? null,
+        hasCost ? 'available' : 'unavailable',
+        hasCost ? 'agent_usage_event' : 'unavailable',
+        hasCost
+          ? 'provider-reported total for the agent call; not split across stream/tools/artifact internally'
+          : 'runtime did not report total_cost_usd',
+      ),
+      tool_execution: phaseCost(
+        'tool-execution',
+        null,
+        'included_in_agent_call_or_not_metered',
+        'not_split',
+        'tool spans are local process/tool time; provider token cost is only available at agent-call granularity',
+      ),
+      artifact_generation: phaseCost(
+        'artifact-generation',
+        null,
+        'included_in_agent_call',
+        'not_split',
+        'artifact output is generated inside the agent call and is not separately priced',
+      ),
+      verification: phaseCost(
+        'verification',
+        null,
+        'not_instrumented',
+        'unavailable',
+        'preview/screenshot/responsive verification is not yet emitted as a structured measured phase',
+      ),
+    },
+  };
+}
+
+function durationMs(startedAt: number, endedAt: number): number {
+  return Math.max(0, Math.round(endedAt - startedAt));
+}
+
+function buildToolPerformanceDiagnostics(
+  tools: ToolCallSummary[] | undefined,
+): Record<string, unknown> {
+  const list = tools ?? [];
+  const byName = new Map<
+    string,
+    {
+      tool_name: string;
+      call_count: number;
+      error_count: number;
+      total_duration_ms: number;
+      max_duration_ms: number;
+      min_duration_ms: number;
+      failure_types: Set<string>;
+    }
+  >();
+
+  for (const tool of list) {
+    const d = durationMs(tool.startedAt, tool.endedAt);
+    const current =
+      byName.get(tool.name) ??
+      {
+        tool_name: tool.name,
+        call_count: 0,
+        error_count: 0,
+        total_duration_ms: 0,
+        max_duration_ms: 0,
+        min_duration_ms: Number.POSITIVE_INFINITY,
+        failure_types: new Set<string>(),
+      };
+    current.call_count += 1;
+    current.total_duration_ms += d;
+    current.max_duration_ms = Math.max(current.max_duration_ms, d);
+    current.min_duration_ms = Math.min(current.min_duration_ms, d);
+    if (tool.isError === true) {
+      current.error_count += 1;
+      current.failure_types.add('tool_result_error');
+    }
+    byName.set(tool.name, current);
+  }
+
+  return {
+    tool_call_count: list.length,
+    total_tool_duration_ms: list.reduce(
+      (sum, tool) => sum + durationMs(tool.startedAt, tool.endedAt),
+      0,
+    ),
+    retry_count_available: false,
+    retry_count: null,
+    retry_detection: 'not_instrumented',
+    retry_unavailable_reason:
+      'tool spans do not yet carry retry-group or attempt indexes',
+    by_tool: [...byName.values()].map((entry) => ({
+      tool_name: entry.tool_name,
+      call_count: entry.call_count,
+      error_count: entry.error_count,
+      total_duration_ms: entry.total_duration_ms,
+      avg_duration_ms:
+        entry.call_count > 0
+          ? Math.round(entry.total_duration_ms / entry.call_count)
+          : 0,
+      max_duration_ms: entry.max_duration_ms,
+      min_duration_ms:
+        Number.isFinite(entry.min_duration_ms) ? entry.min_duration_ms : 0,
+      retry_count_available: false,
+      retry_count: null,
+      failure_types:
+        entry.failure_types.size > 0 ? [...entry.failure_types] : ['none'],
+    })),
+  };
+}
+
+function buildArtifactWriteDiagnostics(
+  ctx: ReportContext,
+): Record<string, unknown> {
+  const writeTools = (ctx.tools ?? []).filter((tool) => tool.name === 'Write');
+  const totalArtifactSizeBytes = ctx.artifacts.reduce(
+    (sum, artifact) => sum + artifact.sizeBytes,
+    0,
+  );
+  const writeDurationMs = writeTools.reduce(
+    (sum, tool) => sum + durationMs(tool.startedAt, tool.endedAt),
+    0,
+  );
+  return {
+    artifact_count: ctx.artifacts.length,
+    total_artifact_size_bytes: totalArtifactSizeBytes,
+    write_tool_count: writeTools.length,
+    write_tool_duration_ms: writeDurationMs,
+    bytes_per_write_ms:
+      writeDurationMs > 0
+        ? Math.round(totalArtifactSizeBytes / writeDurationMs)
+        : null,
+    correlation_status:
+      ctx.artifacts.length > 0 && writeTools.length > 0
+        ? 'heuristic_by_write_tool_total'
+        : 'unavailable',
+    correlation_unavailable_reason:
+      ctx.artifacts.length > 0 && writeTools.length > 0
+        ? undefined
+        : 'artifact files are not yet linked to individual Write tool ids',
+    artifacts: ctx.artifacts.map((artifact) => ({
+      slug: artifact.slug,
+      type: artifact.type,
+      size_bytes: artifact.sizeBytes,
+    })),
+  };
+}
+
+function buildSemanticPhaseDiagnostics(ctx: ReportContext): Record<string, unknown> {
+  const marks = ctx.run.timingMarks ?? {};
+  const measured: Record<string, unknown> = {};
+  const addMeasured = (
+    name: string,
+    start: number | undefined,
+    end: number | undefined,
+  ) => {
+    const s = validTimestamp(start);
+    const e = validTimestamp(end);
+    measured[name] =
+      s !== undefined && e !== undefined && e >= s
+        ? { duration_ms: Math.round(e - s), status: 'measured' }
+        : { duration_ms: null, status: 'unmeasured' };
+  };
+  addMeasured('prompt-build', marks.promptBuildStartAt, marks.promptBuildEndAt);
+  addMeasured('agent-call', marks.modelCallStartAt, ctx.run.endedAt);
+  addMeasured('stream-output', marks.firstTokenAt, marks.finalizeStartAt ?? ctx.run.endedAt);
+  addMeasured('finalize', marks.finalizeStartAt, ctx.run.endedAt);
+  return {
+    measured,
+    semantic_phase_timing_status: 'partial',
+    missing_semantic_phases: [
+      'brief-intake',
+      'route-task-kind',
+      'resolve-skill',
+      'resolve-design-system',
+      'plan',
+      'generate-artifact',
+      'critique',
+      'repair',
+      'preview-verify',
+      'export-finalize',
+      'evaluator',
+    ],
+    missing_reason:
+      'runtime currently emits low-level timing marks but not all product semantic phase boundaries',
+  };
+}
+
+function buildPerformanceDiagnostics(ctx: ReportContext): Record<string, unknown> {
+  return {
+    timings: ctx.run.timings,
+    tool_performance: buildToolPerformanceDiagnostics(ctx.tools),
+    artifact_write: buildArtifactWriteDiagnostics(ctx),
+    preview_verify: {
+      status: 'not_instrumented',
+      screenshot_check: 'not_reported',
+      responsive_check: 'not_reported',
+      html_parse_check: 'not_reported',
+      note: 'artifact self-checks may appear in assistant output, but are not yet structured observations',
+    },
+    semantic_phases: buildSemanticPhaseDiagnostics(ctx),
+  };
+}
+
+function buildTimingSpanBodies(
+  ctx: ReportContext,
+  parentObservationId: string,
+  opts: {
+    modelCallName?: string;
+    promptStack?: PromptStackTelemetry;
+  } = {},
+): Record<string, unknown>[] {
   const marks = ctx.run.timingMarks ?? {};
   const runStart = ctx.run.startedAt;
   const runEnd = ctx.run.endedAt;
   const queueEnd = marks.promptBuildStartAt ?? marks.startChatRunStartedAt;
+  const costBreakdown = buildCostBreakdown(ctx);
+  const phaseCosts = costBreakdown.phase_costs as Record<string, unknown>;
   const definitions = [
     {
       name: 'queue',
       start: runStart,
       end: queueEnd,
+      input: {
+        phase: 'queue',
+        from: 'run.startedAt',
+        to: 'promptBuildStartAt',
+      },
+      output: {
+        status: queueEnd === undefined ? 'unmeasured' : 'ready_for_prompt_build',
+      },
       metadata: { boundary: 'run.startedAt -> promptBuildStartAt' },
     },
     {
       name: 'prompt-build',
       start: marks.promptBuildStartAt,
       end: marks.promptBuildEndAt,
+      input: {
+        phase: 'prompt-build',
+        ingredients: {
+          agent: ctx.agentId ?? 'unknown',
+          model: ctx.turn?.model ?? 'unknown',
+          skill_id: ctx.turn?.skillId ?? null,
+          design_system_id: ctx.turn?.designSystemId ?? null,
+          user_request_available: Boolean(ctx.message.prompt),
+          attachment_refs:
+            objectRefSummary(cappedManifestEntries(ctx.attachmentManifest)) ?? [],
+          attachment_refs_truncated: manifestTruncated(ctx.attachmentManifest),
+        },
+      },
+      output: {
+        status:
+          marks.promptBuildEndAt === undefined
+            ? 'unmeasured'
+            : 'prompt_stack_ready',
+        content_policy: opts.promptStack
+          ? 'redacted_prompt_stack_inline_with_object_refs'
+          : 'metadata_only_or_unavailable',
+        ...promptBuildSummary(ctx.promptTelemetry),
+        prompt_stack: opts.promptStack
+          ? structuredPromptStackInput(opts.promptStack)
+          : undefined,
+      },
       metadata: { boundary: 'promptBuildStartAt -> promptBuildEndAt' },
     },
     {
       name: 'spawn',
       start: marks.processSpawnStartedAt,
       end: marks.processSpawnedAt,
+      input: {
+        phase: 'spawn',
+        agent: ctx.agentId ?? 'unknown',
+        runtime: ctx.runtime?.clientType ?? 'unknown',
+        cwd_ref: 'project',
+        raw_path_included: false,
+      },
+      output: {
+        status:
+          marks.processSpawnedAt === undefined ? 'unmeasured' : 'process_spawned',
+      },
       metadata: {
         boundary: 'processSpawnStartedAt -> processSpawnedAt',
       },
     },
     {
-      name: 'model-call',
+      name: opts.modelCallName ?? 'agent-call',
       start: marks.modelCallStartAt,
       end: runEnd,
+      input: {
+        phase: opts.modelCallName ?? 'agent-call',
+        model: ctx.turn?.model ?? 'unknown',
+        agent: ctx.agentId ?? 'unknown',
+        tool_call_count: ctx.eventsSummary.toolCalls,
+        generation_observation:
+          (opts.modelCallName ?? 'agent-call') === 'agent-call',
+      },
+      output: {
+        status: ctx.run.status,
+        error_code: ctx.run.errorCode,
+        token_usage: tokenUsageSummary(ctx.message.usage),
+        cost: phaseCosts.agent_call,
+        tool_call_count: ctx.eventsSummary.toolCalls,
+      },
       metadata: {
         boundary: 'modelCallStartAt -> run.endedAt',
         toolCallCount: ctx.eventsSummary.toolCalls,
@@ -425,12 +890,33 @@ function buildTimingSpanBodies(ctx: ReportContext, generationId: string): Record
       name: 'stream-output',
       start: marks.firstTokenAt,
       end: marks.finalizeStartAt ?? runEnd,
+      input: {
+        phase: 'stream-output',
+        from: 'firstTokenAt',
+        to: 'finalizeStartAt',
+      },
+      output: {
+        status: ctx.run.status,
+        output_redacted: true,
+        artifact_blocks_redacted: true,
+      },
       metadata: { boundary: 'firstTokenAt -> finalizeStartAt' },
     },
     {
       name: 'finalize',
       start: marks.finalizeStartAt,
       end: runEnd,
+      input: {
+        phase: 'finalize',
+        artifact_manifest_enabled: ctx.prefs.artifactManifest === true,
+      },
+      output: {
+        status: ctx.run.status,
+        artifact_count: ctx.artifacts.length,
+        attachment_count: ctx.attachmentManifest?.length ?? 0,
+        manifest_completeness:
+          ctx.manifestCompleteness ?? (ctx.prefs.artifactManifest ? 'unavailable' : 'off'),
+      },
       metadata: { boundary: 'finalizeStartAt -> run.endedAt' },
     },
   ];
@@ -439,12 +925,75 @@ function buildTimingSpanBodies(ctx: ReportContext, generationId: string): Record
     .map((definition) =>
       timingSpanBody({
         traceId: ctx.run.runId,
-        parentObservationId: generationId,
+        parentObservationId,
         runId: ctx.run.runId,
         ...definition,
       }),
     )
     .filter((body): body is Record<string, unknown> => body !== null);
+}
+
+function usageTotal(usage: MessageSummary['usage']): number {
+  if (!usage) return 0;
+  const values = [
+    usage.inputTokens,
+    usage.inputTokensProvider,
+    usage.inputTokensEffective,
+    usage.outputTokens,
+    usage.totalTokens,
+    usage.cacheReadInputTokens,
+    usage.cacheCreationInputTokens,
+    usage.uncachedInputTokens,
+    usage.estimatedContextTokens,
+  ];
+  let total = 0;
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) total += value;
+  }
+  return total;
+}
+
+function redactArtifactBlocks(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return value.replace(
+    /<artifact\b([^>]*)>[\s\S]*?<\/artifact>/gi,
+    (_match, attrs: string) =>
+      `<artifact${attrs}>[REDACTED:artifact_content]</artifact>`,
+  );
+}
+
+const CONTENT_TOOL_NAMES = new Set([
+  'Read',
+  'Write',
+  'Edit',
+  'MultiEdit',
+  'NotebookEdit',
+]);
+
+function redactLocalPaths(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return value
+    .replace(/\/Users\/[^/\s"']+(?:\/[^ \n\r\t"'`<>)]*)?/g, '[REDACTED:local_path]')
+    .replace(/[A-Za-z]:\\Users\\[^\\\s"']+(?:\\[^ \n\r\t"'`<>)]*)?/g, '[REDACTED:local_path]');
+}
+
+function traceSafeToolPayload(
+  toolName: string,
+  direction: 'input' | 'output',
+  value: string | undefined,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (CONTENT_TOOL_NAMES.has(toolName)) {
+    return `[REDACTED:tool_${direction}:content_tool:${toolName}]`;
+  }
+  return redactLocalPaths(redactArtifactBlocks(value));
+}
+
+function shouldCreateGenerationObservation(ctx: ReportContext): boolean {
+  if (ctx.run.status === 'succeeded') return true;
+  if (usageTotal(ctx.message.usage) > 0) return true;
+  if (ctx.eventsSummary.toolCalls > 0) return true;
+  return ctx.run.failure?.failure_stage !== 'session_init';
 }
 
 export function buildTracePayload(ctx: ReportContext): unknown[] {
@@ -462,7 +1011,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     ? truncate(ctx.message.prompt, INPUT_MAX_BYTES)
     : undefined;
   const outputText = wantsContent
-    ? truncate(ctx.message.output, OUTPUT_MAX_BYTES)
+    ? truncate(redactArtifactBlocks(ctx.message.output), OUTPUT_MAX_BYTES)
     : undefined;
 
   const artifactsList = wantsArtifacts
@@ -472,6 +1021,18 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     wantsArtifacts && ctx.artifacts.length > ARTIFACTS_MAX_ITEMS
       ? true
       : undefined;
+  const attachmentManifest = wantsArtifacts
+    ? cappedManifestEntries(ctx.attachmentManifest)
+    : undefined;
+  const attachmentManifestTruncated = wantsArtifacts
+    ? manifestTruncated(ctx.attachmentManifest)
+    : undefined;
+  const artifactManifest = wantsArtifacts
+    ? cappedManifestEntries(ctx.artifactManifest)
+    : undefined;
+  const artifactManifestTruncated = wantsArtifacts
+    ? manifestTruncated(ctx.artifactManifest)
+    : undefined;
 
   const tokens = ctx.message.usage
     ? {
@@ -497,6 +1058,8 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
         unit: 'TOKENS' as const,
       }
     : undefined;
+  const costBreakdown = buildCostBreakdown(ctx);
+  const performanceDiagnostics = buildPerformanceDiagnostics(ctx);
 
   const success = ctx.run.status === 'succeeded';
   const traceId = ctx.run.runId;
@@ -504,6 +1067,10 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     ctx.langfuse ?? deriveLangfuseDeliveryState(ctx.prefs, readTelemetrySinkConfig());
   const agentSpanId = `${ctx.run.runId}-agent`;
   const generationId = `${ctx.run.runId}-gen`;
+  const createGeneration = shouldCreateGenerationObservation(ctx);
+  const operationSpanId = createGeneration
+    ? generationId
+    : `${ctx.run.runId}-runtime`;
   const promptStack = ctx.promptTelemetry
     ? wantsContent
       ? ctx.promptTelemetry
@@ -532,8 +1099,22 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     stderr: ctx.run.stderr,
     eventsSummary: ctx.eventsSummary,
     tokens,
+    cost_usd: costBreakdown.cost_usd,
+    currency: costBreakdown.currency,
+    pricing_version: costBreakdown.pricing_version,
+    cost_source: costBreakdown.cost_source,
+    cost_status: costBreakdown.cost_status,
+    cost_breakdown: costBreakdown,
+    performance_diagnostics: performanceDiagnostics,
     artifacts: artifactsList,
     artifactsTruncated,
+    attachment_manifest: attachmentManifest,
+    attachment_manifest_truncated: attachmentManifestTruncated,
+    artifact_manifest: artifactManifest,
+    artifact_manifest_truncated: artifactManifestTruncated,
+    manifest_completeness: wantsArtifacts
+      ? (ctx.manifestCompleteness ?? 'unavailable')
+      : undefined,
     projectId: ctx.projectId || undefined,
     agent: ctx.agentId,
     model: ctx.turn?.model,
@@ -556,12 +1137,16 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
   // shows them in the dedicated Model Parameters card and filters work.
   const modelParameters: Record<string, unknown> | undefined =
     ctx.turn?.reasoning ? { reasoning: ctx.turn.reasoning } : undefined;
-  const timingSpanBodies = buildTimingSpanBodies(ctx, generationId);
+  const timingSpanBodies = buildTimingSpanBodies(ctx, operationSpanId, {
+    modelCallName: createGeneration ? 'agent-call' : 'runtime-call',
+    ...(promptStack ? { promptStack } : {}),
+  });
   const toolParentObservationId = timingSpanBodies.some(
-    (span) => span.name === 'model-call',
+    (span) => span.name === 'agent-call',
   )
-    ? `${ctx.run.runId}-phase-model-call`
+    ? `${ctx.run.runId}-phase-agent-call`
     : agentSpanId;
+  const agentEventParentObservationId = toolParentObservationId;
 
   const batch: unknown[] = [
     {
@@ -600,10 +1185,16 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
           durationMs: ctx.eventsSummary.durationMs,
           toolCalls: ctx.eventsSummary.toolCalls,
           errors: ctx.eventsSummary.errors,
+          cost_usd: costBreakdown.cost_usd,
+          currency: costBreakdown.currency,
+          cost_status: costBreakdown.cost_status,
         },
       },
     },
-    {
+  ];
+
+  if (createGeneration) {
+    batch.push({
       id: randomUUID(),
       type: 'generation-create',
       timestamp: nowIso,
@@ -626,12 +1217,48 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
         usage,
         metadata: {
           durationMs: ctx.eventsSummary.durationMs,
+          cost_usd: costBreakdown.cost_usd,
+          currency: costBreakdown.currency,
+          pricing_version: costBreakdown.pricing_version,
+          cost_source: costBreakdown.cost_source,
+          cost_breakdown: costBreakdown,
+          performance_diagnostics: performanceDiagnostics,
           promptStack,
           ...promptStackFlatMetadata,
         },
       },
-    },
-  ];
+    });
+  } else {
+    batch.push({
+      id: randomUUID(),
+      type: 'span-create',
+      timestamp: nowIso,
+      body: {
+        id: operationSpanId,
+        traceId,
+        parentObservationId: agentSpanId,
+        name: 'agent-runtime',
+        startTime: startTimeIso,
+        endTime: endTimeIso,
+        input: generationInput,
+        output: outputText,
+        level: 'ERROR',
+        statusMessage: ctx.run.error ?? undefined,
+        metadata: {
+          durationMs: ctx.eventsSummary.durationMs,
+          cost_usd: costBreakdown.cost_usd,
+          currency: costBreakdown.currency,
+          pricing_version: costBreakdown.pricing_version,
+          cost_source: costBreakdown.cost_source,
+          cost_breakdown: costBreakdown,
+          performance_diagnostics: performanceDiagnostics,
+          promptStack,
+          ...promptStackFlatMetadata,
+          reason: 'no_model_generation',
+        },
+      },
+    });
+  }
 
   for (const span of timingSpanBodies) {
     batch.push({
@@ -642,16 +1269,45 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     });
   }
 
+  if (ctx.agentEvents?.length) {
+    for (const event of ctx.agentEvents) {
+      batch.push({
+        id: randomUUID(),
+        type: 'event-create',
+        timestamp: nowIso,
+        body: {
+          id: `${ctx.run.runId}-agent-event-${event.id}`,
+          traceId,
+          parentObservationId: agentEventParentObservationId,
+          name: event.name,
+          startTime: new Date(event.timestamp).toISOString(),
+          input: event.input,
+          output: event.output,
+          level: event.level ?? 'DEFAULT',
+          statusMessage: event.statusMessage,
+          metadata: event.metadata,
+        },
+      });
+    }
+  }
+
   if (ctx.tools?.length) {
     for (const tool of ctx.tools) {
       const toolSpanId = `${ctx.run.runId}-tool-${tool.id}`;
       const toolStartedAt = new Date(tool.startedAt).toISOString();
       const toolEndedAt = new Date(tool.endedAt).toISOString();
+      const toolDurationMs = durationMs(tool.startedAt, tool.endedAt);
       const toolInput = wantsContent
-        ? truncate(tool.input, TOOL_INPUT_MAX_BYTES)
+        ? truncate(
+            traceSafeToolPayload(tool.name, 'input', tool.input),
+            TOOL_INPUT_MAX_BYTES,
+          )
         : undefined;
       const toolOutput = wantsContent
-        ? truncate(tool.output, TOOL_OUTPUT_MAX_BYTES)
+        ? truncate(
+            traceSafeToolPayload(tool.name, 'output', tool.output),
+            TOOL_OUTPUT_MAX_BYTES,
+          )
         : undefined;
       batch.push({
         id: randomUUID(),
@@ -670,9 +1326,13 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
           metadata: {
             toolCallId: tool.id,
             toolName: tool.name,
+            durationMs: toolDurationMs,
             hasInput: tool.input !== undefined,
             hasOutput: tool.output !== undefined,
             isError: tool.isError === true,
+            failureType: tool.isError === true ? 'tool_result_error' : 'none',
+            retryCount: null,
+            retryDetection: 'not_instrumented',
           },
         },
       });
@@ -690,9 +1350,22 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
         parentObservationId: agentSpanId,
         name: 'artifact-summary',
         startTime: endTimeIso,
+        input: {
+          source: 'agent_generated_artifacts',
+          artifact_count: artifactsList.length,
+          artifact_manifest_enabled: wantsArtifacts,
+        },
+        output: {
+          artifacts: artifactsList,
+          artifactsTruncated,
+          manifest_completeness: wantsArtifacts
+            ? (ctx.manifestCompleteness ?? 'unavailable')
+            : 'off',
+        },
         metadata: {
           artifacts: artifactsList,
           artifactsTruncated,
+          artifact_write_diagnostics: performanceDiagnostics.artifact_write,
         },
       },
     });

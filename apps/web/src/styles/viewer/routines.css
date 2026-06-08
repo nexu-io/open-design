@@ -1588,13 +1588,20 @@
   color: var(--text-faint);
   cursor: default;
 }
-.app .working-dir-pill {
+/* The pill renders under `.app` (legacy header host) and under
+   `.chat-composer-fixed-layer` (its current home in the composer toolbar).
+   Paired selectors cover both contexts — matching the `.icon-btn` convention
+   above — instead of `:is(.app, .chat-composer-fixed-layer)`, whose inner
+   comma would also break selector-literal style tests. */
+.app .working-dir-pill,
+.chat-composer-fixed-layer .working-dir-pill {
   position: relative;
   display: inline-flex;
   margin-top: 0;
   font-size: 11.5px;
 }
-.app .working-dir-pill-trigger {
+.app .working-dir-pill-trigger,
+.chat-composer-fixed-layer .working-dir-pill-trigger {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1607,20 +1614,24 @@
   color: var(--text-muted);
   cursor: pointer;
 }
-.app .working-dir-pill-trigger:hover {
+.app .working-dir-pill-trigger:hover,
+.chat-composer-fixed-layer .working-dir-pill-trigger:hover {
   background: color-mix(in srgb, var(--text-muted) 6%, var(--bg-panel));
   border-color: var(--border-strong, var(--border));
 }
-.app .working-dir-pill-trigger:disabled {
+.app .working-dir-pill-trigger:disabled,
+.chat-composer-fixed-layer .working-dir-pill-trigger:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
-.app .working-dir-pill-label {
+.app .working-dir-pill-label,
+.chat-composer-fixed-layer .working-dir-pill-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.app .working-dir-pill-menu {
+.app .working-dir-pill-menu,
+.chat-composer-fixed-layer .working-dir-pill-menu {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
@@ -1633,13 +1644,15 @@
   background: var(--bg-panel);
   box-shadow: var(--shadow-md, 0 12px 32px rgba(0, 0, 0, 0.12));
 }
-.app .working-dir-pill-menu-path {
+.app .working-dir-pill-menu-path,
+.chat-composer-fixed-layer .working-dir-pill-menu-path {
   padding: 4px 10px;
   color: var(--text-muted);
   font-size: 10.5px;
   word-break: break-all;
 }
-.app .working-dir-pill-menu-item {
+.app .working-dir-pill-menu-item,
+.chat-composer-fixed-layer .working-dir-pill-menu-item {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1654,25 +1667,31 @@
   font-size: 12px;
   text-align: left;
 }
-.app .working-dir-pill-menu-item.small {
+.app .working-dir-pill-menu-item.small,
+.chat-composer-fixed-layer .working-dir-pill-menu-item.small {
   font-size: 11.5px;
 }
-.app .working-dir-pill-menu-item:hover {
+.app .working-dir-pill-menu-item:hover,
+.chat-composer-fixed-layer .working-dir-pill-menu-item:hover {
   background: color-mix(in srgb, var(--text-muted) 8%, transparent);
 }
-.app .working-dir-pill-menu-item:disabled {
+.app .working-dir-pill-menu-item:disabled,
+.chat-composer-fixed-layer .working-dir-pill-menu-item:disabled {
   color: var(--text-faint);
   cursor: not-allowed;
 }
-.app .working-dir-pill-menu-item:disabled:hover {
+.app .working-dir-pill-menu-item:disabled:hover,
+.chat-composer-fixed-layer .working-dir-pill-menu-item:disabled:hover {
   background: transparent;
 }
-.app .working-dir-pill-menu-divider {
+.app .working-dir-pill-menu-divider,
+.chat-composer-fixed-layer .working-dir-pill-menu-divider {
   height: 1px;
   margin: 4px 0;
   background: var(--border);
 }
-.app .working-dir-pill-menu-section {
+.app .working-dir-pill-menu-section,
+.chat-composer-fixed-layer .working-dir-pill-menu-section {
   padding: 4px 10px;
   color: var(--text-muted);
   font-size: 10.5px;
@@ -1680,16 +1699,38 @@
   letter-spacing: 0;
   text-transform: uppercase;
 }
-.app .working-dir-pill-menu-recent {
+.app .working-dir-pill-menu-recent,
+.chat-composer-fixed-layer .working-dir-pill-menu-recent {
   max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.app .working-dir-pill-menu-error {
+.app .working-dir-pill-menu-error,
+.chat-composer-fixed-layer .working-dir-pill-menu-error {
   padding: 4px 10px 6px;
   color: var(--red, #c0392b);
   font-size: 11.5px;
+}
+/* Hosted in the composer's bottom toolbar (left of the spacer): flip the menu
+   to open upward and anchor it left so it neither drops below the viewport nor
+   overflows the composer's left edge. */
+.app .composer-row .working-dir-pill-menu,
+.chat-composer-fixed-layer .composer-row .working-dir-pill-menu {
+  top: auto;
+  right: auto;
+  bottom: calc(100% + 6px);
+  left: 0;
+}
+/* The toolbar is a flex row; without this the pill gets squeezed below its
+   content width and the trailing chevron wraps to a second line. */
+.app .composer-row .working-dir-pill,
+.chat-composer-fixed-layer .composer-row .working-dir-pill {
+  flex: 0 0 auto;
+}
+.app .composer-row .working-dir-pill-trigger,
+.chat-composer-fixed-layer .composer-row .working-dir-pill-trigger {
+  flex-wrap: nowrap;
 }
 .app .composer-hint {
   margin: 4px 8px 0;

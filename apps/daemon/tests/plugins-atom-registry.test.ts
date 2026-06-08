@@ -92,6 +92,9 @@ function ctxFor(stage: PipelineStage, iteration = 0): AtomWorkerContext {
     runId:          'run-1',
     projectId:      'project-1',
     conversationId: 'conv-A',
+    daemonUrl:      null,
+    cwd:            tmpDir,
+    entryFile:      null,
     stage,
     iteration,
     snapshot:       fakeSnapshot(),
@@ -227,7 +230,7 @@ describe('built-in critique-theater worker', () => {
 });
 
 describe('registerBuiltInAtomWorkers: idempotency', () => {
-  it('registers every FIRST_PARTY_ATOM exactly once even on repeat calls', () => {
+  it('registers every implemented first-party atom exactly once even on repeat calls', () => {
     registerBuiltInAtomWorkers();
     const first = listRegisteredAtomIds();
     registerBuiltInAtomWorkers();
@@ -236,6 +239,7 @@ describe('registerBuiltInAtomWorkers: idempotency', () => {
     expect(first).toContain('critique-theater');
     expect(first).toContain('file-write');
     expect(first).toContain('media-image');
+    expect(first).toContain('visual-validation');
   });
 });
 

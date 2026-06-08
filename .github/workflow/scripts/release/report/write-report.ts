@@ -80,7 +80,7 @@ function topDurations(entries: unknown[], key: string, limit: number): JsonRecor
 
 function pickBuildArtifacts(build: JsonRecord | null): JsonRecord {
   if (build == null) return {};
-  const keys = ["appPath", "dmgPath", "installerPath", "latestYmlPath", "outputRoot", "portableZipPath", "zipPath"];
+  const keys = ["appPath", "dmgPath", "installerPath", "latestYmlPath", "outputRoot", "payloadPath", "portableZipPath", "zipPath"];
   const artifacts: JsonRecord = {};
   for (const key of keys) {
     const value = build[key];

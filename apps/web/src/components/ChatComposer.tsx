@@ -278,6 +278,10 @@ interface Props {
   // ChatPane). Pass `null` (or omit) to render the full rail.
   pinnedPluginId?: string | null;
   footerAccessory?: ReactNode;
+  // Slot rendered in the composer's bottom toolbar, immediately right of the
+  // "+" menu. Hosts the working-directory pill so the folder selector sits by
+  // the composer (mirroring the home input) instead of the file-panel header.
+  leadingAccessory?: ReactNode;
   // Design-system picker slot rendered at the top of the composer (above
   // the textarea). The former standalone chrome header row was removed;
   // ProjectView owns the project record so it renders the picker as a slot.
@@ -382,6 +386,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onProjectSkillChange,
       pinnedPluginId = null,
       footerAccessory,
+      leadingAccessory,
       designSystemPicker,
       currentDesignSystemId = null,
       onActiveDesignSystemChange,
@@ -2133,6 +2138,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 />
               )}
             />
+            {leadingAccessory}
             <span className="composer-spacer" />
             {footerAccessory}
             <SessionModeToggle

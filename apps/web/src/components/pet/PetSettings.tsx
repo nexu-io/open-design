@@ -72,6 +72,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
   } | null>(null);
   const [atlasRowIndex, setAtlasRowIndex] = useState<number>(0);
   const [atlasBusy, setAtlasBusy] = useState(false);
+  const hatchCopiedTimerRef = useRef<number | null>(null);
   // "Hatch with AI" prompt scratchpad. The user types a short pet
   // concept here, we splice it into a ready-to-paste hatch-pet skill
   // prompt, then they copy or run it from chat.
@@ -100,6 +101,15 @@ export function PetSettings({ cfg, setCfg }: Props) {
     | { kind: 'error'; error: string }
     | null
   >(null);
+
+  useEffect(() => {
+    return () => {
+      if (hatchCopiedTimerRef.current !== null) {
+        window.clearTimeout(hatchCopiedTimerRef.current);
+        hatchCopiedTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Tab routing — split the panel into three exclusive surfaces
   // (built-in / custom / community) so each "where do my pets come
@@ -403,8 +413,18 @@ export function PetSettings({ cfg, setCfg }: Props) {
     try {
       await navigator.clipboard.writeText(hatchPrompt);
       setHatchCopied(true);
-      window.setTimeout(() => setHatchCopied(false), 1800);
+      if (hatchCopiedTimerRef.current !== null) {
+        window.clearTimeout(hatchCopiedTimerRef.current);
+      }
+      hatchCopiedTimerRef.current = window.setTimeout(() => {
+        hatchCopiedTimerRef.current = null;
+        setHatchCopied(false);
+      }, 1800);
     } catch {
+      if (hatchCopiedTimerRef.current !== null) {
+        window.clearTimeout(hatchCopiedTimerRef.current);
+        hatchCopiedTimerRef.current = null;
+      }
       setHatchCopied(false);
     }
   }

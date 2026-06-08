@@ -167,6 +167,7 @@ import {
   restoreProjectSnapshotLink,
   resolvePluginSnapshot,
   runPipelineForRun,
+  splitPipelineSnapshotByExecutionBoundary,
   runStageWithRegistry,
   startSnapshotGc,
   uninstallPlugin,
@@ -1316,7 +1317,11 @@ function resolveProcessResourcesPath() {
 
 export function resolveDaemonResourceRoot({
   configured = process.env[RESOURCE_ROOT_ENV],
-  safeBases = [PROJECT_ROOT, resolveProcessResourcesPath()],
+  safeBases = [
+    PROJECT_ROOT,
+    resolveProcessResourcesPath(),
+    process.env.OD_INSTALLATION_DIR,
+  ],
 } = {}) {
   if (!configured || configured.length === 0) return null;
 
@@ -4390,6 +4395,13 @@ export function resolveActiveInactivityTimeoutMs(params: {
 //     an external `kill -9` after the artifact write must still report
 //     `failed`, only the watchdog-initiated SIGTERM/SIGKILL escalation
 //     is allowed to flip the status to `succeeded`.
+//   - the artifact-produced carve-out is EXIT-CODE ONLY (code != null &&
+//     code !== 0): a non-zero *normal* exit that nonetheless wrote a
+//     confirmed artifact this run is teardown noise, not a generation
+//     failure. It deliberately never overrides a signal kill (code ===
+//     null) — an OOM / external `kill` / container shutdown after an
+//     artifact write stays `failed`, same guard as the quiet-period
+//     branch above.
 export function classifyChatRunCloseStatus(params: {
   cancelRequested: boolean;
   code: number | null;
@@ -4397,6 +4409,7 @@ export function classifyChatRunCloseStatus(params: {
   acpCleanCompletion: boolean;
   artifactQuietShutdownRequested: boolean;
   turnCompletedCleanly: boolean;
+  artifactProducedThisRun: boolean;
 }): 'canceled' | 'succeeded' | 'failed' {
   if (params.cancelRequested) return 'canceled';
   if (params.code === 0) return 'succeeded';
@@ -4408,6 +4421,17 @@ export function classifyChatRunCloseStatus(params: {
     params.code === null &&
     (params.signal === 'SIGTERM' || params.signal === 'SIGKILL');
   if (artifactQuietShutdown) return 'succeeded';
+  // Artifact-aware NORMAL-exit carve-out. A non-zero exit that still
+  // produced a confirmed artifact this run (a SessionEnd hook or a late
+  // stdin/stream error dragging the CLI to exit 1 *after* the deliverable
+  // landed) is teardown noise, not a generation failure — reproduced by
+  // project c92897e1: a 31KB HTML + .artifact.json on disk, status='failed'.
+  // CRITICAL: gated on `code != null && code !== 0` so a signal kill
+  // (code === null, SIGKILL/SIGTERM) is NEVER flipped by an artifact,
+  // preserving the OOM / external-kill / container-shutdown guard.
+  if (params.code != null && params.code !== 0 && params.artifactProducedThisRun) {
+    return 'succeeded';
+  }
   // Post-completion teardown carve-out (#3372). When the model already
   // emitted a clean terminal turn (a `turn_end`/`usage` event with no
   // outstanding host answer, the same condition that closes the child's
@@ -11475,10 +11499,13 @@ export async function startServer({
   // back to the canned v1 stub for diagnostic bisection or replay
   // of pre-Stage-D runs. Errors are swallowed (logged) so a bad
   // pipeline never blocks the agent run.
-  const firePipelineForRun = (args) => {
+  const executePipelineForRun = async (args) => {
     const { run, snapshot, runs, db: dbHandle } = args;
-    if (!snapshot?.pipeline?.stages?.length) return;
+    if (!snapshot?.pipeline) {
+      return { outcomes: [], lastSignalsByStage: new Map() };
+    }
     const env = { maxIterations: readPluginEnvKnobs().maxDevloopIterations };
+    const lastSignalsByStage = new Map();
     const emitPipeline = (evt) => {
       try { runs.emit(run, evt.kind, evt); } catch {/* ignore */}
     };
@@ -11493,32 +11520,47 @@ export async function startServer({
       : 'registry';
     let runStage;
     if (runnerMode === 'stub') {
-      runStage = ({ iteration }) => ({
-        signals: {
-          'critique.score':  iteration >= 0 ? 4 : 0,
-          'preview.ok':      true,
-          'user.confirmed':  true,
-        },
-      });
+      runStage = ({ stage, iteration }) => {
+        const outcome = {
+          signals: {
+            'critique.score':  iteration >= 0 ? 4 : 0,
+            'preview.ok':      true,
+            'user.confirmed':  true,
+          },
+        };
+        lastSignalsByStage.set(stage.id, outcome.signals);
+        return outcome;
+      };
     } else {
       registerBuiltInAtomWorkers();
       runStage = async ({ stage, iteration, snapshot: stageSnapshot }) => {
+        const projectRecord = getProject(dbHandle, projectIdForRun);
+        const cwd = projectRecord
+          ? resolveProjectDir(PROJECTS_DIR, projectIdForRun, projectRecord.metadata)
+          : null;
+        const entryFile = typeof projectRecord?.metadata?.entryFile === 'string'
+          ? projectRecord.metadata.entryFile
+          : null;
         const outcome = await runStageWithRegistry({
           db:             dbHandle,
           runId:          run.id,
           projectId:      projectIdForRun,
           conversationId: run.conversationId ?? null,
+          daemonUrl,
+          cwd,
+          entryFile,
           stage,
           iteration,
           snapshot:       stageSnapshot,
         });
+        lastSignalsByStage.set(stage.id, outcome.signals ?? {});
         return {
           signals:         outcome.signals,
           critiqueSummary: outcome.critiqueSummary,
         };
       };
     }
-    void runPipelineForRun({
+    const outcomes = await runPipelineForRun({
       db: dbHandle,
       runId:           run.id,
       projectId:       projectIdForRun,
@@ -11529,7 +11571,13 @@ export async function startServer({
       runStage,
       emitPipeline,
       emitGenui,
-    }).catch((err) => {
+    });
+    return { outcomes, lastSignalsByStage };
+  };
+
+  const firePipelineForRun = (args) => {
+    const { run, snapshot, runs } = args;
+    void executePipelineForRun(args).catch((err) => {
       try {
         runs.emit(run, 'pipeline_stage_failed', {
           runId:      run.id,
@@ -13498,6 +13546,29 @@ export async function startServer({
 
     if (def.streamFormat === 'claude-stream-json') {
       const claude = createClaudeStreamHandler((ev) => {
+        if (ev?.type === 'error') {
+          if (agentStreamError) return;
+          const message = String((ev as any).message || 'Claude Code stream error');
+          const failureText = [
+            message,
+            typeof (ev as any).code === 'string' ? (ev as any).code : '',
+            agentStdoutTail,
+            agentStderrTail,
+          ].join('\n');
+          agentStreamError = rewriteKnownAgentStreamError(
+            agentId,
+            message,
+            failureText,
+          );
+          clearInactivityWatchdog();
+          const serviceCode = classifyAgentServiceFailure(failureText);
+          send('error', createSseErrorPayload(
+            serviceCode ?? 'AGENT_EXECUTION_FAILED',
+            agentStreamError,
+            { retryable: serviceCode === 'AGENT_AUTH_REQUIRED' || serviceCode === 'RATE_LIMITED' },
+          ));
+          return;
+        }
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
         noteAgentActivity();
         noteFirstTokenFromAgentEvent(ev);
@@ -13900,6 +13971,7 @@ export async function startServer({
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
+      const runArtifactSideEffects = scanRunEventsForRetrySideEffects(run.events);
       const status = classifyChatRunCloseStatus({
         cancelRequested: !!run.cancelRequested,
         code,
@@ -13907,6 +13979,9 @@ export async function startServer({
         acpCleanCompletion,
         artifactQuietShutdownRequested,
         turnCompletedCleanly: !!run.turnCompletedCleanly,
+        artifactProducedThisRun:
+          runArtifactSideEffects.artifactWriteSeen ||
+          runArtifactSideEffects.liveArtifactSeen,
       });
       // Skip the close-handler failure emit when the run is already
       // terminal: the inactivity watchdog (failForInactivity) finishes the
@@ -14024,25 +14099,67 @@ export async function startServer({
       for (const chunk of plaintextStdoutBuffer) {
         send('stdout', { chunk });
       }
-      // Capture the pi session file path for conversational continuity.
-      // The session path is discovered by attachPiRpcSession when it
-      // processes agent_end; persist it under (conversationId, agentId) so
-      // another conversation in the same cwd cannot inherit this history.
-      if (acpSession && typeof acpSession.getLastSessionPath === 'function') {
-        const sessionPath = acpSession.getLastSessionPath();
-        if (status === 'succeeded' && def.streamFormat === 'pi-rpc') {
-          persistCapturedAgentSession(db, {
-            conversationId: run.conversationId,
-            agentId: def.id,
-            sessionId: sessionPath,
-            stablePromptHash: currentStableHash,
+      let finalStatus = status;
+      if (
+        finalStatus === 'succeeded'
+        && run.postRunPipelineSnapshot?.pipeline?.stages?.length
+      ) {
+        try {
+          const { outcomes, lastSignalsByStage } = await executePipelineForRun({
+            run,
+            snapshot: run.postRunPipelineSnapshot,
+            runs: design.runs,
+            db,
           });
+          const failedStage = outcomes.find((outcome) => {
+            if (!outcome.converged) return true;
+            const stage = run.postRunPipelineSnapshot.pipeline.stages.find(
+              (candidate) => candidate.id === outcome.stageId,
+            );
+            if (!stage?.atoms.includes('visual-validation')) return false;
+            const signals = lastSignalsByStage.get(outcome.stageId) ?? {};
+            if (signals['preview.ok'] === false) return true;
+            return typeof signals['critique.score'] === 'number'
+              && signals['critique.score'] < 4;
+          });
+          if (failedStage) {
+            const failedSignals = lastSignalsByStage.get(failedStage.stageId) ?? {};
+            const failedScore = failedSignals['critique.score'];
+            send('error', createSseErrorPayload(
+              'PLUGIN_PIPELINE_FAILED',
+              typeof failedScore === 'number'
+                ? `Post-run visual validation scored ${failedScore}, so the run cannot finish successfully.`
+                : `Post-run pipeline stage "${failedStage.stageId}" did not finish successfully.`,
+            ));
+            finalStatus = 'failed';
+          }
+        } catch (err) {
+          send('error', createSseErrorPayload(
+            'PLUGIN_PIPELINE_FAILED',
+            err instanceof Error ? err.message : String(err),
+          ));
+          finalStatus = 'failed';
         }
       }
-      if (status === 'succeeded') {
+      if (finalStatus === 'succeeded') {
+        // Capture the pi session file path for conversational continuity.
+        // The session path is discovered by attachPiRpcSession when it
+        // processes agent_end; persist it under (conversationId, agentId) so
+        // another conversation in the same cwd cannot inherit this history.
+        if (acpSession && typeof acpSession.getLastSessionPath === 'function') {
+          const sessionPath = acpSession.getLastSessionPath();
+          if (def.streamFormat === 'pi-rpc') {
+            persistCapturedAgentSession(db, {
+              conversationId: run.conversationId,
+              agentId: def.id,
+              sessionId: sessionPath,
+              stablePromptHash: currentStableHash,
+            });
+          }
+        }
         persistDeliveredAgentSessionState();
       }
-      finishWithRetryDecision(status, code, signal);
+      finishWithRetryDecision(finalStatus, code, signal);
       } finally {
         // Best-effort cleanup of the per-run agy log file on every close
         // path — successful, failed, cancelled, or non-zero exit — so
@@ -14513,19 +14630,17 @@ export async function startServer({
         : {}),
     };
     res.status(202).json(body);
-    // Plan §3.I1 / spec §10.1 — fire the pipeline schedule on the run's
-    // SSE stream BEFORE the agent process is started. The first
-    // pipeline_stage_started event is emitted synchronously (before
-    // the first await inside runPipelineForRun), so any SSE consumer
-    // that subscribes between create() and start() sees a stage event
-    // ahead of the agent's message_chunk stream — exactly what §8 e2e-3
-    // expects. The stub stage runner returns immediately so a
-    // non-loop pipeline walks through every stage in O(stages) time;
-    // the audit row in `run_devloop_iterations` records the timeline.
-    if (resolvedSnapshot?.ok && resolvedSnapshot.snapshot.pipeline) {
+    const pipelineSchedule = resolvedSnapshot?.ok
+      ? splitPipelineSnapshotByExecutionBoundary(resolvedSnapshot.snapshot)
+      : { preRun: null, postRun: null };
+    // Fire only pre-run-safe stages before the agent starts. Stages that
+    // depend on agent-produced artifacts (`visual-validation`) are
+    // deferred until the run succeeds so they inspect the current output
+    // instead of the untouched pre-run workspace.
+    if (resolvedSnapshot?.ok && pipelineSchedule.preRun) {
       firePipelineForRun({
         run,
-        snapshot: resolvedSnapshot.snapshot,
+        snapshot: pipelineSchedule.preRun,
         runs: design.runs,
         db,
       });
@@ -14540,6 +14655,7 @@ export async function startServer({
         console.warn('[plugins] skill candidate hook setup failed', err);
       }
     }
+    run.postRunPipelineSnapshot = pipelineSchedule.postRun;
     design.runs.start(run, () => startChatRun(meta, run));
 
     // Analytics v2: emit run_created (daemon-side authoritative) and

@@ -8801,8 +8801,8 @@ function HtmlViewer({
         </div>,
         document.body,
       ) : null}
-      {imageExportModalOpen ? (
-        <div className="modal-backdrop" role="presentation">
+      {imageExportModalOpen && typeof document !== 'undefined' ? createPortal(
+        <div className="modal-backdrop viewer-modal-backdrop image-export-backdrop" role="presentation">
           <div
             className="modal deploy-modal image-export-modal"
             role="dialog"
@@ -8867,10 +8867,11 @@ function HtmlViewer({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
-      {templateModalOpen ? (
-        <div className="modal-backdrop" role="presentation">
+      {templateModalOpen && typeof document !== 'undefined' ? createPortal(
+        <div className="modal-backdrop viewer-modal-backdrop" role="presentation">
           <div className="modal deploy-modal" role="dialog" aria-modal="true">
             <div className="modal-head">
               <div className="kicker">TEMPLATE</div>
@@ -8925,11 +8926,12 @@ function HtmlViewer({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
-      {deployModalOpen ? (
+      {deployModalOpen && typeof document !== 'undefined' ? createPortal(
         <div
-          className="modal-backdrop deploy-flow-backdrop"
+          className="modal-backdrop viewer-modal-backdrop deploy-flow-backdrop"
           role="presentation"
           onClick={(event) => {
             if (event.target === event.currentTarget) closeDeployModal();
@@ -9252,7 +9254,8 @@ function HtmlViewer({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
       {deploySavedToast ? (
         <Toast
