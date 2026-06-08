@@ -13,7 +13,6 @@ import type {
   OpenDesignGithubLatestReleaseResponse,
   ImportLocalDesignSystemRequest,
   ImportLocalDesignSystemResponse,
-  PublicArtifactShareResponse,
   ReplaceProjectWorkingDirResponse,
   SocialShareRequest,
   SocialShareResponse,
@@ -1373,28 +1372,6 @@ export async function checkDeploymentLink(
     throw new Error(payload?.error?.message || payload?.message || `Link check failed (${resp.status})`);
   }
   return (await resp.json()) as WebDeployProjectFileResponse;
-}
-
-export async function createPublicArtifactShareLink(
-  projectId: string,
-  fileName: string,
-  title?: string,
-): Promise<PublicArtifactShareResponse> {
-  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/public-share`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      fileName,
-      ...(title ? { title } : {}),
-    }),
-  });
-  if (!resp.ok) {
-    const payload = (await resp.json().catch(() => null)) as
-      | { error?: { message?: string }; message?: string }
-      | null;
-    throw new Error(payload?.error?.message || payload?.message || `Public share failed (${resp.status})`);
-  }
-  return (await resp.json()) as PublicArtifactShareResponse;
 }
 
 export async function createSocialSharePayload(

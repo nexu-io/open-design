@@ -23,7 +23,6 @@ import {
   extractCssReferences,
   extractHtmlReferences,
   extractInlineCssReferences,
-  createPublicArtifactShare,
   injectDeployHookScript,
   isVercelProtectedResponse,
   listCloudflarePagesZones,
@@ -236,55 +235,6 @@ describe('deploy file set', () => {
     expect(files.map((f) => f.file)).toEqual(['index.html']);
     expect(files[0]?.data.toString('utf8')).toContain('data-open-design-attribution="true"');
     expect(files[0]?.data.toString('utf8')).toContain('Made with Open Design');
-  });
-
-  it('uploads a user-triggered public share payload with a 24h expiry', async () => {
-    const { projectsRoot, projectId, dir } = await setupProject();
-    await writeFile(path.join(dir, 'page.html'), '<!doctype html><body><h1>Hello</h1></body>');
-    const files = await buildDeployFileSet(projectsRoot, projectId, 'page.html');
-    const calls: Array<{ url: string; body: any }> = [];
-    vi.stubGlobal('fetch', vi.fn(async (url, init) => {
-      calls.push({
-        url: String(url),
-        body: JSON.parse(String((init as RequestInit).body)),
-      });
-      return new Response(JSON.stringify({
-        url: 'https://og.open-design.ai/s/share_123',
-        id: 'share_123',
-        expiresAt: '2026-06-09T00:00:00.000Z',
-        expiresInSeconds: 86400,
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
-    }));
-
-    const result = await createPublicArtifactShare({
-      endpoint: 'https://og.open-design.ai/api/share',
-      files,
-      projectId,
-      sourceFileName: 'page.html',
-      title: 'Hello Share',
-    });
-
-    expect(result).toEqual({
-      url: 'https://og.open-design.ai/s/share_123',
-      id: 'share_123',
-      expiresAt: '2026-06-09T00:00:00.000Z',
-      expiresInSeconds: 86400,
-    });
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.url).toBe('https://og.open-design.ai/api/share');
-    expect(calls[0]?.body).toMatchObject({
-      schema: 'open-design.public-artifact-share.v1',
-      title: 'Hello Share',
-      projectId,
-      sourceFileName: 'page.html',
-      entryFile: 'index.html',
-      expiresInSeconds: 86400,
-    });
-    const entry = calls[0]?.body.files.find((file: { path: string }) => file.path === 'index.html');
-    expect(entry?.encoding).toBe('base64');
-    const html = Buffer.from(entry.data, 'base64').toString('utf8');
-    expect(html).toContain('<h1>Hello</h1>');
-    expect(html).toContain('data-open-design-attribution="true"');
   });
 
   it('can include all visible project files while keeping the selected entry at index.html', async () => {

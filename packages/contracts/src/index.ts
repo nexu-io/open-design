@@ -25,7 +25,6 @@ export * from './api/plugin-candidates.js';
 export * from './api/providerModels.js';
 export * from './api/projects.js';
 export * from './api/proxy.js';
-export * from './api/public-share.js';
 export * from './api/routines.js';
 export * from './api/registry.js';
 export * from './api/research.js';

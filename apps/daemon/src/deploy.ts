@@ -4,14 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
-import {
-  DEFAULT_PUBLIC_ARTIFACT_SHARE_ENDPOINT,
-  PUBLIC_ARTIFACT_SHARE_SCHEMA,
-  PUBLIC_ARTIFACT_SHARE_TTL_SECONDS,
-  injectOpenDesignAttribution,
-  type PublicArtifactShareResponse,
-  type PublicArtifactShareUploadRequest,
-} from '@open-design/contracts';
+import { injectOpenDesignAttribution } from '@open-design/contracts';
 import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
@@ -66,8 +59,6 @@ export const CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_BODY_BYTES = 75 * 1024 * 1024;
 export const CLOUDFLARE_PAGES_ASSET_MAX_BYTES = 25 * 1024 * 1024;
 const VERCEL_PROTECTED_MESSAGE =
   'Deployment is protected by Vercel. Disable Deployment Protection or use a custom domain to make this link public.';
-const PUBLIC_SHARE_MAX_FILES = 100;
-const PUBLIC_SHARE_MAX_BODY_BYTES = 20 * 1024 * 1024;
 
 export class DeployError extends Error {
   status: number;
@@ -362,109 +353,6 @@ export async function buildDeployFileSet(projectsRoot: string, projectId: string
     });
   }
   return plan.files;
-}
-
-export async function createPublicArtifactShare(input: {
-  endpoint?: string;
-  files: DeployFile[];
-  projectId: string;
-  sourceFileName: string;
-  title?: string;
-}): Promise<PublicArtifactShareResponse> {
-  const endpoint = normalizePublicShareEndpoint(input.endpoint ?? process.env.OD_PUBLIC_SHARE_ENDPOINT ?? DEFAULT_PUBLIC_ARTIFACT_SHARE_ENDPOINT);
-  if (!endpoint) {
-    throw new DeployError('Public share endpoint must be an http(s) URL.', 400);
-  }
-  if (input.files.length > PUBLIC_SHARE_MAX_FILES) {
-    throw new DeployError(`Public share supports at most ${PUBLIC_SHARE_MAX_FILES} files.`, 400);
-  }
-  const totalBytes = input.files.reduce((sum, file) => sum + Buffer.from(file.data).byteLength, 0);
-  if (totalBytes > PUBLIC_SHARE_MAX_BODY_BYTES) {
-    throw new DeployError('Public share bundle is too large. Export or deploy the project instead.', 400, {
-      maxBytes: PUBLIC_SHARE_MAX_BODY_BYTES,
-      totalBytes,
-    });
-  }
-
-  const payload: PublicArtifactShareUploadRequest = {
-    schema: PUBLIC_ARTIFACT_SHARE_SCHEMA,
-    title: displayPublicShareTitle(input.title, input.sourceFileName),
-    projectId: input.projectId,
-    sourceFileName: input.sourceFileName,
-    entryFile: 'index.html',
-    expiresInSeconds: PUBLIC_ARTIFACT_SHARE_TTL_SECONDS,
-    files: input.files.map((file) => ({
-      path: file.file,
-      ...(file.contentType ? { contentType: file.contentType } : {}),
-      encoding: 'base64',
-      data: Buffer.from(file.data).toString('base64'),
-    })),
-  };
-
-  let resp: Response;
-  try {
-    resp = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-open-design-share-schema': PUBLIC_ARTIFACT_SHARE_SCHEMA,
-      },
-      body: JSON.stringify(payload),
-    });
-  } catch (err) {
-    throw new DeployError(`Public share upload failed: ${errorMessage(err, 'network error')}`, 502);
-  }
-  const body = await resp.json().catch(() => null) as Partial<PublicArtifactShareResponse> & { error?: string; message?: string } | null;
-  if (!resp.ok) {
-    throw new DeployError(body?.error || body?.message || `Public share upload failed (${resp.status}).`, resp.status >= 500 ? 502 : 400, body ?? undefined);
-  }
-  const url = normalizePublicShareUrl(body?.url);
-  if (!url) {
-    throw new DeployError('Public share endpoint returned an invalid URL.', 502, body ?? undefined);
-  }
-  return {
-    url,
-    ...(typeof body?.id === 'string' && body.id.trim() ? { id: body.id.trim() } : {}),
-    expiresAt: typeof body?.expiresAt === 'string' && body.expiresAt.trim()
-      ? body.expiresAt.trim()
-      : new Date(Date.now() + PUBLIC_ARTIFACT_SHARE_TTL_SECONDS * 1000).toISOString(),
-    expiresInSeconds: typeof body?.expiresInSeconds === 'number' && Number.isFinite(body.expiresInSeconds)
-      ? Math.max(0, Math.floor(body.expiresInSeconds))
-      : PUBLIC_ARTIFACT_SHARE_TTL_SECONDS,
-  };
-}
-
-function displayPublicShareTitle(title: string | undefined, sourceFileName: string): string {
-  if (typeof title === 'string' && title.trim()) return title.trim().slice(0, 160);
-  const base = path.posix.basename(sourceFileName);
-  const dot = base.lastIndexOf('.');
-  return (dot > 0 ? base.slice(0, dot) : base || 'Open Design artifact').slice(0, 160);
-}
-
-function normalizePublicShareEndpoint(value: unknown): string {
-  if (typeof value !== 'string') return '';
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  try {
-    const url = new URL(trimmed);
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') return '';
-    return url.toString();
-  } catch {
-    return '';
-  }
-}
-
-function normalizePublicShareUrl(value: unknown): string {
-  if (typeof value !== 'string') return '';
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  try {
-    const url = new URL(trimmed);
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') return '';
-    return url.toString();
-  } catch {
-    return '';
-  }
 }
 
 async function addVisibleProjectFilesToDeployPlan(
