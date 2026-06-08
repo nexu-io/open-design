@@ -1325,6 +1325,68 @@ describe('ChatPane imported folder surfaces', () => {
     });
   });
 
+  it('shows a retryable error when imported folder surface discovery fails', async () => {
+    const metadata: ProjectMetadata = {
+      kind: 'prototype',
+      importedFrom: 'folder',
+      entryFile: 'app/page.tsx',
+    };
+    const fetchMock = vi.fn(async (url) => {
+      if (typeof url !== 'string') throw new Error(`unexpected fetch ${url}`);
+      if (!url.includes('/ui-surfaces')) throw new Error(`unexpected fetch ${url}`);
+      if (fetchMock.mock.calls.length === 1) {
+        return json({ error: { message: 'Surface detector crashed' } }, 500);
+      }
+      return json({
+        surfaces: [
+          {
+            id: 'home',
+            label: 'Recovered home screen',
+            route: '/',
+            kind: 'static-html',
+            confidence: 'high',
+            framework: null,
+            entryFile: 'site/index.html',
+            previewFile: 'site/index.html',
+            previewRuntimeRoot: null,
+            previewPath: '/',
+            previewStatus: 'live-preview',
+            sourceFiles: ['site/index.html'],
+            styleFiles: [],
+            scriptFiles: [],
+            assetFiles: [],
+            fontFiles: [],
+            externalDependencies: [],
+            reasons: ['HTML screen file detected'],
+            mtime: 20,
+          },
+        ],
+        generatedAt: '2026-06-02T00:00:00.000Z',
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPane({
+      projectMetadata: metadata,
+      projectFiles: [
+        file('site/index.html', 'html', 20),
+        file('app/page.tsx', 'code', 18),
+      ],
+    });
+
+    const error = await screen.findByTestId('chat-ui-surfaces-error');
+    expect(within(error).getByText('Could not scan previewable screens')).toBeTruthy();
+    expect(within(error).getByText('Surface detector crashed')).toBeTruthy();
+    expect(screen.queryByTestId('chat-ui-surfaces-empty')).toBeNull();
+
+    fireEvent.click(within(error).getByRole('button', { name: /Retry/i }));
+
+    expect(await screen.findByTestId('chat-ui-surfaces-loading')).toBeTruthy();
+    const surface = await screen.findByTestId('chat-ui-surface-0');
+    expect(within(surface).getByText('Recovered home screen')).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('marks a runtime preview failed when the preview start request times out', async () => {
     vi.useFakeTimers();
     const metadata: ProjectMetadata = {

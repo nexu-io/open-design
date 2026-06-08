@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button } from '@open-design/components';
 import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
 import { useT } from '../i18n';
@@ -101,7 +102,8 @@ interface ActionNotice {
 type RenderedPreviewState =
   | { status: 'loading' }
   | { status: 'ready'; url: string }
-  | { status: 'unavailable' };
+  | { status: 'unavailable' }
+  | { status: 'error'; message: string };
 
 type DesignFilesGroupMode = 'kind' | 'modified';
 type ModifiedSection = 'today' | 'yesterday' | 'previous7Days' | 'previous30Days' | 'older';
@@ -632,15 +634,27 @@ export function DesignFilesPanel({
       projectId,
       file: previewFile,
       loadUiSurfaces,
-    }).then((url) => {
-      if (cancelled) return;
-      setRenderedPreviewStates((current) => ({
-        ...current,
-        [previewFile.name]: url
-          ? { status: 'ready', url }
-          : { status: 'unavailable' },
-      }));
-    });
+    })
+      .then((url) => {
+        if (cancelled) return;
+        setRenderedPreviewStates((current) => ({
+          ...current,
+          [previewFile.name]: url
+            ? { status: 'ready', url }
+            : { status: 'unavailable' },
+        }));
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        requestedRenderedPreviewRef.current.delete(previewFile.name);
+        setRenderedPreviewStates((current) => ({
+          ...current,
+          [previewFile.name]: {
+            status: 'error',
+            message: readableErrorMessage(err, 'Could not load rendered preview.'),
+          },
+        }));
+      });
     return () => {
       cancelled = true;
     };
@@ -830,7 +844,13 @@ export function DesignFilesPanel({
   }
 
   function loadUiSurfaces(): Promise<ProjectUiSurface[]> {
-    uiSurfacesPromiseRef.current ??= fetchProjectUiSurfaces(projectId);
+    if (!uiSurfacesPromiseRef.current) {
+      const promise = fetchProjectUiSurfaces(projectId).catch((err: unknown) => {
+        if (uiSurfacesPromiseRef.current === promise) uiSurfacesPromiseRef.current = null;
+        throw err;
+      });
+      uiSurfacesPromiseRef.current = promise;
+    }
     return uiSurfacesPromiseRef.current;
   }
 
@@ -840,12 +860,29 @@ export function DesignFilesPanel({
       openRenderedPreviewInWorkspace(file, renderedState.url);
       return;
     }
+    let renderedPreviewFailed = false;
     const renderedUrl = await renderedPreviewUrlForFile({
       projectId,
       file,
       loadUiSurfaces,
+    }).catch((err: unknown) => {
+      renderedPreviewFailed = true;
+      requestedRenderedPreviewRef.current.delete(file.name);
+      setRenderedPreviewStates((current) => ({
+        ...current,
+        [file.name]: {
+          status: 'error',
+          message: readableErrorMessage(err, 'Could not load rendered preview.'),
+        },
+      }));
+      return null;
     });
+    if (renderedPreviewFailed) return;
     if (renderedUrl) {
+      setRenderedPreviewStates((current) => ({
+        ...current,
+        [file.name]: { status: 'ready', url: renderedUrl },
+      }));
       openRenderedPreviewInWorkspace(file, renderedUrl);
       return;
     }
@@ -1926,6 +1963,8 @@ function DfPreview({
               src={renderedPreviewState.url}
               sandbox="allow-scripts allow-forms allow-popups"
             />
+          ) : renderedPreviewState?.status === 'error' ? (
+            <RenderedPreviewError message={renderedPreviewState.message} onRetry={onOpen} />
           ) : renderedPreviewState?.status === 'unavailable' ? (
             <HtmlPreviewThumbnail projectId={projectId} file={file} />
           ) : (
@@ -1955,7 +1994,7 @@ function DfPreview({
             {kindGlyph(file.kind)}
           </div>
         )}
-        {thumbCanOpen ? (
+        {thumbCanOpen && renderedPreviewState?.status !== 'error' ? (
           <button
             type="button"
             className="df-preview-thumb-open"
@@ -1994,6 +2033,30 @@ function RenderedPreviewPlaceholder() {
       <span>Starting preview</span>
     </div>
   );
+}
+
+function RenderedPreviewError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="df-rendered-preview-placeholder df-rendered-preview-error" role="alert">
+      <Icon name="alert-triangle" size={26} />
+      <span>Preview unavailable</span>
+      <small>{message}</small>
+      <Button variant="ghost" className="df-rendered-preview-retry" onClick={onRetry}>
+        <Icon name="refresh" size={13} />
+        <span>Retry</span>
+      </Button>
+    </div>
+  );
+}
+
+function readableErrorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error && err.message.trim() ? err.message : fallback;
 }
 
 function HtmlPreviewThumbnail({

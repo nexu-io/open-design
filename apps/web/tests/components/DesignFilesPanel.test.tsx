@@ -298,6 +298,92 @@ describe('DesignFilesPanel grouping', () => {
     );
   });
 
+  it('shows a retryable rendered-preview error when UI surface discovery fails', async () => {
+    const onOpenRenderedPreview = vi.fn();
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/ui-surfaces')) {
+        const surfaceRequests = fetchMock.mock.calls.filter(([request]) => String(request).includes('/ui-surfaces')).length;
+        if (surfaceRequests === 1) {
+          return json({ error: { message: 'Surface detector crashed' } }, 500);
+        }
+        return json({
+          surfaces: [
+            {
+              id: 'src-main-tsx',
+              label: 'Home screen',
+              route: '/',
+              kind: 'react-app',
+              confidence: 'medium',
+              framework: 'Vite',
+              entryFile: 'src/main.tsx',
+              previewFile: 'index.html',
+              previewRuntimeRoot: '',
+              previewPath: '/',
+              previewStatus: 'source-mapped',
+              sourceFiles: ['index.html', 'src/main.tsx', 'src/App.tsx'],
+              styleFiles: ['src/index.css'],
+              scriptFiles: [],
+              assetFiles: [],
+              fontFiles: [],
+              externalDependencies: [
+                { packageName: 'react', importPath: 'react', kind: 'runtime' },
+              ],
+              reasons: ['React app entry and HTML shell detected'],
+              mtime: 20,
+            },
+          ],
+          generatedAt: '2026-06-02T00:00:00.000Z',
+        });
+      }
+      if (url.includes('/ui-preview')) {
+        expect(init).toEqual(expect.objectContaining({ method: 'POST' }));
+        return json({
+          status: 'ready',
+          runtimeRoot: '',
+          baseUrl: 'http://127.0.0.1:43210',
+          url: 'http://127.0.0.1:43210/',
+          route: '/',
+        });
+      }
+      return new Response('<div>raw preview</div>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      });
+    });
+    const { onOpenFile } = renderPanel(
+      [
+        file({ name: 'index.html', kind: 'html', mime: 'text/html', mtime: 20 }),
+        file({ name: 'src/main.tsx', kind: 'code', mime: 'text/typescript', mtime: 19 }),
+      ],
+      { onOpenRenderedPreview },
+    );
+
+    fireEvent.click(within(screen.getByTestId('design-file-row-index.html')).getByRole('button', { name: /index\.html/i }));
+    await screen.findByTestId('design-file-preview');
+    const error = await screen.findByRole('alert');
+    expect(within(error).getByText('Preview unavailable')).toBeTruthy();
+    expect(within(error).getByText('Surface detector crashed')).toBeTruthy();
+    expect(onOpenRenderedPreview).not.toHaveBeenCalled();
+    expect(onOpenFile).not.toHaveBeenCalled();
+
+    fireEvent.click(within(error).getByRole('button', { name: /Retry/i }));
+
+    await waitFor(() => {
+      expect(onOpenRenderedPreview).toHaveBeenCalledWith({
+        tabId: 'rendered-preview:index.html',
+        title: 'index.html',
+        url: 'http://127.0.0.1:43210/',
+        sourceFile: 'index.html',
+      });
+    });
+    await waitFor(() => {
+      expect(screen.queryByText('Preview unavailable')).toBeNull();
+    });
+    expect(fetchMock.mock.calls.filter(([request]) => String(request).includes('/ui-surfaces')).length).toBe(2);
+    expect(onOpenFile).not.toHaveBeenCalled();
+  });
+
   it('can group files by modified date and collapse a date group', () => {
     const now = new Date(2026, 4, 9, 12).getTime();
     vi.useFakeTimers();

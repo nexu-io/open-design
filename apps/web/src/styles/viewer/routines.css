@@ -1715,6 +1715,18 @@
   font-size: 12px;
   line-height: 1.45;
 }
+.app .chat-ui-surfaces-error {
+  border-color: color-mix(in srgb, var(--danger, #c03434) 32%, var(--border));
+}
+.app .chat-ui-surfaces-error svg {
+  color: var(--danger, #c03434);
+}
+.app .chat-ui-surfaces-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
 .app .chat-ui-surface-skeleton {
   pointer-events: none;
 }

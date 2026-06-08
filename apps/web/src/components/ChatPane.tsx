@@ -14,6 +14,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { Button } from '@open-design/components';
 import { useAnalytics } from '../analytics/provider';
 import { trackChatPanelClick, trackRunFailedToastSurfaceView } from '../analytics/events';
 import { attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
@@ -655,6 +656,26 @@ function ImportedProjectSurfacesEmpty({ files }: { files: ProjectFile[] }) {
           ? 'This import looks like a native/mobile project. Design Files still has the full project tree.'
           : 'Design Files still has the full project tree, but no web screen was found to preview.'}
       </span>
+    </div>
+  );
+}
+
+function ImportedProjectSurfacesError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="chat-ui-surfaces-empty chat-ui-surfaces-error" role="alert" data-testid="chat-ui-surfaces-error">
+      <Icon name="alert-triangle" size={30} />
+      <strong>Could not scan previewable screens</strong>
+      <span>{message}</span>
+      <Button variant="ghost" className="chat-ui-surfaces-retry" onClick={onRetry}>
+        <Icon name="refresh" size={13} />
+        <span>Retry</span>
+      </Button>
     </div>
   );
 }
@@ -1437,17 +1458,22 @@ export function ChatPane({
     retryAssistant,
   ]);
   const [importedProjectSurfacesState, setImportedProjectSurfacesState] = useState<{
-    status: 'idle' | 'loading' | 'loaded';
+    status: 'idle' | 'loading' | 'loaded' | 'error';
     surfaces: ProjectUiSurface[];
-  }>({ status: 'idle', surfaces: [] });
+    error: string | null;
+  }>({ status: 'idle', surfaces: [], error: null });
   const [importedSurfacePreviewStates, setImportedSurfacePreviewStates] = useState<ImportedSurfacePreviewStates>({});
+  const [importedProjectSurfacesRetryNonce, setImportedProjectSurfacesRetryNonce] = useState(0);
   const startedSurfacePreviewGroupsRef = useRef(new Set<string>());
   const activeImportedProjectIdRef = useRef<string | null>(null);
+  const retryImportedProjectSurfaces = useCallback(() => {
+    setImportedProjectSurfacesRetryNonce((nonce) => nonce + 1);
+  }, []);
   useEffect(() => {
     let cancelled = false;
     if (!projectId || projectMetadata?.importedFrom !== 'folder') {
       activeImportedProjectIdRef.current = null;
-      setImportedProjectSurfacesState({ status: 'idle', surfaces: [] });
+      setImportedProjectSurfacesState({ status: 'idle', surfaces: [], error: null });
       setImportedSurfacePreviewStates({});
       startedSurfacePreviewGroupsRef.current.clear();
       return;
@@ -1461,14 +1487,26 @@ export function ChatPane({
     setImportedProjectSurfacesState((current) => ({
       status: 'loading',
       surfaces: projectChanged ? [] : current.surfaces,
+      error: null,
     }));
-    void fetchProjectUiSurfaces(projectId).then((surfaces) => {
-      if (!cancelled) setImportedProjectSurfacesState({ status: 'loaded', surfaces });
-    });
+    void fetchProjectUiSurfaces(projectId)
+      .then((surfaces) => {
+        if (!cancelled) setImportedProjectSurfacesState({ status: 'loaded', surfaces, error: null });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setImportedProjectSurfacesState({
+          status: 'error',
+          surfaces: [],
+          error: err instanceof Error && err.message.trim()
+            ? err.message
+            : 'Could not load previewable screens.',
+        });
+      });
     return () => {
       cancelled = true;
     };
-  }, [projectId, projectMetadata?.importedFrom]);
+  }, [importedProjectSurfacesRetryNonce, projectId, projectMetadata?.importedFrom]);
   useEffect(() => {
     if (!projectId || importedProjectSurfacesState.status !== 'loaded') return;
     const groups = new Map<string, ProjectUiSurface[]>();
@@ -2468,6 +2506,11 @@ export function ChatPane({
                     />
                   ) : showImportedFolderSurfaces && importedProjectSurfacesState.status === 'loading' ? (
                     <ImportedProjectSurfacesLoading />
+                  ) : showImportedFolderSurfaces && importedProjectSurfacesState.status === 'error' ? (
+                    <ImportedProjectSurfacesError
+                      message={importedProjectSurfacesState.error ?? 'Could not load previewable screens.'}
+                      onRetry={retryImportedProjectSurfaces}
+                    />
                   ) : showImportedFolderSurfaces && importedProjectSurfacesState.status === 'loaded' ? (
                     <ImportedProjectSurfacesEmpty files={projectFiles} />
                   ) : (

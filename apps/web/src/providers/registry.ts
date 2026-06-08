@@ -1420,16 +1420,27 @@ export async function fetchProjectFolders(projectId: string): Promise<ProjectFol
 }
 
 export async function fetchProjectUiSurfaces(projectId: string): Promise<ProjectUiSurface[]> {
-  try {
-    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/ui-surfaces`, {
-      cache: 'no-store',
-    });
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as ProjectUiSurfacesResponse;
-    return json.surfaces ?? [];
-  } catch {
-    return [];
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/ui-surfaces`, {
+    cache: 'no-store',
+  });
+  if (!resp.ok) {
+    throw new Error(await readProjectUiSurfacesError(resp));
   }
+  const json = (await resp.json()) as ProjectUiSurfacesResponse;
+  return json.surfaces ?? [];
+}
+
+async function readProjectUiSurfacesError(resp: Response): Promise<string> {
+  const payload = (await resp.json().catch(() => null)) as
+    | { error?: { message?: string } | string; message?: string }
+    | null;
+  const error = payload?.error;
+  if (typeof error === 'string' && error.trim()) return error;
+  if (error && typeof error === 'object' && typeof error.message === 'string' && error.message.trim()) {
+    return error.message;
+  }
+  if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message;
+  return `Could not load previewable screens (${resp.status}).`;
 }
 
 export async function createProjectFolder(

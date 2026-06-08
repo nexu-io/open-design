@@ -808,10 +808,27 @@
   place-items: center;
   align-content: center;
   gap: 8px;
+  padding: 16px;
+  text-align: center;
   color: var(--text-muted);
   background: var(--bg);
   font-size: 12px;
   font-weight: 650;
+}
+.df-rendered-preview-placeholder small {
+  max-width: 220px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.df-rendered-preview-error svg {
+  color: var(--danger, #c03434);
+}
+.df-rendered-preview-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
 }
 .df-preview-thumb audio {
   width: calc(100% - 24px);
