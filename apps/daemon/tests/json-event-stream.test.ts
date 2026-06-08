@@ -471,6 +471,83 @@ test('cursor stream recovers dropped chunk via model_call_id after fallback-term
   ]);
 });
 
+test('cursor stream recovers a dropped middle chunk from a later cumulative snapshot', () => {
+  const { events, handler } = collectEvents('cursor-agent');
+
+  // Cursor's timestamped chunks are cumulative snapshots of the turn. When
+  // a middle snapshot is dropped, the next snapshot still carries the full
+  // text, so prefix reconciliation recovers the gap with no loss and no
+  // duplication. (Regression for the reviewer's "drop a middle fragment
+  // before a later fragment is delivered" scenario.)
+  handler.feed(
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    }) +
+    '\n' +
+    // "hello brave" snapshot is dropped / never received
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 2,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello brave world' }] },
+    }) +
+    '\n' +
+    // Replay confirms the full turn text — nothing more to emit
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 3,
+      model_call_id: 'call-1',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello brave world' }] },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'hello' },
+    { type: 'text_delta', delta: ' brave world' },
+  ]);
+});
+
+test('cursor stream does not duplicate output when emitted text is not a replay prefix', () => {
+  const { events, handler } = collectEvents('cursor-agent');
+
+  // Pathological non-cumulative case: a middle fragment (" brave") is
+  // dropped while a later fragment (" world") still arrives, so the emitted
+  // turn text "hello world" is NOT a prefix of the replay "hello brave
+  // world". Length-only slicing would emit " world" a second time (yielding
+  // "hello world world"). The replay must instead be reconciled against the
+  // emitted text: since it is not a verified prefix, the append-only stream
+  // is left untouched rather than corrupted with a duplicate suffix.
+  handler.feed(
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    }) +
+    '\n' +
+    // " brave" fragment dropped; " world" still arrives
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 2,
+      message: { role: 'assistant', content: [{ type: 'text', text: ' world' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 3,
+      model_call_id: 'call-1',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello brave world' }] },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'hello' },
+    { type: 'text_delta', delta: ' world' },
+  ]);
+});
+
 test('codex json stream emits status text and usage events', () => {
   const { events, handler } = collectEvents('codex');
 

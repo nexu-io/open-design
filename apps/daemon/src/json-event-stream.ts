@@ -237,19 +237,30 @@ function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: Par
 
   if (obj.type === 'assistant' && obj.message) {
     // Cursor sends a final assistant message with `model_call_id` that
-    // replays the full accumulated text for the current turn. Compare
-    // the replay against only the current turn's portion of
-    // `cursorTextSoFar` (starting from `cursorTurnStart`). If a
-    // streamed chunk was dropped, the replay may be longer than what
-    // we emitted for this turn — emit the missing suffix.
+    // replays the full accumulated text for the current turn. Reconcile
+    // it against the text we have actually emitted for this turn
+    // (`cursorTextSoFar` from `cursorTurnStart` onward) — NOT against the
+    // emitted length. Length-only slicing wrongly assumes the emitted
+    // text is always a complete prefix of the replay; that breaks when a
+    // middle chunk was dropped (e.g. emitted "hello world" but the replay
+    // is "hello brave world"), re-emitting an already-shown suffix while
+    // still losing the gap. Only a verified prefix permits suffix
+    // recovery.
     if (typeof obj.model_call_id === 'string') {
       const text = extractCursorText(obj.message);
-      const turnLength = state.cursorTextSoFar.length - state.cursorTurnStart;
-      if (text && text.length > turnLength) {
-        const suffix = text.slice(turnLength);
+      const emittedTurn = state.cursorTextSoFar.slice(state.cursorTurnStart);
+      if (text && text !== emittedTurn && text.startsWith(emittedTurn)) {
+        // Verified prefix: a trailing chunk was dropped. Emit only the
+        // missing suffix so the turn ends with the full replay text.
+        const suffix = text.slice(emittedTurn.length);
         if (suffix) onEvent({ type: 'text_delta', delta: suffix });
         state.cursorTextSoFar += suffix;
       }
+      // When the emitted text is NOT a prefix of the replay the live
+      // stream already diverged from the authoritative text (a non-final
+      // chunk was dropped). Re-emitting any part of the replay here would
+      // duplicate already-shown text in an append-only delta stream, so we
+      // leave the stream as-is rather than corrupt it with length slicing.
       // Mark the next turn's start after processing the replay.
       state.cursorTurnStart = state.cursorTextSoFar.length;
       return true;
