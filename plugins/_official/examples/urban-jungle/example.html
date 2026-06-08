@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Urban Jungle — Scroll Hero</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    /* ───── Custom headline font (Dirtyline 36 Days of Type 2022) ───── */
+    @font-face {
+      font-family: 'Dirtyline36Daysoftype2022';
+      src: url('https://dirtylinestudio.com/wp-content/uploads/2022/05/Dirtyline-36daysoftype-2022.woff2') format('woff2');
+      font-style: normal;
+      font-weight: normal;
+      text-rendering: optimizeLegibility;
+      font-display: swap;
+    }
+
+    :root {
+      --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+      --font-serif: "Instrument Serif", ui-serif, Georgia, "Times New Roman", serif;
+      --font-dirtyline: "Dirtyline36Daysoftype2022", "Manrope", sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: auto; }
+    body {
+      background-color: #000;
+      color: #fff;
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+    }
+    img, svg, video { display: block; }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+
+    /* ───── LAYER 1: BACKGROUND ScrollVideo ───── */
+    .video-wrapper {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 0; transform: scale(1.05); transform-origin: center;
+      will-change: transform;
+    }
+    .scroll-video {
+      width: 100%; height: 100%; object-fit: cover; transform: scale(1.35);
+    }
+
+    .loading-overlay {
+      position: fixed; inset: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: center;
+      background: #000; color: #fff;
+      font-family: var(--font-sans); font-size: 1.5rem;
+      transition: opacity 0.6s ease;
+    }
+    .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+    /* ───── LAYER 2: HERO TEXT ScrollFloat ───── */
+    .scroll-float {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; flex-direction: column; justify-content: flex-end;
+      padding: 1rem; pointer-events: none;
+    }
+    @media (min-width: 768px) { .scroll-float { padding: 2rem; } }
+    .scroll-float-text {
+      display: inline-block;
+      font-family: var(--font-dirtyline);
+      font-size: clamp(4rem, 15vw, 317px);
+      line-height: 0.85; letter-spacing: 0; color: #fff;
+      text-transform: uppercase;
+    }
+    .char { display: inline-block; will-change: transform, opacity; }
+
+    /* ───── 500vh scroll container ───── */
+    .scroll-container { position: relative; height: 500vh; }
+
+    /* ───── LAYER 3: GLASS PANEL ───── */
+    .glass-anchor {
+      position: absolute; bottom: 0; left: 0; width: 100%; height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 20; pointer-events: none;
+    }
+    .panel-wrapper {
+      width: 100%; max-width: 1250px; height: 900px; max-height: 85vh;
+      pointer-events: auto; perspective: 1000px;
+      padding: 0 1rem;
+    }
+    .glass-panel {
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column; justify-content: space-between;
+      border-radius: 1.5rem; position: relative; overflow: hidden;
+      background-color: rgba(0, 0, 0, 0.16);
+      backdrop-filter: blur(160px); -webkit-backdrop-filter: blur(160px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transform-style: preserve-3d; will-change: transform;
+    }
+    .panel-content {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 0 1.5rem; text-align: center;
+    }
+    @media (min-width: 768px) { .panel-content { padding: 0 3rem; } }
+    .panel-sub {
+      font-family: var(--font-serif); font-style: italic;
+      color: rgba(255,255,255,0.7); font-size: 1rem; margin-bottom: 1rem;
+    }
+    @media (min-width: 768px) { .panel-sub { font-size: 1.125rem; margin-bottom: 1.5rem; } }
+    .panel-heading {
+      font-family: var(--font-serif); color: #fff;
+      font-size: 2.25rem; line-height: 1.1; letter-spacing: -0.02em;
+      width: 100%; max-width: 1000px; margin: 0 auto;
+    }
+    @media (min-width: 768px) { .panel-heading { font-size: 3.75rem; } }
+    @media (min-width: 1024px) { .panel-heading { font-size: 96px; line-height: 92.6px; } }
+    .panel-heading .italic { font-style: italic; }
+
+    /* ───── Bottom marquee ───── */
+    .marquee-row {
+      border-top: 1px solid rgba(255,255,255,0.1);
+      padding-top: 1.5rem; padding-bottom: 1.5rem;
+      overflow: hidden; white-space: nowrap;
+    }
+    .marquee-track {
+      display: inline-flex; align-items: center;
+      animation: marquee 20s linear infinite;
+    }
+    @keyframes marquee { 100% { transform: translateX(-50%); } }
+    .marquee-item {
+      color: #fff; opacity: 0.4;
+      text-transform: uppercase; font-family: var(--font-sans); font-weight: 600;
+      font-size: 0.875rem; letter-spacing: 0.1em;
+      padding: 0 2.5rem; transition: opacity 0.3s ease;
+    }
+    .marquee-item:hover { opacity: 1; }
+
+    /* ───── LAYER 4: PILL NAV ───── */
+    .pill-nav-container {
+      position: fixed; top: 24px; left: 50%; transform: translateX(-50%);
+      z-index: 100; font-family: var(--font-sans);
+    }
+    .pill-nav { display: flex; align-items: center; background: transparent; padding: 0; gap: 0; }
+    .pill-logo {
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; background-color: #000; width: 48px; height: 48px;
+      flex-shrink: 0; margin-right: 8px; transform: scale(0);
+    }
+    .logo-svg-container { display: flex; align-items: center; justify-content: center; }
+    .pill-nav-items {
+      background-color: #000; border-radius: 50px; padding: 4px;
+      border: 2px solid #000; overflow: hidden;
+    }
+    .pill-list { display: flex; align-items: center; gap: 4px; list-style: none; margin: 0; padding: 0; }
+    .pill {
+      position: relative; display: block; padding: 8px 24px; border-radius: 50px;
+      color: #000; font-weight: 600; font-size: 14px; letter-spacing: 0.05em;
+      text-transform: uppercase; overflow: hidden; background-color: #f0f0f0;
+      transition: background-color 0.3s ease;
+    }
+    .pill.is-active { background-color: #e0e0e0; }
+    .hover-circle {
+      position: absolute; background-color: #000; border-radius: 50%;
+      pointer-events: none; z-index: 0; transform: scale(0);
+    }
+    .label-stack {
+      position: relative; display: block; z-index: 1; overflow: hidden; height: 1.2em;
+    }
+    .pill-label, .pill-label-hover { display: block; line-height: 1.2em; text-align: center; }
+    .pill-label-hover { position: absolute; top: 0; left: 0; width: 100%; color: #fff; transform: translateY(120%); }
+
+    .mobile-menu-button {
+      display: none; flex-direction: column; gap: 4px; padding: 8px;
+      background: #000; border-radius: 50%; width: 48px; height: 48px;
+      align-items: center; justify-content: center;
+    }
+    .hamburger-line { width: 24px; height: 2px; background-color: #fff; display: block; transition: transform 0.3s ease; }
+
+    @media (min-width: 769px) { .mobile-only { display: none !important; } }
+    @media (max-width: 768px) {
+      .desktop-only { display: none !important; }
+      .mobile-menu-button { display: flex; }
+    }
+  </style>
+</head>
+<body>
+  <!-- LAYER 1: BACKGROUND ScrollVideo -->
+  <div class="video-wrapper" id="video-wrapper">
+    <video
+      class="scroll-video"
+      id="scroll-video"
+      muted playsinline crossorigin="anonymous" preload="auto"
+    ></video>
+  </div>
+
+  <div class="loading-overlay" id="loading-overlay">Loading... <span id="load-pct">0</span>%</div>
+
+  <!-- LAYER 4: PILL NAV -->
+  <nav class="pill-nav-container">
+    <div class="pill-nav">
+      <button class="pill-logo" id="pill-logo" aria-label="Home">
+        <span class="logo-svg-container" id="logo-svg-container">
+          <svg width="24" height="24" viewBox="0 0 100 100" fill="#fff" xmlns="http://www.w3.org/2000/svg">
+            <path d="m50,50c0,18.2,14.77,32.98,32.97,32.98,0-18.2-14.77-32.98-32.97-32.98Z"/>
+            <path d="m17.02,82.98c18.2,0,32.98-14.77,32.98-32.98-18.2,0-32.98,14.77-32.98,32.98Z"/>
+            <path d="m82.98,17.02c-18.2,0-32.97,14.77-32.97,32.97,18.2,0,32.97-14.77,32.97-32.97Z"/>
+            <path d="m17.02,17.02c0,18.2,14.77,32.97,32.98,32.97,0-18.2-14.77-32.98-32.98-32.97Z"/>
+          </svg>
+        </span>
+      </button>
+
+      <div class="pill-nav-items desktop-only" id="pill-nav-items">
+        <ul class="pill-list" id="pill-list">
+          <li><a href="#" class="pill is-active" data-action="home"><span class="hover-circle"></span><span class="label-stack"><span class="pill-label">Home</span><span class="pill-label-hover">Home</span></span></a></li>
+          <li><a href="#" class="pill" data-action="about"><span class="hover-circle"></span><span class="label-stack"><span class="pill-label">About</span><span class="pill-label-hover">About</span></span></a></li>
+          <li><a href="#" class="pill" data-action="services"><span class="hover-circle"></span><span class="label-stack"><span class="pill-label">Services</span><span class="pill-label-hover">Services</span></span></a></li>
+          <li><a href="#" class="pill" data-action="contact"><span class="hover-circle"></span><span class="label-stack"><span class="pill-label">Contact</span><span class="pill-label-hover">Contact</span></span></a></li>
+        </ul>
+      </div>
+
+      <button class="mobile-menu-button mobile-only" id="mobile-menu-button" aria-label="Menu">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- 500vh scroll container -->
+  <div class="scroll-container" id="scroll-container">
+    <!-- LAYER 2: HERO TEXT ScrollFloat -->
+    <div class="scroll-float">
+      <div class="scroll-float-text" id="scroll-float-text">Unleash The
+Full Power</div>
+    </div>
+
+    <!-- LAYER 3: GLASS PANEL -->
+    <div class="glass-anchor" id="glass-anchor">
+      <div class="panel-wrapper" id="panel-wrapper">
+        <div class="glass-panel" id="glass-panel">
+          <div class="panel-content">
+            <p class="panel-sub">About Us</p>
+            <h2 class="panel-heading">
+              We transform sterile concrete into thriving <span class="italic">urban</span> jungles.
+              Our innovative designs bring wild <span class="italic">nature</span> back to modern cities.
+              Experience the <span class="italic">bloom</span>
+            </h2>
+          </div>
+          <div class="marquee-row">
+            <div class="marquee-track" id="marquee-track"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      var VIDEO_SRC = 'https://stream.mux.com/43NlHXsaMrmyzWamMk87m01fNyxSTekAD669BBAPBNm00.m3u8';
+      var video = document.getElementById('scroll-video');
+      var wrapper = document.getElementById('video-wrapper');
+      var overlay = document.getElementById('loading-overlay');
+      var loadPct = document.getElementById('load-pct');
+      var prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      function hideOverlay() { overlay.classList.add('hidden'); }
+
+      // ── LAYER 1: HLS setup, force highest quality ──
+      function setupHls() {
+        if (window.Hls && window.Hls.isSupported()) {
+          var hls = new window.Hls({
+            maxBufferLength: 120,
+            maxMaxBufferLength: 600,
+            maxBufferSize: 200 * 1024 * 1024,
+            startPosition: 0,
+            capLevelToPlayerSize: false,
+            startLevel: -1,
+            autoStartLoad: true
+          });
+          hls.loadSource(VIDEO_SRC);
+          hls.attachMedia(video);
+          hls.on(window.Hls.Events.MANIFEST_PARSED, function () {
+            var maxLevel = hls.levels.length - 1;
+            hls.currentLevel = maxLevel;
+            hls.startLevel = maxLevel;
+          });
+          hls.on(window.Hls.Events.FRAG_BUFFERED, function () {
+            var dur = video.duration;
+            if (dur && isFinite(dur) && video.buffered.length) {
+              var bufferedEnd = video.buffered.end(video.buffered.length - 1);
+              var pct = Math.min(100, Math.round((bufferedEnd / dur) * 100));
+              loadPct.textContent = pct;
+            }
+          });
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          // Safari native HLS
+          video.src = VIDEO_SRC;
+        } else {
+          // No HLS support — drop the overlay so the page is still usable
+          hideOverlay();
+        }
+      }
+
+      video.addEventListener('canplay', hideOverlay);
+      video.addEventListener('loadeddata', function () {
+        try { video.pause(); } catch (e) {}
+      });
+      // Safety: never trap the user behind the loader
+      setTimeout(hideOverlay, 6000);
+
+      setupHls();
+
+      // ── LAYER 1: scroll-to-seek (passive scroll listener → inline transform) ──
+      var seekPending = false;
+      var currentTarget = 0;
+      function doSeek() {
+        if (!video.duration || !isFinite(video.duration)) return;
+        if (!video.seeking) {
+          try { video.currentTime = currentTarget; } catch (e) {}
+        } else {
+          seekPending = true;
+        }
+      }
+      video.addEventListener('seeked', function () {
+        if (seekPending) { seekPending = false; doSeek(); }
+      });
+
+      function scrollProgress() {
+        var max = document.documentElement.scrollHeight - window.innerHeight;
+        if (max <= 0) return 0;
+        return Math.min(1, Math.max(0, window.scrollY / max));
+      }
+
+      // ── LAYER 2: ScrollFloat — split text into chars, animate on scroll ──
+      var floatEl = document.getElementById('scroll-float-text');
+      var raw = floatEl.textContent;
+      floatEl.textContent = '';
+      var chars = [];
+      raw.split('\n').forEach(function (lineText) {
+        var line = document.createElement('span');
+        line.style.display = 'block';
+        lineText.split(' ').forEach(function (word, wi, arr) {
+          var wordEl = document.createElement('span');
+          wordEl.style.display = 'inline-block';
+          wordEl.style.whiteSpace = 'nowrap';
+          word.split('').forEach(function (ch) {
+            var c = document.createElement('span');
+            c.className = 'char';
+            c.textContent = ch;
+            wordEl.appendChild(c);
+            chars.push(c);
+          });
+          line.appendChild(wordEl);
+          if (wi < arr.length - 1) line.appendChild(document.createTextNode(' '));
+        });
+        floatEl.appendChild(line);
+      });
+
+      // FROM {opacity:1,yPercent:0,scaleY:1,scaleX:1} TO {opacity:0,yPercent:250,scaleY:1.2,scaleX:0.9}
+      // Driven over the first ~1000px of scroll, staggered per char.
+      function updateFloat(p) {
+        var floatRange = Math.min(1, (window.scrollY) / 1000);
+        var n = chars.length;
+        for (var i = 0; i < n; i++) {
+          var stagger = (i / n) * 0.35;
+          var t = Math.min(1, Math.max(0, (floatRange - stagger) / (1 - stagger)));
+          var ease = t * t * (3 - 2 * t); // smoothstep ~ power2.inOut
+          var opacity = 1 - ease;
+          var yPercent = 250 * ease;
+          var scaleY = 1 + 0.2 * ease;
+          var scaleX = 1 - 0.1 * ease;
+          chars[i].style.opacity = opacity;
+          chars[i].style.transform = 'translateY(' + yPercent + '%) scale(' + scaleX + ',' + scaleY + ')';
+          chars[i].style.transformOrigin = '50% 0%';
+        }
+      }
+
+      // ── LAYER 3: GlassPanel slide-up ──
+      var panelWrapper = document.getElementById('panel-wrapper');
+      var glassPanel = document.getElementById('glass-panel');
+      var panelTX = 0, panelTY = 0, panelRX = 0, panelRY = 0;
+      function updatePanel(p) {
+        // panel slides from y:100% to y:0% across full scroll (start top bottom → end bottom bottom)
+        var slide = (1 - p) * 100;
+        applyPanelTransform(slide);
+      }
+      function applyPanelTransform(slidePct) {
+        glassPanel.style.transform =
+          'translate3d(' + panelTX + 'px,' + panelTY + 'px,0) ' +
+          'rotateX(' + panelRX + 'deg) rotateY(' + panelRY + 'deg)';
+        panelWrapper.style.transform = 'translateY(' + slidePct + '%)';
+      }
+
+      // ── Marquee: duplicate brand names 4x for seamless loop ──
+      var brands = ['VOICEFLOW', 'ZENDESK', 'PENDO', 'GLIDE', 'CANVA'];
+      var track = document.getElementById('marquee-track');
+      function buildMarquee() {
+        var html = '';
+        for (var r = 0; r < 4; r++) {
+          for (var b = 0; b < brands.length; b++) {
+            html += '<span class="marquee-item">' + brands[b] + '</span>';
+          }
+        }
+        track.innerHTML = html;
+      }
+      buildMarquee();
+
+      // ── Master scroll handler ──
+      var ticking = false;
+      function onScroll() {
+        if (ticking) return;
+        ticking = true;
+        window.requestAnimationFrame(function () {
+          var p = scrollProgress();
+          currentTarget = p * (video.duration || 0);
+          doSeek();
+          updateFloat(p);
+          updatePanel(p);
+          ticking = false;
+        });
+      }
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', onScroll, { passive: true });
+      onScroll();
+
+      // ── Mouse parallax on video wrapper (moveX*-30, moveY*-30) ──
+      var vpx = 0, vpy = 0;
+      function onMouseMoveVideo(e) {
+        if (prefersReduced) return;
+        var moveX = (e.clientX / window.innerWidth - 0.5) * 2;
+        var moveY = (e.clientY / window.innerHeight - 0.5) * 2;
+        vpx = moveX * -30;
+        vpy = moveY * -30;
+        wrapper.style.transition = 'transform 1.5s cubic-bezier(0.25,0.46,0.45,0.94)';
+        wrapper.style.transform = 'scale(1.05) translate(' + vpx + 'px,' + vpy + 'px)';
+      }
+      window.addEventListener('mousemove', onMouseMoveVideo);
+
+      // ── 3D mouse parallax on glass panel ──
+      function onMouseMovePanel(e) {
+        if (prefersReduced) return;
+        var moveX = (e.clientX / window.innerWidth - 0.5) * 2;
+        var moveY = (e.clientY / window.innerHeight - 0.5) * 2;
+        panelTX = moveX * 20;
+        panelTY = moveY * 20;
+        panelRY = moveX * 4;
+        panelRX = -moveY * 4;
+        glassPanel.style.transition = 'transform 1s cubic-bezier(0.16,1,0.3,1)';
+        glassPanel.style.transform =
+          'translate3d(' + panelTX + 'px,' + panelTY + 'px,0) ' +
+          'rotateX(' + panelRX + 'deg) rotateY(' + panelRY + 'deg)';
+      }
+      panelWrapper.addEventListener('mousemove', onMouseMovePanel);
+
+      // ── LAYER 4: PillNav ──
+      var logo = document.getElementById('pill-logo');
+      var navItems = document.getElementById('pill-nav-items');
+      var logoSvgContainer = document.getElementById('logo-svg-container');
+
+      // Initial load animation: logo scale 0→1, nav width 0→auto
+      requestAnimationFrame(function () {
+        logo.style.transition = 'transform 0.6s cubic-bezier(0.16,1,0.3,1)';
+        logo.style.transform = 'scale(1)';
+        if (navItems) {
+          var full = navItems.scrollWidth;
+          navItems.style.width = '0px';
+          navItems.style.transition = 'width 0.6s cubic-bezier(0.16,1,0.3,1)';
+          requestAnimationFrame(function () { navItems.style.width = full + 'px'; });
+          setTimeout(function () { navItems.style.width = 'auto'; }, 700);
+        }
+      });
+
+      // Logo hover: rotate 360deg
+      var logoRot = 0;
+      logo.addEventListener('mouseenter', function () {
+        logoRot += 360;
+        logoSvgContainer.style.transition = 'transform 0.2s linear';
+        logoSvgContainer.style.transform = 'rotate(' + logoRot + 'deg)';
+      });
+
+      // Pill hover: liquid fill via dynamically sized circle
+      function setupPill(pill) {
+        var circle = pill.querySelector('.hover-circle');
+        var labelDark = pill.querySelector('.pill-label');
+        var labelHover = pill.querySelector('.pill-label-hover');
+        function size() {
+          var w = pill.offsetWidth;
+          var h = pill.offsetHeight;
+          var R = (w * w / 4 + h * h) / (2 * h);
+          var D = 2 * R + 2;
+          var delta = R - Math.sqrt(R * R - w * w / 4) + 1;
+          circle.style.width = D + 'px';
+          circle.style.height = D + 'px';
+          circle.style.left = (w / 2 - D / 2) + 'px';
+          circle.style.bottom = (-delta) + 'px';
+          circle.style.transformOrigin = '50% ' + (D - delta) + 'px';
+        }
+        size();
+        window.addEventListener('resize', size);
+        pill.addEventListener('mouseenter', function () {
+          circle.style.transition = 'transform 0.3s cubic-bezier(0.16,1,0.3,1)';
+          labelDark.style.transition = labelHover.style.transition = 'transform 0.3s cubic-bezier(0.16,1,0.3,1)';
+          circle.style.transform = 'scale(3)';
+          labelDark.style.transform = 'translateY(-120%)';
+          labelHover.style.transform = 'translateY(0%)';
+        });
+        pill.addEventListener('mouseleave', function () {
+          circle.style.transition = 'transform 0.2s cubic-bezier(0.16,1,0.3,1)';
+          labelDark.style.transition = labelHover.style.transition = 'transform 0.2s cubic-bezier(0.16,1,0.3,1)';
+          circle.style.transform = 'scale(0)';
+          labelDark.style.transform = 'translateY(0%)';
+          labelHover.style.transform = 'translateY(120%)';
+        });
+      }
+
+      // Smooth scroll helper (replaces gsap scrollTo)
+      function smoothScrollTo(targetY, duration) {
+        var startY = window.scrollY;
+        var diff = targetY - startY;
+        var start;
+        function step(ts) {
+          if (!start) start = ts;
+          var t = Math.min(1, (ts - start) / duration);
+          // power3.inOut
+          var e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+          window.scrollTo(0, startY + diff * e);
+          if (t < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+      }
+
+      var pills = document.querySelectorAll('.pill');
+      pills.forEach(function (pill) {
+        setupPill(pill);
+        pill.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          pills.forEach(function (p) { p.classList.remove('is-active'); });
+          pill.classList.add('is-active');
+          var action = pill.getAttribute('data-action');
+          if (action === 'home') smoothScrollTo(0, 3000);
+          else if (action === 'about') smoothScrollTo(document.body.scrollHeight, 3000);
+        });
+      });
+
+      // Mobile hamburger toggle
+      var menuBtn = document.getElementById('mobile-menu-button');
+      if (menuBtn) {
+        var open = false;
+        var lines = menuBtn.querySelectorAll('.hamburger-line');
+        menuBtn.addEventListener('click', function () {
+          open = !open;
+          if (open) {
+            lines[0].style.transform = 'translateY(3px) rotate(45deg)';
+            lines[1].style.transform = 'translateY(-3px) rotate(-45deg)';
+          } else {
+            lines[0].style.transform = '';
+            lines[1].style.transform = '';
+          }
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
