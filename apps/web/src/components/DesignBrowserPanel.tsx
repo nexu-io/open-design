@@ -39,6 +39,7 @@ import {
   browserApplyTextScript,
   browserCommentFilePath,
   browserElementPickerScript,
+  browserMeasureTargetsScript,
   browserSnapshotFromUnknown,
   isProjectHtmlBrowserUrl,
   projectRelativePathFromBrowserUrl,
@@ -222,6 +223,7 @@ const EMPTY_URL = 'about:blank';
 const DESIGN_BROWSER_PARTITION = 'persist:open-design-design-browser';
 const HISTORY_LIMIT = 80;
 const HISTORY_SUGGESTION_LIMIT = 20;
+const EMPTY_PREVIEW_COMMENTS: PreviewComment[] = [];
 // Cap the resource-hint (`dns-prefetch`/`preconnect`) links we leave in <head>.
 // Hovering/typing origins used to accumulate them and their Set entries forever.
 const WARMED_ORIGIN_LIMIT = 32;
@@ -690,7 +692,7 @@ export function DesignBrowserPanel({
   onOpenFile,
   onPageInfoChange,
   onRefreshFiles,
-  previewComments = [],
+  previewComments = EMPTY_PREVIEW_COMMENTS,
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
@@ -731,6 +733,7 @@ export function DesignBrowserPanel({
   const [browserPreviewIndex, setBrowserPreviewIndex] = useState<number | null>(null);
   const [sendingComment, setSendingComment] = useState(false);
   const [savingDomEdit, setSavingDomEdit] = useState(false);
+  const [browserLiveCommentTargets, setBrowserLiveCommentTargets] = useState<Map<string, BrowserElementSnapshot>>(() => new Map());
   const [textDraft, setTextDraft] = useState('');
   const [captureChromeHidden, setCaptureChromeHidden] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -1094,12 +1097,93 @@ export function DesignBrowserPanel({
     title: isBlank ? 'Browser' : pageTitle,
     url: isBlank ? EMPTY_URL : currentUrl,
   }), [browserFilePath, currentUrl, isBlank, pageTitle, projectId, resolvedDir]);
-  const visibleComments = previewComments
-    .filter((comment) => comment.filePath === browserFilePath && comment.status === 'open')
-    .sort((left, right) => left.createdAt - right.createdAt);
+  const visibleComments = useMemo(
+    () => previewComments
+      .filter((comment) => comment.filePath === browserFilePath && comment.status === 'open')
+      .sort((left, right) => left.createdAt - right.createdAt),
+    [browserFilePath, previewComments],
+  );
   const activeSavedComment = activePreviewCommentId
     ? visibleComments.find((comment) => comment.id === activePreviewCommentId) ?? null
     : null;
+
+  useEffect(() => {
+    const node = webviewNode;
+    if (!node || isBlank) {
+      setBrowserLiveCommentTargets((current) => (current.size > 0 ? new Map() : current));
+      return;
+    }
+
+    const commentTargets = visibleComments.map((comment) => ({
+      elementId: comment.elementId,
+      key: `comment:${comment.id}`,
+      selector: comment.selector,
+    }));
+    const activeTarget = activeCommentTarget
+      ? [{
+          elementId: activeCommentTarget.elementId,
+          key: 'active',
+          selector: activeCommentTarget.selector,
+        }]
+      : [];
+    const targets = [...commentTargets, ...activeTarget].filter((target) => target.elementId && target.selector);
+    if (targets.length === 0) {
+      setBrowserLiveCommentTargets((current) => (current.size > 0 ? new Map() : current));
+      return;
+    }
+
+    let cancelled = false;
+    let running = false;
+    const refresh = async () => {
+      if (cancelled || running) return;
+      running = true;
+      try {
+        const result = await node.executeJavaScript<unknown>(
+          browserMeasureTargetsScript(browserFilePath, targets),
+          true,
+        );
+        if (cancelled || !Array.isArray(result)) return;
+        const next = new Map<string, BrowserElementSnapshot>();
+        for (const item of result) {
+          if (!item || typeof item !== 'object') continue;
+          const key = String((item as { key?: unknown }).key || '');
+          if (!key) continue;
+          const snapshot = browserSnapshotFromUnknown(item, browserFilePath);
+          if (snapshot) next.set(key, snapshot);
+        }
+        setBrowserLiveCommentTargets((current) => (
+          browserSnapshotMapsEqual(current, next) ? current : next
+        ));
+        const activeSnapshot = next.get('active');
+        if (activeSnapshot) {
+          setActiveCommentTarget((current) => (
+            current && current.selector === activeSnapshot.selector && !browserSnapshotsEqual(current, activeSnapshot)
+              ? { ...current, ...activeSnapshot }
+              : current
+          ));
+          setTextDraft((current) => (
+            activeTool === 'inspect' || activeTool === 'edit'
+              ? current
+              : activeSnapshot.text
+          ));
+        }
+      } catch {
+        // Cross-origin navigations, transient loads, and detached webviews can
+        // reject executeJavaScript. Keep the saved positions until the next tick.
+      } finally {
+        running = false;
+      }
+    };
+
+    void refresh();
+    const timer = window.setInterval(() => {
+      void refresh();
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeCommentTarget?.elementId, activeCommentTarget?.selector, activeTool, browserFilePath, isBlank, visibleComments, webviewNode]);
 
   useEffect(() => {
     const next = browserImages.map((file) => ({ file, url: URL.createObjectURL(file) }));
@@ -1963,12 +2047,14 @@ export function DesignBrowserPanel({
                 <iframe title={pageTitle} src={loadUrl} />
               </div>
             )}
-            {!isBlank ? (
+            {!isBlank && desktopHostAvailable ? (
               <BrowserCommentMarkers
                 comments={visibleComments}
+                liveTargets={browserLiveCommentTargets}
                 activeCommentId={activePreviewCommentId}
                 onOpen={(comment) => {
-                  const snapshot = browserSnapshotFromComment(comment, browserFilePath);
+                  const snapshot = browserLiveCommentTargets.get(`comment:${comment.id}`)
+                    ?? browserSnapshotFromComment(comment, browserFilePath);
                   setActiveTool('comment');
                   setActiveCommentTarget(snapshot);
                   setActivePreviewCommentId(comment.id);
@@ -2182,17 +2268,19 @@ function BrowserViewportControls({
 function BrowserCommentMarkers({
   activeCommentId,
   comments,
+  liveTargets,
   onOpen,
 }: {
   activeCommentId: string | null;
   comments: PreviewComment[];
+  liveTargets: Map<string, BrowserElementSnapshot>;
   onOpen: (comment: PreviewComment) => void;
 }) {
   if (comments.length === 0) return null;
   return (
     <div className="db-comment-layer" aria-label="Browser comments">
       {comments.map((comment, index) => {
-        const snapshot = browserSnapshotFromComment(comment, comment.filePath);
+        const snapshot = liveTargets.get(`comment:${comment.id}`) ?? browserSnapshotFromComment(comment, comment.filePath);
         const bounds = browserOverlayBounds(snapshot);
         const active = comment.id === activeCommentId;
         const label = comment.label || comment.elementId || 'Browser comment';
@@ -2216,6 +2304,34 @@ function BrowserCommentMarkers({
         );
       })}
     </div>
+  );
+}
+
+function browserSnapshotMapsEqual(
+  current: Map<string, BrowserElementSnapshot>,
+  next: Map<string, BrowserElementSnapshot>,
+): boolean {
+  if (current.size !== next.size) return false;
+  for (const [key, snapshot] of current) {
+    const candidate = next.get(key);
+    if (!candidate || !browserSnapshotsEqual(snapshot, candidate)) return false;
+  }
+  return true;
+}
+
+function browserSnapshotsEqual(left: BrowserElementSnapshot, right: BrowserElementSnapshot): boolean {
+  return (
+    left.filePath === right.filePath &&
+    left.elementId === right.elementId &&
+    left.selector === right.selector &&
+    left.label === right.label &&
+    left.text === right.text &&
+    left.htmlHint === right.htmlHint &&
+    left.position.x === right.position.x &&
+    left.position.y === right.position.y &&
+    left.position.width === right.position.width &&
+    left.position.height === right.position.height &&
+    JSON.stringify(left.style ?? null) === JSON.stringify(right.style ?? null)
   );
 }
 

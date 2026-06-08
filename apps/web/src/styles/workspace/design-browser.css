@@ -33,7 +33,7 @@
 .db-chrome {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, auto) minmax(180px, 1fr) max-content;
+  grid-template-columns: minmax(0, auto) minmax(180px, 740px) max-content;
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -726,11 +726,11 @@
 
 @container design-browser (max-width: 920px) {
   .db-chrome {
-    grid-template-columns: minmax(0, auto) minmax(150px, 1fr) max-content;
+    grid-template-columns: minmax(0, auto) minmax(150px, 560px) max-content;
     gap: 8px;
     padding-inline: 10px;
   }
-  .db-action-secondary {
+  .db-action-save {
     display: none;
   }
   .db-address-title {
@@ -740,7 +740,7 @@
 
 @container design-browser (max-width: 760px) {
   .db-chrome {
-    grid-template-columns: minmax(0, auto) minmax(120px, 1fr) max-content;
+    grid-template-columns: minmax(0, auto) minmax(120px, 420px) max-content;
     gap: 6px;
     padding-inline: 8px;
   }
