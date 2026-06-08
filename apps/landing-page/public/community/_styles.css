@@ -154,7 +154,7 @@
   .label.bug{background:#fde2dd;color:#a23a28;border-color:rgba(162,58,40,.2)}
   .label.design{background:#f1e8fa;color:#5b3a8a;border-color:rgba(91,58,138,.2)}
   .label.lang{background:transparent;border-color:var(--line);color:var(--ink-mute)}
-  .issue .lang{font:500 12px/1 var(--mono);color:var(--ink-faint);text-align:right;min-width:80px}
+  .issue .lang{font:500 12px/1 var(--mono);color:var(--ink-faint);text-align:right;width:max-content}
   .issue .arr{color:var(--ink-faint);transition:color .15s,transform .15s}
   .issue:hover .arr{color:var(--coral);transform:translateX(3px)}
   .issues-foot{margin-top:36px;display:flex;justify-content:space-between;align-items:center;font:500 13px/1 var(--mono);color:var(--ink-mute)}
