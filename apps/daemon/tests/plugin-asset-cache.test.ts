@@ -68,6 +68,9 @@ describe('isPrivateAddress', () => {
       'fd12::3',
       'ff02::1',
       '::ffff:127.0.0.1',
+      '::ffff:7f00:1', // hex IPv4-mapped 127.0.0.1 (Node normalizes brackets to this)
+      '::ffff:0a00:1', // hex IPv4-mapped 10.0.0.1
+      '::ffff:a9fe:a9fe', // hex IPv4-mapped 169.254.169.254 (metadata)
       'not-an-ip',
     ]) {
       expect(isPrivateAddress(addr)).toBe(true);
@@ -75,7 +78,14 @@ describe('isPrivateAddress', () => {
   });
 
   it('allows ordinary public addresses', () => {
-    for (const addr of ['8.8.8.8', '1.1.1.1', '172.15.0.1', '172.32.0.1', '2606:4700:4700::1111']) {
+    for (const addr of [
+      '8.8.8.8',
+      '1.1.1.1',
+      '172.15.0.1',
+      '172.32.0.1',
+      '2606:4700:4700::1111',
+      '::ffff:5db8:d822', // hex IPv4-mapped 93.184.216.34 (public)
+    ]) {
       expect(isPrivateAddress(addr)).toBe(false);
     }
   });
@@ -100,6 +110,11 @@ describe('assertSafePublicUrl (up-front rejection)', () => {
       expect.objectContaining({ status: 400 }),
     );
     expect(() => assertSafePublicUrl('http://169.254.169.254/x.png')).toThrow(
+      expect.objectContaining({ status: 400 }),
+    );
+    // IPv4-mapped IPv6 literal — the URL parser normalizes the bracketed host
+    // to `::ffff:7f00:1`, which must still be rejected as loopback.
+    expect(() => assertSafePublicUrl('http://[::ffff:127.0.0.1]/x.png')).toThrow(
       expect.objectContaining({ status: 400 }),
     );
   });

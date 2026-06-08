@@ -78,6 +78,41 @@ export class AssetCacheError extends Error {
   }
 }
 
+/** Expand an IPv6 literal (with `::` compression and/or an embedded dotted
+ *  IPv4 tail) into its eight 16-bit groups, or null if it does not parse.
+ *  Node's URL parser normalizes mapped literals to hex (`::ffff:127.0.0.1` →
+ *  `::ffff:7f00:1`), so a string regex can't reliably spot the mapped range —
+ *  we have to canonicalize. */
+function expandIpv6(addr: string): number[] | null {
+  let s = addr.toLowerCase().split('%')[0] ?? '';
+  if (!s.includes(':')) return null;
+  // Fold a trailing dotted IPv4 (`…:1.2.3.4`) into two hex groups.
+  const v4 = /^(.*:)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(s);
+  if (v4) {
+    const o = (v4[2] ?? '').split('.').map((n) => Number(n));
+    if (o.length !== 4 || o.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+    const hi = (((o[0] ?? 0) << 8) | (o[1] ?? 0)).toString(16);
+    const lo = (((o[2] ?? 0) << 8) | (o[3] ?? 0)).toString(16);
+    s = `${v4[1]}${hi}:${lo}`;
+  }
+  const halves = s.split('::');
+  if (halves.length > 2) return null;
+  const parse = (p: string): number[] =>
+    p === '' ? [] : p.split(':').map((g) => (/^[0-9a-f]{1,4}$/.test(g) ? parseInt(g, 16) : Number.NaN));
+  const left = parse(halves[0] ?? '');
+  let groups: number[];
+  if (halves.length === 1) {
+    groups = left;
+  } else {
+    const right = parse(halves[1] ?? '');
+    const fill = 8 - left.length - right.length;
+    if (fill < 1) return null;
+    groups = [...left, ...new Array(fill).fill(0), ...right];
+  }
+  if (groups.length !== 8 || groups.some((g) => Number.isNaN(g) || g < 0 || g > 0xffff)) return null;
+  return groups;
+}
+
 /** True for any address an external CDN must never resolve to: loopback,
  *  link-local, private, CGNAT, ULA, multicast, or unspecified. An unparseable
  *  input is treated as unsafe. */
@@ -101,13 +136,26 @@ export function isPrivateAddress(addr: string): boolean {
     return false;
   }
   if (fam === 6) {
-    const x = addr.toLowerCase();
-    if (x === '::' || x === '::1') return true; // unspecified / loopback
-    if (x.startsWith('fe80')) return true; // link-local
-    if (x.startsWith('fc') || x.startsWith('fd')) return true; // unique local
-    if (x.startsWith('ff')) return true; // multicast
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(x);
-    if (mapped && mapped[1]) return isPrivateAddress(mapped[1]);
+    const groups = expandIpv6(addr);
+    if (!groups) return true; // can't canonicalize a "valid" v6 → refuse
+    // IPv4-mapped (`::ffff:0:0/96`) and the deprecated IPv4-compatible
+    // (`::0:0/96`, excluding :: / ::1) carry an embedded IPv4 — classify it by
+    // its real v4 range so `::ffff:7f00:1` (== 127.0.0.1) is caught.
+    const topZero = groups.slice(0, 5).every((g) => g === 0);
+    if (topZero && (groups[5] === 0xffff || groups[5] === 0)) {
+      const a = (groups[6] ?? 0) >> 8;
+      const b = (groups[6] ?? 0) & 0xff;
+      const c = (groups[7] ?? 0) >> 8;
+      const d = (groups[7] ?? 0) & 0xff;
+      if (groups[5] === 0xffff || a !== 0 || b !== 0) {
+        return isPrivateAddress(`${a}.${b}.${c}.${d}`);
+      }
+    }
+    if (groups.every((g) => g === 0)) return true; // ::  (unspecified)
+    if (groups.slice(0, 7).every((g) => g === 0) && groups[7] === 1) return true; // ::1 loopback
+    if (groups[0] === 0xfe80) return true; // link-local fe80::/10
+    if (groups[0] !== undefined && (groups[0] & 0xfe00) === 0xfc00) return true; // ULA fc00::/7
+    if (groups[0] !== undefined && (groups[0] & 0xff00) === 0xff00) return true; // multicast ff00::/8
     return false;
   }
   return true; // not a literal IP — caller must resolve before trusting it
