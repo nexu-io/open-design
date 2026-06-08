@@ -36,13 +36,16 @@ describe('mention popover styles', () => {
     expect(ruleValue(results, 'overflow-y')).toBe('auto');
   });
 
-  it('wraps category tabs inside the panel without clipping labels', () => {
+  it('keeps category tabs on one line without clipping labels', () => {
     const tabs = cssBlock('.mention-tabs');
     const tab = cssBlock('.mention-tab');
 
-    expect(ruleValue(tabs, 'flex-wrap')).toBe('wrap');
-    expect(ruleValue(tabs, 'overflow')).toBe('hidden');
+    expect(ruleValue(tabs, 'flex-wrap')).toBe('nowrap');
+    expect(ruleValue(tabs, 'overflow-x')).toBe('auto');
+    expect(ruleValue(tabs, 'overflow-y')).toBe('hidden');
+    expect(ruleValue(tabs, 'scrollbar-width')).toBe('none');
     expect(ruleValue(tab, 'flex')).toBe('0 0 auto');
+    expect(ruleValue(tab, 'min-inline-size')).toBe('max-content');
     expect(ruleValue(tab, 'white-space')).toBe('nowrap');
   });
 

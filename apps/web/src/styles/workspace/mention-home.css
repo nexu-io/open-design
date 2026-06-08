@@ -43,13 +43,18 @@
   display: flex;
   align-items: center;
   align-content: flex-start;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
   min-height: 0;
   padding: 6px;
   background: var(--bg-subtle);
   border-bottom: 1px solid var(--border-soft);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.mention-tabs::-webkit-scrollbar {
+  display: none;
 }
 .mention-tab {
   flex: 0 0 auto;
