@@ -360,19 +360,19 @@ export function Header({
                 <li role='none'>
                   <a
                     role='menuitem'
-                    href={href('/plugins/templates/')}
-                    className={linkClass('templates')}
+                    href={href('/templates/')}
+                    className={localeBasePath.startsWith('/templates') ? 'is-active' : undefined}
                   >
-                    <span className='dropdown-name'>{headerCopy.nav.templates}</span>
+                    <span className='dropdown-name'>{templateUseCasesLabel}</span>
                   </a>
                 </li>
                 <li role='none'>
                   <a
                     role='menuitem'
-                    href={href('/templates/')}
-                    className={localeBasePath.startsWith('/templates') ? 'is-active' : undefined}
+                    href={href('/plugins/templates/')}
+                    className={linkClass('templates')}
                   >
-                    <span className='dropdown-name'>{templateUseCasesLabel}</span>
+                    <span className='dropdown-name'>{headerCopy.nav.templates}</span>
                   </a>
                 </li>
                 <li role='none'>
