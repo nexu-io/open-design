@@ -8166,13 +8166,12 @@ function HtmlViewer({
                 <div className="share-menu chrome-share-menu">
                   <button
                     type="button"
-                    className="chrome-action chrome-action-secondary chrome-action-with-label"
+                    className="chrome-action chrome-action-secondary chrome-action-with-label chrome-action-text-only"
                     aria-haspopup="menu"
                     aria-expanded={deployMenuOpen}
                     aria-label={shareMenuLabel}
                     onClick={openDeployMenu}
                   >
-                    <RemixIcon name="share-forward-line" size={15} />
                     <span>{shareMenuLabel}</span>
                   </button>
                   {deployMenuOpen ? (
@@ -8310,7 +8309,6 @@ function HtmlViewer({
                     aria-expanded={downloadMenuOpen}
                     onClick={openDownloadMenu}
                   >
-                    <RemixIcon name="download-line" size={15} />
                     <span>{t('fileViewer.download')}</span>
                   </button>
                   {downloadMenuOpen ? (
