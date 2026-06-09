@@ -515,6 +515,58 @@ test('cursor stream does not duplicate output across two fallback-terminated tur
   ]);
 });
 
+test('cursor stream dedupes cumulative timestamped chunks on a later turn', () => {
+  const { events, handler } = collectEvents('cursor-agent');
+
+  // Turn 1 completes. Turn 2 streams cumulative snapshots ("second" then
+  // "second turn") via the timestamped path. That path must dedupe against
+  // the CURRENT turn slice, not the whole cross-turn buffer — otherwise
+  // "second turn" fails the startsWith("hellosecond") check and is appended
+  // whole, duplicating output as "secondsecond turn".
+  handler.feed(
+    // Turn 1: streamed "hello", terminal replay "hello"
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 2,
+      model_call_id: 'call-1',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    }) +
+    '\n' +
+    // Turn 2: cumulative timestamped snapshots before the terminal replay
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 3,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 4,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second turn' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 5,
+      model_call_id: 'call-2',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second turn' }] },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'hello' },
+    { type: 'text_delta', delta: 'second' },
+    { type: 'text_delta', delta: ' turn' },
+  ]);
+});
+
 test('cursor stream recovers a dropped middle chunk from a later cumulative snapshot', () => {
   const { events, handler } = collectEvents('cursor-agent');
 

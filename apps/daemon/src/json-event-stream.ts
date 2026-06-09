@@ -205,18 +205,25 @@ function extractCursorText(message: unknown): string {
 }
 
 function emitCursorTextDelta(text: string, onEvent: StreamEventHandler, state: ParserState): void {
-  if (!state.cursorTextSoFar) {
-    state.cursorTextSoFar = text;
+  // Dedupe a streamed chunk against the CURRENT turn's emitted text
+  // (`cursorTextSoFar` from `cursorTurnStart` onward), NOT the whole
+  // cross-turn buffer. Cursor sends cumulative snapshots within a turn
+  // (`"second"` then `"second turn"`); comparing against the full buffer
+  // would, after an earlier turn, miss the current-turn prefix and append
+  // the whole snapshot again, duplicating output (`"secondsecond turn"`).
+  const emittedTurn = state.cursorTextSoFar.slice(state.cursorTurnStart);
+  if (!emittedTurn) {
+    state.cursorTextSoFar += text;
     onEvent({ type: 'text_delta', delta: text });
     return;
   }
-  if (text === state.cursorTextSoFar) {
+  if (text === emittedTurn) {
     return;
   }
-  if (text.startsWith(state.cursorTextSoFar)) {
-    const delta = text.slice(state.cursorTextSoFar.length);
+  if (text.startsWith(emittedTurn)) {
+    const delta = text.slice(emittedTurn.length);
     if (delta) onEvent({ type: 'text_delta', delta });
-    state.cursorTextSoFar = text;
+    state.cursorTextSoFar += delta;
     return;
   }
   state.cursorTextSoFar += text;
