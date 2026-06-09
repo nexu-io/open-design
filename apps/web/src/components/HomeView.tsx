@@ -81,6 +81,7 @@ import { HomeTemplatesReveal } from './HomeTemplatesReveal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import type { FacetSelection } from './plugins-home/facets';
+import { localizePluginTitle } from './plugins-home/localization';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
 import { AnimatePresence } from 'motion/react';
@@ -579,8 +580,8 @@ export function HomeView({
         return homeHeroChipLabelForId(chip.id, t);
       }
     }
-    return active.record.title;
-  }, [active, t]);
+    return localizePluginTitle(locale, active.record);
+  }, [active, locale, t]);
   const showActivePluginChip = useMemo(
     () => shouldShowActivePluginChip(active),
     [active],
