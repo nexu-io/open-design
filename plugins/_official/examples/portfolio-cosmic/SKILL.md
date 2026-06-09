@@ -25,6 +25,7 @@ This is the authoritative build brief. The named colors, fonts, gradient, animat
 
 - Default output: a single self-contained HTML file (the `example.html` seed). It already inlines everything.
 - If the user explicitly asks for a **React + Vite + Tailwind + TypeScript** project, port the seed faithfully: same tokens, same section structure, **GSAP** for entrance/marquee/ScrollTrigger pin, **Framer Motion** for `whileInView` reveals and role `AnimatePresence`, **hls.js** for the background video. Use `react-router-dom` + `tailwindcss-animate` and add smooth-scroll nav + page transitions. Do not change the design while porting.
+- **Motion loading (locked).** If you emit a single self-contained inline-JSX file instead of the Vite project, Motion's React hooks (`useScroll`, `useTransform`, `useAnimationFrame`, …) exist only in the **React** UMD build: load `<script src="https://unpkg.com/framer-motion@11.11.13/dist/framer-motion.js"></script>` and read them off `window.Motion` — never the vanilla `https://unpkg.com/motion@.../dist/motion.js` DOM bundle, which lacks `useScroll` and renders a blank page. (The Vite project imports from npm and is unaffected.)
 
 ## Fonts
 
