@@ -306,4 +306,42 @@ describe("hoistStandaloneNextPeerDeps", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  it("refreshes copied fallback peer dependency directories after dependency version changes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-hoist-refresh-"));
+    const pnpmRoot = join(root, "node_modules", ".pnpm");
+    const initialPackageRoot = join(pnpmRoot, "react@18.3.1", "node_modules", "react");
+    const updatedPackageRoot = join(pnpmRoot, "react@19.0.0", "node_modules", "react");
+    const hoistedRoot = join(root, "apps", "web", "node_modules", "react");
+    const blockedSymlink = async () => {
+      const error = new Error("operation not permitted") as NodeJS.ErrnoException;
+      error.code = "EPERM";
+      throw error;
+    };
+
+    try {
+      await mkdir(initialPackageRoot, { recursive: true });
+      await writeFile(join(initialPackageRoot, "package.json"), '{"name":"react","version":"18.3.1"}\n', "utf8");
+
+      await hoistStandaloneNextPeerDeps(root, { createLink: blockedSymlink });
+      expect(await readFile(join(hoistedRoot, "package.json"), "utf8")).toBe(
+        '{"name":"react","version":"18.3.1"}\n',
+      );
+
+      await rm(join(pnpmRoot, "react@18.3.1"), { force: true, recursive: true });
+      await mkdir(updatedPackageRoot, { recursive: true });
+      await writeFile(join(updatedPackageRoot, "package.json"), '{"name":"react","version":"19.0.0"}\n', "utf8");
+
+      await hoistStandaloneNextPeerDeps(root, { createLink: blockedSymlink });
+
+      const stats = await lstat(hoistedRoot);
+      expect(stats.isDirectory()).toBe(true);
+      expect(stats.isSymbolicLink()).toBe(false);
+      expect(await readFile(join(hoistedRoot, "package.json"), "utf8")).toBe(
+        '{"name":"react","version":"19.0.0"}\n',
+      );
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });

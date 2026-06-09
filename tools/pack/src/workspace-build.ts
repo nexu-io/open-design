@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { access, cp, lstat, mkdir, readdir, readFile, stat, symlink, unlink, writeFile } from "node:fs/promises";
+import { access, cp, lstat, mkdir, readdir, readFile, rm, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 
 import { hashJson, hashPath, ToolPackCache } from "./cache.js";
@@ -263,10 +263,8 @@ export async function hoistStandaloneNextPeerDeps(
     // `lstat` does not follow symlinks: this lets us distinguish a
     // stale dangling link (which `access`/`pathExists` would falsely
     // report as missing, and then `symlink()` would later reject with
-    // EEXIST) from a fresh slot. If Next genuinely hoisted a real
-    // directory, leave it alone.
+    // EEXIST) from a fresh slot.
     const existing = await lstat(linkPath).catch(() => null);
-    if (existing && existing.isDirectory() && !existing.isSymbolicLink()) continue;
     // pnpm dirs look like `react@18.3.1` or
     // `react-dom@18.3.1_react@18.3.1` — pick the bare version, not a
     // peer-resolved sibling. The leading `${pkg}@` requirement
@@ -276,10 +274,10 @@ export async function hoistStandaloneNextPeerDeps(
     const target = join(pnpmRoot, match, "node_modules", pkg);
     if (!(await pathExists(target))) continue;
     const relativeTarget = relative(dirname(linkPath), target);
-    // Idempotent re-run: drop any pre-existing entry (stale symlink
-    // from a previous build with different react/react-dom versions)
-    // before recreating, so repeated invocations don't EEXIST.
-    if (existing) await unlink(linkPath).catch(() => undefined);
+    // Idempotent re-run: drop any pre-existing derived entry before
+    // recreating it. This covers both stale symlinks and copied fallback
+    // directories from Windows hosts that cannot create symlinks.
+    if (existing) await rm(linkPath, { force: true, recursive: true }).catch(() => undefined);
     await createHoistedPeerDependency(target, linkPath, relativeTarget, createLink);
   }
 }
