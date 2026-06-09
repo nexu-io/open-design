@@ -722,6 +722,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   }
 
   function usePromptExample(example: string) {
+    trackHomeChatComposerClick(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      element: 'example_prompt',
+      chip_id: activeChipId ?? 'prototype',
+    });
     setSelectedPromptExample({
       label: promptExampleChipLabel(example),
       promptText: example,
@@ -738,6 +744,14 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   }
 
   function pickExamplePluginPreset(record: InstalledPluginRecord, chipId: string, promptText: string) {
+    trackHomeChatComposerClick(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      element: 'example_prompt',
+      chip_id: chipId,
+      plugin_id: record.sourceMarketplaceEntryName ?? record.id,
+      plugin_type: record.marketplaceTrust ?? 'official',
+    });
     setSelectedPromptExample({
       label: record.title,
       promptText,
@@ -1395,10 +1409,26 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           subChips={activeSubChips}
           selectedSlug={selectedSubcategory}
           pluginsLoading={pluginsLoading}
-          onPickSubChip={(sub) =>
-            setSelectedSubcategory((current) => (current === sub.slug ? null : sub.slug))
-          }
-          onSelectAll={() => setSelectedSubcategory(null)}
+          onPickSubChip={(sub) => {
+            trackHomeChatComposerClick(analytics.track, {
+              page_name: 'home',
+              area: 'chat_composer',
+              element: 'subcategory_chip',
+              chip_id: activeChipId ?? undefined,
+              subcategory: sub.slug,
+            });
+            setSelectedSubcategory((current) => (current === sub.slug ? null : sub.slug));
+          }}
+          onSelectAll={() => {
+            trackHomeChatComposerClick(analytics.track, {
+              page_name: 'home',
+              area: 'chat_composer',
+              element: 'subcategory_chip',
+              chip_id: activeChipId ?? undefined,
+              subcategory: 'all',
+            });
+            setSelectedSubcategory(null);
+          }}
         />
       ) : null}
 

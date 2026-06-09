@@ -847,6 +847,14 @@ export function HomeView({
     action: PluginUseAction = 'use',
     inputs?: Record<string, unknown>,
   ) {
+    trackCommunityGalleryClick(analytics.track, {
+      page_name: 'home',
+      area: 'community_gallery',
+      element: 'use_plugin',
+      plugin_id: record.sourceMarketplaceEntryName ?? record.id,
+      plugin_type: record.marketplaceTrust ?? 'official',
+      action: action === 'use-with-query' ? 'use_with_query' : 'use',
+    });
     if (action === 'use-with-query') {
       const renderedQuery = previewPluginReplacement(record, undefined, inputs ? { inputs } : undefined);
       const trimmedQuery = renderedQuery?.trim() ?? '';
@@ -1457,6 +1465,7 @@ export function HomeView({
     onSubmit({
       prompt: trimmed,
       pluginId: routedPluginId,
+      pluginType: submittedActive?.record.marketplaceTrust ?? (routedPluginId ? 'official' : null),
       skillId: resolvedSkillId,
       appliedPluginSnapshotId: submittedActive?.result?.appliedPlugin?.snapshotId ?? null,
       pluginTitle: submittedActive?.record.title ?? null,
