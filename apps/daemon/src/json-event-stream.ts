@@ -205,27 +205,16 @@ function extractCursorText(message: unknown): string {
 }
 
 function emitCursorTextDelta(text: string, onEvent: StreamEventHandler, state: ParserState): void {
-  // Dedupe a streamed chunk against the CURRENT turn's emitted text
-  // (`cursorTextSoFar` from `cursorTurnStart` onward), NOT the whole
-  // cross-turn buffer. Cursor sends cumulative snapshots within a turn
-  // (`"second"` then `"second turn"`); comparing against the full buffer
-  // would, after an earlier turn, miss the current-turn prefix and append
-  // the whole snapshot again, duplicating output (`"secondsecond turn"`).
-  const emittedTurn = state.cursorTextSoFar.slice(state.cursorTurnStart);
-  if (!emittedTurn) {
-    state.cursorTextSoFar += text;
-    onEvent({ type: 'text_delta', delta: text });
-    return;
-  }
-  if (text === emittedTurn) {
-    return;
-  }
-  if (text.startsWith(emittedTurn)) {
-    const delta = text.slice(emittedTurn.length);
-    if (delta) onEvent({ type: 'text_delta', delta });
-    state.cursorTextSoFar += delta;
-    return;
-  }
+  // Timestamped assistant events WITHOUT `model_call_id` are cursor-agent's
+  // real-time incremental deltas (`--stream-partial-output`): the final turn
+  // text is the in-order concatenation of every such delta. Emit each one
+  // verbatim — do NOT dedupe by content. Legitimately repeated deltas
+  // (`"ha"`, `"ha"` -> `"haha"`) or a delta that happens to be a prefix of
+  // earlier text are real content, not duplicates; content-based prefix or
+  // equality checks would silently drop them. Duplicate suppression and
+  // dropped-chunk recovery belong to the buffered terminal replay paths
+  // (`model_call_id` and no-timestamp events) via reconcileCursorTurnReplay.
+  if (!text) return;
   state.cursorTextSoFar += text;
   onEvent({ type: 'text_delta', delta: text });
 }

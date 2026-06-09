@@ -262,9 +262,15 @@ test('cursor stream emits suffix when final assistant extends partial text', () 
   ]);
 });
 
-test('cursor stream de-duplicates cumulative timestamped assistant chunks', () => {
+test('cursor stream concatenates independent timestamped fragments verbatim', () => {
   const { events, handler } = collectEvents('cursor-agent');
 
+  // cursor-agent --stream-partial-output sends timestamped assistant events
+  // (without model_call_id) as INDEPENDENT incremental fragments — each
+  // carries only the new text and the turn text is their in-order
+  // concatenation. They must be emitted verbatim, including a fragment that
+  // repeats earlier text; content-based equality/prefix dedup would silently
+  // drop real output.
   handler.feed(
     JSON.stringify({
       type: 'assistant',
@@ -275,19 +281,21 @@ test('cursor stream de-duplicates cumulative timestamped assistant chunks', () =
     JSON.stringify({
       type: 'assistant',
       timestamp_ms: 2,
-      message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
+      message: { role: 'assistant', content: [{ type: 'text', text: ' world' }] },
     }) +
     '\n' +
+    // A legitimately repeated fragment — must NOT be deduped away.
     JSON.stringify({
       type: 'assistant',
       timestamp_ms: 3,
-      message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
+      message: { role: 'assistant', content: [{ type: 'text', text: ' world' }] },
     }) +
     '\n',
   );
 
   assert.deepEqual(events, [
     { type: 'text_delta', delta: 'hello' },
+    { type: 'text_delta', delta: ' world' },
     { type: 'text_delta', delta: ' world' },
   ]);
 });
@@ -515,106 +523,68 @@ test('cursor stream does not duplicate output across two fallback-terminated tur
   ]);
 });
 
-test('cursor stream dedupes cumulative timestamped chunks on a later turn', () => {
+test('cursor stream preserves repeated real deltas on a later turn', () => {
   const { events, handler } = collectEvents('cursor-agent');
 
-  // Turn 1 completes. Turn 2 streams cumulative snapshots ("second" then
-  // "second turn") via the timestamped path. That path must dedupe against
-  // the CURRENT turn slice, not the whole cross-turn buffer — otherwise
-  // "second turn" fails the startsWith("hellosecond") check and is appended
-  // whole, duplicating output as "secondsecond turn".
+  // Turn 1 completes (delta "hi" + its model_call_id replay). Turn 2 streams
+  // two legitimately identical real deltas "ha" + "ha" (turn text "haha"),
+  // then the buffered model_call_id replay "haha". Both timestamped deltas
+  // must be emitted (they are real content, not duplicates), and only the
+  // replay is suppressed. A content equality/prefix check on the timestamped
+  // path would wrongly drop the second "ha" and lose output.
   handler.feed(
-    // Turn 1: streamed "hello", terminal replay "hello"
+    // Turn 1
     JSON.stringify({
       type: 'assistant',
       timestamp_ms: 1,
-      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] },
     }) +
     '\n' +
     JSON.stringify({
       type: 'assistant',
       timestamp_ms: 2,
       model_call_id: 'call-1',
-      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] },
     }) +
     '\n' +
-    // Turn 2: cumulative timestamped snapshots before the terminal replay
+    // Turn 2: two identical real deltas, then the buffered replay
     JSON.stringify({
       type: 'assistant',
       timestamp_ms: 3,
-      message: { role: 'assistant', content: [{ type: 'text', text: 'second' }] },
+      message: { role: 'assistant', content: [{ type: 'text', text: 'ha' }] },
     }) +
     '\n' +
     JSON.stringify({
       type: 'assistant',
       timestamp_ms: 4,
-      message: { role: 'assistant', content: [{ type: 'text', text: 'second turn' }] },
+      message: { role: 'assistant', content: [{ type: 'text', text: 'ha' }] },
     }) +
     '\n' +
     JSON.stringify({
       type: 'assistant',
       timestamp_ms: 5,
       model_call_id: 'call-2',
-      message: { role: 'assistant', content: [{ type: 'text', text: 'second turn' }] },
+      message: { role: 'assistant', content: [{ type: 'text', text: 'haha' }] },
     }) +
     '\n',
   );
 
   assert.deepEqual(events, [
-    { type: 'text_delta', delta: 'hello' },
-    { type: 'text_delta', delta: 'second' },
-    { type: 'text_delta', delta: ' turn' },
-  ]);
-});
-
-test('cursor stream recovers a dropped middle chunk from a later cumulative snapshot', () => {
-  const { events, handler } = collectEvents('cursor-agent');
-
-  // Cursor's timestamped chunks are cumulative snapshots of the turn. When
-  // a middle snapshot is dropped, the next snapshot still carries the full
-  // text, so prefix reconciliation recovers the gap with no loss and no
-  // duplication. (Regression for the reviewer's "drop a middle fragment
-  // before a later fragment is delivered" scenario.)
-  handler.feed(
-    JSON.stringify({
-      type: 'assistant',
-      timestamp_ms: 1,
-      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
-    }) +
-    '\n' +
-    // "hello brave" snapshot is dropped / never received
-    JSON.stringify({
-      type: 'assistant',
-      timestamp_ms: 2,
-      message: { role: 'assistant', content: [{ type: 'text', text: 'hello brave world' }] },
-    }) +
-    '\n' +
-    // Replay confirms the full turn text — nothing more to emit
-    JSON.stringify({
-      type: 'assistant',
-      timestamp_ms: 3,
-      model_call_id: 'call-1',
-      message: { role: 'assistant', content: [{ type: 'text', text: 'hello brave world' }] },
-    }) +
-    '\n',
-  );
-
-  assert.deepEqual(events, [
-    { type: 'text_delta', delta: 'hello' },
-    { type: 'text_delta', delta: ' brave world' },
+    { type: 'text_delta', delta: 'hi' },
+    { type: 'text_delta', delta: 'ha' },
+    { type: 'text_delta', delta: 'ha' },
   ]);
 });
 
 test('cursor stream does not duplicate output when emitted text is not a replay prefix', () => {
   const { events, handler } = collectEvents('cursor-agent');
 
-  // Pathological non-cumulative case: a middle fragment (" brave") is
-  // dropped while a later fragment (" world") still arrives, so the emitted
-  // turn text "hello world" is NOT a prefix of the replay "hello brave
-  // world". Length-only slicing would emit " world" a second time (yielding
-  // "hello world world"). The replay must instead be reconciled against the
-  // emitted text: since it is not a verified prefix, the append-only stream
-  // is left untouched rather than corrupted with a duplicate suffix.
+  // A middle fragment (" brave") is dropped while a later fragment (" world")
+  // still arrives, so the emitted turn text "hello world" is NOT a prefix of
+  // the buffered replay "hello brave world". The replay is reconciled against
+  // the emitted turn text: since it is not a verified prefix, the append-only
+  // stream is left untouched rather than re-emitting an already-shown suffix
+  // (which would yield "hello world world").
   handler.feed(
     JSON.stringify({
       type: 'assistant',
