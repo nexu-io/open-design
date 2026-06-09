@@ -2295,7 +2295,7 @@ export const zhTW: Dict = {
   'assistant.forkConversation': '從這裡分叉',
   'assistant.forkingConversation': '正在分叉…',
   'assistant.shareToOpenDesign': '分享到 Open Design',
-  'assistant.shareToOpenDesignBusy': '分享中…',
+  'assistant.shareToOpenDesignBusy': '正在準備投稿…',
   'assistant.feedbackPrompt': '意見回饋',
   'assistant.feedbackPositive': '有幫助',
   'assistant.feedbackNegative': '沒有幫助',

@@ -2295,7 +2295,7 @@ export const id: Dict = {
   'assistant.forkConversation': 'Fork dari sini',
   'assistant.forkingConversation': 'Membuat fork…',
   'assistant.shareToOpenDesign': 'Bagikan ke Open Design',
-  'assistant.shareToOpenDesignBusy': 'Membagikan…',
+  'assistant.shareToOpenDesignBusy': 'Menyiapkan paket…',
   'assistant.feedbackPrompt': 'Masukan',
   'assistant.feedbackPositive': 'Membantu',
   'assistant.feedbackNegative': 'Tidak membantu',

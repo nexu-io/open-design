@@ -2,8 +2,8 @@
 
 /**
  * Gate coverage for the "next step" affordance under the last assistant
- * message. It should appear only for the last successful turn that produced a
- * previewable HTML artifact, and only when the handlers are wired.
+ * message. Iteration chips should appear for the last successful turn even
+ * without a previewable artifact; the Share action still needs HTML.
  */
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -91,7 +91,7 @@ describe('AssistantMessage next-step affordance', () => {
     expect(screen.queryByTestId('next-step-actions')).toBeNull();
   });
 
-  it('does not render when the turn produced no previewable HTML artifact', () => {
+  it('renders iteration chips without the Share action when the turn produced no previewable HTML artifact', () => {
     render(
       <AssistantMessage
         message={baseMessage({ producedFiles: [producedFile('notes.md', 'text')] })}
@@ -101,7 +101,36 @@ describe('AssistantMessage next-step affordance', () => {
         {...handlers()}
       />,
     );
-    expect(screen.queryByTestId('next-step-actions')).toBeNull();
+    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
+    expect(screen.queryByText(en['nextStep.share'])).toBeNull();
+    expect(screen.getByText(en['nextStep.chipPolishVisual'])).toBeTruthy();
+  });
+
+  it('keeps Share to Open Design separated after the regular next-step actions', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({ producedFiles: [producedFile('notes.md', 'text')] })}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        onFeedback={vi.fn()}
+        onShareToOpenDesign={vi.fn()}
+        {...handlers()}
+      />,
+    );
+
+    const nextSteps = screen.getByTestId('next-step-actions');
+    const optionsRow = screen.getByTestId('next-step-options-row');
+    const divider = screen.getByTestId('next-step-open-design-divider');
+    const shareToOd = screen.getByTestId('assistant-share-to-od-panel');
+
+    expect(nextSteps).toBeTruthy();
+    expect(screen.getByText(en['nextStep.chipBrand'])).toBeTruthy();
+    expect(shareToOd).toBeTruthy();
+    expect(nextSteps.contains(shareToOd)).toBe(true);
+    expect(optionsRow.contains(shareToOd)).toBe(false);
+    expect(optionsRow.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(divider.compareDocumentPosition(shareToOd) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('does not render when the handlers are not wired', () => {

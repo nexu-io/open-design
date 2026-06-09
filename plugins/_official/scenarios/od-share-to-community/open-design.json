@@ -21,10 +21,10 @@
     "uk": "Поділитися зі спільнотою"
   },
   "version": "0.1.0",
-  "description": "Package the work the user just finished into an Open Design plugin and route them to the existing Add-to-My-plugins / Open-Design-PR buttons. Triggered by the 'Share to Open Design' button next to the post-completion Discord prompt.",
+  "description": "Package the work the user just finished into an Open Design plugin and route them to the existing Add-to-My-plugins / Open-Design-PR buttons. Triggered by the post-completion 'Share to Open Design' submission action.",
   "description_i18n": {
-    "en": "Package the work the user just finished into an Open Design plugin and route them to the existing Add-to-My-plugins / Open-Design-PR buttons. Triggered by the 'Share to Open Design' button next to the post-completion Discord prompt.",
-    "zh-CN": "把用户刚做完的作品打包成 Open Design 插件,然后引导他们点已有的 Add to My plugins / Open Design PR 按钮。在生成完成后 Discord 提示旁边的 'Share to Open Design' 按钮触发。"
+    "en": "Package the work the user just finished into an Open Design plugin and route them to the existing Add-to-My-plugins / Open-Design-PR buttons. Triggered by the post-completion 'Share to Open Design' submission action.",
+    "zh-CN": "把用户刚做完的作品打包成 Open Design 插件,然后引导他们点已有的 Add to My plugins / Open Design PR 按钮。由生成完成后的 'Share to Open Design' 投稿操作触发。"
   },
   "license": "MIT",
   "author": {

@@ -2295,7 +2295,7 @@ export const it: Dict = {
   'assistant.forkConversation': 'Fork da qui',
   'assistant.forkingConversation': 'Creazione fork…',
   'assistant.shareToOpenDesign': 'Condividi su Open Design',
-  'assistant.shareToOpenDesignBusy': 'Condivisione…',
+  'assistant.shareToOpenDesignBusy': 'Preparazione pacchetto…',
   'assistant.feedbackPrompt': 'Feedback',
   'assistant.feedbackPositive': 'Utile',
   'assistant.feedbackNegative': 'Non utile',

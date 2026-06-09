@@ -2295,7 +2295,7 @@ export const esES: Dict = {
   'assistant.forkConversation': 'Bifurcar desde aquí',
   'assistant.forkingConversation': 'Bifurcando…',
   'assistant.shareToOpenDesign': 'Compartir con Open Design',
-  'assistant.shareToOpenDesignBusy': 'Compartiendo…',
+  'assistant.shareToOpenDesignBusy': 'Preparando paquete…',
   'assistant.feedbackPrompt': 'Comentarios',
   'assistant.feedbackPositive': 'Útil',
   'assistant.feedbackNegative': 'No útil',

@@ -486,7 +486,7 @@ interface Props {
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
   // "Next step" affordance handlers forwarded to the last assistant message.
   onArtifactShare?: (fileName: string) => void;
-  onArtifactChip?: (fileName: string, prompt: string) => void;
+  onArtifactChip?: (fileName: string | null, prompt: string) => void;
   onForkFromMessage?: (assistantMessage: ChatMessage) => void;
   forkingMessageId?: string | null;
   // Header "+" button — kicks off ProjectView's create-conversation flow.
@@ -2162,7 +2162,7 @@ interface AssistantCallbacks {
     | ((message: ChatMessage, change: ChatMessageFeedbackChange) => void)
     | undefined;
   onArtifactShare: ((fileName: string) => void) | undefined;
-  onArtifactChip: ((fileName: string, prompt: string) => void) | undefined;
+  onArtifactChip: ((fileName: string | null, prompt: string) => void) | undefined;
   onForkFromMessage: ((message: ChatMessage) => void) | undefined;
   onShareToOpenDesign: (() => void) | undefined;
 }
@@ -2257,7 +2257,7 @@ function ChatRows({
   assistantCallbacksRef: MutableRefObject<AssistantCallbacks>;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onArtifactShare?: (fileName: string) => void;
-  onArtifactChip?: (fileName: string, prompt: string) => void;
+  onArtifactChip?: (fileName: string | null, prompt: string) => void;
   onForkFromMessage?: (message: ChatMessage) => void;
   onAssistantFeedback?: (message: ChatMessage, change: ChatMessageFeedbackChange) => void;
   forkingMessageId?: string | null;

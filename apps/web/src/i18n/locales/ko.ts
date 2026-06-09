@@ -2295,7 +2295,7 @@ export const ko: Dict = {
   'assistant.forkConversation': '여기서 포크',
   'assistant.forkingConversation': '포크 중…',
   'assistant.shareToOpenDesign': 'Open Design에 공유',
-  'assistant.shareToOpenDesignBusy': '공유 중…',
+  'assistant.shareToOpenDesignBusy': '패키지 준비 중…',
   'assistant.feedbackPrompt': '피드백',
   'assistant.feedbackPositive': '도움 됨',
   'assistant.feedbackNegative': '도움 안 됨',

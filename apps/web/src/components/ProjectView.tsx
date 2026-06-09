@@ -4156,16 +4156,26 @@ export function ProjectView({
   // "Share to Open Design" — kicks off the bundled `od-share-to-community`
   // scenario in the active conversation. We just inject the trigger prompt
   // through the standard chat-send path; the agent then loads SKILL.md and
-  // drives the rest. Busy flag debounces the double-click while the send
-  // request is in flight (handleSend is async).
+  // drives the rest. Keep this preparing state alive for the resulting chat
+  // run so the action reads as async packaging instead of instant sharing.
   const [shareToOpenDesignBusy, setShareToOpenDesignBusy] = useState(false);
   const shareToOpenDesignBusyRef = useRef(false);
+  useEffect(() => {
+    if (!shareToOpenDesignBusyRef.current || currentConversationBusy) return;
+    shareToOpenDesignBusyRef.current = false;
+    setShareToOpenDesignBusy(false);
+  }, [currentConversationBusy]);
   const handleShareToOpenDesign = useCallback(() => {
     if (currentConversationActionDisabled || shareToOpenDesignBusyRef.current) return;
     shareToOpenDesignBusyRef.current = true;
     setShareToOpenDesignBusy(true);
     void Promise.resolve(handleSend(SHARE_TO_COMMUNITY_PROMPT, [], []))
-      .finally(() => {
+      .then((started) => {
+        if (started) return;
+        shareToOpenDesignBusyRef.current = false;
+        setShareToOpenDesignBusy(false);
+      })
+      .catch(() => {
         shareToOpenDesignBusyRef.current = false;
         setShareToOpenDesignBusy(false);
       });
@@ -4768,7 +4778,7 @@ export function ProjectView({
   // deliberately no generic "continue editing" / "optimize visuals" action —
   // free-form follow-ups belong in the composer and the visual directions are
   // already covered by the concrete chips, so vague catch-alls only added noise.
-  const handleArtifactChip = useCallback((_fileName: string, prompt: string) => {
+  const handleArtifactChip = useCallback((_fileName: string | null, prompt: string) => {
     setComposerDraftSignal({ text: prompt, nonce: Date.now() });
   }, []);
   const handleArtifactShare = useCallback(
