@@ -3349,10 +3349,18 @@ function DesignToolboxPanel({
     const detailWidth = 264;
     const gap = 8;
     const toRight = rect.right + gap;
-    const left =
+    const preferredLeft =
       toRight + detailWidth > window.innerWidth - 8
         ? rect.left - gap - detailWidth
         : toRight;
+    // The left-side fallback can go negative on a narrow pane (row near the
+    // left edge, or viewport narrower than detailWidth + gap*2), which would
+    // push the fixed panel off-screen and out of reach. Clamp into the
+    // viewport so it always degrades gracefully.
+    const left = Math.max(
+      8,
+      Math.min(preferredLeft, window.innerWidth - 8 - detailWidth),
+    );
     // Plugin rows render a tall visual preview; clamp the top so the panel
     // never spills past the viewport bottom (CSS still scrolls if it must).
     const estimatedHeight = 340;
