@@ -2,6 +2,7 @@
 
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -32,7 +33,8 @@ import type {
   DesignToolboxClickProps,
 } from '@open-design/contracts/analytics';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
-import { projectRawUrl, uploadProjectFiles, openFolderDialog } from "../providers/registry";
+import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir } from "../providers/registry";
+import { WorkingDirPicker } from './WorkingDirPicker';
 import { patchProject } from "../state/projects";
 import { fetchMcpServers } from "../state/mcp";
 import type { McpServerConfig, McpTemplate } from "../state/mcp";
@@ -500,6 +502,25 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const editorRef = useRef<LexicalComposerInputHandle | null>(null);
     const petEnabled = Boolean(onAdoptPet && onTogglePet);
     const linkedDirs = projectMetadata?.linkedDirs ?? [];
+    // The project's working directory: the local folder the agent can read
+    // (via `linkedDirs` → `--add-dir`). Shown in the WorkingDirPicker below
+    // the input, mirroring Home. We treat it as a single primary folder.
+    const workingDir = linkedDirs[0] ?? null;
+    const [recentDirs, setRecentDirs] = useState<string[]>([]);
+    useEffect(() => {
+      let cancelled = false;
+      void fetchRecentLinkedDirs().then((dirs) => {
+        if (!cancelled) setRecentDirs(dirs);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, []);
+    const rememberRecentDir = useCallback(async (dir: string) => {
+      setRecentDirs((prev) => [dir, ...prev.filter((d) => d !== dir)].slice(0, 10));
+      const persisted = await pushRecentLinkedDir(dir);
+      setRecentDirs(persisted);
+    }, []);
     const visibleWorkspaceContext =
       activeWorkspaceContext && activeWorkspaceContext.id !== dismissedWorkspaceContextId
         ? activeWorkspaceContext
@@ -1559,6 +1580,30 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (result?.metadata) onProjectMetadataChange?.(result.metadata);
     }
 
+    // The WorkingDirPicker treats the project's working directory as a single
+    // primary folder, so selecting one replaces `linkedDirs`. The folder is
+    // read-only awareness for the agent (→ `--add-dir`), not a Design Files
+    // import, and `baseDir` is never touched.
+    async function setWorkingDirFolder(dir: string) {
+      if (!projectId) return;
+      const base = projectMetadata ?? { kind: 'prototype' as const };
+      const metadata: ProjectMetadata = { ...base, linkedDirs: [dir] };
+      const result = await patchProject(projectId, { metadata });
+      if (result?.metadata) onProjectMetadataChange?.(result.metadata);
+      void rememberRecentDir(dir);
+    }
+    async function handlePickWorkingDir() {
+      const selected = await openFolderDialog();
+      if (selected) await setWorkingDirFolder(selected);
+    }
+    async function clearWorkingDir() {
+      if (!projectId) return;
+      const base = projectMetadata ?? { kind: 'prototype' as const };
+      const metadata: ProjectMetadata = { ...base, linkedDirs: [] };
+      const result = await patchProject(projectId, { metadata });
+      if (result?.metadata) onProjectMetadataChange?.(result.metadata);
+    }
+
     async function handleSwitchDesignSystem(
       designSystemId: string | null,
       title: string | null,
@@ -1582,14 +1627,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       return true;
     }
 
-    async function handleUnlinkFolder(dir: string) {
-      if (!projectId) return;
-      const base = projectMetadata ?? { kind: 'prototype' as const };
-      const existing = base.linkedDirs ?? [];
-      const metadata: ProjectMetadata = { ...base, linkedDirs: existing.filter((d) => d !== dir) };
-      const result = await patchProject(projectId, { metadata });
-      if (result?.metadata) onProjectMetadataChange?.(result.metadata);
-    }
 
     // Lexical drives every text change through this callback. `present` is the
     // entity list the editor's text currently references (MentionNodes plus
@@ -2087,26 +2124,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               t={t}
             />
           ) : null}
-          {linkedDirs.length > 0 ? (
-            <div className="linked-dirs-row" data-testid="linked-dirs">
-              {linkedDirs.map((dir) => (
-                <div key={dir} className="linked-dir-chip">
-                  <Icon name="folder" size={13} />
-                  <span className="linked-dir-name" title={dir}>
-                    {dir.split('/').pop() || dir}
-                  </span>
-                  <button
-                    className="staged-remove"
-                    onClick={() => handleUnlinkFolder(dir)}
-                    title={t('chat.linkedFolderRemoveAria', { path: dir })}
-                    aria-label={t('chat.linkedFolderRemoveAria', { path: dir })}
-                  >
-                    <Icon name="close" size={11} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
           {activeFileContext ? (
             <div
               className="composer-active-file"
@@ -2198,6 +2215,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               t={t}
             />
           </CaretFloatingLayer>
+          {projectId ? (
+            <div className="composer-workdir-row">
+              <WorkingDirPicker
+                placement="up"
+                workingDir={workingDir}
+                recentDirs={recentDirs}
+                onPickDirectory={() => void handlePickWorkingDir()}
+                onSelectRecent={(dir) => void setWorkingDirFolder(dir)}
+                onClear={() => void clearWorkingDir()}
+              />
+            </div>
+          ) : null}
           <div className="composer-row">
             <input
               ref={fileInputRef}

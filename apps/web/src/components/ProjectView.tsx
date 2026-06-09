@@ -46,11 +46,8 @@ import {
   fetchLiveArtifacts,
   fetchProjectFiles,
   fetchSkill,
-  fetchRecentLinkedDirs,
-  openFolderDialog,
   patchPreviewCommentStatus,
   projectRawUrl,
-  pushRecentLinkedDir,
   uploadProjectFiles,
   upsertPreviewComment,
   writeProjectTextFile,
@@ -174,7 +171,6 @@ import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { ChatPane } from './ChatPane';
 import type { QuestionFormOpenRequest } from './AssistantMessage';
-import { WorkingDirPicker } from './WorkingDirPicker';
 import type { ChatSendMeta } from './ChatComposer';
 import {
   CritiqueTheaterMount,
@@ -4193,48 +4189,6 @@ export function ProjectView({
     void patchProject(project.id, { metadata });
   }, [onProjectChange, project]);
 
-  // Working-directory awareness for the in-project composer. Like Home, the
-  // picker grants the agent read-only access to a local folder via the
-  // project's `linkedDirs` (→ `--add-dir`); it does NOT switch `baseDir`, so
-  // Design Files keeps showing only the managed artifact store. Linked dirs
-  // are surfaced as removable chips by the composer; this picker is the
-  // add/select entry point plus the shared global "recent folders" list.
-  const [recentDirs, setRecentDirs] = useState<string[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    void fetchRecentLinkedDirs().then((dirs) => {
-      if (!cancelled) setRecentDirs(dirs);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  const rememberRecentDir = useCallback(async (dir: string) => {
-    setRecentDirs((prev) => [dir, ...prev.filter((d) => d !== dir)].slice(0, 10));
-    const persisted = await pushRecentLinkedDir(dir);
-    setRecentDirs(persisted);
-  }, []);
-  const addLinkedDir = useCallback(
-    (dir: string) => {
-      const existing = project.metadata?.linkedDirs ?? [];
-      if (!existing.includes(dir)) {
-        const metadata: ProjectMetadata = {
-          kind: project.metadata?.kind ?? 'other',
-          ...project.metadata,
-          linkedDirs: [...existing, dir],
-        };
-        onProjectChange({ ...project, metadata });
-        void patchProject(project.id, { metadata });
-      }
-      void rememberRecentDir(dir);
-    },
-    [project, onProjectChange, rememberRecentDir],
-  );
-  const handlePickLinkedDir = useCallback(async () => {
-    const picked = await openFolderDialog();
-    if (picked) addLinkedDir(picked);
-  }, [addLinkedDir]);
-
   const sendDesignSystemFeedback = useCallback((
     sectionTitle: string,
     feedback: string,
@@ -5488,22 +5442,6 @@ export function ProjectView({
               onBack={onBack}
               backLabel={t('project.backToProjects')}
               composerFooterAccessory={executionControls}
-              composerLeadingAccessory={(
-                // Grants the agent read-only awareness of a local folder via
-                // `linkedDirs` (→ `--add-dir`) instead of switching `baseDir`,
-                // so Design Files keeps showing only the managed artifact
-                // store. The picked folder shows as a removable chip in the
-                // composer; `workingDir={null}` keeps the trigger as a pure
-                // "add" entry point. No file-tree refresh is needed because
-                // the project's resolvedDir is unchanged.
-                <WorkingDirPicker
-                  placement="up"
-                  workingDir={null}
-                  recentDirs={recentDirs}
-                  onPickDirectory={() => void handlePickLinkedDir()}
-                  onSelectRecent={(dir) => addLinkedDir(dir)}
-                />
-              )}
               projectHeader={(
                 <span className="chat-project-title-line">
                   <span
