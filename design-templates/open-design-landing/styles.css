@@ -208,6 +208,16 @@ body::before {
   color: var(--ink);
   text-decoration: none;
   font-size: 18px;
+  /*
+   * Pin the brand so it never participates in flex-shrink. `.nav-inner` is a
+   * `justify-content: space-between` flex row; in locales whose nav labels are
+   * longer (de/ru/pt-BR…) the link list widens the row past the container and
+   * the browser shrinks every shrinkable child proportionally — including the
+   * logo, which is why the wordmark looked smaller in some languages. The nav
+   * links absorb the squeeze instead (they already tighten/collapse to the
+   * hamburger at the 1180/1080 breakpoints below).
+   */
+  flex-shrink: 0;
 }
 .brand-mark {
   width: 36px; height: 36px;
