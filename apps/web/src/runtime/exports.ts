@@ -899,12 +899,39 @@ export function buildSandboxedPreviewDocument(
 </html>`;
 }
 
+function currentOriginBaseHref(): string | undefined {
+  if (typeof window !== 'undefined' && typeof window.location?.origin === 'string') {
+    return `${window.location.origin.replace(/\/+$/, '')}/`;
+  }
+  const base =
+    typeof document !== 'undefined' && typeof document.baseURI === 'string'
+      ? document.baseURI
+      : typeof window !== 'undefined' && typeof window.location?.href === 'string'
+        ? window.location.href
+        : undefined;
+  if (!base) return undefined;
+  try {
+    return new URL('/', base).href;
+  } catch {
+    return undefined;
+  }
+}
+
+function buildBlobSafeSrcdoc(html: string, options?: SrcdocOptions): string {
+  const baseHref =
+    typeof options?.baseHref === 'string' ? options.baseHref : currentOriginBaseHref();
+  return buildSrcdoc(html, {
+    ...options,
+    ...(baseHref ? { baseHref } : {}),
+  });
+}
+
 export function openSandboxedPreviewInNewTab(
   html: string,
   title: string,
   srcdocOptions?: SrcdocOptions,
 ): void {
-  const doc = buildSandboxedPreviewDocument(buildSrcdoc(html, srcdocOptions), title);
+  const doc = buildSandboxedPreviewDocument(buildBlobSafeSrcdoc(html, srcdocOptions), title);
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank', 'noopener,noreferrer');
@@ -935,7 +962,7 @@ export async function exportAsPdf(
   // Generate a per-export nonce so the print-ready handshake is resistant to
   // spoofing by untrusted scripts inside the exported artifact.
   const nonce = randomUUID();
-  let doc = buildSrcdoc(html, opts);
+  let doc = buildBlobSafeSrcdoc(html, opts);
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
   doc = injectPrintReadyHandshake(doc, nonce);
 

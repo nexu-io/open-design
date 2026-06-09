@@ -46,6 +46,25 @@ jobs:
         if: ${{ steps.changes.outputs.should_run == 'true' }}
         uses: ./.github/actions/visual-screenshot
 
+      - name: Run Playwright critical gate
+        if: ${{ steps.changes.outputs.should_run == 'true' }}
+        run: |
+          pnpm -C e2e exec tsx scripts/playwright.ts clean
+          pnpm -C e2e run test:ui:critical
+
+      - name: Upload critical gate debug artifact
+        if: ${{ always() && steps.changes.outputs.should_run == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-pr-critical-gate-${{ github.event.pull_request.number }}-${{ github.run_id }}
+          path: |
+            e2e/ui/reports/playwright-html-report
+            e2e/ui/reports/results.json
+            e2e/ui/reports/test-results
+            e2e/ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Run strict visual Playwright suite
         if: ${{ steps.changes.outputs.should_run == 'true' }}
         env:

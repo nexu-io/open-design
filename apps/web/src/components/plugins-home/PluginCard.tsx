@@ -134,6 +134,71 @@ export function PluginCard({
           >
             {title}
           </button>
+          <div
+            className={`plugins-home__gallery-use plugins-home__use-menu${hasQuery ? ' has-options' : ''}`}
+            onClick={(event) => event.stopPropagation()}
+            onBlur={(event) => {
+              const nextTarget = event.relatedTarget;
+              if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
+                setUseMenuOpen(false);
+              }
+            }}
+          >
+            <button
+              type="button"
+              className="plugins-home__gallery-use-main"
+              onClick={() => pickUseAction('use')}
+              disabled={useDisabled}
+              aria-busy={isPending ? 'true' : undefined}
+              data-testid={`plugins-home-use-${record.id}`}
+            >
+              {isPending ? 'Applying...' : 'Use'}
+            </button>
+            {hasQuery ? (
+              <>
+                <button
+                  type="button"
+                  className="plugins-home__gallery-use-more"
+                  onClick={() => setUseMenuOpen((open) => !open)}
+                  disabled={useDisabled}
+                  aria-haspopup="menu"
+                  aria-expanded={useMenuOpen}
+                  aria-label={`Choose how to use ${title}`}
+                  data-testid={`plugins-home-use-menu-${record.id}`}
+                >
+                  <Icon name="chevron-down" size={12} />
+                </button>
+                {useMenuOpen ? (
+                  <div
+                    className="plugins-home__use-menu-list plugins-home__gallery-use-list"
+                    role="menu"
+                    aria-label={`Use options for ${title}`}
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="plugins-home__use-menu-item"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => pickUseAction('use')}
+                      data-testid={`plugins-home-use-context-${record.id}`}
+                    >
+                      Use
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="plugins-home__use-menu-item"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => pickUseAction('use-with-query')}
+                      data-testid={`plugins-home-use-with-query-${record.id}`}
+                    >
+                      Use with query
+                    </button>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+          </div>
           {previewSrc ? (
             <a
               className="plugins-home__gallery-open"

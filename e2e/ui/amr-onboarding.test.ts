@@ -29,7 +29,7 @@ declare global {
 
 test.describe.configure({ timeout: 30_000 });
 
-test('[P0] onboarding lets AMR Cloud sign in and complete setup after the login poll succeeds', async ({ page }) => {
+test('[P0] @critical onboarding lets AMR Cloud sign in and complete setup after the login poll succeeds', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
     initialLoggedIn: false,
@@ -53,7 +53,7 @@ test('[P0] onboarding lets AMR Cloud sign in and complete setup after the login 
   });
 });
 
-test('[P0] onboarding Local CLI card lets the user pick an agent model before continuing', async ({ page }) => {
+test('[P0] @critical onboarding Local CLI card lets the user pick an agent model before continuing', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: false,
     initialLoggedIn: false,
@@ -293,7 +293,7 @@ test('[P0] onboarding about-you step accepts profile selections and completes se
   });
 });
 
-test('[P0] onboarding BYOK path can fetch models, test the provider, and complete setup', async ({ page }) => {
+test('[P0] @critical onboarding BYOK path can fetch models, test the provider, and complete setup', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
     initialLoggedIn: true,

@@ -25,6 +25,7 @@ This is the authoritative build brief. Follow it exactly — the named CSS varia
 
 - Default output: the single self-contained `example.html` seed (vanilla HTML/CSS/JS). It already includes everything inline.
 - If the user explicitly asks for a React + Vite + Tailwind + shadcn/ui + Framer Motion (`motion/react`) project, port the seed faithfully: same tokens, same section structure, `lucide-react` for icons, Instrument Serif + Barlow from Google Fonts. Do not change the design while porting. Key deps for the React port: `motion ^12.35.0`, `hls.js ^1.6.15` (for the Mux HLS section videos), `lucide-react ^0.462.0`, `react-router-dom ^6.30.1`.
+- **Motion loading (locked).** If you emit a single self-contained inline-JSX file instead of the Vite project, Motion's React hooks (`useScroll`, `useTransform`, `useAnimationFrame`, …) exist only in the **React** UMD build: load `<script src="https://unpkg.com/framer-motion@11.11.13/dist/framer-motion.js"></script>` and read them off `window.Motion` — never the vanilla `https://unpkg.com/motion@.../dist/motion.js` DOM bundle, which lacks `useScroll` and renders a blank page. (The Vite project imports from npm and is unaffected.)
 
 ## Fonts
 

@@ -114,6 +114,22 @@ test('[P0] real daemon run surfaces process/parser errors in chat', async ({ pag
   await expect(page.locator('.msg.error')).toContainText('intentional fake codex failure');
 });
 
+test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retryable connection error', async ({ page }) => {
+  await page.goto('/');
+  await createProject(page, 'Daemon socket-drop smoke', 'claude');
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'Return a daemon socket-drop failure');
+
+  // The raw SDK error ("The socket connection was closed unexpectedly") is
+  // classified as AGENT_CONNECTION_DROPPED and the error card shows the
+  // localized chat.connectionDropped copy (en locale here) instead of echoing
+  // the raw SDK string verbatim.
+  await expect(page.locator('.msg.error')).toContainText('connection to the model service dropped', {
+    timeout: 15_000,
+  });
+});
+
 test('[P0] real daemon run supports a follow-up turn in the same project', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Daemon follow-up smoke');

@@ -1975,6 +1975,7 @@ export interface Dict {
   'chat.amrError.rechargeCta': string;
   'chat.antigravityError.launchTerminalCta': string;
   'chat.antigravityError.launchSwitchModelCta': string;
+  'chat.connectionDropped': string;
   'chat.tabComments': string;
   'chat.commentsSoon': string;
   'chat.comments.attached': string;
@@ -2386,22 +2387,6 @@ export interface Dict {
   'workspace.terminalReconnecting': string;
   'workspace.terminalStartFailed': string;
   'workspace.terminalRestart': string;
-  'generationPreview.title': string;
-  'generationPreview.failedTitle': string;
-  'generationPreview.failedFallback': string;
-  'generationPreview.footnote': string;
-  'generationPreview.stepUnderstand': string;
-  'generationPreview.stepGenerate': string;
-  'generationPreview.stepPrepare': string;
-  'generationPreview.retry': string;
-  'generationPreview.awaitingTitle': string;
-  'generationPreview.awaitingLead': string;
-  'generationPreview.stoppedTitle': string;
-  'generationPreview.stoppedLead': string;
-  'generationPreview.reasonAuth': string;
-  'generationPreview.reasonRateLimited': string;
-  'generationPreview.reasonService': string;
-  'generationPreview.reasonBalance': string;
   'designFiles.title': string;
   'designFiles.upload': string;
   'designFiles.pasteText': string;
@@ -2423,6 +2408,7 @@ export interface Dict {
   'designFiles.selectAll': string;
   'designFiles.dropTitle': string;
   'designFiles.dropDesc': string;
+  'designFiles.dropLabel': string;
   'designFiles.upload.title': string;
   'designFiles.paste.title': string;
   'designFiles.upload.label': string;
@@ -2493,6 +2479,8 @@ export interface Dict {
   'designFiles.modifiedExt': string;
   'designFiles.usefulInfoLabel': string;
   'designFiles.usefulInfoTip': string;
+  'designFiles.usefulInfoTip2': string;
+  'designFiles.usefulInfoTip3': string;
   'quickSwitcher.placeholder': string;
   'quickSwitcher.empty': string;
   'quickSwitcher.noMatches': string;
