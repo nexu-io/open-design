@@ -53,6 +53,7 @@ import { buildVisualAnnotationAttachment, commentTargetDisplayName } from '../co
 import { Icon, type IconName } from "./Icon";
 import { SessionModeToggle } from './SessionModeToggle';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
+import { ComposerPluginPreview } from './ComposerPluginPreview';
 import { PluginDetailsModal } from "./PluginDetailsModal";
 import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
 import { BUILT_IN_PETS, CUSTOM_PET_ID } from "./pet/pets";
@@ -3285,7 +3286,14 @@ function DesignToolboxPanel({
       toRight + detailWidth > window.innerWidth - 8
         ? rect.left - gap - detailWidth
         : toRight;
-    setToolboxDetail({ key, left, top: rect.top, node });
+    // Plugin rows render a tall visual preview; clamp the top so the panel
+    // never spills past the viewport bottom (CSS still scrolls if it must).
+    const estimatedHeight = 340;
+    const top = Math.max(
+      8,
+      Math.min(rect.top, window.innerHeight - 8 - estimatedHeight),
+    );
+    setToolboxDetail({ key, left, top, node });
   }
   function scheduleToolboxDetailClose(key: string) {
     cancelDetailClose();
@@ -3381,18 +3389,25 @@ function DesignToolboxPanel({
                   }
                 }}
                 detail={
-                  <>
-                    <div className="plus-menu__detail-title">{resource.title}</div>
-                    {resource.subtitle ? (
-                      <div className="plus-menu__detail-desc">{resource.subtitle}</div>
-                    ) : null}
-                    <div className="plus-menu__detail-skill">
-                      {designToolboxResourceKindLabel(resource.kind, t)}
-                    </div>
-                    <div className="plus-menu__detail-badge">
-                      {active ? t('chat.designToolbox.selected') : resource.badge}
-                    </div>
-                  </>
+                  // Plugin rows reuse the rich visual preview (poster /
+                  // sandboxed example iframe + meta); every other kind keeps
+                  // the compact text detail since it has no preview asset.
+                  resource.kind === 'plugin' ? (
+                    <ComposerPluginPreview record={resource.plugin} locale={locale} />
+                  ) : (
+                    <>
+                      <div className="plus-menu__detail-title">{resource.title}</div>
+                      {resource.subtitle ? (
+                        <div className="plus-menu__detail-desc">{resource.subtitle}</div>
+                      ) : null}
+                      <div className="plus-menu__detail-skill">
+                        {designToolboxResourceKindLabel(resource.kind, t)}
+                      </div>
+                      <div className="plus-menu__detail-badge">
+                        {active ? t('chat.designToolbox.selected') : resource.badge}
+                      </div>
+                    </>
+                  )
                 }
               />
             );

@@ -231,15 +231,20 @@
 .plus-menu__plugin-main .plus-menu__list {
   max-height: 248px;
 }
+/* Base preview block — reused both as the plugins-flyout side column and
+   inside the design-toolbox hover-detail panel, so it stays layout-neutral
+   here; the column divider lives in the plugin-pane scope below. */
 .plus-menu__preview {
-  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overflow: hidden;
+}
+.plus-menu__plugin-pane .plus-menu__preview {
+  flex: 1 1 auto;
   padding-left: 8px;
   border-left: 1px solid var(--border);
-  overflow: hidden;
 }
 .plus-menu__preview-hero {
   border: 1px solid var(--border);
@@ -322,6 +327,69 @@
 }
 .plus-menu__popup--flyout-contained .plus-menu__preview-hero .plugins-home__preview {
   max-height: 160px;
+}
+
+/* ---------- Design-toolbox hover-detail / preview panel ---------- */
+/* Portaled (to <body>) third-level panel shown when a toolbox row is
+   hovered. JS sets viewport-relative left/top from the row rect, so the
+   panel is fixed-positioned. Plugin rows render the rich ComposerPluginPreview
+   inside it; every other kind renders the text detail below. */
+.plus-menu__detail {
+  position: fixed;
+  z-index: 92;
+  width: 264px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 10px 28px -10px rgba(0, 0, 0, 0.18);
+  overflow: hidden auto;
+  scrollbar-width: thin;
+}
+.plus-menu__detail-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.plus-menu__detail-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+}
+.plus-menu__detail-skill {
+  font-size: 11.5px;
+  color: var(--accent, var(--text-muted));
+}
+.plus-menu__detail-badge {
+  align-self: flex-start;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+/* Section headings inside the toolbox list (后续动作 / 资源). */
+.plus-menu__section-label {
+  padding: 6px 9px 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+.plus-menu__subitem {
+  position: relative;
 }
 
 /* The design-toolbox panel sits inside a flyout; give the flyout room and
