@@ -1575,13 +1575,16 @@
 .chat-composer-fixed-layer .composer-send {
   border-radius: var(--radius-sm);
 }
-.app .composer-row .icon-btn {
-  width: 28px;
-  height: 28px;
-}
+.app .composer-row .icon-btn,
 .chat-composer-fixed-layer .composer-row .icon-btn {
+  /* Clear the 32px min-width/min-height that leaks from chat.css's base
+     `.composer-row .icon-btn`; without these, width/height: 28px is floored
+     back up to 32px and the + drifts taller than the rest of the toolbar. */
   width: 28px;
   height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  box-sizing: border-box;
 }
 .app .composer-send {
   height: 28px;
@@ -1593,12 +1596,28 @@
   box-shadow: none;
 }
 .chat-composer-fixed-layer .composer-send {
-  height: 30px;
-  min-height: 30px;
+  height: 28px;
+  min-height: 28px;
   padding: 0 12px;
   font-size: 12.5px;
   font-weight: 600;
   box-shadow: none;
+}
+/* The session-mode ("Design"/CLI) toggle and the agent avatar are authored in
+   their own components and default to 32px. The composer now mounts under
+   .chat-composer-fixed-layer (a body-level portal), so chat.css's .app-scoped
+   normalization never reaches them and they drift taller than the + and the
+   working-dir pill. Pin both to the same 28px control height here — this is the
+   last-loaded stylesheet, so it wins — so the toolbar reads as one row. */
+.app .composer-row .session-mode-toggle,
+.app .composer-row .session-mode-toggle__trigger,
+.app .composer-row .avatar-agent-trigger,
+.chat-composer-fixed-layer .composer-row .session-mode-toggle,
+.chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger,
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger {
+  height: 28px;
+  min-height: 28px;
+  box-sizing: border-box;
 }
 .app .composer-send:disabled {
   background: var(--bg-subtle);
