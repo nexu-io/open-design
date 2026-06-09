@@ -179,6 +179,43 @@ describe('buildTraceObjectManifests', () => {
       extension: 'html',
       stored_in_open_design: true,
     });
+    expect(manifests?.attachmentManifest?.[0]).not.toHaveProperty('reason');
+    expect(manifests?.artifactManifest?.[0]).not.toHaveProperty('reason');
+  });
+
+  it('does not put pending authorization reasons into registration-only manifests', async () => {
+    const projectsRoot = path.join(dataDir, 'projects');
+    const projectDir = path.join(projectsRoot, 'proj-1');
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(path.join(projectDir, 'artifact.txt'), 'release artifact');
+
+    const manifests = await buildTraceObjectManifests({
+      installationId: 'install-1',
+      projectId: 'proj-1',
+      runId: 'run-1',
+      projectsRoot,
+      artifacts: [
+        { summary: { slug: 'artifact.txt', type: 'text', sizeBytes: 'release artifact'.length } },
+      ],
+      prompt: 'prompt',
+      prefs: { metrics: true, content: true, artifactManifest: true },
+      fetchImpl: vi.fn() as any,
+      env: {
+        NODE_ENV: 'test',
+        OPEN_DESIGN_OBJECT_RELAY_URL: 'https://telemetry.open-design.ai/api/objects/batch',
+      },
+      uploadMode: 'manifest-only',
+      now: () => new Date('2026-06-08T00:00:00.000Z'),
+    });
+
+    expect(manifests?.completeness).toBe('partial');
+    expect(manifests?.artifactManifest?.[0]).toMatchObject({
+      status: 'unavailable',
+      stored_in_open_design: false,
+      size_bytes: 'release artifact'.length,
+      sha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    });
+    expect(manifests?.artifactManifest?.[0]).not.toHaveProperty('reason');
   });
 
   it('splits relay uploads at the worker object count cap', async () => {
