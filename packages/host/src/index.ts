@@ -170,7 +170,12 @@ export type OpenDesignHostUpdaterErrorSnapshot = {
 };
 
 export type OpenDesignHostUpdaterInstallResult = {
+  activeVersion?: string;
+  artifactPath?: string;
   dryRun?: boolean;
+  helperLogPath?: string;
+  launcherRuntimePath?: string;
+  launchPath?: string;
   openedAt: string;
   path: string;
 };
@@ -199,12 +204,41 @@ export type OpenDesignHostUpdaterIncomingSnapshot = {
   version: string;
 };
 
+export type OpenDesignHostUpdaterCacheLifecycleTrigger = "cold-start" | "next-version-ready";
+
+export type OpenDesignHostUpdaterReleaseLifecycleState =
+  | "cleanup-deferred"
+  | "cleanup-removed"
+  | "deprecated"
+  | "retained"
+  | "unknown";
+
+export type OpenDesignHostUpdaterCacheLifecycleSummary = {
+  lastRunAt?: string;
+  lastTrigger?: OpenDesignHostUpdaterCacheLifecycleTrigger;
+  platform: string;
+  releases: {
+    cleanupDeferred: number;
+    cleanupRemoved: number;
+    deprecated: number;
+    errors: number;
+    retained: number;
+    total: number;
+    unknown: number;
+  };
+};
+
+export type OpenDesignHostUpdaterCacheSnapshot = {
+  lifecycle?: OpenDesignHostUpdaterCacheLifecycleSummary;
+};
+
 export type OpenDesignHostUpdaterStatusSnapshot = {
   active?: OpenDesignHostUpdaterReleaseSnapshot;
   arch: string;
   artifact?: OpenDesignHostUpdaterArtifactSnapshot;
   artifactUrl?: string;
   availableVersion?: string;
+  cache?: OpenDesignHostUpdaterCacheSnapshot;
   capabilities: OpenDesignHostUpdaterCapabilitySet;
   channel: OpenDesignHostUpdaterChannel;
   checksum?: OpenDesignHostUpdaterChecksumSnapshot;

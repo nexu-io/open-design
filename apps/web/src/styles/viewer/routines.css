@@ -773,9 +773,14 @@
   width: 156px;
   height: 26px;
   min-height: 26px;
-  min-width: 112px;
+  /* Auto-shrink in the project shell: tabs sit at 156px when there's room and
+     shrink toward --workspace-tab-min-width as more open, keeping the whole row
+     visible without scrolling for as long as possible. flex-grow 0 stops a lone
+     tab from ballooning; only once every tab hits its min do we fall back to the
+     shared strip's horizontal scroll. */
+  min-width: var(--workspace-tab-min-width, 56px);
   max-width: 168px;
-  flex: 0 0 156px;
+  flex: 0 1 156px;
   grid-template-columns: minmax(0, 1fr) 22px;
   align-self: center;
   /* Intentional compact-chrome value (26px tab); kept off the radius scale
@@ -787,6 +792,22 @@
 }
 .workspace-shell .workspace-tab + .workspace-tab::before {
   display: none;
+}
+/* The pinned Home tab is fixed: it never shrinks with the project tabs and
+   stays stuck to the left edge so it remains fully visible after the rest
+   overflow into horizontal scroll. The opaque tab-bar background keeps scrolled
+   tabs from showing through it. Declared before .is-active so an active Home
+   tab still picks up the active highlight. */
+.workspace-shell .workspace-tab.is-pinned {
+  flex: 0 0 104px;
+  width: 104px;
+  min-width: 104px;
+  max-width: 104px;
+  grid-template-columns: minmax(0, 1fr);
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--workspace-tab-bar-bg);
 }
 .workspace-shell .workspace-tab.is-active {
   background: color-mix(in srgb, var(--bg-panel) 94%, var(--bg-subtle));
@@ -1554,13 +1575,16 @@
 .chat-composer-fixed-layer .composer-send {
   border-radius: var(--radius-sm);
 }
-.app .composer-row .icon-btn {
-  width: 28px;
-  height: 28px;
-}
+.app .composer-row .icon-btn,
 .chat-composer-fixed-layer .composer-row .icon-btn {
+  /* Clear the 32px min-width/min-height that leaks from chat.css's base
+     `.composer-row .icon-btn`; without these, width/height: 28px is floored
+     back up to 32px and the + drifts taller than the rest of the toolbar. */
   width: 28px;
   height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  box-sizing: border-box;
 }
 .app .composer-send {
   height: 28px;
@@ -1572,12 +1596,28 @@
   box-shadow: none;
 }
 .chat-composer-fixed-layer .composer-send {
-  height: 30px;
-  min-height: 30px;
+  height: 28px;
+  min-height: 28px;
   padding: 0 12px;
   font-size: 12.5px;
   font-weight: 600;
   box-shadow: none;
+}
+/* The session-mode ("Design"/CLI) toggle and the agent avatar are authored in
+   their own components and default to 32px. The composer now mounts under
+   .chat-composer-fixed-layer (a body-level portal), so chat.css's .app-scoped
+   normalization never reaches them and they drift taller than the + and the
+   working-dir pill. Pin both to the same 28px control height here — this is the
+   last-loaded stylesheet, so it wins — so the toolbar reads as one row. */
+.app .composer-row .session-mode-toggle,
+.app .composer-row .session-mode-toggle__trigger,
+.app .composer-row .avatar-agent-trigger,
+.chat-composer-fixed-layer .composer-row .session-mode-toggle,
+.chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger,
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger {
+  height: 28px;
+  min-height: 28px;
+  box-sizing: border-box;
 }
 .app .composer-send:disabled {
   background: var(--bg-subtle);
@@ -1823,7 +1863,7 @@
   border-right-color: var(--border);
 }
 .app .df-body {
-  padding: 16px 20px 20px;
+  padding: 4px 20px 20px;
   background: var(--bg-panel);
 }
 .app .df-controls-row {
@@ -2018,6 +2058,12 @@
 .app .df-file-row:hover {
   background: color-mix(in srgb, var(--bg-subtle) 62%, transparent);
 }
+/* A selected row must keep its blue fill on hover — otherwise the generic
+   hover background wins (higher specificity) and the white selected text
+   lands on a light fill and "disappears". Darken slightly for feedback. */
+.app .df-file-row.selected:hover {
+  background: color-mix(in srgb, var(--blue) 90%, #000);
+}
 .app .df-row-icon {
   width: 30px;
   height: 30px;
@@ -2043,20 +2089,6 @@
 .app .df-page-info {
   color: var(--text-soft);
 }
-.app .df-drop {
-  margin: 18px 0 0;
-  padding: 18px;
-  border-radius: var(--radius-md);
-  background: var(--bg-panel);
-}
-.app .df-drop .label {
-  font-size: 10.5px;
-}
-.app .df-drop .desc {
-  font-size: 12px;
-  max-width: 48ch;
-}
-
 /* -- Hand-off button in ChatPane header (paseo-style open-in-editor) -- */
 .app .handoff-wrap {
   position: relative;

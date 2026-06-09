@@ -209,7 +209,7 @@ describe('AssistantMessage feedback gate', () => {
     expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
   });
 
-  it('hides the feedback widget when the run failed', () => {
+  it('shows the feedback widget when the run failed', () => {
     render(
       <AssistantMessage
         message={baseMessage({
@@ -221,7 +221,9 @@ describe('AssistantMessage feedback gate', () => {
         onFeedback={vi.fn()}
       />,
     );
-    expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
+    // A failed turn is a settled outcome worth rating — it's exactly the case a
+    // user most wants to thumbs-down, so the feedback row must be present.
+    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
   });
 
   it('hides the feedback widget when the run ended with an empty_response status', () => {

@@ -90,7 +90,10 @@ describe('workspace tabs chrome styles', () => {
     expect(ruleValue(projectTab, 'height')).toBe('26px');
     expect(ruleValue(projectTab, 'align-self')).toBe('center');
     expect(ruleValue(projectTab, 'border-radius')).toBe('7px');
-    expect(ruleValue(projectTab, 'flex')).toBe('0 0 156px');
+    // Tabs auto-shrink: flex-grow 0 (never balloon), flex-shrink 1 (squeeze to
+    // fit) down to --workspace-tab-min-width before the strip scrolls.
+    expect(ruleValue(projectTab, 'flex')).toBe('0 1 156px');
+    expect(ruleValue(projectTab, 'min-width')).toBe('var(--workspace-tab-min-width, 56px)');
     expect(ruleValue(activeProjectTab, 'background')).toBe('color-mix(in srgb, var(--bg-panel) 94%, var(--bg-subtle))');
     expect(ruleValue(activeProjectTab, 'border-color')).toBe('var(--workspace-active-tab-border)');
     expect(ruleValue(activeProjectTab, 'box-shadow')).toContain('0 1px 2px');
@@ -105,6 +108,22 @@ describe('workspace tabs chrome styles', () => {
     expect(ruleValue(preview, 'box-sizing')).toBe('border-box');
     expect(routinesCss).not.toContain('.workspace-shell .workspace-tab.is-active::before');
     expect(routinesCss).not.toContain('.workspace-shell .workspace-tab.is-active::after');
+  });
+
+  it('pins the Home tab fixed and stuck to the left edge', () => {
+    const pinnedShared = cssDeclarations(shellCss, '.workspace-tab.is-pinned');
+    const pinnedProject = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab.is-pinned');
+
+    // Home never shrinks (flex-shrink 0) in either chrome…
+    expect(ruleValue(pinnedShared, 'flex')).toBe('0 0 96px');
+    expect(ruleValue(pinnedProject, 'flex')).toBe('0 0 104px');
+    // …and stays stuck to the left edge with an opaque background so scrolled
+    // project tabs pass behind it instead of squeezing it.
+    expect(ruleValue(pinnedShared, 'position')).toBe('sticky');
+    expect(ruleValue(pinnedShared, 'left')).toBe('0');
+    expect(ruleValue(pinnedProject, 'position')).toBe('sticky');
+    expect(ruleValue(pinnedProject, 'left')).toBe('0');
+    expect(ruleValue(pinnedProject, 'background')).toBe('var(--workspace-tab-bar-bg)');
   });
 
   it('uses a rounded highlight for inactive workspace tab hover', () => {

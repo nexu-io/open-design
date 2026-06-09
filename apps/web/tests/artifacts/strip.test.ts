@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { splitStreamingArtifact, stripArtifact } from '../../src/artifacts/strip';
+import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from '../../src/artifacts/strip';
+
+const completeHtml = '<!doctype html><html><head><title>X</title></head><body><h1>X</h1></body></html>';
 
 describe('stripArtifact', () => {
   it('removes a real artifact tag and its body from prose', () => {
@@ -188,5 +190,38 @@ describe('splitStreamingArtifact', () => {
     const { head, live } = splitStreamingArtifact(input);
     expect(head).toBe(input);
     expect(live).toBeNull();
+  });
+});
+
+describe('stripRecoveredHtmlFallbackForDisplay', () => {
+  it('removes a standalone complete HTML response for display only', () => {
+    expect(stripRecoveredHtmlFallbackForDisplay(`\n${completeHtml}\n`)).toBe('');
+  });
+
+  it('removes a single complete html fence while preserving prose', () => {
+    const input = ['Done — saved as an artifact.', '', '```html', completeHtml, '```'].join('\n');
+    expect(stripRecoveredHtmlFallbackForDisplay(input)).toBe('Done — saved as an artifact.');
+  });
+
+  it('removes a recovered preceding HTML document using original artifact context', () => {
+    const original = [
+      'Done — saved as an artifact.',
+      '',
+      completeHtml,
+      '<artifact identifier="demo" type="text/html" title="Demo">summary only</artifact>',
+    ].join('\n');
+    const stripped = stripArtifact(original);
+
+    expect(stripRecoveredHtmlFallbackForDisplay(stripped, original)).toBe('Done — saved as an artifact.');
+  });
+
+  it('leaves partial snippets unchanged', () => {
+    const input = '```html\n<main><h1>Snippet</h1></main>\n```';
+    expect(stripRecoveredHtmlFallbackForDisplay(input)).toBe(input);
+  });
+
+  it('leaves multiple complete html fences unchanged instead of guessing', () => {
+    const input = ['```html', completeHtml, '```', '```html', completeHtml, '```'].join('\n');
+    expect(stripRecoveredHtmlFallbackForDisplay(input)).toBe(input);
   });
 });

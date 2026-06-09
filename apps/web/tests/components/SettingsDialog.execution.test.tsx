@@ -91,6 +91,8 @@ vi.mock('../../src/analytics/provider', () => ({
 
 import { SettingsDialog } from '../../src/components/SettingsDialog';
 import type { AgentRefreshOptions, SettingsSection } from '../../src/components/SettingsDialog';
+import { reconcileAmrModelChoice } from '../../src/components/SettingsDialog';
+import { reconcileAmrProfileEnv } from '../../src/components/SettingsDialog';
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
 import { MAX_MAX_TOKENS, MIN_MAX_TOKENS } from '../../src/state/maxTokens';
@@ -3513,6 +3515,135 @@ describe('SettingsDialog appearance interactions', () => {
       }),
       {},
     );
+  });
+
+  it('reconciles the open settings draft when the parent agent CLI env changes', async () => {
+    const view = renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'amr',
+        theme: 'dark',
+        agentModels: {
+          amr: {
+            model: 'prod-only-model',
+            reasoning: 'default',
+          },
+        },
+        agentCliEnv: {
+          codex: { CODEX_BIN: '/tmp/codex-dev' },
+          amr: {
+            OPEN_DESIGN_AMR_PROFILE: 'prod',
+            AMR_API_BASE_URL: 'https://draft.example.test',
+          },
+        },
+      },
+      { initialSection: 'appearance', agents: [amrAgent, ...availableAgents] },
+    );
+
+    view.rerender(
+      <SettingsDialog
+        initial={{
+          ...baseConfig,
+          mode: 'daemon',
+          agentId: 'amr',
+          theme: 'dark',
+          agentCliEnv: {
+            amr: {
+              OPEN_DESIGN_AMR_PROFILE: 'local',
+              AMR_API_BASE_URL: 'https://daemon.example.test',
+            },
+          },
+        }}
+        agents={[amrAgent, ...availableAgents]}
+        daemonLive={true}
+        appVersionInfo={null}
+        initialSection="appearance"
+        onPersist={view.onPersist}
+        onPersistComposioKey={view.onPersistComposioKey}
+        onClose={view.onClose}
+        onRefreshAgents={view.onRefreshAgents}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Light' }));
+
+    await waitForPersist(
+      view.onPersist,
+      expect.objectContaining({
+        theme: 'light',
+        agentModels: {},
+        agentCliEnv: {
+          codex: { CODEX_BIN: '/tmp/codex-dev' },
+          amr: {
+            OPEN_DESIGN_AMR_PROFILE: 'local',
+            AMR_API_BASE_URL: 'https://draft.example.test',
+          },
+        },
+      }),
+      {},
+    );
+  });
+
+  it('clears a stale AMR draft model when the external profile changes and the draft still matches the previous config', () => {
+    expect(
+      reconcileAmrModelChoice(
+        {
+          amr: {
+            model: 'prod-only-model',
+            reasoning: 'default',
+          },
+        },
+        {
+          ...baseConfig,
+          agentModels: {
+            amr: {
+              model: 'prod-only-model',
+              reasoning: 'default',
+            },
+          },
+          agentCliEnv: {
+            amr: {
+              OPEN_DESIGN_AMR_PROFILE: 'prod',
+            },
+          },
+        },
+        {
+          ...baseConfig,
+          agentModels: {},
+          agentCliEnv: {
+            amr: {
+              OPEN_DESIGN_AMR_PROFILE: 'local',
+            },
+          },
+        },
+      ),
+    ).toEqual({});
+  });
+
+  it('preserves unrelated draft env entries when reconciling the AMR profile', () => {
+    expect(
+      reconcileAmrProfileEnv(
+        {
+          codex: { CODEX_BIN: '/tmp/codex-dev' },
+          amr: {
+            OPEN_DESIGN_AMR_PROFILE: 'prod',
+            AMR_API_BASE_URL: 'https://draft.example.test',
+          },
+        },
+        {
+          amr: {
+            OPEN_DESIGN_AMR_PROFILE: 'local',
+            AMR_API_BASE_URL: 'https://daemon.example.test',
+          },
+        },
+      ),
+    ).toEqual({
+      codex: { CODEX_BIN: '/tmp/codex-dev' },
+      amr: {
+        OPEN_DESIGN_AMR_PROFILE: 'local',
+        AMR_API_BASE_URL: 'https://draft.example.test',
+      },
+    });
   });
 
   it('switches back to the default accent color and persists it explicitly', async () => {

@@ -159,10 +159,16 @@
 .workspace-tab {
   position: relative;
   height: 24px;
-  /* Fixed width — never shrink. The strip scrolls when the tabs
-     don't fit anymore. */
+  /* Auto-shrink: tabs sit at their natural 124px when there's room and
+     shrink down toward --workspace-tab-min-width as more tabs open, so the
+     whole row stays visible without scrolling for as long as possible. They
+     never grow past 124px (flex-grow 0) so a lone project tab doesn't balloon
+     to fill the bar. Only once every tab has hit its min width does the strip
+     fall back to horizontal scroll. */
   width: 124px;
-  flex: 0 0 124px;
+  flex: 0 1 124px;
+  min-width: var(--workspace-tab-min-width, 56px);
+  max-width: 124px;
   padding: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 22px;
@@ -182,11 +188,20 @@
   will-change: transform;
 }
 /* The pinned Home tab has no close button, so it drops the close column and
-   sits a little narrower than the project tabs. */
+   sits a little narrower than the project tabs. It is fixed: it never shrinks
+   with the others (flex 0 0) and stays stuck to the left edge so it remains
+   visible even after the project tabs overflow into horizontal scroll. The
+   opaque background keeps scrolled tabs from showing through it. */
 .workspace-tab.is-pinned {
   width: 96px;
   flex: 0 0 96px;
+  min-width: 96px;
+  max-width: 96px;
   grid-template-columns: minmax(0, 1fr);
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-subtle));
 }
 .workspace-tab.is-dragging {
   opacity: 0.88;

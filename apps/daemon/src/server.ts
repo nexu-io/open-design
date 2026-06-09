@@ -53,6 +53,7 @@ import {
   resolveModelForAgent,
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
+import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import {
   cancelVelaLogin,
   forgetVelaLogin,
@@ -62,6 +63,7 @@ import {
   parseVelaLoginAttribution,
   readVelaCredentialRevision,
   readVelaLoginStatus,
+  resolveAmrProfile,
   spawnVelaLogin,
 } from './integrations/vela.js';
 import {
@@ -10676,6 +10678,10 @@ export async function startServer({
       try {
         const snap = getSnapshot(db, appliedPluginSnapshotId);
         if (snap?.pluginId) {
+          const { getSnapshotContextCraft } = await import('./plugins/context-craft.js');
+          for (const craft of getSnapshotContextCraft(snap)) {
+            if (!skillCraftRequires.includes(craft)) skillCraftRequires.push(craft);
+          }
           const plugin = getInstalledPlugin(db, snap.pluginId);
           if (plugin) {
             const { loadPluginLocalSkill } = await import('./plugins/local-skill.js');
@@ -11672,18 +11678,34 @@ export async function startServer({
       ...(run.analyticsTelemetry ?? {}),
       promptBuildEndAt: Date.now(),
     };
+    let configuredAgentEnv = {};
+    try {
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
+    } catch {
+      configuredAgentEnv = {};
+    }
     // Per-agent model + reasoning the user picked in the model menu.
     // Trust the value when it matches the most recent /api/agents listing
     // (live or fallback). Otherwise allow it through if it passes a
     // permissive sanitizer — that's the path for user-typed custom model
     // ids the CLI's listing didn't surface yet.
+    const requestedLiveModelScope = def.id === 'amr'
+      ? resolveAmrProfile({
+          ...process.env,
+          ...(def.env || {}),
+          ...configuredAgentEnv,
+        })
+      : null;
     let safeModel = resolveModelForAgent(
       def,
       typeof model === 'string'
-        ? isKnownModel(def, model)
+        ? isKnownModel(def, model, requestedLiveModelScope)
           ? model
           : sanitizeCustomModel(model)
         : null,
+      process.env,
+      requestedLiveModelScope,
     );
     const safeReasoning =
       typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
@@ -12004,14 +12026,6 @@ export async function startServer({
       return design.runs.finish(run, 'failed', 1, null);
     }
 
-    let configuredAgentEnv = {};
-    try {
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
-      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
-    } catch {
-      configuredAgentEnv = {};
-    }
-
     let mmdRouteLaunchEnv = null;
     if (def.id === 'claude' && safeModel) {
       mmdRouteLaunchEnv = await loadMmdRouteLaunchEnv(
@@ -12068,9 +12082,10 @@ export async function startServer({
       } catch {
         liveModels = [];
       }
-      const rememberedLiveModels = getRememberedLiveModels(def.id);
+      const amrModelScope = resolveAmrProfile(modelProbeEnv ?? process.env);
+      const rememberedLiveModels = getRememberedLiveModels(def.id, amrModelScope);
       if (liveModels.length > 0) {
-        rememberLiveModels(def.id, liveModels);
+        rememberLiveModels(def.id, liveModels, amrModelScope);
       }
       liveModels = preferFreshLiveModels(liveModels, rememberedLiveModels);
       const liveModelIds = new Set(
@@ -12164,6 +12179,10 @@ export async function startServer({
       def.id === 'antigravity'
         ? path.join(os.tmpdir(), `od-agy-${run.id}.log`)
         : undefined;
+    const promptFile = await preparePromptFileForAgent(def, composed, run.id);
+    const cleanupPromptFile = () => {
+      if (promptFile) promptFile.cleanup().catch(() => {});
+    };
 
     // Serialize antigravity spawns whose buildArgs writes a concrete
     // model into settings.json. Two concurrent runs with different
@@ -12187,19 +12206,26 @@ export async function startServer({
       antigravityModelLockRelease = await acquireAntigravityModelLock();
     }
 
-    const args = def.buildArgs(
-      composed,
-      safeImages,
-      extraAllowedDirs,
-      agentOptions,
-      {
-        cwd: effectiveCwd,
-        hasPriorAssistantTurn,
-        agentLogFilePath,
-        resumeSessionId: agentResumeCtx.resumeSessionId,
-        newSessionId: agentResumeCtx.newSessionId,
-      },
-    );
+    let args;
+    try {
+      args = def.buildArgs(
+        composed,
+        safeImages,
+        extraAllowedDirs,
+        agentOptions,
+        {
+          cwd: effectiveCwd,
+          hasPriorAssistantTurn,
+          agentLogFilePath,
+          promptFilePath: promptFile?.path,
+          resumeSessionId: agentResumeCtx.resumeSessionId,
+          newSessionId: agentResumeCtx.newSessionId,
+        },
+      );
+    } catch (err) {
+      cleanupPromptFile();
+      throw err;
+    }
     // Second-pass budget check that knows about the Windows `.cmd` shim
     // wrap. The pre-buildArgs `checkPromptArgvBudget` only looks at the
     // raw composed prompt; on Windows an npm-installed adapter resolves
@@ -12216,6 +12242,7 @@ export async function startServer({
       args,
     );
     if (cmdShimBudgetError) {
+      cleanupPromptFile();
       design.runs.emit(
         run,
         'error',
@@ -12243,6 +12270,7 @@ export async function startServer({
       args,
     );
     if (directExeBudgetError) {
+      cleanupPromptFile();
       design.runs.emit(
         run,
         'error',
@@ -12472,6 +12500,7 @@ export async function startServer({
     // spawn(def.bin) — that fallback re-introduces the exact ENOENT symptom
     // from issue #10.
     if (!resolvedBin || !agentLaunch.launchPath) {
+      cleanupPromptFile();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       send('error', createSseErrorPayload(
@@ -12495,6 +12524,7 @@ export async function startServer({
     if (def.id === 'amr') {
       const loginStatus = readVelaLoginStatus(agentSpawnEnv, configuredAgentEnv);
       if (!loginStatus.loggedIn) {
+        cleanupPromptFile();
         revokeToolToken('child_exit');
         unregisterChatAgentEventSink();
         sendAmrAccountFailure({
@@ -12529,6 +12559,7 @@ export async function startServer({
         : {}),
     };
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
+      cleanupPromptFile();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       return;
@@ -12685,6 +12716,7 @@ export async function startServer({
         writePromptToChildStdin = true;
       }
     } catch (err) {
+      cleanupPromptFile();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `spawn failed: ${err.message}`));
@@ -13315,6 +13347,7 @@ export async function startServer({
 
     child.on('error', (err) => {
       clearInactivityWatchdog();
+      cleanupPromptFile();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
@@ -13680,6 +13713,7 @@ export async function startServer({
         if (agentLogFilePath) {
           fs.promises.unlink(agentLogFilePath).catch(() => {});
         }
+        cleanupPromptFile();
       }
     });
     if (writePromptToChildStdin && child.stdin) {

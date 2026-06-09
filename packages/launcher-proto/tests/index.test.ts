@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import {
   LAUNCHER_SCHEMA_VERSION,
   LauncherProtocolError,
+  buildLauncherAfterQuitArgs,
+  parseLauncherAfterQuitArgs,
   resolveLauncherPaths,
   resolveLauncherVersionPaths,
   selectLauncherRuntimeTarget,
@@ -45,6 +47,24 @@ describe("launcher protocol paths", () => {
     expect(() => resolveLauncherPaths({ channel: "beta", namespace: "release-beta", root: "relative" })).toThrow(LauncherProtocolError);
     expect(() => resolveLauncherVersionPaths({ channel: "beta", namespace: "release-beta", root, version: "../0.8.1" })).toThrow(LauncherProtocolError);
     expect(() => resolveLauncherVersionPaths({ channel: "beta", namespace: "release-beta", root, version: "0.8..1" })).toThrow(LauncherProtocolError);
+  });
+});
+
+describe("launcher after-quit argv", () => {
+  it("round-trips the target pid and timeout through stable launcher args", () => {
+    const args = buildLauncherAfterQuitArgs({ targetPid: 1234, timeoutMs: 600000 });
+
+    expect(parseLauncherAfterQuitArgs(args)).toEqual({ targetPid: 1234, timeoutMs: 600000 });
+  });
+
+  it("returns null when after-quit mode is absent", () => {
+    expect(parseLauncherAfterQuitArgs(["--other"])).toBeNull();
+  });
+
+  it("rejects malformed after-quit values", () => {
+    expect(() => parseLauncherAfterQuitArgs(["--od-launcher-after-quit"])).toThrow(LauncherProtocolError);
+    expect(() => buildLauncherAfterQuitArgs({ targetPid: 0, timeoutMs: 1 })).toThrow(LauncherProtocolError);
+    expect(() => buildLauncherAfterQuitArgs({ targetPid: 1, timeoutMs: -1 })).toThrow(LauncherProtocolError);
   });
 });
 

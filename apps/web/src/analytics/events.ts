@@ -10,6 +10,7 @@ import type {
   HelpPopoverSurfaceViewProps,
   NewProjectModalSurfaceViewProps,
   PluginReplacementModalSurfaceViewProps,
+  PluginDetailModalSurfaceViewProps,
   DesignSystemsTemplatesModalSurfaceViewProps,
   AssistantFeedbackReasonPanelSurfaceViewProps,
   // ui_click
@@ -38,6 +39,7 @@ import type {
   PluginsSourcesTabClickProps,
   PluginDetailClickProps,
   PluginLoopClickProps,
+  CommunityGalleryClickProps,
   DesignSystemsTopClickProps,
   DesignSystemsTemplateCardClickProps,
   DesignSystemsTemplatesModalClickProps,
@@ -159,6 +161,13 @@ export function trackPluginReplacementModalSurfaceView(
 export function trackDesignSystemsTemplatesModalSurfaceView(
   track: Track,
   props: DesignSystemsTemplatesModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackPluginDetailModalSurfaceView(
+  track: Track,
+  props: PluginDetailModalSurfaceViewProps,
 ): void {
   send(track, 'surface_view', props);
 }
@@ -369,6 +378,13 @@ export function trackPluginDetailClick(
 export function trackPluginLoopClick(
   track: Track,
   props: PluginLoopClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackCommunityGalleryClick(
+  track: Track,
+  props: CommunityGalleryClickProps,
 ): void {
   send(track, 'ui_click', props);
 }

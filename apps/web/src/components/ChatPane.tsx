@@ -36,7 +36,7 @@ import { exactDateTime, messageTime, shortTime } from '../utils/chatTime';
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
 import { AmrGuidance } from './AmrGuidance';
-import { AMR_RECHARGE_URL, resolveRunFailureUi } from '../runtime/amr-guidance';
+import { amrRechargeUrlForProfile, resolveRunFailureUi } from '../runtime/amr-guidance';
 import {
   ChatComposer,
   type ChatComposerHandle,
@@ -600,7 +600,10 @@ interface Props {
   backLabel?: string;
   projectHeader?: ReactNode;
   designSystemPicker?: ReactNode;
+  config?: AppConfig;
 }
+
+const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
 
 type Tab = 'chat' | 'comments';
 
@@ -751,9 +754,11 @@ export function ChatPane({
   backLabel,
   projectHeader,
   designSystemPicker,
+  config,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
+  const amrProfile = config?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
   const logRef = useRef<HTMLDivElement | null>(null);
   const chatLogScrollIdleTimerRef = useRef<number | null>(null);
   const historyWrapRef = useRef<HTMLDivElement | null>(null);
@@ -2063,7 +2068,7 @@ export function ChatPane({
                                   'chat_error_recharge',
                                 );
                                 window.open(
-                                  attributedAmrUrl(AMR_RECHARGE_URL, attribution),
+                                  attributedAmrUrl(amrRechargeUrlForProfile(amrProfile), attribution),
                                   '_blank',
                                   'noopener,noreferrer',
                                 );

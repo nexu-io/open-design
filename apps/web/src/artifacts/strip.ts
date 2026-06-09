@@ -1,7 +1,19 @@
 import { computeSkipRanges, isRealArtifactOpenAt, rangeContains, type Range } from './markdown-context';
+import {
+  recoverHtmlArtifactFromPrecedingDocument,
+  recoverHtmlDocumentFromMarkdownFence,
+  recoverStandaloneHtmlDocument,
+} from './recover';
 
 const OPEN = '<artifact';
 const CLOSE = '</artifact>';
+const HTML_FENCE_RE = /```(?:html|HTML)\s*\n([\s\S]*?)\n```/g;
+
+type MarkdownFenceRange = {
+  start: number;
+  end: number;
+  html: string;
+};
 
 function findUnskipped(content: string, needle: string, fromIndex: number, ranges: ReadonlyArray<Range>): number {
   let from = fromIndex;
@@ -62,6 +74,83 @@ export function stripArtifact(content: string): string {
   const end = findUnskipped(content, CLOSE, closeTag, ranges);
   if (end === -1) return content;
   return (content.slice(0, open) + content.slice(end + CLOSE.length)).trim();
+}
+
+function findSingleRecoverableHtmlFence(content: string): MarkdownFenceRange | null {
+  HTML_FENCE_RE.lastIndex = 0;
+  let recovered: MarkdownFenceRange | null = null;
+  let count = 0;
+  let match: RegExpExecArray | null = HTML_FENCE_RE.exec(content);
+  while (match !== null) {
+    const html = (match[1] || '').replace(/^﻿/, '').trim();
+    if (recoverHtmlDocumentFromMarkdownFence(match[0]) === html) {
+      recovered = { start: match.index, end: match.index + match[0].length, html };
+      count += 1;
+    }
+    match = HTML_FENCE_RE.exec(content);
+  }
+  return count === 1 ? recovered : null;
+}
+
+function findRecoverablePrecedingHtmlArtifact(sourceText: string): string | null {
+  const { ranges: baseRanges, unclosedFenceStart } = computeSkipRanges(sourceText);
+  const ranges: Range[] =
+    unclosedFenceStart !== null ? [...baseRanges, [unclosedFenceStart, sourceText.length]] : baseRanges;
+
+  let from = 0;
+  while (from <= sourceText.length) {
+    const open = findRealOpen(sourceText, from, ranges);
+    if (open === -1) return null;
+
+    const closeTag = sourceText.indexOf('>', open);
+    if (closeTag === -1) return null;
+
+    const end = findUnskipped(sourceText, CLOSE, closeTag, ranges);
+    if (end === -1) return null;
+
+    const attrs = parseArtifactAttrs(sourceText.slice(open, closeTag));
+    const recovered = recoverHtmlArtifactFromPrecedingDocument({
+      artifactHtml: sourceText.slice(closeTag + 1, end),
+      identifier: attrs['identifier'],
+      sourceText,
+    });
+    if (recovered) return recovered;
+
+    from = end + CLOSE.length;
+  }
+
+  return null;
+}
+
+function stripRecoverablePrecedingHtml(content: string, sourceText: string): string | null {
+  const recovered = findRecoverablePrecedingHtmlArtifact(sourceText);
+  if (!recovered) return null;
+
+  const start = content.lastIndexOf(recovered);
+  if (start === -1) return null;
+
+  return `${content.slice(0, start)}${content.slice(start + recovered.length)}`.trim();
+}
+
+/**
+ * Display-only cleanup for Grok Build's fallback artifact shape.
+ *
+ * Some Grok runs emit a complete HTML document as a standalone response or as a
+ * single ```html fenced block instead of using the `<artifact>` protocol. The
+ * ProjectView recovery path persists those documents as `response.html`; this
+ * helper only removes the duplicate raw document from the rendered chat bubble.
+ * It must never be used to rewrite `message.content`, because that content is
+ * the canonical transcript for future agent turns and forked conversations.
+ */
+export function stripRecoveredHtmlFallbackForDisplay(content: string, sourceText = content): string {
+  const withoutPrecedingDocument = stripRecoverablePrecedingHtml(content, sourceText);
+  if (withoutPrecedingDocument !== null) return withoutPrecedingDocument;
+
+  if (recoverStandaloneHtmlDocument(content)) return '';
+
+  const fence = findSingleRecoverableHtmlFence(content);
+  if (!fence) return content;
+  return `${content.slice(0, fence.start)}${content.slice(fence.end)}`.trim();
 }
 
 function parseArtifactAttrs(raw: string): Record<string, string> {

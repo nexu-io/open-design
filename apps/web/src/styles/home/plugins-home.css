@@ -159,11 +159,9 @@
 }
 
 /* ============================================================
-   Faceted filter — a single combined bar. Saved / category
-   pills live on the left, the search field + result count +
-   clear-filters affordance live on the right. Folding the old
-   "mode strip + header search + category row" into one keeps the
-   eye on a single horizontal control surface.
+   Faceted filter — a single combined bar. An optional Saved chip
+   (rich layout only) + category pills live on the left, the search
+   field + clear-filters affordance live on the right.
    ============================================================ */
 .plugins-home__chip {
   appearance: none;
@@ -434,6 +432,115 @@
 }
 .plugins-home__card.is-featured {
   border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+}
+
+/* ============================================================
+   Gallery layout — a wall of live example.html previews. Each
+   card is a macOS-window-style bar (status dot + plugin name +
+   open-in-new-tab) over a fixed-height frame that renders the
+   plugin's real example page in a scaled-down sandboxed iframe.
+   ============================================================ */
+.plugins-home__grid--gallery {
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+}
+@media (min-width: 1400px) {
+  .plugins-home__grid--gallery {
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  }
+}
+.plugins-home__card--gallery {
+  cursor: pointer;
+  contain-intrinsic-size: 400px 340px;
+}
+.plugins-home__card--gallery:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.plugins-home__gallery-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
+  min-width: 0;
+}
+.plugins-home__gallery-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 50%;
+  background: #3ad29f;
+}
+.plugins-home__gallery-name {
+  flex: 1;
+  min-width: 0;
+  /* Reset the <button> chrome — this is the accessible "open details"
+     control but reads as the tile's plain title. */
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plugins-home__gallery-name:hover {
+  color: var(--accent);
+}
+.plugins-home__gallery-name:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.plugins-home__gallery-open {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.plugins-home__gallery-open:hover {
+  background: var(--bg-panel);
+  color: var(--accent);
+}
+.plugins-home__gallery-frame {
+  position: relative;
+  height: 300px;
+  background: #fff;
+  overflow: hidden;
+}
+/* PreviewSurface fills the fixed-height gallery frame instead of its
+   default 4/3 aspect box. */
+.plugins-home__card--gallery .plugins-home__preview {
+  position: absolute;
+  inset: 0;
+  aspect-ratio: auto;
+  height: 100%;
+}
+.plugins-home__card--gallery .plugins-home__html-iframe {
+  width: 1440px;
+  height: 2200px;
+  transform: scale(0.32);
+  transition: top 6s linear;
+}
+/* Hover auto-pans the scaled preview down to reveal the rest of the
+   page. The iframe stays inert (pointer-events: none, inherited) so a
+   click anywhere on the tile — preview included — opens the detail
+   modal rather than being swallowed by the embedded page. */
+.plugins-home__card--gallery:hover .plugins-home__html-iframe {
+  top: -404px;
 }
 
 /* ---------- Hero preview surface ---------- */

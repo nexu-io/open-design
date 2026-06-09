@@ -1824,6 +1824,7 @@ export function DesignSystemDetailView({
             messages={chatMessages}
             streaming={generationActive || saving || chatStreaming}
             error={chatError}
+            config={config}
             projectId={workspaceProjectId}
             projectFiles={workspaceProjectFiles}
             onEnsureProject={ensureWorkspaceProject}

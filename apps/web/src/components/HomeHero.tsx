@@ -25,10 +25,12 @@ import type {
 import type {
   ChatSessionMode,
   ConnectorDetail,
+  DesignSystemSummary,
   InputFieldSpec,
   InstalledPluginRecord,
   McpServerConfig,
 } from '@open-design/contracts';
+import { DesignSystemPicker } from './DesignSystemPicker';
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
@@ -43,7 +45,6 @@ import {
   type HomeHeroChip,
 } from './home-hero/chips';
 import {
-  filterPluginsBySubChip,
   isSubChipParent,
   subChipsForChip,
   type HomeHeroSubChip,
@@ -61,6 +62,8 @@ import {
 } from '../i18n/content';
 import { PreviewSurface } from './plugins-home/cards/PreviewSurface';
 import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
+import { sortByVisualAppeal } from './plugins-home/visualScore';
+import { applyFacetSelection } from './plugins-home/facets';
 import { inferPluginPreview } from './plugins-home/preview';
 import { SessionModeToggle } from './SessionModeToggle';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
@@ -127,7 +130,7 @@ interface Props {
   onPluginInputValuesChange?: (values: Record<string, unknown>) => void;
   inlineEditableInputNames?: string[];
   footerInputNames?: string[];
-  designSystemOptions?: HomeHeroDesignSystemOption[];
+  designSystems?: DesignSystemSummary[];
   stagedFiles?: File[];
   onAddFiles?: (files: File[]) => void;
   onRemoveFile?: (index: number) => void;
@@ -157,19 +160,14 @@ interface Props {
   executionSwitcher?: ReactNode;
 }
 
-interface HomeHeroDesignSystemOption {
-  id: string;
-  title: string;
-  isDefault?: boolean;
-  auto?: boolean;
-  group?: string;
-  category?: string;
-  summary?: string;
-  swatches?: string[];
-  logoUrl?: string;
-}
-
 type HomeMentionTab = 'all' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors';
+
+// In the combined "All" overview, every surface is capped to a handful of top
+// matches so no single section floods the picker. The dedicated "Design files"
+// tab is exempt: staged files are the user's own finite content, so that tab
+// lists every match (the results panel scrolls) and its count reflects the true
+// total rather than the truncated preview.
+const HOME_MENTION_ALL_TAB_PREVIEW = 6;
 
 interface HomeMentionOption {
   id: string;
@@ -199,7 +197,7 @@ const EMPTY_CONNECTOR_CONTEXTS: ConnectorDetail[] = [];
 const EMPTY_INPUT_FIELDS: InputFieldSpec[] = [];
 const EMPTY_PLUGIN_INPUT_VALUES: Record<string, unknown> = {};
 const EMPTY_INPUT_NAMES: string[] = [];
-const EMPTY_DESIGN_SYSTEM_OPTIONS: HomeHeroDesignSystemOption[] = [];
+const EMPTY_DESIGN_SYSTEMS: DesignSystemSummary[] = [];
 const EMPTY_STAGED_FILES: File[] = [];
 const EMPTY_SKILLS: SkillSummary[] = [];
 const EMPTY_MCP_OPTIONS: McpServerConfig[] = [];
@@ -235,7 +233,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     pluginInputValues = EMPTY_PLUGIN_INPUT_VALUES,
     onPluginInputValuesChange = () => undefined,
     footerInputNames = EMPTY_INPUT_NAMES,
-    designSystemOptions = EMPTY_DESIGN_SYSTEM_OPTIONS,
+    designSystems = EMPTY_DESIGN_SYSTEMS,
     stagedFiles = EMPTY_STAGED_FILES,
     onAddFiles = () => undefined,
     onRemoveFile = () => undefined,
@@ -304,7 +302,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         ? stagedFiles
             .map((file, index) => ({ file, index }))
             .filter(({ file }) => fileMatchesQuery(file, mentionQuery))
-            .slice(0, 6)
         : [],
     [mentionActive, mentionQuery, stagedFiles],
   );
@@ -338,7 +335,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   );
   const pickerOpen = mentionActive;
   const tabs: Array<{ id: HomeMentionTab; label: string; count: number }> = [
-    { id: 'all', label: t('common.all'), count: fileMatches.length + pluginMatches.length + skillMatches.length + mcpMatches.length + connectorMatches.length },
+    // The All overview previews at most HOME_MENTION_ALL_TAB_PREVIEW files, so
+    // its badge counts the previewed slice — not the full staged total — to keep
+    // the count aligned with what that tab actually renders. The dedicated files
+    // tab below lists every match and reports the true total.
+    { id: 'all', label: t('common.all'), count: Math.min(fileMatches.length, HOME_MENTION_ALL_TAB_PREVIEW) + pluginMatches.length + skillMatches.length + mcpMatches.length + connectorMatches.length },
     { id: 'files', label: t('chat.mentionTabFiles'), count: fileMatches.length },
     { id: 'plugins', label: t('entry.navPlugins'), count: pluginMatches.length },
     { id: 'skills', label: t('homeHero.skills'), count: skillMatches.length },
@@ -355,7 +356,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       ? {
           id: 'files',
           label: t('chat.mentionSectionFiles'),
-          options: fileMatches.map(({ file, index }) => ({
+          options: (mentionTab === 'files' ? fileMatches : fileMatches.slice(0, HOME_MENTION_ALL_TAB_PREVIEW)).map(({ file, index }) => ({
             id: `file-${index}-${file.name}`,
             icon: isImageFile(file) ? 'image' : 'file',
             title: file.name,
@@ -482,21 +483,31 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         : [],
     [activeChipId, locale, pluginOptions],
   );
-  // Derive sub-category pills from the SAME list that feeds the preset cards
-  // (`activeExamplePlugins`), not the full install set. This guarantees every
-  // pill maps to at least one visible card, so selecting it always filters to
-  // a non-empty slice — no "looks unfiltered" fallback needed.
+  // Derive sub-category pills from the FULL install set so the rail mirrors the
+  // Community section exactly — same sub-category set and same order. (Earlier
+  // this read only `activeExamplePlugins` to guarantee non-empty slices, but
+  // that left the rail showing fewer types than Community; the empty case is
+  // now handled by the full-catalog fallback in `filteredExamplePlugins`.)
   const activeSubChips = useMemo(
-    () => subChipsForChip(activeChipId, activeExamplePlugins),
-    [activeChipId, activeExamplePlugins],
+    () => subChipsForChip(activeChipId, pluginOptions),
+    [activeChipId, pluginOptions],
   );
-  // When a sub-category pill is active, narrow the example-prompt cards to that
-  // scene. Because the pills are derived from this very list, the slice is
-  // always non-empty for a real selection.
+  // When a sub-category pill is active, show the SAME set the Community section
+  // shows for that sub-category — every matching plugin from the full install
+  // set, in the same visual-appeal order — rather than the small curated
+  // example showcase. This keeps the example-prompt count consistent with the
+  // Community count badge (e.g. Brand / design shows all 16, not just 1).
+  // Atoms are excluded to match Community's `visiblePlugins` derivation, and
+  // `applyFacetSelection` is the exact filter Community uses — it requires the
+  // plugin's primary category to be this chip AND match the sub-category, so a
+  // deck/image plugin that merely carries a "brand" tag is not pulled in.
   const filteredExamplePlugins = useMemo(() => {
     if (!selectedSubcategory || !isSubChipParent(activeChipId)) return activeExamplePlugins;
-    return filterPluginsBySubChip(activeExamplePlugins, activeChipId, selectedSubcategory);
-  }, [activeExamplePlugins, activeChipId, selectedSubcategory]);
+    const pool = pluginOptions.filter((plugin) => plugin.manifest?.od?.kind !== 'atom');
+    return sortByVisualAppeal(
+      applyFacetSelection(pool, { category: activeChipId, subcategory: selectedSubcategory }),
+    );
+  }, [activeExamplePlugins, activeChipId, selectedSubcategory, pluginOptions]);
   const activePromptExamples = useMemo(
     () => activeChipId && activeExamplePlugins.length === 0
       ? homeHeroChipPromptExamples(activeChipId, locale)
@@ -1301,7 +1312,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                     key={field.name}
                     field={field}
                     value={pluginInputValues[field.name]}
-                    designSystemOptions={designSystemOptions}
+                    designSystems={designSystems}
                     onChange={(value) => {
                       onPluginInputValuesChange({
                         ...pluginInputValues,
@@ -1522,7 +1533,7 @@ function PluginPromptPresetCard({
   record: InstalledPluginRecord;
 }) {
   const preview = useMemo(() => inferPluginPreview(record), [record]);
-  const promptPreview = pluginPresetPromptPreview(record, locale, chipId);
+  const seedPrompt = examplePresetSeedPrompt(record, locale, chipId);
   return (
     <button
       type="button"
@@ -1531,7 +1542,7 @@ function PluginPromptPresetCard({
       data-plugin-id={record.id}
       role="listitem"
       disabled={disabled}
-      onClick={() => onPick(record, chipId, promptPreview)}
+      onClick={() => onPick(record, chipId, seedPrompt)}
     >
       <span className="home-hero__plugin-preset-preview" aria-hidden>
         <PreviewSurface
@@ -1719,13 +1730,13 @@ function buildHomeMentionEntities({
 function FooterInputOption({
   field,
   value,
-  designSystemOptions,
+  designSystems,
   onChange,
   t,
 }: {
   field: InputFieldSpec;
   value: unknown;
-  designSystemOptions: HomeHeroDesignSystemOption[];
+  designSystems: DesignSystemSummary[];
   onChange: (value: unknown) => void;
   t: ReturnType<typeof useT>;
 }) {
@@ -1746,36 +1757,26 @@ function FooterInputOption({
       </button>
     );
   }
-  if (field.name === 'designSystem' && designSystemOptions.length > 0) {
-    const selectedValue = value === undefined || value === null ? '' : String(value);
-    const selectedOption = selectedValue.length > 0
-      ? designSystemOptions.find((option) => option.title === selectedValue || option.id === selectedValue)
-      : undefined;
-    const currentValue = selectedOption?.id ?? designSystemOptions[0]?.id ?? '';
+  if (field.name === 'designSystem') {
+    // The composer binds its design-system choice as a TITLE string in the
+    // plugin input (used by the apply query template). The shared picker is
+    // id-based, so adapt: "不指定 / No design system" (or an unset value) maps
+    // to a null id; otherwise resolve the title to its system id.
+    const noneTitle = t('designSystemPicker.noneTitle');
+    const currentTitle = value === undefined || value === null ? '' : String(value).trim();
+    const selectedId =
+      currentTitle && currentTitle !== noneTitle && currentTitle !== 'the active project design system'
+        ? designSystems.find((system) => system.title === currentTitle)?.id ?? null
+        : null;
     return (
-      <FooterSelectOption
-        fieldName={field.name}
+      <DesignSystemPicker
+        variant="footer"
         label={label}
-        value={currentValue}
-        options={designSystemOptions.map((option) => ({
-          value: option.id,
-          submitValue: option.title,
-          label: option.isDefault ? `${option.title} (${t('ds.badgeDefault')})` : option.title,
-          group: option.group,
-          icon: option.auto ? 'sparkles' : undefined,
-          description: option.summary,
-          meta: option.category,
-          preview: option.auto
-            ? undefined
-            : {
-                title: option.title,
-                swatches: option.swatches,
-                logoUrl: option.logoUrl,
-              },
-        }))}
-        searchable
-        searchPlaceholder={t('ds.searchPlaceholder')}
-        onChange={onChange}
+        designSystems={designSystems}
+        selectedId={selectedId}
+        onChange={(id) =>
+          onChange(id == null ? noneTitle : designSystems.find((system) => system.id === id)?.title ?? noneTitle)
+        }
       />
     );
   }
@@ -2730,6 +2731,43 @@ function pluginPresetPromptPreview(
     ? renderPluginPresetQuery(record, query)
     : localizePluginDescription(locale, record);
   return textPromptForPluginPreset(record, rendered, chipId, locale);
+}
+
+// The seed text dropped into the composer when a preset card is picked.
+// The full build spec now rides along as plugin context (SKILL.md +
+// example.html injected once the plugin is applied), so the textarea only
+// needs a short, human-readable, editable hook — not the verbatim spec.
+function examplePresetSeedPrompt(
+  record: InstalledPluginRecord,
+  locale: Locale,
+  chipId: string,
+): string {
+  const description = localizePluginDescription(locale, record).trim();
+  // zh: the localized useCase.query is a generator-facing meta-instruction
+  // ("follow the en field verbatim; start from example.html"), useless as a
+  // human seed — surface the curated one-line description instead.
+  if (promptLocaleKind(locale) === 'zh' && description) return description;
+  const query = pluginPresetQuery(record, locale);
+  if (query) {
+    const head = firstPromptParagraph(renderPluginPresetQuery(record, query));
+    // Skip meta-instructions that reference fields/assets the model can't see
+    // from the textarea; fall back to the description.
+    if (head && !isMetaInstructionSeed(head)) return head;
+  }
+  if (description) return description;
+  return pluginPresetPromptPreview(record, locale, chipId);
+}
+
+function firstPromptParagraph(value: string): string {
+  const normalized = value.replace(/\r\n/g, '\n').trim();
+  if (!normalized) return '';
+  // First paragraph = text up to the first blank line / markdown rule fence.
+  const [head] = normalized.split(/\n\s*\n/);
+  return (head ?? normalized).trim();
+}
+
+function isMetaInstructionSeed(value: string): boolean {
+  return /逐字注入|以\s*en\s*字段为准|verbatim|example\.html/iu.test(value);
 }
 
 function pluginPresetQuery(record: InstalledPluginRecord, locale: Locale): string | null {
