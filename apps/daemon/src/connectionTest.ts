@@ -57,6 +57,7 @@ import { aihubmixHeaders } from './aihubmix.js';
 import type { AgentCliEnvPrefs } from './app-config.js';
 import type { RuntimeAgentDef } from './runtimes/types.js';
 import { resolveModelForAgent } from './runtimes/models.js';
+import { preparePromptFileForAgent, type PreparedPromptFile } from './runtimes/prompt-file.js';
 import {
   isBlockedExternalApiHostname,
   isLoopbackApiHost,
@@ -1728,6 +1729,7 @@ async function testAgentConnectionInternal(
   let child: AgentChild | null = null;
   let childExit: Promise<AgentChildExit> | null = null;
   let childClosed = false;
+  let promptFile: PreparedPromptFile | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let abortHandler: (() => void) | null = null;
   const sink = createAgentSink();
@@ -1877,12 +1879,16 @@ async function testAgentConnectionInternal(
   try {
     let args: string[];
     try {
+      promptFile = await preparePromptFileForAgent(def, SMOKE_PROMPT, 'connection-test');
       args = def.buildArgs(
         SMOKE_PROMPT,
         [],
         [],
         { model: input.model ?? null, reasoning: input.reasoning ?? null },
-        { cwd: tempDir },
+        {
+          cwd: tempDir,
+          ...(promptFile ? { promptFilePath: promptFile.path } : {}),
+        },
       );
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
@@ -2241,6 +2247,9 @@ async function testAgentConnectionInternal(
       .catch(() => {
         // Best-effort cleanup; the OS reaps /tmp eventually.
       });
+    await promptFile?.cleanup().catch(() => {
+      // Best-effort cleanup; the OS reaps /tmp eventually.
+    });
   }
 }
 
