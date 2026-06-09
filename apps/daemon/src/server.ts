@@ -53,6 +53,7 @@ import {
   resolveModelForAgent,
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
+import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import {
   cancelVelaLogin,
   forgetVelaLogin,
@@ -62,6 +63,7 @@ import {
   parseVelaLoginAttribution,
   readVelaCredentialRevision,
   readVelaLoginStatus,
+  resolveAmrProfile,
   spawnVelaLogin,
 } from './integrations/vela.js';
 import {
@@ -103,6 +105,12 @@ import { validateLinkedDirs } from './linked-dirs.js';
 import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
+import {
+  AssetCacheError,
+  assetCacheRewriteUrl,
+  createPluginAssetCache,
+  isCacheableExternalUrl,
+} from './plugin-asset-cache.js';
 import { syncCommunityPets } from './community-pets-sync.js';
 import { defaultMediaExecutionPolicy, parseMediaExecutionPolicyInput } from './media-policy.js';
 import {
@@ -260,6 +268,7 @@ import {
   deriveConfigureGlobals,
   modelIdForTracking,
   projectKindToTracking,
+  sessionModeToTracking,
   type ObservabilityEventRequest,
 } from '@open-design/contracts/analytics';
 import {
@@ -1600,6 +1609,11 @@ const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 const USER_SKILLS_DIR = path.join(RUNTIME_DATA_DIR, 'skills');
 const USER_DESIGN_SYSTEMS_DIR = path.join(RUNTIME_DATA_DIR, 'design-systems');
 const PLUGIN_REGISTRY_ROOTS = registryRootsForDataDir(RUNTIME_DATA_DIR);
+// Disk cache + same-origin proxy for external preview media (cross-border CDN
+// images/videos referenced by plugin example.html). See plugin-asset-cache.ts.
+const pluginAssetCache = createPluginAssetCache({
+  cacheDir: path.join(RUNTIME_DATA_DIR, 'plugin-asset-cache'),
+});
 // User-imported design templates mirror USER_SKILLS_DIR but are scanned
 // against DESIGN_TEMPLATES_DIR rather than SKILLS_DIR so the EntryView
 // Templates surface and the Settings → Skills surface stay decoupled.
@@ -2285,7 +2299,10 @@ function resolveRunProjectKindForAnalytics({
 }) {
   if (typeof hintProjectKind === 'string') return hintProjectKind;
   if (projectMetadata?.importedFrom === 'design-system') return 'design_system';
-  return projectKindToTracking(projectMetadata?.kind);
+  // Pass videoModel so a HyperFrames project (kind=video + videoModel=
+  // hyperframes-html) is reported as project_kind=hyperframes, not generic
+  // video. The web-supplied `hintProjectKind` already encodes this when set.
+  return projectKindToTracking(projectMetadata?.kind, projectMetadata?.videoModel);
 }
 
 export function __forTestResolveRunProjectKindForAnalytics(args) {
@@ -7783,10 +7800,20 @@ export async function startServer({
   function rewritePluginAssetUrls(html: string, pluginId: string, baseDir: string) {
     if (typeof html !== 'string' || html.length === 0) return html;
     const safeBase = baseDir === '.' ? '' : baseDir;
-    return html.replace(
+    const withAttrs = html.replace(
       /(\s(?:src|href|poster)\s*=\s*)(['"])([^'"]+)(\2)/gi,
       (match, attr, quote, rawValue, closeQuote) => {
         const value = String(rawValue).trim();
+        // External media (cross-border CDN images/videos) is blocked by the
+        // sandbox CSP and is slow; route src/poster through the same-origin
+        // asset cache. href stays untouched (anchors + external stylesheets).
+        if (
+          /^https?:\/\//i.test(value) &&
+          !/\bhref\b/i.test(String(attr)) &&
+          isCacheableExternalUrl(value)
+        ) {
+          return `${attr}${quote}${assetCacheRewriteUrl(value)}${closeQuote}`;
+        }
         if (
           !value ||
           value.startsWith('#') ||
@@ -7811,6 +7838,30 @@ export async function startServer({
         }
         const url = `/api/plugins/${encodeURIComponent(pluginId)}/asset/${normalized}${suffix}`;
         return `${attr}${quote}${url}${closeQuote}`;
+      },
+    );
+    // Preview seeds also pull external media outside src/poster: CSS
+    // `background-image: url(...)`, and — most commonly in these templates —
+    // JS string constants like `const HERO = 'https://cdn/.../bg.png'` that get
+    // assigned to `style.backgroundImage` at runtime. Rewrite any quoted
+    // absolute media URL (covers JS literals + quoted CSS url() + quoted attrs)
+    // and any unquoted `url(...)`. Gating on a media extension keeps this from
+    // touching scripts, stylesheets, or fonts. URLs already rewritten by the
+    // attribute pass are percent-encoded inside `?url=` and no longer match.
+    const withQuoted = withAttrs.replace(
+      /(['"])(https?:\/\/[^'"]+)\1/g,
+      (match, quote, rawValue) => {
+        const value = String(rawValue).trim();
+        if (!isCacheableExternalUrl(value)) return match;
+        return `${quote}${assetCacheRewriteUrl(value)}${quote}`;
+      },
+    );
+    return withQuoted.replace(
+      /url\(\s*(https?:\/\/[^)'"\s]+)\s*\)/gi,
+      (match, rawValue) => {
+        const value = String(rawValue).trim();
+        if (!isCacheableExternalUrl(value)) return match;
+        return `url(${assetCacheRewriteUrl(value)})`;
       },
     );
   }
@@ -8037,6 +8088,34 @@ export async function startServer({
       res.send(buf);
     } catch (err) {
       res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Same-origin proxy + disk cache for the external media that plugin preview
+  // HTML references on cross-border CDNs. `rewritePluginAssetUrls` rewrites
+  // those URLs to this route so they satisfy the sandbox CSP (`img-src 'self'`)
+  // and load from local cache instead of re-paying cross-border latency.
+  // SSRF guards live in plugin-asset-cache.ts (scheme + private-address checks).
+  app.get('/api/asset-cache', async (req, res) => {
+    const rawUrl =
+      typeof req.query.url === 'string'
+        ? req.query.url
+        : Array.isArray(req.query.url) && typeof req.query.url[0] === 'string'
+          ? req.query.url[0]
+          : '';
+    if (!rawUrl) {
+      return res.status(400).json({ error: 'missing url query parameter' });
+    }
+    try {
+      const { buf, contentType } = await pluginAssetCache.get(rawUrl);
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Security-Policy', "default-src 'none'");
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      return res.send(buf);
+    } catch (err) {
+      const status = err instanceof AssetCacheError ? err.status : 502;
+      return res.status(status).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -10622,6 +10701,10 @@ export async function startServer({
       try {
         const snap = getSnapshot(db, appliedPluginSnapshotId);
         if (snap?.pluginId) {
+          const { getSnapshotContextCraft } = await import('./plugins/context-craft.js');
+          for (const craft of getSnapshotContextCraft(snap)) {
+            if (!skillCraftRequires.includes(craft)) skillCraftRequires.push(craft);
+          }
           const plugin = getInstalledPlugin(db, snap.pluginId);
           if (plugin) {
             const { loadPluginLocalSkill } = await import('./plugins/local-skill.js');
@@ -11185,6 +11268,7 @@ export async function startServer({
     const safeAttachments = cwd
       ? resolveSafeProjectAttachments(cwd, attachments)
       : [];
+    run.projectAttachmentPaths = safeAttachments;
 
     // Local code agents don't accept a separate "system" channel the way the
     // Messages API does — we fold the skill + design-system prompt into the
@@ -11573,18 +11657,34 @@ export async function startServer({
       ...(run.analyticsTelemetry ?? {}),
       promptBuildEndAt: Date.now(),
     };
+    let configuredAgentEnv = {};
+    try {
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
+    } catch {
+      configuredAgentEnv = {};
+    }
     // Per-agent model + reasoning the user picked in the model menu.
     // Trust the value when it matches the most recent /api/agents listing
     // (live or fallback). Otherwise allow it through if it passes a
     // permissive sanitizer — that's the path for user-typed custom model
     // ids the CLI's listing didn't surface yet.
+    const requestedLiveModelScope = def.id === 'amr'
+      ? resolveAmrProfile({
+          ...process.env,
+          ...(def.env || {}),
+          ...configuredAgentEnv,
+        })
+      : null;
     let safeModel = resolveModelForAgent(
       def,
       typeof model === 'string'
-        ? isKnownModel(def, model)
+        ? isKnownModel(def, model, requestedLiveModelScope)
           ? model
           : sanitizeCustomModel(model)
         : null,
+      process.env,
+      requestedLiveModelScope,
     );
     const safeReasoning =
       typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
@@ -11905,14 +12005,6 @@ export async function startServer({
       return design.runs.finish(run, 'failed', 1, null);
     }
 
-    let configuredAgentEnv = {};
-    try {
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
-      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
-    } catch {
-      configuredAgentEnv = {};
-    }
-
     let mmdRouteLaunchEnv = null;
     if (def.id === 'claude' && safeModel) {
       mmdRouteLaunchEnv = await loadMmdRouteLaunchEnv(
@@ -11969,9 +12061,10 @@ export async function startServer({
       } catch {
         liveModels = [];
       }
-      const rememberedLiveModels = getRememberedLiveModels(def.id);
+      const amrModelScope = resolveAmrProfile(modelProbeEnv ?? process.env);
+      const rememberedLiveModels = getRememberedLiveModels(def.id, amrModelScope);
       if (liveModels.length > 0) {
-        rememberLiveModels(def.id, liveModels);
+        rememberLiveModels(def.id, liveModels, amrModelScope);
       }
       liveModels = preferFreshLiveModels(liveModels, rememberedLiveModels);
       const liveModelIds = new Set(
@@ -12065,6 +12158,10 @@ export async function startServer({
       def.id === 'antigravity'
         ? path.join(os.tmpdir(), `od-agy-${run.id}.log`)
         : undefined;
+    const promptFile = await preparePromptFileForAgent(def, composed, run.id);
+    const cleanupPromptFile = () => {
+      if (promptFile) promptFile.cleanup().catch(() => {});
+    };
 
     // Serialize antigravity spawns whose buildArgs writes a concrete
     // model into settings.json. Two concurrent runs with different
@@ -12088,19 +12185,26 @@ export async function startServer({
       antigravityModelLockRelease = await acquireAntigravityModelLock();
     }
 
-    const args = def.buildArgs(
-      composed,
-      safeImages,
-      extraAllowedDirs,
-      agentOptions,
-      {
-        cwd: effectiveCwd,
-        hasPriorAssistantTurn,
-        agentLogFilePath,
-        resumeSessionId: agentResumeCtx.resumeSessionId,
-        newSessionId: agentResumeCtx.newSessionId,
-      },
-    );
+    let args;
+    try {
+      args = def.buildArgs(
+        composed,
+        safeImages,
+        extraAllowedDirs,
+        agentOptions,
+        {
+          cwd: effectiveCwd,
+          hasPriorAssistantTurn,
+          agentLogFilePath,
+          promptFilePath: promptFile?.path,
+          resumeSessionId: agentResumeCtx.resumeSessionId,
+          newSessionId: agentResumeCtx.newSessionId,
+        },
+      );
+    } catch (err) {
+      cleanupPromptFile();
+      throw err;
+    }
     // Second-pass budget check that knows about the Windows `.cmd` shim
     // wrap. The pre-buildArgs `checkPromptArgvBudget` only looks at the
     // raw composed prompt; on Windows an npm-installed adapter resolves
@@ -12117,6 +12221,7 @@ export async function startServer({
       args,
     );
     if (cmdShimBudgetError) {
+      cleanupPromptFile();
       design.runs.emit(
         run,
         'error',
@@ -12144,6 +12249,7 @@ export async function startServer({
       args,
     );
     if (directExeBudgetError) {
+      cleanupPromptFile();
       design.runs.emit(
         run,
         'error',
@@ -12373,6 +12479,7 @@ export async function startServer({
     // spawn(def.bin) — that fallback re-introduces the exact ENOENT symptom
     // from issue #10.
     if (!resolvedBin || !agentLaunch.launchPath) {
+      cleanupPromptFile();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       send('error', createSseErrorPayload(
@@ -12396,6 +12503,7 @@ export async function startServer({
     if (def.id === 'amr') {
       const loginStatus = readVelaLoginStatus(agentSpawnEnv, configuredAgentEnv);
       if (!loginStatus.loggedIn) {
+        cleanupPromptFile();
         revokeToolToken('child_exit');
         unregisterChatAgentEventSink();
         sendAmrAccountFailure({
@@ -12418,6 +12526,7 @@ export async function startServer({
         : {}),
     };
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
+      cleanupPromptFile();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       return;
@@ -12574,6 +12683,7 @@ export async function startServer({
         writePromptToChildStdin = true;
       }
     } catch (err) {
+      cleanupPromptFile();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `spawn failed: ${err.message}`));
@@ -13204,6 +13314,7 @@ export async function startServer({
 
     child.on('error', (err) => {
       clearInactivityWatchdog();
+      cleanupPromptFile();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
@@ -13569,6 +13680,7 @@ export async function startServer({
         if (agentLogFilePath) {
           fs.promises.unlink(agentLogFilePath).catch(() => {});
         }
+        cleanupPromptFile();
       }
     });
     if (writePromptToChildStdin && child.stdin) {
@@ -13927,6 +14039,9 @@ export async function startServer({
     if (!toolBundleSupport.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
     }
+    if (runProject?.metadata) {
+      meta.projectMetadata = runProject.metadata;
+    }
     // MCP / SDK callers POST /api/runs with just a projectId — no
     // conversationId, no pre-created assistantMessageId — because they
     // don't know about OD's chat-row lifecycle. The web flow
@@ -14156,6 +14271,36 @@ export async function startServer({
       // project runs are classified even when callers do not send
       // `analyticsHints`. Other dimensions stay omitted until follow-up PRs
       // thread them through.
+      // Per-turn capability sets: MCP servers live under the nested
+      // `context` selection; skills are sent top-level. Both are arrays of
+      // ids on the wire; coerce defensively so a malformed payload never
+      // throws inside the capture path.
+      const reqContext =
+        reqBody.context && typeof reqBody.context === 'object'
+          ? (reqBody.context as Record<string, unknown>)
+          : {};
+      const runMcpServerIds = Array.isArray(reqContext.mcpServerIds)
+        ? (reqContext.mcpServerIds as unknown[]).filter(
+            (id): id is string => typeof id === 'string',
+          )
+        : [];
+      const runTurnSkillIds = Array.isArray(reqBody.skillIds)
+        ? (reqBody.skillIds as unknown[]).filter(
+            (id): id is string => typeof id === 'string',
+          )
+        : [];
+      // `skill_ids` is the full per-send skill context, so fold in the
+      // project-bound persistent `skillId` (also reported singularly as
+      // `skill_id`) alongside the staged one-turn skills — otherwise a normal
+      // project run with a persisted skill but no staged skills would emit
+      // `skill_ids=[]` and undercount in dashboards that read the array.
+      const runSkillIds = [
+        ...new Set(
+          [reqBody.skillId, ...runTurnSkillIds].filter(
+            (id): id is string => typeof id === 'string' && id.length > 0,
+          ),
+        ),
+      ];
       const baseProps: Record<string, unknown> = {
         page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
         area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
@@ -14227,7 +14372,26 @@ export async function startServer({
           typeof reqBody.agentId === 'string' ? reqBody.agentId : null,
         ),
         skill_id: typeof reqBody.skillId === 'string' ? reqBody.skillId : null,
-        mcp_id: null,
+        // Per-send composer context (v2 spec: every prompt records mode +
+        // which model/cli/mcp/skill/plugin/design-system it ran with). Mode,
+        // plugin, and the MCP/skill sets weren't on `run_created` before; the
+        // values are all on the create payload, so populate them here. The
+        // legacy singular `mcp_id` becomes the first enabled server for
+        // back-compat; `mcp_ids` carries the full set.
+        // Only composer-originated runs have an ask/design mode. DS-generation
+        // runs never go through the composer, so omit `session_mode` for them
+        // rather than defaulting them to `ask` and polluting mode dashboards.
+        ...(!isDesignSystemRun && typeof reqBody.sessionMode === 'string'
+          ? { session_mode: sessionModeToTracking(reqBody.sessionMode) }
+          : {}),
+        plugin_id: resolvedSnapshot?.ok
+          ? resolvedSnapshot.snapshot.pluginId
+          : typeof reqBody.pluginId === 'string'
+            ? reqBody.pluginId
+            : null,
+        mcp_ids: runMcpServerIds,
+        mcp_id: runMcpServerIds[0] ?? null,
+        skill_ids: runSkillIds,
         token_count_source: userQueryTokens > 0 ? 'estimated' : 'unknown',
       };
       design.analytics.capture({
@@ -14524,6 +14688,7 @@ export async function startServer({
       ...requestBody,
       mediaExecution: mediaExecution.policy,
       toolBundle: toolBundle.bundle,
+      ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
     };
     const run = design.runs.create(meta);
     design.runs.stream(run, req, res);

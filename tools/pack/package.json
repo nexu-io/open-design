@@ -24,7 +24,7 @@
     "resedit": "1.7.2"
   },
   "optionalDependencies": {
-    "@powerformer/vela-cli": "0.0.12"
+    "@powerformer/vela-cli": "0.0.13"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

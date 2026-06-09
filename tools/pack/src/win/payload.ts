@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { cp, mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
@@ -8,8 +8,10 @@ import {
   resolveLauncherVersionPaths,
 } from "@open-design/launcher-proto";
 
+import { hashJson, hashPath, type ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
 import { winResources } from "../resources.js";
+import { electronBuilderVersionForAppVersion } from "../versions.js";
 import {
   resolveToolPackLauncherChannel,
   resolveToolPackLauncherRoot,
@@ -18,6 +20,7 @@ import { readPackagedVersion } from "./manifest.js";
 import type { WinBuiltAppManifest, WinPackTiming, WinPaths } from "./types.js";
 
 const execFileAsync = promisify(execFile);
+const WIN_LAUNCHER_PAYLOAD_BASE_CACHE_VERSION = 1;
 
 export type WinLauncherPayloadManifest = {
   channel: string;
@@ -62,6 +65,7 @@ export async function buildWinLauncherPayloadArchive(
   config: ToolPackConfig,
   paths: WinPaths,
   builtApp: WinBuiltAppManifest,
+  cache?: ToolPackCache,
 ): Promise<WinPackTiming[]> {
   if (process.platform !== "win32") throw new Error("Windows launcher payload build must run on Windows");
   const timings: WinPackTiming[] = [];
@@ -76,6 +80,7 @@ export async function buildWinLauncherPayloadArchive(
   });
   const stageRoot = join(dirname(paths.launcherPayloadPath), "stage");
   const payloadRoot = join(stageRoot, "payload");
+  const overlayRoot = join(dirname(paths.launcherPayloadPath), "overlay");
   const manifest = buildWinLauncherPayloadManifest({
     channel,
     namespace: config.namespace,
@@ -101,19 +106,84 @@ export async function buildWinLauncherPayloadArchive(
     }
   };
 
+  const writeOverlay = async (): Promise<void> => {
+    await rm(overlayRoot, { force: true, recursive: true });
+    await mkdir(join(overlayRoot, "payload", "resources"), { recursive: true });
+    await writeFile(join(overlayRoot, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    await writeFile(
+      join(overlayRoot, "payload", "resources", "open-design-config.json"),
+      await readFile(paths.packagedConfigPath),
+    );
+    const packageJsonPath = join(builtApp.unpackedRoot, "resources", "app", "package.json");
+    try {
+      const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as Record<string, unknown>;
+      packageJson.version = electronBuilderVersionForAppVersion(packagedVersion);
+      await mkdir(join(overlayRoot, "payload", "resources", "app"), { recursive: true });
+      await writeFile(
+        join(overlayRoot, "payload", "resources", "app", "package.json"),
+        `${JSON.stringify(packageJson, null, 2)}\n`,
+        "utf8",
+      );
+    } catch {
+      // Legacy/fake unpacked fixtures may not include Electron app metadata.
+    }
+  };
+
+  const createBaseArchive = async (outputPath: string): Promise<void> => {
+    await rm(stageRoot, { force: true, recursive: true });
+    await mkdir(payloadRoot, { recursive: true });
+    await cp(builtApp.unpackedRoot, payloadRoot, { recursive: true });
+    await execFileAsync(winResources.sevenZipExe, ["a", "-t7z", "-mx=5", outputPath, ".\\*"], {
+      cwd: stageRoot,
+      windowsHide: true,
+    });
+  };
+
   await runSegment("launcher-payload:prepare", async () => {
     await rm(stageRoot, { force: true, recursive: true });
+    await rm(overlayRoot, { force: true, recursive: true });
     await rm(paths.launcherPayloadPath, { force: true });
-    await mkdir(payloadRoot, { recursive: true });
-  });
-  await runSegment("launcher-payload:stage", async () => {
-    await cp(builtApp.unpackedRoot, payloadRoot, { recursive: true });
-    await writeFile(join(stageRoot, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-  });
-  await runSegment("launcher-payload:7z", async () => {
     await mkdir(dirname(paths.launcherPayloadPath), { recursive: true });
-    await execFileAsync(winResources.sevenZipExe, ["a", "-t7z", "-mx=5", paths.launcherPayloadPath, ".\\*"], {
-      cwd: stageRoot,
+  });
+
+  if (cache == null) {
+    await runSegment("launcher-payload:stage", async () => {
+      await createBaseArchive(paths.launcherPayloadPath);
+      await writeOverlay();
+    });
+  } else {
+    const sourceKey = builtApp.cacheEntryPath == null
+      ? await runSegment("launcher-payload:base-input-hash", async () => hashPath(builtApp.unpackedRoot))
+      : `cache-entry:${builtApp.cacheEntryPath}`;
+    const baseNode = {
+      build: async ({ entryRoot }: { entryRoot: string }): Promise<{ createdAt: string; sourceKey: string }> => {
+        await createBaseArchive(join(entryRoot, "payload-base.7z"));
+        return { createdAt: new Date().toISOString(), sourceKey };
+      },
+      id: "win.launcher-payload-base",
+      invalidate: async () => null,
+      key: hashJson({
+        cacheVersion: WIN_LAUNCHER_PAYLOAD_BASE_CACHE_VERSION,
+        channel,
+        namespace: config.namespace,
+        node: "win.launcher-payload-base",
+        sourceKey,
+      }),
+      outputs: ["payload-base.7z"],
+    };
+    await runSegment("launcher-payload:base-cache", async () => {
+      const cached = await cache.acquire({
+        materialize: [],
+        node: baseNode,
+      });
+      await cp(join(cached.entryPath, "payload-base.7z"), paths.launcherPayloadPath);
+      await writeOverlay();
+    });
+  }
+
+  await runSegment("launcher-payload:overlay", async () => {
+    await execFileAsync(winResources.sevenZipExe, ["u", "-t7z", paths.launcherPayloadPath, ".\\*"], {
+      cwd: overlayRoot,
       windowsHide: true,
     });
   });
@@ -123,6 +193,7 @@ export async function buildWinLauncherPayloadArchive(
   });
   await runSegment("launcher-payload:cleanup", async () => {
     await rm(stageRoot, { force: true, recursive: true });
+    await rm(overlayRoot, { force: true, recursive: true });
   });
   return timings;
 }

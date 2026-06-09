@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button } from '@open-design/components';
 import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
 import { useT } from '../i18n';
@@ -773,7 +772,28 @@ export function DesignFilesPanel({
           <div className="df-topbar-left">{breadcrumbs}</div>
           <div className="df-topbar-right">{fileActions}</div>
         </div>
-        <div className="df-body">
+        <div
+          className="df-body"
+          onDragEnter={(ev) => {
+            ev.preventDefault();
+            dragDepthRef.current += 1;
+            setDraggingFiles(true);
+          }}
+          onDragOver={(ev) => {
+            ev.preventDefault();
+            ev.dataTransfer.dropEffect = 'copy';
+          }}
+          onDragLeave={(ev) => {
+            if (!ev.currentTarget.contains(ev.relatedTarget as Node | null)) {
+              dragDepthRef.current = 0;
+              setDraggingFiles(false);
+              return;
+            }
+            dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+            if (dragDepthRef.current === 0) setDraggingFiles(false);
+          }}
+          onDrop={handleDrop}
+        >
           {visibleUploadError && !preview ? (
             <div className="df-upload-banner" data-testid="upload-error-banner">
               <span>{visibleUploadError}</span>
@@ -979,36 +999,26 @@ export function DesignFilesPanel({
               ))}
             </>
           )}
-          <div className="df-useful-info">
-            <span className="df-useful-info-label">{t('designFiles.usefulInfoLabel')}</span>
-            <span className="df-useful-info-tip">{t('designFiles.usefulInfoTip')}</span>
-          </div>
-          <div
-            className={`df-drop ${draggingFiles ? 'dragging' : ''}`}
-            onDragEnter={(ev) => {
-              ev.preventDefault();
-              dragDepthRef.current += 1;
-              setDraggingFiles(true);
-            }}
-            onDragOver={(ev) => {
-              ev.preventDefault();
-              ev.dataTransfer.dropEffect = 'copy';
-            }}
-            onDragLeave={(ev) => {
-              if (!ev.currentTarget.contains(ev.relatedTarget as Node | null)) {
-                dragDepthRef.current = 0;
-                setDraggingFiles(false);
-                return;
-              }
-              dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-              if (dragDepthRef.current === 0) setDraggingFiles(false);
-            }}
-            onDrop={handleDrop}
-          >
-            <span className="label">{t('designFiles.dropTitle')}</span>
-            <span className="desc">{t('designFiles.dropDesc')}</span>
+          <div className="df-footer-info">
+            <div className="df-drop-hint">
+              <Icon name="upload" size={12} />
+              <span>{t('designFiles.dropDesc')}</span>
+            </div>
+            <div className="df-useful-info">
+              <span className="df-useful-info-label">{t('designFiles.usefulInfoLabel')}</span>
+              <span className="df-useful-info-tip">{t('designFiles.usefulInfoTip')}</span>
+            </div>
           </div>
         </div>
+        {draggingFiles ? (
+          <div className="df-drop-overlay" aria-hidden>
+            <div className="df-drop-overlay-card">
+              <Icon name="upload" size={22} />
+              <span className="label">{t('designFiles.dropTitle')}</span>
+              <span className="desc">{t('designFiles.dropDesc')}</span>
+            </div>
+          </div>
+        ) : null}
       </div>
       {preview && previewFile ? (
         // Key on the file name so React unmounts the previous DfPreview

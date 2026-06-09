@@ -81,6 +81,9 @@ function resolveLauncherConfig(namespace: string): PackagedConfig {
     telemetryRelayUrl: process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim() || null,
     posthogKey: process.env.POSTHOG_KEY?.trim() || null,
     posthogHost: process.env.POSTHOG_HOST?.trim() || null,
+    // WebUI is a no-Electron lane with no packaged auto-updater, so this stays
+    // null unless explicitly overridden — mirrors the headless packaged path.
+    updateMetadataUrl: process.env.OD_UPDATE_METADATA_URL?.trim() || null,
     webSidecarEntry: null,
     webStandaloneRoot: null,
     // Same web runtime mode as the existing Linux headless path — verified to

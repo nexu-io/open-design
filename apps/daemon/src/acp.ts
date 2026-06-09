@@ -158,6 +158,33 @@ function rpcErrorRetryable(data: unknown): boolean | undefined {
   return typeof details?.retryable === 'boolean' ? details.retryable : undefined;
 }
 
+function promotedOpenCodeSessionErrorPayload(data: unknown, fallbackMessage: string) {
+  const details = asObject(data);
+  if (
+    details?.kind !== 'opencode_session_error' ||
+    details.source !== 'opencode' ||
+    details.code !== 'ROLE_MARKER_HALLUCINATION'
+  ) {
+    return null;
+  }
+  const message =
+    typeof details.message === 'string' && details.message.trim()
+      ? details.message.trim()
+      : fallbackMessage;
+  return {
+    message,
+    error: {
+      code: 'ROLE_MARKER_HALLUCINATION',
+      message,
+      retryable: typeof details.retryable === 'boolean' ? details.retryable : true,
+      details: {
+        ...details,
+        promoted_by: 'open_design_acp',
+      },
+    },
+  };
+}
+
 interface FormattedUsage {
   input_tokens?: number;
   output_tokens?: number;
@@ -749,6 +776,15 @@ export function attachAcpSession({
     );
   };
 
+  const failWithPayload = (payload: unknown) => {
+    if (finished) return;
+    finished = true;
+    fatal = true;
+    clearStageTimer();
+    send('error', payload);
+    if (!child.killed) child.kill('SIGTERM');
+  };
+
   const fail = (
     message: string,
     options: { forceModelUnavailable?: boolean; details?: unknown; retryable?: boolean } = {},
@@ -861,6 +897,11 @@ export function attachAcpSession({
         return;
       }
       const details = rpcErrorData(obj);
+      const promotedPayload = promotedOpenCodeSessionErrorPayload(details, rpcErr);
+      if (promotedPayload) {
+        failWithPayload(promotedPayload);
+        return;
+      }
       const retryable = rpcErrorRetryable(details);
       fail(rpcErr, {
         details,

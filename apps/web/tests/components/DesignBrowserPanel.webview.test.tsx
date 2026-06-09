@@ -65,7 +65,7 @@ function getAddressDisplay(container: HTMLElement) {
 }
 
 describe('DesignBrowserPanel <webview> navigation', () => {
-  it('moves Tune and Edit into the Browser menu instead of the top toolbar', () => {
+  it('keeps desktop browser tools available on the supported webview path', () => {
     render(
       <DesignBrowserPanel
         projectId="proj-webview-more-tools"
@@ -78,11 +78,17 @@ describe('DesignBrowserPanel <webview> navigation', () => {
 
     expect(screen.queryByRole('button', { name: 'Tune element' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Edit live DOM' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Mark' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Comment' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Screenshot' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Browser menu' }));
 
     expect(screen.getByRole('menuitem', { name: /Tune Element/ })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Edit Live DOM/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Mark' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Comment' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Copy Screenshot' })).toBeTruthy();
   });
 
   it('searches inspiration actions and adds an operation prompt for the current browser tab', () => {
@@ -334,6 +340,42 @@ describe('DesignBrowserPanel <webview> navigation', () => {
     expect(screen.queryByText('Embedded browser controls are available in the desktop app.')).toBeNull();
   });
 
+  it('does not render saved comment markers in the browser fallback iframe', () => {
+    restoreHost?.();
+    restoreHost = null;
+
+    const previewComments = [{
+      id: 'comment-fallback-1',
+      projectId: 'proj-browser-fallback-comments',
+      conversationId: 'conv-1',
+      filePath: 'browser:https://example.com',
+      elementId: 'dom:#card',
+      selector: '#card',
+      label: 'article.card',
+      note: 'Review this card',
+      text: 'Card',
+      position: { x: 24, y: 32, width: 240, height: 160 },
+      htmlHint: '<article id="card">',
+      status: 'open' as const,
+      createdAt: 1,
+      updatedAt: 1,
+    }];
+
+    const { container } = render(
+      <DesignBrowserPanel
+        initialUrl="https://example.com"
+        projectId="proj-browser-fallback-comments"
+        previewComments={previewComments}
+        onOpenFile={() => {}}
+        onRefreshFiles={() => {}}
+      />,
+    );
+
+    expect(container.querySelector('iframe')).not.toBeNull();
+    expect(container.querySelector('.db-comment-layer')).toBeNull();
+    expect(container.querySelector('.db-comment-marker')).toBeNull();
+  });
+
   it('reuses the artifact mark label and icon for page annotation', () => {
     const { container } = render(
       <I18nProvider initial="zh-CN">
@@ -399,6 +441,53 @@ describe('DesignBrowserPanel <webview> navigation', () => {
       comment: 'Make this heading tighter',
       elementId: 'dom:h1',
       filePath: 'browser:https://example.com',
+    });
+  });
+
+  it('repositions saved browser comment markers from live webview selector measurements', async () => {
+    const previewComments = [{
+      id: 'comment-1',
+      projectId: 'proj-webview-live-comment-marker',
+      conversationId: 'conv-1',
+      filePath: 'browser:https://example.com',
+      elementId: 'dom:#card',
+      selector: '#card',
+      label: 'article.card',
+      note: 'Review this card',
+      text: 'Card',
+      position: { x: 24, y: 32, width: 240, height: 160 },
+      htmlHint: '<article id="card">',
+      status: 'open' as const,
+      createdAt: 1,
+      updatedAt: 1,
+    }];
+    const { container } = render(
+      <DesignBrowserPanel
+        initialUrl="https://example.com"
+        projectId="proj-webview-live-comment-marker"
+        previewComments={previewComments}
+        onOpenFile={() => {}}
+        onRefreshFiles={() => {}}
+      />,
+    );
+
+    const webview = container.querySelector('webview.db-webview') as HTMLElement & {
+      executeJavaScript?: ReturnType<typeof vi.fn>;
+    };
+    webview.executeJavaScript = vi.fn(async () => [{
+      key: 'comment:comment-1',
+      elementId: 'dom:#card',
+      selector: '#card',
+      label: 'article.card',
+      text: 'Card',
+      position: { x: 140, y: 36, width: 240, height: 160 },
+      htmlHint: '<article id="card">',
+      style: {},
+      selectionKind: 'element',
+    }]);
+
+    await waitFor(() => {
+      expect(container.querySelector<HTMLElement>('.db-comment-marker')?.style.left).toBe('140px');
     });
   });
 

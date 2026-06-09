@@ -69,9 +69,18 @@ interface Props {
    * a label would be redundant (scenario fallback).
    */
   heading?: string;
+  /**
+   * 'minimal' keeps the designer-relevant blocks (author, example
+   * query) inline and tucks the developer-oriented manifest detail
+   * (inputs, context bundles, workflow, GenUI, connectors,
+   * capabilities, source) behind a collapsed "Developer details"
+   * disclosure. Defaults to 'full' so the scenario / media / design
+   * variants keep their existing flat inspector.
+   */
+  variant?: 'full' | 'minimal';
 }
 
-export function PluginMetaSections({ record, omit, compact, heading }: Props) {
+export function PluginMetaSections({ record, omit, compact, heading, variant = 'full' }: Props) {
   const { locale } = useI18n();
   const [copied, setCopied] = useState(false);
 
@@ -220,6 +229,21 @@ export function PluginMetaSections({ record, omit, compact, heading }: Props) {
         </Section>
       ) : null}
 
+      {((advanced) =>
+        variant === 'minimal' ? (
+          <details
+            className="plugin-meta-sections__advanced"
+            data-testid="plugin-meta-advanced"
+          >
+            <summary className="plugin-meta-sections__advanced-summary">
+              Developer details
+            </summary>
+            {advanced}
+          </details>
+        ) : (
+          advanced
+        ))(
+        <>
       {showInputs ? (
         <Section
           title="Inputs"
@@ -561,6 +585,8 @@ export function PluginMetaSections({ record, omit, compact, heading }: Props) {
           </div>
         </dl>
       </Section>
+        </>,
+      )}
     </div>
   );
 }

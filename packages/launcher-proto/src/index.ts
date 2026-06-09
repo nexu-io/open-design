@@ -3,6 +3,9 @@ import { isAbsolute, join, resolve, sep } from "node:path";
 import { normalizeNamespace } from "@open-design/sidecar-proto";
 
 export const LAUNCHER_SCHEMA_VERSION = 1 as const;
+export const LAUNCHER_AFTER_QUIT_FLAG = "--od-launcher-after-quit" as const;
+export const LAUNCHER_AFTER_QUIT_TARGET_PID_ARG = "--od-launcher-target-pid" as const;
+export const LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG = "--od-launcher-timeout-ms" as const;
 
 export const LAUNCHER_CHANNELS = Object.freeze({
   BETA: "beta",
@@ -81,6 +84,11 @@ export type LauncherTargetSelection =
   | { pointer: LauncherVersionPointer; reason: "last-successful"; selected: true }
   | { reason: "no-runtime-target"; selected: false };
 
+export type LauncherAfterQuitRequest = {
+  targetPid: number;
+  timeoutMs: number;
+};
+
 export class LauncherProtocolError extends Error {
   constructor(message: string) {
     super(message);
@@ -109,6 +117,44 @@ export function normalizeLauncherVersion(value: unknown): string {
   }
   if (isAbsolute(value)) throw new LauncherProtocolError(`launcher version must not be absolute: ${value}`);
   return value;
+}
+
+function normalizePositiveInteger(value: unknown, label: string): number {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new LauncherProtocolError(`${label} must be a positive safe integer`);
+  }
+  return parsed;
+}
+
+function valueAfterArg(args: readonly string[], name: string): string | null {
+  const index = args.indexOf(name);
+  if (index < 0) return null;
+  return args[index + 1] ?? null;
+}
+
+export function buildLauncherAfterQuitArgs(request: LauncherAfterQuitRequest): string[] {
+  return [
+    LAUNCHER_AFTER_QUIT_FLAG,
+    LAUNCHER_AFTER_QUIT_TARGET_PID_ARG,
+    normalizePositiveInteger(request.targetPid, "launcher after-quit target pid").toString(),
+    LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG,
+    normalizePositiveInteger(request.timeoutMs, "launcher after-quit timeout").toString(),
+  ];
+}
+
+export function parseLauncherAfterQuitArgs(args: readonly string[]): LauncherAfterQuitRequest | null {
+  if (!args.includes(LAUNCHER_AFTER_QUIT_FLAG)) return null;
+  return {
+    targetPid: normalizePositiveInteger(
+      valueAfterArg(args, LAUNCHER_AFTER_QUIT_TARGET_PID_ARG),
+      "launcher after-quit target pid",
+    ),
+    timeoutMs: normalizePositiveInteger(
+      valueAfterArg(args, LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG),
+      "launcher after-quit timeout",
+    ),
+  };
 }
 
 export function normalizeLauncherNamespace(value: unknown): string {

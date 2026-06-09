@@ -14,6 +14,7 @@ import {
   trackFileManagerClick,
   trackFileUploadResult,
   trackPageView,
+  trackTabLauncherClick,
 } from '../analytics/events';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
 import { useT } from '../i18n';
@@ -217,6 +218,8 @@ interface Props {
   // Bumped nonce that focuses the Questions tab (banner click / new form).
   focusQuestionsRequest?: { nonce: number } | null;
 }
+
+const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
 
 interface SketchState {
   version: number;
@@ -427,6 +430,7 @@ export function FileWorkspace({
   focusQuestionsRequest = null,
 }: Props) {
   const t = useT();
+  const amrProfile = chatConfig?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
   // The chat column only shows a compact Questions banner; the form itself
   // lives here, including after submission when a banner click can reopen the
   // answered preview.
@@ -2021,6 +2025,14 @@ export function FileWorkspace({
           launcherContext={launcherContext}
           onOpenFile={openFile}
           onOpenTab={focusWorkspaceTab}
+          onTrack={(input) =>
+            trackTabLauncherClick(analytics.track, {
+              page_name: 'file_manager',
+              area: 'tab_launcher',
+              ...(projectId ? { project_id: projectId } : {}),
+              ...input,
+            })
+          }
           onClose={() => setLauncherOpen(false)}
         />
       ) : null}
@@ -2121,6 +2133,7 @@ export function FileWorkspace({
             onLaunchTerminalAuth={onLaunchTerminalAuth}
             amrAuthorizeSourceDetail="generation_preview_authorize_retry"
             amrRechargeSourceDetail="generation_preview_recharge"
+            amrProfile={amrProfile}
             amrGuidance={
               generationPreview.promoteAmrSwitch
                 && generationPreview.errorCode

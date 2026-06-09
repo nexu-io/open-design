@@ -681,7 +681,7 @@ describe('NewProjectPanel working directory picker', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Choose folder' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Local storage' }));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /product-designs/i })).toBeTruthy();
@@ -719,7 +719,7 @@ describe('NewProjectPanel working directory picker', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Choose folder' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Local storage' }));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /host-designs/i })).toBeTruthy();
@@ -756,7 +756,7 @@ describe('NewProjectPanel working directory picker', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Choose folder' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Local storage' }));
 
     expect(await screen.findByText(/Couldn't open the folder picker/i)).toBeTruthy();
     expect(mockedOpenFolderDialog).not.toHaveBeenCalled();

@@ -44,11 +44,11 @@ describe('conversation timestamps', () => {
     vi.useRealTimers();
   });
 
-  it('shows inline relative message times with exact hover text', () => {
+  it('does not render inline relative message times in the message list', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-15T14:00:00Z'));
 
-    renderChatPane([
+    const { container } = renderChatPane([
       {
         id: 'user-1',
         role: 'user',
@@ -63,17 +63,17 @@ describe('conversation timestamps', () => {
       },
     ]);
 
-    const firstTime = screen.getByText('2h ago');
-    expect(firstTime.tagName).toBe('TIME');
-    expect(firstTime.getAttribute('title')).toContain('2025');
-    expect(screen.getByText('1h ago').tagName).toBe('TIME');
+    expect(screen.queryByText('2h ago')).toBeNull();
+    expect(screen.queryByText('1h ago')).toBeNull();
+    // The relative "just now" message-time element (MessageTimestamp) is gone.
+    expect(container.querySelector('.msg-time')).toBeNull();
   });
 
-  it('adds day separators when a conversation crosses days', () => {
+  it('does not add day separators when a conversation crosses days', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-16T14:00:00Z'));
 
-    renderChatPane([
+    const { container } = renderChatPane([
       {
         id: 'user-1',
         role: 'user',
@@ -88,7 +88,8 @@ describe('conversation timestamps', () => {
       },
     ]);
 
-    expect(screen.getAllByRole('separator')).toHaveLength(2);
+    expect(screen.queryAllByRole('separator')).toHaveLength(0);
+    expect(container.querySelector('.chat-day-separator')).toBeNull();
   });
 
   it('does not treat a completed last assistant message as streaming just because another conversation is running', () => {

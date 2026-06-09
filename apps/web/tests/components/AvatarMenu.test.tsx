@@ -208,4 +208,35 @@ describe('AvatarMenu', () => {
       within(popover).getByRole('option', { name: /custom-codex-model/i }),
     ).toBeTruthy();
   });
+
+  it('routes the AMR account shortcut through the active AMR profile', () => {
+    renderMenu({
+      config: {
+        ...baseConfig,
+        agentId: 'amr',
+        agentCliEnv: {
+          amr: {
+            OPEN_DESIGN_AMR_PROFILE: 'test',
+          },
+        },
+      },
+      agents: [
+        {
+          id: 'amr',
+          name: 'Open Design AMR',
+          bin: 'vela',
+          available: true,
+          models: [{ id: 'default', label: 'Default (CLI config)' }],
+        },
+      ],
+    });
+
+    openMenu();
+
+    expect(
+      screen
+        .getByRole('link', { name: 'avatar.amrConsoleavatar.amrConsoleMeta' })
+        .getAttribute('href'),
+    ).toBe('https://vela.powerformer.net/wallet');
+  });
 });

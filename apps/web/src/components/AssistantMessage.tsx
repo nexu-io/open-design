@@ -34,7 +34,7 @@ import {
   type QuestionForm,
 } from "../artifacts/question-form";
 import { parseSubmittedAnswers } from "./QuestionForm";
-import { splitStreamingArtifact, stripArtifact } from "../artifacts/strip";
+import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from "../artifacts/strip";
 import {
   getPluginFolderCandidates,
   type PluginFolderCandidate,
@@ -53,11 +53,6 @@ import {
 import type { Dict } from "../i18n/types";
 import { agentDisplayName, agentIconId, exactAgentDisplayName } from "../utils/agentLabels";
 import { AgentIcon } from "./AgentIcon";
-import {
-  exactDateTime,
-  messageTime,
-  relativeTimeLong,
-} from "../utils/chatTime";
 import { filterImplicitProducedFiles } from "../produced-files";
 import type {
   AgentEvent,
@@ -638,6 +633,7 @@ function AssistantMessageImpl({
               <ProseBlock
                 key={i}
                 text={b.text}
+                hideRecoveredHtmlFallback={message.agentId === "grok-build" && !streaming}
                 assistantMessageId={message.id}
                 isLastAssistant={!!isLast}
                 streaming={streaming}
@@ -792,7 +788,6 @@ function AssistantMessageImpl({
                   onFork: canFork ? onForkFromMessage : undefined,
                   forking,
                   forceVisible: true,
-                  message,
                   isLast: !!isLast,
                 }}
               />
@@ -808,20 +803,19 @@ function AssistantMessageImpl({
                 copyMarkdown={copyMarkdown}
                 onFork={canFork ? onForkFromMessage : undefined}
                 forking={forking}
-                message={message}
                 isLast={!!isLast}
               />
             )}
             {/*
               "Share to Open Design" — pairs with the post-feedback Discord
               prompt (assistant-feedback-discord-note). Only shows on the most
-              recent assistant message after a successful run, gated on the
-              same isFeedbackEligible signal so it appears alongside the
-              thumbs-up/down + Discord CTA — not on errored runs, partial
-              streams, or empty responses. Click hands the user a packaged
-              plugin via the bundled od-share-to-community scenario.
+              recent assistant message after a successful run. The thumbs row
+              now also renders on failed/canceled turns, so Share keeps its own
+              `runSucceeded` gate to stay off errored runs, partial streams, or
+              empty responses. Click hands the user a packaged plugin via the
+              bundled od-share-to-community scenario.
             */}
-            {onShareToOpenDesign && isLast && showFeedback ? (
+            {onShareToOpenDesign && isLast && showFeedback && runSucceeded ? (
               <button
                 type="button"
                 className="assistant-share-to-od-btn"
@@ -882,6 +876,18 @@ function inferProducedFilesFromTurn({
   ).sort((a, b) => b.mtime - a.mtime);
 }
 
+// A run that reached a terminal state — succeeded, failed, or canceled — has a
+// settled assistant turn worth rating. Only queued/running turns are still in
+// flight, so they have no outcome to give feedback on yet. Feedback used to be
+// gated on success alone, which silently dropped the thumbs row on failed and
+// canceled turns even though those are exactly the outcomes a user most wants
+// to thumbs-down.
+function isTerminalRunStatus(
+  status: NonNullable<ChatMessage["runStatus"]>
+): boolean {
+  return status === "succeeded" || status === "failed" || status === "canceled";
+}
+
 function isFeedbackEligible({
   streaming,
   message,
@@ -894,28 +900,8 @@ function isFeedbackEligible({
   hasUnfinishedTodos: boolean;
 }): boolean {
   if (streaming || hasEmptyResponse || hasUnfinishedTodos) return false;
-  if (message.runStatus) return message.runStatus === "succeeded";
+  if (message.runStatus) return isTerminalRunStatus(message.runStatus);
   return !!message.endedAt;
-}
-
-function MessageTimestamp({
-  message,
-  t,
-}: {
-  message: ChatMessage;
-  t: TranslateFn;
-}) {
-  const ts = messageTime(message);
-  if (!ts) return null;
-  return (
-    <time
-      className="msg-time"
-      dateTime={new Date(ts).toISOString()}
-      title={exactDateTime(ts)}
-    >
-      {relativeTimeLong(ts, t)}
-    </time>
-  );
 }
 
 // The agent name without the trailing model id — the role header shows the
@@ -995,7 +981,6 @@ interface AssistantFooterProps {
   forking?: boolean;
   feedbackControls?: ReactNode;
   forceVisible?: boolean;
-  message?: ChatMessage;
   // The most recent assistant reply keeps its footer permanently visible
   // (not hover-gated), matching Lobe Chat's persistent last-message footer.
   isLast?: boolean;
@@ -1014,7 +999,6 @@ function AssistantFooter({
   forking = false,
   feedbackControls,
   forceVisible = false,
-  message,
   isLast = false,
 }: AssistantFooterProps) {
   const t = useT();
@@ -1075,7 +1059,6 @@ function AssistantFooter({
           {feedbackControls}
         </span>
       ) : null}
-      {!streaming && message ? <MessageTimestamp message={message} t={t} /> : null}
     </div>
   );
 }
@@ -1908,6 +1891,7 @@ function hasPluginFinalActionHint(content: string): boolean {
 
 function ProseBlock({
   text,
+  hideRecoveredHtmlFallback,
   assistantMessageId,
   isLastAssistant,
   streaming,
@@ -1920,6 +1904,7 @@ function ProseBlock({
   onRequestOpenFile,
 }: {
   text: string;
+  hideRecoveredHtmlFallback?: boolean;
   assistantMessageId: string;
   isLastAssistant: boolean;
   streaming: boolean;
@@ -1932,7 +1917,10 @@ function ProseBlock({
   onRequestOpenFile?: (name: string) => void;
 }) {
   const t = useT();
-  const cleaned = useMemo(() => stripArtifact(text), [text]);
+  const cleaned = useMemo(() => {
+    const stripped = stripArtifact(text);
+    return hideRecoveredHtmlFallback ? stripRecoveredHtmlFallbackForDisplay(stripped, text) : stripped;
+  }, [hideRecoveredHtmlFallback, text]);
   // While the latest turn is still streaming a not-yet-closed question-form,
   // drop the partial `<question-form>{…` markup from the prose so the chat
   // doesn't flash raw JSON; we surface a banner for it instead. The actual

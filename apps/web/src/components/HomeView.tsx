@@ -22,8 +22,10 @@ import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
+  trackCommunityGalleryClick,
   trackHomeChatComposerClick,
   trackPageView,
+  trackPluginDetailModalSurfaceView,
   trackPluginReplacementModalClick,
   trackPluginReplacementModalSurfaceView,
   trackPluginReplacementResult,
@@ -47,12 +49,11 @@ import {
   mergeAihubmixImageModels,
   useAIHubMixImageModels,
 } from '../media/aihubmix-image-models';
-import { fetchProjectFiles, openFolderDialog, projectFileUrl } from '../providers/registry';
+import { openFolderDialog } from '../providers/registry';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type {
   DesignSystemSummary,
   Project,
-  ProjectFile,
   ProjectMetadata,
   PromptTemplateSummary,
   SkillSummary,
@@ -175,20 +176,6 @@ const AUTHORING_DEFAULT_SCENARIO_INPUTS = {
   topic: 'packaging a reusable workflow as an Open Design plugin',
 };
 
-type HomeDesignSystemOption = {
-  id: string;
-  title: string;
-  isDefault: boolean;
-  auto?: boolean;
-  group?: 'Personal' | 'Official preset' | 'Enterprise';
-  category?: string;
-  summary?: string;
-  swatches?: string[];
-  logoUrl?: string;
-};
-
-const AUTO_DESIGN_SYSTEM_OPTION_ID = '__auto-design-system__';
-const LEGACY_AUTO_DESIGN_SYSTEM_TITLES = new Set(['自动选择风格参考']);
 
 interface Props {
   projects: Project[];
@@ -282,7 +269,6 @@ export function HomeView({
     examplePromptInfoRef.current = info;
   }, []);
   const [error, setError] = useState<string | null>(null);
-  const [designSystemLogoById, setDesignSystemLogoById] = useState<Record<string, string>>({});
   const [elevenLabsVoices, setElevenLabsVoices] = useState<AudioVoiceOption[]>([]);
   const [elevenLabsVoicesLoading, setElevenLabsVoicesLoading] = useState(false);
   // Live AIHubMix image catalogue merged into the home media composer's model
@@ -313,6 +299,45 @@ export function HomeView({
       area: 'plugin_replacement_modal',
     });
   }, [pendingReplacement, analytics.track]);
+  // Community gallery analytics. Opening a tile fires both a ui_click on
+  // the card (the funnel's denominator) and a surface_view on the detail
+  // modal it reveals (the numerator); the ↗ that jumps straight to the
+  // real example page is its own ui_click so "go to the finished thing"
+  // stays distinct from "open the detail modal". plugin_id / plugin_type
+  // mirror PluginsView so the two surfaces join on the same keys.
+  const handleCommunityOpenDetails = useCallback(
+    (record: InstalledPluginRecord) => {
+      const pluginId = record.sourceMarketplaceEntryName ?? record.id;
+      const pluginType = record.marketplaceTrust ?? 'official';
+      trackCommunityGalleryClick(analytics.track, {
+        page_name: 'home',
+        area: 'community_gallery',
+        element: 'card',
+        plugin_id: pluginId,
+        plugin_type: pluginType,
+      });
+      trackPluginDetailModalSurfaceView(analytics.track, {
+        page_name: 'home',
+        area: 'plugin_detail_modal',
+        plugin_id: pluginId,
+        plugin_type: pluginType,
+      });
+      setDetailsRecord(record);
+    },
+    [analytics.track],
+  );
+  const handleCommunityOpenExternal = useCallback(
+    (record: InstalledPluginRecord) => {
+      trackCommunityGalleryClick(analytics.track, {
+        page_name: 'home',
+        area: 'community_gallery',
+        element: 'card_open_external',
+        plugin_id: record.sourceMarketplaceEntryName ?? record.id,
+        plugin_type: record.marketplaceTrust ?? 'official',
+      });
+    },
+    [analytics.track],
+  );
   const inputRef = useRef<HomeHeroHandle | null>(null);
   const homeViewRef = useRef<HTMLDivElement | null>(null);
   const consumedHandoffIdRef = useRef<number | null>(null);
@@ -569,46 +594,13 @@ export function HomeView({
     [mcpServers],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    const personalSystems = designSystems.filter((system) => (
-      system.projectId &&
-      designSystemOptionGroup(system) === 'Personal' &&
-      (system.status ?? 'draft') === 'published'
-    ));
-    if (personalSystems.length === 0) {
-      setDesignSystemLogoById((current) => (
-        Object.keys(current).length === 0 ? current : {}
-      ));
-      return;
-    }
-
-    void Promise.all(
-      personalSystems.map(async (system) => {
-        const projectId = system.projectId;
-        if (!projectId) return [system.id, null] as const;
-        const files = await fetchProjectFiles(projectId);
-        const logo = findDesignSystemLogoFile(files);
-        if (!logo) return [system.id, null] as const;
-        return [system.id, projectFileUrl(projectId, logo.path ?? logo.name)] as const;
-      }),
-    ).then((entries) => {
-      if (cancelled) return;
-      const next: Record<string, string> = {};
-      for (const [id, logoUrl] of entries) {
-        if (logoUrl) next[id] = logoUrl;
-      }
-      setDesignSystemLogoById(next);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [designSystems]);
-
-  const designSystemOptions = useMemo(
-    () => designSystemOptionsForHome(designSystems, defaultDesignSystemId, designSystemLogoById, t),
-    [defaultDesignSystemId, designSystemLogoById, designSystems, t],
+  const designSystemPickerSystems = useMemo(
+    () => selectableHomeDesignSystems(designSystems, defaultDesignSystemId),
+    [defaultDesignSystemId, designSystems],
+  );
+  const defaultDesignSystemTitle = useMemo(
+    () => homeDefaultDesignSystemTitle(designSystems, defaultDesignSystemId, t),
+    [defaultDesignSystemId, designSystems, t],
   );
 
   function focusPromptAtEnd() {
@@ -657,7 +649,7 @@ export function HomeView({
     const inputFields = options?.inputFields ?? record.manifest?.od?.inputs ?? [];
     const optimisticInputs = hydratePluginInputs(
       inputFields,
-      withHomeDesignSystemDefault(options?.inputs, inputFields, designSystemOptions),
+      withHomeDesignSystemDefault(options?.inputs, inputFields, defaultDesignSystemTitle),
     );
     const inputsValid = pluginInputsAreValid(inputFields, optimisticInputs);
     const queryTemplate =
@@ -821,7 +813,7 @@ export function HomeView({
     },
   ) {
     const replacement = previewPluginReplacement(record, nextPrompt, {
-      inputs: withHomeDesignSystemDefault(options?.inputs, options?.inputFields ?? record.manifest?.od?.inputs ?? [], designSystemOptions),
+      inputs: withHomeDesignSystemDefault(options?.inputs, options?.inputFields ?? record.manifest?.od?.inputs ?? [], defaultDesignSystemTitle),
       inputFields: options?.inputFields,
       queryTemplate: options?.queryTemplate,
     });
@@ -884,6 +876,7 @@ export function HomeView({
         queryTemplate: hasAppendedQuery ? rawQueryTemplate : null,
         queryTemplateAllowsPrefix: hasAppendedQuery && currentDraft.length > 0,
       });
+      scrollHomeToTop();
       return;
     }
     await usePlugin(record, undefined, {
@@ -963,10 +956,23 @@ export function HomeView({
     focusPromptAtEnd();
   }
 
-  function useExamplePlugin(_record: InstalledPluginRecord, _chipId: string, promptText: string) {
+  function useExamplePlugin(record: InstalledPluginRecord, chipId: string, promptText: string) {
     setError(null);
-    setPrompt(promptText);
-    setPromptEditedByUser(false);
+    // Picking a preset card *binds* the plugin (not just a textarea fill):
+    // active switches to this exact preset so submit resolves its snapshot and
+    // injects the plugin's SKILL.md + example.html as generation context — the
+    // output faithfully recreates the reference. `promptText` is the short,
+    // editable seed; the full build spec rides along in the plugin context.
+    // deferApply mirrors the chip rail: bind now, resolve the snapshot on
+    // submit (submit() already re-resolves), so a preset click stays instant
+    // and doesn't fire an /apply roundtrip per card. The chip is already
+    // active when preset cards are visible, so reuse its project kind/metadata.
+    void usePlugin(record, promptText, {
+      chipId,
+      projectKind: active?.projectKind ?? undefined,
+      projectMetadata: active?.projectMetadata ?? null,
+      deferApply: true,
+    });
     focusPromptAtEnd();
   }
 
@@ -1363,21 +1369,14 @@ export function HomeView({
       return;
     }
     const defaultInputs = { prompt: trimmed };
-    const submittedDesignSystemSelection = homeDesignSystemSelectionForInputs(
+    const submittedDesignSystemId = homeDesignSystemSelectionForInputs(
       submittedActive?.inputs ?? null,
-      designSystemOptions,
-      trimmed,
+      designSystemPickerSystems,
+      t('designSystemPicker.noneTitle'),
     );
-    // Composer inputs with the design-system selection folded in. The deferred
-    // footer/media fields are stripped from this set just below to form the
-    // run-facing inputs.
-    const submittedApplyInputs = submittedActive
-      ? applyHomeDesignSystemSelectionToInputs(
-          submittedActive.inputs,
-          submittedDesignSystemSelection,
-          designSystemOptions,
-        )
-      : defaultInputs;
+    // Composer inputs are forwarded as-is; the deferred footer/media fields are
+    // stripped from this set just below to form the run-facing inputs.
+    const submittedApplyInputs = submittedActive ? submittedActive.inputs : defaultInputs;
     // Inputs forwarded to the run AND used to build the run-facing snapshot:
     // drop every now-hidden footer/media setting so the first-turn
     // AskUserQuestion flow collects them instead of inheriting a baked-in
@@ -1465,7 +1464,7 @@ export function HomeView({
       pluginInputs: submittedPluginInputs,
       projectKind: submittedProjectKind,
       projectMetadata: submittedProjectMetadata,
-      designSystemId: submittedDesignSystemSelection?.id ?? null,
+      designSystemId: submittedDesignSystemId,
       contextPlugins,
       contextMcpServers,
       contextConnectors,
@@ -1525,7 +1524,7 @@ export function HomeView({
         onPluginInputValuesChange={updateActiveInputs}
         inlineEditableInputNames={active?.editableInputNames ?? []}
         footerInputNames={footerInputNamesForChip(active?.chipId ?? null)}
-        designSystemOptions={designSystemOptions}
+        designSystems={designSystemPickerSystems}
         stagedFiles={stagedFiles}
         onAddFiles={stageFiles}
         onRemoveFile={removeStagedFile}
@@ -1570,7 +1569,7 @@ export function HomeView({
           // before navigation so the event isn't lost when the host
           // re-renders into the project view.
           const project = projects.find((p) => p.id === id);
-          const projectKind = projectKindToTracking(project?.metadata?.kind);
+          const projectKind = projectKindToTracking(project?.metadata?.kind, project?.metadata?.videoModel);
           trackRecentProjectsClick(analytics.track, {
             page_name: 'home',
             area: 'recent_projects',
@@ -1599,10 +1598,12 @@ export function HomeView({
           activePluginId={active?.record.id ?? null}
           pendingApplyId={pendingApplyId}
           onUse={(record, action) => void routePluginUse(record, action)}
-          onOpenDetails={setDetailsRecord}
+          onOpenDetails={handleCommunityOpenDetails}
+          onOpenExternal={handleCommunityOpenExternal}
           onBrowseRegistry={onBrowseRegistry}
           preferDefaultFacet={false}
           presetSelection={presetStartersSelection}
+          cardLayout="gallery"
         />
       </HomeTemplatesReveal>
 
@@ -1835,54 +1836,52 @@ function homeCreateProjectMetadata(
   return next;
 }
 
-function designSystemOptionsForHome(
+// Selectable design systems for the home composer, sorted to match the picker:
+// a user-owned ("Personal") default first, then by group (Personal → Official
+// preset → Enterprise) and title. The shared DesignSystemPicker renders its own
+// "不指定 / No design system" row, so it is NOT included here.
+function selectableHomeDesignSystems(
   systems: DesignSystemSummary[],
   defaultDesignSystemId: string | null,
-  logoById: Record<string, string>,
-  t: ReturnType<typeof useI18n>['t'],
-): HomeDesignSystemOption[] {
+): DesignSystemSummary[] {
   const selectable = systems.filter((system) => {
     if (!system.title) return false;
     if (system.source === 'user' || system.isEditable === true) return (system.status ?? 'draft') === 'published';
     return true;
   });
-  const systemOptions = selectable
-    .map((system) => ({
-      id: system.id,
-      title: system.title,
-      isDefault: system.id === defaultDesignSystemId,
-      group: designSystemOptionGroup(system),
-      category: system.category,
-      summary: system.summary,
-      swatches: system.swatches,
-      logoUrl: logoById[system.id],
-    }))
-    .sort((a, b) => {
-      const groupDelta = designSystemGroupOrder(a.group) - designSystemGroupOrder(b.group);
-      if (groupDelta !== 0) return groupDelta;
-      if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
-      return a.title.localeCompare(b.title);
-    });
-  const autoOption: HomeDesignSystemOption = {
-    id: AUTO_DESIGN_SYSTEM_OPTION_ID,
-    title: t('homeHero.footer.autoDesignSystem'),
-    isDefault: false,
-    auto: true,
-    summary: t('homeHero.footer.autoDesignSystemSummary'),
-  };
-  // Only a user-owned ("Personal") design system should be pre-selected as the
-  // default. Official/enterprise presets must not auto-select — when the user
-  // has no personal default, the composer defaults to "Auto" (which matches a
-  // fitting system from the prompt) rather than locking onto a starter preset.
-  const defaultOption = systemOptions.find(
-    (option) => option.isDefault && option.group === 'Personal',
+  const sorted = [...selectable].sort((a, b) => {
+    const groupDelta =
+      designSystemGroupOrder(designSystemOptionGroup(a)) - designSystemGroupOrder(designSystemOptionGroup(b));
+    if (groupDelta !== 0) return groupDelta;
+    const aDefault = a.id === defaultDesignSystemId;
+    const bDefault = b.id === defaultDesignSystemId;
+    if (aDefault !== bDefault) return aDefault ? -1 : 1;
+    return a.title.localeCompare(b.title);
+  });
+  const defaultSystem = sorted.find(
+    (system) => system.id === defaultDesignSystemId && designSystemOptionGroup(system) === 'Personal',
   );
-  if (!defaultOption) return [autoOption, ...systemOptions];
-  return [
-    defaultOption,
-    autoOption,
-    ...systemOptions.filter((option) => option.id !== defaultOption.id),
-  ];
+  if (!defaultSystem) return sorted;
+  return [defaultSystem, ...sorted.filter((system) => system.id !== defaultSystem.id)];
+}
+
+// The composer's default selection title. A user-owned ("Personal") default
+// design system stays pre-selected; otherwise the composer defaults to
+// "不指定 / No design system" so nothing is imposed implicitly and the project
+// opens with an empty Design system.
+function homeDefaultDesignSystemTitle(
+  systems: DesignSystemSummary[],
+  defaultDesignSystemId: string | null,
+  t: ReturnType<typeof useI18n>['t'],
+): string {
+  const defaultSystem = systems.find(
+    (system) =>
+      system.id === defaultDesignSystemId &&
+      Boolean(system.title) &&
+      designSystemOptionGroup(system) === 'Personal' &&
+      (system.status ?? 'draft') === 'published',
+  );
+  return defaultSystem?.title ?? t('designSystemPicker.noneTitle');
 }
 
 function designSystemOptionGroup(
@@ -1899,24 +1898,12 @@ function designSystemGroupOrder(group: 'Personal' | 'Official preset' | 'Enterpr
   return 2;
 }
 
-function findDesignSystemLogoFile(files: ProjectFile[]): ProjectFile | null {
-  const logoCandidates = files
-    .filter((file) => file.type !== 'dir')
-    .filter((file) => {
-      const name = file.path ?? file.name;
-      return file.kind === 'image' || /\.(svg|png|jpe?g|webp|gif)$/iu.test(name);
-    });
-  return (
-    logoCandidates.find((file) => (file.path ?? file.name).toLowerCase() === 'assets/logo.svg') ??
-    logoCandidates.find((file) => /(^|\/)(logo|wordmark|brand-mark|brandmark|mark|icon|favicon)[^/]*\.(svg|png|jpe?g|webp|gif)$/iu.test(file.path ?? file.name)) ??
-    null
-  );
-}
-
+// Seed the composer's `designSystem` plugin input with the default selection
+// title when the plugin exposes the field and the user hasn't chosen one yet.
 function withHomeDesignSystemDefault(
   provided: Record<string, unknown> | undefined,
   fields: InputFieldSpec[],
-  designSystemOptions: HomeDesignSystemOption[],
+  defaultDesignSystemTitle: string,
 ): Record<string, unknown> | undefined {
   if (!fields.some((field) => field.name === 'designSystem')) return provided;
   const current = provided?.designSystem;
@@ -1924,124 +1911,29 @@ function withHomeDesignSystemDefault(
   if (currentText.length > 0 && currentText !== 'the active project design system') {
     return provided;
   }
-  const selected = designSystemOptions[0];
-  if (!selected) return provided;
   return {
     ...(provided ?? {}),
-    designSystem: selected.title,
+    designSystem: defaultDesignSystemTitle,
   };
 }
 
+// Resolve the composer's `designSystem` input (a title string) to the
+// designSystemId sent at submit. "不指定 / No design system" (or an unset
+// value) resolves to null so the project is created without a design system.
 function homeDesignSystemSelectionForInputs(
   inputs: Record<string, unknown> | null,
-  designSystemOptions: HomeDesignSystemOption[],
-  prompt: string,
-): HomeDesignSystemOption | null {
+  systems: DesignSystemSummary[],
+  noneTitle: string,
+): string | null {
   const value = inputs?.designSystem;
   if (typeof value !== 'string') return null;
   const selectedTitle = value.trim();
-  if (!selectedTitle || selectedTitle === 'the active project design system') return null;
-  const selected = designSystemOptions.find((option) => option.title === selectedTitle);
-  if (selected?.auto || isAutoDesignSystemTitle(selectedTitle, designSystemOptions)) {
-    return autoSelectHomeDesignSystem(prompt, designSystemOptions);
+  if (!selectedTitle || selectedTitle === noneTitle || selectedTitle === 'the active project design system') {
+    return null;
   }
-  return selected ?? null;
+  return systems.find((system) => system.title === selectedTitle)?.id ?? null;
 }
 
-function applyHomeDesignSystemSelectionToInputs(
-  inputs: Record<string, unknown>,
-  selected: HomeDesignSystemOption | null,
-  designSystemOptions: HomeDesignSystemOption[],
-): Record<string, unknown> {
-  if (!selected) return inputs;
-  const current = inputs.designSystem;
-  if (typeof current !== 'string' || !isAutoDesignSystemTitle(current, designSystemOptions)) return inputs;
-  return {
-    ...inputs,
-    designSystem: selected.title,
-  };
-}
-
-function isAutoDesignSystemTitle(
-  value: string,
-  designSystemOptions: HomeDesignSystemOption[],
-): boolean {
-  const title = value.trim();
-  if (LEGACY_AUTO_DESIGN_SYSTEM_TITLES.has(title)) return true;
-  return designSystemOptions.some((option) => option.auto && option.title === title);
-}
-
-function autoSelectHomeDesignSystem(
-  prompt: string,
-  designSystemOptions: HomeDesignSystemOption[],
-): HomeDesignSystemOption | null {
-  const candidates = designSystemOptions.filter((option) => !option.auto);
-  if (candidates.length === 0) return null;
-  const promptText = normalizeAutoDesignSystemText(prompt);
-  const promptTokens = autoDesignSystemTokens(promptText);
-  let best: { option: HomeDesignSystemOption; score: number } | null = null;
-  for (const option of candidates) {
-    const title = normalizeAutoDesignSystemText(option.title);
-    const category = normalizeAutoDesignSystemText(option.category ?? '');
-    const summary = normalizeAutoDesignSystemText(option.summary ?? '');
-    const haystack = `${title} ${category} ${summary}`;
-    let score = 0;
-    if (title && promptText.includes(title)) score += 18;
-    if (category && promptText.includes(category)) score += 8;
-    for (const token of promptTokens) {
-      if (title.includes(token)) score += 5;
-      if (category.includes(token)) score += 3;
-      if (summary.includes(token)) score += 2;
-      if (haystack.includes(token)) score += 1;
-    }
-    if (!best || score > best.score) best = { option, score };
-  }
-  if (best && best.score > 0) return best.option;
-  return candidates.find((option) => option.isDefault) ?? candidates[0] ?? null;
-}
-
-function normalizeAutoDesignSystemText(value: string): string {
-  return value.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function autoDesignSystemTokens(value: string): string[] {
-  const seen = new Set<string>();
-  const tokens = value
-    .split(/[^a-z0-9\u4e00-\u9fff]+/iu)
-    .map((token) => token.trim())
-    .filter((token) => token.length >= 2 && !AUTO_DESIGN_SYSTEM_STOP_WORDS.has(token));
-  return tokens.filter((token) => {
-    if (seen.has(token)) return false;
-    seen.add(token);
-    return true;
-  });
-}
-
-const AUTO_DESIGN_SYSTEM_STOP_WORDS = new Set([
-  'the',
-  'and',
-  'for',
-  'with',
-  'using',
-  'create',
-  'make',
-  'build',
-  'page',
-  'site',
-  'app',
-  'web',
-  'design',
-  'system',
-  'style',
-  '一个',
-  '这个',
-  '使用',
-  '生成',
-  '设计',
-  '页面',
-  '网站',
-  '应用',
-]);
 
 function estimatePluginContextItemCount(
   record: InstalledPluginRecord,

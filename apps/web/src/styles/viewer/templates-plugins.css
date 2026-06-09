@@ -197,7 +197,7 @@
   flex-shrink: 0;
   color: var(--text-faint);
   font-size: 10px;
-  transition: transform 120ms ease;
+  transition: transform 120ms var(--ease-out);
 }
 .mcp-picker-group[open] > .mcp-picker-group-summary::before {
   transform: rotate(90deg);
@@ -331,7 +331,7 @@
   display: inline-block;
   width: 0.9em;
   flex-shrink: 0;
-  transition: transform 120ms ease;
+  transition: transform 120ms var(--ease-out);
   color: var(--text-faint);
   font-size: 10px;
 }
@@ -427,7 +427,7 @@
   justify-content: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
@@ -441,7 +441,7 @@
    `chevron-down` icon and rotates it 180° when the row is open so the
    element stays visually anchored to the same DOM node. */
 .mcp-row-toggle-btn svg {
-  transition: transform 120ms ease;
+  transition: transform 120ms var(--ease-out);
 }
 .mcp-row-expanded .mcp-row-toggle-btn svg {
   transform: rotate(180deg);
@@ -459,7 +459,7 @@
   padding: 5px 8px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   text-align: left;
   cursor: pointer;
   color: inherit;
@@ -588,7 +588,7 @@
 .mcp-oauth-error {
   font-size: 11.5px;
   padding: 6px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--danger, #d54) 14%, transparent);
   color: var(--danger, #d54);
   white-space: pre-wrap;
@@ -630,7 +630,7 @@
   max-width: 100%;
   padding: 2px 8px;
   border: 1px solid var(--trust-border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--trust-bg);
   color: var(--trust-fg);
   font-size: 10.5px;
@@ -641,7 +641,7 @@
 .plugin-trust-badge__dot {
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--trust-dot);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--trust-dot) 18%, transparent);
 }
@@ -765,7 +765,7 @@
   align-items: center;
   gap: 6px;
   padding: 3px 8px 3px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   color: var(--text);
@@ -1106,7 +1106,7 @@
 }
 .plugin-details-modal__tag {
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 11px;
@@ -1149,7 +1149,7 @@
   padding: 6px 10px 6px 6px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   align-self: flex-start;
   max-width: 100%;
 }
@@ -1246,7 +1246,7 @@
   padding: 3px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   flex-wrap: wrap;
 }
 .plugin-details-modal__hero-tab {
@@ -1255,7 +1255,7 @@
   background: transparent;
   color: var(--text-muted);
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 11.5px;
   font-weight: 500;
   cursor: pointer;
@@ -1263,7 +1263,7 @@
   max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .plugin-details-modal__hero-tab:hover {
   color: var(--text);
@@ -1309,7 +1309,7 @@
   margin: 0 6px;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
   font-size: 11.5px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -1326,7 +1326,7 @@
   align-items: center;
   gap: 5px;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--border);
   background: var(--bg-panel);
   color: var(--text-muted);
@@ -1334,7 +1334,7 @@
   font-weight: 500;
   text-decoration: none;
   flex-shrink: 0;
-  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+  transition: color 120ms var(--ease-out), border-color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
 .plugin-details-modal__hero-popout:hover {
   color: var(--accent);
@@ -1394,7 +1394,7 @@
   color: var(--text-muted);
   background: var(--bg-subtle);
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 .plugin-details-modal__section-action {
   display: inline-flex;
@@ -1438,7 +1438,7 @@
   background: var(--bg);
   color: var(--text-muted);
   padding: 4px 9px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 11.5px;
   cursor: pointer;
 }
@@ -1496,7 +1496,7 @@
   gap: 4px;
   font-size: 10.5px;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-weight: 500;
@@ -1551,7 +1551,7 @@
   gap: 4px;
   font-size: 11.5px;
   padding: 3px 9px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text);
   border: 1px solid var(--border);
@@ -1587,7 +1587,7 @@
   letter-spacing: 0;
   background: var(--bg-subtle);
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 .plugin-details-modal__stages {
   list-style: none;
@@ -1642,7 +1642,7 @@
   font-size: 13px;
   white-space: nowrap;
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .settings-skills .skills-rows {
   display: flex;
@@ -1653,13 +1653,13 @@
 .settings-skills .skills-row {
   position: relative;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
   display: flex;
   flex-direction: column;
   min-width: 0;
-  transition: border-color 140ms ease, box-shadow 140ms ease,
-    background-color 140ms ease;
+  transition: border-color 140ms var(--ease-out), box-shadow 140ms var(--ease-out),
+    background-color 140ms var(--ease-out);
 }
 .settings-skills .skills-row::before {
   content: '';
@@ -1670,7 +1670,7 @@
   width: 3px;
   border-radius: 0 3px 3px 0;
   background: transparent;
-  transition: background-color 140ms ease;
+  transition: background-color 140ms var(--ease-out);
   pointer-events: none;
 }
 .settings-skills .skills-row:hover {
@@ -1706,7 +1706,7 @@
   padding: 4px 6px;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   text-align: left;
   cursor: pointer;
   color: inherit;
@@ -1725,7 +1725,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-subtle);
   color: var(--text-muted);
   flex-shrink: 0;
@@ -1755,7 +1755,7 @@
   font-size: 13px;
   font-weight: 500;
   color: var(--text);
-  transition: color 120ms ease;
+  transition: color 120ms var(--ease-out);
 }
 .settings-skills .skills-row-summary-mode,
 .settings-skills .skills-row-summary-source,
@@ -1824,7 +1824,7 @@
   padding: 2px 7px;
   background: var(--bg-subtle);
   color: var(--text);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   border: 1px solid var(--border);
 }
 .plugin-details-modal__atom.is-cap {
@@ -1910,7 +1910,7 @@
   display: inline-flex;
   align-items: center;
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 10.5px;
   font-weight: 500;
   background: var(--bg-subtle);
@@ -2111,6 +2111,42 @@
 .plugin-info-pane .plugin-meta-sections {
   display: block;
 }
+/* Developer-details disclosure (variant="minimal"): folds the dev
+   manifest sections away so designers see only author + example query
+   by default. */
+.plugin-meta-sections__advanced {
+  margin-top: 6px;
+  border-top: 1px solid var(--border-soft, var(--border));
+}
+.plugin-meta-sections__advanced-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 0 4px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  user-select: none;
+}
+.plugin-meta-sections__advanced-summary::-webkit-details-marker {
+  display: none;
+}
+.plugin-meta-sections__advanced-summary::before {
+  content: '▸';
+  font-size: 9px;
+  color: var(--text-faint);
+  transition: transform 120ms ease;
+}
+.plugin-meta-sections__advanced[open] .plugin-meta-sections__advanced-summary::before {
+  transform: rotate(90deg);
+}
+.plugin-meta-sections__advanced-summary:hover {
+  color: var(--text);
+}
 .plugin-info-pane .plugin-meta-sections.is-compact {
   font-size: 12px;
 }
@@ -2148,7 +2184,7 @@
   align-items: center;
   gap: 8px 10px;
   padding: 6px 10px 6px 6px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -2182,6 +2218,59 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------
+   Plugin info pane — calm, unified typography (designer-first).
+   Quieter section labels, a box-free author line, a single hairline
+   between sections, and a softer example-query block so the panel
+   reads as one coherent column instead of competing widgets.
+   --------------------------------------------------------------- */
+.plugin-info-pane .plugin-details-modal__section {
+  border-bottom: none;
+  padding: 15px 0;
+}
+.plugin-info-pane .plugin-details-modal__section + .plugin-details-modal__section {
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+.plugin-info-pane .plugin-details-modal__section-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.plugin-info-pane .plugin-details-modal__section-count {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text-muted);
+}
+/* Author — drop the capsule for a quiet avatar + two-line meta. */
+.plugin-info-pane .plugin-details-modal__byline {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  gap: 10px;
+  align-items: center;
+}
+.plugin-info-pane .plugin-details-modal__byline-meta {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+.plugin-info-pane .plugin-details-modal__byline .plugin-details-modal__avatar {
+  width: 32px;
+  height: 32px;
+}
+/* Example query — softer tint, hairline border, smaller radius. The
+   query is a natural-language prompt, so set it in the regular UI font
+   instead of monospace for a calmer, more readable block. */
+.plugin-info-pane .plugin-details-modal__query {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.6;
 }
 /* Design-system sidebar keeps the plugin inspector first, then exposes
    DESIGN.md as a secondary spec section. This makes design systems read
@@ -2227,7 +2316,7 @@
   max-height: 520px;
   overflow: auto;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 }
 
 /* Plugin info heading — the badge-style header shown by the

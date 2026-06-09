@@ -1,0 +1,90 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-mythic-naturecore",
+  "title": "Mythic Naturecore — Reverie",
+  "title_i18n": {
+    "zh-CN": "神话自然核 — Reverie 沉浸式视差落地页",
+    "en": "Mythic Naturecore — Reverie"
+  },
+  "version": "0.1.0",
+  "description": "A cinematic mythic-naturecore landing page: a 480vh scroll zooms through a portal while mirrored curtains part over a layered world background, with mouse-parallax 3D depth and a Viaoda-Libre / Imprima serif-sans pairing.",
+  "description_i18n": {
+    "zh-CN": "电影感神话自然核落地页：480vh 滚动穿过传送门，镜像帷幕在分层世界背景上拉开，配合鼠标视差 3D 景深与 Viaoda Libre / Imprima 衬线无衬线字体组合。",
+    "en": "A cinematic mythic-naturecore landing page: a 480vh scroll zooms through a portal while mirrored curtains part over a layered world background, with mouse-parallax 3D depth and a Viaoda-Libre / Imprima serif-sans pairing."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Eli"
+  },
+  "homepage": "https://motionsites.ai/sections",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "naturecore",
+    "parallax",
+    "cinematic",
+    "landing"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Recreate a high-fidelity, premium interactive landing page named \"Reverie\" using React, TypeScript, and a combination of Tailwind CSS and inline styles. The project must have a smooth, hardware-accelerated scroll-linked animation system, 3D/parallax mouse-tracking effects, responsive layouts, and elegant micro-animations.\n\n---\n\n- Typography & Global Styles\n\n- Fonts:\n- Load the following Google Fonts:\n- Headers: `'Viaoda Libre', serif` (elegant serif font).\n- Body, nav links, and captions: `'Imprima', sans-serif` (clean, sleek sans-serif font).\n- Global Reset & Base CSS:\n- `html, body { margin: 0; padding: 0; background: #0a0608; scroll-behavior: auto; }`\n- Body font should default to `'Imprima', sans-serif`.\n- Add `scrollbar-gutter: stable;` to the `html` tag to prevent layout shifts.\n- Include an animation utility:`@keyframes bobUp {  0%, 100% { transform: translateY(0); }  50% { transform: translateY(-6px); }}`\n\n---\n\n- Assets Asset Mapping\n\nDefine these exact asset constants at the top of the file:`const PORTAL_BG = 'https://plugin-assets.open-design.ai/plugins/mythic-naturecore/portal_bg_mu60k9-78f20d.webp';const CURTAIN_LEFT = 'https://plugin-assets.open-design.ai/plugins/mythic-naturecore/curtain_left_cdht6q-c85f2f.webp';const CURTAIN_RIGHT = 'https://plugin-assets.open-design.ai/plugins/mythic-naturecore/curtain_right_a9bn3i-1ca8f6.webp';const WORLD_BG = 'https://plugin-assets.open-design.ai/plugins/mythic-naturecore/world_bg_jzzcn1-dfd909.webp';// The cards MUST remain in this exact order (Card 3, Card 1, Card 2)const CARD_IMAGES = [  'https://plugin-assets.open-design.ai/plugins/mythic-naturecore/card_3_nbwm25-de0132.webp',  'https://plugin-assets.open-design.ai/plugins/mythic-naturecore/card_2_wr6al6-b3a8c5.webp', // Representing Card 1  'https://plugin-assets.open-design.ai/plugins/mythic-naturecore/card_1_jz8otj-096be2.webp', // Representing Card 2];`\n\n---\n\n- State Management & Mathematical Helpers\n\n- Math Utilities:\n- Easing curve: `easeInOut(t) = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t`\n- Linear Interpolation: `lerp(a, b, t) = a + (b - a) * t`\n- Constraint: `clamp(val, min, max) = Math.max(min, Math.min(max, val))`\n- Parallax Magnitudes:\n- `MAG.world = 6`, `MAG.portal = 7`, `MAG.curtainL = 14`, `MAG.curtainR = 14`\n- Hook for Responsiveness:\n- Implement a `useIsMobile()` hook responding to media query max-width of `767px` to dynamically update layouts.\n- Scroll Tracking:\n- The page height must be exactly `480vh`. Inside, a single sticky container spans `100vh`.\n- Calculate normalized `scrollProgress` from `0` to `1` by reading window scroll position relative to the scrollable height.\n- Smooth Mouse Tracking (Parallax):\n- Normalize coordinates `rx`, `ry` between `-1` and `1` relative to the center of the viewport.\n- Implement a `requestAnimationFrame` render loop (`tick`) to smoothly interpolate current position towards target cursor position (lerp step speed: `0.07`) to eliminate frame-rate stutters.\n- Entrance Animation Delays:\n- On mount, transition curtains open after `100ms`, fade UI in after `600ms`. Disable entry CSS transitions after `2200ms` so mouse movement doesn't experience lag or delay.\n\n---\n\n- Animation Timelines (Scroll & Mouse Parallax)\n\nApply these precise styling updates in the render loop on every frame:\n- World Layer (`WORLD_BG`):\n- Scale: Lerps from `1` (at start) to `1.18` (at maximum scroll).\n- Parallax: `transform = scale(${scale}) translate3d(${rx * 6}px, ${ry * 6}px, 0)`\n- Portal Frame (`PORTAL_BG`):\n- Scale: Lerps from `1` to `7.5` (creating an immersive zoom-through effect).\n- Origin: `52% 38%`\n- Opacity: Starts at `1`, fades out after `65%` scroll: `clamp(1 - (scrollProgress - 0.65) / 0.2, 0, 1)`\n- Parallax: `transform = scale(${scale}) translate3d(${rx * 7}px, ${ry * 7}px, 0)`\n- Curtain Left (`CURTAIN_LEFT`):\n- Initial Opening Offset: `62%` shift left.\n- Scroll Offset: Moves further leftward up to `150%` as eased progress goes `0` to `1`.\n- Curtain Scroll Scale: Lerps from `1` to `1.3`.\n- Parallax & GPU Layer: `transform = translateX(calc(-${totalShift}% + ${rx * 14}px)) translateY(${ry * 14 * 0.3}px) scale(${curtainScrollScale}) translateZ(0)`\n- Curtain Right (`CURTAIN_RIGHT`):\n- Symmetrically mirrors Curtain Left.\n- Parallax & GPU Layer: `transform = translateX(calc(${totalShift}% + ${rx * 14}px)) translateY(${ry * 14 * 0.3}px) scale(${curtainScrollScale}) translateZ(0)`\n\n---\n\n- Layout & Components\n\nNavigation Bar\n- Position: Absolute at the top, `zIndex: 50`. Responsive padding: `18px 20px` (mobile), `22px 48px` (desktop).\n- Desktop (>=768px): Split navigation.\n- Left side: Links `Worlds`, `Atelier`, `Immersions`.\n- Center: SVG Star Logo (clean star shape in path `M14 2l2.09 6.42H23l-5.45 ...` inside a `28x28` viewport).\n- Right side: Links `Craft`, `Codex`, `Connect`.\n- Mobile (<768px): Centered star logo with an `Explore` link on the left and a `Connect` link on the right.\n- Link Styling: uppercase, `12px`, letter spacing `0.12em`, white color with `0.9` opacity, no text decoration.\n\nScene 1: Hero Section (Entrance)\n- Opacity: Fades out smoothly on scroll: `clamp(1 - scrollProgress / 0.22, 0, 1)`.\n- Entrance Transition: Slide upward by `20px` on mount with opacity transition `0.9s ease` delayed by `300ms`.\n- Responsive Layout:\n- Mobile (<768px): Center-aligned vertical column. Text is dark brown (`#3b1a0a`). Heading: `FALL › INTO REVERIE` (Viaoda Libre). Subheading paragraph (max-width `280px`). Below it, displays a single card with image `CARD_IMAGES[0]`, showing a rounded white play button icon and \"View Reel\".\n- Tablet (768px - 1099px): Center-aligned column. Text is dark brown (`#3b1a0a`). Headline and paragraph (max-width `400px`). Shows all 3 cards in a horizontal row:\n- Card 3: Image `CARD_IMAGES[0]`, Play button + \"View Reel\"\n- Card 1: Image `CARD_IMAGES[1]`, \"32 World Patrons\" in large elegant text\n- Card 2: Image `CARD_IMAGES[2]`, Play button + \"View Reel\"\n- Desktop (>=1100px): Split-screen horizontal layout. Text is white.\n- Left Container: Aligned to the left (top `46%`, left `60px`). Title: `FALL › INTO REVERIE` (Viaoda Libre). Subheading paragraph. Max-width `440px`.\n- Right Container: Aligned to the right (top `50%`, right `40px`). Row of 3 card containers (`158px x 158px`) with rounded corners (`28px`), bottom linear gradient, glassmorphic bottom blur (`backdropFilter: 'blur(6px)'`), play icon buttons or patron metrics overlay.\n- Card Interactive Styling:\n- Backdrop blur filter on bottom labels: `backdropFilter: 'blur(6px)'`, linear gradient to top `rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.18) 60%, transparent 100%`.\n- Slider Dots (Bottom Left):\n- Absolutely positioned at bottom left (`60px` desktop, centered mobile).\n- Renders 4 horizontal pill indicators: first indicator is wide (`28px`), other three are thin (`14px`), colored in white with opacities.\n- Scroll Cue (Descend):\n- Absolutely positioned at `bottom: 36px`, centered horizontally. Hidden on mobile.\n- Text: uppercase \"Descend\" in `10px`, letter-spacing `0.22em`, color `rgba(255,255,255,0.6)`.\n- Icon: A chevron SVG surrounded by a `34px x 34px` round circular border animated with the `bobUp 1.8s ease-in-out infinite` bounce animation.\n\nScene 2: Call to Action (Forge Beyond)\n- Opacity: Fades in on scroll: `clamp((scrollProgress - 0.68) / 0.16, 0, 1)`.\n- Layout: Centered vertical flex container (`zIndex: 46`), active only when opacity is visible.\n- Content:\n- Centered text wrapper.\n- Heading: `FORGE BEYOND THE REAL` (Viaoda Libre, size clamp `38px` to `78px`, color `#ffffff`, letter spacing `0.03em`, line-height `1.05`, elegant text shadow `0 2px 20px rgba(0,0,0,0.4)`).\n- Paragraph: `Singular voyages to astonishing destinations, shaped for those who seek beauty beyond the ordinary and the known.` (Imprima, size `20px` desktop / `14px` mobile, max-width `480px` desktop / `260px` mobile, line-height `1.6`, color `rgba(255,255,255,0.82)`).``\n",
+        "zh-CN": "构建 Mythic Naturecore（“Reverie”）电影感视差落地页。完整规格以 en 字段为准（逐字注入）；从随附的 example.html 起步，只替换文案与图片，不要改动滚动/视差数学与视觉语言。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Mythic Naturecore — Reverie"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "network"
+    ]
+  }
+}

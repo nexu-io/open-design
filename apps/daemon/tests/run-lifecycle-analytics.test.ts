@@ -44,6 +44,24 @@ describe('run lifecycle analytics', () => {
       }),
     ).toBe('design_system');
   });
+
+  it('splits HyperFrames out of generic video via videoModel', () => {
+    expect(
+      __forTestResolveRunProjectKindForAnalytics({
+        hintProjectKind: null,
+        projectMetadata: { kind: 'video', videoModel: 'hyperframes-html' },
+      }),
+    ).toBe('hyperframes');
+  });
+
+  it('keeps AI video projects as video when videoModel is not HyperFrames', () => {
+    expect(
+      __forTestResolveRunProjectKindForAnalytics({
+        hintProjectKind: null,
+        projectMetadata: { kind: 'video', videoModel: 'kling-v2' },
+      }),
+    ).toBe('video');
+  });
 });
 
 describe('scanRunEventsForFinishedProps', () => {

@@ -127,11 +127,11 @@ The lighter HF subcommands you CAN still run from your own shell
 - `npx hyperframes tts <text>` — generate narration
 
 Reserve the daemon dispatch for `render`/`inspect`/`preview` (anything
-Chrome-bound).
-
-**Do NOT** call `"$OD_NODE_BIN" "$OD_BIN" media generate --model hyperframes-html` — that
-dispatcher path returns a 400 (`AGENT_RENDERED`) on purpose. HyperFrames
-is rendered by you directly via npx.
+Chrome-bound). After authoring the composition under `.hyperframes-cache/`,
+render it by calling `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>`.
+The daemon runs the Chrome-bound HyperFrames render outside your shell
+sandbox and streams progress back to you. Do not run `npx hyperframes render`
+yourself.
 
 **Do NOT** drop `hyperframes.json` / `meta.json` / `index.html` in the
 project root; OD's file listing scans recursively and the user would see

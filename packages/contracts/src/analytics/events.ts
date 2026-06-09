@@ -97,6 +97,14 @@ export type TrackingProjectKind =
   | 'template'
   | 'image'
   | 'video'
+  // `hyperframes` is a `video` project rendered by the local HyperFrames
+  // HTML→MP4 engine (`videoModel === 'hyperframes-html'`). The product
+  // routes it as its own task type (a peer of Video, with its own Home
+  // chip), and its cost/latency/success profile differs sharply from AI
+  // video providers, so it is surfaced as a first-class project_kind
+  // rather than collapsed into generic `video`. `model_id` still carries
+  // `hyperframes-html` as a secondary anchor.
+  | 'hyperframes'
   | 'audio'
   // `design_system` covers DS-as-project runs (creation + regeneration).
   // The dashboard reads it on run_created / run_finished to split the
@@ -839,6 +847,9 @@ export type TrackingDesignSystemApplyTargetKind =
   | 'slide_deck'
   | 'image'
   | 'video'
+  // HyperFrames projects can be a DS-apply target too; keep this in lockstep
+  // with `TrackingProjectKind` so the picker reports them distinctly.
+  | 'hyperframes'
   | 'audio'
   | 'live_artifact'
   | 'unknown';
@@ -1040,8 +1051,24 @@ export interface HomeChatComposerClickProps {
     // Paperclip icon opening the file picker. Mirrors the chat_panel
     // composer's `element: 'attachment'` so the same dashboard counts
     // "user opened the file picker" across both surfaces.
-    | 'attachment';
-  // For plugin / action chips, the specific id (e.g. `prototype`, `from_figma`).
+    | 'attachment'
+    // Local-storage / working-dir picker under the home composer; `task_chip`
+    // is the task-type rail (原型 / 幻灯片 / HyperFrames / 视频 / …).
+    | 'working_dir'
+    | 'working_dir_clear'
+    | 'task_chip'
+    // The "+" menu on the home composer (same control as the in-project
+    // composer's `plus_*` events): opening it, inserting a
+    // connector/plugin/mcp mention (`resource_kind` + `resource_id`), or
+    // jumping to the add-resource surface (`resource_kind`).
+    | 'plus_menu_open'
+    | 'plus_pick'
+    | 'plus_add';
+  // For `plus_pick` / `plus_add`: which kind of resource (and its id on pick).
+  resource_kind?: 'connector' | 'plugin' | 'mcp';
+  resource_id?: string;
+  // For plugin / action / task chips, the specific id (e.g. `prototype`,
+  // `from_figma`, `hyperframes`).
   chip_id?: string;
 }
 
@@ -1178,9 +1205,30 @@ export interface AutomationsClickProps {
     | 'history'
     | 'cancel'
     | 'create'
-    | 'save';
+    | 'save'
+    | 'crystallize'
+    | 'proposal_apply'
+    | 'proposal_reject';
   type_id?: 'orbit' | 'routines' | 'schedules' | 'live_artifacts';
-  filter_id?: 'all' | 'scheduled' | 'running' | 'done';
+  // filter_id mirrors the template category tabs actually rendered in the
+  // Automations tab; the legacy run-status values stay for forward-compat.
+  filter_id?:
+    | 'all'
+    | 'scheduled'
+    | 'running'
+    | 'done'
+    | 'orbit'
+    | 'live-artifact'
+    | 'routine'
+    | 'memory'
+    | 'design-system'
+    | 'skills'
+    | 'connectors'
+    | 'compression'
+    | 'release'
+    | 'quality';
+  // Kind of the template whose card was clicked (element=type_card).
+  template_kind?: 'orbit' | 'live-artifact' | 'routine';
 }
 
 // PLUGINS
@@ -1252,6 +1300,19 @@ export interface PluginLoopClickProps {
   area: 'plugin_loop';
   element: 'clear_active' | 'submit' | 'card_details' | 'card_use';
   plugin_id?: string;
+}
+
+// COMMUNITY — the home "Community" gallery: a wall of live example.html
+// preview tiles (PluginsHomeSection cardLayout="gallery"). `card` opens
+// the plugin detail modal (tile body click or keyboard); `card_open_external`
+// is the ↗ that opens the real example page in a new tab, bypassing the
+// modal — a strong "go straight to the finished thing" intent signal.
+export interface CommunityGalleryClickProps {
+  page_name: 'home';
+  area: 'community_gallery';
+  element: 'card' | 'card_open_external';
+  plugin_id?: string;
+  plugin_type?: string;
 }
 
 // DESIGN SYSTEMS
@@ -1356,6 +1417,87 @@ export interface ChatPanelClickProps {
     | 'resources_popover_trigger';
 }
 
+// Composer mode the user sends prompts in. `ask` is the lighter Q&A mode
+// (the wire / DB value is `chat`; the UI labels it "Ask"); `design` is the
+// full design-agent run. Map the wire `chat` → `ask` at every emit site via
+// `sessionModeToTracking` so analytics speaks the product's language.
+export type TrackingSessionMode = 'ask' | 'design';
+
+// Toggling the ask/design switch in the chat composer.
+export interface ComposerSessionModeClickProps {
+  // The composer renders on both the home hero and the in-project chat panel;
+  // the toggle is the same control on both surfaces.
+  page_name: 'home' | 'chat_panel';
+  area: 'chat_composer';
+  element: 'session_mode_toggle';
+  mode_before: TrackingSessionMode;
+  mode_after: TrackingSessionMode;
+  project_id?: string;
+}
+
+// The "设计百宝箱" (Design toolbox) flyout inside the composer's "+" menu.
+// `design_toolbox_open` fires when the panel is opened; `..._action` when a
+// predefined follow-up action is picked (`toolbox_action_id`); `..._resource`
+// when a skill / plugin / mcp / connector / file is inserted
+// (`resource_kind` + `resource_id`).
+export interface DesignToolboxClickProps {
+  page_name: 'chat_panel';
+  area: 'chat_composer';
+  element:
+    | 'design_toolbox_open'
+    | 'design_toolbox_action'
+    | 'design_toolbox_resource';
+  toolbox_action_id?: string;
+  resource_kind?:
+    | 'skill'
+    | 'plugin'
+    | 'mcp'
+    | 'mcp-template'
+    | 'connector'
+    | 'file';
+  resource_id?: string;
+  project_id?: string;
+}
+
+// The rest of the in-project composer bottom bar (not the mode toggle or the
+// design toolbox, which have their own events above):
+//   - `plus_menu_open` / `plus_pick` / `plus_add`: the "+" menu — opening it,
+//     inserting a connector/plugin/mcp mention (`resource_kind` + `resource_id`),
+//     or jumping to the add-resource surface (`resource_kind`).
+//   - `design_system_switch`: picked a design system from the composer
+//     (`design_system_id`).
+//   - `working_dir_switch`: changed the project's local-storage working dir.
+//   - `agent_selector_open` / `agent_select` / `agent_model_select`: the CLI/
+//     agent/model dropdown (`agent_id` / `model_id`).
+//   - `context_remove`: removed a staged context chip (`resource_kind` +
+//     `resource_id`).
+export interface ComposerBarClickProps {
+  page_name: 'chat_panel';
+  area: 'chat_composer';
+  element:
+    | 'plus_menu_open'
+    | 'plus_pick'
+    | 'plus_add'
+    | 'design_system_switch'
+    | 'working_dir_switch'
+    | 'agent_selector_open'
+    | 'agent_select'
+    | 'agent_model_select'
+    | 'context_remove';
+  resource_kind?:
+    | 'connector'
+    | 'plugin'
+    | 'mcp'
+    | 'skill'
+    | 'workspace'
+    | 'attachment';
+  resource_id?: string;
+  agent_id?: string;
+  model_id?: string;
+  design_system_id?: string;
+  project_id?: string;
+}
+
 // Next-step action affordance shown under the last assistant message after a
 // previewable artifact is produced. `next_step_exposed` fires once when the
 // affordance becomes visible so the funnel can divide clicks by exposure;
@@ -1421,6 +1563,23 @@ export interface FileManagerClickProps {
     | 'per_page_dropdown';
 }
 
+// The workspace tab strip's "+" launcher — a command-palette popover for
+// opening tabs. `open` fires when the menu is opened; `filter` when a file-kind
+// chip is picked (`kind_filter`); `create` when a "New …" action runs
+// (`action_id` = new-terminal | new-browser | …); `open_file` when a project
+// file is opened as a tab (`file_kind`); `open_tab` when an already-open tab is
+// focused (`tab_kind` = browser | terminal | design-files | …).
+export interface TabLauncherClickProps {
+  page_name: 'file_manager';
+  area: 'tab_launcher';
+  element: 'open' | 'filter' | 'create' | 'open_file' | 'open_tab';
+  action_id?: string;
+  kind_filter?: string;
+  file_kind?: string;
+  tab_kind?: string;
+  project_id?: string;
+}
+
 // ARTIFACT
 export interface ArtifactToolbarClickProps {
   page_name: 'artifact';
@@ -1468,8 +1627,84 @@ export interface ArtifactHeaderClickProps {
     | 'back'
     | 'edit'
     | 'present_dropdown'
+    // `download_dropdown` distinguishes the Download split button from the
+    // Share button; before, both reported `share_dropdown` and were
+    // indistinguishable in the funnel.
+    | 'download_dropdown'
     | 'share_dropdown'
     | 'settings';
+  artifact_id?: string;
+  artifact_kind?: TrackingArtifactKind;
+}
+
+// Canonical, bounded set of hand-off `target_id` values: the editor /
+// file-manager ids (mirrors `HostEditorId` in `../api/host-tools`) plus the
+// tracked code-agent CLI ids. Single source of truth for both the type and
+// the runtime allow-list in `handoffTargetIdToTracking`. Keep in sync with
+// `HostEditorId` and `HandoffButton`'s CLI_ORDER; unknown runtime ids
+// normalize to `'other'` so the schema never leaks an editor label, binary
+// name, or other free-form / PII value.
+export const TRACKING_HANDOFF_TARGET_IDS = [
+  // editors / file managers (HostEditorId)
+  'cursor', 'vscode', 'windsurf', 'zed', 'qoder', 'antigravity', 'webstorm',
+  'idea', 'xcode', 'finder', 'explorer', 'file-manager', 'terminal', 'warp',
+  // code-agent CLIs (HandoffButton CLI_ORDER; qoder / antigravity already above)
+  'amr', 'claude', 'codex', 'opencode', 'cursor-agent', 'gemini', 'qwen',
+  'copilot', 'grok-build', 'deepseek', 'kimi', 'hermes', 'devin', 'kiro',
+  'kilo', 'vibe', 'aider', 'trae-cli', 'pi', 'reasonix',
+] as const;
+
+export type TrackingHandoffTargetId =
+  | (typeof TRACKING_HANDOFF_TARGET_IDS)[number]
+  | 'other';
+
+// Normalize a runtime editor / CLI id to the bounded tracking enum. Unknown
+// ids (e.g. a CLI the daemon adds later) collapse to `'other'` rather than
+// shipping a free-form value, keeping the no-PII guarantee enforced in code.
+export function handoffTargetIdToTracking(
+  id: string | null | undefined,
+): TrackingHandoffTargetId {
+  return (TRACKING_HANDOFF_TARGET_IDS as readonly string[]).includes(id ?? '')
+    ? (id as TrackingHandoffTargetId)
+    : 'other';
+}
+
+// Hand-off button in the workspace header (open the project folder in a local
+// editor, or copy a hand-off prompt for a code-agent CLI). Lives under
+// `page_name=artifact` / `area=handoff` so it sits next to the other header
+// actions (present/share/download/settings) in the funnel.
+export interface HandoffClickProps {
+  page_name: 'artifact';
+  area: 'handoff';
+  element:
+    // Primary split button — launches the preferred editor, or toggles the
+    // picker when there is no preferred target yet.
+    | 'trigger'
+    // Caret next to the primary button — toggles the picker menu.
+    | 'caret'
+    // Switch between the Editor and CLI tabs inside the picker.
+    | 'tab'
+    // Choose a target framework chip for the CLI hand-off prompt.
+    | 'framework'
+    // Copy the absolute project path.
+    | 'copy_path'
+    // Launch a specific editor target (or the Finder/Explorer fallback).
+    | 'open_editor'
+    // Copy the hand-off prompt for a specific CLI agent.
+    | 'copy_cli_prompt'
+    // Open the Open Design AMR website link.
+    | 'amr_website';
+  // Bounded enum id of the editor / CLI target, present for `open_editor`,
+  // `copy_cli_prompt`, and for `trigger` when it directly launches the
+  // preferred editor. Normalized via `handoffTargetIdToTracking` so it is
+  // never a free path or display name (`'other'` for unknown ids).
+  target_id?: TrackingHandoffTargetId;
+  // Whether the chosen editor / CLI target was detected as installed.
+  target_available?: boolean;
+  // Which hand-off tab the click relates to (tab switches and CLI copies).
+  handoff_tab?: 'editor' | 'cli';
+  // Selected framework id for CLI prompt copies / framework chip selection.
+  framework?: 'react' | 'vue' | 'svelte' | 'solid' | 'next' | 'vanilla';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
 }
@@ -1712,6 +1947,7 @@ export type UiClickProps =
   | PluginsSourcesTabClickProps
   | PluginDetailClickProps
   | PluginLoopClickProps
+  | CommunityGalleryClickProps
   | DesignSystemsTopClickProps
   | DesignSystemsTemplateCardClickProps
   | DesignSystemsTemplatesModalClickProps
@@ -1722,15 +1958,20 @@ export type UiClickProps =
   | IntegrationsSkillsTabClickProps
   | IntegrationsUseEverywhereTabClickProps
   | ChatPanelClickProps
+  | ComposerSessionModeClickProps
+  | DesignToolboxClickProps
+  | ComposerBarClickProps
   | NextStepActionClickProps
   | RunFailedToastClickProps
   | AmrEntryClickProps
   | ChatPanelResourcesPopoverClickProps
   | FileManagerClickProps
+  | TabLauncherClickProps
   | ArtifactToolbarClickProps
   | TweaksPopoverClickProps
   | CommentPopoverClickProps
   | ArtifactHeaderClickProps
+  | HandoffClickProps
   | PresentPopoverClickProps
   | ShareOptionPopoverClickProps
   | AssistantFeedbackButtonClickProps
@@ -1765,6 +2006,16 @@ export interface NewProjectModalSurfaceViewProps {
 export interface PluginReplacementModalSurfaceViewProps {
   page_name: 'home';
   area: 'plugin_replacement_modal';
+}
+
+// Impression of the plugin detail modal opened from the home Community
+// gallery. Fires once per open so the gallery → detail funnel has a
+// denominator (card clicks) and a numerator (modal exposures).
+export interface PluginDetailModalSurfaceViewProps {
+  page_name: 'home';
+  area: 'plugin_detail_modal';
+  plugin_id?: string;
+  plugin_type?: string;
 }
 
 export interface DesignSystemsTemplatesModalSurfaceViewProps {
@@ -1824,6 +2075,7 @@ export type SurfaceViewProps =
   | HelpPopoverSurfaceViewProps
   | NewProjectModalSurfaceViewProps
   | PluginReplacementModalSurfaceViewProps
+  | PluginDetailModalSurfaceViewProps
   | DesignSystemsTemplatesModalSurfaceViewProps
   | AssistantFeedbackReasonPanelSurfaceViewProps
   | UpdateIndicatorSurfaceViewProps
@@ -1925,6 +2177,18 @@ export interface RunCreatedProps {
   agent_provider_id: TrackingCliProviderId;
   skill_id: string | null;
   mcp_id: string | null;
+  // Composer mode the prompt was sent in. `ask` is the lighter Q&A mode
+  // (wire value `chat`); `design` is the full design-agent run. Optional so
+  // DS-generation runs (which have no user-facing mode) can omit it.
+  session_mode?: TrackingSessionMode;
+  // The plugin actively bound to this run (the applied plugin snapshot), or
+  // null when the user ran with no active plugin.
+  plugin_id?: string | null;
+  // Per-turn capability context: the MCP servers and skills actually enabled
+  // for this send. Multi-valued, so recorded as arrays alongside the legacy
+  // singular `mcp_id` / `skill_id` (which stay for back-compat).
+  mcp_ids?: string[];
+  skill_ids?: string[];
   token_count_source: TrackingTokenCountSource;
 }
 
@@ -2292,10 +2556,28 @@ export type AnalyticsEventPayload =
 
 // ---- Enum mapping helpers (code ↔ CSV wire format) -----------------------
 
+// Map the wire `ChatSessionMode` ('design' | 'chat') to the analytics enum.
+// The composer's "Ask" mode is `chat` on the wire; analytics uses `ask` so
+// the dashboards read in the product's own language. Anything that isn't a
+// recognized design mode buckets into `ask` (the lighter default).
+export function sessionModeToTracking(
+  mode: string | null | undefined,
+): TrackingSessionMode {
+  return mode === 'design' ? 'design' : 'ask';
+}
+
 // Code `ProjectKind` from packages/contracts/src/api/projects.ts:
 //   'prototype' | 'deck' | 'template' | 'other' | 'image' | 'video' | 'audio'
+// Discriminates HyperFrames from generic AI video. A HyperFrames project is
+// stored as `kind: 'video'` with `metadata.videoModel === 'hyperframes-html'`
+// (the local HTML→MP4 renderer); callers pass that videoModel through so the
+// analytics layer can split it out into its own `project_kind`. See the
+// `'hyperframes'` member docblock on `TrackingProjectKind`.
+const HYPERFRAMES_VIDEO_MODEL = 'hyperframes-html';
+
 export function projectKindToTracking(
   kind: string | null | undefined,
+  videoModel?: string | null,
 ): TrackingProjectKind | null {
   switch (kind) {
     case 'prototype':
@@ -2309,7 +2591,9 @@ export function projectKindToTracking(
     case 'image':
       return 'image';
     case 'video':
-      return 'video';
+      // HyperFrames rides on the `video` kind; the local-render engine is the
+      // only thing that distinguishes it, so route on videoModel here.
+      return videoModel === HYPERFRAMES_VIDEO_MODEL ? 'hyperframes' : 'video';
     case 'audio':
       return 'audio';
     case 'live-artifact':

@@ -114,7 +114,7 @@
   gap: 6px;
   padding: 7px 11px;
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg-subtle));
   color: var(--text-muted);
   font-size: 12.5px;
@@ -124,11 +124,11 @@
   box-shadow: var(--shadow-xs);
   cursor: pointer;
   transition:
-    color 120ms ease,
-    background-color 120ms ease,
-    border-color 120ms ease,
-    box-shadow 120ms ease,
-    transform 120ms ease;
+    color 120ms var(--ease-out),
+    background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out),
+    box-shadow 120ms var(--ease-out),
+    transform 120ms var(--ease-out);
 }
 .home-hero__type-tab:hover:not(:disabled) {
   color: var(--text-strong);
@@ -204,7 +204,7 @@
   gap: 5px;
   padding: 4px 10px;
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-muted);
   font-size: 12px;
@@ -212,10 +212,10 @@
   line-height: 1.3;
   cursor: pointer;
   transition:
-    color 120ms ease,
-    background-color 120ms ease,
-    border-color 120ms ease,
-    transform 120ms ease;
+    color 120ms var(--ease-out),
+    background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out),
+    transform 120ms var(--ease-out);
 }
 .home-hero__subtype-chip:hover:not(:disabled) {
   color: var(--text-strong);
@@ -269,7 +269,7 @@
   gap: 4px;
   padding: 6px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-panel) 98%, white);
   box-shadow: var(--shadow-lg);
 }
@@ -283,7 +283,7 @@
   gap: 9px;
   padding: 8px 10px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -293,9 +293,9 @@
   text-align: left;
   cursor: pointer;
   transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
+    background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
 }
 .home-hero__shortcut-menu-item:hover:not(:disabled),
 .home-hero__shortcut-menu-item:focus-visible {
@@ -343,7 +343,7 @@
   flex-direction: column;
   gap: 10px;
   margin-top: 0;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
 }
 .home-hero__input-card:has(.inline-switcher__popover),
 .home-hero__input-card:has(.session-mode-toggle__popover),
@@ -391,7 +391,7 @@
   max-width: min(240px, 100%);
   min-height: 24px;
   padding: 2px 5px 2px 3px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--bg-panel) 86%, var(--accent-tint));
   border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border-soft));
   color: color-mix(in srgb, var(--accent) 78%, var(--text));
@@ -464,7 +464,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, currentColor 8%, var(--bg-subtle));
   color: inherit;
 }
@@ -473,7 +473,7 @@
   width: 20px;
   height: 20px;
   flex: 0 0 20px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   object-fit: cover;
   background: var(--bg-subtle);
 }
@@ -487,7 +487,7 @@
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: inherit;
   cursor: pointer;
   padding: 0;
@@ -550,7 +550,7 @@
   gap: 6px;
   padding: 9px 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 42%, transparent);
 }
@@ -565,7 +565,7 @@
   max-width: 100%;
   gap: 4px;
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
   color: var(--accent);
   font-size: 11.5px;
@@ -636,7 +636,7 @@
   flex-direction: column;
   gap: 3px;
   max-height: 280px;
-  overflow: auto;
+  overflow: hidden;
   padding: 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -653,7 +653,16 @@
   right: auto;
   top: auto;
   width: 100%;
+  height: var(--cfl-max-h, 60vh);
   max-height: var(--cfl-max-h, 60vh);
+}
+.home-hero__plugin-picker-results {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
 }
 .home-hero__plugin-hover-card {
   display: grid;
@@ -784,7 +793,7 @@
   color: var(--text);
   text-align: left;
   cursor: pointer;
-  transition: background-color 120ms ease, border-color 120ms ease;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out);
 }
 .home-hero__plugin-option:hover,
 .home-hero__plugin-option.is-active {
@@ -878,7 +887,7 @@
   max-width: 120px;
   padding: 0 12px;
   gap: 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 12px;
 }
 .home-hero__foot-right .session-mode-toggle__label {
@@ -928,7 +937,7 @@
   justify-content: center;
   width: 18px;
   height: 18px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   font-size: 14px;
   font-weight: 650;
   line-height: 1;
@@ -950,7 +959,7 @@
   gap: 0;
   padding: 5px;
   border: 1px solid var(--border-strong, var(--border));
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.04),
@@ -965,7 +974,7 @@
   gap: 9px;
   padding: 0 9px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: transparent;
   color: var(--text-strong);
   font: inherit;
@@ -1013,7 +1022,7 @@
   gap: 0;
   padding: 5px;
   border: 1px solid var(--border-strong, var(--border));
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.04),
@@ -1037,7 +1046,7 @@
   padding: 0 8px;
   height: 30px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: var(--bg);
   color: var(--text-muted);
   flex: 0 0 auto;
@@ -1087,14 +1096,14 @@
   max-width: 180px;
   padding: 0 8px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   box-shadow: var(--shadow-xs);
   color: var(--text-muted);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
-  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .home-hero__working-dir:hover {
   background: var(--bg-subtle);
@@ -1128,7 +1137,7 @@
   color: var(--text-soft);
   cursor: pointer;
   opacity: 0;
-  transition: color 120ms ease, opacity 120ms ease;
+  transition: color 120ms var(--ease-out), opacity 120ms var(--ease-out);
 }
 .home-hero__working-dir-wrap:hover .home-hero__working-dir-clear,
 .home-hero__working-dir-clear:focus-visible {
@@ -1152,7 +1161,7 @@
   gap: 6px;
   padding: 0 12px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   cursor: pointer;
@@ -1161,9 +1170,9 @@
   line-height: 1.2;
   box-shadow: var(--shadow-xs);
   transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
+    background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
 }
 .home-hero__active-type-chip-icon {
   width: 13px;
@@ -1178,7 +1187,7 @@
   width: 0;
   opacity: 0;
   transform: translateX(-2px) scale(0.9);
-  transition: opacity 120ms ease, transform 120ms ease, width 120ms ease;
+  transition: opacity 120ms var(--ease-out), transform 120ms var(--ease-out), width 120ms var(--ease-out);
 }
 .home-hero__active-type-chip span {
   min-width: 0;
@@ -1213,16 +1222,16 @@
   flex-shrink: 1;
   padding: 0 8px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 400;
   box-shadow: var(--shadow-xs);
   transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
+    background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
 }
 .home-hero__footer-option.is-open,
 .home-hero__footer-option:hover {
@@ -1317,7 +1326,7 @@
   gap: 8px;
   padding: 0 10px 0 12px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   cursor: pointer;
@@ -1327,9 +1336,9 @@
   letter-spacing: 0;
   box-shadow: var(--shadow-xs);
   transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
+    background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
 }
 .home-hero__footer-switch:hover,
 .home-hero__footer-switch:focus-visible {
@@ -1347,7 +1356,7 @@
   width: 34px;
   height: 20px;
   flex: 0 0 34px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--border) 78%, var(--bg-subtle));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-strong) 18%, transparent);
   transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -1359,7 +1368,7 @@
   left: 3px;
   width: 14px;
   height: 14px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: #fff;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.22);
   transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -1381,7 +1390,7 @@
   overflow: auto;
   padding: 6px;
   border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-  border-radius: 13px;
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--bg-panel) 98%, var(--bg-subtle) 2%);
   box-shadow: 0 18px 44px rgba(15, 23, 42, 0.16), 0 1px 2px rgba(15, 23, 42, 0.08);
   isolation: isolate;
@@ -1398,7 +1407,7 @@
   max-height: min(280px, calc(100vh - 240px));
   padding: 7px;
   border-color: color-mix(in srgb, var(--border) 70%, transparent);
-  border-radius: 13px;
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--bg-panel) 98%, white);
   box-shadow:
     0 16px 38px rgba(15, 23, 42, 0.14),
@@ -1420,7 +1429,7 @@
   width: 100%;
   height: 42px;
   border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
   color: var(--text);
   font: inherit;
@@ -1433,7 +1442,7 @@
 .home-hero__footer-option--select[data-field-name='designSystem'] .home-hero__footer-select-search input {
   height: 34px;
   border-color: color-mix(in srgb, var(--border) 74%, transparent);
-  border-radius: 9px;
+  border-radius: var(--radius);
   color: var(--text);
   font-size: 12px;
   font-weight: 600;
@@ -1493,7 +1502,7 @@
   appearance: none;
   width: 100%;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -1509,8 +1518,8 @@
   letter-spacing: 0;
   text-align: left;
   transition:
-    background-color 120ms ease,
-    color 120ms ease;
+    background-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
 }
 .home-hero__footer-select-item > svg {
   flex: 0 0 auto;
@@ -1554,7 +1563,7 @@
   gap: 8px;
   min-height: 42px;
   padding: 5px 8px;
-  border-radius: 9px;
+  border-radius: var(--radius);
   color: var(--text);
   font-size: 12.5px;
   font-weight: 720;
@@ -1586,7 +1595,7 @@
   justify-content: center;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-subtle);
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 44%, transparent);
 }
@@ -1594,20 +1603,20 @@
   width: 40px;
   height: 40px;
   flex-basis: 40px;
-  border-radius: 9px;
+  border-radius: var(--radius);
 }
 .home-hero__footer-option--select[data-field-name='designSystem'] .home-hero__footer-select-item .home-hero__ds-option-preview,
 .home-hero__footer-option--select[data-field-name='designSystem'] .home-hero__footer-select-item .home-hero__footer-option-icon {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .home-hero__ds-option-preview--compact {
   width: 13px;
   height: 13px;
   flex-basis: 13px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   box-shadow: none;
 }
@@ -1641,7 +1650,7 @@
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: var(--bg-subtle);
   color: var(--text-muted);
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 44%, transparent);
@@ -1664,7 +1673,7 @@
   align-items: center;
   justify-content: center;
   border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: color-mix(in srgb, currentColor 10%, var(--bg-panel));
   color: var(--text-muted);
   font-size: 10px;
@@ -1759,7 +1768,7 @@
   align-items: center;
   justify-content: center;
   border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: color-mix(in srgb, currentColor 9%, var(--bg-panel));
   color: var(--text-muted);
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 44%, transparent);
@@ -1839,7 +1848,7 @@
   min-width: 64px;
   height: 32px;
   padding: 0 16px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--accent);
   background: var(--accent);
   color: white;
@@ -1970,7 +1979,7 @@
   align-items: flex-start;
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-panel);
   color: var(--text);
   font: inherit;
@@ -1980,11 +1989,11 @@
   cursor: pointer;
   box-shadow: var(--shadow-xs);
   transition:
-    border-color 140ms ease,
-    background-color 140ms ease,
-    color 140ms ease,
-    transform 140ms ease,
-    box-shadow 140ms ease;
+    border-color 140ms var(--ease-out),
+    background-color 140ms var(--ease-out),
+    color 140ms var(--ease-out),
+    transform 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out);
 }
 .home-hero__prompt-example span {
   min-width: 0;
@@ -2024,7 +2033,7 @@
   gap: 8px;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--bg-panel);
   color: var(--text);
   font: inherit;
@@ -2034,11 +2043,11 @@
   scroll-snap-align: start;
   overflow: hidden;
   transition:
-    border-color 140ms ease,
-    background-color 140ms ease,
-    color 140ms ease,
-    transform 140ms ease,
-    box-shadow 140ms ease;
+    border-color 140ms var(--ease-out),
+    background-color 140ms var(--ease-out),
+    color 140ms var(--ease-out),
+    transform 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out);
 }
 
 .home-hero__plugin-preset:disabled {
@@ -2079,7 +2088,7 @@
   justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
   color: var(--bg-panel);
   box-shadow: var(--shadow-sm);
@@ -2167,7 +2176,7 @@
   gap: 6px;
   padding: 5px 11px 5px 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12.5px;
@@ -2176,8 +2185,8 @@
   letter-spacing: -0.005em;
   cursor: pointer;
   box-shadow: var(--shadow-xs);
-  transition: border-color 140ms ease, background-color 140ms ease,
-    color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+  transition: border-color 140ms var(--ease-out), background-color 140ms var(--ease-out),
+    color 140ms var(--ease-out), transform 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
 }
 .home-hero__rail-chip--migrate {
   background: var(--bg-subtle);
@@ -2187,7 +2196,7 @@
   flex: 0 0 auto;
   color: currentColor;
   opacity: 0.82;
-  transition: opacity 140ms ease;
+  transition: opacity 140ms var(--ease-out);
 }
 .home-hero__rail-chip-label {
   white-space: nowrap;

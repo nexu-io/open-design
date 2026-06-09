@@ -643,6 +643,67 @@ describe('streamViaDaemon', () => {
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
+  it('renders promoted OpenCode role-marker errors without OpenCode-session prefixing', async () => {
+    const handlers = createDaemonHandlers();
+    const message =
+      'Model emitted fabricated role marker ("## user"). Response was truncated to prevent unauthorized instruction injection.';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: error',
+              `data: ${JSON.stringify({
+                message,
+                error: {
+                  code: 'ROLE_MARKER_HALLUCINATION',
+                  message,
+                  retryable: true,
+                  details: {
+                    kind: 'opencode_session_error',
+                    source: 'opencode',
+                    code: 'ROLE_MARKER_HALLUCINATION',
+                    upstream_name: 'RoleMarkerHallucinationError',
+                    message,
+                    marker: '## user',
+                    retryable: true,
+                    promoted_by: 'open_design_acp',
+                  },
+                },
+              })}`,
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message,
+        code: 'ROLE_MARKER_HALLUCINATION',
+        details: expect.objectContaining({
+          kind: 'opencode_session_error',
+          code: 'ROLE_MARKER_HALLUCINATION',
+          marker: '## user',
+        }),
+      }),
+    );
+    const renderedMessage = (handlers.onError.mock.calls[0]?.[0] as Error).message;
+    expect(renderedMessage).not.toContain('OpenCode session failed');
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
   it('renders structured retry-exhausted provider errors from responseBodyPreview', async () => {
     const handlers = createDaemonHandlers();
     const responseBodyPreview = JSON.stringify({

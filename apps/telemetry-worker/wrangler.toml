@@ -9,6 +9,13 @@ routes = [
 
 [vars]
 LANGFUSE_BASE_URL = "https://us.cloud.langfuse.com"
+TRACE_OBJECT_PREFIX = "observability"
+TRACE_OBJECT_MAX_BYTES = "10485760"
+TRACE_OBJECT_BATCH_MAX_BYTES = "20971520"
+
+[[r2_buckets]]
+binding = "TRACE_OBJECT_BUCKET"
+bucket_name = "open-design-observability"
 
 [[ratelimits]]
 name = "TELEMETRY_CLIENT_RATE_LIMITER"
