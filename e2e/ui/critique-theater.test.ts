@@ -38,6 +38,7 @@
 
 import { expect, test } from '@playwright/test';
 import type { Page, Route } from '@playwright/test';
+import { routeAgents } from '@/playwright/mock-factory';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -124,22 +125,16 @@ async function bootAppWithCritiqueEnabled(page: Page): Promise<void> {
 }
 
 async function stubAgents(page: Page): Promise<void> {
-  await page.route('**/api/agents', async (route: Route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeAgents(page, [
+    {
+      id: 'mock',
+      name: 'Mock Agent',
+      bin: 'mock-agent',
+      available: true,
+      version: 'test',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
 }
 
 async function stubProjectEvents(page: Page, frames: CritiqueFrame[]): Promise<void> {

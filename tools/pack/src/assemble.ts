@@ -209,8 +209,8 @@ export async function buildWorkspaceArtifacts(config: ToolPackBuildOnlyConfig): 
 
   await runPnpm(config, ["--filter", "@open-design/contracts", "build"]);
   await runPnpm(config, ["--filter", "@open-design/registry-protocol", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/launcher-proto", "build"]);
   await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/launcher-proto", "build"]);
   await runPnpm(config, ["--filter", "@open-design/sidecar", "build"]);
   await runPnpm(config, ["--filter", "@open-design/platform", "build"]);
   await runPnpm(config, ["--filter", "@open-design/host", "build"]);

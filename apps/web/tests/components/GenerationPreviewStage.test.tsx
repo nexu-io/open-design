@@ -79,6 +79,22 @@ function render(model: GenerationPreviewModel, props: Record<string, unknown> = 
 }
 
 describe('GenerationPreviewStage', () => {
+  it('does not surface the raw thinking/activity snippet while generating', () => {
+    const markup = renderToStaticMarkup(
+      <GenerationPreviewStage
+        model={generatingModel({
+          activityLabel: '品牌留空走 Branch B，我自己选的方向）。核',
+          // No concrete substatus — this is exactly the case where the old
+          // build leaked the half-formed narration line.
+          detailLabel: null,
+          todoProgress: null,
+        })}
+      />,
+    );
+    expect(markup).toContain('data-testid="generation-preview-stage"');
+    expect(markup).not.toContain('Branch B');
+  });
+
   it('never renders a progress bar while generating', () => {
     const markup = renderToStaticMarkup(<GenerationPreviewStage model={generatingModel()} />);
     expect(markup).not.toContain('role="progressbar"');

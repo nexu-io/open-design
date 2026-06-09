@@ -397,6 +397,10 @@ describe('sandboxed preview Blob exports', () => {
       revokeObjectURL: vi.fn(),
     });
     vi.stubGlobal('window', {
+      location: {
+        href: 'https://open-design.test/plugins/example',
+        origin: 'https://open-design.test',
+      },
       open: (_url: string, _target: string, features?: string) => {
         openCalls.push([_url, _target]);
         openedFeatures = features;
@@ -421,6 +425,14 @@ describe('sandboxed preview Blob exports', () => {
     expect(wrapper).not.toContain('allow-same-origin');
     expect(wrapper).toContain('&lt;script&gt;window.parent.localStorage.clear()&lt;/script&gt;');
     expect(wrapper).not.toContain('<script>window.parent.localStorage.clear()</script>');
+  });
+
+  it('anchors new-tab srcdoc previews to the current origin when no explicit base is provided', async () => {
+    openSandboxedPreviewInNewTab('<img src="/api/plugins/example/assets/hero.png"><img src="assets/card.png">', 'Plugin preview');
+
+    expect(capturedBlob).toBeDefined();
+    const wrapper = await capturedBlob!.text();
+    expect(wrapper).toContain('&lt;base href=&quot;https://open-design.test/&quot;&gt;');
   });
 
   it('passes srcdoc options through the sandboxed new-tab wrapper', async () => {

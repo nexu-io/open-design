@@ -23,6 +23,7 @@ This is the authoritative build brief. Follow it exactly — the named colors, r
 
 - Default output: a single self-contained HTML file (the `example.html` seed). It already includes everything inline.
 - If the user explicitly asks for a **React + TypeScript + Vite + Tailwind** project, port the seed faithfully: same tokens, same section order, same markup structure. Map vanilla features back up: the `IntersectionObserver` reveal → Framer-Motion `whileInView`; the passive scroll listener that toggles `.scrolled` on the nav → `useScroll`; the CSS marquee → a Framer-Motion loop or duplicated-track CSS keyframe. Do not change the design while porting.
+- **Motion loading (locked).** If you emit a single self-contained inline-JSX file instead of the Vite project, Motion's React hooks (`useScroll`, `useTransform`, `useAnimationFrame`, …) exist only in the **React** UMD build: load `<script src="https://unpkg.com/framer-motion@11.11.13/dist/framer-motion.js"></script>` and read them off `window.Motion` — never the vanilla `https://unpkg.com/motion@.../dist/motion.js` DOM bundle, which lacks `useScroll` and renders a blank page. (The Vite project imports from npm and is unaffected.)
 
 ## Fonts
 

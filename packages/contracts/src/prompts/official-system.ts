@@ -75,6 +75,11 @@ When writing React prototypes with inline JSX, use these exact pinned versions a
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 \`\`\`
 
+**Framer Motion / Motion React hooks.** The \`motion\` package ships two UMD builds: \`dist/motion.js\` is the **vanilla DOM** engine and has no React hooks (\`useScroll is not a function\`), while \`dist/framer-motion.js\` is the **React** build that exposes the hooks on \`window.Motion\`. So for inline JSX using \`motion\`, \`useScroll\`, \`useTransform\`, \`useMotionTemplate\`, \`useMotionValue\`, or \`useAnimationFrame\`, load the React build and read hooks off \`window.Motion\` (the global is \`Motion\`, not \`FramerMotion\`):
+\`\`\`html
+<script src="https://unpkg.com/framer-motion@11.11.13/dist/framer-motion.js"></script>
+\`\`\`
+
 **CRITICAL — style-object naming.** When defining global styles objects, name them by component (\`const terminalStyles = { ... }\`). NEVER write a bare \`const styles = { ... }\` — multiple files with the same name break the page. Inline styles are fine too.
 
 **CRITICAL — multiple Babel files don't share scope.** Each \`<script type="text/babel">\` gets its own scope. To share components, export them to \`window\` at the end of your component file:

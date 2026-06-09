@@ -4,6 +4,7 @@ import {
   createAmrEnvironmentProfileMenuItems,
   mergeAmrEnvironmentProfileConfig,
   normalizeAmrEnvironmentProfile,
+  resolveAboutPanelVersion,
 } from "../../src/main/index.js";
 
 describe("AMR Environment Profile desktop menu helpers", () => {
@@ -161,5 +162,12 @@ describe("AMR Environment Profile desktop menu helpers", () => {
       : null;
     localItem?.click?.(undefined as never, undefined as never, undefined as never);
     expect(selected).toEqual(["local"]);
+  });
+
+  it("uses the active packaged runtime version for the native About panel", () => {
+    expect(resolveAboutPanelVersion({ update: { currentVersion: "0.10.0-beta.24" } })).toBe("0.10.0-beta.24");
+    expect(resolveAboutPanelVersion({ update: { currentVersion: " 0.10.0-beta.24 " } })).toBe("0.10.0-beta.24");
+    expect(resolveAboutPanelVersion({ update: { currentVersion: "" } })).toBeNull();
+    expect(resolveAboutPanelVersion({})).toBeNull();
   });
 });

@@ -23,6 +23,7 @@ This is the authoritative build brief. The named fonts, colors, video/image URLs
 
 - Default output: a single self-contained HTML file (the `example.html` seed). It already includes everything inline — vanilla HTML/CSS/JS, no build step.
 - If the user explicitly asks for the React project, port the seed faithfully: **React + Vite + Tailwind CSS v4 + `motion/react` (Framer Motion)**, `lucide-react` for icons. Same tokens, same markup structure, same numbers. The vanilla seed maps 1:1 to the React spec below — do not change the design while porting.
+- **Motion loading (locked).** If you emit a single self-contained inline-JSX file instead of the Vite project, Motion's React hooks (`useScroll`, `useTransform`, `useAnimationFrame`, …) exist only in the **React** UMD build: load `<script src="https://unpkg.com/framer-motion@11.11.13/dist/framer-motion.js"></script>` and read them off `window.Motion` — never the vanilla `https://unpkg.com/motion@.../dist/motion.js` DOM bundle, which lacks `useScroll` and renders a blank page. (The Vite project imports from npm and is unaffected.)
 
 ### Framework → vanilla mapping (already done in the seed)
 - `useScroll({ offset: ["start start","end end"] })` → a `getProgress()` reading `scrollRoot.getBoundingClientRect().top` over `(scrollHeight - innerHeight)`, clamped 0..1.

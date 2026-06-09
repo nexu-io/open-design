@@ -25,6 +25,7 @@ interface Props {
   onClose: () => void;
   onUse: (record: InstalledPluginRecord) => void;
   isApplying?: boolean;
+  hideUseAction?: boolean;
 }
 
 export function PluginExampleDetail({
@@ -33,6 +34,7 @@ export function PluginExampleDetail({
   onClose,
   onUse,
   isApplying,
+  hideUseAction,
 }: Props) {
   const { t, locale } = useI18n();
   const localizedTitle = localizePluginTitle(locale, record);
@@ -139,13 +141,15 @@ export function PluginExampleDetail({
           </div>
         ),
       }}
-      primaryAction={{
-        label: 'Use plugin',
-        onClick: () => onUse(record),
-        busy: !!isApplying,
-        busyLabel: 'Applying…',
-        testId: `plugin-details-use-${record.id}`,
-      }}
+      primaryAction={hideUseAction
+        ? undefined
+        : {
+            label: 'Use plugin',
+            onClick: () => onUse(record),
+            busy: !!isApplying,
+            busyLabel: 'Applying…',
+            testId: `plugin-details-use-${record.id}`,
+          }}
       hideSidebarToggle
     />
   );

@@ -8,7 +8,7 @@ od:
 
 # od-share-to-community (scenario)
 
-Triggered by the "Share to Open Design" button that sits next to the post-completion Discord prompt. The user just finished a piece of work in this project and wants to ship it as a plugin. They have not been asked any questions yet.
+Triggered by the post-completion "Share to Open Design" submission action. The user just finished a piece of work in this project and wants to ship it as a plugin. They have not been asked any questions yet.
 
 ## Required outcome
 
