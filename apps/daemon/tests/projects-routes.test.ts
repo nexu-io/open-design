@@ -106,6 +106,8 @@ describe('GET /api/projects/:id resolvedDir', () => {
       'Alice project',
     );
     expect(aliceCreate.status).toBe(200);
+    const aliceCreateBody = (await aliceCreate.json()) as { project: { id: string } };
+    const aliceStoredProjectId = aliceCreateBody.project.id;
 
     const bobCreate = await createProjectAs(
       'bob@example.com',
@@ -113,7 +115,9 @@ describe('GET /api/projects/:id resolvedDir', () => {
       'Bob project',
     );
     expect(bobCreate.status).toBe(200);
-    const bobWrite = await fetch(`${baseUrl}/api/projects/${bobProjectId}/files`, {
+    const bobCreateBody = (await bobCreate.json()) as { project: { id: string } };
+    const bobStoredProjectId = bobCreateBody.project.id;
+    const bobWrite = await fetch(`${baseUrl}/api/projects/${bobStoredProjectId}/files`, {
       method: 'POST',
       headers: userHeaders('bob@example.com'),
       body: JSON.stringify({
@@ -144,21 +148,21 @@ describe('GET /api/projects/:id resolvedDir', () => {
     const aliceListJson = (await aliceList.json()) as {
       projects: Array<{ id: string }>;
     };
-    expect(aliceListJson.projects.map((project) => project.id)).toContain(aliceProjectId);
-    expect(aliceListJson.projects.map((project) => project.id)).not.toContain(bobProjectId);
+    expect(aliceListJson.projects.map((project) => project.id)).toContain(aliceStoredProjectId);
+    expect(aliceListJson.projects.map((project) => project.id)).not.toContain(bobStoredProjectId);
     expect(JSON.stringify(aliceListJson)).not.toContain('ownerEmail');
 
-    const aliceGetsBob = await fetch(`${baseUrl}/api/projects/${bobProjectId}`, {
+    const aliceGetsBob = await fetch(`${baseUrl}/api/projects/${bobStoredProjectId}`, {
       headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
     });
     expect(aliceGetsBob.status).toBe(404);
 
-    const aliceReadsBobFiles = await fetch(`${baseUrl}/api/projects/${bobProjectId}/files`, {
+    const aliceReadsBobFiles = await fetch(`${baseUrl}/api/projects/${bobStoredProjectId}/files`, {
       headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
     });
     expect(aliceReadsBobFiles.status).toBe(404);
 
-    const aliceArchivesBob = await fetch(`${baseUrl}/api/projects/${bobProjectId}/archive`, {
+    const aliceArchivesBob = await fetch(`${baseUrl}/api/projects/${bobStoredProjectId}/archive`, {
       headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
     });
     expect(aliceArchivesBob.status).toBe(404);
@@ -166,7 +170,7 @@ describe('GET /api/projects/:id resolvedDir', () => {
       error: { code: 'PROJECT_NOT_FOUND' },
     });
 
-    const aliceBatchArchivesBob = await fetch(`${baseUrl}/api/projects/${bobProjectId}/archive/batch`, {
+    const aliceBatchArchivesBob = await fetch(`${baseUrl}/api/projects/${bobStoredProjectId}/archive/batch`, {
       method: 'POST',
       headers: userHeaders('alice@example.com'),
       body: JSON.stringify({ files: ['index.html'] }),
@@ -177,7 +181,7 @@ describe('GET /api/projects/:id resolvedDir', () => {
     });
 
     const aliceListsBobPluginSnapshots = await fetch(
-      `${baseUrl}/api/projects/${bobProjectId}/applied-plugins`,
+      `${baseUrl}/api/projects/${bobStoredProjectId}/applied-plugins`,
       { headers: { 'cf-access-authenticated-user-email': 'alice@example.com' } },
     );
     expect(aliceListsBobPluginSnapshots.status).toBe(404);
@@ -185,7 +189,7 @@ describe('GET /api/projects/:id resolvedDir', () => {
       error: { code: 'PROJECT_NOT_FOUND' },
     });
 
-    const aliceListsBobGenui = await fetch(`${baseUrl}/api/projects/${bobProjectId}/genui`, {
+    const aliceListsBobGenui = await fetch(`${baseUrl}/api/projects/${bobStoredProjectId}/genui`, {
       headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
     });
     expect(aliceListsBobGenui.status).toBe(404);
@@ -193,7 +197,7 @@ describe('GET /api/projects/:id resolvedDir', () => {
       error: { code: 'PROJECT_NOT_FOUND' },
     });
 
-    const alicePrefillsBobGenui = await fetch(`${baseUrl}/api/projects/${bobProjectId}/genui/prefill`, {
+    const alicePrefillsBobGenui = await fetch(`${baseUrl}/api/projects/${bobStoredProjectId}/genui/prefill`, {
       method: 'POST',
       headers: userHeaders('alice@example.com'),
       body: JSON.stringify({ snapshotId: 'snap-1', surfaceId: 'surface-1' }),
@@ -204,7 +208,7 @@ describe('GET /api/projects/:id resolvedDir', () => {
     });
 
     const aliceListsBobPluginCandidates = await fetch(
-      `${baseUrl}/api/projects/${bobProjectId}/plugin-candidates`,
+      `${baseUrl}/api/projects/${bobStoredProjectId}/plugin-candidates`,
       { headers: { 'cf-access-authenticated-user-email': 'alice@example.com' } },
     );
     expect(aliceListsBobPluginCandidates.status).toBe(404);
@@ -213,7 +217,7 @@ describe('GET /api/projects/:id resolvedDir', () => {
     });
 
     const aliceDismissesBobPluginCandidate = await fetch(
-      `${baseUrl}/api/projects/${bobProjectId}/plugin-candidates/candidate-1/dismiss`,
+      `${baseUrl}/api/projects/${bobStoredProjectId}/plugin-candidates/candidate-1/dismiss`,
       {
         method: 'POST',
         headers: userHeaders('alice@example.com'),
@@ -265,31 +269,31 @@ describe('GET /api/projects/:id resolvedDir', () => {
     });
     expect(bobGetsTemplate.status).toBe(200);
 
-    const aliceOpensBob = await fetch(`${baseUrl}/api/projects/${bobProjectId}/open-in`, {
+    const aliceOpensBob = await fetch(`${baseUrl}/api/projects/${bobStoredProjectId}/open-in`, {
       method: 'POST',
       headers: userHeaders('alice@example.com'),
       body: JSON.stringify({ editorId: 'cursor' }),
     });
     expect(aliceOpensBob.status).toBe(404);
 
-    const aliceListsBobTerminals = await fetch(`${baseUrl}/api/projects/${bobProjectId}/terminals`, {
+    const aliceListsBobTerminals = await fetch(`${baseUrl}/api/projects/${bobStoredProjectId}/terminals`, {
       headers: { 'cf-access-authenticated-user-email': 'alice@example.com' },
     });
     expect(aliceListsBobTerminals.status).toBe(404);
 
-    const aliceCreatesBobTerminal = await fetch(`${baseUrl}/api/projects/${bobProjectId}/terminals`, {
+    const aliceCreatesBobTerminal = await fetch(`${baseUrl}/api/projects/${bobStoredProjectId}/terminals`, {
       method: 'POST',
       headers: userHeaders('alice@example.com'),
       body: JSON.stringify({ cols: 80, rows: 24 }),
     });
     expect(aliceCreatesBobTerminal.status).toBe(404);
 
-    const bobGetsBob = await fetch(`${baseUrl}/api/projects/${bobProjectId}`, {
+    const bobGetsBob = await fetch(`${baseUrl}/api/projects/${bobStoredProjectId}`, {
       headers: { 'cf-access-authenticated-user-email': 'bob@example.com' },
     });
     expect(bobGetsBob.status).toBe(200);
 
-    const bobDeletesSourceProject = await fetch(`${baseUrl}/api/projects/${bobProjectId}`, {
+    const bobDeletesSourceProject = await fetch(`${baseUrl}/api/projects/${bobStoredProjectId}`, {
       method: 'DELETE',
       headers: userHeaders('bob@example.com'),
     });

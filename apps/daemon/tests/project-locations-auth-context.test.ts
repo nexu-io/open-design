@@ -6,6 +6,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { DEFAULT_TRUSTED_EMAIL_HEADER } from '../src/auth-context.js';
+import { PROJECT_MANIFEST_RELATIVE_PATH } from '../src/project-locations.js';
 import { startServer } from '../src/server.js';
 
 interface StartedServer {
@@ -76,6 +77,26 @@ describe('project locations auth context', () => {
     return dir;
   }
 
+  function uniqueId(prefix: string): string {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  async function writeLocationProject(locationDir: string, projectId: string, name: string): Promise<void> {
+    const projectDir = path.join(locationDir, projectId);
+    await fsp.mkdir(path.dirname(path.join(projectDir, PROJECT_MANIFEST_RELATIVE_PATH)), { recursive: true });
+    await fsp.writeFile(
+      path.join(projectDir, PROJECT_MANIFEST_RELATIVE_PATH),
+      JSON.stringify({
+        schemaVersion: 1,
+        id: projectId,
+        name,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }),
+      'utf8',
+    );
+  }
+
   it('stores external project locations under the authenticated user data dir', async () => {
     const aliceDir = makeTempDir();
     const bobDir = makeTempDir();
@@ -106,6 +127,79 @@ describe('project locations auth context', () => {
 
     const bobAfter = await readProjectLocations(baseUrl, 'bob@example.com');
     expect(bobAfter.locations.map((location) => location.id)).toEqual(['default', 'bob-ext']);
+  });
+
+  it('allows different authenticated owners to create the same requested project id', async () => {
+    const requestedId = uniqueId('shared-project');
+
+    const aliceCreate = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: jsonAuthHeaders('alice@example.com'),
+      body: JSON.stringify({ id: requestedId, name: 'Shared client id' }),
+    });
+    expect(aliceCreate.status).toBe(200);
+    const aliceBody = (await aliceCreate.json()) as { project: { id: string } };
+
+    const bobCreate = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: jsonAuthHeaders('bob@example.com'),
+      body: JSON.stringify({ id: requestedId, name: 'Shared client id' }),
+    });
+    expect(bobCreate.status).toBe(200);
+    const bobBody = (await bobCreate.json()) as { project: { id: string } };
+
+    expect(aliceBody.project.id).not.toBe(bobBody.project.id);
+
+    const aliceProjects = await fetch(`${baseUrl}/api/projects`, {
+      headers: authHeaders('alice@example.com'),
+    });
+    expect(aliceProjects.status).toBe(200);
+    const aliceProjectsBody = (await aliceProjects.json()) as { projects: Array<{ id: string }> };
+    expect(aliceProjectsBody.projects.map((project) => project.id)).toContain(aliceBody.project.id);
+    expect(aliceProjectsBody.projects.map((project) => project.id)).not.toContain(bobBody.project.id);
+  });
+
+  it('allows different authenticated owners to scan the same manifest project id', async () => {
+    const manifestId = uniqueId('shared-scan-project');
+    const aliceDir = makeTempDir();
+    const bobDir = makeTempDir();
+    await writeLocationProject(aliceDir, manifestId, 'Alice shared manifest');
+    await writeLocationProject(bobDir, manifestId, 'Bob shared manifest');
+
+    const aliceLocation = await fetch(`${baseUrl}/api/project-locations`, {
+      method: 'PUT',
+      headers: jsonAuthHeaders('alice@example.com'),
+      body: JSON.stringify({
+        locations: [{ id: 'alice-scan-ext', name: 'Alice scan', path: aliceDir }],
+      }),
+    });
+    expect(aliceLocation.status).toBe(200);
+
+    const bobLocation = await fetch(`${baseUrl}/api/project-locations`, {
+      method: 'PUT',
+      headers: jsonAuthHeaders('bob@example.com'),
+      body: JSON.stringify({
+        locations: [{ id: 'bob-scan-ext', name: 'Bob scan', path: bobDir }],
+      }),
+    });
+    expect(bobLocation.status).toBe(200);
+
+    const aliceScan = await fetch(`${baseUrl}/api/project-locations/scan`, {
+      method: 'POST',
+      headers: authHeaders('alice@example.com'),
+    });
+    expect(aliceScan.status).toBe(200);
+    const aliceScanBody = (await aliceScan.json()) as { imported: Array<{ id: string }> };
+    expect(aliceScanBody.imported).toHaveLength(1);
+
+    const bobScan = await fetch(`${baseUrl}/api/project-locations/scan`, {
+      method: 'POST',
+      headers: authHeaders('bob@example.com'),
+    });
+    expect(bobScan.status).toBe(200);
+    const bobScanBody = (await bobScan.json()) as { imported: Array<{ id: string }> };
+    expect(bobScanBody.imported).toHaveLength(1);
+    expect(bobScanBody.imported[0]?.id).not.toBe(aliceScanBody.imported[0]?.id);
   });
 
   it('hides imported-folder project files from other authenticated owners', async () => {

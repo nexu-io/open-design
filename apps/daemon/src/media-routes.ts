@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { Express, Request } from 'express';
 import type { MediaExecutionPolicy } from '@open-design/contracts';
 import { defaultMediaExecutionPolicy, mediaPolicyDenial } from './media-policy.js';
-import type { ProjectOwnerScope } from './db.js';
+import { ownerScopedProjectId, type ProjectOwnerScope } from './db.js';
 import type { RouteDeps } from './server-context.js';
 import { proxyDispatcherRequestInit } from './connectionTest.js';
 import { ownerFieldsForRequest, ownerScopeForRequest } from './project-owner-scope.js';
@@ -89,6 +89,17 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       : requestDataDir;
   };
 
+  function getProjectForRequest(
+    req: Request,
+    projectId: string,
+    scope: ProjectOwnerScope = ownerScopeForRequest(req),
+  ) {
+    const project = getProject(db, projectId, scope);
+    if (project) return project;
+    const scopedProjectId = ownerScopedProjectId(projectId, ownerFieldsForRequest(req));
+    return scopedProjectId === projectId ? null : getProject(db, scopedProjectId, scope);
+  }
+
   function mediaTaskVisibleToRequest(
     req: Request,
     task: { projectId?: unknown; ownerEmail?: unknown },
@@ -99,7 +110,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     if (ownerEmail) return ownerScopeForRequest(req).ownerEmail === ownerEmail;
     const projectId = typeof task.projectId === 'string' ? task.projectId : '';
     if (!projectId) return false;
-    if (getProject(db, projectId, ownerScopeForRequest(req))) return true;
+    if (getProjectForRequest(req, projectId)) return true;
     return !getProject(db, projectId);
   }
 
@@ -124,8 +135,9 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     options: { projectId: string; grant: ToolTokenGrant | null; projectScope?: ProjectOwnerScope },
   ) => {
     const projectId = options.projectId;
-    const project = getProject(db, projectId, options.projectScope);
+    const project = getProjectForRequest(req, projectId, options.projectScope);
     if (!project) return res.status(404).json({ error: 'project not found' });
+    const resolvedProjectId = project.id;
 
     const surface = req.body?.surface;
     if (surface !== 'image' && surface !== 'video' && surface !== 'audio') {
@@ -148,7 +160,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     let task: ReturnType<typeof createMediaTask> | null = null;
     try {
       const taskId = randomUUID();
-      task = createMediaTask(taskId, projectId, {
+      task = createMediaTask(taskId, resolvedProjectId, {
         surface: req.body?.surface,
         model: req.body?.model,
         ...ownerFieldsForRequest(req),
@@ -170,7 +182,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         projectRoot: PROJECT_ROOT,
         projectsRoot: projectsDirFor(req),
         mediaConfigDataDir: mediaConfigDataDirFor(req),
-        projectId,
+        projectId: resolvedProjectId,
         surface: req.body?.surface,
         model: req.body?.model,
         prompt: req.body?.prompt,
@@ -641,11 +653,11 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const projectId = req.params.id;
-    const project = getProject(db, projectId, ownerScopeForRequest(req));
+    const project = getProjectForRequest(req, projectId);
     if (!project) return res.status(404).json({ error: 'project not found' });
     const includeDone =
       req.query.includeDone === '1' || req.query.includeDone === 'true';
-    const tasks = listMediaTasksByProject(db, projectId, {
+    const tasks = listMediaTasksByProject(db, project.id, {
       includeTerminal: includeDone,
     }).map((t: any) => ({
         taskId: t.id,

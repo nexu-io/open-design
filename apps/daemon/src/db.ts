@@ -7,7 +7,7 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { ProjectBrowserWorkspaceTab, ProjectTabsState } from '@open-design/contracts';
 import { migrateCritique } from './critique/persistence.js';
 import { migrateMediaTasks } from './media-tasks.js';
@@ -655,6 +655,29 @@ export interface ProjectOwnerScope {
   includeOwnerless?: boolean;
 }
 
+function normalizeProjectIdOwnerKey(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const key = value.trim();
+  return /^[A-Za-z0-9._-]{1,64}$/u.test(key) ? key : null;
+}
+
+function hasProjectIdOwnerKey(id: string, key: string): boolean {
+  return id === key || id.startsWith(`${key}-`) || id.includes(`-${key}-`);
+}
+
+export function ownerScopedProjectId(
+  id: string,
+  owner: { projectIdOwnerKey?: string | null } | null | undefined,
+): string {
+  const key = normalizeProjectIdOwnerKey(owner?.projectIdOwnerKey);
+  if (!key || hasProjectIdOwnerKey(id, key)) return id;
+  const prefixed = `${key}-${id}`;
+  if (prefixed.length <= 128) return prefixed;
+  const digest = createHash('sha1').update(id).digest('hex').slice(0, 12);
+  const budget = 128 - key.length - digest.length - 2;
+  return `${key}-${id.slice(0, Math.max(1, budget))}-${digest}`;
+}
+
 function ownerClause(column: string, scope?: ProjectOwnerScope) {
   if (!scope) return { where: '', params: [] as unknown[] };
   const ownerEmail = typeof scope.ownerEmail === 'string' && scope.ownerEmail.length > 0
@@ -768,13 +791,14 @@ export function getProject(db: SqliteDb, id: string, scope?: ProjectOwnerScope) 
 }
 
 export function insertProject(db: SqliteDb, p: DbRow) {
+  const projectId = getProject(db, p.id) ? ownerScopedProjectId(p.id, p) : p.id;
   db.prepare(
     `INSERT INTO projects
        (id, owner_email, owner_dir_hash, name, skill_id, design_system_id, pending_prompt,
         metadata_json, custom_instructions, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
-    p.id,
+    projectId,
     p.ownerEmail ?? null,
     p.ownerDirHash ?? null,
     p.name,
@@ -786,7 +810,7 @@ export function insertProject(db: SqliteDb, p: DbRow) {
     p.createdAt,
     p.updatedAt,
   );
-  return getProject(db, p.id);
+  return getProject(db, projectId);
 }
 
 export function updateProject(db: SqliteDb, id: string, patch: DbRow, scope?: ProjectOwnerScope) {

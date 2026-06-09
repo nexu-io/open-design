@@ -1,7 +1,7 @@
 import type { Express, Request } from 'express';
 import nodePath from 'node:path';
 import type { RouteDeps } from './server-context.js';
-import type { ProjectOwnerScope } from './db.js';
+import { ownerScopedProjectId, type ProjectOwnerScope } from './db.js';
 import {
   InlineAssetsLimitError,
   MAX_INLINE_OWNER_BYTES,
@@ -45,6 +45,17 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
     return ownerFieldsForRequest(req);
   }
 
+  function projectIdForRequest(req: Request, projectId: string) {
+    return ownerScopedProjectId(projectId, projectOwnerFields(req));
+  }
+
+  function getProjectForRequest(req: Request, projectId: string) {
+    const scope = projectOwnerScope(req);
+    const project = getProject(db, projectId, scope);
+    if (project) return project;
+    const scopedProjectId = projectIdForRequest(req, projectId);
+    return scopedProjectId === projectId ? null : getProject(db, scopedProjectId, scope);
+  }
   app.post(
     '/api/import/claude-design',
     importUpload.single('file'),
@@ -84,15 +95,18 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           createdAt: now,
           updatedAt: now,
         });
+        if (!project) {
+          return sendApiError(res, 500, 'INTERNAL_ERROR', 'created project could not be loaded');
+        }
         const cid = randomId();
         insertConversation(db, {
           id: cid,
-          projectId: id,
+          projectId: project.id,
           title: 'Imported Claude Design project',
           createdAt: now,
           updatedAt: now,
         });
-        setTabs(db, id, [imported.entryFile], imported.entryFile);
+        setTabs(db, project.id, [imported.entryFile], imported.entryFile);
         res.json({
           project,
           conversationId: cid,
@@ -117,7 +131,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   app.post('/api/projects/:id/working-dir', async (req, res) => {
     try {
       const projectId = req.params.id;
-      const existing = getProject(db, projectId, projectOwnerScope(req));
+      const existing = getProjectForRequest(req, projectId);
       if (!existing) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
@@ -207,14 +221,14 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         entryFile,
         ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
       };
-      const updated = updateProject(db, projectId, { metadata: nextMeta }, projectOwnerScope(req));
+      const updated = updateProject(db, existing.id, { metadata: nextMeta }, projectOwnerScope(req));
       if (!updated) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
       // Folder imports should land on Design Files so users can choose from
       // the imported folder's artifacts. Persist an empty saved tab state so
       // ProjectView does not auto-open the detected primary file on hydration.
-      setTabs(db, projectId, [], null);
+      setTabs(db, existing.id, [], null);
       /** @type {import('@open-design/contracts').ReplaceProjectWorkingDirResponse} */
       const body = { project: updated, baseDir: normalizedPath, entryFile };
       res.json(body);
@@ -347,11 +361,14 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         createdAt: now,
         updatedAt: now,
       });
+      if (!project) {
+        return sendApiError(res, 500, 'INTERNAL_ERROR', 'created project could not be loaded');
+      }
 
       const cid = randomId();
       insertConversation(db, {
         id: cid,
-        projectId: id,
+        projectId: project.id,
         title: `Imported from ${projectName}`,
         createdAt: now,
         updatedAt: now,
@@ -359,7 +376,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       // Folder imports should land on Design Files so users can choose from
       // the imported folder's artifacts. Persist an empty saved tab state so
       // ProjectView does not auto-open the detected primary file on hydration.
-      setTabs(db, id, [], null);
+      setTabs(db, project.id, [], null);
       /** @type {import('@open-design/contracts').ImportFolderResponse} */
       const body = { project, conversationId: cid, entryFile };
       res.json(body);
@@ -390,6 +407,24 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   function projectOwnerScope(req: Request): ProjectOwnerScope {
     return ownerScopeForRequest(req);
   }
+  function projectOwnerFields(req: Request) {
+    return ownerFieldsForRequest(req);
+  }
+  function projectIdForRequest(req: Request, projectId: string) {
+    return ownerScopedProjectId(projectId, projectOwnerFields(req));
+  }
+  function getProjectForRequest(req: Request, projectId: string) {
+    const scope = projectOwnerScope(req);
+    const project = getProject(db, projectId, scope);
+    if (project) return project;
+    const scopedProjectId = projectIdForRequest(req, projectId);
+    return scopedProjectId === projectId ? null : getProject(db, scopedProjectId, scope);
+  }
+  function getUntrackedExportProjectForRequest(req: Request, projectId: string) {
+    const project = getProjectForRequest(req, projectId);
+    if (project) return { id: project.id, metadata: project.metadata };
+    return getProject(db, projectId) ? null : { id: projectId, metadata: undefined };
+  }
   // Streams a ZIP of the project's on-disk tree so the "Download as .zip"
   // share menu can hand the user the actual files they uploaded — e.g. the
   // imported `ui-design/` folder — instead of a one-file snapshot of the
@@ -398,13 +433,13 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   app.get('/api/projects/:id/archive', async (req, res) => {
     try {
       const root = typeof req.query?.root === 'string' ? req.query.root : '';
-      const project = getProject(db, req.params.id, projectOwnerScope(req));
+      const project = getProjectForRequest(req, req.params.id);
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
       const { buffer, baseName } = await buildProjectArchive(
         projectsDirFor(req),
-        req.params.id,
+        project.id,
         root,
         project.metadata,
       );
@@ -443,13 +478,13 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         sendApiError(res, 400, 'BAD_REQUEST', 'files must be a non-empty array');
         return;
       }
-      const project = getProject(db, req.params.id, projectOwnerScope(req));
+      const project = getProjectForRequest(req, req.params.id);
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
       const { buffer } = await buildBatchArchive(
         projectsDirFor(req),
-        req.params.id,
+        project.id,
         files,
         project.metadata,
       );
@@ -480,17 +515,17 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       if (!isSafeId(req.params.id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
       }
-      const project = getProject(db, req.params.id, projectOwnerScope(req));
+      const project = getProjectForRequest(req, req.params.id);
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      const files = await listFiles(projectsDirFor(req), req.params.id, {
+      const files = await listFiles(projectsDirFor(req), project.id, {
         metadata: project.metadata,
       });
       /** @type {import('@open-design/contracts').ProjectExportManifestResponse} */
       const body = buildProjectExportManifestResponse({
         project,
-        projectId: req.params.id,
+        projectId: project.id,
         files,
       });
       res.json(body);
@@ -513,7 +548,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       if (typeof fileName !== 'string' || fileName.length === 0) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
-      const project = getProject(db, req.params.id, projectOwnerScope(req));
+      const project = getProjectForRequest(req, req.params.id);
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
@@ -521,7 +556,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         daemonUrl: daemonUrlRef.current,
         deck: deck === true,
         fileName,
-        projectId: req.params.id,
+        projectId: project.id,
         projectsRoot: projectsDirFor(req),
         title: typeof title === 'string' ? title : undefined,
       });
@@ -581,7 +616,10 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         );
       }
 
-      const project = getProject(db, req.params.id, projectOwnerScope(req));
+      const project = getUntrackedExportProjectForRequest(req, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
       const splatParam = (req.params as { splat?: string | string[] }).splat;
       const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
 
@@ -602,9 +640,9 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       try {
         ownerMeta = await resolveProjectFilePath(
           projectsDirFor(req),
-          req.params.id,
+          project.id,
           relPath,
-          project?.metadata,
+          project.metadata,
         );
       } catch (err: any) {
         const status = err && err.code === 'ENOENT' ? 404 : 400;
@@ -636,7 +674,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
 
       let file;
       try {
-        file = await readProjectFile(projectsDirFor(req), req.params.id, relPath, project?.metadata);
+        file = await readProjectFile(projectsDirFor(req), project.id, relPath, project.metadata);
       } catch (err: any) {
         const status = err && err.code === 'ENOENT' ? 404 : 400;
         return sendApiError(
@@ -657,9 +695,9 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         try {
           meta = await resolveProjectFilePath(
             projectsDirFor(req),
-            req.params.id,
+            project.id,
             sibling,
-            project?.metadata,
+            project.metadata,
           );
         } catch {
           return null;
@@ -670,9 +708,9 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
             try {
               const siblingFile = await readProjectFile(
                 projectsDirFor(req),
-                req.params.id,
+                project.id,
                 sibling,
-                project?.metadata,
+                project.metadata,
               );
               return siblingFile.buffer.toString('utf8');
             } catch {
@@ -683,11 +721,11 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       };
 
       const exportSource = await resolveHtmlExportSource({
-        projectId: req.params.id,
+        projectId: project.id,
         projectsRoot: projectsDirFor(req),
         relPath,
         html: file.buffer.toString('utf8'),
-        metadata: project?.metadata,
+        metadata: project.metadata,
         readProjectFile,
         resolveProjectFilePath,
       });

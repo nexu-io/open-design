@@ -432,6 +432,7 @@ import {
   insertScheduledRoutineRun,
   insertTemplate,
   findTemplateByNameAndProject,
+  ownerScopedProjectId,
   updateTemplate,
   listProjectsAwaitingInput,
   listConversations,
@@ -6299,6 +6300,35 @@ export async function startServer({
     requestRunOverride,
     verifyDesktopImportToken,
   };
+  function projectIdForRequest(req, projectId) {
+    return ownerScopedProjectId(projectId, ownerFieldsForRequest(req));
+  }
+  function getProjectForRequest(req, projectId) {
+    const scope = ownerScopeForRequest(req);
+    const project = getProject(db, projectId, scope);
+    if (project) return project;
+    const scopedProjectId = projectIdForRequest(req, projectId);
+    return scopedProjectId === projectId ? null : getProject(db, scopedProjectId, scope);
+  }
+  function projectAccessForRequest(req, projectId, options = {}) {
+    const project = getProjectForRequest(req, projectId);
+    if (project) {
+      return {
+        id: project.id,
+        metadata: project.metadata,
+        name: project.name,
+        project,
+      };
+    }
+    if (getProject(db, projectId)) return null;
+    return options.allowUntracked ? { id: projectId, metadata: undefined, name: projectId, project: null } : null;
+  }
+  function requireProjectAccessForRequest(req, res, projectId, options = {}) {
+    const access = projectAccessForRequest(req, projectId, options);
+    if (access) return access;
+    sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+    return null;
+  }
   const finalizeDeps = {
     defaultBaseUrlForFinalizeProtocol,
     finalizeDesignPackage,
@@ -6525,8 +6555,10 @@ export async function startServer({
 
   app.delete('/api/projects/:id', async (req, res) => {
     try {
-      dbDeleteProject(db, req.params.id);
-      await removeProjectDir(projectsDirFor(req), req.params.id).catch(() => {});
+      const project = getProjectForRequest(req, req.params.id);
+      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      dbDeleteProject(db, project.id, ownerScopeForRequest(req));
+      await removeProjectDir(projectsDirFor(req), project.id).catch(() => {});
       /** @type {import('@open-design/contracts').OkResponse} */
       const body = { ok: true };
       res.json(body);
@@ -6543,7 +6575,8 @@ export async function startServer({
   // chokidar watcher is refcounted in project-watchers.ts so we never hold
   // descriptors for projects no UI is looking at.
   app.get('/api/projects/:id/events', (req, res) => {
-    if (!getProject(db, req.params.id)) {
+    const project = getProjectForRequest(req, req.params.id);
+    if (!project) {
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
     }
     let sub;
@@ -6552,26 +6585,25 @@ export async function startServer({
       const projectEventSink = (payload) => {
         sse.send(payload.type, payload);
       };
-      let sinks = activeProjectEventSinks.get(req.params.id);
+      let sinks = activeProjectEventSinks.get(project.id);
       if (!sinks) {
         sinks = new Set();
-        activeProjectEventSinks.set(req.params.id, sinks);
+        activeProjectEventSinks.set(project.id, sinks);
       }
       sinks.add(projectEventSink);
-      const watchProject = getProject(db, req.params.id);
-      sub = subscribeFileEvents(projectsDirFor(req), req.params.id, (evt) => {
+      sub = subscribeFileEvents(projectsDirFor(req), project.id, (evt) => {
         sse.send('file-changed', evt);
-      }, { metadata: watchProject?.metadata });
-      sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => {});
+      }, { metadata: project.metadata });
+      sub.ready.then(() => sse.send('ready', { projectId: project.id })).catch(() => {});
       const cleanup = () => {
         if (sub) {
           const { unsubscribe } = sub;
           sub = null;
           Promise.resolve(unsubscribe()).catch(() => {});
         }
-        const currentSinks = activeProjectEventSinks.get(req.params.id);
+        const currentSinks = activeProjectEventSinks.get(project.id);
         currentSinks?.delete(projectEventSink);
-        if (currentSinks?.size === 0) activeProjectEventSinks.delete(req.params.id);
+        if (currentSinks?.size === 0) activeProjectEventSinks.delete(project.id);
       };
       res.on('close', cleanup);
       res.on('finish', cleanup);
@@ -8739,12 +8771,13 @@ export async function startServer({
   });
   app.get('/api/projects/:projectId/applied-plugins', (req, res) => {
     try {
-      if (!getProject(db, req.params.projectId, ownerScopeForRequest(req))) {
+      const project = getProjectForRequest(req, req.params.projectId);
+      if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
       const rows = db
         .prepare(`SELECT id FROM applied_plugin_snapshots WHERE project_id = ? ORDER BY applied_at DESC`)
-        .all(req.params.projectId);
+        .all(project.id);
       res.json({
         snapshots: rows.map((r) => getSnapshot(db, (r).id)).filter((x) => x !== null),
       });
@@ -8852,7 +8885,7 @@ export async function startServer({
     }
     const projectId = typeof surface?.projectId === 'string' ? surface.projectId : null;
     if (!projectId) return ownerScope.includeOwnerless;
-    if (getProject(db, projectId, ownerScope)) return true;
+    if (getProjectForRequest(req, projectId)) return true;
     if (getProject(db, projectId)) return false;
     return ownerScope.includeOwnerless;
   }
@@ -8874,12 +8907,13 @@ export async function startServer({
 
   app.get('/api/projects/:projectId/genui', (req, res) => {
     try {
-      if (!getProject(db, req.params.projectId, ownerScopeForRequest(req))) {
+      const project = getProjectForRequest(req, req.params.projectId);
+      if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      const surfaces = listSurfacesForProject(db, req.params.projectId)
+      const surfaces = listSurfacesForProject(db, project.id)
         .map(publicGenuiSurface);
-      res.json({ projectId: req.params.projectId, surfaces });
+      res.json({ projectId: project.id, surfaces });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
@@ -8924,11 +8958,11 @@ export async function startServer({
           const projectId =
             (run as { projectId?: string | null } | undefined)?.projectId ?? updated.projectId;
           if (projectId) {
-            const project = getProject(db, projectId, ownerScopeForRequest(req)) ?? getProject(db, projectId);
+            const project = getProjectForRequest(req, projectId) ?? getProject(db, projectId);
             const metadata = project?.metadata && typeof project.metadata === 'string'
               ? JSON.parse(project.metadata)
               : project?.metadata ?? undefined;
-            const cwd = resolveProjectDir(projectsDirFor(req), projectId, metadata);
+            const cwd = resolveProjectDir(projectsDirFor(req), project?.id ?? projectId, metadata);
             const bridgeResult = await applyDiffReviewDecisionToCwd({
               cwd,
               value,
@@ -8954,11 +8988,12 @@ export async function startServer({
 
   app.post('/api/projects/:projectId/genui/:surfaceId/revoke', (req, res) => {
     try {
-      if (!getProject(db, req.params.projectId, ownerScopeForRequest(req))) {
+      const project = getProjectForRequest(req, req.params.projectId);
+      if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
       const changed = revokeProjectSurface(db, {
-        projectId: req.params.projectId,
+        projectId: project.id,
         surfaceId: req.params.surfaceId,
       });
       res.json({ ok: true, invalidated: changed });
@@ -8969,7 +9004,8 @@ export async function startServer({
 
   app.post('/api/projects/:projectId/genui/prefill', (req, res) => {
     try {
-      if (!getProject(db, req.params.projectId, ownerScopeForRequest(req))) {
+      const project = getProjectForRequest(req, req.params.projectId);
+      if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
       const body = req.body && typeof req.body === 'object' ? req.body : {};
@@ -8985,7 +9021,7 @@ export async function startServer({
         return res.status(400).json({ error: 'snapshotId and surfaceId are required' });
       }
       const row = prefillProjectSurface(db, {
-        projectId:        req.params.projectId,
+        projectId:        project.id,
         ...ownerFieldsForRequest(req),
         pluginSnapshotId: snapshotId,
         surfaceId,
@@ -9385,10 +9421,12 @@ export async function startServer({
       if (!projectId) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
       }
+      const projectAccess = requireProjectAccessForRequest(req, res, projectId, { allowUntracked: true });
+      if (!projectAccess) return;
 
       const artifacts = await listLiveArtifacts({
         projectsRoot: projectsDirFor(req),
-        projectId,
+        projectId: projectAccess.id,
       });
       res.json({ artifacts });
     } catch (err) {
@@ -9406,12 +9444,14 @@ export async function startServer({
       if (!projectId) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
       }
+      const projectAccess = requireProjectAccessForRequest(req, res, projectId, { allowUntracked: true });
+      if (!projectAccess) return;
 
       const variant = typeof req.query.variant === 'string' ? req.query.variant : 'rendered';
       if (variant === 'template' || variant === 'rendered-source') {
         const html = await readLiveArtifactCode({
           projectsRoot: projectsDirFor(req),
-          projectId,
+          projectId: projectAccess.id,
           artifactId: req.params.artifactId,
           variant: variant === 'template' ? 'template' : 'rendered',
         });
@@ -9424,7 +9464,7 @@ export async function startServer({
 
       const record = await ensureLiveArtifactPreview({
         projectsRoot: projectsDirFor(req),
-        projectId,
+        projectId: projectAccess.id,
         artifactId: req.params.artifactId,
       });
       setLiveArtifactPreviewHeaders(res);
@@ -9440,10 +9480,12 @@ export async function startServer({
       if (!projectId) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
       }
+      const projectAccess = requireProjectAccessForRequest(req, res, projectId, { allowUntracked: true });
+      if (!projectAccess) return;
 
       const record = await getLiveArtifact({
         projectsRoot: projectsDirFor(req),
-        projectId,
+        projectId: projectAccess.id,
         artifactId: req.params.artifactId,
       });
       res.json({ artifact: record.artifact });
@@ -9458,10 +9500,12 @@ export async function startServer({
       if (!projectId) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
       }
+      const projectAccess = requireProjectAccessForRequest(req, res, projectId, { allowUntracked: true });
+      if (!projectAccess) return;
 
       const refreshes = await listLiveArtifactRefreshLogEntries({
         projectsRoot: projectsDirFor(req),
-        projectId,
+        projectId: projectAccess.id,
         artifactId: req.params.artifactId,
       });
       res.json({ refreshes });
@@ -9604,14 +9648,16 @@ export async function startServer({
       if (!projectId) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
       }
+      const projectAccess = requireProjectAccessForRequest(req, res, projectId, { allowUntracked: true });
+      if (!projectAccess) return;
 
       const record = await updateLiveArtifact({
         projectsRoot: projectsDirFor(req),
-        projectId,
+        projectId: projectAccess.id,
         artifactId: req.params.artifactId,
         input: req.body ?? {},
       });
-      emitLiveArtifactEvent({ projectId }, 'updated', record.artifact);
+      emitLiveArtifactEvent({ projectId: projectAccess.id }, 'updated', record.artifact);
       res.json({ artifact: record.artifact });
     } catch (err) {
       sendLiveArtifactRouteError(res, err);
@@ -9624,19 +9670,21 @@ export async function startServer({
       if (!projectId) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
       }
+      const projectAccess = requireProjectAccessForRequest(req, res, projectId, { allowUntracked: true });
+      if (!projectAccess) return;
 
       const existing = await getLiveArtifact({
         projectsRoot: projectsDirFor(req),
-        projectId,
+        projectId: projectAccess.id,
         artifactId: req.params.artifactId,
       });
       await deleteLiveArtifact({
         projectsRoot: projectsDirFor(req),
-        projectId,
+        projectId: projectAccess.id,
         artifactId: req.params.artifactId,
       });
-      updateProject(db, projectId, {});
-      emitLiveArtifactEvent({ projectId }, 'deleted', existing.artifact);
+      updateProject(db, projectAccess.id, {});
+      emitLiveArtifactEvent({ projectId: projectAccess.id }, 'deleted', existing.artifact);
       res.json({ ok: true });
     } catch (err) {
       sendLiveArtifactRouteError(res, err);
@@ -9653,27 +9701,29 @@ export async function startServer({
       if (!projectId) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
       }
+      const projectAccess = requireProjectAccessForRequest(req, res, projectId, { allowUntracked: true });
+      if (!projectAccess) return;
 
       let result;
       try {
         result = await refreshLiveArtifact({
           projectsRoot: projectsDirFor(req),
-          projectId,
+          projectId: projectAccess.id,
           artifactId: req.params.artifactId,
           connectorService: connectorServiceForDataDir(runtimeDataDirFor(req)),
           onStarted: ({ refreshId }) => {
-            emitLiveArtifactRefreshEvent({ projectId }, { phase: 'started', artifactId: req.params.artifactId, refreshId });
+            emitLiveArtifactRefreshEvent({ projectId: projectAccess.id }, { phase: 'started', artifactId: req.params.artifactId, refreshId });
           },
         });
       } catch (refreshErr) {
-        emitLiveArtifactRefreshEvent({ projectId }, {
+        emitLiveArtifactRefreshEvent({ projectId: projectAccess.id }, {
           phase: 'failed',
           artifactId: req.params.artifactId,
           error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
         });
         throw refreshErr;
       }
-      emitLiveArtifactRefreshEvent({ projectId }, {
+      emitLiveArtifactRefreshEvent({ projectId: projectAccess.id }, {
         phase: 'succeeded',
         artifactId: req.params.artifactId,
         refreshId: result.refresh.id,
@@ -10357,12 +10407,12 @@ export async function startServer({
     if (ownerEmail) return req.user?.email === ownerEmail;
     const projectId = typeof task?.projectId === 'string' ? task.projectId : '';
     if (!projectId) return false;
-    if (getProject(db, projectId, ownerScopeForRequest(req))) return true;
+    if (getProjectForRequest(req, projectId)) return true;
     return !getProject(db, projectId);
   }
 
   function getProjectForFileRequest(req, res, projectId) {
-    const project = getProject(db, projectId, ownerScopeForRequest(req));
+    const project = getProjectForRequest(req, projectId);
     if (!project) {
       sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       return null;
@@ -10419,7 +10469,7 @@ export async function startServer({
       const max = Math.min(Number(req.query.max) || 200, 1000);
       const searchProject = getProjectForFileRequest(req, res, req.params.id);
       if (!searchProject) return;
-      const matches = await searchProjectFiles(projectsDirFor(req), req.params.id, query, {
+      const matches = await searchProjectFiles(projectsDirFor(req), searchProject.id, query, {
         pattern,
         max,
         metadata: searchProject.metadata,
@@ -10442,7 +10492,7 @@ export async function startServer({
       if (!project) return;
       const { buffer, baseName } = await buildProjectArchive(
         projectsDirFor(req),
-        req.params.id,
+        project.id,
         root,
         project.metadata,
       );
@@ -10485,7 +10535,7 @@ export async function startServer({
       if (!project) return;
       const { buffer } = await buildBatchArchive(
         projectsDirFor(req),
-        req.params.id,
+        project.id,
         files,
         project.metadata,
       );
@@ -10529,7 +10579,7 @@ export async function startServer({
       const relPath = String(req.params[1] ?? '');
       const project = getProjectForFileRequest(req, res, projectId);
       if (!project) return;
-      const file = await readProjectFile(projectsDirFor(req), projectId, relPath, project.metadata);
+      const file = await readProjectFile(projectsDirFor(req), project.id, relPath, project.metadata);
       // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
       // data: URIs, file://, and some sandboxed iframes also send null — all are
       // local-only callers, so this is safe. Real cross-origin sites send a real
@@ -10555,7 +10605,7 @@ export async function startServer({
       const rawSplat = String(req.params[1] ?? '');
       const project = getProjectForFileRequest(req, res, projectId);
       if (!project) return;
-      await deleteProjectFile(projectsDirFor(req), projectId, rawSplat, project.metadata);
+      await deleteProjectFile(projectsDirFor(req), project.id, rawSplat, project.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -10576,7 +10626,7 @@ export async function startServer({
       if (!project) return;
       const file = await readProjectFile(
         projectsDirFor(req),
-        req.params.id,
+        project.id,
         req.params.name,
         project.metadata,
       );
@@ -10606,7 +10656,7 @@ export async function startServer({
       if (!project) return;
       const file = await readProjectFile(
         projectsDirFor(req),
-        projectId,
+        project.id,
         fileSplat,
         project.metadata,
       );
@@ -10637,7 +10687,7 @@ export async function startServer({
       try {
         const uploadProject = getProjectForFileRequest(req, res, req.params.id);
         if (!uploadProject) return;
-        await ensureProject(projectsDirFor(req), req.params.id, uploadProject.metadata);
+        await ensureProject(projectsDirFor(req), uploadProject.id, uploadProject.metadata);
         if (req.file) {
           const buf = await fs.promises.readFile(req.file.path);
           const desiredName = sanitizeName(
@@ -10645,7 +10695,7 @@ export async function startServer({
           );
           const meta = await writeProjectFile(
             projectsDirFor(req),
-            req.params.id,
+            uploadProject.id,
             desiredName,
             buf,
             {},
@@ -10685,7 +10735,7 @@ export async function startServer({
             : Buffer.from(content, 'utf8');
         const meta = await writeProjectFile(
           projectsDirFor(req),
-          req.params.id,
+          uploadProject.id,
           name,
           buf,
           { artifactManifest },
@@ -10709,7 +10759,7 @@ export async function startServer({
     try {
       const delProject = getProjectForFileRequest(req, res, req.params.id);
       if (!delProject) return;
-      await deleteProjectFile(projectsDirFor(req), req.params.id, req.params.name, delProject.metadata);
+      await deleteProjectFile(projectsDirFor(req), delProject.id, req.params.name, delProject.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -10904,7 +10954,7 @@ export async function startServer({
     if (ownerEmail) return req.user?.email === ownerEmail;
     const projectId = typeof task?.projectId === 'string' ? task.projectId : '';
     if (!projectId) return false;
-    if (getProject(db, projectId, ownerScopeForRequest(req))) return true;
+    if (getProjectForRequest(req, projectId)) return true;
     return !getProject(db, projectId);
   }
 
@@ -10955,9 +11005,11 @@ export async function startServer({
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const projectId = req.params.id;
+    const project = getProjectForRequest(req, projectId);
+    if (!project) return res.status(404).json({ error: 'project not found' });
     const includeDone =
       req.query.includeDone === '1' || req.query.includeDone === 'true';
-    const tasks = listMediaTasksByProject(db, projectId, {
+    const tasks = listMediaTasksByProject(db, project.id, {
       includeTerminal: includeDone,
     }).map((t) => ({
       taskId: t.id,
@@ -10983,9 +11035,11 @@ export async function startServer({
   app.post(
     '/api/projects/:id/upload',
     (req, res, next) => {
-      if (!getProject(db, req.params.id, ownerScopeForRequest(req))) {
+      const project = getProjectForRequest(req, req.params.id);
+      if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
+      req.params.id = project.id;
       next();
     },
     handleProjectUpload,
@@ -14602,7 +14656,7 @@ export async function startServer({
       return req.user?.email === runOwnerEmail;
     }
     if (!run?.projectId) return true;
-    if (getProject(db, run.projectId, ownerScopeForRequest(req))) return true;
+    if (getProjectForRequest(req, run.projectId)) return true;
     return !getProject(db, run.projectId);
   }
 
@@ -14629,10 +14683,11 @@ export async function startServer({
     }
     let requestProjectForRun = null;
     if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
-      requestProjectForRun = getProject(db, requestBody.projectId, ownerScopeForRequest(req));
+      requestProjectForRun = getProjectForRequest(req, requestBody.projectId);
       if (!requestProjectForRun) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
+      requestBody.projectId = requestProjectForRun.id;
     }
     // Plan §3.A1 / spec §11.5: resolve any pluginId / appliedPluginSnapshotId
     // before the run is created. The resolver returns null when the body
@@ -15429,10 +15484,11 @@ export async function startServer({
     let chatProject = null;
     if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
       try {
-        chatProject = getProject(db, requestBody.projectId, ownerScopeForRequest(req));
+        chatProject = getProjectForRequest(req, requestBody.projectId);
         if (!chatProject) {
           return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         }
+        requestBody.projectId = chatProject.id;
         assertSandboxProjectRootAvailable(chatProject?.metadata);
       } catch (err) {
         if (err instanceof SandboxImportedProjectError) {

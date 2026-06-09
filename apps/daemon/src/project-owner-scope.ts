@@ -21,6 +21,7 @@ export function ownerFieldsForUser(user: DaemonUser | null | undefined) {
   return {
     ownerEmail: user?.email ?? null,
     ownerDirHash: user?.dirHash ?? null,
+    projectIdOwnerKey: user?.source === 'trusted-header' ? user.dirHash : null,
   };
 }
 
