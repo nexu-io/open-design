@@ -1154,6 +1154,15 @@
 .composer-inline-mention--file       { --m-hue: var(--blue);    --m-tint: var(--blue-bg); }
 .composer-inline-mention--connector  { --m-hue: var(--green);   --m-tint: var(--green-bg); }
 .composer-inline-mention--asset      { --m-hue: var(--text-soft); --m-tint: var(--bg-subtle); }
+/* Working-directory picker row, directly below the input and above the
+   controls — mirrors the Home composer's placement. */
+.composer-workdir-row {
+  display: flex;
+  justify-content: flex-start;
+  /* Hug the composer card so the picker sits ~5px below it (to the icon),
+     matching the Home placement. */
+  margin-top: -4px;
+}
 .composer-row {
   display: flex;
   align-items: center;

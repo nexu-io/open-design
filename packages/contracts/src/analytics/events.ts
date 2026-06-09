@@ -1064,6 +1064,9 @@ export interface HomeChatComposerClickProps {
     // from a Community card or an example-prompt preset. `chip_id` is the
     // plugin id.
     | 'plugin_chip_clear'
+    // Re-selecting a previously used folder from the working-dir picker's
+    // "Recent folders" submenu.
+    | 'working_dir_recent'
     | 'task_chip'
     // Sub-category filter pill under the task rail (全部 / Landing / Brand /
     // Dashboards / …). `subcategory` carries the picked slug; '全部' sends

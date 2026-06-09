@@ -171,7 +171,6 @@ import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { ChatPane } from './ChatPane';
 import type { QuestionFormOpenRequest } from './AssistantMessage';
-import { WorkingDirPill } from './WorkingDirPill';
 import type { ChatSendMeta } from './ChatComposer';
 import {
   CritiqueTheaterMount,
@@ -876,7 +875,6 @@ export function ProjectView({
   // True while a working-dir replace is reindexing the new folder. Surfaced
   // to the Design Files panel so the file list shows a loading state instead
   // of silently sitting on the old tree for the few seconds the scan takes.
-  const [workingDirReplacing, setWorkingDirReplacing] = useState(false);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const projectFilesRef = useRef<ProjectFile[]>([]);
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
@@ -4356,6 +4354,7 @@ export function ProjectView({
     onProjectChange({ ...project, metadata });
     void patchProject(project.id, { metadata });
   }, [onProjectChange, project]);
+
   const sendDesignSystemFeedback = useCallback((
     sectionTitle: string,
     feedback: string,
@@ -5595,33 +5594,11 @@ export function ProjectView({
               backLabel={t('project.backToProjects')}
               composerFooterAccessory={executionControls}
               composerLeadingAccessory={(
-                <>
-                  <ProjectInstructionsControl
-                    instructions={project.customInstructions ?? ''}
-                    onSave={handleProjectInstructionsSave}
-                    t={t}
-                  />
-                  <WorkingDirPill
-                    projectId={project.id}
-                    resolvedDir={projectDetail.resolvedDir}
-                    onReplaced={({ project: updated }) => {
-                      if (updated) onProjectChange(updated);
-                      // The new working dir has a different file tree, so the
-                      // current listing, breadcrumb nav, and open tabs are all
-                      // stale. Refetch files; DesignFilesPanel's self-heal then
-                      // drops the now-unmatched currentDir back to root.
-                      // projectDetail.refresh() repulls resolvedDir so the
-                      // breadcrumb root + pill show the new folder name even on
-                      // the Electron path, which reports no updated project.
-                      setWorkingDirReplacing(true);
-                      refreshFilesAndDesignMd();
-                      void Promise.all([
-                        refreshWorkspaceItems(),
-                        projectDetail.refresh(),
-                      ]).finally(() => setWorkingDirReplacing(false));
-                    }}
-                  />
-                </>
+                <ProjectInstructionsControl
+                  instructions={project.customInstructions ?? ''}
+                  onSave={handleProjectInstructionsSave}
+                  t={t}
+                />
               )}
               projectHeader={(
                 <span className="chat-project-title-line">
@@ -5692,7 +5669,7 @@ export function ProjectView({
               ? baseDir.split(/[/\\]/).filter(Boolean).pop()
               : undefined;
           })()}
-          reloading={workingDirReplacing}
+          reloading={false}
           resolvedDir={projectDetail.resolvedDir}
           files={projectFiles}
           liveArtifacts={liveArtifacts}
