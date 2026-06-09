@@ -18,6 +18,12 @@ import { useAnalytics } from '../analytics/provider';
 import { trackChatPanelClick, trackRunFailedToastSurfaceView } from '../analytics/events';
 import { attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
 import { useT } from '../i18n';
+import {
+  FEATURED_DESIGN_TOOLBOX_ACTION_IDS,
+  findDesignToolboxSkill,
+  getDesignToolboxAction,
+  type DesignToolboxActionId,
+} from '../runtime/design-toolbox';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';
@@ -487,8 +493,10 @@ interface Props {
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
   // "Next step" affordance handlers forwarded to the last assistant message.
+  // The featured design-toolbox rows are driven directly off the composer ref
+  // owned here, so they need no handler from ProjectView (unlike onArtifactShare).
   onArtifactShare?: (fileName: string) => void;
-  onArtifactChip?: (fileName: string | null, prompt: string) => void;
+  onArtifactDownload?: (fileName: string) => void;
   onForkFromMessage?: (assistantMessage: ChatMessage) => void;
   forkingMessageId?: string | null;
   // Header "+" button — kicks off ProjectView's create-conversation flow.
@@ -683,7 +691,7 @@ export function ChatPane({
   onContinueRemainingTasks,
   onAssistantFeedback,
   onArtifactShare,
-  onArtifactChip,
+  onArtifactDownload,
   onForkFromMessage,
   forkingMessageId = null,
   onNewConversation,
@@ -783,7 +791,6 @@ export function ChatPane({
     onContinueRemainingTasks,
     onAssistantFeedback,
     onArtifactShare,
-    onArtifactChip,
     onForkFromMessage,
     onShareToOpenDesign,
   });
@@ -792,10 +799,30 @@ export function ChatPane({
     onContinueRemainingTasks,
     onAssistantFeedback,
     onArtifactShare,
-    onArtifactChip,
     onForkFromMessage,
     onShareToOpenDesign,
   };
+  // Featured design-toolbox follow-up rows on the assistant "next step" card.
+  // The toolbox left the "+" menu, so these route straight into the composer
+  // we own here: seeding an action's prompt+skill, or opening the full panel.
+  // Both stay stable (composer ref + no deps) so AssistantMessage stays memoized.
+  const handleToolboxAction = useCallback((id: DesignToolboxActionId) => {
+    composerRef.current?.applyDesignToolboxAction(id);
+  }, []);
+  const handlePickSkill = useCallback((skillId: string) => {
+    composerRef.current?.applyDesignToolboxSkill(skillId);
+  }, []);
+  // The `@skill` shown in each featured row's hover detail — matched the same
+  // way the composer matches it, using the raw skill name (what gets inlined
+  // into the draft). Recomputed only when the skill list changes.
+  const featuredToolboxSkillNames = useMemo<Partial<Record<DesignToolboxActionId, string | null>>>(() => {
+    const map: Partial<Record<DesignToolboxActionId, string | null>> = {};
+    for (const id of FEATURED_DESIGN_TOOLBOX_ACTION_IDS) {
+      const action = getDesignToolboxAction(id);
+      map[id] = action ? (findDesignToolboxSkill(action, skills)?.name ?? null) : null;
+    }
+    return map;
+  }, [skills]);
   const [tab, setTab] = useState<Tab>('chat');
   const [showConvList, setShowConvList] = useState(false);
   const [conversationSearch, setConversationSearch] = useState('');
@@ -1972,7 +1999,11 @@ export function ChatPane({
                 assistantCallbacksRef={assistantCallbacksRef}
                 onContinueRemainingTasks={onContinueRemainingTasks}
                 onArtifactShare={onArtifactShare}
-                onArtifactChip={onArtifactChip}
+                onToolboxAction={handleToolboxAction}
+                onPickSkill={handlePickSkill}
+                onArtifactDownload={onArtifactDownload}
+                nextStepSkills={skills}
+                toolboxSkillNames={featuredToolboxSkillNames}
                 onForkFromMessage={onForkFromMessage}
                 onAssistantFeedback={onAssistantFeedback}
                 forkingMessageId={forkingMessageId}
@@ -2199,7 +2230,6 @@ interface AssistantCallbacks {
     | ((message: ChatMessage, change: ChatMessageFeedbackChange) => void)
     | undefined;
   onArtifactShare: ((fileName: string) => void) | undefined;
-  onArtifactChip: ((fileName: string | null, prompt: string) => void) | undefined;
   onForkFromMessage: ((message: ChatMessage) => void) | undefined;
   onShareToOpenDesign: ((assistantMessageId: string) => void) | undefined;
 }
@@ -2257,7 +2287,11 @@ function ChatRows({
   assistantCallbacksRef,
   onContinueRemainingTasks,
   onArtifactShare,
-  onArtifactChip,
+  onToolboxAction,
+  onPickSkill,
+  onArtifactDownload,
+  nextStepSkills,
+  toolboxSkillNames,
   onForkFromMessage,
   onAssistantFeedback,
   forkingMessageId,
@@ -2294,7 +2328,11 @@ function ChatRows({
   assistantCallbacksRef: MutableRefObject<AssistantCallbacks>;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onArtifactShare?: (fileName: string) => void;
-  onArtifactChip?: (fileName: string | null, prompt: string) => void;
+  onToolboxAction?: (id: DesignToolboxActionId) => void;
+  onPickSkill?: (skillId: string) => void;
+  onArtifactDownload?: (fileName: string) => void;
+  nextStepSkills?: SkillSummary[];
+  toolboxSkillNames?: Partial<Record<DesignToolboxActionId, string | null>>;
   onForkFromMessage?: (message: ChatMessage) => void;
   onAssistantFeedback?: (message: ChatMessage, change: ChatMessageFeedbackChange) => void;
   forkingMessageId?: string | null;
@@ -2399,11 +2437,11 @@ function ChatRows({
             ? (fileName) => assistantCallbacksRef.current.onArtifactShare?.(fileName)
             : undefined
         }
-        onArtifactChip={
-          onArtifactChip
-            ? (fileName, prompt) => assistantCallbacksRef.current.onArtifactChip?.(fileName, prompt)
-            : undefined
-        }
+        onToolboxAction={onToolboxAction}
+        onPickSkill={onPickSkill}
+        onArtifactDownload={onArtifactDownload}
+        nextStepSkills={nextStepSkills}
+        toolboxSkillNames={toolboxSkillNames}
       />
     );
   };

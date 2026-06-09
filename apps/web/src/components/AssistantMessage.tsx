@@ -42,6 +42,7 @@ import {
 import type { PluginFolderAgentAction } from "./design-files/pluginFolderActions";
 import { Icon } from "./Icon";
 import { NextStepActions } from "./NextStepActions";
+import type { DesignToolboxActionId } from "../runtime/design-toolbox";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
 import { useT } from "../i18n";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
@@ -61,6 +62,7 @@ import type {
   ChatMessageFeedbackRating,
   ChatMessageFeedbackReasonCode,
   ProjectFile,
+  SkillSummary,
 } from "../types";
 
 type TranslateFn = (
@@ -302,7 +304,14 @@ interface Props {
   // assistant message. Omitting them hides the affordance entirely (e.g. in
   // tests that don't wire chat send).
   onArtifactShare?: (fileName: string) => void;
-  onArtifactChip?: (fileName: string | null, prompt: string) => void;
+  // Featured design-toolbox follow-up rows on the "next step" card. Seeding the
+  // composer with an action / opening the full toolbox both route through the
+  // composer; see ChatPane's composer ref wiring.
+  onToolboxAction?: (id: DesignToolboxActionId) => void;
+  onPickSkill?: (skillId: string) => void;
+  onArtifactDownload?: (fileName: string) => void;
+  nextStepSkills?: SkillSummary[];
+  toolboxSkillNames?: Partial<Record<DesignToolboxActionId, string | null>>;
 }
 
 // Props compared by reference to decide whether a memoized AssistantMessage can
@@ -335,6 +344,11 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'shareToOpenDesignBusy',
   'suppressDirectionForms',
   'hasDesignSystemContext',
+  // Memoized + stable from ChatPane; compared so a late skill-list load
+  // refreshes the featured next-step rows' `@skill` hover detail and the full
+  // More → Design toolbox skill list.
+  'toolboxSkillNames',
+  'nextStepSkills',
   // Live streaming tool input changes identity on every `tool_input_delta`.
   // ChatPane passes it only to the streaming row (undefined elsewhere), so
   // comparing it re-renders just that row as the card grows — without it the
@@ -392,7 +406,11 @@ function AssistantMessageImpl({
   suppressDirectionForms = false,
   hasDesignSystemContext = false,
   onArtifactShare,
-  onArtifactChip,
+  onToolboxAction,
+  onPickSkill,
+  onArtifactDownload,
+  nextStepSkills,
+  toolboxSkillNames,
 }: Props) {
   const t = useT();
   const events = message.events ?? [];
@@ -469,12 +487,13 @@ function AssistantMessageImpl({
           }),
     [blocks, fileOps, message, produced, projectFiles, streaming],
   );
-  // The single artifact the "next step" affordance anchors to: prefer the
-  // first HTML produced file (decks/prototypes are HTML and are the ones the
-  // Share/Export menu + visual-polish loop apply to).
+  // The single artifact the "next step" affordance anchors to: prefer the HTML
+  // produced by THIS turn; if the final turn emitted none (a summary / continue
+  // message) fall back to the most recently modified HTML in the project so
+  // Share / Download still target the deliverable the user just made.
   const nextStepArtifactName = useMemo(
-    () => pickPreviewableArtifact(displayedProduced),
-    [displayedProduced],
+    () => pickPreviewableArtifact(displayedProduced) ?? pickLatestPreviewableArtifact(projectFiles),
+    [displayedProduced, projectFiles],
   );
   const pluginActionFolders = useMemo(
     () =>
@@ -586,7 +605,7 @@ function AssistantMessageImpl({
     !streaming &&
     !!projectId &&
     runSucceeded &&
-    ((!!isLast && !!onArtifactChip) || showOpenDesignSubmission);
+    ((!!isLast && !!onToolboxAction) || showOpenDesignSubmission);
   // Pre-output vs working: before any real content (text / thinking / tools /
   // files) the footer shimmers "Preparing…"; the moment content lands it
   // flips to "Working". The elapsed clock stays anchored to the persisted run
@@ -808,7 +827,11 @@ function AssistantMessageImpl({
           <NextStepActions
             fileName={isLast ? nextStepArtifactName : null}
             onShare={isLast && nextStepArtifactName ? onArtifactShare : undefined}
-            onChip={isLast ? onArtifactChip : undefined}
+            onToolboxAction={isLast ? onToolboxAction : undefined}
+            onPickSkill={isLast ? onPickSkill : undefined}
+            onDownload={isLast && nextStepArtifactName ? onArtifactDownload : undefined}
+            skills={isLast ? nextStepSkills : undefined}
+            toolboxSkillNames={isLast ? toolboxSkillNames : undefined}
             onShareToOpenDesign={showOpenDesignSubmission ? onShareToOpenDesign : undefined}
             shareToOpenDesignBusy={shareToOpenDesignBusy}
           />
@@ -822,11 +845,26 @@ function AssistantMessageImpl({
 // files, or null if this turn produced no shareable/polishable preview. Only
 // HTML files drive the preview workspace's Share/Export menu and the
 // visual-polish loop, so the "next step" affordance keys off them.
+function isPreviewableHtml(f: ProjectFile): boolean {
+  return f.kind === "html" || /\.html?$/i.test(f.name);
+}
+
 function pickPreviewableArtifact(files: ProjectFile[]): string | null {
-  const html = files.find(
-    (f) => f.kind === "html" || /\.html?$/i.test(f.name),
-  );
+  const html = files.find(isPreviewableHtml);
   return html ? html.name : null;
+}
+
+// Fallback for when the card-bearing turn produced no HTML itself: pick the
+// most recently modified HTML in the project (the deliverable the user just
+// made / is looking at) rather than whichever HTML happens to be first, which
+// would attach Share/Download to an arbitrary file in a multi-artifact project.
+function pickLatestPreviewableArtifact(files: ProjectFile[]): string | null {
+  let latest: ProjectFile | null = null;
+  for (const f of files) {
+    if (!isPreviewableHtml(f)) continue;
+    if (!latest || (f.mtime ?? 0) > (latest.mtime ?? 0)) latest = f;
+  }
+  return latest ? latest.name : null;
 }
 
 function inferProducedFilesFromTurn({

@@ -1004,6 +1004,8 @@ export function ProjectView({
   // file's Share/Export menu. Drives the "Share" next-step action: it reuses the
   // existing export/deploy surface rather than introducing a new share backend.
   const [shareRequest, setShareRequest] = useState<{ name: string; nonce: number } | null>(null);
+  // Parallel to shareRequest, but opens the workspace's Download/Export menu.
+  const [downloadRequest, setDownloadRequest] = useState<{ name: string; nonce: number } | null>(null);
   // When a queued chat send starts processing, ask the workspace to flip the
   // deck preview to the slide its marked element lives on, so the user watches
   // the edit land in context instead of staying parked on slide 1. Mirrors the
@@ -4948,19 +4950,22 @@ export function ProjectView({
   }, [githubConnected, onOpenSettings, designSystemProject, projectFiles]);
 
   // "Next step" affordance handlers (shown under the last assistant message
-  // once it produced a previewable HTML artifact). Recommended-direction chips
-  // prefill the composer (not auto-send) so the user reviews before sending;
-  // Share reuses the preview workspace's existing Share/Export menu. There is
-  // deliberately no generic "continue editing" / "optimize visuals" action —
-  // free-form follow-ups belong in the composer and the visual directions are
-  // already covered by the concrete chips, so vague catch-alls only added noise.
-  const handleArtifactChip = useCallback((_fileName: string | null, prompt: string) => {
-    setComposerDraftSignal({ text: prompt, nonce: Date.now() });
-  }, []);
+  // once it produced a previewable HTML artifact). Share reuses the preview
+  // workspace's existing Share/Export menu. The featured design-toolbox rows are
+  // driven by ChatPane's composer ref, so ProjectView no longer wires them here.
   const handleArtifactShare = useCallback(
     (fileName: string) => {
       requestOpenFile(fileName);
       setShareRequest({ name: fileName, nonce: Date.now() });
+    },
+    [requestOpenFile],
+  );
+  // Mirrors share, but opens the workspace's Download/Export menu (PDF / image /
+  // zip / standalone HTML / save-as-template) instead of a bare file download.
+  const handleArtifactDownload = useCallback(
+    (fileName: string) => {
+      requestOpenFile(fileName);
+      setDownloadRequest({ name: fileName, nonce: Date.now() });
     },
     [requestOpenFile],
   );
@@ -5560,7 +5565,7 @@ export function ProjectView({
               onContinueRemainingTasks={handleContinueRemainingTasks}
               onAssistantFeedback={handleAssistantFeedback}
               onArtifactShare={handleArtifactShare}
-              onArtifactChip={handleArtifactChip}
+              onArtifactDownload={handleArtifactDownload}
               onForkFromMessage={handleForkFromMessage}
               forkingMessageId={forkingMessageId}
               onNewConversation={handleNewConversation}
@@ -5721,6 +5726,7 @@ export function ProjectView({
           commentSendDisabled={currentConversationQueueDisabled}
           openRequest={openRequest}
           shareRequest={shareRequest}
+          downloadRequest={downloadRequest}
           slideNavRequest={slideNavRequest}
           liveArtifactEvents={liveArtifactEvents}
           designSystemActivityEvents={designSystemActivityEvents}

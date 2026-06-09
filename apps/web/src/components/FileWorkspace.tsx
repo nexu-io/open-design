@@ -114,6 +114,9 @@ interface Props {
   // Open the named file AND surface its Share/Export menu. Drives the chat-side
   // "Share" next-step action without a dedicated share backend.
   shareRequest?: { name: string; nonce: number } | null;
+  // Open the named file AND surface its Download/Export menu. Drives the
+  // chat-side "Download" next-step action.
+  downloadRequest?: { name: string; nonce: number } | null;
   // Flip a deck preview to a given slide when a queued chat send starts. Mirrors
   // `shareRequest`: the named file is activated (if open) and the matching
   // FileViewer consumes the nonce to navigate.
@@ -364,6 +367,7 @@ export function FileWorkspace({
   commentSendDisabled = false,
   openRequest,
   shareRequest,
+  downloadRequest,
   slideNavRequest,
   liveArtifactEvents = [],
   designSystemActivityEvents = [],
@@ -766,6 +770,21 @@ export function FileWorkspace({
     setActiveTab(name);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shareRequest]);
+
+  // Download request: same as shareRequest, but the FileViewer opens its
+  // Download/Export menu. Without this, Download did nothing whenever the target
+  // artifact was not already the active tab (it forwards only on a name match).
+  useEffect(() => {
+    if (!downloadRequest) return;
+    const name = downloadRequest.name;
+    if (!name) return;
+    commitTabsState(workspaceTabsState(
+      persistedTabs.includes(name) ? persistedTabs : [...persistedTabs, name],
+      name,
+    ));
+    setActiveTab(name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [downloadRequest]);
 
   // Slide-nav request: decide deliverability once, at fire time. Only if the
   // named deck is already an open tab do we mark this nonce deliverable and
@@ -2225,6 +2244,11 @@ export function FileWorkspace({
             shareRequest={
               shareRequest && shareRequest.name === activeFile.name
                 ? { nonce: shareRequest.nonce }
+                : null
+            }
+            downloadRequest={
+              downloadRequest && downloadRequest.name === activeFile.name
+                ? { nonce: downloadRequest.nonce }
                 : null
             }
             slideNavRequest={deliverableSlideNavForActiveFile(

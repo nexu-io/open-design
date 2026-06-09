@@ -957,6 +957,9 @@ interface Props {
   // Bumped nonce asking this viewer to open its Share/Export menu (chat-side
   // "Share" next-step action). Only HTML artifacts expose a Share menu.
   shareRequest?: { nonce: number } | null;
+  // Bumped nonce asking this viewer to open its Download/Export menu (chat-side
+  // "Download" next-step action).
+  downloadRequest?: { nonce: number } | null;
   // Bumped nonce asking a deck preview to flip to `slideIndex` (a queued chat
   // send for this file just started processing).
   slideNavRequest?: { slideIndex: number; nonce: number } | null;
@@ -982,6 +985,7 @@ export function FileViewer({
   commentPortalId,
   onCommentModeChange,
   shareRequest,
+  downloadRequest,
   slideNavRequest,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
@@ -1025,6 +1029,7 @@ export function FileViewer({
         commentPortalId={commentPortalId}
         onCommentModeChange={onCommentModeChange}
         shareRequest={shareRequest}
+        downloadRequest={downloadRequest}
         slideNavRequest={slideNavRequest}
       />
     );
@@ -4422,6 +4427,7 @@ function HtmlViewer({
   commentPortalId,
   onCommentModeChange,
   shareRequest,
+  downloadRequest,
   slideNavRequest,
 }: {
   projectId: string;
@@ -4442,6 +4448,7 @@ function HtmlViewer({
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
   shareRequest?: { nonce: number } | null;
+  downloadRequest?: { nonce: number } | null;
   slideNavRequest?: { slideIndex: number; nonce: number } | null;
 }) {
   const { locale, t } = useI18n();
@@ -7186,6 +7193,22 @@ function HtmlViewer({
     setDownloadMenuOpen(false);
     setDeployMenuOpen(true);
   }, [shareRequest?.nonce, canShare, projectId, file.name]);
+
+  // Parallel to shareRequest, but opens the Download / Export menu instead — the
+  // assistant "next step" card's Download row routes here so it surfaces the same
+  // PDF / image / zip / standalone-HTML / template options the toolbar exposes.
+  const consumedDownloadNonceRef = useRef<number | null>(null);
+  useEffect(() => {
+    const nonce = downloadRequest?.nonce;
+    if (nonce == null) return;
+    if (consumedDownloadNonceRef.current === nonce) return;
+    if (!canShare) return;
+    consumedDownloadNonceRef.current = nonce;
+    setExportReadyNudge(false);
+    markExportReadyNudgeSeen(projectId, file.name);
+    setDeployMenuOpen(false);
+    setDownloadMenuOpen(true);
+  }, [downloadRequest?.nonce, canShare, projectId, file.name]);
 
   // A queued chat send for this deck just started: flip the preview to the
   // slide its marked element lives on. We write the cached slide state first so

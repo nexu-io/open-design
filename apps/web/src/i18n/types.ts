@@ -2902,12 +2902,10 @@ export interface Dict {
   'assistant.openFile': string;
   'assistant.downloadFile': string;
   'nextStep.title': string;
+  'nextStep.more': string;
   'nextStep.share': string;
-  'nextStep.chipJoiner': string;
-  'nextStep.chipPolishVisual': string;
-  'nextStep.chipBrand': string;
-  'nextStep.chipConcise': string;
-  'nextStep.chipSecondVersion': string;
+  'nextStep.download': string;
+  'nextStep.contribute': string;
   'assistant.thinking': string;
   'assistant.thought': string;
   'assistant.thoughtFor': string;

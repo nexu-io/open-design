@@ -1530,13 +1530,20 @@ export interface ComposerBarClickProps {
 // Next-step action affordance shown under the last successful assistant
 // message. `next_step_exposed` fires once when the affordance becomes visible
 // so the funnel can divide clicks by exposure; the action elements drive the
-// "second-turn rate" / "share rate" acceptance metrics. `chip_id` carries the
-// recommended-chip identity (e.g. `polish_visual`, `second_version`) for the
-// `chip` element.
+// "second-turn rate" / "share rate" acceptance metrics. The featured
+// design-toolbox rows (`toolbox_action`, with `chip_id` carrying the action id)
+// and `toolbox_more` replaced the former recommended chips as the card's
+// primary iteration entry. `chip` remains for back-compat on legacy events.
 export interface NextStepActionClickProps {
   page_name: 'chat_panel';
   area: 'next_step';
-  element: 'next_step_exposed' | 'share' | 'chip' | 'share_to_open_design';
+  element:
+    | 'next_step_exposed'
+    | 'share'
+    | 'chip'
+    | 'toolbox_action'
+    | 'toolbox_more'
+    | 'share_to_open_design';
   chip_id?: string;
 }
 
