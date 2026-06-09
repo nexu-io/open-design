@@ -68,6 +68,10 @@ describe('GET /api/projects/:id resolvedDir', () => {
     });
   }
 
+  function uniqueId(prefix: string): string {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
   it('returns resolvedDir === metadata.baseDir for an imported-folder project', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
@@ -323,6 +327,59 @@ describe('GET /api/projects/:id resolvedDir', () => {
       template: { files: Array<{ content: string }> };
     };
     expect(JSON.stringify(bobTemplateAfterSourceDeleteJson.template.files)).toContain('Bob only');
+  });
+
+  it('rejects re-posting a returned owner-scoped project id as a duplicate', async () => {
+    const aliceEmail = 'alice@example.com';
+    const bobEmail = 'bob@example.com';
+    const requestedId = uniqueId('proj-scoped-repost');
+    const aliceProjectName = uniqueId('Alice scoped repost');
+
+    const bobCreate = await createProjectAs(
+      bobEmail,
+      requestedId,
+      'Bob raw collision project',
+    );
+    expect(bobCreate.status).toBe(200);
+    const bobCreateBody = (await bobCreate.json()) as { project: { id: string } };
+    expect(bobCreateBody.project.id).toBe(requestedId);
+
+    const aliceCreate = await createProjectAs(
+      aliceEmail,
+      requestedId,
+      aliceProjectName,
+    );
+    expect(aliceCreate.status).toBe(200);
+    const aliceCreateBody = (await aliceCreate.json()) as { project: { id: string } };
+    const aliceStoredProjectId = aliceCreateBody.project.id;
+    expect(aliceStoredProjectId).not.toBe(requestedId);
+    expect(aliceStoredProjectId).not.toBe(bobCreateBody.project.id);
+
+    const aliceRetry = await createProjectAs(
+      aliceEmail,
+      aliceStoredProjectId,
+      aliceProjectName,
+    );
+    expect(aliceRetry.status).toBe(400);
+    await expect(aliceRetry.json()).resolves.toMatchObject({
+      error: { code: 'BAD_REQUEST', message: 'project id already exists' },
+    });
+
+    const aliceProjects = await fetch(`${baseUrl}/api/projects`, {
+      headers: { 'cf-access-authenticated-user-email': aliceEmail },
+    });
+    expect(aliceProjects.status).toBe(200);
+    const aliceProjectsBody = (await aliceProjects.json()) as {
+      projects: Array<{ id: string; name: string }>;
+    };
+    const aliceMatches = aliceProjectsBody.projects.filter(
+      (project) => project.name === aliceProjectName,
+    );
+    expect(aliceMatches).toHaveLength(1);
+    expect(aliceMatches[0]).toMatchObject({
+      id: aliceStoredProjectId,
+      name: aliceProjectName,
+    });
   });
 
   it('keeps imported-folder resolvedDir stable in sandbox mode', async () => {

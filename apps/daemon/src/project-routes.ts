@@ -1211,6 +1211,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         return sendApiError(res, 400, skillValidation.code, skillValidation.message);
       }
       const normalizedSkillId = skillValidation.id;
+      if (getProjectForRequest(req, id)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'project id already exists');
+      }
       const dataDir = runtimeDataDirFor(req);
       const projectsRoot = projectsDirFor(req);
       const storageProjectId = insertProjectIdForRequest(req, id);
@@ -1220,9 +1223,6 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         const location = (await configuredProjectLocations(dataDir, projectsRoot)).find((loc: any) => loc.id === selectedLocationId);
         if (!location || location.builtIn) {
           return sendApiError(res, 400, 'BAD_REQUEST', 'unknown project location');
-        }
-        if (getProjectForRequest(req, id)) {
-          return sendApiError(res, 400, 'BAD_REQUEST', 'project id already exists');
         }
         externalProjectDir = await createLocationProjectDir(location, storageProjectId);
       }
