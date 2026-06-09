@@ -201,7 +201,9 @@ test('[P2] captures the home plugin use with query surface', async ({ page }) =>
   await card.hover();
   await home.getByTestId('plugins-home-use-menu-visual-deck-writer').click({ force: true });
   await home.getByTestId('plugins-home-use-with-query-visual-deck-writer').click();
-  await expect(page.getByTestId('home-hero-input')).toContainText('Draft a {{topic}} deck.');
+  // use-with-query now seeds the rendered preset text (placeholders filled in),
+  // not the raw `{{...}}` query — matching the example-prompt card path.
+  await expect(page.getByTestId('home-hero-input')).toContainText('Draft a topic deck.');
 
   await captureVisual(page, 'visual-home-plugin-use-with-query');
 });
