@@ -13,6 +13,7 @@ export const id: Dict = {
   'chat.amrError.rechargeCta': 'Isi ulang AMR',
   'chat.antigravityError.launchTerminalCta': 'Masuk melalui terminal',
   'chat.antigravityError.launchSwitchModelCta': 'Ganti model di terminal',
+  'chat.connectionDropped': 'Koneksi ke layanan model terputus sebelum respons selesai — biasanya karena jaringan atau proxy yang tidak stabil. Silakan coba lagi.',
   'common.cancel': 'Batal',
   'common.save': 'Simpan',
   'common.close': 'Tutup',

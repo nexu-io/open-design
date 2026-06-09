@@ -13,6 +13,7 @@ export const it: Dict = {
   'chat.amrError.rechargeCta': 'Ricarica AMR',
   'chat.antigravityError.launchTerminalCta': 'Accedi tramite terminale',
   'chat.antigravityError.launchSwitchModelCta': 'Cambia modello nel terminale',
+  'chat.connectionDropped': 'La connessione al servizio del modello è caduta prima del completamento della risposta, di solito a causa di una rete o di un proxy instabili. Riprova.',
   'common.cancel': 'Annulla',
   'common.save': 'Salva',
   'common.close': 'Chiudi',

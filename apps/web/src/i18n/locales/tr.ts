@@ -13,6 +13,7 @@ export const tr: Dict = {
   'chat.amrError.rechargeCta': 'AMR bakiyesi yükle',
   'chat.antigravityError.launchTerminalCta': 'Terminal üzerinden giriş yap',
   'chat.antigravityError.launchSwitchModelCta': 'Terminalde modeli değiştir',
+  'chat.connectionDropped': 'Yanıt tamamlanmadan model hizmetiyle bağlantı koptu — genellikle kararsız bir ağ veya proxy nedeniyle. Lütfen yeniden deneyin.',
   'common.cancel': 'İptal et',
   'common.save': 'Kaydet',
   'common.close': 'Kapat',

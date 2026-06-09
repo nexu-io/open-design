@@ -13,6 +13,7 @@ export const fr: Dict = {
   'chat.amrError.rechargeCta': 'Recharger AMR',
   'chat.antigravityError.launchTerminalCta': 'Se connecter via le terminal',
   'chat.antigravityError.launchSwitchModelCta': 'Changer de modèle dans le terminal',
+  'chat.connectionDropped': 'La connexion au service de modèle a été interrompue avant la fin de la réponse — généralement un réseau ou un proxy instable. Veuillez réessayer.',
   'common.cancel': 'Annuler',
   'common.save': 'Enregistrer',
   'common.close': 'Fermer',

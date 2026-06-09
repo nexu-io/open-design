@@ -13,6 +13,7 @@ export const th: Dict = {
   'chat.amrError.rechargeCta': 'เติมเงิน AMR',
   'chat.antigravityError.launchTerminalCta': 'ลงชื่อเข้าใช้ผ่านเทอร์มินัล',
   'chat.antigravityError.launchSwitchModelCta': 'สลับโมเดลในเทอร์มินัล',
+  'chat.connectionDropped': 'การเชื่อมต่อกับบริการโมเดลหลุดก่อนที่การตอบกลับจะเสร็จสิ้น — มักเกิดจากเครือข่ายหรือพร็อกซีที่ไม่เสถียร โปรดลองอีกครั้ง',
   'common.cancel': 'ยกเลิก',
   'common.save': 'บันทึก',
   'common.close': 'ปิด',

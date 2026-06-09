@@ -13,6 +13,7 @@ export const ptBR: Dict = {
   'chat.amrError.rechargeCta': 'Recarregar AMR',
   'chat.antigravityError.launchTerminalCta': 'Entrar pelo terminal',
   'chat.antigravityError.launchSwitchModelCta': 'Alternar modelo no terminal',
+  'chat.connectionDropped': 'A conexão com o serviço do modelo caiu antes de a resposta terminar — geralmente uma rede ou proxy instável. Tente novamente.',
   'common.cancel': 'Cancelar',
   'common.save': 'Salvar',
   'common.close': 'Fechar',

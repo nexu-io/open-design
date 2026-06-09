@@ -13,6 +13,7 @@ export const ru: Dict = {
   'chat.amrError.rechargeCta': 'Пополнить AMR',
   'chat.antigravityError.launchTerminalCta': 'Войти через терминал',
   'chat.antigravityError.launchSwitchModelCta': 'Сменить модель в терминале',
+  'chat.connectionDropped': 'Соединение с сервисом модели прервалось до завершения ответа — обычно из-за нестабильной сети или прокси. Повторите попытку.',
   'common.cancel': 'Отмена',
   'common.save': 'Сохранить',
   'common.close': 'Закрыть',

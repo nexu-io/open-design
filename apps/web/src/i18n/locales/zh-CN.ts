@@ -13,6 +13,7 @@ export const zhCN: Dict = {
   'chat.amrError.rechargeCta': '为 AMR 充值',
   'chat.antigravityError.launchTerminalCta': '在终端中登录',
   'chat.antigravityError.launchSwitchModelCta': '在终端中切换模型',
+  'chat.connectionDropped': '与模型服务的连接在响应完成前中断了——通常是网络或代理不稳定。请重试。',
   'common.cancel': '取消',
   'common.save': '保存',
   'common.close': '关闭',

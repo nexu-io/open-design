@@ -13,6 +13,7 @@ export const fa: Dict = {
   'chat.amrError.rechargeCta': 'شارژ AMR',
   'chat.antigravityError.launchTerminalCta': 'ورود از طریق ترمینال',
   'chat.antigravityError.launchSwitchModelCta': 'تغییر مدل در ترمینال',
+  'chat.connectionDropped': 'اتصال به سرویس مدل پیش از پایان پاسخ قطع شد — معمولاً به دلیل شبکه یا پراکسی ناپایدار. لطفاً دوباره تلاش کنید.',
   'common.cancel': 'لغو',
   'common.save': 'ذخیره',
   'common.close': 'بستن',

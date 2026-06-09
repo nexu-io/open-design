@@ -13,6 +13,7 @@ export const ja: Dict = {
   'chat.amrError.rechargeCta': 'AMR にチャージ',
   'chat.antigravityError.launchTerminalCta': 'ターミナルでサインイン',
   'chat.antigravityError.launchSwitchModelCta': 'ターミナルでモデルを切り替え',
+  'chat.connectionDropped': '応答が完了する前にモデルサービスへの接続が切断されました。多くはネットワークやプロキシの不安定が原因です。再試行してください。',
   'common.cancel': 'キャンセル',
   'common.save': '保存',
   'common.close': '閉じる',

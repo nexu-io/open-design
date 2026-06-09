@@ -1973,6 +1973,7 @@ export interface Dict {
   'chat.amrError.rechargeCta': string;
   'chat.antigravityError.launchTerminalCta': string;
   'chat.antigravityError.launchSwitchModelCta': string;
+  'chat.connectionDropped': string;
   'chat.tabComments': string;
   'chat.commentsSoon': string;
   'chat.comments.attached': string;

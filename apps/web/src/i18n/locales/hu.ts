@@ -13,6 +13,7 @@ export const hu: Dict = {
   'chat.amrError.rechargeCta': 'AMR feltöltése',
   'chat.antigravityError.launchTerminalCta': 'Bejelentkezés terminálon keresztül',
   'chat.antigravityError.launchSwitchModelCta': 'Modellváltás a terminálban',
+  'chat.connectionDropped': 'A modellszolgáltatáshoz való kapcsolat megszakadt a válasz befejezése előtt – általában instabil hálózat vagy proxy miatt. Kérjük, próbáld újra.',
   'common.cancel': 'Mégse',
   'common.save': 'Mentés',
   'common.close': 'Bezárás',

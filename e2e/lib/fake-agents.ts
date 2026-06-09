@@ -157,6 +157,10 @@ async function emitRun(promptText) {
     emitServiceFailure(503);
     return;
   }
+  if (promptText.includes('Return a daemon socket-drop failure')) {
+    emitSocketDropFailure();
+    return;
+  }
   if (promptText.includes('Return an empty daemon smoke response')) {
     emitEmptySuccess();
     return;
@@ -421,6 +425,57 @@ function emitServiceFailure(statusCode) {
       process.exitCode = 1;
       exitSoon(1);
   }
+}
+
+// Reproduces a connection that dropped mid-response. This shape is NOT guessed:
+// it was captured by pointing the real Claude Code CLI (2.1.168) at a fake
+// Anthropic endpoint that accepts the request, starts streaming, then destroys
+// the TCP socket. The real CLI exhausts its internal retries and then, on
+// STDOUT (not stderr), emits the SDK error as a synthetic assistant text block
+// plus a result frame carrying is_error:true with subtype "success", and exits
+// 1. The daemon's claude diagnostic reads the stdout tail and classifies it as
+// a retryable connection drop.
+//
+// Only claude is modeled here: the daemon connection-drop diagnostic is
+// claude-specific, and the real Codex CLI fails this class differently (it
+// streams "Reconnecting... N/5" and a turn.failed event over its own
+// transport), so a faithful Codex case belongs with Codex-specific handling,
+// not this claude reproduction.
+function emitSocketDropFailure() {
+  const sdkError =
+    'API Error: The socket connection was closed unexpectedly. For more information, pass \`verbose: true\` in the second argument to fetch()';
+  if (agentId === 'claude') {
+    writeJson({ type: 'system', subtype: 'init', model: 'fake-claude', session_id: 'fake-session' });
+    writeJson({
+      type: 'assistant',
+      message: {
+        id: 'msg-1',
+        model: '<synthetic>',
+        role: 'assistant',
+        stop_reason: 'stop_sequence',
+        content: [{ type: 'text', text: sdkError }],
+      },
+      error: 'unknown',
+    });
+    writeJson({
+      type: 'result',
+      subtype: 'success',
+      is_error: true,
+      result: sdkError,
+      stop_reason: 'stop_sequence',
+      duration_ms: 1,
+      total_cost_usd: 0,
+      usage: { input_tokens: 0, output_tokens: 0 },
+    });
+    process.exitCode = 1;
+    exitSoon(1);
+    return;
+  }
+  // Other runtimes are not the subject of the claude connection diagnostic;
+  // surface a generic non-zero exit carrying the same SDK error text.
+  process.stderr.write(sdkError + '\\n');
+  process.exitCode = 1;
+  exitSoon(1);
 }
 
 function emitEmptySuccess() {

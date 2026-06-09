@@ -74,6 +74,7 @@ export type RunFailurePrimaryAction =
 export type RunFailureMessageKey =
   | 'chat.amrError.authMessage'
   | 'chat.amrError.balanceMessage'
+  | 'chat.connectionDropped'
   | null;
 
 export interface RunFailureUi {
@@ -148,6 +149,18 @@ export function resolveRunFailureUi(
         showSwitchCard: false,
       };
     }
+  }
+  // Agent-neutral: a mid-response connection drop (any agent) gets a clear,
+  // localized "lost connection — retry" message instead of the raw SDK string.
+  // Not an AMR-promotable case: the break is the user's own network path, which
+  // switching model service wouldn't fix.
+  if (code === 'AGENT_CONNECTION_DROPPED') {
+    return {
+      primaryAction: 'retry',
+      messageKey: 'chat.connectionDropped',
+      secondaryRetry: false,
+      showSwitchCard: false,
+    };
   }
   const promote = typeof code === 'string' && PROMOTE_AMR_CODES.has(code);
   return {

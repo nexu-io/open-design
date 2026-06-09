@@ -13,6 +13,7 @@ export const zhTW: Dict = {
   'chat.amrError.rechargeCta': '為 AMR 儲值',
   'chat.antigravityError.launchTerminalCta': '透過終端機登入',
   'chat.antigravityError.launchSwitchModelCta': '在終端機中切換模型',
+  'chat.connectionDropped': '與模型服務的連線在回應完成前中斷了——通常是網路或代理不穩定。請重試。',
   'common.cancel': '取消',
   'common.save': '儲存',
   'common.close': '關閉',

@@ -13,6 +13,7 @@ export const uk: Dict = {
   'chat.amrError.rechargeCta': 'Поповнити AMR',
   'chat.antigravityError.launchTerminalCta': 'Увійти через термінал',
   'chat.antigravityError.launchSwitchModelCta': 'Змінити модель у терміналі',
+  'chat.connectionDropped': 'З’єднання зі службою моделі обірвалося до завершення відповіді — зазвичай через нестабільну мережу або проксі. Повторіть спробу.',
   'common.cancel': 'Скасувати',
   'common.save': 'Зберегти',
   'common.close': 'Закрити',

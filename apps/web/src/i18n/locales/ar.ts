@@ -13,6 +13,7 @@ export const ar: Dict = {
   'chat.amrError.rechargeCta': 'شحن AMR',
   'chat.antigravityError.launchTerminalCta': 'تسجيل الدخول عبر الطرفية',
   'chat.antigravityError.launchSwitchModelCta': 'تبديل النموذج في الطرفية',
+  'chat.connectionDropped': 'انقطع الاتصال بخدمة النموذج قبل اكتمال الاستجابة — عادةً بسبب شبكة أو وكيل (proxy) غير مستقر. يرجى إعادة المحاولة.',
   'common.cancel': 'إلغاء',
   'common.save': 'حفظ',
   'common.close': 'إغلاق',
