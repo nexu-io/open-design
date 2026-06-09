@@ -360,6 +360,11 @@
 .home-hero__input-card .session-mode-toggle__popover-card {
   max-height: min(300px, calc(100vh - 120px));
 }
+.home-hero__input-card .session-mode-toggle__popover {
+  right: 0;
+  left: auto;
+  flex-direction: row-reverse;
+}
 .home-hero__input-card--compact-authoring {
   max-width: 640px;
   padding-block: 12px 10px;
