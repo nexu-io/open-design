@@ -203,6 +203,127 @@
   color: var(--text-muted);
   font-size: 12px;
 }
+/* ---------- Plugins flyout: list + hover-preview column ---------- */
+/* The plugins flyout is wider than the others: the left column is the
+   familiar search + list, the right column mirrors the hovered row with
+   a live preview hero and metadata. Placement math reserves the extra
+   width via PLUS_MENU_PLUGIN_FLYOUT_WIDTH. */
+.plus-menu__flyout--plugins {
+  min-width: 0;
+  max-width: none;
+  width: 466px;
+  max-width: calc(100vw - 24px);
+  overflow: hidden;
+}
+.plus-menu__plugin-pane {
+  display: flex;
+  gap: 8px;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.plus-menu__plugin-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 0 0 224px;
+  max-width: 224px;
+}
+.plus-menu__plugin-main .plus-menu__list {
+  max-height: 248px;
+}
+.plus-menu__preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+}
+.plus-menu__preview-hero {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-subtle);
+  flex: 0 0 auto;
+}
+.plus-menu__preview-hero .plugins-home__preview {
+  border-radius: 0;
+}
+.plus-menu__preview-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+.plus-menu__preview-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.plus-menu__preview-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.plus-menu__preview-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  /* Clamp to a few lines so a verbose manifest never blows out the panel. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.plus-menu__preview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.plus-menu__preview-tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+/* Resting highlight on the row the preview is mirroring, so the panel's
+   subject is obvious even before the cursor reaches a row. */
+.plus-menu__item.is-previewed:not(:disabled) {
+  background: var(--bg-subtle);
+}
+/* Narrow surfaces (contained flyout) have no room for a side column, so
+   the preview drops below the list and the hero height is capped. */
+.plus-menu__popup--flyout-contained .plus-menu__flyout--plugins {
+  width: auto;
+}
+.plus-menu__popup--flyout-contained .plus-menu__plugin-pane {
+  flex-direction: column;
+}
+.plus-menu__popup--flyout-contained .plus-menu__plugin-main {
+  flex: 1 1 auto;
+  max-width: none;
+}
+.plus-menu__popup--flyout-contained .plus-menu__preview {
+  border-left: 0;
+  border-top: 1px solid var(--border);
+  padding-left: 0;
+  padding-top: 8px;
+}
+.plus-menu__popup--flyout-contained .plus-menu__preview-hero .plugins-home__preview {
+  max-height: 160px;
+}
+
 /* The design-toolbox panel sits inside a flyout; give the flyout room and
    let the panel's own styling (composer-design-toolbox-*) drive the rest. */
 .plus-menu__flyout .composer-design-toolbox-menu {
