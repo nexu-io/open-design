@@ -119,7 +119,7 @@ export interface AppConfigPrefs {
 
 // Cap on how many recent working directories we remember. Keeps the picker's
 // "Recent" submenu short and the config file bounded.
-export const RECENT_LINKED_DIRS_MAX = 10;
+export const RECENT_LINKED_DIRS_MAX = 5;
 
 const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'onboardingCompleted',

@@ -899,6 +899,7 @@ export interface Dict {
   'homeWorkingDir.recentEmpty': string;
   'homeWorkingDir.clear': string;
   'homeWorkingDir.hint': string;
+  'homeWorkingDir.missing': string;
   'workingDirPicker.title': string;
   'workingDirPicker.homeTitle': string;
   'workingDirPicker.processing': string;

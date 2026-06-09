@@ -260,6 +260,7 @@ interface Props {
   onOpenPetSettings?: () => void;
   researchAvailable?: boolean;
   projectMetadata?: ProjectMetadata;
+  missingLinkedDirs?: string[];
   onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
   activeWorkspaceContext?: WorkspaceContextItem | null;
   workspaceContexts?: WorkspaceContextItem[];
@@ -385,6 +386,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onOpenPetSettings,
       researchAvailable = false,
       projectMetadata,
+      missingLinkedDirs,
       onProjectMetadataChange,
       activeWorkspaceContext = null,
       workspaceContexts = [],
@@ -517,7 +519,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       };
     }, []);
     const rememberRecentDir = useCallback(async (dir: string) => {
-      setRecentDirs((prev) => [dir, ...prev.filter((d) => d !== dir)].slice(0, 10));
+      setRecentDirs((prev) => [dir, ...prev.filter((d) => d !== dir)].slice(0, 5));
       const persisted = await pushRecentLinkedDir(dir);
       setRecentDirs(persisted);
     }, []);
@@ -2380,6 +2382,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             <WorkingDirPicker
               placement="up"
               workingDir={workingDir}
+              invalid={workingDir != null && (missingLinkedDirs ?? []).includes(workingDir)}
               recentDirs={recentDirs}
               onPickDirectory={() => void handlePickWorkingDir()}
               onSelectRecent={(dir) => void setWorkingDirFolder(dir)}

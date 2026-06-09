@@ -537,6 +537,7 @@ export const ko: Dict = {
   'homeWorkingDir.recentEmpty': 'No recent folders',
   'homeWorkingDir.clear': 'Clear working directory',
   'homeWorkingDir.hint': 'Let the agent read this local folder (not imported into Design Files)',
+  'homeWorkingDir.missing': 'This working folder no longer exists — pick another',
   'workingDirPicker.title': '폴더',
   'workingDirPicker.homeTitle': '로컬 저장소에 저장됨 — 클릭하여 폴더 선택',
   'workingDirPicker.processing': '처리 중…',

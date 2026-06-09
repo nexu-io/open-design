@@ -20,6 +20,8 @@ interface Props {
   onClear?: () => void;
   /** Extra class applied to the outer wrapper, for layout by the host. */
   className?: string;
+  /** The selected directory no longer exists on disk — flag it in red. */
+  invalid?: boolean;
   /**
    * Panel direction. `'down'` (default) suits the Home composer where there
    * is room below; `'up'` suits the in-project composer whose trigger sits at
@@ -48,6 +50,7 @@ export function WorkingDirPicker({
   onClear,
   className,
   placement = 'down',
+  invalid = false,
 }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -83,10 +86,10 @@ export function WorkingDirPicker({
       <div className={styles.triggerRow}>
         <button
           type="button"
-          className={styles.trigger}
+          className={`${styles.trigger}${invalid ? ` ${styles.triggerInvalid}` : ''}`}
           data-testid="working-dir-trigger"
           aria-expanded={open}
-          title={workingDir ?? t('homeWorkingDir.hint')}
+          title={invalid ? t('homeWorkingDir.missing') : (workingDir ?? t('homeWorkingDir.hint'))}
           onClick={() => setOpen((v) => !v)}
         >
           <Icon name="folder" size={13} className={styles.triggerIcon} />

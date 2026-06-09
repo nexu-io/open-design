@@ -548,6 +548,7 @@ interface Props {
   onTogglePet?: () => void;
   onOpenPetSettings?: () => void;
   projectMetadata?: ProjectMetadata;
+  missingLinkedDirs?: string[];
   onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
   activeWorkspaceContext?: WorkspaceContextItem | null;
   workspaceContexts?: WorkspaceContextItem[];
@@ -708,6 +709,7 @@ export function ChatPane({
   onTogglePet,
   onOpenPetSettings,
   projectMetadata,
+  missingLinkedDirs,
   onProjectMetadataChange,
   activeWorkspaceContext,
   workspaceContexts = [],
@@ -1655,6 +1657,7 @@ export function ChatPane({
       onOpenPetSettings={onOpenPetSettings}
       researchAvailable={researchAvailable}
       projectMetadata={projectMetadata}
+      missingLinkedDirs={missingLinkedDirs}
       onProjectMetadataChange={onProjectMetadataChange}
       activeWorkspaceContext={activeWorkspaceContext}
       workspaceContexts={workspaceContexts}

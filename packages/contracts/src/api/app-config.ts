@@ -65,3 +65,9 @@ export interface AppConfigResponse {
 }
 
 export type UpdateAppConfigRequest = Partial<AppConfigPrefs>;
+
+/** Response body for `GET /api/recent-dirs` — recent working directories
+ *  pruned to those that still exist on disk, most-recent-first. */
+export interface RecentLinkedDirsResponse {
+  dirs: string[];
+}

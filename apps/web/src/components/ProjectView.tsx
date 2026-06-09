@@ -5422,6 +5422,7 @@ export function ProjectView({
               byokSpeechVoice={byokSpeechVoiceOverride}
               onChangeByokSpeechVoice={setByokSpeechVoiceOverride}
               projectMetadata={project.metadata}
+              missingLinkedDirs={projectDetail.missingLinkedDirs}
               onProjectMetadataChange={(metadata) => {
                 onProjectChange({ ...project, metadata });
               }}

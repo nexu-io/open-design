@@ -2018,10 +2018,12 @@ export async function openFolderDialog(): Promise<string | null> {
 // and the `od` CLI. Returns most-recent-first.
 export async function fetchRecentLinkedDirs(): Promise<string[]> {
   try {
-    const resp = await fetch('/api/app-config');
+    // `/api/recent-dirs` returns the list pruned to folders that still exist
+    // on disk (and persists the pruning), so deleted folders never linger.
+    const resp = await fetch('/api/recent-dirs');
     if (!resp.ok) return [];
     const data = await resp.json();
-    const list = data?.config?.recentLinkedDirs;
+    const list = data?.dirs;
     return Array.isArray(list) ? list.filter((d: unknown): d is string => typeof d === 'string') : [];
   } catch {
     return [];
@@ -2035,7 +2037,7 @@ export async function fetchRecentLinkedDirs(): Promise<string[]> {
 // optimistic UI matches what gets persisted.
 export async function pushRecentLinkedDir(dir: string): Promise<string[]> {
   const existing = await fetchRecentLinkedDirs();
-  const next = [dir, ...existing.filter((d) => d !== dir)].slice(0, 10);
+  const next = [dir, ...existing.filter((d) => d !== dir)].slice(0, 5);
   try {
     await fetch('/api/app-config', {
       method: 'PUT',

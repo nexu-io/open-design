@@ -38,6 +38,16 @@
   background: var(--bg-subtle);
   color: var(--text-strong);
 }
+/* Selected directory no longer exists on disk. */
+.triggerInvalid,
+.triggerInvalid:hover,
+.triggerInvalid:focus-visible {
+  color: var(--danger, #e5484d);
+}
+.triggerInvalid .triggerIcon {
+  opacity: 1;
+  color: var(--danger, #e5484d);
+}
 .triggerIcon {
   flex: 0 0 auto;
   opacity: 0.75;

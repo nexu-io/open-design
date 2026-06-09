@@ -838,7 +838,7 @@ describe('app-config recentLinkedDirs', () => {
   it('caps the list at RECENT_LINKED_DIRS_MAX entries', async () => {
     const many = Array.from({ length: 25 }, (_, i) => `/home/dir${i}`);
     const cfg = await writeAppConfig(dataDir, { recentLinkedDirs: many });
-    expect(cfg.recentLinkedDirs).toEqual(many.slice(0, 10));
+    expect(cfg.recentLinkedDirs).toEqual(many.slice(0, 5));
   });
 
   it('ignores a non-array value without touching other prefs', async () => {

@@ -276,7 +276,7 @@ export function HomeView({
   const rememberRecentDir = useCallback(async (dir: string) => {
     // Optimistically promote the dir to the front so the submenu updates
     // immediately; the daemon also trims/de-dupes/caps the persisted list.
-    setRecentDirs((prev) => [dir, ...prev.filter((d) => d !== dir)].slice(0, 10));
+    setRecentDirs((prev) => [dir, ...prev.filter((d) => d !== dir)].slice(0, 5));
     const persisted = await pushRecentLinkedDir(dir);
     setRecentDirs(persisted);
   }, []);

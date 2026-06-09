@@ -1,4 +1,5 @@
 import { rm } from 'node:fs/promises';
+import { statSync } from 'node:fs';
 import path from 'node:path';
 import type { Express, Response } from 'express';
 import {
@@ -1305,8 +1306,24 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     if (!project || !projectVisibleForLocations(project, locations))
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
     const resolvedDir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
-    /** @type {import('@open-design/contracts').ProjectResponse} */
-    const body = { project, resolvedDir };
+    // Flag any working directories the user linked that no longer exist on
+    // disk, so the composer can mark the selection in red.
+    const linkedDirs = Array.isArray(project.metadata?.linkedDirs)
+      ? project.metadata!.linkedDirs
+      : [];
+    const missingLinkedDirs = linkedDirs.filter((dir: string) => {
+      try {
+        return !statSync(dir).isDirectory();
+      } catch {
+        return true;
+      }
+    });
+    /** @type {import('@open-design/contracts').ProjectDetailResponse} */
+    const body = {
+      project,
+      resolvedDir,
+      ...(missingLinkedDirs.length > 0 ? { missingLinkedDirs } : {}),
+    };
     res.json(body);
   });
 

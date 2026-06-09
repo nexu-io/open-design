@@ -537,6 +537,7 @@ export const zhCN: Dict = {
   'homeWorkingDir.recentEmpty': '暂无最近使用的目录',
   'homeWorkingDir.clear': '清除工作目录',
   'homeWorkingDir.hint': '让 Agent 可读取该本地目录（不会导入到 Design Files）',
+  'homeWorkingDir.missing': '该工作目录已不存在，请重新选择',
   'workingDirPicker.title': '目录',
   'workingDirPicker.homeTitle': '默认存在本地存储，点击可选择文件夹',
   'workingDirPicker.processing': '处理中…',
