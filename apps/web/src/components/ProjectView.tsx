@@ -30,10 +30,10 @@ import {
   listActiveChatRuns,
   listProjectRuns,
   reattachDaemonRun,
-  streamByokViaDaemon,
   reportChatRunFeedback,
   streamViaDaemon,
 } from '../providers/daemon';
+import { streamMessage } from '../providers/anthropic';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
 import {
@@ -3725,11 +3725,14 @@ export function ProjectView({
           { omitNativeImageAttachments: usesAnthropicProxy(config) },
         );
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
-        // BYOK now flows through the daemon run registry (same as the agent
-        // path) so the chat survives navigating away and reattaches on
-        // return. The handlers below wrap the shared `handlers` only to (a)
-        // accumulate the assistant text for the post-turn memory-extract
-        // call and (b) keep onAgentEvent/onError delegating unchanged.
+        // BYOK uses the direct `/api/proxy/<protocol>/stream` SSE consumer
+        // exported by providers/anthropic.ts. (We previously wrapped this in a
+        // `streamByokViaDaemon` daemon-run helper to integrate with the run
+        // registry, but the daemon's proxy routes still respond with SSE
+        // streams — not `{ runId }` JSON — so the wrapper failed to decode the
+        // response and broke e2e empty-stream handling. Reverted to direct
+        // consumption. The `byokHandlers` wrapper still accumulates assistant
+        // text for the post-turn memory-extract call.)
         let accumulatedAssistantText = '';
         const byokHandlers = {
           onDelta: (delta: string) => {
@@ -3757,36 +3760,26 @@ export function ProjectView({
           },
           onError: handlers.onError,
         };
-        void streamByokViaDaemon({
-          protocol: config.apiProtocol ?? 'openai',
-          baseUrl: config.baseUrl ?? '',
-          apiKey: config.apiKey ?? '',
-          model: config.model,
-          apiVersion: config.apiProtocol === 'azure' ? config.apiVersion ?? '' : undefined,
-          systemPrompt,
-          history: apiHistory,
-          maxTokens: effectiveMaxTokens(config),
-          signal: controller.signal,
-          cancelSignal: cancelController.signal,
-          handlers: byokHandlers,
+        const proxyContext = {
           projectId: project.id,
-          conversationId: runConversationId,
-          assistantMessageId: assistantId,
-          // BYOK chat reads these to pre-fill each media tool's default model.
-          // Prefer the live composer override; fall back to the Settings default
-          // or first catalogue option. Other protocols ignore unknown body fields.
-          byokImageModel:
-            byokImageModelOverride || config.byokImageModel || byokImageModelOptionsPV[0]?.id,
-          byokVideoModel:
-            byokVideoModelOverride || config.byokVideoModel || byokVideoModelOptionsPV[0]?.id,
-          byokAudioModel: byokAudioModelOverride,
-          byokSpeechModel:
-            byokSpeechModelOverride || config.byokSpeechModel || byokSpeechModelOptionsPV[0]?.id,
-          byokSpeechVoice: byokSpeechVoiceOverride || config.byokSpeechVoice,
-          onRunCreated,
-          onRunStatus,
-          onRunEventId,
-        });
+          ...(byokImageModelOverride || config.byokImageModel
+            ? { byokImageModel: byokImageModelOverride || config.byokImageModel }
+            : {}),
+          ...(byokVideoModelOverride || config.byokVideoModel
+            ? { byokVideoModel: byokVideoModelOverride || config.byokVideoModel }
+            : {}),
+          ...(byokAudioModelOverride
+            ? { byokAudioModel: byokAudioModelOverride }
+            : {}),
+        };
+        void streamMessage(
+          config,
+          systemPrompt,
+          apiHistory,
+          controller.signal,
+          byokHandlers,
+          proxyContext,
+        );
         return true;
       }
     },
