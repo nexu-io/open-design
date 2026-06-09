@@ -46,7 +46,99 @@ describe('DesignsTab select mode', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
     cleanup();
+  });
+
+  it('refreshes the projects list from the toolbar button', async () => {
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+    render(
+      <DesignsTab
+        projects={[project]}
+        skills={[]}
+        designSystems={[]}
+        onOpen={vi.fn()}
+        onOpenLiveArtifact={vi.fn()}
+        onDelete={vi.fn()}
+        onRename={vi.fn()}
+        onRefresh={onRefresh}
+        isActive={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    await waitFor(() => {
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('auto-refreshes while the projects tab is active', async () => {
+    let intervalCallback: TimerHandler | undefined;
+    const originalSetInterval = window.setInterval.bind(window);
+    const featureIntervalHandle = originalSetInterval(
+      () => {},
+      2147483647,
+    ) as unknown as ReturnType<typeof setInterval>;
+    const setIntervalSpy = vi.spyOn(window, 'setInterval').mockImplementation((handler, timeout) => {
+      if (timeout !== 15000) {
+        return originalSetInterval(handler, timeout) as unknown as ReturnType<typeof setInterval>;
+      }
+      intervalCallback = handler;
+      return featureIntervalHandle;
+    });
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+    render(
+      <DesignsTab
+        projects={[project]}
+        skills={[]}
+        designSystems={[]}
+        onOpen={vi.fn()}
+        onOpenLiveArtifact={vi.fn()}
+        onDelete={vi.fn()}
+        onRename={vi.fn()}
+        onRefresh={onRefresh}
+        isActive
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+    });
+    expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 15000);
+    onRefresh.mockClear();
+
+    await act(async () => {
+      if (typeof intervalCallback === 'function') intervalCallback();
+      await Promise.resolve();
+    });
+
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not auto-refresh while the projects tab is inactive', () => {
+    vi.useFakeTimers();
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+    render(
+      <DesignsTab
+        projects={[project]}
+        skills={[]}
+        designSystems={[]}
+        onOpen={vi.fn()}
+        onOpenLiveArtifact={vi.fn()}
+        onDelete={vi.fn()}
+        onRename={vi.fn()}
+        onRefresh={onRefresh}
+        isActive={false}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(15000);
+    });
+
+    expect(onRefresh).not.toHaveBeenCalled();
   });
 
   it('only exposes select mode in grid view', () => {
