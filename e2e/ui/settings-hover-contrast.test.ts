@@ -1,9 +1,8 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { openSettingsDialog } from '../lib/playwright/amr.js';
 
 const STORAGE_KEY = 'open-design:config';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
-const SETTINGS_MENU_LABEL = /^Settings$|^设置$|^設定$/i;
 
 // WCAG AA threshold for normal text. We assert against this rather than AAA
 // because the codebase has historically targeted AA for muted-on-subtle
@@ -39,12 +38,7 @@ async function openSettings(page: Page, theme: Theme) {
 
   await page.emulateMedia({ colorScheme: theme });
   await page.goto('/');
-  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
-  const menu = page.getByRole('menu');
-  if (await menu.isVisible().catch(() => false)) {
-    await menu.getByRole('button', { name: SETTINGS_MENU_LABEL }).click();
-  }
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await openSettingsDialog(page);
 }
 
 /**

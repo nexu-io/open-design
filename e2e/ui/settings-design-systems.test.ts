@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import type { Page, Route } from '@playwright/test';
+import { openSettingsDialog } from '../lib/playwright/amr.js';
 
 const STORAGE_KEY = 'open-design:config';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
 
 type DesignSystemFixture = {
   id: string;
@@ -183,9 +183,7 @@ async function routeBootstrapApis(
 
 async function openDesignSystemsSettings(page: Page) {
   await gotoEntryHome(page);
-  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
+  const dialog = await openSettingsDialog(page);
   await dialog.getByRole('button', { name: /Design systems|设计系统|設計系統/i }).click();
   await expect(dialog.getByRole('heading', { name: /Design systems|设计系统|設計系統/i })).toBeVisible();
   return dialog;

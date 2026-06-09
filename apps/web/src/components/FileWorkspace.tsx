@@ -87,9 +87,6 @@ import {
   type SketchItem,
 } from './sketch-model';
 import { AnimatePresence } from 'motion/react';
-import { GenerationPreviewStage } from './GenerationPreviewStage';
-import { AmrGuidance } from './AmrGuidance';
-import { buildGenerationPreviewState } from '../runtime/generation-preview';
 import type { ChatMessage } from '../types';
 
 interface Props {
@@ -219,8 +216,6 @@ interface Props {
   focusQuestionsRequest?: { nonce: number } | null;
 }
 
-const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
-
 interface SketchState {
   version: number;
   rawItems: unknown[];
@@ -235,7 +230,6 @@ interface SketchState {
 export const DESIGN_FILES_TAB = '__design_files__';
 export const DESIGN_SYSTEM_TAB = '__design_system__';
 const QUESTIONS_TAB = '__questions__';
-const GENERATING_TAB = '__generating__';
 const BROWSER_TAB_PREFIX = '__browser__:';
 // Keep at most this many embedded-browser `<webview>`s mounted at once. Each is
 // a full out-of-process Chromium guest (timers, JS, network, a GPU surface), so
@@ -413,11 +407,6 @@ export function FileWorkspace({
   onActiveContextChange,
   onWorkspaceContextsChange,
   messages = [],
-  artifactHtml,
-  conversationError,
-  onRetry,
-  onAuthorizeAndRetry,
-  onLaunchTerminalAuth,
   conversationId,
   headerActions,
   questionForm = null,
@@ -431,7 +420,6 @@ export function FileWorkspace({
   focusQuestionsRequest = null,
 }: Props) {
   const t = useT();
-  const amrProfile = chatConfig?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
   // The chat column only shows a compact Questions banner; the form itself
   // lives here, including after submission when a banner click can reopen the
   // answered preview.
@@ -564,62 +552,15 @@ export function FileWorkspace({
     };
   }, [projectId]);
 
-  const generationPreview = useMemo(
-    () =>
-      buildGenerationPreviewState({
-        designSystemProject: Boolean(designSystemProject),
-        messages,
-        streaming: Boolean(streaming),
-        activeTab,
-        projectFiles: visibleFiles,
-        liveArtifacts,
-        artifactHtml,
-        conversationError,
-      }),
-    [designSystemProject, messages, streaming, activeTab, visibleFiles, liveArtifacts, artifactHtml, conversationError],
-  );
-
   // True when the Design Files tab has nothing to attach: no files, no live
   // artifacts, no folders. Mirrors DesignFilesPanel's own empty-state gate so
   // the "Design files" composer context and the empty placeholder agree on
   // when the tab is actually empty. Reused below to suppress the auto-attached
-  // workspace context for a brand-new/empty project and to scope the
-  // Generating tab to the first-run (empty) case.
+  // workspace context for a brand-new/empty project.
   const designFilesTabIsEmpty =
     visibleFiles.length === 0
     && liveArtifactEntries.length === 0
     && projectFolders.length === 0;
-
-  // The generation status now lives in its own transient tab (like the
-  // Questions tab) instead of taking over the Design Files content area — so
-  // the user can switch to Design Files while a run is in flight. Scoped to the
-  // empty (first-run) project: a populated project keeps its file browser while
-  // generating, exactly as before — there are already file tabs to watch, and
-  // `buildGenerationPreviewState` defers to an open artifact/file anyway.
-  //
-  // EXCLUDE the 'awaiting-input' phase: when the agent emits a question form it
-  // pauses awaiting answers, and that flow already focuses the Questions tab
-  // (via focusQuestionsRequest). Surfacing a Generating tab here too would
-  // auto-focus away from the form the user needs to answer on the main
-  // discovery path. Let the Questions tab own the awaiting-input state.
-  const showGeneratingTab =
-    Boolean(generationPreview)
-    && generationPreview?.phase !== 'awaiting-input'
-    && designFilesTabIsEmpty;
-  const generatingTabTitle =
-    generationPreview?.phase === 'failed'
-      ? t('generationPreview.failedTitle')
-      : generationPreview?.phase === 'stopped'
-        ? t('generationPreview.stoppedTitle')
-        : generationPreview?.phase === 'awaiting-input'
-          ? t('generationPreview.awaitingTitle')
-          : t('generationPreview.title');
-  const generatingTabIcon: IconName =
-    generationPreview?.phase === 'failed'
-      ? 'close'
-      : generationPreview?.phase === 'stopped'
-        ? 'stop'
-        : 'sparkles';
 
   // Pull the persisted active tab in when the parent's hydration completes
   // (or on project switch). Fall back to the Design Files browser so a
@@ -763,7 +704,6 @@ export function FileWorkspace({
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
       || activeTab === QUESTIONS_TAB
-      || activeTab === GENERATING_TAB
     ) return;
     if (isBrowserTabId(activeTab)) {
       if (!browserTabs.some((tab) => tab.id === activeTab)) {
@@ -874,31 +814,6 @@ export function FileWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, showQuestionsTab]);
 
-  // Auto-focus the Generating tab the moment a run surfaces it (rising edge
-  // only). After that the user is free to switch to Design Files — we don't
-  // yank them back, because `showGeneratingTab` stays true without a new
-  // transition while the run continues. The ref starts `false` so a run that
-  // is already active at mount (a fresh project's first turn, or a reattach)
-  // still counts as a rising edge and focuses the tab.
-  const previousShowGeneratingTabRef = useRef(false);
-  useEffect(() => {
-    const justAppeared = !previousShowGeneratingTabRef.current && showGeneratingTab;
-    previousShowGeneratingTabRef.current = showGeneratingTab;
-    if (justAppeared) setActiveTab(GENERATING_TAB);
-  }, [showGeneratingTab]);
-
-  // When the run resolves (the produced file opens, or the status clears) the
-  // transient tab disappears; if it was active, fall back. Prefer the Questions
-  // tab when a form is awaiting answers — this is the generating→awaiting-input
-  // handoff, and the user should land on the form, not the empty Design Files
-  // list. Otherwise fall back to the default root tab.
-  useEffect(() => {
-    if (activeTab === GENERATING_TAB && !showGeneratingTab) {
-      setActiveTab(showQuestionsTab ? QUESTIONS_TAB : defaultRootTab);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, showGeneratingTab]);
-
   function openFile(name: string) {
     setUploadError(null);
     // Read from the ref, not the `persistedTabs` prop closure: this path is
@@ -936,7 +851,7 @@ export function FileWorkspace({
   }
 
   function activateWorkspaceTab(tabId: string) {
-    if (tabId === QUESTIONS_TAB || tabId === GENERATING_TAB) {
+    if (tabId === QUESTIONS_TAB) {
       setUploadError(null);
       setActiveTab(tabId);
       return;
@@ -1646,12 +1561,11 @@ export function FileWorkspace({
     if (designSystemProject) ids.push(DESIGN_SYSTEM_TAB);
     ids.push(DESIGN_FILES_TAB);
     if (showQuestionsTab) ids.push(QUESTIONS_TAB);
-    if (showGeneratingTab) ids.push(GENERATING_TAB);
     for (const entry of orderedWorkspaceTabs) {
       ids.push(entry.kind === 'browser' ? entry.browserTab.id : entry.name);
     }
     return ids;
-  }, [designSystemProject, orderedWorkspaceTabs, showGeneratingTab, showQuestionsTab]);
+  }, [designSystemProject, orderedWorkspaceTabs, showQuestionsTab]);
 
   const workspaceContexts = useMemo<WorkspaceContextItem[]>(() => {
     const out: WorkspaceContextItem[] = [];
@@ -1930,23 +1844,6 @@ export function FileWorkspace({
               <span className="ws-tab-label">{t('questions.tabLabel')}</span>
             </button>
           ) : null}
-          {showGeneratingTab ? (
-            <button
-              type="button"
-              className={`ws-tab generating-tab ${activeTab === GENERATING_TAB ? 'active' : ''}`}
-              role="tab"
-              aria-selected={activeTab === GENERATING_TAB}
-              tabIndex={0}
-              data-testid="generating-tab"
-              onClick={() => setActiveTab(GENERATING_TAB)}
-              title={generatingTabTitle}
-            >
-              <span className="tab-icon" aria-hidden>
-                <Icon name={generatingTabIcon} size={13} />
-              </span>
-              <span className="ws-tab-label">{generatingTabTitle}</span>
-            </button>
-          ) : null}
           {orderedWorkspaceTabs.map((entry) => {
             if (entry.kind === 'browser') {
               const browserTab = entry.browserTab;
@@ -2187,47 +2084,13 @@ export function FileWorkspace({
             onConnectRepo={onConnectRepo}
             githubConnected={githubConnected}
           />
-        ) : activeTab === GENERATING_TAB && generationPreview ? (
-          <GenerationPreviewStage
-            model={generationPreview}
-            onRetry={
-              generationPreview.retryTarget && onRetry
-                ? () => onRetry(generationPreview.retryTarget!)
-                : undefined
-            }
-            onAuthorizeAndRetry={
-              generationPreview.retryTarget && onAuthorizeAndRetry
-                ? () => onAuthorizeAndRetry(generationPreview.retryTarget!)
-                : undefined
-            }
-            onLaunchTerminalAuth={onLaunchTerminalAuth}
-            amrAuthorizeSourceDetail="generation_preview_authorize_retry"
-            amrRechargeSourceDetail="generation_preview_recharge"
-            amrProfile={amrProfile}
-            amrGuidance={
-              generationPreview.promoteAmrSwitch
-                && generationPreview.errorCode
-                && generationPreview.retryTarget
-                && onAuthorizeAndRetry ? (
-                <AmrGuidance
-                  errorCode={generationPreview.errorCode}
-                  projectId={projectId}
-                  projectKind={projectKind}
-                  conversationId={conversationId ?? null}
-                  assistantMessageId={generationPreview.retryTarget.id}
-                  runId={generationPreview.retryTarget.runId ?? null}
-                  sourceDetail="generation_preview_switch_retry_card"
-                  onActivate={() => onAuthorizeAndRetry(generationPreview.retryTarget!)}
-                />
-              ) : undefined
-            }
-          />
         ) : activeTab === DESIGN_FILES_TAB ? (
           <DesignFilesPanel
             key={projectId}
             projectId={projectId}
             rootDirName={rootDirName}
             reloading={reloading}
+            running={Boolean(streaming)}
             files={visibleFiles}
             folders={projectFolders}
             liveArtifacts={liveArtifactEntries}

@@ -500,6 +500,53 @@
   outline-offset: 2px;
   border-radius: 4px;
 }
+.plugins-home__gallery-use {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+}
+.plugins-home__gallery-use-main,
+.plugins-home__gallery-use-more {
+  appearance: none;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-panel);
+  color: var(--text);
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.plugins-home__gallery-use-main {
+  border-radius: 6px 0 0 6px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.plugins-home__gallery-use-more {
+  border-left: 0;
+  border-radius: 0 6px 6px 0;
+  width: 22px;
+  color: var(--text-muted);
+}
+.plugins-home__gallery-use-main:hover,
+.plugins-home__gallery-use-more:hover {
+  background: var(--bg);
+  color: var(--accent);
+}
+.plugins-home__gallery-use-main:disabled,
+.plugins-home__gallery-use-more:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.plugins-home__gallery-use-list {
+  top: calc(100% + 6px);
+  right: 0;
+  left: auto;
+  z-index: 5;
+}
 .plugins-home__gallery-open {
   flex: 0 0 auto;
   display: inline-flex;

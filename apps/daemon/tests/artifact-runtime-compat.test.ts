@@ -74,4 +74,91 @@ describe('artifact runtime compatibility normalizer', () => {
       await rm(projectsRoot, { recursive: true, force: true });
     }
   });
+
+  // Port-path regression coverage for the reported luxury-botanical plugin. Its React port leans on
+  // the full Motion hook set (useScroll/useTransform/useAnimationFrame/useMotionValue), which only the
+  // framer-motion React UMD build exposes. A single-file prototype that reaches for the vanilla
+  // motion.js DOM bundle throws `useScroll is not a function` and renders blank — this is the artifact
+  // the normalizer must repair at the write boundary.
+  const luxuryBotanicalOrbitHtml = `<!doctype html>
+<html>
+  <head>
+    <script src="https://unpkg.com/motion@11.11.13/dist/motion.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel">
+      const { motion, useScroll, useTransform, useAnimationFrame, useMotionValue } = Motion;
+      function OrbitImages() {
+        const { scrollYProgress } = useScroll({ offset: ['start start', 'end end'] });
+        const progress = useMotionValue(0);
+        const radius = useTransform(scrollYProgress, [0.15, 0.25], [330, 650]);
+        useAnimationFrame(() => progress.set(progress.get() + 0.4));
+        return <motion.div style={{ '--r': radius }} />;
+      }
+    </script>
+  </body>
+</html>`;
+
+  it('repairs the luxury-botanical orbit prototype that uses the full Motion hook set', () => {
+    const normalized = normalizeArtifactRuntimeImports('beyond-the-collection.html', luxuryBotanicalOrbitHtml) as string;
+
+    expect(normalized).toContain('https://unpkg.com/framer-motion@11.11.13/dist/framer-motion.js');
+    expect(normalized).not.toContain('/dist/motion.js');
+    // The destructured `Motion` global now resolves to the React build that actually carries the hooks.
+    expect(normalized).toContain('useAnimationFrame');
+  });
+
+  it('rewrites the minified vanilla Motion bundle as well', () => {
+    const html = brokenReactMotionHtml.replace('dist/motion.js', 'dist/motion.min.js');
+
+    const normalized = normalizeArtifactRuntimeImports('landing.html', html) as string;
+
+    expect(normalized).toContain('https://unpkg.com/framer-motion@11.11.13/dist/framer-motion.js');
+    expect(normalized).not.toContain('/dist/motion.min.js');
+  });
+
+  it('repairs a prototype that loads the wrong bundle and reads the FramerMotion global', () => {
+    const html = brokenReactMotionHtml.replace('const { motion, useScroll, useTransform } = Motion;', 'const { motion, useScroll, useTransform } = FramerMotion;');
+
+    const normalized = normalizeArtifactRuntimeImports('landing.html', html) as string;
+
+    expect(normalized).toContain('https://unpkg.com/framer-motion@11.11.13/dist/framer-motion.js');
+    expect(normalized).not.toContain('/dist/motion.js');
+    expect(normalized).toContain('window.FramerMotion = window.FramerMotion || window.Motion;');
+  });
+
+  it('repairs the right package name but wrong file (framer-motion@.../dist/motion.js)', () => {
+    const html = brokenReactMotionHtml.replace(
+      'https://unpkg.com/motion@11.11.13/dist/motion.js',
+      'https://unpkg.com/framer-motion@11.11.13/dist/motion.js',
+    );
+
+    const normalized = normalizeArtifactRuntimeImports('landing.html', html) as string;
+
+    expect(normalized).toContain('https://unpkg.com/framer-motion@11.11.13/dist/framer-motion.js');
+    expect(normalized).not.toContain('/dist/motion.js');
+  });
+
+  it('repairs the vanilla bundle served from jsdelivr and preserves the host', () => {
+    const html = brokenReactMotionHtml.replace(
+      'https://unpkg.com/motion@11.11.13/dist/motion.js',
+      'https://cdn.jsdelivr.net/npm/motion@11.11.13/dist/motion.js',
+    );
+
+    const normalized = normalizeArtifactRuntimeImports('landing.html', html) as string;
+
+    expect(normalized).toContain('https://cdn.jsdelivr.net/npm/framer-motion@11.11.13/dist/framer-motion.js');
+    expect(normalized).not.toContain('/dist/motion.js');
+  });
+
+  it('leaves the correct framer-motion.js bundle untouched (no false rewrite)', () => {
+    const html = brokenReactMotionHtml.replace(
+      'https://unpkg.com/motion@11.11.13/dist/motion.js',
+      'https://unpkg.com/framer-motion@11.11.13/dist/framer-motion.js',
+    );
+
+    // Already correct → returned verbatim (idempotent), the vanilla-file matcher must not touch it.
+    expect(normalizeArtifactRuntimeImports('landing.html', html)).toBe(html);
+  });
 });

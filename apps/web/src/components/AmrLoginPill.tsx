@@ -238,9 +238,12 @@ export function AmrLoginPill({
 
   const refresh = useCallback(async () => {
     const next = await fetchVelaLoginStatus();
-    if (next) setStatus(next);
+    if (next) {
+      setStatus(next);
+      onStatusChange?.(next);
+    }
     return next;
-  }, []);
+  }, [onStatusChange]);
 
   useEffect(() => {
     if (!skipInitialRefresh) void refresh();

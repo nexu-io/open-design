@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { ensureRailOpen } from '@/playwright/rail';
+import { routeAgents } from '@/playwright/mock-factory';
 import type { Page } from '@playwright/test';
 import { T } from '@/timeouts';
 
@@ -280,7 +281,7 @@ test('[P0] simple deck keeps the active slide stable across preview mode switche
   await expect(frame.getByText('Slide Three')).toBeVisible();
 });
 
-test('[P0] HTML preview stays rendered after switching from Preview to Code and back', async ({ page }) => {
+test('[P0] @critical HTML preview stays rendered after switching from Preview to Code and back', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'HTML preview toggle regression');
   await seedHtmlArtifact(
@@ -313,22 +314,16 @@ test('[P0] HTML preview stays rendered after switching from Preview to Code and 
 });
 
 async function routeMockAgents(page: Page) {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeAgents(page, [
+    {
+      id: 'mock',
+      name: 'Mock Agent',
+      bin: 'mock-agent',
+      available: true,
+      version: 'test',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
 }
 
 async function createEmptyProject(page: Page, name: string): Promise<string> {

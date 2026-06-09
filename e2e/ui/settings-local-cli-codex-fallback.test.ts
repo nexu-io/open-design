@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
-import type { Page, Route } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { openSettingsDialog } from '../lib/playwright/amr.js';
+import { routeAgents } from '../lib/playwright/mock-factory.js';
 
 const STORAGE_KEY = 'open-design:config';
 const LOCALE_KEY = 'open-design:locale';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
-const SETTINGS_MENU_LABEL = /Settings|设置|設定/i;
 const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 
 test.describe.configure({ timeout: 30_000 });
@@ -141,9 +142,7 @@ async function openLocalCliSettings(
     });
   });
 
-  await page.route('**/api/agents**', async (route) => {
-    await fulfillAgentsRoute(route, agents);
-  });
+  await routeAgents(page, agents);
 
   await page.route('**/api/test/connection', async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
@@ -155,21 +154,7 @@ async function openLocalCliSettings(
   });
 
   await gotoEntryHome(page);
-  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).first().click();
-  const dialog = page.locator('.modal-settings[role="dialog"]');
-  const menu = page.getByRole('menu');
-  await expect
-    .poll(async () => {
-      if (await dialog.isVisible().catch(() => false)) return 'dialog';
-      if (await menu.isVisible().catch(() => false)) return 'menu';
-      return 'pending';
-    })
-    .not.toBe('pending');
-  if (await menu.isVisible().catch(() => false)) {
-    await menu.getByRole('menuitem', { name: SETTINGS_MENU_LABEL }).click();
-  }
-
-  await expect(dialog).toBeVisible();
+  const dialog = await openSettingsDialog(page);
   await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
   const codexCard = dialog
     .locator('[data-testid="settings-agent-select-codex"], .agent-card-select', {
@@ -187,35 +172,8 @@ async function openLocalCliSettings(
   return dialog;
 }
 
-async function fulfillAgentsRoute(route: Route, agents: AgentFixture[]) {
-  const url = new URL(route.request().url());
-  if (url.searchParams.get('stream') === '1') {
-    const body = [
-      ...agents.flatMap((agent) => [
-        'event: agent',
-        `data: ${JSON.stringify(agent)}`,
-        '',
-      ]),
-      'event: done',
-      'data: {}',
-      '',
-      '',
-    ].join('\n');
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
-    return;
-  }
-  await route.fulfill({ json: { agents } });
-}
-
 test.describe('Settings Local CLI Codex fallback UX', () => {
-  test('[P0] shows fallback repair actions and can replace the saved path with the detected Codex binary', async ({ page }) => {
+  test('[P0] @critical shows fallback repair actions and can replace the saved path with the detected Codex binary', async ({ page }) => {
     test.setTimeout(60_000);
     const configuredPath = '/bad/codex';
     const detectedPath = '/usr/local/bin/codex';

@@ -299,6 +299,49 @@ describe("desktop updater", () => {
     }
   });
 
+  it("adds session and source context to lifecycle logs", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture();
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() };
+    try {
+      const updater = createDesktopUpdater(
+        {
+          arch: "arm64",
+          downloadRoot: root,
+          env: updaterEnv(fixture.metadataUrl),
+          namespace: "release-beta",
+          source: SIDECAR_SOURCES.PACKAGED,
+        },
+        {
+          logger,
+          now: () => new Date("2026-06-09T07:50:51.000Z"),
+          processPid: 12345,
+        },
+      );
+
+      await updater.checkForUpdates({ autoDownload: false });
+
+      expect(logger.info).toHaveBeenCalledWith("[open-design updater] lifecycle", expect.objectContaining({
+        enabled: true,
+        event: "session-start",
+        metadataUrl: fixture.metadataUrl,
+        namespace: "release-beta",
+        sessionId: "2026-06-09T07:50:51.000Z-12345",
+        source: SIDECAR_SOURCES.PACKAGED,
+      }));
+      expect(logger.info).toHaveBeenCalledWith("[open-design updater] lifecycle", expect.objectContaining({
+        event: "check-start",
+        metadataUrl: fixture.metadataUrl,
+        namespace: "release-beta",
+        sessionId: "2026-06-09T07:50:51.000Z-12345",
+        source: SIDECAR_SOURCES.PACKAGED,
+      }));
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("downloads, verifies, persists, and dry-runs opening a mac package", async () => {
     const root = makeRoot();
     const fixture = await createUpdaterFixture();

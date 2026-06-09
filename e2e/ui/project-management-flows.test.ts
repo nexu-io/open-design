@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { ensureRailOpen } from '@/playwright/rail';
 import type { Locator, Page, Request, Route } from '@playwright/test';
+import { routeAgents } from '../lib/playwright/mock-factory.js';
 
 const STORAGE_KEY = 'open-design:config';
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
@@ -111,37 +112,8 @@ test.beforeEach(async ({ page }) => {
     });
   });
 
-  await page.route('**/api/agents**', async (route) => {
-    await fulfillAgentsRoute(route, AGENTS);
-  });
+  await routeAgents(page, AGENTS);
 });
-
-async function fulfillAgentsRoute(route: Route, agents: typeof AGENTS) {
-  const url = new URL(route.request().url());
-  if (url.searchParams.get('stream') === '1') {
-    const body = [
-      ...agents.flatMap((agent) => [
-        'event: agent',
-        `data: ${JSON.stringify(agent)}`,
-        '',
-      ]),
-      'event: done',
-      'data: {}',
-      '',
-      '',
-    ].join('\n');
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
-    return;
-  }
-  await route.fulfill({ json: { agents } });
-}
 
 function artifactPreview(page: Page) {
   return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
@@ -366,7 +338,7 @@ test('[P1] project detail header design system picker switches the active projec
   expect(body.designSystemId).toBe('editorial-noir');
 });
 
-test('[P0] project detail header design system switch carries into the next run request', async ({ page }) => {
+test('[P0] @critical project detail header design system switch carries into the next run request', async ({ page }) => {
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await page.route('**/api/runs', async (route) => {
     const raw = route.request().postData();
@@ -420,7 +392,8 @@ test('[P0] project detail header design system switch carries into the next run 
   expect(runRequestBodies[0]?.designSystemId).toBe('editorial-noir');
 });
 
-test('[P0] project instructions flow into the next API run as project-level system prompt context', async ({ page }) => {
+test('[P0] @critical project instructions flow into the next API run as project-level system prompt context', async ({ page }) => {
+  test.setTimeout(60_000);
   let capturedSystemPrompt = '';
   const apiConfig = {
     onboardingCompleted: true,
@@ -485,7 +458,7 @@ test('[P0] project instructions flow into the next API run as project-level syst
   expect(capturedSystemPrompt).toContain(instructions);
 });
 
-test('[P0] project detail avatar menu lets the user switch Local CLI agents and models', async ({ page }) => {
+test('[P0] @critical project detail avatar menu lets the user switch Local CLI agents and models', async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto('/');
   await createProject(page, 'Header agent switch');
@@ -829,7 +802,7 @@ test('[P0] project detail share menu opens the current share page for uploaded h
     .toContain('https://protected-share.example');
 });
 
-test('[P0] project detail share menu publish action opens the deploy flow for the selected provider', async ({ page }) => {
+test('[P0] @critical project detail share menu publish action opens the deploy flow for the selected provider', async ({ page }) => {
   let deployConfigUrl: string | null = null;
   await page.route('**/api/projects/*/deployments', async (route) => {
     await route.fulfill({ json: { deployments: [] } });
@@ -1522,6 +1495,7 @@ async function openAvatarAgentMenu(page: Page): Promise<{
 async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
   await dismissPrivacyDialog(page);
+  await expect(page.getByTestId('project-title')).toBeVisible();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();

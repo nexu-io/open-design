@@ -23,6 +23,7 @@ This is the authoritative build brief. Follow it exactly — the named colors, f
 
 - Default output: the single self-contained `example.html` seed (vanilla HTML/CSS/JS). It already includes everything inline.
 - If the user explicitly asks for a **React + TypeScript + Vite + Tailwind + Framer Motion** project, port the seed faithfully: same tokens, same markup structure, same section order. Use `lucide-react` for icons and `framer-motion` for the FadeUp reveals. Do not change the design while porting.
+- **Motion loading (locked).** If you emit a single self-contained inline-JSX file instead of the Vite project, Motion's React hooks (`useScroll`, `useTransform`, `useAnimationFrame`, …) exist only in the **React** UMD build: load `<script src="https://unpkg.com/framer-motion@11.11.13/dist/framer-motion.js"></script>` and read them off `window.Motion` — never the vanilla `https://unpkg.com/motion@.../dist/motion.js` DOM bundle, which lacks `useScroll` and renders a blank page. (The Vite project imports from npm and is unaffected.)
 - Dependencies for the React port: `framer-motion ^12.38.0`, `lucide-react ^0.344.0`, `react ^18.3.1`, `react-dom ^18.3.1`; dev: Vite, Tailwind CSS 3, TypeScript, PostCSS, Autoprefixer.
 
 ## Fonts (locked)

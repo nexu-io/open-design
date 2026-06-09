@@ -17,14 +17,17 @@ import {
 import { PreviewModal } from '../PreviewModal';
 import { buildPluginShareUrl } from './PluginShareMenu';
 import { PluginMetaSections } from './PluginMetaSections';
+import { buildPluginUseMenu } from './pluginUseMenu';
+import type { PluginUseAction } from '../plugins-home/useActions';
 
 interface Props {
   record: InstalledPluginRecord;
   /** When set, fetch this specific example stem; otherwise hit /preview. */
   exampleStem?: string | null;
   onClose: () => void;
-  onUse: (record: InstalledPluginRecord) => void;
+  onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
   isApplying?: boolean;
+  hideUseAction?: boolean;
 }
 
 export function PluginExampleDetail({
@@ -33,6 +36,7 @@ export function PluginExampleDetail({
   onClose,
   onUse,
   isApplying,
+  hideUseAction,
 }: Props) {
   const { t, locale } = useI18n();
   const localizedTitle = localizePluginTitle(locale, record);
@@ -139,13 +143,16 @@ export function PluginExampleDetail({
           </div>
         ),
       }}
-      primaryAction={{
-        label: 'Use plugin',
-        onClick: () => onUse(record),
-        busy: !!isApplying,
-        busyLabel: 'Applying…',
-        testId: `plugin-details-use-${record.id}`,
-      }}
+      primaryAction={hideUseAction
+        ? undefined
+        : {
+            label: t('preview.usePlugin'),
+            onClick: () => onUse(record, 'use'),
+            busy: !!isApplying,
+            busyLabel: 'Applying…',
+            testId: `plugin-details-use-${record.id}`,
+            menu: buildPluginUseMenu(record, onUse, t),
+          }}
       hideSidebarToggle
     />
   );
