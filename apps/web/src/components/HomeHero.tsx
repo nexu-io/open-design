@@ -1607,7 +1607,9 @@ function PluginPromptPresetCard({
   pending: boolean;
   record: InstalledPluginRecord;
 }) {
-  const preview = useMemo(() => inferPluginPreview(record), [record]);
+  // Example-prompt preset tiles are thumbnails too — prefer the cheap baked
+  // hover-pan clip when one exists (same as the gallery cards).
+  const preview = useMemo(() => inferPluginPreview(record, { preferBaked: true }), [record]);
   const seedPrompt = examplePresetSeedPrompt(record, locale, chipId);
   return (
     <button
