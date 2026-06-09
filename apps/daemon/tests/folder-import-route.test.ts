@@ -395,6 +395,154 @@ describe('POST /api/import/folder', () => {
     expect(routes).not.toContain('/api/health');
   });
 
+  it('does not synthesize Next routes for non-Next React apps that use a src/pages convention', async () => {
+    const folder = makeFolder();
+    await mkdir(path.join(folder, 'src/pages'), { recursive: true });
+    await writeFile(
+      path.join(folder, 'package.json'),
+      JSON.stringify({
+        scripts: { dev: 'vite' },
+        dependencies: {
+          '@vitejs/plugin-react': 'latest',
+          react: '18.0.0',
+          vite: '6.0.0',
+        },
+      }),
+    );
+    await writeFile(path.join(folder, 'index.html'), '<div id="root"></div><script type="module" src="/src/main.tsx"></script>');
+    await writeFile(path.join(folder, 'src/main.tsx'), "import React from 'react';\nimport './App';\n");
+    await writeFile(path.join(folder, 'src/App.tsx'), 'export function App(){return <main>App</main>}');
+    await writeFile(path.join(folder, 'src/pages/Home.tsx'), 'export function Home(){return <main>Home</main>}');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const resp = await fetch(`${baseUrl}/api/projects/${project.id}/ui-surfaces`);
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      surfaces: Array<{
+        kind: string;
+        route: string | null;
+        framework: string | null;
+        entryFile: string;
+        previewFile: string | null;
+      }>;
+    };
+
+    expect(body.surfaces).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'react-app',
+          route: '/',
+          framework: 'Vite',
+          entryFile: 'src/main.tsx',
+          previewFile: 'index.html',
+        }),
+      ]),
+    );
+    expect(body.surfaces).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'next-route',
+          entryFile: 'src/pages/Home.tsx',
+        }),
+      ]),
+    );
+  });
+
+  it('does not let root Next signals classify a nested non-Next package src/pages tree', async () => {
+    const folder = makeFolder();
+    await mkdir(path.join(folder, 'app'), { recursive: true });
+    await mkdir(path.join(folder, 'packages/vite-app/src/pages'), { recursive: true });
+    await writeFile(
+      path.join(folder, 'package.json'),
+      JSON.stringify({
+        dependencies: {
+          next: '16.0.0',
+          react: '18.0.0',
+        },
+      }),
+    );
+    await writeFile(path.join(folder, 'app/page.tsx'), 'export default function Page(){return <main>Root Next</main>}');
+    await writeFile(
+      path.join(folder, 'packages/vite-app/package.json'),
+      JSON.stringify({
+        scripts: { dev: 'vite' },
+        dependencies: {
+          react: '18.0.0',
+          vite: '6.0.0',
+        },
+      }),
+    );
+    await writeFile(path.join(folder, 'packages/vite-app/src/pages/Home.tsx'), 'export function Home(){return <main>Nested Vite</main>}');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const resp = await fetch(`${baseUrl}/api/projects/${project.id}/ui-surfaces`);
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      surfaces: Array<{
+        kind: string;
+        framework: string | null;
+        entryFile: string;
+      }>;
+    };
+
+    expect(body.surfaces).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'next-route',
+          framework: 'Next.js',
+          entryFile: 'app/page.tsx',
+        }),
+      ]),
+    );
+    expect(body.surfaces).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'next-route',
+          entryFile: 'packages/vite-app/src/pages/Home.tsx',
+        }),
+      ]),
+    );
+  });
+
+  it('treats next.config as an explicit Next route signal without a next dependency', async () => {
+    const folder = makeFolder();
+    await mkdir(path.join(folder, 'src/app/dashboard'), { recursive: true });
+    await writeFile(path.join(folder, 'next.config.mjs'), 'export default {};');
+    await writeFile(path.join(folder, 'src/app/dashboard/page.tsx'), 'export default function Page(){return <main>Dashboard</main>}');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const resp = await fetch(`${baseUrl}/api/projects/${project.id}/ui-surfaces`);
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      surfaces: Array<{
+        kind: string;
+        route: string | null;
+        framework: string | null;
+        entryFile: string;
+      }>;
+    };
+
+    expect(body.surfaces).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'next-route',
+          route: '/dashboard',
+          framework: 'Next.js',
+          entryFile: 'src/app/dashboard/page.tsx',
+        }),
+      ]),
+    );
+  });
+
   it('starts an imported app runtime for source-backed UI surfaces', async () => {
     const folder = makeFolder();
     await mkdir(path.join(folder, 'app/messages/[conversationId]'), { recursive: true });

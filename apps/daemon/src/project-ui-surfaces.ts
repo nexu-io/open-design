@@ -87,7 +87,7 @@ export async function discoverProjectUiSurfaces(input: {
   const surfaces: ProjectUiSurface[] = [];
   const htmlShells = await findAppShellHtmlFiles(ctx);
 
-  for (const page of findNextRouteFiles(input.files)) {
+  for (const page of findNextRouteFiles(ctx)) {
     surfaces.push(await buildCodeSurface(ctx, page, {
       kind: 'next-route',
       route: routeForNextFile(page),
@@ -541,16 +541,32 @@ function findReactAppEntry(ctx: DiscoveryContext): { entryFile: string; previewF
   };
 }
 
-function findNextRouteFiles(files: ProjectFile[]): string[] {
-  return files
+function findNextRouteFiles(ctx: DiscoveryContext): string[] {
+  return ctx.files
     .map((file) => normalizeProjectPath(file.name))
     .filter((file) =>
       /(^|\/)(src\/)?app\/.*page\.[cm]?[jt]sx?$/u.test(file) ||
       /(^|\/)(src\/)?pages\/.+\.[cm]?[jt]sx?$/u.test(file),
     )
+    .filter((file) => hasNextSignalForFile(ctx, file))
     .filter((file) => !/(^|\/)(src\/)?pages\/api\//u.test(file))
     .filter((file) => !/\/(?:_app|_document|_error)\.[cm]?[jt]sx?$/u.test(file))
     .sort(compareProjectPaths);
+}
+
+function hasNextSignalForFile(ctx: DiscoveryContext, file: string): boolean {
+  const owner = nearestPackageInfoForFile(ctx, file);
+  if (owner) {
+    if ('next' in owner.dependencies) return true;
+    const configDirs = owner.dir ? [owner.dir] : ancestorDirsForFile(file);
+    return configDirs.some((dir) => hasNextConfigInDir(ctx, dir));
+  }
+  return ancestorDirsForFile(file).some((dir) => hasNextConfigInDir(ctx, dir));
+}
+
+function hasNextConfigInDir(ctx: DiscoveryContext, dir: string): boolean {
+  return ['next.config.js', 'next.config.mjs', 'next.config.cjs', 'next.config.ts']
+    .some((name) => ctx.fileMap.has(normalizeProjectPath(path.posix.join(dir, name))));
 }
 
 function findHtmlScreenFiles(files: ProjectFile[]): string[] {
@@ -629,11 +645,28 @@ function previewRuntimeRootForSurface(
 }
 
 function packageInfoForFile(ctx: DiscoveryContext, file: string): PackageInfo | null {
+  return nearestPackageInfoForFile(ctx, file) ?? ctx.rootPackage;
+}
+
+function nearestPackageInfoForFile(ctx: DiscoveryContext, file: string): PackageInfo | null {
   const normalized = normalizeProjectPath(file);
   const matches = ctx.packages
     .filter((pkg) => pkg.dir === '' || normalized === pkg.dir || normalized.startsWith(`${pkg.dir}/`))
     .sort((a, b) => b.dir.length - a.dir.length);
-  return matches[0] ?? ctx.rootPackage;
+  return matches[0] ?? null;
+}
+
+function ancestorDirsForFile(file: string): string[] {
+  const dirs: string[] = [];
+  let dir = path.posix.dirname(normalizeProjectPath(file));
+  while (dir && dir !== '.') {
+    dirs.push(dir);
+    const next = path.posix.dirname(dir);
+    if (next === dir) break;
+    dir = next;
+  }
+  dirs.push('');
+  return dirs;
 }
 
 function routeForHtmlFile(file: string): string {

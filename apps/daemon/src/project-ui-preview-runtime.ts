@@ -37,7 +37,7 @@ interface PreviewRuntimeEntry {
   child: ChildProcess;
   status: 'starting' | 'ready' | 'failed';
   error: string | null;
-  startPromise: Promise<ProjectUiPreviewRuntimeResponse> | null;
+  startPromise: Promise<void> | null;
 }
 
 const previewRuntimes = new Map<string, PreviewRuntimeEntry>();
@@ -85,7 +85,15 @@ export async function startProjectUiPreviewRuntime(input: {
   const existing = previewRuntimes.get(key);
   if (existing && isRuntimeAlive(existing)) {
     if (existing.status === 'ready') return readyResponse(existing, previewRoute);
-    if (existing.startPromise) return existing.startPromise;
+    if (existing.startPromise) {
+      await existing.startPromise;
+      return runtimeResponse(existing, previewRoute);
+    }
+    existing.status = 'starting';
+    existing.error = null;
+    existing.startPromise = waitForRuntime(existing);
+    await existing.startPromise;
+    return runtimeResponse(existing, previewRoute);
   } else if (existing) {
     previewRuntimes.delete(key);
   }
@@ -186,7 +194,7 @@ async function launchRuntime(input: {
     error: null,
     startPromise: null,
   };
-  const startPromise = waitForRuntime(entry, input.route);
+  const startPromise = waitForRuntime(entry);
   entry.startPromise = startPromise;
   previewRuntimes.set(input.key, entry);
   child.once('exit', (code, signal) => {
@@ -198,33 +206,39 @@ async function launchRuntime(input: {
     entry.error = errorMessage(error);
   });
   child.unref();
-  return startPromise;
+  await startPromise;
+  return runtimeResponse(entry, input.route);
 }
 
 async function waitForRuntime(
   entry: PreviewRuntimeEntry,
-  route: string,
-): Promise<ProjectUiPreviewRuntimeResponse> {
+): Promise<void> {
   try {
     await waitForPreviewPort(entry);
     entry.status = 'ready';
     entry.error = null;
     entry.startPromise = null;
-    return readyResponse(entry, route);
   } catch (error) {
     entry.status = 'failed';
     entry.error = errorMessage(error);
     entry.startPromise = null;
-    return {
-      status: 'failed',
-      runtimeRoot: entry.runtimeRoot,
-      baseUrl: null,
-      url: null,
-      route,
-      error: entry.error,
-      logTail: await readLogTail(entry.logPath, 30),
-    };
   }
+}
+
+async function runtimeResponse(
+  entry: PreviewRuntimeEntry,
+  route: string,
+): Promise<ProjectUiPreviewRuntimeResponse> {
+  if (entry.status === 'ready') return readyResponse(entry, route);
+  return {
+    status: 'failed',
+    runtimeRoot: entry.runtimeRoot,
+    baseUrl: null,
+    url: null,
+    route,
+    error: entry.error,
+    logTail: await readLogTail(entry.logPath, 30),
+  };
 }
 
 function readyResponse(entry: PreviewRuntimeEntry, route: string): ProjectUiPreviewRuntimeResponse {
