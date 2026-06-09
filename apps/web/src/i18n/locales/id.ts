@@ -2316,6 +2316,7 @@ export const id: Dict = {
   'assistant.unfinishedSummary': '{n} tugas tersisa',
   'assistant.unfinishedMore': '+{n} lagi',
   'assistant.continueRemaining': 'Lanjutkan',
+  'chat.resumeRunCta': 'Lanjutkan proses',
   'assistant.outTokens': '{n} keluar',
   'assistant.producedFiles': 'File yang dibuat',
   'assistant.openFile': 'Buka file',

@@ -2316,6 +2316,7 @@ export const ru: Dict = {
   'assistant.unfinishedSummary': 'Осталось задач: {n}',
   'assistant.unfinishedMore': '+{n} еще',
   'assistant.continueRemaining': 'Продолжить оставшиеся задачи',
+  'chat.resumeRunCta': 'Продолжить выполнение',
   'assistant.outTokens': '{n} токенов вывода',
   'assistant.producedFiles': 'Файлы из этого хода',
   'assistant.openFile': 'Открыть',

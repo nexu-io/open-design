@@ -2316,6 +2316,7 @@ export const tr: Dict = {
   'assistant.unfinishedSummary': '{n} görev kaldı',
   'assistant.unfinishedMore': '+{n} daha',
   'assistant.continueRemaining': 'Kalan görevleri sürdür',
+  'chat.resumeRunCta': 'Çalıştırmayı sürdür',
   'assistant.outTokens': '{n} çıktı',
   'assistant.producedFiles': 'Bu çalışmadan dosyalar',
   'assistant.openFile': 'Aç',

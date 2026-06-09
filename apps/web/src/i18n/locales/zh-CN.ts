@@ -2316,6 +2316,7 @@ export const zhCN: Dict = {
   'assistant.unfinishedSummary': '剩余 {n} 个任务',
   'assistant.unfinishedMore': '还有 {n} 个',
   'assistant.continueRemaining': '继续剩余任务',
+  'chat.resumeRunCta': '继续运行',
   'assistant.outTokens': '{n} 输出',
   'assistant.producedFiles': '本轮产出的文件',
   'assistant.openFile': '打开',

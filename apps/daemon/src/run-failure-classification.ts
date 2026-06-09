@@ -276,6 +276,30 @@ function processExitDetail(
   return 'unknown';
 }
 
+/**
+ * Whether a terminal failure can be recovered by RESUMING the agent's existing
+ * CLI session (continue from where it left off) rather than restarting from
+ * scratch. True only for transient mid-stream interruptions — an upstream drop
+ * or an inactivity timeout — where any work already committed to the session is
+ * worth continuing. Deliberately excludes process crashes, OOM kills,
+ * auth/balance/prompt-size and any other non-transient cause: resuming those
+ * would just reproduce the failure. The caller additionally gates on the
+ * runtime actually supporting CLI session resume and on holding a session id.
+ */
+export function isResumableFailure(
+  failure: RunFailureClassification | undefined,
+): boolean {
+  if (!failure) return false;
+  if (failure.failure_category === 'upstream_unavailable') return true;
+  if (
+    failure.failure_category === 'timeout' &&
+    failure.failure_detail === 'inactivity_timeout'
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function classification(
   failure_category: TrackingRunFailureCategory,
   failure_detail: TrackingRunFailureDetail,

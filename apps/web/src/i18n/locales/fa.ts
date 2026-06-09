@@ -2316,6 +2316,7 @@ export const fa: Dict = {
   'assistant.unfinishedSummary': '{n} وظیفه باقی مانده',
   'assistant.unfinishedMore': '+{n} بیشتر',
   'assistant.continueRemaining': 'ادامه وظایف باقی مانده',
+  'chat.resumeRunCta': 'ادامهٔ اجرا',
   'assistant.outTokens': '{n} خروجی',
   'assistant.producedFiles': 'فایل‌های این نوبت',
   'assistant.openFile': 'باز کردن',

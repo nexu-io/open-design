@@ -2316,6 +2316,7 @@ export const ko: Dict = {
   'assistant.unfinishedSummary': '{n}개 작업 남음',
   'assistant.unfinishedMore': '+{n}개 추가',
   'assistant.continueRemaining': '남은 작업 계속하기',
+  'chat.resumeRunCta': '실행 계속하기',
   'assistant.outTokens': '{n} 출력',
   'assistant.producedFiles': '이 턴에서 생성된 파일',
   'assistant.openFile': '열기',

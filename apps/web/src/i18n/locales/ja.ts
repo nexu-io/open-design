@@ -2316,6 +2316,7 @@ export const ja: Dict = {
   'assistant.unfinishedSummary': '{n} 件のタスクが残っています',
   'assistant.unfinishedMore': '+{n} 件',
   'assistant.continueRemaining': '残りのタスクを続ける',
+  'chat.resumeRunCta': '実行を続ける',
   'assistant.outTokens': '{n} 出力',
   'assistant.producedFiles': 'このターンのファイル',
   'assistant.openFile': '開く',

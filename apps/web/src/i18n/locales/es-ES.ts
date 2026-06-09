@@ -2316,6 +2316,7 @@ export const esES: Dict = {
   'assistant.unfinishedSummary': 'quedan {n} tarea(s)',
   'assistant.unfinishedMore': '+{n} más',
   'assistant.continueRemaining': 'Continuar tareas pendientes',
+  'chat.resumeRunCta': 'Continuar la ejecución',
   'assistant.outTokens': '{n} salida',
   'assistant.producedFiles': 'Archivos de este turno',
   'assistant.openFile': 'Abrir',

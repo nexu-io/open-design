@@ -2316,6 +2316,7 @@ export const th: Dict = {
   'assistant.unfinishedSummary': 'งาน {n} ขั้นลืมอยู่ข้างหลัง',
   'assistant.unfinishedMore': 'ทิ้งเพิ่มมาอีก +{n}',
   'assistant.continueRemaining': 'สานต่อภาระหน้าที่หลงเหลือที',
+  'chat.resumeRunCta': 'ดำเนินการต่อ',
   'assistant.outTokens': 'หมดการจ่ายใน {n} โทเคน',
   'assistant.producedFiles': 'ดึงงานมาจากระบบไฟล์',
   'assistant.openFile': 'เรียก',

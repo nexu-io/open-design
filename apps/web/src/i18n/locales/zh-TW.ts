@@ -2316,6 +2316,7 @@ export const zhTW: Dict = {
   'assistant.unfinishedSummary': '剩餘 {n} 個任務',
   'assistant.unfinishedMore': '還有 {n} 個',
   'assistant.continueRemaining': '繼續剩餘任務',
+  'chat.resumeRunCta': '繼續執行',
   'assistant.outTokens': '{n} 輸出',
   'assistant.producedFiles': '本輪產出的檔案',
   'assistant.openFile': '開啟',

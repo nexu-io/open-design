@@ -2316,6 +2316,7 @@ export const pl: Dict = {
   'assistant.unfinishedSummary': 'pozostało {n} zadań',
   'assistant.unfinishedMore': '+{n} więcej',
   'assistant.continueRemaining': 'Kontynuuj pozostałe zadania',
+  'chat.resumeRunCta': 'Wznów działanie',
   'assistant.outTokens': '{n} wysłano',
   'assistant.producedFiles': 'Pliki z tej tury',
   'assistant.openFile': 'Otwórz',
