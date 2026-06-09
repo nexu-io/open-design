@@ -1238,6 +1238,7 @@ function AppInner() {
       input: CreateInput & {
         pendingPrompt?: string;
         pluginId?: string;
+        pluginType?: string;
         appliedPluginSnapshotId?: string;
         pluginInputs?: Record<string, unknown>;
         conversationMode?: ChatSessionMode;
@@ -1282,6 +1283,8 @@ function AppInner() {
             project_id: null,
             project_kind: projectKindToTracking(kind, input.metadata?.videoModel),
             fidelity,
+            ...(input.pluginId ? { plugin_id: input.pluginId } : {}),
+            ...(input.pluginType ? { plugin_type: input.pluginType } : {}),
             result: 'failed',
             error_code: 'CREATE_REQUEST_FAILED',
           },
@@ -1360,6 +1363,8 @@ function AppInner() {
           project_id: result.project.id,
           project_kind: projectKindToTracking(kind, input.metadata?.videoModel),
           fidelity,
+          ...(input.pluginId ? { plugin_id: input.pluginId } : {}),
+          ...(input.pluginType ? { plugin_type: input.pluginType } : {}),
           result: 'success',
         },
         { requestId: input.requestId },
