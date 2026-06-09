@@ -277,6 +277,19 @@
   font-weight: 600;
   color: var(--text-strong);
 }
+/* Plugin kind (Prototype / Slides / Image / Video / Audio / HyperFrames /
+   Live artifact) — same taxonomy as the home Community chips. */
+.plus-menu__preview-kind {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: color-mix(in srgb, var(--accent) 78%, var(--text));
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.5;
+  white-space: nowrap;
+}
 .plus-menu__preview-desc {
   margin: 0;
   font-size: 12px;

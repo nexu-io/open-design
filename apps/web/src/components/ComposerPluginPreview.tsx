@@ -12,7 +12,9 @@
 
 import { useMemo } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
+import { useT } from '../i18n';
 import { PreviewSurface } from './plugins-home/cards/PreviewSurface';
+import { extractCategories } from './plugins-home/facets';
 import {
   localizePluginDescription,
   localizePluginTitle,
@@ -21,6 +23,33 @@ import { inferPluginPreview } from './plugins-home/preview';
 import { TrustBadge } from './TrustBadge';
 
 const MAX_VISIBLE_TAGS = 4;
+
+// Map a plugin's primary facet (from `extractCategories`) to its localized
+// chip label — the same taxonomy as the home Community filters, so the
+// preview's "kind" tag reads identically to those chips.
+function pluginKindLabel(
+  slug: string | undefined,
+  t: ReturnType<typeof useT>,
+): string | null {
+  switch (slug) {
+    case 'prototype':
+      return t('homeHero.chip.prototype');
+    case 'live-artifact':
+      return t('homeHero.chip.liveArtifact');
+    case 'deck':
+      return t('pluginsHome.facet.slides');
+    case 'image':
+      return t('homeHero.chip.image');
+    case 'video':
+      return t('homeHero.chip.video');
+    case 'hyperframes':
+      return t('homeHero.chip.hyperframes');
+    case 'audio':
+      return t('homeHero.chip.audio');
+    default:
+      return null;
+  }
+}
 
 const NOISE_TAGS = new Set<string>([
   'first-party',
@@ -38,9 +67,14 @@ export function ComposerPluginPreview({
   record: InstalledPluginRecord;
   locale: string;
 }) {
+  const t = useT();
   const preview = useMemo(() => inferPluginPreview(record), [record]);
   const title = localizePluginTitle(locale, record);
   const description = localizePluginDescription(locale, record);
+  const kindLabel = useMemo(
+    () => pluginKindLabel(extractCategories(record)[0], t),
+    [record, t],
+  );
   const tags = useMemo(
     () =>
       (record.manifest?.tags ?? [])
@@ -56,6 +90,9 @@ export function ComposerPluginPreview({
           <span className="plus-menu__preview-title" title={title}>
             {title}
           </span>
+          {kindLabel ? (
+            <span className="plus-menu__preview-kind">{kindLabel}</span>
+          ) : null}
           <TrustBadge trust={record.trust} />
         </div>
         {description ? (
