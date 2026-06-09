@@ -1059,6 +1059,9 @@ export interface HomeChatComposerClickProps {
     // is the task-type rail (原型 / 幻灯片 / HyperFrames / 视频 / …).
     | 'working_dir'
     | 'working_dir_clear'
+    // Re-selecting a previously used folder from the working-dir picker's
+    // "Recent folders" submenu.
+    | 'working_dir_recent'
     | 'task_chip'
     // Sub-category filter pill under the task rail (全部 / Landing / Brand /
     // Dashboards / …). `subcategory` carries the picked slug; '全部' sends

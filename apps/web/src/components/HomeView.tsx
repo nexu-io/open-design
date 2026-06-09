@@ -49,7 +49,7 @@ import {
   mergeAihubmixImageModels,
   useAIHubMixImageModels,
 } from '../media/aihubmix-image-models';
-import { openFolderDialog } from '../providers/registry';
+import { openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir } from '../providers/registry';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type {
   DesignSystemSummary,
@@ -262,6 +262,26 @@ export function HomeView({
   // native dialog. Spent on the post-creation working-dir POST so the
   // daemon's desktop-auth gate accepts the path. Null for web picks.
   const [workingDirToken, setWorkingDirToken] = useState<string | null>(null);
+  // Global most-recently-used working directories, surfaced in the picker's
+  // "Recent folders" submenu. Loaded from the daemon's app-config and bumped
+  // whenever the user picks a folder.
+  const [recentDirs, setRecentDirs] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchRecentLinkedDirs().then((dirs) => {
+      if (!cancelled) setRecentDirs(dirs);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const rememberRecentDir = useCallback(async (dir: string) => {
+    // Optimistically promote the dir to the front so the submenu updates
+    // immediately; the daemon also trims/de-dupes/caps the persisted list.
+    setRecentDirs((prev) => [dir, ...prev.filter((d) => d !== dir)].slice(0, 5));
+    const persisted = await pushRecentLinkedDir(dir);
+    setRecentDirs(persisted);
+  }, []);
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
   const [mcpLoading, setMcpLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
@@ -1046,6 +1066,7 @@ export function HomeView({
       if (result.ok) {
         setWorkingDir(result.baseDir);
         setWorkingDirToken(result.token);
+        void rememberRecentDir(result.baseDir);
         return;
       }
       // The user explicitly cancelled the host picker — respect that and do
@@ -1069,6 +1090,7 @@ export function HomeView({
     if (picked) {
       setWorkingDir(picked);
       setWorkingDirToken(null);
+      void rememberRecentDir(picked);
     }
   }
 
@@ -1563,7 +1585,15 @@ export function HomeView({
         contextItemCount={contextItemCount}
         error={error}
         workingDir={workingDir}
+        recentDirs={recentDirs}
         onPickWorkingDir={handlePickWorkingDir}
+        onSelectRecentWorkingDir={(dir) => {
+          setWorkingDir(dir);
+          // Recents come from the browser-side picker only; they carry no
+          // desktop trust token (and linkedDirs don't need one).
+          setWorkingDirToken(null);
+          void rememberRecentDir(dir);
+        }}
         onClearWorkingDir={() => {
           setWorkingDir(null);
           setWorkingDirToken(null);
