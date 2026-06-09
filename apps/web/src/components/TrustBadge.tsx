@@ -20,24 +20,6 @@ interface Props {
   variant?: 'default' | 'overlay';
 }
 
-const TRUST_META: Record<
-  NormalizedTrustTier,
-  { label: string; description: string }
-> = {
-  official: {
-    label: 'Official',
-    description: 'Open Design official',
-  },
-  trusted: {
-    label: 'Trusted',
-    description: 'Community trusted',
-  },
-  restricted: {
-    label: 'Restricted',
-    description: 'Restricted source',
-  },
-};
-
 export function TrustBadge({
   trust,
   label,
@@ -46,7 +28,10 @@ export function TrustBadge({
 }: Props) {
   const t = useT();
   const tier = normalizeTrustTier(trust);
-  const meta = TRUST_META[tier];
+  // The visible label AND the tooltip / screen-reader text all resolve from
+  // the localized tier key, so non-English locales never see mixed-language
+  // accessibility text leaking through (the old hard-coded English
+  // descriptions did exactly that).
   const text = label ?? t(TRUST_LABEL_KEY[tier]);
   const classes = [
     'plugin-trust-badge',
@@ -62,8 +47,8 @@ export function TrustBadge({
       className={classes}
       data-trust-tier={tier}
       data-trust-source={trust}
-      title={meta.description}
-      aria-label={`${meta.description}: ${text}`}
+      title={text}
+      aria-label={text}
     >
       <span className="plugin-trust-badge__dot" aria-hidden />
       <span>{text}</span>
