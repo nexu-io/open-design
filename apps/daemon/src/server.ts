@@ -5554,6 +5554,7 @@ export async function startServer({
           : null;
       res.json({
         enabled: consentGranted,
+        env: baseline.env,
         key: baseline.key,
         host: baseline.host,
         installationId,
@@ -5564,6 +5565,7 @@ export async function startServer({
       // valuable signal in a degraded-state scenario.
       res.json({
         enabled: false,
+        env: baseline.env,
         key: baseline.key,
         host: baseline.host,
         installationId: null,
