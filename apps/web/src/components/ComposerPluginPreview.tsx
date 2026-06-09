@@ -3,8 +3,9 @@
 // The plugin list shows only a sparkle + name; committing to a plugin
 // from a bare name is a guess. This panel is the second-level surface
 // that fills in the gap: hovering (or arrow-defaulting to) a plugin
-// renders its live preview hero plus the title / trust / description /
-// tags, so the choice is informed before the user clicks.
+// renders its live preview hero plus the title, a localized kind tag,
+// the trust badge, and the description, so the choice is informed before
+// the user clicks.
 //
 // It reuses the plugins-home preview stack (`inferPluginPreview` +
 // `PreviewSurface`) so the hero looks identical to the gallery tile,
@@ -21,8 +22,6 @@ import {
 } from './plugins-home/localization';
 import { inferPluginPreview } from './plugins-home/preview';
 import { TrustBadge } from './TrustBadge';
-
-const MAX_VISIBLE_TAGS = 4;
 
 // Map a plugin's primary facet (from `extractCategories`) to its localized
 // chip label — the same taxonomy as the home Community filters, so the
@@ -51,15 +50,6 @@ function pluginKindLabel(
   }
 }
 
-const NOISE_TAGS = new Set<string>([
-  'first-party',
-  'third-party',
-  'phase-1',
-  'phase-7',
-  'untitled',
-  'plugin',
-]);
-
 export function ComposerPluginPreview({
   record,
   locale,
@@ -74,13 +64,6 @@ export function ComposerPluginPreview({
   const kindLabel = useMemo(
     () => pluginKindLabel(extractCategories(record)[0], t),
     [record, t],
-  );
-  const tags = useMemo(
-    () =>
-      (record.manifest?.tags ?? [])
-        .filter((t) => !NOISE_TAGS.has(t.toLowerCase()))
-        .slice(0, MAX_VISIBLE_TAGS),
-    [record.manifest?.tags],
   );
 
   return (
@@ -97,15 +80,6 @@ export function ComposerPluginPreview({
         </div>
         {description ? (
           <p className="plus-menu__preview-desc">{description}</p>
-        ) : null}
-        {tags.length > 0 ? (
-          <div className="plus-menu__preview-tags">
-            {tags.map((t) => (
-              <span key={t} className="plus-menu__preview-tag">
-                {t}
-              </span>
-            ))}
-          </div>
         ) : null}
       </div>
       <div className="plus-menu__preview-hero">

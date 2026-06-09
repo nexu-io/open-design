@@ -2,9 +2,16 @@ import type {
   MarketplaceTrust,
   TrustTier,
 } from '@open-design/contracts';
+import { useT } from '../i18n';
 
 type TrustBadgeTrust = TrustTier | MarketplaceTrust;
 type NormalizedTrustTier = 'official' | 'trusted' | 'restricted';
+
+const TRUST_LABEL_KEY = {
+  official: 'pluginsView.trust.official',
+  trusted: 'pluginsView.trust.trusted',
+  restricted: 'pluginsView.trust.restricted',
+} as const;
 
 interface Props {
   trust: TrustBadgeTrust;
@@ -37,9 +44,10 @@ export function TrustBadge({
   className,
   variant = 'default',
 }: Props) {
+  const t = useT();
   const tier = normalizeTrustTier(trust);
   const meta = TRUST_META[tier];
-  const text = label ?? meta.label;
+  const text = label ?? t(TRUST_LABEL_KEY[tier]);
   const classes = [
     'plugin-trust-badge',
     `plugin-trust-badge--${tier}`,

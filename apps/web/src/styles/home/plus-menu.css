@@ -301,20 +301,6 @@
   -webkit-line-clamp: 4;
   overflow: hidden;
 }
-.plus-menu__preview-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.plus-menu__preview-tag {
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--bg-subtle);
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.5;
-  white-space: nowrap;
-}
 /* Resting highlight on the row the preview is mirroring, so the panel's
    subject is obvious even before the cursor reaches a row. */
 .plus-menu__item.is-previewed:not(:disabled) {
