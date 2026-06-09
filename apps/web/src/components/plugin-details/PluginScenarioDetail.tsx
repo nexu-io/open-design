@@ -23,6 +23,7 @@ interface Props {
   onClose: () => void;
   onUse: (record: InstalledPluginRecord) => void;
   isApplying?: boolean;
+  hideUseAction?: boolean;
 }
 
 export function PluginScenarioDetail({
@@ -30,6 +31,7 @@ export function PluginScenarioDetail({
   onClose,
   onUse,
   isApplying,
+  hideUseAction,
 }: Props) {
   const closeRef = useRef<HTMLButtonElement | null>(null);
 
@@ -135,20 +137,22 @@ export function PluginScenarioDetail({
           >
             Close
           </button>
-          <button
-            type="button"
-            className="plugin-details-modal__primary"
-            onClick={() => onUse(record)}
-            disabled={isApplying}
-            aria-busy={isApplying ? 'true' : undefined}
-            data-testid={`plugin-details-use-${record.id}`}
-          >
-            {isApplying
-              ? 'Applying…'
-              : query
-                ? 'Use example query'
-                : 'Use plugin'}
-          </button>
+          {hideUseAction ? null : (
+            <button
+              type="button"
+              className="plugin-details-modal__primary"
+              onClick={() => onUse(record)}
+              disabled={isApplying}
+              aria-busy={isApplying ? 'true' : undefined}
+              data-testid={`plugin-details-use-${record.id}`}
+            >
+              {isApplying
+                ? 'Applying…'
+                : query
+                  ? 'Use example query'
+                  : 'Use plugin'}
+            </button>
+          )}
         </footer>
       </div>
     </div>
