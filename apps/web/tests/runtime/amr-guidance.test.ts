@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { resolveRunFailureUi } from '../../src/runtime/amr-guidance';
+import { amrRechargeUrlForProfile, resolveRunFailureUi } from '../../src/runtime/amr-guidance';
+
+describe('amrRechargeUrlForProfile', () => {
+  it('matches the selected AMR profile wallet origin', () => {
+    expect(amrRechargeUrlForProfile('prod')).toBe('https://open-design.ai/amr/wallet');
+    expect(amrRechargeUrlForProfile('test')).toBe('https://vela.powerformer.net/wallet');
+    expect(amrRechargeUrlForProfile('local')).toBe('http://localhost:5173/wallet');
+    expect(amrRechargeUrlForProfile(' unknown ')).toBe('https://open-design.ai/amr/wallet');
+  });
+});
 
 describe('resolveRunFailureUi', () => {
   it('promotes AMR (switch card) for non-AMR model/auth/quota errors', () => {

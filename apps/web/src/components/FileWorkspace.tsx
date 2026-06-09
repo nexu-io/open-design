@@ -219,6 +219,8 @@ interface Props {
   focusQuestionsRequest?: { nonce: number } | null;
 }
 
+const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
+
 interface SketchState {
   version: number;
   rawItems: unknown[];
@@ -428,6 +430,7 @@ export function FileWorkspace({
   focusQuestionsRequest = null,
 }: Props) {
   const t = useT();
+  const amrProfile = chatConfig?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
   // The chat column only shows a compact Questions banner; the form itself
   // lives here, including after submission when a banner click can reopen the
   // answered preview.
@@ -2130,6 +2133,7 @@ export function FileWorkspace({
             onLaunchTerminalAuth={onLaunchTerminalAuth}
             amrAuthorizeSourceDetail="generation_preview_authorize_retry"
             amrRechargeSourceDetail="generation_preview_recharge"
+            amrProfile={amrProfile}
             amrGuidance={
               generationPreview.promoteAmrSwitch
                 && generationPreview.errorCode

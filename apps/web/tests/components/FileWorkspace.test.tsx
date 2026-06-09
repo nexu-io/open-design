@@ -19,7 +19,7 @@ import {
   writeProjectTextFile,
   fetchProjectFolders,
 } from '../../src/providers/registry';
-import type { ChatMessage, ProjectFile, ProjectFolder } from '../../src/types';
+import type { AppConfig, ChatMessage, ProjectFile, ProjectFolder } from '../../src/types';
 
 vi.mock('../../src/components/AmrGuidance', () => ({
   AmrGuidance: ({
@@ -1301,6 +1301,7 @@ describe('FileWorkspace generation failure recovery', () => {
         isDeck={false}
         tabsState={{ tabs: ['generation'], active: 'generation' }}
         onTabsStateChange={vi.fn()}
+        chatConfig={{ agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'local' } } } as unknown as AppConfig}
         messages={[failedAssistantMessage('AMR_INSUFFICIENT_BALANCE', 'amr', 'AMR balance empty')]}
         onRetry={onRetry}
       />,
@@ -1319,7 +1320,7 @@ describe('FileWorkspace generation failure recovery', () => {
     expect(features).toBe('noopener,noreferrer');
     const parsedWalletUrl = new URL(String(walletUrl));
     expect(`${parsedWalletUrl.origin}${parsedWalletUrl.pathname}`).toBe(
-      'https://open-design.ai/amr/wallet',
+      'http://localhost:5173/wallet',
     );
     expect(parsedWalletUrl.searchParams.get('od_origin')).toBe('open_design');
     expect(parsedWalletUrl.searchParams.get('od_entry_source')).toBe(
