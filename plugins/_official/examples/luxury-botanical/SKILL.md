@@ -23,6 +23,7 @@ This is the authoritative build brief. The named fonts, colors, scroll stops, ra
 
 - Default output: a single self-contained HTML file (the `example.html` seed). It uses **vanilla HTML/CSS/JS** — the scroll engine is one passive `requestAnimationFrame` loop reading `getBoundingClientRect()`, and `whileInView` reveals use an `IntersectionObserver`. Everything is inline.
 - If the user explicitly asks for a **React + TypeScript + Vite + Tailwind** project, port the seed faithfully into **Framer Motion**: the hero stage is a `useScroll({ offset: ["start start","end end"] })` over a `600vh` container with a `sticky top-0 h-screen` child; every animated value maps to a `useTransform`; the orbit carousel is the `OrbitImages` component driven by a `useAnimationFrame` progress value. Same fonts, same colors, same keyframe stops. Do not change the design while porting.
+- **Motion loading (locked).** If you emit a single self-contained inline-JSX file instead of the Vite project, Motion's React hooks (`useScroll`, `useTransform`, `useAnimationFrame`, …) exist only in the **React** UMD build: load `<script src="https://unpkg.com/framer-motion@11.11.13/dist/framer-motion.js"></script>` and read them off `window.Motion` — never the vanilla `https://unpkg.com/motion@.../dist/motion.js` DOM bundle, which lacks `useScroll` and renders a blank page. (The Vite project imports from npm and is unaffected.)
 
 ## Fonts (Google Fonts, locked)
 

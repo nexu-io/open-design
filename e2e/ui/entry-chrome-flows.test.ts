@@ -67,7 +67,7 @@ test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
 });
 
-test('[P0] entry chrome exposes the primary home creation surface and settings entry', async ({ page }) => {
+test('[P0] @critical entry chrome exposes the primary home creation surface and settings entry', async ({ page }) => {
   await page.route('**/api/projects', async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ json: { projects: [] } });
@@ -159,7 +159,7 @@ test('[P1] home view exposes the redesigned hero, recent projects, and starters'
   await expect(page.getByTestId('entry-nav-projects')).toHaveAttribute('aria-current', 'page');
 });
 
-test('[P0] recent projects strip opens a project card and view all routes to the projects index', async ({ page }) => {
+test('[P0] @critical recent projects strip opens a project card and view all routes to the projects index', async ({ page }) => {
   const created = await createProject(page, 'Recent project entry point');
   await gotoEntryHome(page);
 
@@ -268,7 +268,7 @@ test('[P2] entry chrome avoids horizontal overflow on compact desktop width', as
   expect(pageOverflow).toBeLessThanOrEqual(2);
 });
 
-test('[P0] entry execution pill opens the Local CLI and BYOK switcher from Home', async ({ page }) => {
+test('[P0] @critical entry execution pill opens the Local CLI and BYOK switcher from Home', async ({ page }) => {
   await page.addInitScript((key) => {
     window.localStorage.setItem(
       key,
@@ -799,7 +799,7 @@ test('[P1] home starters Use plugin from the details modal applies the plugin to
   await expect(page.getByTestId('home-hero-input')).toHaveText('');
 });
 
-test('[P0] home starters direct Use routes the plugin as the active driver and keeps the prompt freeform', async ({ page }) => {
+test('[P0] @critical home starters direct Use routes the plugin as the active driver and keeps the prompt freeform', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -880,7 +880,7 @@ test('[P1] home starters route the picked plugin as the active driver from its d
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
 });
 
-test('[P0] home starters Use with query carries the hydrated starter prompt into the created project and first user turn', async ({ page }) => {
+test('[P0] @critical home starters Use with query carries the hydrated starter prompt into the created project and first user turn', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -925,7 +925,7 @@ test('[P0] home starters Use with query carries the hydrated starter prompt into
   expect(typeof projectBody.metadata?.kind).toBe('string');
 });
 
-test('[P0] home hero input keeps Shift+Enter as a newline and submits on Enter', async ({ page }) => {
+test('[P0] @critical home hero input keeps Shift+Enter as a newline and submits on Enter', async ({ page }) => {
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-input');
@@ -984,7 +984,7 @@ test('[P1] home hero @ mention picker opens and Enter applies the highlighted pl
   await expect(input).toHaveText('@Localized Plugin');
 });
 
-test('[P0] home hero attachment input stages files, enables submit, and supports removal', async ({ page }) => {
+test('[P0] @critical home hero attachment input stages files, enables submit, and supports removal', async ({ page }) => {
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-file-input');
@@ -1007,7 +1007,7 @@ test('[P0] home hero attachment input stages files, enables submit, and supports
   await expect(submit).toBeDisabled();
 });
 
-test('[P0] home hero attachment-only submit uploads the file and sends it with the first message', async ({ page }) => {
+test('[P0] @critical home hero attachment-only submit uploads the file and sends it with the first message', async ({ page }) => {
   await gotoEntryHome(page);
 
   const uploadResponse = page.waitForResponse(

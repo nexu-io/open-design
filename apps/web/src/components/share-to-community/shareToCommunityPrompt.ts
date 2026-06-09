@@ -1,5 +1,5 @@
-// Trigger prompt for the "Share to Open Design" button next to the
-// post-completion Discord prompt. Mirrors the constraint surface of
+// Trigger prompt for the post-completion "Share to Open Design" submission
+// action. Mirrors the constraint surface of
 // `home-hero/plugin-authoring.ts`'s `PLUGIN_AUTHORING_PROMPT_TEMPLATE`
 // (no chained shell suggestions, no jq, point user at the plugin-folder
 // card buttons after the validate/install step) — but starts from

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { routeAgents } from '@/playwright/mock-factory';
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -299,31 +300,25 @@ test.beforeEach(async ({ page }) => {
     });
   });
 
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'codex',
-            name: 'Codex CLI',
-            bin: 'codex',
-            available: true,
-            version: '0.80.0',
-            path: '/usr/local/bin/codex',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeAgents(page, [
+    {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+      version: '0.80.0',
+      path: '/usr/local/bin/codex',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+    {
+      id: 'mock',
+      name: 'Mock Agent',
+      bin: 'mock-agent',
+      available: true,
+      version: 'test',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
 
   await page.route('**/api/app-config', async (route) => {
     if (route.request().method() !== 'GET') {

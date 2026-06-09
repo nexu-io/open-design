@@ -84,6 +84,11 @@ export function GenerationPreviewStage({
 
   // For failures prefer the case-specific copy (AMR auth / balance) over the
   // raw upstream string, mirroring the chat error card's `displayError`.
+  // While generating we deliberately DON'T surface the agent's raw
+  // thinking/streaming snippet (model.activityLabel) here — it leaked
+  // half-formed narration like "品牌留空走 Branch B…核" into the panel. The
+  // phase chips plus the concrete substatus line (current task + count) carry
+  // enough live signal. Only the terminal phases keep a lead message.
   const lead =
     model.phase === 'failed'
       ? model.failureUi?.messageKey
@@ -93,7 +98,7 @@ export function GenerationPreviewStage({
         ? t('generationPreview.stoppedLead')
         : model.phase === 'awaiting-input'
           ? t('generationPreview.awaitingLead')
-          : model.activityLabel;
+          : null;
 
   const markIcon =
     model.phase === 'failed' ? 'close' : model.phase === 'stopped' ? 'stop' : 'sparkles';
@@ -116,9 +121,7 @@ export function GenerationPreviewStage({
       </div>
       <h1 className={styles.title}>{title}</h1>
       {!showSubstatus && lead ? (
-        <p className={styles.lead} data-live={generating && Boolean(model.activityLabel)}>
-          {lead}
-        </p>
+        <p className={styles.lead}>{lead}</p>
       ) : null}
       <ol className={styles.steps}>
         {model.steps

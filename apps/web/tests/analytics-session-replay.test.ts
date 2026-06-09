@@ -30,6 +30,7 @@ interface InitConfig {
 }
 
 let lastInitConfig: InitConfig | null = null;
+let lastRegisterPayload: Record<string, unknown> | null = null;
 
 vi.mock('posthog-js', () => {
   const stub = {
@@ -41,7 +42,9 @@ vi.mock('posthog-js', () => {
       loaded?.(stub);
       return stub;
     },
-    register: () => undefined,
+    register: (payload: Record<string, unknown>) => {
+      lastRegisterPayload = payload;
+    },
     opt_in_capturing: () => undefined,
     opt_out_capturing: () => undefined,
     reset: () => undefined,
@@ -55,6 +58,7 @@ describe('PostHog session replay configuration', () => {
 
   beforeEach(() => {
     lastInitConfig = null;
+    lastRegisterPayload = null;
     vi.resetModules();
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url =
@@ -67,6 +71,7 @@ describe('PostHog session replay configuration', () => {
         return new Response(
           JSON.stringify({
             enabled: true,
+            env: 'local_development',
             key: 'phc_test_key',
             host: 'https://us.i.posthog.com',
             installationId: 'install-123',
@@ -116,5 +121,12 @@ describe('PostHog session replay configuration', () => {
     const config = await initClient();
     expect(config?.session_recording?.blockSelector).toBe('iframe');
     expect(config?.session_recording?.recordCrossOriginIframes).toBe(false);
+  });
+
+  it('registers the daemon-provided telemetry environment', async () => {
+    await initClient();
+    expect(lastRegisterPayload).toMatchObject({
+      env: 'local_development',
+    });
   });
 });

@@ -30,6 +30,7 @@ import type {
   RunTimingAnalytics,
 } from './run-analytics-observability.js';
 import type { RunFailureClassification } from './run-failure-classification.js';
+import { readTelemetryEnvironment } from './telemetry-environment.js';
 
 // Langfuse US region: confirmed by an end-to-end smoke on 2026-05-07 — the
 // project's keys authenticate against `us.cloud.langfuse.com` only. EU host
@@ -1103,6 +1104,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
   // keys best). All entries are anonymous — no PII, no credentials.
   const traceMetadata: Record<string, unknown> = {
     success,
+    env: readTelemetryEnvironment(),
     status: ctx.run.status,
     error: ctx.run.error ?? undefined,
     error_code: ctx.run.errorCode,

@@ -1981,6 +1981,7 @@ export interface Dict {
   'chat.amrError.rechargeCta': string;
   'chat.antigravityError.launchTerminalCta': string;
   'chat.antigravityError.launchSwitchModelCta': string;
+  'chat.connectionDropped': string;
   'chat.tabComments': string;
   'chat.commentsSoon': string;
   'chat.comments.attached': string;
@@ -2950,6 +2951,7 @@ export interface Dict {
   'qf.cardSampleText': string;
   'questions.tabLabel': string;
   'questions.banner': string;
+  'questions.bannerAnswered': string;
   'questions.continue': string;
   'questions.generating': string;
   'questions.skipAll': string;

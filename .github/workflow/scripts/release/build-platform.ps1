@@ -207,6 +207,15 @@ New-Item -ItemType Directory -Force -Path $WorkRoot, $ToolsPackDir, $CacheDir, $
 Remove-Item -LiteralPath $BuildJsonPath -Force -ErrorAction SilentlyContinue
 
 try {
+  Measure-Step "clean tools-pack win namespace" {
+    Invoke-CommandChecked -Arguments @(
+      "pnpm.cmd", "exec", "tools-pack", "win", "cleanup",
+      "--dir", $ToolsPackDir,
+      "--namespace", $ReleaseNamespace,
+      "--json"
+    )
+  }
+
   $buildArgs = @(
     "pnpm.cmd", "exec", "tools-pack", "win", "build",
     "--dir", $ToolsPackDir,

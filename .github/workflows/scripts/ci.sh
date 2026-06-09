@@ -648,7 +648,7 @@ if [ "$mode" = "browser" ] && [ "$install_exit_code" = "0" ]; then
   run_ci_command "playwright clean" pnpm -C e2e exec tsx scripts/playwright.ts clean
   record_browser_result "playwright clean" "$last_command_exit_code" "$last_command_seconds"
 
-  run_ci_command "playwright critical" pnpm -C e2e exec playwright test -c playwright.config.ts ui/critical-smoke.test.ts ui/entry-chrome-flows.test.ts
+  run_ci_command "playwright critical" pnpm -C e2e run test:ui:critical
   playwright_critical_exit_code="$last_command_exit_code"
   playwright_critical_seconds="$last_command_seconds"
   record_browser_result "playwright critical" "$playwright_critical_exit_code" "$playwright_critical_seconds"

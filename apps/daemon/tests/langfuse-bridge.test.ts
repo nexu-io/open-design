@@ -621,6 +621,11 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(4);
     expect(fetchSpy.mock.calls[0]![0]).toContain('/api/langfuse');
+    const registrationBody = JSON.parse(fetchSpy.mock.calls[0]![1]!.body as string).batch as any[];
+    const registrationTrace = registrationBody[0].body;
+    expect(registrationTrace.metadata.attachment_manifest[0]).not.toHaveProperty('reason');
+    expect(registrationTrace.metadata.artifact_manifest[0]).not.toHaveProperty('reason');
+    expect(registrationTrace.metadata.input_text_snapshot_manifest[0]).not.toHaveProperty('reason');
     expect(fetchSpy.mock.calls[1]![0]).toContain('/api/objects/authorize');
     expect(fetchSpy.mock.calls[2]![0]).toContain('/api/objects/batch');
     expect(fetchSpy.mock.calls[3]![0]).toContain('/api/langfuse');
@@ -644,6 +649,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       access_scope: 'project',
       sensitivity: 'private',
     });
+    expect(trace.metadata.attachment_manifest[0]).not.toHaveProperty('reason');
     expect(trace.metadata.artifact_manifest[0]).toMatchObject({
       object_class: 'artifact',
       status: 'ok',
@@ -651,12 +657,14 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       source: 'agent_generated',
       retention_policy: 'observability_90d',
     });
+    expect(trace.metadata.artifact_manifest[0]).not.toHaveProperty('reason');
     expect(trace.metadata.input_text_snapshot_manifest[0]).toMatchObject({
       object_class: 'input_text_snapshot',
       status: 'ok',
       stored_in_open_design: true,
       source: 'user_prompt',
     });
+    expect(trace.metadata.input_text_snapshot_manifest[0]).not.toHaveProperty('reason');
     expect(JSON.stringify(trace.metadata)).toContain(
       'od://objects/workspaces/unknown/projects/proj-1/runs/run-id-1',
     );

@@ -32,6 +32,18 @@ describe('resolveRunFailureUi', () => {
     expect(resolveRunFailureUi('AGENT_UNAVAILABLE', 'codex').showSwitchCard).toBe(false);
   });
 
+  it('localizes a mid-stream connection drop for any agent, no AMR promotion', () => {
+    for (const agent of ['claude', 'codex', null]) {
+      const ui = resolveRunFailureUi('AGENT_CONNECTION_DROPPED', agent);
+      expect(ui).toMatchObject({
+        primaryAction: 'retry',
+        messageKey: 'chat.connectionDropped',
+        secondaryRetry: false,
+        showSwitchCard: false,
+      });
+    }
+  });
+
   it('offers authorize-and-retry for an unauthorized AMR run (no card)', () => {
     const ui = resolveRunFailureUi('AMR_AUTH_REQUIRED', 'amr');
     expect(ui).toMatchObject({

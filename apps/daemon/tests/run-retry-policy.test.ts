@@ -187,4 +187,23 @@ describe('decideSafeRunRetry', () => {
       retrySuppressedReason: 'cancel_requested',
     });
   });
+
+  it('never auto-retries process kills, crashes, or interruptions', () => {
+    for (const failure_detail of [
+      'signal_killed',
+      'process_crashed',
+      'interrupted',
+    ] as const) {
+      expect(
+        decide({
+          failure: {
+            failure_category: 'process_exit',
+            failure_detail,
+            failure_stage: 'child_close',
+            retryable: false,
+          },
+        }).shouldRetry,
+      ).toBe(false);
+    }
+  });
 });

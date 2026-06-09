@@ -74,10 +74,18 @@ function make(args: MakeArgs): InstalledPluginRecord {
   };
 }
 
-function render(record: InstalledPluginRecord): string {
+function render(
+  record: InstalledPluginRecord,
+  options: { hideUseAction?: boolean } = {},
+): string {
   return renderToStaticMarkup(
     <I18nProvider>
-      <PluginDetailsModal record={record} onClose={() => {}} onUse={() => {}} />
+      <PluginDetailsModal
+        record={record}
+        onClose={() => {}}
+        onUse={() => {}}
+        hideUseAction={options.hideUseAction}
+      />
     </I18nProvider>,
   );
 }
@@ -161,6 +169,20 @@ describe('PluginDetailsModal dispatch', () => {
     expect(html).not.toContain('plugin-share-live-dashboard');
   });
 
+  it('can hide the use action for conversation-context plugin previews', () => {
+    const record = make({
+      id: 'chat-context-preview',
+      title: 'Chat Context Preview',
+      preview: { type: 'html', entry: './example.html' },
+    });
+
+    const html = render(record, { hideUseAction: true });
+
+    expect(html).toContain('ds-modal');
+    expect(html).not.toContain('plugin-details-use-chat-context-preview');
+    expect(html).not.toContain('Use plugin');
+  });
+
   it('routes design-system plugins to the showcase + DESIGN.md surface (with share menu)', () => {
     const html = render(
       make({
@@ -189,6 +211,19 @@ describe('PluginDetailsModal dispatch', () => {
     expect(html).toContain('data-detail-variant="scenario"');
     expect(html).toContain('plugin-details-modal__title');
     expect(html).toContain('plugin-share-plain-scenario');
+  });
+
+  it('keeps the use action by default outside conversation context', () => {
+    const html = render(
+      make({
+        id: 'outside-chat',
+        title: 'Outside Chat',
+        preview: { type: 'html', entry: './example.html' },
+      }),
+    );
+
+    expect(html).toContain('plugin-details-use-outside-chat');
+    expect(html).toContain('Use plugin');
   });
 });
 

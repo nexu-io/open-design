@@ -1114,11 +1114,6 @@ export function DesignBrowserPanel({
       return;
     }
 
-    const commentTargets = visibleComments.map((comment) => ({
-      elementId: comment.elementId,
-      key: `comment:${comment.id}`,
-      selector: comment.selector,
-    }));
     const activeTarget = activeCommentTarget
       ? [{
           elementId: activeCommentTarget.elementId,
@@ -1126,7 +1121,7 @@ export function DesignBrowserPanel({
           selector: activeCommentTarget.selector,
         }]
       : [];
-    const targets = [...commentTargets, ...activeTarget].filter((target) => target.elementId && target.selector);
+    const targets = activeTarget.filter((target) => target.elementId && target.selector);
     if (targets.length === 0) {
       setBrowserLiveCommentTargets((current) => (current.size > 0 ? new Map() : current));
       return;
@@ -1183,7 +1178,7 @@ export function DesignBrowserPanel({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [activeCommentTarget?.elementId, activeCommentTarget?.selector, activeTool, browserFilePath, isBlank, visibleComments, webviewNode]);
+  }, [activeCommentTarget?.elementId, activeCommentTarget?.selector, activeTool, browserFilePath, isBlank, webviewNode]);
 
   useEffect(() => {
     const next = browserImages.map((file) => ({ file, url: URL.createObjectURL(file) }));
@@ -1863,29 +1858,6 @@ export function DesignBrowserPanel({
               <RemixIcon name="screenshot-2-line" size={15} />
             </IconTooltipButton>
           ) : null}
-          {desktopHostAvailable ? (
-            <IconTooltipButton
-              label={t('fileViewer.mark')}
-              wrapperClassName="db-action-item db-action-mark"
-              disabled={isBlank}
-              className={drawOverlayOpen ? 'is-active' : ''}
-              onClick={() => {
-                clearBrowserTool();
-                setDrawOverlayOpen((open) => !open);
-              }}
-            >
-              <RemixIcon name="mark-pen-line" size={15} />
-            </IconTooltipButton>
-          ) : null}
-          <IconTooltipButton
-            label={t('fileViewer.comment')}
-            wrapperClassName="db-action-item db-action-primary db-action-comment"
-            disabled={isBlank || !desktopHostAvailable}
-            className={activeTool === 'comment' ? 'is-active' : ''}
-            onClick={() => toggleBrowserTool('comment')}
-          >
-            <Icon name="comment" size={15} />
-          </IconTooltipButton>
           <IconTooltipButton
             label={t('browserUse.title')}
             wrapperClassName="db-action-item db-action-browser-use"
@@ -1922,58 +1894,6 @@ export function DesignBrowserPanel({
           </IconTooltipButton>
           {menuOpen ? (
             <div className="db-menu" role="menu">
-              {desktopHostAvailable ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    clearBrowserTool();
-                    setDrawOverlayOpen((open) => !open);
-                  }}
-                  disabled={isBlank}
-                >
-                  <RemixIcon name="mark-pen-line" size={14} />
-                  {t('fileViewer.mark')}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setMenuOpen(false);
-                  toggleBrowserTool('comment');
-                }}
-                disabled={isBlank || !desktopHostAvailable}
-              >
-                <Icon name="comment" size={14} />
-                {t('fileViewer.comment')}
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setMenuOpen(false);
-                  toggleBrowserTool('inspect');
-                }}
-                disabled={isBlank || !desktopHostAvailable}
-              >
-                <RemixIcon name="contrast-drop-line" size={14} />
-                Tune Element
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setMenuOpen(false);
-                  toggleBrowserTool('edit');
-                }}
-                disabled={isBlank || !desktopHostAvailable}
-              >
-                <Icon name="edit" size={14} />
-                {editableProjectHtml ? 'Edit HTML' : 'Edit Live DOM'}
-              </button>
-              <span className="db-menu-separator" />
               <button type="button" role="menuitem" onClick={takeScreenshot} disabled={isBlank || savingAction != null}>
                 <Icon name="image" size={14} />
                 Copy Screenshot
@@ -2047,24 +1967,6 @@ export function DesignBrowserPanel({
                 <iframe title={pageTitle} src={loadUrl} />
               </div>
             )}
-            {!isBlank && desktopHostAvailable ? (
-              <BrowserCommentMarkers
-                comments={visibleComments}
-                liveTargets={browserLiveCommentTargets}
-                activeCommentId={activePreviewCommentId}
-                onOpen={(comment) => {
-                  const snapshot = browserLiveCommentTargets.get(`comment:${comment.id}`)
-                    ?? browserSnapshotFromComment(comment, browserFilePath);
-                  setActiveTool('comment');
-                  setActiveCommentTarget(snapshot);
-                  setActivePreviewCommentId(comment.id);
-                  setCommentDraft(comment.note);
-                  setQueuedCommentNotes([]);
-                  setTextDraft(snapshot.text);
-                  setDrawOverlayOpen(false);
-                }}
-              />
-            ) : null}
             {commentComposer}
             {(activeTool === 'inspect' || activeTool === 'edit') && activeCommentTarget ? (
               <BrowserInspectPanel

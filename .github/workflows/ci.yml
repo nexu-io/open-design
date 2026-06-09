@@ -480,7 +480,7 @@ jobs:
       - name: Playwright critical
         run: |
           pnpm -C e2e exec tsx scripts/playwright.ts clean
-          pnpm -C e2e exec playwright test -c playwright.config.ts ui/critical-smoke.test.ts ui/entry-chrome-flows.test.ts
+          pnpm -C e2e run test:ui:critical
 
   build_workspaces:
     name: Build workspaces

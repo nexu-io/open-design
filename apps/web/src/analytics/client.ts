@@ -115,6 +115,7 @@ export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<v
         clearExceptionTrackingContext();
         return;
       }
+      const telemetryEnv = cfg.env || 'unknown';
       const distinctId =
         (typeof cfg.installationId === 'string' && cfg.installationId) ||
         context.anonymousId;
@@ -124,6 +125,7 @@ export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<v
         distinctId,
         appVersion: context.appVersion,
         sessionId: context.sessionId,
+        telemetryEnv,
       });
     } catch {
       // Network failure / endpoint unavailable — leave the buffer in
@@ -151,6 +153,7 @@ export async function getAnalyticsClient(
       if (!res.ok) return null;
       const cfg = (await res.json()) as AnalyticsConfigResponse;
       if (!cfg.enabled || !cfg.key || !cfg.host) return null;
+      const telemetryEnv = cfg.env || 'unknown';
       const distinctId =
         (typeof cfg.installationId === 'string' && cfg.installationId) ||
         context.anonymousId;
@@ -252,6 +255,7 @@ export async function getAnalyticsClient(
         loaded: (instance) => {
           lastRegisterPayload = {
             event_schema_version: EVENT_SCHEMA_VERSION,
+            env: telemetryEnv,
             ui_version: context.appVersion,
             app_version: context.appVersion,
             client_type: context.clientType,
@@ -274,6 +278,7 @@ export async function getAnalyticsClient(
             distinctId,
             appVersion: context.appVersion,
             sessionId: context.sessionId,
+            telemetryEnv,
           });
         },
       });

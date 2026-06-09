@@ -37,6 +37,10 @@ jobs:
       matrix:
         include:
           - name: entry-onboarding
+            smoke_command: >-
+              pnpm -C e2e exec playwright test -c playwright.config.ts
+              ui/critical-smoke.test.ts
+              --grep '\[P0\]'
             command: >-
               pnpm -C e2e exec playwright test -c playwright.config.ts
               ui/critical-smoke.test.ts
@@ -46,6 +50,10 @@ jobs:
               ui/api-empty-response.test.ts
               --grep '\[P0\]'
           - name: project-workspace
+            smoke_command: >-
+              pnpm -C e2e exec playwright test -c playwright.config.ts
+              ui/critical-smoke.test.ts
+              --grep '\[P0\]'
             command: >-
               pnpm -C e2e exec playwright test -c playwright.config.ts
               ui/app.test.ts
@@ -56,6 +64,10 @@ jobs:
               ui/workspace-keyboard-flows.test.ts
               --grep '\[P0\]'
           - name: runtime-recovery
+            smoke_command: >-
+              pnpm -C e2e exec playwright test -c playwright.config.ts
+              ui/critical-smoke.test.ts
+              --grep '\[P0\]'
             command: >-
               pnpm -C e2e exec playwright test -c playwright.config.ts
               ui/real-daemon-run.test.ts
@@ -64,6 +76,10 @@ jobs:
               ui/settings-local-cli-codex-fallback.test.ts
               --grep '\[P0\]'
           - name: settings-connectors
+            smoke_command: >-
+              pnpm -C e2e exec playwright test -c playwright.config.ts
+              ui/critical-smoke.test.ts
+              --grep '\[P0\].*settings dialog'
             command: >-
               pnpm -C e2e exec playwright test -c playwright.config.ts
               ui/settings-api-protocol.test.ts
@@ -92,6 +108,9 @@ jobs:
 
       - name: Clean Playwright state
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean
+
+      - name: Run UI shell smoke
+        run: ${{ matrix.smoke_command }}
 
       - name: Run UI P0 domain
         run: ${{ matrix.command }}

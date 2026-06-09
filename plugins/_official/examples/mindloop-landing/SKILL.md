@@ -27,6 +27,7 @@ This is the authoritative build brief. Follow it exactly — the HSL variables, 
 
 - Default output: a single self-contained HTML file (the `example.html` seed). It already includes everything inline.
 - If the user explicitly asks for the full project, port the seed faithfully to **React + Vite + TypeScript + Tailwind CSS + shadcn/ui + Framer Motion**. Same tokens, same markup structure. Install `hls.js` and `framer-motion`. Fonts via `@fontsource/inter` (400, 500, 600, 700) and `@fontsource/instrument-serif` (400, 400-italic). `lucide-react` for icons. `tailwindcss-animate` plugin. Do not change the design while porting.
+- **Motion loading (locked).** If you emit a single self-contained inline-JSX file instead of the Vite project, Motion's React hooks (`useScroll`, `useTransform`, `useAnimationFrame`, …) exist only in the **React** UMD build: load `<script src="https://unpkg.com/framer-motion@11.11.13/dist/framer-motion.js"></script>` and read them off `window.Motion` — never the vanilla `https://unpkg.com/motion@.../dist/motion.js` DOM bundle, which lacks `useScroll` and renders a blank page. (The Vite project imports from npm and is unaffected.)
 
 ## Fonts
 

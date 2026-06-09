@@ -42,7 +42,6 @@ function sameOwner(left: Record<string, unknown>, right: Record<string, unknown>
   return left.repository === right.repository &&
     left.workflow === right.workflow &&
     left.runId === right.runId &&
-    left.runAttempt === right.runAttempt &&
     left.commit === right.commit;
 }
 

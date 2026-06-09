@@ -227,6 +227,7 @@ import {
   cursorAuthGuidance,
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
+import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
@@ -5554,6 +5555,7 @@ export async function startServer({
           : null;
       res.json({
         enabled: consentGranted,
+        env: baseline.env,
         key: baseline.key,
         host: baseline.host,
         installationId,
@@ -5564,6 +5566,7 @@ export async function startServer({
       // valuable signal in a degraded-state scenario.
       res.json({
         enabled: false,
+        env: baseline.env,
         key: baseline.key,
         host: baseline.host,
         installationId: null,
@@ -12529,6 +12532,19 @@ export async function startServer({
     let spawnedAgentEnv = null;
     let agentStdoutTail = '';
     let agentStderrTail = '';
+    const agentStderrFilter = createAgentStderrVisibilityFilter(agentId);
+    const emitVisibleAgentStderr = (chunk: unknown) => {
+      const visibleChunk = agentStderrFilter.write(chunk);
+      if (!visibleChunk) return;
+      agentStderrTail = `${agentStderrTail}${visibleChunk}`.slice(-2000);
+      send('stderr', { chunk: visibleChunk });
+    };
+    const flushVisibleAgentStderr = () => {
+      const visibleChunk = agentStderrFilter.flush();
+      if (!visibleChunk) return;
+      agentStderrTail = `${agentStderrTail}${visibleChunk}`.slice(-2000);
+      send('stderr', { chunk: visibleChunk });
+    };
     try {
       // Prompt delivery via stdin is now the universal default. This bypasses
       // both the cmd.exe 8KB limit and the CreateProcess 32KB limit.
@@ -12817,9 +12833,10 @@ export async function startServer({
         // is owned solely by the orchestrator's awaited result below.
         child.stderr.on('data', (chunk) => {
           noteAgentActivity();
-          send('stderr', { chunk });
+          emitVisibleAgentStderr(chunk);
         });
         child.on('error', (err) => {
+          flushVisibleAgentStderr();
           send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
         });
 
@@ -12828,7 +12845,10 @@ export async function startServer({
         // flow. Without this the orchestrator can't tell a non-zero exit
         // apart from a clean ship and may misclassify failures.
         const childExitPromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
-          child.once('close', (code, signal) => resolve({ code, signal }));
+          child.once('close', (code, signal) => {
+            flushVisibleAgentStderr();
+            resolve({ code, signal });
+          });
         });
         try {
           const orchestratorResult = await runOrchestrator({
@@ -12871,6 +12891,7 @@ export async function startServer({
             design.runs.finish(run, 'failed', 1, null);
           }
         } catch (err) {
+          flushVisibleAgentStderr();
           send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err)));
           design.runs.finish(run, 'failed', 1, null);
         } finally {
@@ -13016,6 +13037,7 @@ export async function startServer({
     const sendAgentEvent = (ev) => {
       if (ev?.type === 'error') {
         if (agentStreamError) return;
+        flushVisibleAgentStderr();
         const failureText = [
           String(ev.message || 'Agent stream error'),
           typeof ev.raw === 'string' ? ev.raw : '',
@@ -13073,6 +13095,7 @@ export async function startServer({
       const claude = createClaudeStreamHandler((ev) => {
         if (ev?.type === 'error') {
           if (agentStreamError) return;
+          flushVisibleAgentStderr();
           const message = String((ev as any).message || 'Claude Code stream error');
           const failureText = [
             message,
@@ -13080,17 +13103,33 @@ export async function startServer({
             agentStdoutTail,
             agentStderrTail,
           ].join('\n');
-          agentStreamError = rewriteKnownAgentStreamError(
-            agentId,
-            message,
-            failureText,
-          );
           clearInactivityWatchdog();
+          // Claude surfaces a connection drop / reset as an in-stream `error`
+          // frame (assistant `error:"unknown"` + the raw SDK string), which
+          // would otherwise reach the UI verbatim as a non-retryable
+          // AGENT_EXECUTION_FAILED. Run the same per-agent diagnostic used at
+          // child-exit so this path emits the specific class
+          // (AGENT_CONNECTION_DROPPED) — retryable, with copy the web can
+          // localize and triage can count by code.
+          const diagnostic = diagnoseClaudeCliFailure({
+            agentId: def.id,
+            exitCode: 1,
+            stderrTail: agentStderrTail,
+            stdoutTail: failureText,
+            env: spawnedAgentEnv,
+            resolvedBin: agentLaunch.selectedPath,
+          });
           const serviceCode = classifyAgentServiceFailure(failureText);
+          agentStreamError = diagnostic?.message
+            ?? rewriteKnownAgentStreamError(agentId, message, failureText);
           send('error', createSseErrorPayload(
-            serviceCode ?? 'AGENT_EXECUTION_FAILED',
+            diagnostic?.code ?? serviceCode ?? 'AGENT_EXECUTION_FAILED',
             agentStreamError,
-            { retryable: serviceCode === 'AGENT_AUTH_REQUIRED' || serviceCode === 'RATE_LIMITED' },
+            {
+              retryable: diagnostic?.retryable
+                ?? (serviceCode === 'AGENT_AUTH_REQUIRED' || serviceCode === 'RATE_LIMITED'),
+              ...(diagnostic ? { details: { detail: diagnostic.detail } } : {}),
+            },
           ));
           return;
         }
@@ -13171,6 +13210,7 @@ export async function startServer({
             sendAgentEvent(payload);
           } else if (channel === 'error') {
             if (agentStreamError) return;
+            flushVisibleAgentStderr();
             agentStreamError = String(payload?.message || 'Pi session error');
             const piErrorCode = typeof payload?.code === 'string' ? payload.code : null;
             if (piErrorCode) {
@@ -13209,6 +13249,7 @@ export async function startServer({
           }
           noteAgentActivity();
           if (event === 'agent') noteFirstTokenFromAgentEvent(data);
+          if (event === 'error') flushVisibleAgentStderr();
           if (def.id === 'amr' && event === 'error') {
             const failure = classifyAmrAccountFailure(
               [
@@ -13284,13 +13325,13 @@ export async function startServer({
     run.acpSession = acpSession;
     child.stderr.on('data', (chunk) => {
       noteAgentActivity();
-      agentStderrTail = `${agentStderrTail}${chunk}`.slice(-2000);
-      send('stderr', { chunk });
+      emitVisibleAgentStderr(chunk);
     });
 
     child.on('error', (err) => {
       clearInactivityWatchdog();
       cleanupPromptFile();
+      flushVisibleAgentStderr();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
@@ -13299,6 +13340,7 @@ export async function startServer({
     child.on('close', async (code, signal) => {
       try {
       clearInactivityWatchdog();
+      flushVisibleAgentStderr();
       if (watchdogRetryRestarted) {
         // The inactivity watchdog already failed this attempt and the same-run
         // retry restarted on a fresh child. Finalization and event-sink / run-
@@ -13537,7 +13579,10 @@ export async function startServer({
         );
         if (diagnostic) {
           send('error', createSseErrorPayload(
-            serviceCode ?? 'AGENT_EXECUTION_FAILED',
+            // A diagnostic that named its own failure class (e.g.
+            // AGENT_CONNECTION_DROPPED) wins over the generic service-failure
+            // sniff so the UI can localize by code and triage can count it.
+            diagnostic.code ?? serviceCode ?? 'AGENT_EXECUTION_FAILED',
             diagnostic.message,
             { retryable: diagnostic.retryable, details: { detail: diagnostic.detail } },
           ));

@@ -18,14 +18,14 @@ const releaseBetaSelfHostedWorkflowPath = join(workspaceRoot, ".github", "workfl
 const releasePreviewWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-preview.yml");
 const releaseStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-stable.yml");
 const releaseStableScriptPath = join(workspaceRoot, "scripts", "release-stable.ts");
-const releasePublishBetaMetadataScriptPath = join(
+const releasePublishMetadataScriptPath = join(
   workspaceRoot,
   ".github",
   "workflow",
   "scripts",
   "release",
   "storage",
-  "publish-beta-metadata.ts",
+  "publish-metadata.ts",
 );
 const releaseBetaPosixBuildScriptPath = join(workspaceRoot, ".github", "workflow", "scripts", "release", "build-platform.sh");
 const releaseBetaWindowsBuildScriptPath = join(workspaceRoot, ".github", "workflow", "scripts", "release", "build-platform.ps1");
@@ -176,15 +176,12 @@ describe("packaged smoke workflow", () => {
     expect(releaseStableWorkflow).toContain("linux_namespace: ${{ steps.stable.outputs.linux_namespace }}");
     expect(releaseStableWorkflow).toContain('--namespace "${{ needs.metadata.outputs.namespace }}"');
     expect(releaseStableWorkflow).toContain("OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.namespace }}");
-    expect(releaseStableWorkflow).toContain("TOOLS_PACK_NAMESPACE: ${{ needs.metadata.outputs.namespace }}");
     expect(releaseStableWorkflow).toContain('"--namespace", "${{ needs.metadata.outputs.win_namespace }}",');
     expect(releaseStableWorkflow).toContain('OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.win_namespace }}');
-    expect(releaseStableWorkflow).toContain('TOOLS_PACK_NAMESPACE: ${{ needs.metadata.outputs.win_namespace }}');
     expect(releaseStableWorkflow).toContain('--namespace "${{ needs.metadata.outputs.linux_namespace }}"');
     expect(releaseStableWorkflow).toContain('"namespace": "${{ needs.metadata.outputs.linux_namespace }}",');
     expect(releaseStableWorkflow).not.toMatch(/--namespace release-stable(?:-intel|-win|-linux)?\b/);
     expect(releaseStableWorkflow).not.toMatch(/OD_PACKAGED_E2E_NAMESPACE: release-stable(?:-win|-linux)?\b/);
-    expect(releaseStableWorkflow).not.toMatch(/TOOLS_PACK_NAMESPACE: release-stable(?:-intel|-win|-linux)?\b/);
     expect(releaseStableWorkflow).not.toMatch(/namespaces\/release-stable(?:-intel|-win|-linux)?\b/);
 
     expectChannelWorkflowNamespaces(releasePreviewWorkflow, "preview", { hasLinuxSmoke: false });
@@ -313,17 +310,17 @@ describe("packaged smoke workflow", () => {
   });
 
   it("keeps both beta release lanes on the shared payload-aware metadata surface", async () => {
-    const [releaseBetaWorkflow, releaseBetaSelfHostedWorkflow, platformPublishScript, publishBetaMetadataScript] = await Promise.all([
+    const [releaseBetaWorkflow, releaseBetaSelfHostedWorkflow, platformPublishScript, publishMetadataScript] = await Promise.all([
       readFile(releaseBetaWorkflowPath, "utf8"),
       readFile(releaseBetaSelfHostedWorkflowPath, "utf8"),
       readFile(releaseBetaPlatformPublishScriptPath, "utf8"),
-      readFile(releasePublishBetaMetadataScriptPath, "utf8"),
+      readFile(releasePublishMetadataScriptPath, "utf8"),
     ]);
 
     for (const workflow of [releaseBetaWorkflow, releaseBetaSelfHostedWorkflow]) {
       expect(workflow).toContain("RELEASE_ARTIFACT_MODE: dmg-and-payload");
       expect(workflow).toContain(".github/workflow/scripts/release/storage/publish-platform.ts");
-      expect(workflow).toContain(".github/workflow/scripts/release/storage/publish-beta-metadata.ts");
+      expect(workflow).toContain(".github/workflow/scripts/release/storage/publish-metadata.ts");
       expect(workflow).toContain("RELEASE_MANIFEST_DIR:");
     }
     expect(releaseBetaWorkflow).toContain("RELEASE_ASSET_SUFFIX: ${{ needs.metadata.outputs.asset_version_suffix }}");
@@ -331,8 +328,8 @@ describe("packaged smoke workflow", () => {
     expect(platformPublishScript).toContain("artifacts.payload");
     expect(platformPublishScript).toContain("open-design-${releaseVersion}${assetSuffix}-mac-${arch}-payload.zip");
     expect(platformPublishScript).toContain("open-design-${releaseVersion}${assetSuffix}-win-x64-payload.7z");
-    expect(publishBetaMetadataScript).toContain("for (const [artifactName, artifact] of Object.entries(manifest.artifacts ?? {}))");
-    expect(publishBetaMetadataScript).toContain("outputs[`${target}_${artifactName}_url`] = artifact.url");
+    expect(publishMetadataScript).toContain("for (const [artifactName, artifact] of Object.entries(manifest.artifacts ?? {}))");
+    expect(publishMetadataScript).toContain("outputs[`${target}_${artifactName}_url`] = artifact.url");
   });
 
   it("publishes release-beta mac_x64 payloads while preserving the zip feed", async () => {
@@ -347,12 +344,12 @@ describe("packaged smoke workflow", () => {
   });
 
   it("keeps the self-hosted beta lane metadata-driven with reusable platform publish scripts", async () => {
-    const [workflow, posixBuildScript, windowsBuildScript, platformPublishScript, publishBetaMetadataScript] = await Promise.all([
+    const [workflow, posixBuildScript, windowsBuildScript, platformPublishScript, publishMetadataScript] = await Promise.all([
       readFile(releaseBetaSelfHostedWorkflowPath, "utf8"),
       readFile(releaseBetaPosixBuildScriptPath, "utf8"),
       readFile(releaseBetaWindowsBuildScriptPath, "utf8"),
       readFile(releaseBetaPlatformPublishScriptPath, "utf8"),
-      readFile(releasePublishBetaMetadataScriptPath, "utf8"),
+      readFile(releasePublishMetadataScriptPath, "utf8"),
     ]);
 
     expect(workflow).toContain("enable_win_x64:");
@@ -435,14 +432,14 @@ describe("packaged smoke workflow", () => {
     expect(workflow).toContain("fnm exec --using=24 -- node --experimental-strip-types .github/workflow/scripts/release/report/write-report.ts");
     expect(workflow).toContain("Prepare mac_arm64 assets");
     expect(workflow).toContain("RELEASE_TARGET: mac_arm64");
-    expect(workflow).toContain("RELEASE_SIGNED: ${{ inputs.mac_arm64_sign_mode != 'no' && 'true' || 'false' }}");
+    expect(workflow).toContain("RELEASE_SIGNED: ${{ (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && 'true' || 'false' }}");
     expect(workflow).toContain("RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac_arm64-report.zip");
     expect(workflow).toContain("name: Publish beta metadata to Nexu S3");
     expect(workflow).toContain("Download mac_arm64 platform manifest");
     expect(workflow).toContain("Download win_x64 platform manifest");
     expect(workflow).toContain('manifest_url="${RELEASE_PUBLIC_ORIGIN%/}/beta/versions/${RELEASE_VERSION}${RELEASE_ASSET_SUFFIX}/platforms/${RELEASE_TARGET}.json"');
     expect(workflow).toContain('curl -fsSL "$manifest_url" -o "$RELEASE_MANIFEST_DIR/$RELEASE_TARGET.json"');
-    expect(workflow).toContain(".github/workflow/scripts/release/storage/publish-beta-metadata.ts");
+    expect(workflow).toContain(".github/workflow/scripts/release/storage/publish-metadata.ts");
     expect(workflow).toContain("RELEASE_ASSET_SUFFIX: auto");
     expect(workflow).toContain("RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests");
     expect(workflow).toContain("-IncludeZip $${{ inputs.win_x64_target == 'all' || inputs.win_x64_target == 'zip' }}");
@@ -451,19 +448,19 @@ describe("packaged smoke workflow", () => {
     expect(workflow).not.toContain("open-design-beta-s-mac-arm64-publish-manifest");
     expect(workflow).toContain('STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}');
     expect(workflow).toContain("Verify beta metadata");
-    expect(workflow).toContain(".github/workflow/scripts/release/storage/verify-beta-metadata.ts");
-    expect(publishBetaMetadataScript).toContain("validateManifest");
-    expect(publishBetaMetadataScript).toContain("manifest.releaseVersion !== releaseVersion");
-    expect(publishBetaMetadataScript).toContain("manifest.github?.runId !== currentRunId");
-    expect(publishBetaMetadataScript).not.toContain("manifest.github?.runAttempt !== currentRunAttempt");
-    expect(publishBetaMetadataScript).toContain("manifest.github?.commit !== currentCommit");
-    expect(publishBetaMetadataScript).toContain("manifest.platformKey !== target");
-    expect(publishBetaMetadataScript).toContain("manifest.r2.versionPrefix.includes(`/versions/${releaseVersion}`)");
-    expect(publishBetaMetadataScript).toContain('if (assetVersionSuffix === "auto")');
-    expect(publishBetaMetadataScript).toContain('assetVersionSuffix = allReadyTargetsSigned ? ".signed" : ".unsigned";');
-    expect(publishBetaMetadataScript).toContain("const feedVersionPrefix = manifest.r2?.versionPrefix;");
-    expect(publishBetaMetadataScript).toContain("refusing stale ${def.target} platform manifest");
-    expect(publishBetaMetadataScript).toContain("publishLatestPlatformObjects");
+    expect(workflow).toContain(".github/workflow/scripts/release/storage/verify-metadata.ts");
+    expect(publishMetadataScript).toContain("validateManifest");
+    expect(publishMetadataScript).toContain("manifest.releaseVersion !== releaseVersion");
+    expect(publishMetadataScript).toContain("manifest.github?.runId !== currentRunId");
+    expect(publishMetadataScript).not.toContain("manifest.github?.runAttempt !== currentRunAttempt");
+    expect(publishMetadataScript).toContain("manifest.github?.commit !== currentCommit");
+    expect(publishMetadataScript).toContain("manifest.platformKey !== target");
+    expect(publishMetadataScript).toContain("manifest.r2.versionPrefix.includes(`/versions/${releaseVersion}`)");
+    expect(publishMetadataScript).toContain('if (assetVersionSuffix === "auto")');
+    expect(publishMetadataScript).toContain('assetVersionSuffix = allReadyTargetsSigned ? ".signed" : ".unsigned";');
+    expect(publishMetadataScript).toContain("const feedVersionPrefix = manifest.r2?.versionPrefix;");
+    expect(publishMetadataScript).toContain("refusing stale ${def.target} platform manifest");
+    expect(publishMetadataScript).toContain("publishLatestPlatformObjects");
     expect(platformPublishScript).not.toContain("await upload(join(releaseAssetsDir, name), `${latestPrefix}/${name}`");
     expect(platformPublishScript).not.toContain("await upload(manifestPath, `${latestPrefix}/platforms/${target}.json`");
     expect(platformPublishScript).toContain('const target = requiredTarget();');
@@ -515,7 +512,7 @@ describe("packaged smoke workflow", () => {
       );
       const result = await execFileAsync(
         process.execPath,
-        ["--experimental-strip-types", releasePublishBetaMetadataScriptPath],
+        ["--experimental-strip-types", releasePublishMetadataScriptPath],
         {
           cwd: workspaceRoot,
           env: {
@@ -599,7 +596,7 @@ describe("packaged smoke workflow", () => {
       );
       const result = await execFileAsync(
         process.execPath,
-        ["--experimental-strip-types", releasePublishBetaMetadataScriptPath],
+        ["--experimental-strip-types", releasePublishMetadataScriptPath],
         {
           cwd: workspaceRoot,
           env: {
@@ -681,7 +678,7 @@ describe("packaged smoke workflow", () => {
           2,
         )}\n`,
       );
-      await execFileAsync(process.execPath, ["--experimental-strip-types", releasePublishBetaMetadataScriptPath], {
+      await execFileAsync(process.execPath, ["--experimental-strip-types", releasePublishMetadataScriptPath], {
         cwd: workspaceRoot,
         env: {
           ...process.env,
@@ -766,7 +763,7 @@ describe("packaged smoke workflow", () => {
         )}\n`,
       );
 
-      await execFileAsync(process.execPath, ["--experimental-strip-types", releasePublishBetaMetadataScriptPath], {
+      await execFileAsync(process.execPath, ["--experimental-strip-types", releasePublishMetadataScriptPath], {
         cwd: workspaceRoot,
         env: {
           ...process.env,
@@ -896,7 +893,7 @@ describe("packaged smoke workflow", () => {
         )}\n`,
       );
 
-      await execFileAsync(process.execPath, ["--experimental-strip-types", releasePublishBetaMetadataScriptPath], {
+      await execFileAsync(process.execPath, ["--experimental-strip-types", releasePublishMetadataScriptPath], {
         cwd: workspaceRoot,
         env: {
           ...process.env,
@@ -991,14 +988,10 @@ function expectChannelWorkflowNamespaces(
   const namespace = `release-${channel}`;
   expect(workflow).toContain(`--namespace ${namespace}`);
   expect(workflow).toContain(`OD_PACKAGED_E2E_NAMESPACE: ${namespace}`);
-  expect(workflow).toContain(`TOOLS_PACK_NAMESPACE: ${namespace}`);
   expect(workflow).toContain(`--namespace ${namespace}-intel`);
-  expect(workflow).toContain(`TOOLS_PACK_NAMESPACE: ${namespace}-intel`);
   expect(workflow).toContain(`"--namespace", "${namespace}-win",`);
   expect(workflow).toContain(`OD_PACKAGED_E2E_NAMESPACE: ${namespace}-win`);
-  expect(workflow).toContain(`TOOLS_PACK_NAMESPACE: ${namespace}-win`);
   expect(workflow).toContain(`--namespace ${namespace}-linux`);
-  expect(workflow).toContain(`TOOLS_PACK_NAMESPACE: ${namespace}-linux`);
 
   if (options.hasLinuxSmoke) {
     expect(workflow).toContain(`OD_PACKAGED_E2E_NAMESPACE: ${namespace}-linux`);
