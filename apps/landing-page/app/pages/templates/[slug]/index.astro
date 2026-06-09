@@ -33,14 +33,40 @@ const relatedUseCases = getTemplateUseCases()
   .filter((item) => item.slug !== useCase.slug)
   .slice(0, 6);
 const isZh = locale === 'zh' || locale === 'zh-tw';
-const queryFaq = useCase.keywords.map((keyword) => ({
-  question: isZh
-    ? `可以用 Open Design 做 ${keyword} 吗？`
-    : `Can I use Open Design for ${keyword}?`,
-  answer: isZh
-    ? `可以。${copy.title}页面把相关的真实 Open Design 模板聚合在一起，每个结果都链接到原模板详情页，包含预览、来源归因和 GitHub 源码。`
-    : `Yes. ${copy.title} collects real Open Design templates for this search intent. Each result links to the original template detail page with preview media, attribution, and GitHub source.`,
-}));
+const starterNames = plugins
+  .slice(0, 3)
+  .map((plugin) => resolveBundledTitle(plugin, locale));
+const starterText = starterNames.join(isZh ? '、' : ', ');
+const primaryQuery = useCase.keywords[0] ?? copy.title;
+const secondaryQueries = useCase.keywords.slice(1, 3).join(isZh ? '、' : ', ');
+const useCaseTopic = isZh ? copy.title.replace(/模板$/, '') : primaryQuery;
+const zhDescription = copy.description.replace(/。$/, '');
+const queryFaq = [
+  {
+    question: isZh
+      ? `我要做${useCaseTopic}，应该从哪个模板开始？`
+      : `I need a ${primaryQuery}. Which template should I start with?`,
+    answer: isZh
+      ? `先看 ${starterText}。这几个模板覆盖了这个场景里最常见的起步方式：一个负责主叙事，一个负责更强的视觉风格，一个可以作为社交或补充物料。点进卡片后可以直接看预览、来源和 GitHub 代码，再把文案、图片、品牌色换成你的真实内容。`
+      : `Start with ${starterText}. They cover the common starting points for this use case: one strong narrative artifact, one sharper visual direction, and one supporting social or companion asset. Open any card to inspect the preview, attribution, and GitHub source before swapping in your real copy, images, and brand system.`,
+  },
+  {
+    question: isZh
+      ? `这个页面适合哪些真实项目，而不只是“模板展示”？`
+      : `What real projects does this page fit, beyond browsing templates?`,
+    answer: isZh
+      ? `${zhDescription}，实际上可以落到这些项目：客户提案、活动媒体包、发布前预览、创始人/品牌故事、内部汇报，或者给设计代理商快速出第一版方向。这里的模板会比全量插件列表更快把你带到能直接改的成品。`
+      : `${copy.description} In practice, this can become a client proposal, event media kit, pre-launch preview, founder or brand story, internal review, or a first design direction for an agency workflow. If you searched for ${secondaryQueries || primaryQuery}, this page should get you to something editable faster than the full plugin catalog.`,
+  },
+  {
+    question: isZh
+      ? `我已经有自己的内容了，怎么把这些模板改成可发布版本？`
+      : `I already have my own content. How do I turn these into something publishable?`,
+    answer: isZh
+      ? `先选一个最接近目标气质的模板，再保留它的版式节奏和组件结构，只替换标题、正文、图片、数据和 CTA。模板详情页会保留品牌/来源归因和 GitHub 链接，所以你可以从原始实现继续改，而不是只拿一张静态截图。`
+      : `Pick the template closest to the tone you want, keep its layout rhythm and component structure, then replace the headlines, body copy, imagery, data, and calls to action. The detail page keeps brand/source attribution and the GitHub link, so you can keep editing from the original implementation rather than copying a static screenshot.`,
+  },
+];
 const faqItems = [...queryFaq, ...useCase.faq];
 
 const title = `${copy.title} · Open Design templates`;
@@ -126,7 +152,7 @@ const jsonLd = [
     <h2>{isZh ? '搜索问题' : 'Search Q&A'}</h2>
     <div class="template-usecase-faq-list">
       {queryFaq.map((item) => (
-        <details class="template-usecase-faq-item">
+        <details class="template-usecase-faq-item" open>
           <summary>{item.question}</summary>
           <p>{item.answer}</p>
         </details>
