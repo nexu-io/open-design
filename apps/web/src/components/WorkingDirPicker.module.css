@@ -197,6 +197,14 @@
   height: 100%;
 }
 
+/* When the panel opens upward (bottom-anchored composer), align the recent
+   flyout to the bottom of its row so it grows up and isn't clipped by the
+   viewport's bottom edge. */
+.flyoutUp {
+  top: auto;
+  bottom: -5px;
+}
+
 .recentItem {
   appearance: none;
   width: 100%;

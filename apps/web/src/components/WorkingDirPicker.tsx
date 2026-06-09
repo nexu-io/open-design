@@ -150,7 +150,11 @@ export function WorkingDirPicker({
               <Icon name="chevron-right" size={12} className={styles.itemChevron} />
             </button>
             {recentOpen ? (
-              <div className={styles.flyout} role="menu" data-testid="working-dir-recent-list">
+              <div
+                className={`${styles.flyout}${placement === 'up' ? ` ${styles.flyoutUp}` : ''}`}
+                role="menu"
+                data-testid="working-dir-recent-list"
+              >
                 {recentDirs.length === 0 ? (
                   <div className={styles.empty}>{t('homeWorkingDir.recentEmpty')}</div>
                 ) : (
