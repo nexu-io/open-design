@@ -74,6 +74,35 @@ describe('DesignsTab select mode', () => {
     });
   });
 
+  it('contains refresh failures and returns the toolbar button to idle', async () => {
+    const onRefresh = vi.fn().mockRejectedValue(new Error('daemon unavailable'));
+    render(
+      <DesignsTab
+        projects={[project]}
+        skills={[]}
+        designSystems={[]}
+        onOpen={vi.fn()}
+        onOpenLiveArtifact={vi.fn()}
+        onDelete={vi.fn()}
+        onRename={vi.fn()}
+        onRefresh={onRefresh}
+        isActive={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain(
+        'Refresh request failed. Check your connection and try again.',
+      );
+    });
+    expect(
+      (screen.getByRole('button', { name: 'Refresh' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+
   it('auto-refreshes while the projects tab is active', async () => {
     let intervalCallback: TimerHandler | undefined;
     const originalSetInterval = window.setInterval.bind(window);

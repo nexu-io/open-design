@@ -113,8 +113,13 @@ export function DesignsTab({
 	const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 	const [selectMode, setSelectMode] = useState(false);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
-	const deleteToastIdRef = useRef(0);
-	const [deleteToast, setDeleteToast] = useState<{ id: number; message: string } | null>(null);
+	const toastIdRef = useRef(0);
+	const [designsToast, setDesignsToast] = useState<{
+		id: number;
+		message: string;
+		role?: "status" | "alert";
+		tone?: "default" | "success" | "error";
+	} | null>(null);
 	const [projectsRefreshing, setProjectsRefreshing] = useState(false);
 	const menuContainerRef = useRef<HTMLDivElement | null>(null);
 	const projectsRefreshInFlightRef = useRef(false);
@@ -283,12 +288,21 @@ export function DesignsTab({
 			}
 			try {
 				await onRefresh();
+			} catch {
+				if (source === "manual") {
+					setDesignsToast({
+						id: (toastIdRef.current += 1),
+						message: t("liveArtifact.refresh.networkFailure"),
+						role: "alert",
+						tone: "error",
+					});
+				}
 			} finally {
 				projectsRefreshInFlightRef.current = false;
 				setProjectsRefreshing(false);
 			}
 		},
-		[analytics.track, onRefresh],
+		[analytics.track, onRefresh, t],
 	);
 
 	useEffect(() => {
@@ -432,9 +446,10 @@ export function DesignsTab({
 					failed > 0
 						? t("designs.deleteSelectedPartial", { deleted, failed })
 						: t("designs.deleteSelectedSuccess", { n: deleted });
-				setDeleteToast({
-					id: (deleteToastIdRef.current += 1),
+				setDesignsToast({
+					id: (toastIdRef.current += 1),
 					message,
+					tone: "success",
 				});
 			},
 		});
@@ -1074,11 +1089,13 @@ export function DesignsTab({
 				</Dialog>
 			) : null}
 			<AnimatePresence>
-				{deleteToast ? (
+				{designsToast ? (
 					<Toast
-						key={deleteToast.id}
-						message={deleteToast.message}
-						onDismiss={() => setDeleteToast(null)}
+						key={designsToast.id}
+						message={designsToast.message}
+						role={designsToast.role}
+						tone={designsToast.tone}
+						onDismiss={() => setDesignsToast(null)}
 					/>
 				) : null}
 			</AnimatePresence>
