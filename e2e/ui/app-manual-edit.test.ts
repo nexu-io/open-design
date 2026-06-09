@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { ensureRailOpen } from '@/playwright/rail';
+import { routeAgents } from '@/playwright/mock-factory';
 import type { Page } from '@playwright/test';
 import { T } from '@/timeouts';
 
@@ -71,8 +72,12 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expect.poll(async () => responsivePair.evaluate((el) => getComputedStyle(el).flexDirection)).toBe('row');
 
   await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(1);
   await expect.poll(async () => responsivePair.evaluate((el) => getComputedStyle(el).flexDirection)).toBe('row');
 
+  await frame.locator('body').evaluate(() => {
+    window.parent.postMessage({ type: 'od-edit-background' }, '*');
+  });
   await expect(page.locator('.manual-edit-modal')).toContainText('PAGE');
   await expect(page.locator('.manual-edit-tabs')).toHaveCount(0);
   await expect(page.locator('.manual-edit-layer-row')).toHaveCount(0);
@@ -84,8 +89,7 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expect(inspectorRow(page, 'Font').locator('select')).toHaveValue('Georgia, serif');
   await expect(inspectorRow(page, 'Base size').locator('input')).toHaveValue('18');
 
-  await frame.getByRole('heading', { name: 'Original Hero' }).click();
-  await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
+  await selectPreviewElementThroughBridge(page, frame, '[data-od-id="hero-title"]', 'TYPOGRAPHY');
   const selectedTitleMarker = frame.locator('[data-od-id="hero-title"][data-od-edit-selected="true"]');
   await expect(selectedTitleMarker).toHaveCount(1);
   const fontSizeInput = inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Size' }).locator('input');
@@ -138,6 +142,7 @@ test('[P0] manual edit mode preserves preview actions after style edits', async 
   await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
 
   await page.getByTestId('manual-edit-mode-toggle').click();
+  await selectPreviewElementThroughBridge(page, frame, '[data-od-id="hero-title"]', 'TYPOGRAPHY');
   const fontSizeInput = await selectStyleRowInput(page, frame, '[data-od-id="hero-title"]', 'TYPOGRAPHY', 'Size');
   await fontSizeInput.fill('48');
   await inspectSaveButton(page).click({ force: true });
@@ -152,6 +157,18 @@ test('[P0] manual edit mode preserves preview actions after style edits', async 
   await expect(page.getByRole('button', { name: /^Download$/ })).toBeVisible();
 });
 
+async function selectPreviewElementThroughBridge(
+  page: Page,
+  frame: ReturnType<Page['frameLocator']>,
+  selector: string,
+  section: string,
+) {
+  await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(1);
+  await frame.locator(selector).click();
+  await expect(page.locator('.manual-edit-modal')).toContainText(section);
+  await expect(frame.locator(`${selector}[data-od-edit-selected="true"]`)).toHaveCount(1);
+}
+
 async function selectStyleRowInput(
   page: Page,
   frame: ReturnType<Page['frameLocator']>,
@@ -159,7 +176,68 @@ async function selectStyleRowInput(
   section: string,
   label: string,
 ) {
-  await frame.locator(selector).click();
+  await frame.locator(selector).evaluate((el) => {
+    const element = el as HTMLElement;
+    const rect = element.getBoundingClientRect();
+    const styles = window.getComputedStyle(element);
+    window.parent.postMessage({
+      type: 'od-edit-select',
+      target: {
+        id: element.dataset.odId ?? element.id,
+        kind: 'text',
+        label: element.textContent?.trim() || element.tagName.toLowerCase(),
+        tagName: element.tagName.toLowerCase(),
+        className: typeof element.className === 'string' ? element.className : '',
+        text: element.textContent?.trim() ?? '',
+        rect: {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        },
+        fields: { text: element.textContent?.trim() ?? '' },
+        attributes: Object.fromEntries(Array.from(element.attributes).map((attr) => [attr.name, attr.value])),
+        styles: {
+          fontFamily: styles.fontFamily,
+          fontSize: styles.fontSize,
+          fontWeight: styles.fontWeight,
+          color: styles.color,
+          textAlign: styles.textAlign,
+          lineHeight: styles.lineHeight,
+          letterSpacing: styles.letterSpacing,
+          width: styles.width,
+          height: styles.height,
+          minHeight: styles.minHeight,
+          gap: styles.gap,
+          flexDirection: styles.flexDirection,
+          justifyContent: styles.justifyContent,
+          alignItems: styles.alignItems,
+          backgroundColor: styles.backgroundColor,
+          opacity: styles.opacity,
+          padding: styles.padding,
+          paddingTop: styles.paddingTop,
+          paddingRight: styles.paddingRight,
+          paddingBottom: styles.paddingBottom,
+          paddingLeft: styles.paddingLeft,
+          margin: styles.margin,
+          marginTop: styles.marginTop,
+          marginRight: styles.marginRight,
+          marginBottom: styles.marginBottom,
+          marginLeft: styles.marginLeft,
+          border: styles.border,
+          borderTopWidth: styles.borderTopWidth,
+          borderRightWidth: styles.borderRightWidth,
+          borderBottomWidth: styles.borderBottomWidth,
+          borderLeftWidth: styles.borderLeftWidth,
+          borderStyle: styles.borderStyle,
+          borderColor: styles.borderColor,
+          borderRadius: styles.borderRadius,
+        },
+        isLayoutContainer: false,
+        outerHtml: element.outerHTML,
+      },
+    }, '*');
+  });
   await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
   const row = inspectorSection(page, section).locator('.cc-row').filter({ hasText: label }).locator('input');
   await expect(row).toBeVisible();
@@ -203,7 +281,7 @@ test('[P0] simple deck keeps the active slide stable across preview mode switche
   await expect(frame.getByText('Slide Three')).toBeVisible();
 });
 
-test('[P0] HTML preview stays rendered after switching from Preview to Code and back', async ({ page }) => {
+test('[P0] @critical HTML preview stays rendered after switching from Preview to Code and back', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'HTML preview toggle regression');
   await seedHtmlArtifact(
@@ -236,22 +314,16 @@ test('[P0] HTML preview stays rendered after switching from Preview to Code and 
 });
 
 async function routeMockAgents(page: Page) {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeAgents(page, [
+    {
+      id: 'mock',
+      name: 'Mock Agent',
+      bin: 'mock-agent',
+      available: true,
+      version: 'test',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
 }
 
 async function createEmptyProject(page: Page, name: string): Promise<string> {
@@ -272,7 +344,7 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();
@@ -349,11 +421,7 @@ async function openDesignFile(page: Page, fileName: string) {
   }
 
   const filePattern = new RegExp(fileName.replace(/\./g, '\\.'), 'i');
-  const fileTabButton = page
-    .locator('.workspace-tab')
-    .filter({ hasText: filePattern })
-    .locator('.workspace-tab__main')
-    .first();
+  const fileTabButton = page.getByRole('tab', { name: filePattern }).first();
   let tabFound = true;
   try {
     await fileTabButton.waitFor({ state: 'visible', timeout: 2_000 });

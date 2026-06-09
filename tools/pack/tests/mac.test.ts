@@ -1,6 +1,7 @@
 import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os, { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import process from "node:process";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -11,6 +12,7 @@ import {
   renderMacPackagedConfig,
   validateMacNativeRebuildOutput,
 } from "../src/mac/app.js";
+import { runElectronBuilder } from "../src/mac/builder.js";
 import { resolveSeededAppConfigPaths, seedPackagedAppConfig, writeLaunchPackagedConfig } from "../src/mac/index.js";
 import { resolveMacPaths } from "../src/mac/paths.js";
 
@@ -199,6 +201,76 @@ describe("renderMacPackagedConfig", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  it("bakes the configured updater metadata URL for mac beta validation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const config = makeConfig(root, {
+        updateMetadataUrl: "http://127.0.0.1:4567/beta/latest/metadata.json",
+      });
+
+      const packagedConfig = JSON.parse(
+        renderMacPackagedConfig({
+          appVersion: "1.2.3-beta.0",
+          config,
+          usePrebundledStandaloneWeb: true,
+        }),
+      ) as Record<string, unknown>;
+
+      expect(packagedConfig.updateMetadataUrl).toBe("http://127.0.0.1:4567/beta/latest/metadata.json");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("runElectronBuilder", () => {
+  async function prepareElectronBuilderConfig(root: string, overrides: Partial<ToolPackConfig>) {
+    const cliPath = join(root, "fake-electron-builder.mjs");
+    await writeFile(cliPath, "process.exit(0);\n", "utf8");
+
+    const config = makeConfig(root, {
+      appVersion: "1.2.3.nightly.4",
+      electronBuilderCliPath: cliPath,
+      signed: true,
+      webOutputMode: "server",
+      ...overrides,
+    });
+    const paths = resolveMacPaths(config);
+
+    await runElectronBuilder(config, paths, ["dir"]);
+
+    return JSON.parse(await readFile(paths.appBuilderConfigPath, "utf8")) as {
+      afterSign?: string;
+      mac?: {
+        notarize?: boolean;
+      };
+    };
+  }
+
+  it("does not explicitly disable electron-builder notarization for notarized mac builds", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const builderConfig = await prepareElectronBuilderConfig(root, { macNotarize: true });
+
+      expect(builderConfig.afterSign).toContain("notarize.cjs");
+      expect(builderConfig.mac).not.toHaveProperty("notarize");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps signed-only mac builds from invoking electron-builder notarization", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const builderConfig = await prepareElectronBuilderConfig(root, { macNotarize: false });
+
+      expect(builderConfig.afterSign).toBeUndefined();
+      expect(builderConfig.mac?.notarize).toBe(false);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });
 
 describe("createMacElectronRebuildOptions", () => {
@@ -245,9 +317,16 @@ describe("validateMacNativeRebuildOutput", () => {
       await mkdir(dirname(buildPath), { recursive: true });
       await writeFile(buildPath, "not a directory", "utf8");
 
-      await expect(validateMacNativeRebuildOutput(root)).resolves.toContain(
-        `native module output could not be inspected: ${nativePath}: ENOTDIR: not a directory, stat '${nativePath}'`,
-      );
+      const result = await validateMacNativeRebuildOutput(root);
+      if (process.platform === "win32") {
+        await expect(Promise.resolve(result)).resolves.toBe(
+          `native module output is missing: ${nativePath}`,
+        );
+      } else {
+        await expect(Promise.resolve(result)).resolves.toContain(
+          `native module output could not be inspected: ${nativePath}: ENOTDIR: not a directory, stat '${nativePath}'`,
+        );
+      }
     } finally {
       await rm(root, { force: true, recursive: true });
     }

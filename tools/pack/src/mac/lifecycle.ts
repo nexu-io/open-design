@@ -27,9 +27,11 @@ import {
   stopProcesses,
 } from "@open-design/platform";
 import type { ToolPackConfig } from "../config.js";
+import { readToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
+import { readToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
 import { PACKAGED_CONFIG_PATH_ENV, writeLaunchPackagedConfig } from "./app-config.js";
 import { DESKTOP_LOG_ECHO_ENV } from "./constants.js";
-import { clearQuarantine, pathExists } from "./fs.js";
+import { pathExists, scrubMacExtendedAttributes } from "./fs.js";
 import { resolveMacInstallIdentity } from "./identity.js";
 import { desktopIdentityPath, desktopLogPath, macAppExecutablePath, resolveMacPaths } from "./paths.js";
 import type { DesktopRootIdentityFallback, DesktopRootIdentityMarker, MacCleanupResult, MacInspectResult, MacInstallResult, MacStartResult, MacStartSource, MacStopResult, MacUninstallResult } from "./types.js";
@@ -319,10 +321,12 @@ async function collectLaunchXattrSummary(appPath: string): Promise<string[]> {
     const lines = nonEmptyLines(result.stdout);
     const quarantine = lines.filter((line) => line.includes("com.apple.quarantine"));
     const provenance = lines.filter((line) => line.includes("com.apple.provenance"));
-    const matched = [...quarantine, ...provenance];
+    const macl = lines.filter((line) => line.includes("com.apple.macl"));
+    const matched = [...quarantine, ...provenance, ...macl];
     return [
       `quarantine entries: ${quarantine.length}`,
       `provenance entries: ${provenance.length}`,
+      `macl entries: ${macl.length}`,
       ...(matched.length === 0 ? [] : tailLines(matched, 8).map((line) => truncateLine(line))),
     ];
   } catch (error) {
@@ -505,7 +509,7 @@ export async function installPackedMacDmg(config: ToolPackConfig): Promise<MacIn
       "-quiet",
     ]);
     await execFileAsync("ditto", [join(paths.mountPoint, identity.publicAppBundleName), paths.installedAppPath]);
-    await clearQuarantine(paths.installedAppPath);
+    await scrubMacExtendedAttributes(paths.installedAppPath);
   } finally {
     detached = await detachMount(paths.mountPoint);
   }
@@ -700,6 +704,8 @@ export async function inspectPackedMacApp(config: ToolPackConfig, options: { exp
         { timeoutMs: 5000 },
       ),
     }),
+    launcher: await readToolPackLauncherRuntimeSnapshot(config),
+    updateCache: await readToolPackUpdateCacheLifecycleSnapshot(config),
     ...(options.path == null ? {} : {
       screenshot: await requestJsonIpc<DesktopScreenshotResult>(
         stamp.ipc,

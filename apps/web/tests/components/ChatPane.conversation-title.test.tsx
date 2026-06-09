@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane } from '../../src/components/ChatPane';
 import { trackRunFailedToastSurfaceView } from '../../src/analytics/events';
-import type { ChatMessage, Conversation } from '../../src/types';
+import type { AppConfig, ChatMessage, Conversation } from '../../src/types';
 
 vi.mock('../../src/i18n', () => ({
   useT: () => (key: string, vars?: Record<string, string | number>) => {
@@ -141,6 +141,46 @@ describe('ChatPane session switcher', () => {
       assistant_message_id: 'msg-amr-balance',
       run_id: 'run-amr-balance',
     });
+  });
+
+  it('opens the profile-scoped wallet from the AMR recharge action', () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(
+      <ChatPane
+        messages={[
+          failedAssistantMessage({
+            id: 'msg-amr-balance',
+            runId: 'run-amr-balance',
+            code: 'AMR_INSUFFICIENT_BALANCE',
+            agentId: 'amr',
+          }),
+        ]}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        onRetry={vi.fn()}
+        conversations={[conversation({ id: 'conv-1', title: 'Current' })]}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        config={{ agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'test' } } } as unknown as AppConfig}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('chat.amrError.rechargeCta'));
+
+    const [walletUrl, target, features] = openSpy.mock.calls[0] ?? [];
+    expect(target).toBe('_blank');
+    expect(features).toBe('noopener,noreferrer');
+    const parsedWalletUrl = new URL(String(walletUrl));
+    expect(`${parsedWalletUrl.origin}${parsedWalletUrl.pathname}`).toBe(
+      'https://vela.powerformer.net/wallet',
+    );
+    expect(parsedWalletUrl.searchParams.get('od_entry_source')).toBe('chat_error_recharge');
   });
 });
 

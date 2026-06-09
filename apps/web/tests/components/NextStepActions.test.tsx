@@ -43,6 +43,32 @@ describe('NextStepActions', () => {
     expect(handlers.onShare).toHaveBeenCalledWith('landing.html');
   });
 
+  it('keeps the recommended directions when there is no shareable artifact', () => {
+    renderActions({ fileName: null });
+    expect(screen.queryByText(en['nextStep.share'])).toBeNull();
+    expect(screen.getByText(en['nextStep.chipPolishVisual'])).toBeTruthy();
+    expect(screen.getByText(en['nextStep.chipBrand'])).toBeTruthy();
+  });
+
+  it('renders Share to Open Design as a separated row inside the next-step panel', () => {
+    const onShareToOpenDesign = vi.fn();
+    renderActions({ onShareToOpenDesign });
+
+    const root = screen.getByTestId('next-step-actions');
+    const optionsRow = screen.getByTestId('next-step-options-row');
+    const divider = screen.getByTestId('next-step-open-design-divider');
+    const panel = screen.getByTestId('assistant-share-to-od-panel');
+    const button = screen.getByTestId('assistant-share-to-od');
+
+    expect(root.contains(panel)).toBe(true);
+    expect(optionsRow.contains(panel)).toBe(false);
+    expect(optionsRow.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(divider.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(button);
+    expect(onShareToOpenDesign).toHaveBeenCalledTimes(1);
+  });
+
   it('prefills the chip label (no auto-send) when a chip is clicked', () => {
     const handlers = renderActions();
     fireEvent.click(screen.getByText(en['nextStep.chipBrand']));

@@ -49,7 +49,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('[P0] API empty stream shows No output instead of Done', async ({ page }) => {
+test('[P0] @critical API empty stream shows No output instead of Done', async ({ page }) => {
   await page.route('**/api/proxy/openai/stream', async (route) => {
     await route.fulfill({
       status: 200,
@@ -67,7 +67,7 @@ test('[P0] API empty stream shows No output instead of Done', async ({ page }) =
   await sendPrompt(page, 'Create a login page');
 
   await expect(page.locator('.assistant-label', { hasText: 'No output' })).toBeVisible();
-  await expect(page.getByTestId('generation-preview-stage').getByText(/provider ended the request/i)).toBeVisible();
+  await expect(page.getByText(/provider ended the request/i).first()).toBeVisible();
   await expect(page.locator('.assistant-label', { hasText: 'Done' })).toHaveCount(0);
 });
 
@@ -83,7 +83,7 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();

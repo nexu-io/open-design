@@ -19,17 +19,26 @@ const CHIPS: { id: string; labelKey: Parameters<ReturnType<typeof useT>>[0] }[] 
 
 interface Props {
   // The previewable artifact this affordance is anchored to. Passed back to
-  // every handler so the parent can seed the composer / open the right file.
-  fileName: string;
+  // share so the parent can open the right file. Some completed turns do not
+  // produce a previewable artifact, but the iteration chips are still useful.
+  fileName?: string | null;
   // Open the file's existing Share/Export menu in the preview workspace.
-  onShare: (fileName: string) => void;
+  onShare?: (fileName: string) => void;
   // Prefill the composer with the combined recommended-chip prompt (does not
   // auto-send). Chips are multi-select: every toggle rebuilds the whole prompt
   // from the current selection, so the composer always mirrors the chosen chips.
-  onChip: (fileName: string, prompt: string) => void;
+  onChip?: (fileName: string | null, prompt: string) => void;
+  onShareToOpenDesign?: () => void;
+  shareToOpenDesignBusy?: boolean;
 }
 
-export function NextStepActions({ fileName, onShare, onChip }: Props) {
+export function NextStepActions({
+  fileName,
+  onShare,
+  onChip,
+  onShareToOpenDesign,
+  shareToOpenDesignBusy = false,
+}: Props) {
   const t = useT();
   const analytics = useAnalytics();
   // Fire the exposure event once per mount so the acceptance funnel can divide
@@ -70,12 +79,13 @@ export function NextStepActions({ fileName, onShare, onChip }: Props) {
         element: 'chip',
         chip_id: chip.id,
       });
-      onChip(fileName, composePrompt(next));
+      onChip?.(fileName ?? null, composePrompt(next));
     },
     [analytics.track, composePrompt, fileName, onChip, selected],
   );
 
   const handleShare = useCallback(() => {
+    if (!fileName || !onShare) return;
     trackNextStepActionClick(analytics.track, {
       page_name: 'chat_panel',
       area: 'next_step',
@@ -84,6 +94,18 @@ export function NextStepActions({ fileName, onShare, onChip }: Props) {
     onShare(fileName);
   }, [analytics.track, fileName, onShare]);
 
+  const handleShareToOpenDesign = useCallback(() => {
+    if (!onShareToOpenDesign || shareToOpenDesignBusy) return;
+    trackNextStepActionClick(analytics.track, {
+      page_name: 'chat_panel',
+      area: 'next_step',
+      element: 'share_to_open_design',
+    });
+    onShareToOpenDesign();
+  }, [analytics.track, onShareToOpenDesign, shareToOpenDesignBusy]);
+
+  const hasRegularActions = !!((fileName && onShare) || onChip);
+
   return (
     <div className={styles.root} data-testid="next-step-actions">
       <div className={styles.label}>{t('nextStep.title')}</div>
@@ -91,27 +113,60 @@ export function NextStepActions({ fileName, onShare, onChip }: Props) {
           iteration directions; it's the only item that fires immediately
           instead of toggling into the composer, so it carries an icon + accent
           to read as an action rather than a selectable direction. */}
-      <div className={styles.row}>
-        <button type="button" className={styles.share} onClick={handleShare}>
-          <Icon name="share" size={14} />
-          <span>{t('nextStep.share')}</span>
-        </button>
-        {CHIPS.map((chip) => {
-          const label = t(chip.labelKey);
-          const isSelected = selected.includes(chip.id);
-          return (
-            <button
-              key={chip.id}
-              type="button"
-              aria-pressed={isSelected}
-              className={isSelected ? `${styles.chip} ${styles.chipSelected}` : styles.chip}
-              onClick={() => toggleChip(chip)}
-            >
-              {label}
+      {hasRegularActions ? (
+        <div className={styles.row} data-testid="next-step-options-row">
+          {fileName && onShare ? (
+            <button type="button" className={styles.share} onClick={handleShare}>
+              <Icon name="share" size={14} />
+              <span>{t('nextStep.share')}</span>
             </button>
-          );
-        })}
-      </div>
+          ) : null}
+          {onChip
+            ? CHIPS.map((chip) => {
+                const label = t(chip.labelKey);
+                const isSelected = selected.includes(chip.id);
+                return (
+                  <button
+                    key={chip.id}
+                    type="button"
+                    aria-pressed={isSelected}
+                    className={isSelected ? `${styles.chip} ${styles.chipSelected}` : styles.chip}
+                    onClick={() => toggleChip(chip)}
+                  >
+                    {label}
+                  </button>
+                );
+              })
+            : null}
+        </div>
+      ) : null}
+      {onShareToOpenDesign ? (
+        <>
+          {hasRegularActions ? (
+            <div className={styles.divider} data-testid="next-step-open-design-divider" />
+          ) : null}
+          <div className={styles.openDesignRow} data-testid="assistant-share-to-od-panel">
+            <button
+              type="button"
+              className={styles.openDesignButton}
+              data-testid="assistant-share-to-od"
+              disabled={shareToOpenDesignBusy}
+              onClick={handleShareToOpenDesign}
+            >
+              <Icon
+                name={shareToOpenDesignBusy ? "spinner" : "share"}
+                size={13}
+                className={shareToOpenDesignBusy ? "icon-spin" : undefined}
+              />
+              <span>
+                {shareToOpenDesignBusy
+                  ? t('assistant.shareToOpenDesignBusy')
+                  : t('assistant.shareToOpenDesign')}
+              </span>
+            </button>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

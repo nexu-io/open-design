@@ -93,4 +93,32 @@ describe('claude-stream role-marker guard scope', () => {
       .join('');
     expect(text).toBe('OK.');
   });
+
+  it('emits an error event when Claude Code marks an assistant message as authentication_failed', () => {
+    const { events, sink } = collect();
+    const handler = createClaudeStreamHandler(sink);
+
+    handler.feed(JSON.stringify({
+      type: 'assistant',
+      error: 'authentication_failed',
+      message: {
+        id: 'msg-auth-1',
+        role: 'assistant',
+        stop_reason: 'stop_sequence',
+        content: [
+          { type: 'text', text: 'Not logged in · Please run /login' },
+        ],
+      },
+    }) + '\n');
+
+    expect(events).toContainEqual({
+      type: 'text_delta',
+      delta: 'Not logged in · Please run /login',
+    });
+    expect(events).toContainEqual({
+      type: 'error',
+      message: 'Not logged in · Please run /login',
+      code: 'authentication_failed',
+    });
+  });
 });

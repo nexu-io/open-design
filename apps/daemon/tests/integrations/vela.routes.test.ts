@@ -77,6 +77,20 @@ async function waitForAmrModels(
   }
 }
 
+async function waitForVelaLoginIdle(timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const response = await getJson<{ loginInFlight: boolean }>(
+      `${baseUrl}/api/integrations/vela/status`,
+    );
+    if (!response.body.loginInFlight) return;
+    if (Date.now() >= deadline) {
+      throw new Error('timed out waiting for vela login subprocess to become idle');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
 function configPath(): string {
   return path.join(tmpHome, '.amr', 'config.json');
 }
@@ -473,11 +487,7 @@ describe('POST /api/integrations/vela/login', () => {
     expect(String(second.body.error || '')).toMatch(/already running/i);
 
     delete process.env.FAKE_VELA_LOGIN_DELAY_MS;
-    // Let the first login finish so the next test starts from a clean slate.
-    for (let i = 0; i < 50; i += 1) {
-      if (existsSync(configPath())) break;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+    await waitForVelaLoginIdle();
   });
 
   it('returns an error when the login subprocess exits immediately with stderr', async () => {

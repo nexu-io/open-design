@@ -250,6 +250,8 @@ describe('Design System Project manifest runtime consumption', () => {
         files: {
           design: 'DESIGN.md',
           tokens: 'tokens.css',
+          designTokens: 'design-tokens.json',
+          tailwind: 'tailwind-v4.css',
           components: 'components.html',
         },
         usage: 'USAGE.md',
@@ -280,6 +282,8 @@ describe('Design System Project manifest runtime consumption', () => {
       components: '<button class="btn">Derived should lose to cache</button>',
     });
     writeFileSync(path.join(dir, 'USAGE.md'), '## Read Order\n\nUse cache first.');
+    writeFileSync(path.join(dir, 'design-tokens.json'), '{"format":"od-design-tokens/v1","tokens":[]}\n');
+    writeFileSync(path.join(dir, 'tailwind-v4.css'), '@import "tailwindcss";\n');
     writeFileSync(
       path.join(dir, 'components.manifest.json'),
       `${JSON.stringify({
@@ -328,6 +332,8 @@ describe('Design System Project manifest runtime consumption', () => {
     expect(assets.componentsManifest).toContain('components.manifest schema v1 for cache-brand');
     expect(assets.componentsManifest).toContain('Cached buttons');
     expect(assets.pullIndex).toContain('preview/colors.html: Colors; colors');
+    expect(assets.pullIndex).toContain('design-tokens.json: derived Design Tokens JSON');
+    expect(assets.pullIndex).toContain('tailwind-v4.css: derived Tailwind v4 theme CSS');
     expect(assets.pullIndex).toContain('fonts/Inter-Medium.woff2: font: Inter 500');
     expect(assets.pullIndex).toContain('source/snippets/INDEX.json: source snippet index');
   });
@@ -344,6 +350,8 @@ describe('Design System Project manifest runtime consumption', () => {
         files: {
           design: 'DESIGN.md',
           tokens: 'tokens.css',
+          designTokens: 'design-tokens.json',
+          tailwind: 'tailwind-v4.css',
           components: 'components.html',
         },
         assetsDir: 'assets',
@@ -365,6 +373,8 @@ describe('Design System Project manifest runtime consumption', () => {
       schemaVersion: 1,
       snippets: [{ path: 'source/snippets/Button.tsx', role: 'button' }],
     })}\n`);
+    writeFileSync(path.join(dir, 'design-tokens.json'), '{"format":"od-design-tokens/v1","tokens":[]}\n');
+    writeFileSync(path.join(dir, 'tailwind-v4.css'), '@import "tailwindcss";\n');
     writeFileSync(path.join(dir, 'source', 'snippets', 'Button.tsx'), 'export function Button() {}');
     writeFileSync(path.join(dir, 'assets', 'icons', 'mark.svg'), '<svg />');
 
@@ -380,6 +390,14 @@ describe('Design System Project manifest runtime consumption', () => {
     await expect(readDesignSystemPullFile(root, 'pull-project', 'assets/icons/mark.svg')).resolves.toMatchObject({
       path: 'assets/icons/mark.svg',
       content: '<svg />',
+    });
+    await expect(readDesignSystemPullFile(root, 'pull-project', 'design-tokens.json')).resolves.toMatchObject({
+      path: 'design-tokens.json',
+      content: expect.stringContaining('od-design-tokens/v1'),
+    });
+    await expect(readDesignSystemPullFile(root, 'pull-project', 'tailwind-v4.css')).resolves.toMatchObject({
+      path: 'tailwind-v4.css',
+      content: expect.stringContaining('@import "tailwindcss"'),
     });
     await expect(readDesignSystemPullFile(root, 'pull-project', 'preview/spacing.html')).resolves.toBeNull();
     await expect(readDesignSystemPullFile(root, 'pull-project', '../pull-project/preview/colors.html')).resolves.toBeNull();

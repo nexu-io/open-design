@@ -1159,7 +1159,9 @@ export interface PluginMarketplaceEntry {
   yankReason?: string;
   tags?: string[];
   title?: string;
+  title_i18n?: Record<string, string>;
   description?: string;
+  description_i18n?: Record<string, string>;
   icon?: string;
 }
 

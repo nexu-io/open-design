@@ -147,6 +147,44 @@ function rpcErrorMessage(raw: unknown): string {
     : message;
 }
 
+function rpcErrorData(raw: unknown): unknown {
+  const obj = asObject(raw);
+  const error = asObject(obj?.error);
+  return error && 'data' in error ? error.data : undefined;
+}
+
+function rpcErrorRetryable(data: unknown): boolean | undefined {
+  const details = asObject(data);
+  return typeof details?.retryable === 'boolean' ? details.retryable : undefined;
+}
+
+function promotedOpenCodeSessionErrorPayload(data: unknown, fallbackMessage: string) {
+  const details = asObject(data);
+  if (
+    details?.kind !== 'opencode_session_error' ||
+    details.source !== 'opencode' ||
+    details.code !== 'ROLE_MARKER_HALLUCINATION'
+  ) {
+    return null;
+  }
+  const message =
+    typeof details.message === 'string' && details.message.trim()
+      ? details.message.trim()
+      : fallbackMessage;
+  return {
+    message,
+    error: {
+      code: 'ROLE_MARKER_HALLUCINATION',
+      message,
+      retryable: typeof details.retryable === 'boolean' ? details.retryable : true,
+      details: {
+        ...details,
+        promoted_by: 'open_design_acp',
+      },
+    },
+  };
+}
+
 interface FormattedUsage {
   input_tokens?: number;
   output_tokens?: number;
@@ -738,9 +776,18 @@ export function attachAcpSession({
     );
   };
 
+  const failWithPayload = (payload: unknown) => {
+    if (finished) return;
+    finished = true;
+    fatal = true;
+    clearStageTimer();
+    send('error', payload);
+    if (!child.killed) child.kill('SIGTERM');
+  };
+
   const fail = (
     message: string,
-    options: { forceModelUnavailable?: boolean } = {},
+    options: { forceModelUnavailable?: boolean; details?: unknown; retryable?: boolean } = {},
   ) => {
     if (finished) return;
     finished = true;
@@ -751,7 +798,19 @@ export function attachAcpSession({
       (options.forceModelUnavailable || isModelUnavailableError(message));
     send(
       'error',
-      useModelUnavailable ? amrModelUnavailablePayload(message) : { message },
+      useModelUnavailable
+        ? amrModelUnavailablePayload(message)
+        : options.details === undefined && options.retryable === undefined
+          ? { message }
+          : {
+              message,
+              error: {
+                code: 'AGENT_EXECUTION_FAILED',
+                message,
+                retryable: options.retryable ?? false,
+                ...(options.details === undefined ? {} : { details: options.details }),
+              },
+            },
     );
     if (!child.killed) child.kill('SIGTERM');
   };
@@ -777,6 +836,11 @@ export function attachAcpSession({
       },
       'session/prompt',
     );
+    send('agent', {
+      type: 'status',
+      label: 'waiting_for_first_output',
+      elapsedMs: Date.now() - runStartedAt,
+    });
     nextId += 1;
   };
 
@@ -832,7 +896,17 @@ export function attachAcpSession({
       if (error?.code === -32603 && obj.id !== expectedId) {
         return;
       }
-      fail(rpcErr);
+      const details = rpcErrorData(obj);
+      const promotedPayload = promotedOpenCodeSessionErrorPayload(details, rpcErr);
+      if (promotedPayload) {
+        failWithPayload(promotedPayload);
+        return;
+      }
+      const retryable = rpcErrorRetryable(details);
+      fail(rpcErr, {
+        details,
+        ...(retryable === undefined ? {} : { retryable }),
+      });
       return;
     }
     if (obj.method === 'session/request_permission') {
@@ -841,6 +915,13 @@ export function attachAcpSession({
     }
     const update = asObject(params?.update);
     if (obj.method === 'session/update' && update) {
+      if (update.sessionUpdate !== 'agent_message_chunk' && update.sessionUpdate !== 'agent_thought_chunk') {
+        send('agent', {
+          type: 'status',
+          label: String(update.sessionUpdate || 'session_update'),
+          elapsedMs: Date.now() - runStartedAt,
+        });
+      }
       if (update.sessionUpdate === 'agent_thought_chunk') {
         const text = asObject(update.content)?.text;
         if (typeof text === 'string' && text.length > 0) {

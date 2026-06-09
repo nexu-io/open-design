@@ -8,6 +8,27 @@
 export const AMR_CONSOLE_URL = 'https://open-design.ai/amr/wallet';
 export const AMR_RECHARGE_URL = AMR_CONSOLE_URL;
 
+const AMR_CONSOLE_URL_BY_PROFILE: Record<string, string> = {
+  prod: AMR_CONSOLE_URL,
+  test: 'https://vela.powerformer.net/wallet',
+  local: 'http://localhost:5173/wallet',
+};
+
+export function amrConsoleUrlForProfile(profile: string | null | undefined): string {
+  const normalized = profile?.trim() || 'prod';
+  return AMR_CONSOLE_URL_BY_PROFILE[normalized] ?? AMR_CONSOLE_URL;
+}
+
+export function amrRechargeUrlForProfile(profile: string | null | undefined): string {
+  return amrConsoleUrlForProfile(profile);
+}
+
+export function amrProfileBadgeLabel(profile: string | null | undefined): string | null {
+  if (profile === 'test') return 'TEST';
+  if (profile === 'local') return 'LOCAL';
+  return null;
+}
+
 // Codes that mean a non-AMR agent hit "the model service rejected or could not
 // serve the run" — auth missing/invalid, quota/rate exhausted, or the upstream
 // model endpoint was unavailable. These are the failures worth promoting AMR
@@ -53,6 +74,7 @@ export type RunFailurePrimaryAction =
 export type RunFailureMessageKey =
   | 'chat.amrError.authMessage'
   | 'chat.amrError.balanceMessage'
+  | 'chat.connectionDropped'
   | null;
 
 export interface RunFailureUi {
@@ -127,6 +149,18 @@ export function resolveRunFailureUi(
         showSwitchCard: false,
       };
     }
+  }
+  // Agent-neutral: a mid-response connection drop (any agent) gets a clear,
+  // localized "lost connection — retry" message instead of the raw SDK string.
+  // Not an AMR-promotable case: the break is the user's own network path, which
+  // switching model service wouldn't fix.
+  if (code === 'AGENT_CONNECTION_DROPPED') {
+    return {
+      primaryAction: 'retry',
+      messageKey: 'chat.connectionDropped',
+      secondaryRetry: false,
+      showSwitchCard: false,
+    };
   }
   const promote = typeof code === 'string' && PROMOTE_AMR_CODES.has(code);
   return {

@@ -75,7 +75,8 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
   await gotoProject(page, projectId);
 
   const settings = await openSettingsDialog(page);
-  await expect(settings.getByRole('button', { name: /Use Local CLI/i }).first()).toBeVisible();
+  await expect(settings.getByRole('button', { name: /Open Design AMR/i }).first()).toHaveAttribute('aria-pressed', 'true');
+  await expect(settings.getByRole('button', { name: /^Sign out$/i })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(settings).toHaveCount(0);
   await page.evaluate(async () => {
@@ -83,15 +84,18 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
     if (!response.ok) throw new Error(`logout failed: ${response.status}`);
   });
   const reopenedSettings = await openSettingsDialog(page);
-  await expect(reopenedSettings.getByRole('button', { name: /Use Local CLI active/i }).first()).toBeVisible();
+  await expect(reopenedSettings.getByRole('button', { name: /Open Design AMR/i }).first()).toHaveAttribute('aria-pressed', 'true');
+  await expect(reopenedSettings.getByRole('button', { name: /^Authorize$|^Sign in$/i })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(reopenedSettings).toHaveCount(0);
-  await putAppConfig(page, {
+  const reloginConfig = {
     ...config,
     agentCliEnv: {
       amr: { VELA_BIN: reloginVelaBin },
     },
-  });
+  };
+  await seedBrowserConfig(page, reloginConfig);
+  await putAppConfig(page, reloginConfig);
   await sendPrompt(page, 'AMR logout should require relogin');
 
   await expect(page.locator('.msg.error')).toContainText(/authorize|sign in again|login missing|expired|ACP session exited before completion/i, {

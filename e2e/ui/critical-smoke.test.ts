@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
 });
 
-test('[P0] home loads with the primary entry controls', async ({ page }) => {
+test('[P0] @critical home loads with the primary entry controls', async ({ page }) => {
   await gotoEntryHome(page);
 
   // The rail is collapsed by default — the hero owns the first screen and the
@@ -23,7 +23,7 @@ test('[P0] home loads with the primary entry controls', async ({ page }) => {
   await expect(page.getByTestId('entry-nav-new-project')).toBeVisible();
 });
 
-test('[P0] settings dialog is reachable from home', async ({ page }) => {
+test('[P0] @critical settings dialog is reachable from home', async ({ page }) => {
   await gotoEntryHome(page);
 
   // The home settings entry is a menu: open it, then the "Settings" item
@@ -35,7 +35,7 @@ test('[P0] settings dialog is reachable from home', async ({ page }) => {
   await expect(settingsDialog.getByRole('heading', { name: 'Execution mode' })).toBeVisible();
 });
 
-test('[P0] prototype project creation reaches the workspace shell', async ({ page }) => {
+test('[P0] @critical prototype project creation reaches the workspace shell', async ({ page }) => {
   await gotoEntryHome(page);
   await openNewProjectModal(page);
   await page.getByTestId('new-project-tab-prototype').click();
@@ -50,7 +50,7 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();

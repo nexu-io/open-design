@@ -30,7 +30,10 @@ import {
 const REPO = 'https://github.com/nexu-io/open-design';
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
 const X_TWITTER = 'https://x.com/nexudotio';
-const AMR_URL = 'https://open-design.ai/amr/';
+// Canonical AMR destination. Exported so the homepage AMR band CTA
+// (app/page.tsx) links to the same URL the nav uses, without a second
+// hand-maintained copy of the literal.
+export const AMR_URL = 'https://open-design.ai/amr/';
 
 const ext = {
   target: '_blank',
@@ -67,11 +70,11 @@ const SOLUTION_ROLES: ReadonlyArray<{
   key: SolutionPageKey;
   href: string;
 }> = [
-  { key: 'roleSoloBuilder', href: '/for/solo-builder/' },
-  { key: 'roleDesigner', href: '/for/designer/' },
-  { key: 'roleEngineering', href: '/for/engineering/' },
-  { key: 'roleProductManagers', href: '/for/product-managers/' },
-  { key: 'roleMarketing', href: '/for/marketing/' },
+  { key: 'roleSoloBuilder', href: '/solutions/solo-builder/' },
+  { key: 'roleDesigner', href: '/solutions/designer/' },
+  { key: 'roleEngineering', href: '/solutions/engineering/' },
+  { key: 'roleProductManagers', href: '/solutions/product-managers/' },
+  { key: 'roleMarketing', href: '/solutions/marketing/' },
 ];
 
 
@@ -81,6 +84,7 @@ export interface HeaderProps {
     | 'home'
     | 'product'
     | 'html-anything'
+    | 'html-video'
     | 'plugins'
     /*
      * `library` is kept as an alias for the dropdown trigger so older
@@ -118,7 +122,7 @@ export interface HeaderProps {
   locale?: LandingLocaleCode;
   /** Optional override for callers that already resolved localized chrome. */
   copy?: HeaderCopy;
-  /** Brand link target — `#top` on the homepage, `/` on sub-pages. */
+  /** Brand link target — `/` (home) everywhere; callers may override. */
   brandHref?: string;
   /**
    * Current request pathname (e.g. `/zh/blog/x/`). Used to build the
@@ -138,7 +142,7 @@ export function Header({
   github,
   locale = DEFAULT_LOCALE,
   copy,
-  brandHref = '#top',
+  brandHref = '/',
   currentPath = '/',
 }: HeaderProps) {
   const linkClass = (key: NonNullable<HeaderProps['active']>) =>
@@ -199,7 +203,8 @@ export function Header({
                 className={
                   active === 'product' ||
                   active === 'home' ||
-                  active === 'html-anything'
+                  active === 'html-anything' ||
+                  active === 'html-video'
                     ? 'is-active'
                     : undefined
                 }
@@ -238,6 +243,18 @@ export function Header({
                     </span>
                   </a>
                 </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/html-video/')}
+                    className={linkClass('html-video')}
+                  >
+                    <span className='dropdown-name'>{productMenuCopy.htmlVideoName}</span>
+                    <span className='dropdown-blurb'>
+                      {productMenuCopy.htmlVideoBlurb}
+                    </span>
+                  </a>
+                </li>
                 {/* AMR is no longer listed here — per the Header spec it now
                   heads the Agent dropdown (the design Agent above the coding
                   agents). Listing it in both places would be redundant. */}
@@ -253,7 +270,7 @@ export function Header({
             */}
             <li className='has-dropdown'>
               <a
-                href={href('/compare/')}
+                href={href('/solutions/')}
                 className={active === 'solution' ? 'is-active' : undefined}
                 aria-haspopup='true'
                 aria-expanded='false'
@@ -529,8 +546,14 @@ export function Header({
             data-download-cta
             data-download-page
           >
+            {/*
+              The CPU-arch chip (（Apple Silicon）/（Apple Intel）) is
+              intentionally NOT rendered in the nav CTA — at mid widths it
+              pushed the row over the available space and crowded the bar.
+              The arch suffix still appears on the homepage hero download
+              button (page.tsx) and the /download/ page, where there is room.
+            */}
             {headerCopy.download}
-            <span className='download-arch' data-download-arch hidden />
           </a>
           <details className='locale-switch nav-locale' data-locale-switch>
             <summary

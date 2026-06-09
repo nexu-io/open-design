@@ -123,11 +123,13 @@ fsTest('resolveAgentLaunch selects nvm-installed codex under a minimal PATH and 
     return withEnvSnapshot(['HOME', 'PATH', 'OD_AGENT_HOME'], () => {
       const binDir = join(home, '.nvm', 'versions', 'node', '24.11.0', 'bin');
       const codexBin = join(binDir, 'codex');
+      const pathBin = join(home, 'path-bin');
       mkdirSync(binDir, { recursive: true });
+      mkdirSync(pathBin, { recursive: true });
       writeFileSync(codexBin, '#!/bin/sh\nexit 0\n');
       chmodSync(codexBin, 0o755);
       process.env.HOME = home;
-      process.env.PATH = '/usr/bin:/bin';
+      process.env.PATH = pathBin;
       process.env.OD_AGENT_HOME = home;
 
       const launch = resolveAgentLaunch(codex);

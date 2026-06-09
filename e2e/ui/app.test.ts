@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { ensureRailOpen } from '@/playwright/rail';
-import type { Dialog, Page, Request, Response } from '@playwright/test';
+import { routeAgents } from '@/playwright/mock-factory';
+import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -19,6 +20,19 @@ const APP_OWNED_SCENARIO_FLOWS = new Set([
   'example-use-prompt',
   'comment-attachment-flow',
 ]);
+const CRITICAL_SCENARIO_IDS = new Set([
+  'prototype-basic',
+  'deck-basic',
+  'hyperframes-basic',
+  'image-basic',
+  'video-basic',
+  'live-artifact-basic',
+  'conversation-persistence',
+  'file-mention',
+  'deep-link-preview',
+  'file-upload-send',
+  'conversation-delete-recovery',
+]);
 test.describe.configure({ timeout: 45_000 });
 
 function artifactPreview(page: Page) {
@@ -27,6 +41,12 @@ function artifactPreview(page: Page) {
 
 function artifactPreviewFrame(page: Page) {
   return page.frameLocator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR);
+}
+
+function stagedAttachmentName(page: Page, name: string): Locator {
+  return page
+    .locator('[data-testid="staged-attachments"], [data-testid="staged-contexts"]')
+    .getByText(name, { exact: true });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -73,23 +93,8 @@ test.beforeEach(async ({ page }) => {
 for (const entry of automatedUiScenarios().filter(
   (scenario) => !APP_OWNED_SCENARIO_FLOWS.has(scenario.flow ?? ''),
 )) {
-  test(`[${scenarioPriority(entry)}] ${entry.id}: ${entry.title}`, async ({ page }) => {
-    await page.route('**/api/agents', async (route) => {
-      await route.fulfill({
-        json: {
-          agents: [
-            {
-              id: 'mock',
-              name: 'Mock Agent',
-              bin: 'mock-agent',
-              available: true,
-              version: 'test',
-              models: [{ id: 'default', label: 'Default' }],
-            },
-          ],
-        },
-      });
-    });
+  test(`[${scenarioPriority(entry)}]${criticalScenarioTag(entry)} ${entry.id}: ${entry.title}`, async ({ page }) => {
+    await routeMockAgents(page);
 
     if (entry.flow === 'example-use-prompt') {
       const exampleSummary = {
@@ -390,7 +395,7 @@ for (const entry of automatedUiScenarios().filter(
   });
 }
 
-test('[P0] comment attachment flow attaches preview comments to the next run as structured context', async ({ page }) => {
+test('[P0] @critical comment attachment flow attaches preview comments to the next run as structured context', async ({ page }) => {
   test.setTimeout(75_000);
   const entry = automatedUiScenarios().find((scenario) => scenario.id === 'comment-attachment-flow');
   if (!entry?.mockArtifact) {
@@ -560,22 +565,16 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
 });
 
 async function routeMockAgents(page: Page) {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeAgents(page, [
+    {
+      id: 'mock',
+      name: 'Mock Agent',
+      bin: 'mock-agent',
+      available: true,
+      version: 'test',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
 }
 
 function scenarioPriority(entry: UiScenario): 'P0' | 'P1' | 'P2' {
@@ -603,6 +602,10 @@ function scenarioPriority(entry: UiScenario): 'P0' | 'P1' | 'P2' {
     default:
       return 'P1';
   }
+}
+
+function criticalScenarioTag(entry: UiScenario): string {
+  return CRITICAL_SCENARIO_IDS.has(entry.id) ? ' @critical' : '';
 }
 
 async function routeMockSuccessfulRun(page: Page, runId: string) {
@@ -782,6 +785,21 @@ async function sendPrompt(page: Page, prompt: string) {
   ]);
 }
 
+async function startNewConversation(page: Page) {
+  await page.getByTestId('conversation-history-trigger').click();
+  await expect(page.getByTestId('conversation-list')).toBeVisible();
+  await page.getByTestId('conversation-history-new').click();
+  await expect(page.getByTestId('conversation-list')).toHaveCount(0);
+}
+
+function tabBySuffix(page: Page, name: string): Locator {
+  return page.getByRole('tab', { name: new RegExp(`${escapeRegExp(name)}(?:\\s+Close tab)?$`, 'i') });
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function isCreateRunResponse(resp: Response): boolean {
   const url = new URL(resp.url());
   return url.pathname === '/api/runs' && resp.request().method() === 'POST';
@@ -851,7 +869,7 @@ async function runHyperframesProjectRoutingFlow(
   await expectWorkspaceReady(page);
   await sendPrompt(page, entry.prompt);
   const { projectId } = await getCurrentProjectContext(page);
-  await expect(page.getByRole('tab', { name: new RegExp(`${entry.mockArtifact!.fileName.replace('.', '\\.')}$`, 'i') })).toBeVisible();
+  await expect(tabBySuffix(page, entry.mockArtifact!.fileName)).toBeVisible();
   await expectProjectFileToContain(page, projectId, entry.mockArtifact!.fileName, entry.mockArtifact!.heading);
   await expectScenarioProjectState(page, entry, projectId);
 }
@@ -1247,7 +1265,7 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();
@@ -1442,11 +1460,11 @@ async function expectArtifactVisible(
   entry: UiScenario,
 ) {
   const artifact = entry.mockArtifact!;
-  await expect(page.getByRole('tab', { name: new RegExp(`${artifact.fileName.replace('.', '\\.')}$`, 'i') })).toBeVisible();
+  await expect(tabBySuffix(page, artifact.fileName)).toBeVisible();
   if ((await artifactPreview(page).count()) === 0) {
     const turnCard = page.locator('.msg.assistant').filter({ hasText: artifact.fileName }).last();
     if ((await turnCard.count()) > 0) {
-      const openButton = turnCard.getByRole('button', { name: 'Open' });
+      const openButton = turnCard.getByRole('button', { name: 'Open', exact: true });
       if ((await openButton.count()) > 0) {
         await openButton.click();
       }
@@ -1476,11 +1494,11 @@ async function runConversationPersistenceFlow(
   await sendPrompt(page, entry.prompt);
   await expect(page.locator('.msg.user').getByText(entry.prompt, { exact: true })).toBeVisible();
   const firstContext = await getCurrentProjectContext(page);
-  await expect(page.getByRole('tab', { name: new RegExp(`${entry.mockArtifact!.fileName.replace('.', '\\.')}$`, 'i') })).toBeVisible();
+  await expect(tabBySuffix(page, entry.mockArtifact!.fileName)).toBeVisible();
   await expectProjectFileToContain(page, firstContext.projectId, entry.mockArtifact!.fileName, entry.mockArtifact!.heading);
   const firstConversationId = firstContext.conversationId;
 
-  await page.getByTestId('new-conversation').click();
+  await startNewConversation(page);
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toHaveText('');
 
@@ -1543,10 +1561,9 @@ async function runFileMentionFlow(
   await page.getByTestId('chat-composer-input').click();
   await page.getByTestId('chat-composer-input').pressSequentially('Review @ref');
   await expect(page.getByTestId('mention-popover')).toBeVisible();
-  await page.getByTestId('mention-popover').getByRole('button', { name: /reference\.txt/i }).click();
+  await page.getByTestId('mention-popover').getByRole('option', { name: /reference\.txt/i }).click();
   await expect(page.getByTestId('chat-composer-input')).toHaveText('Review @reference.txt ');
-  await expect(page.getByTestId('staged-attachments')).toBeVisible();
-  await expect(page.getByTestId('staged-attachments').getByText('reference.txt', { exact: true })).toBeVisible();
+  await expect(stagedAttachmentName(page, 'reference.txt')).toBeVisible();
   await expect(page.getByTestId('chat-send')).toBeEnabled();
 
   const runRequestPromise = page.waitForRequest(isCreateRunRequest);
@@ -1581,7 +1598,7 @@ async function runDeepLinkPreviewFlow(
 
   await page.goto(`/projects/${projectId}/files/${fileName}`, { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  const artifactTab = page.getByRole('tab', { name: new RegExp(`${fileName.replace('.', '\\.')}$`, 'i') });
+  const artifactTab = tabBySuffix(page, fileName);
   await expect(artifactTab).toBeVisible();
   await expect(artifactTab).toHaveAttribute('aria-selected', 'true');
   await expectProjectFileToContain(page, projectId, fileName, entry.mockArtifact!.heading);
@@ -1604,10 +1621,7 @@ async function runFileUploadSendFlow(
   });
   await expect((await uploadResponse).ok()).toBeTruthy();
 
-  await expect(page.getByTestId('staged-attachments')).toBeVisible();
-  await expect(
-    page.getByTestId('staged-attachments').getByText('reference.txt', { exact: true }),
-  ).toBeVisible();
+  await expect(stagedAttachmentName(page, 'reference.txt')).toBeVisible();
   await expect(page.getByText('reference.txt', { exact: true })).toBeVisible();
 
   await sendPrompt(page, entry.prompt);
@@ -1629,7 +1643,7 @@ async function runConversationDeleteRecoveryFlow(
     page.locator('.msg.user .user-text').filter({ hasText: entry.prompt }).first(),
   ).toBeVisible();
 
-  await page.getByTestId('new-conversation').click();
+  await startNewConversation(page);
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toHaveText('');
 

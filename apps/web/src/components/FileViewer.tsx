@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
 import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
 import {
@@ -62,10 +62,10 @@ import {
 import type { ProjectFilePreview } from '../providers/registry';
 import {
   downloadImageDataUrl,
-  exportAsHtml,
   exportAsJsx,
   exportAsMd,
   exportAsPdf,
+  exportProjectAsHtml,
   exportProjectAsPdf,
   exportProjectAsZip,
   copyImageDataUrlToClipboard,
@@ -4546,7 +4546,13 @@ function HtmlViewer({
     });
   };
   const fireArtifactHeaderClick = (
-    element: 'back' | 'edit' | 'present_dropdown' | 'share_dropdown' | 'settings',
+    element:
+      | 'back'
+      | 'edit'
+      | 'present_dropdown'
+      | 'download_dropdown'
+      | 'share_dropdown'
+      | 'settings',
   ) => {
     trackArtifactHeaderClick(analytics.track, {
       page_name: 'artifact',
@@ -5218,7 +5224,7 @@ function HtmlViewer({
     needsFocusGuard,
   }) && !manualEditRequiresSrcDoc;
   const basePreviewSrcUrl = useMemo(
-    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll&odPreviewBridge=selection`,
+    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`,
     [projectId, file.name, file.mtime, reloadKey],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
@@ -6523,11 +6529,36 @@ function HtmlViewer({
 
   useEffect(() => {
     if (!inTabPresent) return;
+    const bodyStyle = document.body.style;
+    const previousChromeHeight = bodyStyle.getPropertyValue('--workspace-tabs-chrome-height');
+    const updateChromeHeight = () => {
+      const chrome = document.querySelector<HTMLElement>('.workspace-tabs-chrome.app-chrome-header');
+      const height = chrome?.getBoundingClientRect().height ?? 0;
+      if (height > 0) {
+        bodyStyle.setProperty('--workspace-tabs-chrome-height', `${Math.round(height)}px`);
+      } else {
+        bodyStyle.removeProperty('--workspace-tabs-chrome-height');
+      }
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setInTabPresent(false);
     };
+    updateChromeHeight();
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    window.addEventListener('resize', updateChromeHeight);
+    const chrome = document.querySelector<HTMLElement>('.workspace-tabs-chrome.app-chrome-header');
+    const observer = chrome && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateChromeHeight) : null;
+    if (observer && chrome) observer.observe(chrome);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', updateChromeHeight);
+      observer?.disconnect();
+      if (previousChromeHeight) {
+        bodyStyle.setProperty('--workspace-tabs-chrome-height', previousChromeHeight);
+      } else {
+        bodyStyle.removeProperty('--workspace-tabs-chrome-height');
+      }
+    };
   }, [inTabPresent]);
 
   function openInNewTab() {
@@ -6787,6 +6818,7 @@ function HtmlViewer({
 
   function presentInThisTab() {
     setPresentMenuOpen(false);
+    setMode('preview');
     setInTabPresent(true);
   }
 
@@ -7179,7 +7211,7 @@ function HtmlViewer({
   }, [slideNavRequest?.nonce, slideNavRequest?.slideIndex, effectiveDeck, previewStateKey, slideState?.count]);
 
   const openDownloadMenu = () => {
-    fireArtifactHeaderClick('share_dropdown');
+    fireArtifactHeaderClick('download_dropdown');
     setExportReadyNudge(false);
     markExportReadyNudgeSeen(projectId, file.name);
     setDeployMenuOpen(false);
@@ -7208,6 +7240,14 @@ function HtmlViewer({
       await waitForIframeLoadOrTimeout(activeIframe, 250);
       await waitForAnimationFrame();
       return requestPreviewSnapshotWithRetry(activeIframe);
+    }
+
+    const urlIframe = iframeRef.current ?? urlPreviewIframeRef.current;
+    if (urlIframe) {
+      await waitForIframeLoadOrTimeout(urlIframe, 250);
+      await waitForAnimationFrame();
+      const urlSnapshot = await requestPreviewSnapshotWithRetry(urlIframe);
+      if (urlSnapshot) return urlSnapshot;
     }
 
     const srcDocIframe = srcDocPreviewIframeRef.current;
@@ -7299,11 +7339,15 @@ function HtmlViewer({
     }
   }, [captureExportImageSnapshot, t]);
 
-  const openImageExportModal = () => {
-    setDownloadMenuOpen(false);
+  const openImageExportModal = async () => {
+    flushSync(() => {
+      setDownloadMenuOpen(false);
+    });
     setImageExportError(null);
     setImageExportPreparedBlob(null);
     imageExportSnapshotDataUrlRef.current = null;
+    await waitForAnimationFrame();
+    await waitForAnimationFrame();
     setImageExportModalOpen(true);
     void prepareImageExportBlob(imageExportFormat);
   };
@@ -7879,7 +7923,7 @@ function HtmlViewer({
   ) : null;
 
   return (
-    <div className="viewer html-viewer">
+    <div className={`viewer html-viewer${inTabPresent ? ' is-tab-present' : ''}`}>
       <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
           <button
@@ -8126,13 +8170,12 @@ function HtmlViewer({
                 <div className="share-menu chrome-share-menu">
                   <button
                     type="button"
-                    className="chrome-action chrome-action-secondary chrome-action-with-label"
+                    className="chrome-action chrome-action-secondary chrome-action-with-label chrome-action-text-only"
                     aria-haspopup="menu"
                     aria-expanded={deployMenuOpen}
                     aria-label={shareMenuLabel}
                     onClick={openDeployMenu}
                   >
-                    <RemixIcon name="share-forward-line" size={15} />
                     <span>{shareMenuLabel}</span>
                   </button>
                   {deployMenuOpen ? (
@@ -8270,7 +8313,6 @@ function HtmlViewer({
                     aria-expanded={downloadMenuOpen}
                     onClick={openDownloadMenu}
                   >
-                    <RemixIcon name="download-line" size={15} />
                     <span>{t('fileViewer.download')}</span>
                   </button>
                   {downloadMenuOpen ? (
@@ -8351,7 +8393,12 @@ function HtmlViewer({
                     role="menuitem"
                     onClick={() => {
                       setDownloadMenuOpen(false);
-                      fireShareExport('html', () => exportAsHtml(source ?? '', exportTitle));
+                      fireShareExport('html', () => exportProjectAsHtml({
+                        projectId,
+                        filePath: file.name,
+                        fallbackHtml: source ?? '',
+                        fallbackTitle: exportTitle,
+                      }));
                     }}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-code-line" size={15} /></span>
@@ -8736,7 +8783,7 @@ function HtmlViewer({
           <pre className="viewer-source">{source}</pre>
         )}
       </div>
-      {inTabPresent && source ? (
+      {inTabPresent && source && typeof document !== 'undefined' ? createPortal(
         <div
           className="present-overlay"
           role="dialog"
@@ -8764,10 +8811,11 @@ function HtmlViewer({
               srcDoc={srcDoc}
             />
           )}
-        </div>
+        </div>,
+        document.body,
       ) : null}
-      {imageExportModalOpen ? (
-        <div className="modal-backdrop" role="presentation">
+      {imageExportModalOpen && typeof document !== 'undefined' ? createPortal(
+        <div className="modal-backdrop viewer-modal-backdrop image-export-backdrop" role="presentation">
           <div
             className="modal deploy-modal image-export-modal"
             role="dialog"
@@ -8828,14 +8876,15 @@ function HtmlViewer({
                   void handleImageExportSave();
                 }}
               >
-                {imageExportBusy || imageExportPreparing ? t('fileViewer.exportImageSaving') : t('common.save')}
+                {imageExportBusy ? t('fileViewer.exportImageSaving') : t('common.save')}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
-      {templateModalOpen ? (
-        <div className="modal-backdrop" role="presentation">
+      {templateModalOpen && typeof document !== 'undefined' ? createPortal(
+        <div className="modal-backdrop viewer-modal-backdrop" role="presentation">
           <div className="modal deploy-modal" role="dialog" aria-modal="true">
             <div className="modal-head">
               <div className="kicker">TEMPLATE</div>
@@ -8890,11 +8939,12 @@ function HtmlViewer({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
-      {deployModalOpen ? (
+      {deployModalOpen && typeof document !== 'undefined' ? createPortal(
         <div
-          className="modal-backdrop deploy-flow-backdrop"
+          className="modal-backdrop viewer-modal-backdrop deploy-flow-backdrop"
           role="presentation"
           onClick={(event) => {
             if (event.target === event.currentTarget) closeDeployModal();
@@ -9217,7 +9267,8 @@ function HtmlViewer({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
       {deploySavedToast ? (
         <Toast

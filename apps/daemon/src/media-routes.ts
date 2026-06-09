@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import type { Express } from 'express';
 import type { MediaExecutionPolicy } from '@open-design/contracts';
 import { defaultMediaExecutionPolicy, mediaPolicyDenial } from './media-policy.js';
@@ -358,6 +359,58 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       const config = await writeAppConfig(RUNTIME_DATA_DIR, req.body);
       orbitService.configure(config.orbit);
       res.json({ config });
+    } catch (err: any) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  // Lightweight existence probe for a single directory, used by the composer
+  // to flag a working directory in red the moment its folder is gone (the
+  // composer re-checks on focus / picker-open, so deletions reflect live).
+  app.post('/api/dir-exists', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const dir = typeof req.body?.path === 'string' ? req.body.path : '';
+    let exists = false;
+    if (dir) {
+      try {
+        exists = fs.statSync(dir).isDirectory();
+      } catch {
+        exists = false;
+      }
+    }
+    res.json({ exists });
+  });
+
+  // Recent working directories, pruned to those that still exist on disk. A
+  // folder the user deleted (or an external drive that's gone) drops out of
+  // the list here and the pruned list is persisted back, so the picker's
+  // "recent folders" never offers a path that no longer resolves.
+  app.get('/api/recent-dirs', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const config = await readAppConfig(RUNTIME_DATA_DIR);
+      const recents = Array.isArray(config.recentLinkedDirs)
+        ? config.recentLinkedDirs
+        : [];
+      const existing = recents.filter((dir: string) => {
+        try {
+          return fs.statSync(dir).isDirectory();
+        } catch {
+          return false;
+        }
+      });
+      if (existing.length !== recents.length) {
+        await writeAppConfig(RUNTIME_DATA_DIR, { recentLinkedDirs: existing });
+      }
+      /** @type {import('@open-design/contracts').RecentLinkedDirsResponse} */
+      const body = { dirs: existing };
+      res.json(body);
     } catch (err: any) {
       res
         .status(500)

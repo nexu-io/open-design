@@ -194,6 +194,64 @@ function upstreamDetail(text: string): TrackingRunFailureDetail {
   return 'network_error';
 }
 
+// Signals that mean the agent process aborted abnormally (segfault, abort,
+// illegal instruction, trap, bus error). Distinct from SIGKILL (OOM / forced
+// kill) and SIGTERM (graceful shutdown / cancel). None of these are timeouts.
+const PROCESS_CRASH_SIGNALS = new Set([
+  'SIGSEGV',
+  'SIGABRT',
+  'SIGILL',
+  'SIGTRAP',
+  'SIGBUS',
+]);
+
+// Classifies a run that died from an OS signal or an interrupt exit code
+// (130 = 128 + SIGINT). Returns null when the failure is not signal/interrupt
+// shaped so the caller can fall through to the generic exit-code bucket.
+//
+// Earlier classifier branches already claim the cases where the failure text
+// carries richer meaning than the bare signal: an inactivity-driven SIGTERM is
+// caught by the timeout branch above, and a SIGINT/exit-130 whose text names a
+// stream disconnect is caught by the upstream branch. By the time control
+// reaches here a signal is the strongest evidence we have, so map it to a
+// non-retryable process_exit instead of laundering it into a retryable timeout.
+function signalInterruptClassification(
+  errorCode: string,
+  text: string,
+  retryableHint: boolean | undefined,
+): RunFailureClassification | null {
+  const isInterruptExit = errorCode === 'AGENT_EXIT_130';
+  const signal = errorCode.startsWith('AGENT_SIGNAL_')
+    ? errorCode.slice('AGENT_SIGNAL_'.length)
+    : '';
+  if (!signal && !isInterruptExit) return null;
+
+  if (signal === 'SIGKILL') {
+    return classification('process_exit', 'signal_killed', 'child_close', false, 'none');
+  }
+  if (PROCESS_CRASH_SIGNALS.has(signal)) {
+    return classification('process_exit', 'process_crashed', 'child_close', false, 'none');
+  }
+  if (signal === 'SIGINT' || isInterruptExit) {
+    // Defensive: the upstream branch above already claims disconnect text, but
+    // re-check so a reordering can never silently bury a cancelled stream.
+    if (isUpstreamDetailText(text)) {
+      return classification(
+        'upstream_unavailable',
+        upstreamDetail(text),
+        'first_token_wait',
+        retryableHint ?? true,
+        'retry',
+      );
+    }
+    return classification('process_exit', 'interrupted', 'child_close', false, 'none');
+  }
+  // SIGTERM (graceful shutdown / cancel) and any other signal. Inactivity-driven
+  // SIGTERMs were already claimed by the timeout branch above, so reaching here
+  // means there is no timeout evidence: treat as a non-retryable termination.
+  return classification('process_exit', 'terminated_unknown', 'child_close', false, 'none');
+}
+
 function processExitDetail(
   errorCode: string,
   text: string,
@@ -216,6 +274,30 @@ function processExitDetail(
   if (errorCode === 'AGENT_TERMINATED_UNKNOWN') return 'terminated_unknown';
   if (errorCode === 'AGENT_EXECUTION_FAILED') return 'execution_failed';
   return 'unknown';
+}
+
+/**
+ * Whether a terminal failure can be recovered by RESUMING the agent's existing
+ * CLI session (continue from where it left off) rather than restarting from
+ * scratch. True only for transient mid-stream interruptions — an upstream drop
+ * or an inactivity timeout — where any work already committed to the session is
+ * worth continuing. Deliberately excludes process crashes, OOM kills,
+ * auth/balance/prompt-size and any other non-transient cause: resuming those
+ * would just reproduce the failure. The caller additionally gates on the
+ * runtime actually supporting CLI session resume and on holding a session id.
+ */
+export function isResumableFailure(
+  failure: RunFailureClassification | undefined,
+): boolean {
+  if (!failure) return false;
+  if (failure.failure_category === 'upstream_unavailable') return true;
+  if (
+    failure.failure_category === 'timeout' &&
+    failure.failure_detail === 'inactivity_timeout'
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function classification(
@@ -354,11 +436,7 @@ export function classifyRunFailure(
     );
   }
 
-  if (
-    isTimeoutText(text) ||
-    errorCode === 'TIMEOUT' ||
-    errorCode.startsWith('AGENT_SIGNAL_')
-  ) {
+  if (isTimeoutText(text) || errorCode === 'TIMEOUT') {
     const retryable = retryableHint ?? true;
     return classification(
       'timeout',
@@ -391,6 +469,9 @@ export function classifyRunFailure(
       retryable ? 'retry' : 'none',
     );
   }
+
+  const signalInterrupt = signalInterruptClassification(errorCode, text, retryableHint);
+  if (signalInterrupt) return signalInterrupt;
 
   if (
     errorCode.startsWith('AGENT_EXIT_') ||

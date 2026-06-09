@@ -128,6 +128,12 @@ jobs:
         run: pnpm --filter @open-design/landing-page build:static
 
       - name: Lint changed blog SEO
+        # The build above sets OD_LANDING_NOINDEX=1, so every rendered page in
+        # `out/` carries `noindex`. Pass the same flag through so the SEO linter
+        # treats that staging-only noindex as expected instead of an
+        # indexability blocker (production builds leave the flag unset).
+        env:
+          OD_LANDING_NOINDEX: '1'
         run: |
           BASE="${{ github.event.pull_request.base.sha || github.event.before || '' }}"
           if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then

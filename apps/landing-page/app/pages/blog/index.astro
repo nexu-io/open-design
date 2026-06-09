@@ -24,10 +24,7 @@ import SiteFooter from '../../_components/site-footer.astro';
 import Topbar from '../../_components/topbar.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { getGithubRepoMeta } from '../../_lib/github';
-import {
-  explicitLocalizedString,
-  localizeBlogPostText,
-} from '../../content-i18n';
+import { localizeBlogPostText } from '../../content-i18n';
 import {
   getLandingUiCopy,
   getLocaleDefinition,
@@ -112,6 +109,14 @@ const postImages: Record<string, { src: string; alt: string }> = {
     src: '/blog/plate-12-pure-abstract.png',
     alt: 'An abstract paper plate with layered circles, arcs, and botanical details',
   },
+  'figma-alternative-open-design': {
+    src: '/blog/plate-16-figma-vs-canvas.png',
+    alt: 'Black faceted picture-frame and vector-pen solids re-measured around a red circle with an olive branch on a warm editorial study plate',
+  },
+  'open-design-0-9-0-design-for-everyone': {
+    src: '/blog/plate-22-install-and-create.png',
+    alt: 'A black faceted installer box opened with a ready-made engine core rising out of it, accented by a red circle and an olive branch on a warm editorial study plate',
+  },
 };
 const getPostImage = (id: string) => postImages[id];
 const localizedPostField = (
@@ -128,10 +133,14 @@ const localizedPostField = (
     category: post.data.category,
     locale,
   });
-  return explicitLocalizedString(
-    i18n?.[locale]?.[field] as Parameters<typeof explicitLocalizedString>[0],
-    locale,
-  ) ?? fallbackPost[field];
+  // `i18n[locale][field]` is already the resolved string for this locale, not a
+  // locale→string map, so it must not go through explicitLocalizedString (which
+  // expects the map shape and returns undefined for a bare string on non-default
+  // locales — the reason post translations never rendered). Use it directly and
+  // fall back to the English source text.
+  const explicit = i18n?.[locale]?.[field];
+  if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
+  return fallbackPost[field];
 };
 
 ---

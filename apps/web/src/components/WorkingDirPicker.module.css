@@ -1,0 +1,268 @@
+/* Working-directory picker. Borderless trigger that opens a downward panel
+   with a folder picker and a "recent folders" submenu. Layout-neutral: the
+   host positions the wrapper (e.g. left-aligned under the Home composer, or
+   inline as the in-project composer's leading accessory). */
+
+.wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-start;
+}
+
+.triggerRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Borderless text trigger — no card chrome, just icon + label + chevron. */
+.trigger {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted, var(--text));
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.trigger:hover,
+.trigger:focus-visible {
+  outline: none;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+/* Selected directory no longer exists on disk. */
+.triggerInvalid,
+.triggerInvalid:hover,
+.triggerInvalid:focus-visible {
+  color: var(--danger, #e5484d);
+}
+.triggerInvalid .triggerIcon {
+  opacity: 1;
+  color: var(--danger, #e5484d);
+}
+.triggerIcon {
+  flex: 0 0 auto;
+  opacity: 0.75;
+}
+.triggerLabel {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.triggerChevron {
+  flex: 0 0 auto;
+  opacity: 0.55;
+}
+
+.clear {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted, var(--text));
+  cursor: pointer;
+  opacity: 0.6;
+  transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.clear:hover,
+.clear:focus-visible {
+  outline: none;
+  opacity: 1;
+  background: var(--bg-subtle);
+}
+
+/* Downward panel — anchored to the trigger. */
+.panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 90;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  padding: 5px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 10px 28px -10px rgba(0, 0, 0, 0.18);
+  animation: wdpFade 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Upward variant for bottom-anchored hosts (in-project composer), so the
+   panel is not clipped by the viewport's bottom edge. */
+.panelUp {
+  top: auto;
+  bottom: calc(100% + 6px);
+  animation: wdpFadeUp 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes wdpFade {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes wdpFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.item {
+  appearance: none;
+  width: 100%;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.item:hover,
+.item:focus-visible {
+  outline: none;
+  background: var(--bg-subtle);
+}
+.itemIcon {
+  flex: 0 0 auto;
+  opacity: 0.8;
+}
+.item > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.itemChevron {
+  margin-left: auto;
+  opacity: 0.55;
+}
+
+.submenuRow {
+  position: relative;
+}
+
+/* Right-side flyout listing recent folders. Bridges the small gap so the
+   cursor can cross into it without collapsing the submenu. */
+.flyout {
+  position: absolute;
+  left: 100%;
+  top: -5px;
+  margin-left: 4px;
+  z-index: 91;
+  min-width: 220px;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  padding: 5px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 10px 28px -10px rgba(0, 0, 0, 0.18);
+}
+.flyout::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -8px;
+  width: 8px;
+  height: 100%;
+}
+
+/* When the panel opens upward (bottom-anchored composer), align the recent
+   flyout to the bottom of its row so it grows up and isn't clipped by the
+   viewport's bottom edge. */
+.flyoutUp {
+  top: auto;
+  bottom: -5px;
+}
+
+.recentItem {
+  appearance: none;
+  width: 100%;
+  min-height: 36px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 9px;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.recentItem:hover,
+.recentItem:focus-visible {
+  outline: none;
+  background: var(--bg-subtle);
+}
+.recentItem .itemIcon {
+  grid-row: 1 / span 2;
+}
+.recentName {
+  grid-column: 2;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recentPath {
+  grid-column: 2;
+  font-size: 11px;
+  color: var(--text-muted, var(--text));
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-muted, var(--text));
+  opacity: 0.7;
+  white-space: nowrap;
+}

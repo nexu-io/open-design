@@ -25,6 +25,7 @@ import {
   assertArtifactPublicationAllowed,
   isPublicationGuardedArtifactKind,
 } from './artifact-publication-guard.js';
+import { normalizeArtifactRuntimeImports } from './artifact-runtime-compat.js';
 import { isIgnoredProjectDirName } from './project-ignored-dirs.js';
 import { isSandboxModeEnabled } from './sandbox-mode.js';
 
@@ -40,6 +41,13 @@ export const projectFileRenameTestHooks = {
 export function isRunTouchedProjectFile(fileMtimeMs, runStartTimeMs) {
   if (!Number.isFinite(fileMtimeMs) || !Number.isFinite(runStartTimeMs)) return false;
   return fileMtimeMs + RUN_ARTIFACT_RECONCILE_MTIME_GRACE_MS >= runStartTimeMs;
+}
+
+function containsIgnoredProjectDirSegment(name: string): boolean {
+  return name
+    .split('/')
+    .filter(Boolean)
+    .some((segment) => isIgnoredProjectDirName(segment));
 }
 
 export function projectDir(projectsRoot, projectId) {
@@ -101,10 +109,10 @@ export async function listFiles(projectsRoot, projectId, opts = {}) {
   const metadata = opts?.metadata;
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const out = [];
-  // Skip build/install dirs for linked folders so node_modules doesn't stall
-  // the walk on large repos.
-  const skipDirs = usesExternalProjectRoot(metadata) ? isIgnoredProjectDirName : undefined;
-  await collectFiles(dir, '', out, skipDirs, dir);
+  // Skip generated dependency/build trees for all project roots. Standard OD
+  // projects can contain framework installs too; surfacing package HTML like
+  // node_modules/tslib/*.html as artifacts produces blank previews.
+  await collectFiles(dir, '', out, isIgnoredProjectDirName, dir);
   // Newest first — matches the visual order users expect after generating.
   out.sort((a, b) => b.mtime - a.mtime);
   const since = Number(opts.since);
@@ -118,8 +126,7 @@ export async function listProjectFolders(projectsRoot, projectId, opts = {}) {
   const metadata = opts?.metadata;
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const out = [];
-  const skipDirs = metadata?.baseDir ? isIgnoredProjectDirName : undefined;
-  await collectFolders(dir, '', out, skipDirs);
+  await collectFolders(dir, '', out, isIgnoredProjectDirName);
   out.sort((a, b) => a.name.localeCompare(b.name));
   return out;
 }
@@ -462,6 +469,7 @@ async function collectArchiveEntries(dir, relDir, out) {
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
+      if (isIgnoredProjectDirName(e.name)) continue;
       await collectArchiveEntries(full, rel, out);
       continue;
     }
@@ -748,6 +756,7 @@ export async function writeProjectFile(
   const dir = await ensureProject(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
   const target = await resolveSafeReal(dir, safeName);
+  body = normalizeArtifactRuntimeImports(safeName, body);
   if (!overwrite) {
     try {
       await stat(target);
@@ -842,6 +851,7 @@ function artifactManifestNameFor(name) {
 export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, name, metadata?) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const safeName = validateProjectPath(name);
+  if (containsIgnoredProjectDirSegment(safeName)) return null;
   const ext = path.extname(safeName).toLowerCase();
   if (ext !== '.html' && ext !== '.htm') return null;
 
@@ -861,6 +871,7 @@ export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, nam
     throw err;
   }
   if (!targetStat.isFile()) return null;
+  if (await isViteDevHtmlEntry(dir, safeName, target)) return null;
 
   const manifestFileName = artifactManifestNameFor(safeName);
   const manifestTarget = await resolveSafeReal(dir, manifestFileName);
@@ -897,6 +908,9 @@ export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, nam
 }
 
 async function readManifestForPath(projectDirPath, relPath) {
+  if (containsIgnoredProjectDirSegment(relPath)) return null;
+  const fullPath = path.join(projectDirPath, relPath);
+  if (await isViteDevHtmlEntry(projectDirPath, relPath, fullPath)) return null;
   const manifestPath = path.join(projectDirPath, artifactManifestNameFor(relPath));
   try {
     const raw = await readFile(manifestPath, 'utf8');
@@ -1148,6 +1162,42 @@ async function collectArtifactManifestFiles(dir, relDir, out) {
     if (entry.isFile() && entry.name.endsWith('.artifact.json')) {
       out.push({ relPath, fullPath });
     }
+  }
+}
+
+async function isViteDevHtmlEntry(projectDirPath, safeName, targetPath) {
+  if (!/(^|\/)index\.html?$/i.test(safeName)) return false;
+  let body = '';
+  try {
+    body = await readFile(targetPath, 'utf8');
+  } catch {
+    return false;
+  }
+  if (!/<script\b[^>]*\btype=["']module["'][^>]*\bsrc=["']\/src\//i.test(body)) {
+    return false;
+  }
+  const viteConfigCandidates = [
+    'vite.config.js',
+    'vite.config.mjs',
+    'vite.config.cjs',
+    'vite.config.ts',
+    'vite.config.mts',
+    'vite.config.cts',
+  ];
+  for (const candidate of viteConfigCandidates) {
+    try {
+      const st = await stat(path.join(projectDirPath, candidate));
+      if (st.isFile()) return true;
+    } catch (err) {
+      if (!err || err.code !== 'ENOENT') return false;
+    }
+  }
+  try {
+    const raw = await readFile(path.join(projectDirPath, 'package.json'), 'utf8');
+    const pkg = JSON.parse(raw);
+    return Boolean(pkg?.dependencies?.vite || pkg?.devDependencies?.vite);
+  } catch {
+    return false;
   }
 }
 

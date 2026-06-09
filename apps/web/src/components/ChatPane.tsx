@@ -32,11 +32,12 @@ import {
 import { latestTodoWriteInputForPinnedCard } from '../runtime/todos';
 import { TodoCard } from './ToolCard';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, Project, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
-import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong, shortTime } from '../utils/chatTime';
+import { exactDateTime, messageTime, shortTime } from '../utils/chatTime';
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
-import { AssistantMessage } from './AssistantMessage';
+import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
 import { AmrGuidance } from './AmrGuidance';
-import { AMR_RECHARGE_URL, resolveRunFailureUi } from '../runtime/amr-guidance';
+import { amrRechargeUrlForProfile, resolveRunFailureUi } from '../runtime/amr-guidance';
+import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import {
   ChatComposer,
   type ChatComposerHandle,
@@ -450,6 +451,7 @@ interface Props {
     meta?: ChatSendMeta,
   ) => void;
   onRetry?: (assistantMessage: ChatMessage) => void;
+  onResumeRun?: (assistantMessage: ChatMessage) => void;
   onStop: () => void;
   // Skills available for @-mention assembly. ProjectView filters out the
   // user's disabled set before passing them in here.
@@ -466,6 +468,11 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
+  // "Share to Open Design" button on each completed assistant message —
+  // wired by ProjectView to handleSend with the bundled
+  // `od-share-to-community` scenario's trigger prompt.
+  onShareToOpenDesign?: (assistantMessageId: string) => void;
+  shareToOpenDesignBusyMessageId?: string | null;
   forceStreamingMessageIds?: Set<string>;
   // Live-only streaming tool-input partials keyed by tool-use id. Threaded to
   // AssistantMessage so an in-flight Write/Edit can render its code in real
@@ -476,12 +483,12 @@ interface Props {
   // routes that text through onSend (no attachments).
   onSubmitForm?: (text: string) => void;
   // Focus the right-hand Questions tab from the chat banner.
-  onOpenQuestions?: () => void;
+  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
   // "Next step" affordance handlers forwarded to the last assistant message.
   onArtifactShare?: (fileName: string) => void;
-  onArtifactChip?: (fileName: string, prompt: string) => void;
+  onArtifactChip?: (fileName: string | null, prompt: string) => void;
   onForkFromMessage?: (assistantMessage: ChatMessage) => void;
   forkingMessageId?: string | null;
   // Header "+" button — kicks off ProjectView's create-conversation flow.
@@ -518,6 +525,10 @@ interface Props {
   // Same dialog, but landing on the External MCP tab. Forwarded to the
   // composer's `/mcp` slash and MCP picker button.
   onOpenMcpSettings?: () => void;
+  // The composer "+" menu's "add plugin" / "add connector" rows route to the
+  // home plugin-registry / connector-integration surfaces.
+  onBrowsePlugins?: () => void;
+  onOpenConnectors?: () => void;
   // True when this project is a GitHub-backed design system whose repository
   // evidence has not fully landed. Surfaces a "Connect your repo" CTA in the
   // empty chat state alongside the starter examples.
@@ -564,6 +575,8 @@ interface Props {
   byokSpeechVoice?: string;
   onChangeByokSpeechVoice?: (voice: string) => void;
   composerFooterAccessory?: ReactNode;
+  // Slot rendered next to the composer's "+" menu (e.g. the working-dir pill).
+  composerLeadingAccessory?: ReactNode;
   // Forwarded straight to the chat composer's mid-chat design-system
   // switcher. ProjectView owns the project record so the parent is the
   // natural place to mirror the patched project after a PATCH lands.
@@ -578,7 +591,10 @@ interface Props {
   backLabel?: string;
   projectHeader?: ReactNode;
   designSystemPicker?: ReactNode;
+  config?: AppConfig;
 }
+
+const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
 
 type Tab = 'chat' | 'comments';
 
@@ -591,6 +607,17 @@ const CHAT_VIRTUAL_INITIAL_TAIL_ROWS = 16;
 const CONVERSATION_ROW_HEIGHT_PX = 34;
 const CONVERSATION_VIRTUALIZE_THRESHOLD = 36;
 const CONVERSATION_OVERSCAN_ROWS = 8;
+
+interface RunErrorDiagnosticInput {
+  message: string;
+  rawMessage?: string | null;
+  errorCode?: string;
+  traceId?: string;
+  projectId?: string | null;
+  conversationId?: string | null;
+  assistantMessageId?: string;
+  agentId?: string;
+}
 
 interface QueuedSendItem {
   id: string;
@@ -634,6 +661,7 @@ export function ChatPane({
   onDeleteComment,
   onSend,
   onRetry,
+  onResumeRun,
   onStop,
   onRemoveQueuedSend,
   onUpdateQueuedSend,
@@ -645,6 +673,8 @@ export function ChatPane({
   onRequestPluginFolderAgentAction,
   activePluginActionPaths,
   hiddenPluginActionPaths,
+  onShareToOpenDesign,
+  shareToOpenDesignBusyMessageId,
   forceStreamingMessageIds,
   liveToolInput,
   initialDraft,
@@ -670,6 +700,8 @@ export function ChatPane({
   onSwitchToAmrAndRetry,
   onLaunchAntigravityOauth,
   onOpenMcpSettings,
+  onBrowsePlugins,
+  onOpenConnectors,
   connectRepoNeeded,
   githubConnected,
   onConnectRepo,
@@ -696,6 +728,7 @@ export function ChatPane({
   onChangeByokSpeechModel,
   byokSpeechVoice,
   onChangeByokSpeechVoice,
+  composerLeadingAccessory,
   composerFooterAccessory,
   currentDesignSystemId,
   onActiveDesignSystemChange,
@@ -704,9 +737,11 @@ export function ChatPane({
   backLabel,
   projectHeader,
   designSystemPicker,
+  config,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
+  const amrProfile = config?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
   const logRef = useRef<HTMLDivElement | null>(null);
   const chatLogScrollIdleTimerRef = useRef<number | null>(null);
   const historyWrapRef = useRef<HTMLDivElement | null>(null);
@@ -750,6 +785,7 @@ export function ChatPane({
     onArtifactShare,
     onArtifactChip,
     onForkFromMessage,
+    onShareToOpenDesign,
   });
   assistantCallbacksRef.current = {
     onSubmitForm,
@@ -758,6 +794,7 @@ export function ChatPane({
     onArtifactShare,
     onArtifactChip,
     onForkFromMessage,
+    onShareToOpenDesign,
   };
   const [tab, setTab] = useState<Tab>('chat');
   const [showConvList, setShowConvList] = useState(false);
@@ -830,11 +867,59 @@ export function ChatPane({
   const runFailureUi = retryAssistant
     ? resolveRunFailureUi(failedRunErrorEvent?.code, retryAssistant.agentId)
     : null;
+  // Offer Continue (resume) when the failed run is resumable AND the active
+  // agent still matches the agent that produced it. The daemon stores a
+  // resumable session per (conversation, agent); after an agent switch the new
+  // agent has no id for that session, so a resume would silently start fresh —
+  // fall back to the from-scratch Retry instead. We do NOT require `onResumeRun`
+  // here: because the daemon persists the resumable session, the plain Retry
+  // path (which re-sends the original prompt) would itself silently resume that
+  // session and double the work. So every ChatPane surface must offer Continue
+  // for a resumable failure — `onResumeRun` when wired (primary chat, carries
+  // the resume_continue analytics), otherwise a plain `onSend` of the canonical
+  // continue prompt (resumes the session without re-sending the original turn).
+  const canResumeFailedRun =
+    !!retryAssistant?.resumable &&
+    !!retryAssistant?.agentId &&
+    retryAssistant.agentId === config?.agentId;
   // Prefer a case-specific message (AMR auth / balance) over the raw upstream
   // string; fall back to the live global error (also covers conversation-load
   // / audio errors) then the persisted run error so a reload still shows it.
   const rawError = error ?? failedRunErrorEvent?.detail ?? null;
   const displayError = runFailureUi?.messageKey ? t(runFailureUi.messageKey) : rawError;
+  const errorDiagnosticText = displayError
+    ? buildRunErrorDiagnosticText({
+        message: displayError,
+        rawMessage: rawError,
+        errorCode: failedRunErrorEvent?.code,
+        traceId: retryAssistant?.runId,
+        projectId,
+        conversationId: activeConversationId,
+        assistantMessageId: retryAssistant?.id,
+        agentId: retryAssistant?.agentId,
+      })
+    : null;
+  const [copiedErrorDiagnostic, setCopiedErrorDiagnostic] = useState(false);
+  const errorDiagnosticCopyTimerRef = useRef<number | null>(null);
+  const copyErrorDiagnostic = useCallback(async () => {
+    if (!errorDiagnosticText) return;
+    const ok = await copyToClipboard(errorDiagnosticText);
+    if (!ok) return;
+    if (errorDiagnosticCopyTimerRef.current != null) {
+      window.clearTimeout(errorDiagnosticCopyTimerRef.current);
+    }
+    setCopiedErrorDiagnostic(true);
+    errorDiagnosticCopyTimerRef.current = window.setTimeout(() => {
+      errorDiagnosticCopyTimerRef.current = null;
+      setCopiedErrorDiagnostic(false);
+    }, 1600);
+  }, [errorDiagnosticText]);
+  useEffect(() => () => {
+    if (errorDiagnosticCopyTimerRef.current != null) {
+      window.clearTimeout(errorDiagnosticCopyTimerRef.current);
+      errorDiagnosticCopyTimerRef.current = null;
+    }
+  }, []);
   // The failed run whose error this top-level card represents. AssistantMessage
   // suppresses only THIS message's per-message error pill (to avoid the
   // duplicate); other failed turns — older history, or once a follow-up makes
@@ -918,9 +1003,9 @@ export function ChatPane({
     () => messages.find((m) => m.role === 'user')?.id,
     [messages],
   );
-  // Map each assistant message id to the user message that follows it
-  // (if any) so QuestionFormView can render its locked "answered" state
-  // with the user's picks.
+  // Map each assistant message id to the user message that follows it (if any)
+  // so the chat-side Questions banner can reopen that exact answered form in
+  // the right-hand panel later.
   const nextUserContentByAssistantId = useMemo(() => {
     const map = new Map<string, string>();
     for (let i = 0; i < messages.length - 1; i++) {
@@ -935,6 +1020,10 @@ export function ChatPane({
 
   useEffect(() => {
     didInitialScrollRef.current = false;
+    anchorPendingRef.current = false;
+    anchorActiveRef.current = false;
+    prevLastUserIdRef.current = undefined;
+    resetTailSpacer();
     // A new conversation should land at the bottom (its own initial
     // scroll), not inherit the previous conversation's saved position —
     // including any anchor-to-top reserve still held by the tail spacer, which
@@ -1068,6 +1157,7 @@ export function ChatPane({
     prevLastUserIdRef.current = lastUser?.id;
     if (anchorPendingRef.current && lastUser && lastUser.id !== prevUserId) {
       anchorPendingRef.current = false;
+      resetTailSpacer();
       anchorActiveRef.current = true;
       pinnedToBottomRef.current = false;
       setScrolledFromBottom(true);
@@ -1565,12 +1655,18 @@ export function ChatPane({
         }
         // Arm "anchor to top": the messages effect promotes this once
         // the new user turn renders, pinning it to the top of the view.
+        // Clear any stale reserve from the previous turn first so a resend
+        // doesn't strand the new turn below a leftover gap (release #3653).
+        anchorActiveRef.current = false;
+        resetTailSpacer();
         anchorPendingRef.current = true;
         onSend(prompt, attachments, commentAttachments, meta);
       }}
       onStop={onStop}
       onOpenSettings={onOpenSettings}
       onOpenMcpSettings={onOpenMcpSettings}
+      onBrowsePlugins={onBrowsePlugins}
+      onOpenConnectors={onOpenConnectors}
       petConfig={petConfig}
       onAdoptPet={onAdoptPet}
       onTogglePet={onTogglePet}
@@ -1593,6 +1689,7 @@ export function ChatPane({
       onProjectSkillChange={onProjectSkillChange}
       pinnedPluginId={activePluginSnapshot?.pluginId ?? null}
       footerAccessory={composerFooterAccessory}
+      leadingAccessory={composerLeadingAccessory}
       currentDesignSystemId={currentDesignSystemId}
       onActiveDesignSystemChange={onActiveDesignSystemChange}
       onShowToast={onShowToast}
@@ -1862,6 +1959,8 @@ export function ChatPane({
                 onRequestPluginFolderAgentAction={onRequestPluginFolderAgentAction}
                 activePluginActionPaths={activePluginActionPaths}
                 hiddenPluginActionPaths={hiddenPluginActionPaths}
+                onShareToOpenDesign={onShareToOpenDesign}
+                shareToOpenDesignBusyMessageId={shareToOpenDesignBusyMessageId}
                 forceStreamingMessageIds={forceStreamingMessageIds}
                 lastAssistantId={lastAssistantId}
                 firstUserMessageId={firstUserMessageId}
@@ -1888,7 +1987,7 @@ export function ChatPane({
               {displayError ? (
                 <div className="msg error">
                   <span className="chat-error-text">{displayError}</span>
-                  {showErrorActions ? (
+                  {errorDiagnosticText || showErrorActions || (retryAssistant && onRetry && runFailureUi) ? (
                     <div className="chat-error-actions">
                       {showByokRecoveryCta ? (
                         <button
@@ -1897,6 +1996,17 @@ export function ChatPane({
                           onClick={onSwitchToLocalCli}
                         >
                           {t('avatar.useLocal')}
+                        </button>
+                      ) : null}
+                      {errorDiagnosticText ? (
+                        <button
+                          type="button"
+                          className="ghost chat-error-copy"
+                          onClick={() => void copyErrorDiagnostic()}
+                          aria-label={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
+                          title={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
+                        >
+                          <Icon name={copiedErrorDiagnostic ? 'check' : 'copy'} size={13} />
                         </button>
                       ) : null}
                       {retryAssistant && onRetry && runFailureUi ? (
@@ -1946,7 +2056,7 @@ export function ChatPane({
                                   'chat_error_recharge',
                                 );
                                 window.open(
-                                  attributedAmrUrl(AMR_RECHARGE_URL, attribution),
+                                  attributedAmrUrl(amrRechargeUrlForProfile(amrProfile), attribution),
                                   '_blank',
                                   'noopener,noreferrer',
                                 );
@@ -1955,7 +2065,26 @@ export function ChatPane({
                               {t('chat.amrError.rechargeCta')}
                             </button>
                           ) : null}
-                          {runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry ? (
+                          {canResumeFailedRun ? (
+                            // Resumable failure: continue the agent's existing
+                            // CLI session instead of restarting from scratch, so
+                            // partial work is kept. Replaces the from-scratch
+                            // Retry as the single primary recovery action. Use
+                            // the wired resume handler when present, otherwise a
+                            // plain send of the continue prompt — never the
+                            // re-sending Retry path, which would resume + repeat.
+                            <button
+                              type="button"
+                              className="ghost chat-error-retry"
+                              onClick={() =>
+                                onResumeRun
+                                  ? onResumeRun(retryAssistant)
+                                  : onSend(RESUME_CONTINUE_PROMPT, [], [])
+                              }
+                            >
+                              {t('chat.resumeRunCta')}
+                            </button>
+                          ) : runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry ? (
                             <button
                               type="button"
                               className="ghost chat-error-retry"
@@ -2070,21 +2199,16 @@ interface AssistantCallbacks {
     | ((message: ChatMessage, change: ChatMessageFeedbackChange) => void)
     | undefined;
   onArtifactShare: ((fileName: string) => void) | undefined;
-  onArtifactChip: ((fileName: string, prompt: string) => void) | undefined;
+  onArtifactChip: ((fileName: string | null, prompt: string) => void) | undefined;
   onForkFromMessage: ((message: ChatMessage) => void) | undefined;
+  onShareToOpenDesign: ((assistantMessageId: string) => void) | undefined;
 }
 
-type ChatRenderItem =
-  | {
-      kind: 'separator';
-      key: string;
-      timestamp: number;
-    }
-  | {
-      kind: 'message';
-      key: string;
-      message: ChatMessage;
-    };
+type ChatRenderItem = {
+  kind: 'message';
+  key: string;
+  message: ChatMessage;
+};
 
 function ChatConversationLoading({ t }: { t: TranslateFn }) {
   return (
@@ -2120,6 +2244,8 @@ function ChatRows({
   onRequestPluginFolderAgentAction,
   activePluginActionPaths,
   hiddenPluginActionPaths,
+  onShareToOpenDesign,
+  shareToOpenDesignBusyMessageId,
   forceStreamingMessageIds,
   lastAssistantId,
   firstUserMessageId,
@@ -2155,6 +2281,8 @@ function ChatRows({
   onRequestPluginFolderAgentAction?: (relativePath: string, action: PluginFolderAgentAction) => void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
+  onShareToOpenDesign?: (assistantMessageId: string) => void;
+  shareToOpenDesignBusyMessageId?: string | null;
   forceStreamingMessageIds?: Set<string>;
   lastAssistantId: string | undefined;
   firstUserMessageId: string | undefined;
@@ -2166,13 +2294,13 @@ function ChatRows({
   assistantCallbacksRef: MutableRefObject<AssistantCallbacks>;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onArtifactShare?: (fileName: string) => void;
-  onArtifactChip?: (fileName: string, prompt: string) => void;
+  onArtifactChip?: (fileName: string | null, prompt: string) => void;
   onForkFromMessage?: (message: ChatMessage) => void;
   onAssistantFeedback?: (message: ChatMessage, change: ChatMessageFeedbackChange) => void;
   forkingMessageId?: string | null;
   t: TranslateFn;
   onAssistantFormSubmitStart: () => void;
-  onOpenQuestions?: () => void;
+  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   scrollContainerRef: MutableRefObject<HTMLDivElement | null>;
 }) {
   const items = useMemo(() => buildChatRenderItems(messages), [messages]);
@@ -2187,9 +2315,6 @@ function ChatRows({
   });
 
   const renderItem = (item: ChatRenderItem) => {
-    if (item.kind === 'separator') {
-      return <DaySeparator ts={item.timestamp} />;
-    }
     const m = item.message;
     const messageStreaming = isAssistantMessageStreaming(
       m,
@@ -2237,6 +2362,12 @@ function ChatRows({
         onRequestPluginFolderAgentAction={onRequestPluginFolderAgentAction}
         activePluginActionPaths={activePluginActionPaths}
         hiddenPluginActionPaths={hiddenPluginActionPaths}
+        onShareToOpenDesign={
+          onShareToOpenDesign
+            ? () => assistantCallbacksRef.current.onShareToOpenDesign?.(m.id)
+            : undefined
+        }
+        shareToOpenDesignBusy={shareToOpenDesignBusyMessageId === m.id}
         isLast={m.id === lastAssistantId}
         errorCardOwnerId={errorCardOwnerId}
         nextUserContent={nextUserContentByAssistantId.get(m.id)}
@@ -2351,15 +2482,6 @@ function buildChatRenderItems(messages: ChatMessage[]): ChatRenderItem[] {
   const items: ChatRenderItem[] = [];
   for (let i = 0; i < messages.length; i += 1) {
     const message = messages[i]!;
-    if (shouldShowDaySeparator(messages[i - 1], message)) {
-      const timestamp = messageTime(message);
-      if (timestamp === undefined) continue;
-      items.push({
-        kind: 'separator',
-        key: `day:${dayKey(timestamp)}:${message.id}`,
-        timestamp,
-      });
-    }
     items.push({
       kind: 'message',
       key: `message:${message.id}`,
@@ -2370,7 +2492,6 @@ function buildChatRenderItems(messages: ChatMessage[]): ChatRenderItem[] {
 }
 
 function estimateChatRenderItemHeight(item: ChatRenderItem): number {
-  if (item.kind === 'separator') return 34 + CHAT_VIRTUAL_ROW_GAP_PX;
   const message = item.message;
   const contentLength = message.content?.length ?? 0;
   const attachmentCount = (message.attachments?.length ?? 0) + (message.commentAttachments?.length ?? 0);
@@ -2732,6 +2853,7 @@ function QueuedSendStrip({
                   data-tooltip={t('chat.send')}
                   data-tooltip-placement="top"
                   aria-label={t('chat.send')}
+                  data-testid="chat-queued-send-now"
                   onClick={() => onSendNow?.(item.id)}
                   disabled={!onSendNow}
                 >
@@ -2985,6 +3107,29 @@ export function isAssistantMessageStreaming(
   return true;
 }
 
+export function buildRunErrorDiagnosticText(input: RunErrorDiagnosticInput): string {
+  const lines = [
+    'Open Design run error diagnostics',
+    `trace_id: ${input.traceId ?? 'n/a'}`,
+    `run_id: ${input.traceId ?? 'n/a'}`,
+    `error_code: ${input.errorCode ?? 'n/a'}`,
+    `project_id: ${input.projectId ?? 'n/a'}`,
+    `conversation_id: ${input.conversationId ?? 'n/a'}`,
+    `assistant_message_id: ${input.assistantMessageId ?? 'n/a'}`,
+    `agent_id: ${input.agentId ?? 'n/a'}`,
+    '',
+    'error:',
+    input.message.trim(),
+  ];
+
+  const raw = input.rawMessage?.trim();
+  if (raw && raw !== input.message.trim()) {
+    lines.push('', 'raw_error:', raw);
+  }
+
+  return lines.join('\n');
+}
+
 function filterConversations(
   conversations: Conversation[],
   query: string,
@@ -3146,7 +3291,6 @@ function UserMessageImpl({
     <div className="msg user">
       <div className="role">
         <span>{t('chat.you')}</span>
-        <MessageTimestamp message={message} t={t} />
       </div>
       {hasRunContext ? (
         <div className="msg-run-context-row" data-testid="msg-run-context-row">
@@ -3376,33 +3520,6 @@ function ActiveDesignSystemChip({
       {content}
     </button>
   );
-}
-
-function DaySeparator({ ts }: { ts: number | undefined }) {
-  if (!ts) return null;
-  return (
-    <div className="chat-day-separator" role="separator">
-      <time dateTime={new Date(ts).toISOString()}>{dayLabel(ts)}</time>
-    </div>
-  );
-}
-
-function MessageTimestamp({ message, t }: { message: ChatMessage; t: TranslateFn }) {
-  const ts = messageTime(message);
-  if (!ts) return null;
-  return (
-    <time className="msg-time" dateTime={new Date(ts).toISOString()} title={exactDateTime(ts)}>
-      {relativeTimeLong(ts, t)}
-    </time>
-  );
-}
-
-function shouldShowDaySeparator(prev: ChatMessage | undefined, curr: ChatMessage): boolean {
-  const currTime = messageTime(curr);
-  if (!currTime) return false;
-  const prevTime = prev ? messageTime(prev) : undefined;
-  if (!prevTime) return true;
-  return dayKey(prevTime) !== dayKey(currTime);
 }
 
 const WORKSPACE_DESIGN_FILES_TAB = '__design_files__';
