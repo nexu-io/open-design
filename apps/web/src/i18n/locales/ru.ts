@@ -532,7 +532,7 @@ export const ru: Dict = {
   'homeHero.chip.templateHint': 'Начните со встроенного шаблона.',
   'homeWorkingDir.trigger': 'Select working directory',
   'homeWorkingDir.pick': 'Choose folder',
-  'homeWorkingDir.replace': 'Clear and replace folder',
+  'homeWorkingDir.replace': 'Change working directory',
   'homeWorkingDir.recent': 'Recent folders',
   'homeWorkingDir.recentEmpty': 'No recent folders',
   'homeWorkingDir.clear': 'Clear working directory',

@@ -532,7 +532,7 @@ export const zhTW: Dict = {
   'homeHero.chip.templateHint': '從內建範本開始。',
   'homeWorkingDir.trigger': '選擇工作目錄',
   'homeWorkingDir.pick': '選擇目錄',
-  'homeWorkingDir.replace': '清空並替換目錄',
+  'homeWorkingDir.replace': '修改工作目錄',
   'homeWorkingDir.recent': '最近使用的目錄',
   'homeWorkingDir.recentEmpty': '尚無最近使用的目錄',
   'homeWorkingDir.clear': '清除工作目錄',

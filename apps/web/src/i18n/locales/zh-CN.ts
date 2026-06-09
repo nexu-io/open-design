@@ -532,7 +532,7 @@ export const zhCN: Dict = {
   'homeHero.chip.templateHint': '从内置模板开始。',
   'homeWorkingDir.trigger': '选择工作目录',
   'homeWorkingDir.pick': '选择目录',
-  'homeWorkingDir.replace': '清空并替换目录',
+  'homeWorkingDir.replace': '修改工作目录',
   'homeWorkingDir.recent': '最近使用的目录',
   'homeWorkingDir.recentEmpty': '暂无最近使用的目录',
   'homeWorkingDir.clear': '清除工作目录',
