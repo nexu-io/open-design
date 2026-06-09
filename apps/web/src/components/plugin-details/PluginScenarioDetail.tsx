@@ -17,11 +17,12 @@ import { TrustBadge } from '../TrustBadge';
 import { PluginPreviewHero } from './PluginPreviewHero';
 import { PluginMetaSections } from './PluginMetaSections';
 import { PluginShareMenu } from './PluginShareMenu';
+import type { PluginUseAction } from '../plugins-home/useActions';
 
 interface Props {
   record: InstalledPluginRecord;
   onClose: () => void;
-  onUse: (record: InstalledPluginRecord) => void;
+  onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
   isApplying?: boolean;
 }
 
@@ -138,7 +139,7 @@ export function PluginScenarioDetail({
           <button
             type="button"
             className="plugin-details-modal__primary"
-            onClick={() => onUse(record)}
+            onClick={() => onUse(record, 'use')}
             disabled={isApplying}
             aria-busy={isApplying ? 'true' : undefined}
             data-testid={`plugin-details-use-${record.id}`}

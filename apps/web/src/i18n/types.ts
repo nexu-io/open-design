@@ -2303,6 +2303,11 @@ export interface Dict {
   'chat.example3Prompt': string;
 
   // Preview modal
+  'preview.usePlugin': string;
+  'preview.usePluginOnly': string;
+  'preview.usePluginOnlyDesc': string;
+  'preview.replicateContent': string;
+  'preview.replicateContentDesc': string;
   'preview.shareMenu': string;
   'preview.exportMenu': string;
   'preview.shareTemplateBadge': string;

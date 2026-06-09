@@ -341,6 +341,42 @@ const WEB_PROTOTYPE_APPLY_RESULT = {
   },
 };
 
+// A plugin whose useCase.query is a generator-facing meta-instruction (not a
+// human-readable brief). use-with-query must surface the description instead,
+// matching the Home example-prompt cards.
+const META_INSTRUCTION_PLUGIN = {
+  ...DEFAULT_PLUGIN,
+  id: 'example-meta-landing',
+  title: 'Meta Landing',
+  source: '/tmp/meta-landing',
+  fsPath: '/tmp/meta-landing',
+  manifest: {
+    ...DEFAULT_PLUGIN.manifest,
+    name: 'example-meta-landing',
+    title: 'Meta Landing',
+    description: 'Cinematic parallax landing page.',
+    od: {
+      kind: 'scenario',
+      taskKind: 'new-generation',
+      useCase: {
+        query: 'Follow the en field verbatim; start from the bundled example.html.',
+      },
+    },
+  },
+};
+
+const META_INSTRUCTION_APPLY_RESULT = {
+  ...WEB_PROTOTYPE_APPLY_RESULT,
+  query: META_INSTRUCTION_PLUGIN.manifest.od.useCase.query,
+  inputs: [],
+  appliedPlugin: {
+    ...WEB_PROTOTYPE_APPLY_RESULT.appliedPlugin,
+    snapshotId: 'snap-meta-landing',
+    pluginId: 'example-meta-landing',
+    inputs: {},
+  },
+};
+
 const SIMPLE_DECK_APPLY_RESULT = {
   ...AUTHORING_APPLY_RESULT,
   query: SIMPLE_DECK_PLUGIN.manifest.od.useCase.query,
@@ -1347,12 +1383,12 @@ describe('HomeView prompt handoff', () => {
     ));
   });
 
-  it('extracts edited values from a hydrated use-with-query prompt into the submitted inputs', async () => {
-    // Regression: routing use-with-query passed the rendered prompt as
-    // nextPrompt, which nulled active.queryTemplate, so editing a hydrated
-    // `{{...}}` value no longer flowed back into pluginInputs and the snapshot
-    // refreshed from stale defaults. routePluginUse now passes an aligned
-    // queryTemplate so extraction keeps working on the appended draft + query.
+  it('seeds the composer with the example-preset text on use-with-query, without placeholder write-back', async () => {
+    // use-with-query now seeds the SAME human-friendly text the Home
+    // example-prompt cards use. For a plugin whose query is already
+    // human-readable, that text IS the rendered query. Editing it submits as
+    // the prompt, but — matching the example-prompt path — placeholder edits no
+    // longer flow back into structured pluginInputs (the cards never did).
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
@@ -1382,7 +1418,7 @@ describe('HomeView prompt handoff', () => {
     );
 
     await screen.findByTestId('home-hero-input');
-    // Empty draft + use-with-query hydrates the rendered query into the editor.
+    // Empty draft + use-with-query seeds the example-preset text into the editor.
     rerender(
       <HomeView
         projects={[]}
@@ -1395,46 +1431,46 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    const hydrated =
+    const seed =
       'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.';
-    await waitFor(() => expect(homeHeroPromptText()).toBe(hydrated));
+    await waitFor(() => expect(homeHeroPromptText()).toBe(seed));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/plugins/example-web-prototype/apply',
       expect.anything(),
     ));
 
-    // The user edits the hydrated audience from "product evaluators" to a new
-    // value. With the query template preserved, that edit must flow back into
-    // the submitted pluginInputs (not stay at the stale default).
-    const edited = hydrated.replace('product evaluators', 'enterprise architects');
+    // The user edits the seeded audience. The edited text submits verbatim as
+    // the prompt, but pluginInputs.audience stays at the applied default —
+    // there is no placeholder write-back anymore.
+    const edited = seed.replace('product evaluators', 'enterprise architects');
     await setPromptAndSettle(edited);
     await waitFor(() => {
       expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
     });
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
-      pluginId: 'example-web-prototype',
-      pluginInputs: expect.objectContaining({ audience: 'enterprise architects' }),
-    })));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    const submitted = onSubmit.mock.calls.at(-1)?.[0];
+    expect(submitted?.pluginId).toBe('example-web-prototype');
+    expect(submitted?.prompt).toBe(edited);
+    expect(submitted?.pluginInputs?.audience ?? 'product evaluators').toBe('product evaluators');
   });
 
-  it('extracts a placeholder edit even after the use-with-query draft prefix is also edited', async () => {
-    // Regression: the appended query template must not bake in the mutable
-    // draft prefix. With an existing draft, use-with-query appends the query;
-    // the user then edits BOTH the prefix and a hydrated placeholder. The
-    // placeholder edit must still reach pluginInputs (extraction matches the
-    // query as a suffix after any prefix), so the snapshot agrees with the
-    // visible prompt instead of refreshing from stale defaults.
+  it('seeds the plugin description, not the raw meta-instruction query, on use-with-query', async () => {
+    // The plugin's useCase.query is a generator-facing meta-instruction
+    // ("follow the en field verbatim; start from example.html"). The Home
+    // example-prompt cards surface the description instead; the detail modal's
+    // "Replicate this content" (use-with-query) must do the same rather than
+    // dumping the meta-instruction into the composer.
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
-        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+        return new Response(JSON.stringify({ plugins: [META_INSTRUCTION_PLUGIN] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
-      if (typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')) {
-        return new Response(JSON.stringify(WEB_PROTOTYPE_APPLY_RESULT), {
+      if (typeof url === 'string' && url.includes('/api/plugins/example-meta-landing/apply')) {
+        return new Response(JSON.stringify(META_INSTRUCTION_APPLY_RESULT), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -1455,43 +1491,25 @@ describe('HomeView prompt handoff', () => {
     );
 
     await screen.findByTestId('home-hero-input');
-    await setPromptAndSettle('Keep my current brief');
-
     rerender(
       <HomeView
         projects={[]}
         onSubmit={onSubmit}
         onOpenProject={() => undefined}
         onViewAllProjects={() => undefined}
-        promptHandoff={createPluginUseHandoff(4, 'example-web-prototype', {
+        promptHandoff={createPluginUseHandoff(5, 'example-meta-landing', {
           action: 'use-with-query',
         })}
       />,
     );
 
-    const query =
-      'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.';
-    const appended = `Keep my current brief\n\n${query}`;
-    await waitFor(() => expect(homeHeroPromptText()).toBe(appended));
+    await waitFor(() => expect(homeHeroPromptText()).toBe('Cinematic parallax landing page.'));
+    expect(homeHeroPromptText()).not.toContain('verbatim');
+    expect(homeHeroPromptText()).not.toContain('example.html');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/plugins/example-web-prototype/apply',
+      '/api/plugins/example-meta-landing/apply',
       expect.anything(),
     ));
-
-    // Edit BOTH the draft prefix and the hydrated audience placeholder.
-    const edited = appended
-      .replace('Keep my current brief', 'Rewritten brief for the board')
-      .replace('product evaluators', 'enterprise architects');
-    await setPromptAndSettle(edited);
-    await waitFor(() => {
-      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
-    });
-    fireEvent.click(screen.getByTestId('home-hero-submit'));
-
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
-      pluginId: 'example-web-prototype',
-      pluginInputs: expect.objectContaining({ audience: 'enterprise architects' }),
-    })));
   });
 
   it('binds od-plugin-authoring before submitting the rail create-plugin prompt', async () => {

@@ -82,6 +82,8 @@ import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import type { FacetSelection } from './plugins-home/facets';
 import type { PluginUseAction } from './plugins-home/useActions';
+import { examplePresetSeedPrompt } from './plugins-home/presetSeedPrompt';
+import { localizePluginDescription } from './plugins-home/localization';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
 import { AnimatePresence } from 'motion/react';
 
@@ -570,17 +572,23 @@ export function HomeView({
   // record title (e.g. "New generation (default scenario)"). Several
   // chips share od-new-generation, so surfacing the raw plugin title
   // would mislabel what the user actually picked.
-  const activeBadgeTitle = useMemo(() => {
-    if (!active) return null;
+  const activeBadge = useMemo(() => {
+    if (!active) return { title: null as string | null, isExplicitPlugin: false };
     if (active.chipId) {
       const defaultPluginId = defaultPluginIdForChip(active.chipId);
       const chip = findChip(active.chipId);
       if (chip && (defaultPluginId === null || defaultPluginId === active.record.id)) {
-        return homeHeroChipLabelForId(chip.id, t);
+        // The badge stands in for a task-type chip (its default plugin), so the
+        // footer ActiveTypeChip owns the clear affordance — not the plugin chip.
+        return { title: homeHeroChipLabelForId(chip.id, t), isExplicitPlugin: false };
       }
     }
-    return active.record.title;
+    // A specific plugin the user picked (Community card or example-prompt
+    // preset): the chip shows the plugin's own title and owns its clear button.
+    return { title: active.record.title, isExplicitPlugin: true };
   }, [active, t]);
+  const activeBadgeTitle = activeBadge.title;
+  const activePluginIsExplicit = activeBadge.isExplicitPlugin;
   const showActivePluginChip = useMemo(
     () => shouldShowActivePluginChip(active),
     [active],
@@ -849,34 +857,44 @@ export function HomeView({
     action: PluginUseAction = 'use',
     inputs?: Record<string, unknown>,
   ) {
+    // Applying a plugin into the composer — from a Community card's Use button
+    // or the plugin detail modal's primary action (incl. its split-menu). The
+    // `action` distinguishes plain attach vs attach + example-prompt seed.
+    trackCommunityGalleryClick(analytics.track, {
+      page_name: 'home',
+      area: 'community_gallery',
+      element: 'use_plugin',
+      action: action === 'use-with-query' ? 'use_with_query' : 'use',
+      plugin_id: record.sourceMarketplaceEntryName ?? record.id,
+      plugin_type: record.marketplaceTrust ?? 'official',
+    });
     if (action === 'use-with-query') {
-      const renderedQuery = previewPluginReplacement(record, undefined, inputs ? { inputs } : undefined);
-      const trimmedQuery = renderedQuery?.trim() ?? '';
+      // "Replicate this content" seeds the composer with the SAME human-friendly
+      // text the Home example-prompt cards use (examplePresetSeedPrompt), NOT the
+      // raw `od.useCase.query` — which for many plugins is a generator-facing
+      // meta-instruction ("follow the en field verbatim; start from example.html")
+      // that reads as gibberish in the textarea. Fallback: plugin description /
+      // title (the Home cards inject their richer structured-preview fallback).
+      const seed = examplePresetSeedPrompt(
+        record,
+        locale,
+        () => localizePluginDescription(locale, record).trim() || record.title,
+      );
+      const trimmedSeed = seed.trim();
       const currentDraft = prompt.trim();
-      // Append, don't replace: keep the user's draft and add the plugin
-      // query below it (matching the old requestPluginContextUse behavior).
-      const combined = !trimmedQuery
+      // Append, don't replace: keep the user's draft and add the seed below it.
+      const combined = !trimmedSeed
         ? prompt
         : !currentDraft
-          ? trimmedQuery
-          : `${prompt.trimEnd()}\n\n${trimmedQuery}`;
-      // Pass the raw (placeholder-bearing) plugin query as the template so
-      // usePlugin does NOT null out `active.queryTemplate` (which happens by
-      // default whenever nextPrompt is set). Without a template, editing a
-      // `{{...}}` value in the hydrated text would no longer be extracted back
-      // into active.inputs and the snapshot would refresh from stale inputs.
-      //
-      // The template is the plugin query ONLY — it must not bake in the
-      // user's draft prefix, which is mutable: `queryTemplateAllowsPrefix`
-      // tells the extractor to match the query as a suffix after any prefix,
-      // so editing the draft prefix never breaks placeholder extraction.
-      const rawQueryTemplate =
-        resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale) || null;
-      const hasAppendedQuery = Boolean(rawQueryTemplate && trimmedQuery);
+          ? trimmedSeed
+          : `${prompt.trimEnd()}\n\n${trimmedSeed}`;
+      // The seed is plain prose (no `{{...}}` placeholders to extract back into
+      // inputs), so no query template is tracked — mirrors the example-prompt
+      // card path (useExamplePlugin), which also passes no template.
       await usePlugin(record, combined, {
         ...(inputs ? { inputs } : {}),
-        queryTemplate: hasAppendedQuery ? rawQueryTemplate : null,
-        queryTemplateAllowsPrefix: hasAppendedQuery && currentDraft.length > 0,
+        queryTemplate: null,
+        queryTemplateAllowsPrefix: false,
       });
       scrollHomeToTop();
       return;
@@ -1498,6 +1516,7 @@ export function HomeView({
         sessionMode={sessionMode}
         onSessionModeChange={setSessionMode}
         activePluginTitle={activeBadgeTitle}
+        activePluginIsExplicit={activePluginIsExplicit}
         activePluginRecord={active?.record ?? null}
         activeSkillId={activeSkill?.id ?? null}
         activeSkillTitle={activeSkill ? localizeSkillName(locale, activeSkill) : null}
@@ -1615,7 +1634,7 @@ export function HomeView({
           <PluginDetailsModal
             record={detailsRecord}
             onClose={() => setDetailsRecord(null)}
-            onUse={(record) => void routePluginUse(record, 'use')}
+            onUse={(record, action) => void routePluginUse(record, action)}
             isApplying={pendingApplyId === detailsRecord.id}
           />
         ) : null}

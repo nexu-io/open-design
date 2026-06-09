@@ -1056,6 +1056,11 @@ export interface HomeChatComposerClickProps {
     // is the task-type rail (原型 / 幻灯片 / HyperFrames / 视频 / …).
     | 'working_dir'
     | 'working_dir_clear'
+    // The × on the active plugin chip above the composer (mirrors
+    // `working_dir_clear`): removes the bound plugin, whether it was attached
+    // from a Community card or an example-prompt preset. `chip_id` is the
+    // plugin id.
+    | 'plugin_chip_clear'
     | 'task_chip'
     // The "+" menu on the home composer (same control as the in-project
     // composer's `plus_*` events): opening it, inserting a
@@ -1310,9 +1315,15 @@ export interface PluginLoopClickProps {
 export interface CommunityGalleryClickProps {
   page_name: 'home';
   area: 'community_gallery';
-  element: 'card' | 'card_open_external';
+  // `use_plugin`: the user actually applied the plugin into the composer —
+  // either from a Community card's Use button or the plugin detail modal's
+  // primary action — as opposed to merely opening the card (`card`).
+  element: 'card' | 'card_open_external' | 'use_plugin';
   plugin_id?: string;
   plugin_type?: string;
+  // For `use_plugin`: which variant of the split action ran — plain attach
+  // (`use`) or attach + seed the example prompt (`use_with_query`).
+  action?: 'use' | 'use_with_query';
 }
 
 // DESIGN SYSTEMS
