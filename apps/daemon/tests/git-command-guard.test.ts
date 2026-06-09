@@ -106,6 +106,7 @@ describe('git command guard', () => {
       'checkout',
     );
     expect(gitCommandBlockedReason(['checkout', '-b', 'feature', 'main'])).toBeNull();
+    expect(gitCommandBlockedReason(['checkout', '-qb', 'feature', 'main'])).toBeNull();
     expect(gitCommandBlockedReason(['checkout', '-B', 'feature'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', '-B', 'feature', 'HEAD'])).toContain('checkout');
     expect(gitCommandBlockedReason(['checkout', '-q', 'main'])).toBeNull();
@@ -205,6 +206,13 @@ describe('git command guard', () => {
     });
     expect(safeCheckoutBranch.status).toBe(0);
     expect(safeCheckoutBranch.stdout).toContain('real git: checkout -b feature main');
+
+    const safeCheckoutBundledBranch = spawnSync('git', ['checkout', '-qb', 'feature', 'main'], {
+      env: guardEnv,
+      encoding: 'utf8',
+    });
+    expect(safeCheckoutBundledBranch.status).toBe(0);
+    expect(safeCheckoutBundledBranch.stdout).toContain('real git: checkout -qb feature main');
 
     const safeCheckoutQuiet = spawnSync('git', ['checkout', '-q', 'main'], {
       env: guardEnv,
