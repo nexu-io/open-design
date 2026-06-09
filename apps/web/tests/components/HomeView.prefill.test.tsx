@@ -1383,12 +1383,12 @@ describe('HomeView prompt handoff', () => {
     ));
   });
 
-  it('seeds the composer with the example-preset text on use-with-query, without placeholder write-back', async () => {
-    // use-with-query now seeds the SAME human-friendly text the Home
-    // example-prompt cards use. For a plugin whose query is already
-    // human-readable, that text IS the rendered query. Editing it submits as
-    // the prompt, but — matching the example-prompt path — placeholder edits no
-    // longer flow back into structured pluginInputs (the cards never did).
+  it('seeds the rendered query on use-with-query and writes placeholder edits back into inputs', async () => {
+    // For a plugin whose query is already human-readable, use-with-query seeds
+    // the rendered query itself. Because the seed came from the query (not a
+    // description/meta-instruction fallback), the raw `{{...}}` template is kept
+    // so editing a hydrated value in the composer flows back into pluginInputs
+    // and submit resolves the snapshot from what the user sees.
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
@@ -1439,9 +1439,8 @@ describe('HomeView prompt handoff', () => {
       expect.anything(),
     ));
 
-    // The user edits the seeded audience. The edited text submits verbatim as
-    // the prompt, but pluginInputs.audience stays at the applied default —
-    // there is no placeholder write-back anymore.
+    // The user edits the seeded audience; the placeholder edit flows back into
+    // the submitted pluginInputs (not the stale applied default).
     const edited = seed.replace('product evaluators', 'enterprise architects');
     await setPromptAndSettle(edited);
     await waitFor(() => {
@@ -1449,11 +1448,83 @@ describe('HomeView prompt handoff', () => {
     });
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
-    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
-    const submitted = onSubmit.mock.calls.at(-1)?.[0];
-    expect(submitted?.pluginId).toBe('example-web-prototype');
-    expect(submitted?.prompt).toBe(edited);
-    expect(submitted?.pluginInputs?.audience ?? 'product evaluators').toBe('product evaluators');
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-web-prototype',
+      pluginInputs: expect.objectContaining({ audience: 'enterprise architects' }),
+    })));
+  });
+
+  it('extracts a placeholder edit even after the use-with-query draft prefix is also edited', async () => {
+    // The "tweak a preset before running" case: with an existing draft,
+    // use-with-query appends the rendered query; the user then edits BOTH the
+    // prefix and a hydrated placeholder. `queryTemplateAllowsPrefix` matches the
+    // query as a suffix after any prefix, so the placeholder edit still reaches
+    // pluginInputs and submit resolves the snapshot from the visible prompt.
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')) {
+        return new Response(JSON.stringify(WEB_PROTOTYPE_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    const { rerender } = render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
+    await setPromptAndSettle('Keep my current brief');
+
+    rerender(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        promptHandoff={createPluginUseHandoff(4, 'example-web-prototype', {
+          action: 'use-with-query',
+        })}
+      />,
+    );
+
+    const query =
+      'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.';
+    const appended = `Keep my current brief\n\n${query}`;
+    await waitFor(() => expect(homeHeroPromptText()).toBe(appended));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-web-prototype/apply',
+      expect.anything(),
+    ));
+
+    const edited = appended
+      .replace('Keep my current brief', 'Rewritten brief for the board')
+      .replace('product evaluators', 'enterprise architects');
+    await setPromptAndSettle(edited);
+    await waitFor(() => {
+      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-web-prototype',
+      pluginInputs: expect.objectContaining({ audience: 'enterprise architects' }),
+    })));
   });
 
   it('seeds the plugin description, not the raw meta-instruction query, on use-with-query', async () => {

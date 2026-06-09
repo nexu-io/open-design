@@ -99,6 +99,15 @@ export function isMetaInstructionSeed(value: string): boolean {
   return /逐字注入|以\s*en\s*字段为准|verbatim|example\.html/iu.test(value);
 }
 
+export interface PresetSeed {
+  text: string;
+  // True when `text` is the rendered plugin query itself (a human-friendly,
+  // non-meta-instruction query), so callers may keep the raw query template to
+  // drive placeholder write-back into plugin inputs. False for description /
+  // meta-instruction / fallback seeds, which carry no `{{...}}` to extract.
+  fromRenderedQuery: boolean;
+}
+
 // The seed text dropped into the composer when a preset/example is picked.
 // `fallback` supplies the last-resort seed when neither the description nor a
 // human-friendly query paragraph is usable — callers inject their own (the
@@ -108,19 +117,23 @@ export function examplePresetSeedPrompt(
   record: InstalledPluginRecord,
   locale: Locale,
   fallback: () => string,
-): string {
+): PresetSeed {
   const description = localizePluginDescription(locale, record).trim();
   // zh: the localized useCase.query is a generator-facing meta-instruction
   // ("follow the en field verbatim; start from example.html"), useless as a
   // human seed — surface the curated one-line description instead.
-  if (promptLocaleKind(locale) === 'zh' && description) return description;
+  if (promptLocaleKind(locale) === 'zh' && description) {
+    return { text: description, fromRenderedQuery: false };
+  }
   const query = pluginPresetQuery(record, locale);
   if (query) {
     const head = firstPromptParagraph(renderPluginPresetQuery(record, query));
     // Skip meta-instructions that reference fields/assets the model can't see
     // from the textarea; fall back to the description.
-    if (head && !isMetaInstructionSeed(head)) return head;
+    if (head && !isMetaInstructionSeed(head)) {
+      return { text: head, fromRenderedQuery: true };
+    }
   }
-  if (description) return description;
-  return fallback();
+  if (description) return { text: description, fromRenderedQuery: false };
+  return { text: fallback(), fromRenderedQuery: false };
 }

@@ -897,7 +897,7 @@ export function HomeView({
         locale,
         () => localizePluginDescription(locale, record).trim() || record.title,
       );
-      const trimmedSeed = seed.trim();
+      const trimmedSeed = seed.text.trim();
       const currentDraft = prompt.trim();
       // Append, don't replace: keep the user's draft and add the seed below it.
       const combined = !trimmedSeed
@@ -905,13 +905,21 @@ export function HomeView({
         : !currentDraft
           ? trimmedSeed
           : `${prompt.trimEnd()}\n\n${trimmedSeed}`;
-      // The seed is plain prose (no `{{...}}` placeholders to extract back into
-      // inputs), so no query template is tracked — mirrors the example-prompt
-      // card path (useExamplePlugin), which also passes no template.
+      // Preserve placeholder write-back ONLY when the seed IS the rendered
+      // plugin query (a human-friendly, non-meta-instruction query): keep the
+      // raw `{{...}}`-bearing template so editing a hydrated value in the
+      // composer still flows back into `active.inputs` and submit resolves the
+      // snapshot from what the user sees. When we fell back to a description /
+      // meta-instruction seed there are no placeholders to extract, so null the
+      // template (mirrors the example-prompt card path).
+      const rawQueryTemplate = seed.fromRenderedQuery
+        ? resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale) || null
+        : null;
+      const hasTemplate = Boolean(rawQueryTemplate && trimmedSeed);
       await usePlugin(record, combined, {
         ...(inputs ? { inputs } : {}),
-        queryTemplate: null,
-        queryTemplateAllowsPrefix: false,
+        queryTemplate: hasTemplate ? rawQueryTemplate : null,
+        queryTemplateAllowsPrefix: hasTemplate && currentDraft.length > 0,
       });
       scrollHomeToTop();
       return;

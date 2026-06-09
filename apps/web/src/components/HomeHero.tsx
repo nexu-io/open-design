@@ -1634,7 +1634,7 @@ function PluginPromptPresetCard({
   // fallback (the detail modal injects a simpler one).
   const seedPrompt = examplePresetSeedPrompt(record, locale, () =>
     pluginPresetPromptPreview(record, locale, chipId),
-  );
+  ).text;
   return (
     <button
       type="button"
