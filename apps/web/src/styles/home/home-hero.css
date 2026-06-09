@@ -728,27 +728,38 @@
   color: var(--accent);
 }
 .home-hero__mention-tabs {
+  flex: 0 0 auto;
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
   padding: 2px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   background: var(--bg-subtle);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+.home-hero__mention-tabs::-webkit-scrollbar { display: none; }
 .home-hero__mention-tab {
   appearance: none;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  min-width: 0;
-  padding: 5px 8px;
+  min-inline-size: max-content;
+  padding: 5px 6px;
   border: 1px solid transparent;
   border-radius: calc(var(--radius-sm) - 1px);
   background: transparent;
   color: var(--text-muted);
   font: inherit;
   font-size: 11.5px;
+  white-space: nowrap;
   cursor: pointer;
 }
 .home-hero__mention-tab.is-active {
