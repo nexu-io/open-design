@@ -28,11 +28,15 @@ export function TrustBadge({
 }: Props) {
   const t = useT();
   const tier = normalizeTrustTier(trust);
-  // The visible label AND the tooltip / screen-reader text all resolve from
-  // the localized tier key, so non-English locales never see mixed-language
+  // The visible text, tooltip, and screen-reader text all resolve from the
+  // localized tier key, so non-English locales never see mixed-language
   // accessibility text leaking through (the old hard-coded English
-  // descriptions did exactly that).
-  const text = label ?? t(TRUST_LABEL_KEY[tier]);
+  // descriptions did exactly that). When a contextual `label` is supplied the
+  // accessible text keeps the localized tier prefix so assistive tech still
+  // announces the trust level, e.g. "Official: Action plugin".
+  const tierLabel = t(TRUST_LABEL_KEY[tier]);
+  const text = label ?? tierLabel;
+  const accessibleText = label ? `${tierLabel}: ${label}` : tierLabel;
   const classes = [
     'plugin-trust-badge',
     `plugin-trust-badge--${tier}`,
@@ -47,8 +51,8 @@ export function TrustBadge({
       className={classes}
       data-trust-tier={tier}
       data-trust-source={trust}
-      title={text}
-      aria-label={text}
+      title={accessibleText}
+      aria-label={accessibleText}
     >
       <span className="plugin-trust-badge__dot" aria-hidden />
       <span>{text}</span>
