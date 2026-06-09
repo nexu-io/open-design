@@ -16,6 +16,7 @@ import type {
 import { useI18n, useT } from '../i18n';
 import { ComposerPluginPreview } from './ComposerPluginPreview';
 import { localizePluginTitle } from './plugins-home/localization';
+import { resolveFlyoutSide } from './composer-flyout-placement';
 import { Icon, type IconName } from './Icon';
 
 const PLUS_MENU_MARGIN = 12;
@@ -23,9 +24,11 @@ const PLUS_MENU_GAP = 8;
 const PLUS_MENU_WIDTH = 190;
 const PLUS_MENU_FLYOUT_WIDTH = 360;
 // The Plugins flyout is wider than the others because it carries a
-// side-by-side hover-preview column; placement must reserve room for
-// the whole pane so it does not get clipped against the boundary.
-const PLUS_MENU_PLUGIN_FLYOUT_WIDTH = 560;
+// side-by-side hover-preview column. This MUST match the rendered width of
+// `.plus-menu__flyout--plugins` in styles/home/plus-menu.css — over-reserving
+// here makes medium-width panes wrongly fall back to the contained layout and
+// silently drop the preview column.
+const PLUS_MENU_PLUGIN_FLYOUT_WIDTH = 466;
 const PLUS_MENU_PREFERRED_MIN_HEIGHT = 180;
 const PLUS_MENU_FLYOUT_MAX_HEIGHT = 320;
 type PlusMenuFlyoutPlacement = 'right' | 'left' | 'contained';
@@ -92,11 +95,14 @@ function getFlyoutPlacement(
     Math.max(PLUS_MENU_MARGIN, rect.left),
     Math.max(PLUS_MENU_MARGIN, viewportWidth - PLUS_MENU_MARGIN - menuWidth),
   );
-  const hasRightSpace = menuLeft + menuWidth + PLUS_MENU_GAP + flyoutWidth <= boundary.right;
-  if (hasRightSpace) return 'right';
-  const hasLeftSpace = menuLeft - PLUS_MENU_GAP - flyoutWidth >= boundary.left;
-  if (hasLeftSpace) return 'left';
-  return 'contained';
+  return resolveFlyoutSide({
+    menuLeft,
+    menuWidth,
+    flyoutWidth,
+    gap: PLUS_MENU_GAP,
+    boundaryLeft: boundary.left,
+    boundaryRight: boundary.right,
+  });
 }
 
 export interface ComposerPlusMenuProps {
