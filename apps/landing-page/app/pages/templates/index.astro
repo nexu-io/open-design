@@ -16,7 +16,7 @@ const pcopy = getPluginsCopy(locale);
 const useCases = getTemplateUseCases();
 const title =
   locale === 'zh' || locale === 'zh-tw'
-    ? 'Open Design 模板场景库'
+    ? 'Open Design 模板使用场景'
     : 'Open Design template use cases';
 const description =
   locale === 'zh' || locale === 'zh-tw'
@@ -52,11 +52,11 @@ const jsonLd = [
   <nav class="breadcrumb" aria-label={pcopy.breadcrumbLabel}>
     <a href={href('/')}>Open Design</a>
     <span>/</span>
-    <span aria-current="page">{locale === 'zh' || locale === 'zh-tw' ? '模板场景' : 'Templates'}</span>
+    <span aria-current="page">{locale === 'zh' || locale === 'zh-tw' ? '使用场景' : 'Templates'}</span>
   </nav>
 
   <header class="catalog-head template-usecase-head">
-    <span class="label">{locale === 'zh' || locale === 'zh-tw' ? '模板 SEO 场景入口' : 'Template use-case landing pages'}</span>
+    <span class="label">{locale === 'zh' || locale === 'zh-tw' ? '按用途找模板' : 'Template use-case landing pages'}</span>
     <h1 class="display">{title}<span class="dot">.</span></h1>
     <p class="lead">{description}</p>
     <div class="template-usecase-actions">

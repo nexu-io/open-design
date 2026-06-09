@@ -129,7 +129,7 @@ const jsonLd = [
   <nav class="breadcrumb" aria-label={pcopy.breadcrumbLabel}>
     <a href={href('/')}>Open Design</a>
     <span>/</span>
-    <a href={href('/templates/')}>{isZh ? '模板场景' : 'Templates'}</a>
+    <a href={href('/templates/')}>{isZh ? '使用场景' : 'Templates'}</a>
     <span>/</span>
     <span aria-current="page">{copy.title}</span>
   </nav>
@@ -198,7 +198,7 @@ const jsonLd = [
   </section>
 
   <section class="template-usecase-related" aria-label="Related template use cases">
-    <h2>{isZh ? '相关模板场景' : 'Related template use cases'}</h2>
+    <h2>{isZh ? '相关使用场景' : 'Related template use cases'}</h2>
     <div class="template-usecase-related-list">
       {relatedUseCases.map((item) => {
         const relatedCopy = getTemplateUseCaseCopy(item, locale);

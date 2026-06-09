@@ -154,7 +154,7 @@ export function Header({
   const localeDef = getLocaleDefinition(locale);
   const localeBasePath = stripLocaleFromPath(currentPath).pathname;
   const templateUseCasesLabel =
-    locale === 'zh' || locale === 'zh-tw' ? '模板场景' : 'Template use cases';
+    locale === 'zh' || locale === 'zh-tw' ? '使用场景' : 'Template use cases';
   const localeOptions = LANDING_LOCALES.map((entry) => ({
     ...entry,
     href: localePath(entry.code, localeBasePath),
