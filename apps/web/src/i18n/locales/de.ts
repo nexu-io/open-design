@@ -532,6 +532,7 @@ export const de: Dict = {
   'homeHero.chip.templateHint': 'Beginne mit einer mitgelieferten Vorlage.',
   'homeWorkingDir.trigger': 'Select working directory',
   'homeWorkingDir.pick': 'Choose folder',
+  'homeWorkingDir.replace': 'Clear and replace folder',
   'homeWorkingDir.recent': 'Recent folders',
   'homeWorkingDir.recentEmpty': 'No recent folders',
   'homeWorkingDir.clear': 'Clear working directory',

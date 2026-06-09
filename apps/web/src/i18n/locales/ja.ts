@@ -532,6 +532,7 @@ export const ja: Dict = {
   'homeHero.chip.templateHint': '付属のテンプレートから開始します。',
   'homeWorkingDir.trigger': 'Select working directory',
   'homeWorkingDir.pick': 'Choose folder',
+  'homeWorkingDir.replace': 'Clear and replace folder',
   'homeWorkingDir.recent': 'Recent folders',
   'homeWorkingDir.recentEmpty': 'No recent folders',
   'homeWorkingDir.clear': 'Clear working directory',

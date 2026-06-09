@@ -1596,13 +1596,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const selected = await openFolderDialog();
       if (selected) await setWorkingDirFolder(selected);
     }
-    async function clearWorkingDir() {
-      if (!projectId) return;
-      const base = projectMetadata ?? { kind: 'prototype' as const };
-      const metadata: ProjectMetadata = { ...base, linkedDirs: [] };
-      const result = await patchProject(projectId, { metadata });
-      if (result?.metadata) onProjectMetadataChange?.(result.metadata);
-    }
 
     async function handleSwitchDesignSystem(
       designSystemId: string | null,
@@ -2215,18 +2208,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               t={t}
             />
           </CaretFloatingLayer>
-          {projectId ? (
-            <div className="composer-workdir-row">
-              <WorkingDirPicker
-                placement="up"
-                workingDir={workingDir}
-                recentDirs={recentDirs}
-                onPickDirectory={() => void handlePickWorkingDir()}
-                onSelectRecent={(dir) => void setWorkingDirFolder(dir)}
-                onClear={() => void clearWorkingDir()}
-              />
-            </div>
-          ) : null}
           <div className="composer-row">
             <input
               ref={fileInputRef}
@@ -2394,6 +2375,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             ) : null}
           </div>
         </div>
+        {projectId ? (
+          <div className="composer-workdir-row">
+            <WorkingDirPicker
+              placement="up"
+              workingDir={workingDir}
+              recentDirs={recentDirs}
+              onPickDirectory={() => void handlePickWorkingDir()}
+              onSelectRecent={(dir) => void setWorkingDirFolder(dir)}
+            />
+          </div>
+        ) : null}
         {uploadError ? <span className="composer-hint">{uploadError}</span> : null}
         {detailsRecord ? (
           <PluginDetailsModal

@@ -128,7 +128,7 @@ export function WorkingDirPicker({
             }}
           >
             <Icon name="folder" size={14} className={styles.itemIcon} />
-            <span>{t('homeWorkingDir.pick')}</span>
+            <span>{workingDir ? t('homeWorkingDir.replace') : t('homeWorkingDir.pick')}</span>
           </button>
 
           <div

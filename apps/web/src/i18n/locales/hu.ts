@@ -532,6 +532,7 @@ export const hu: Dict = {
   'homeHero.chip.templateHint': 'Indulj egy beépített sablonból.',
   'homeWorkingDir.trigger': 'Select working directory',
   'homeWorkingDir.pick': 'Choose folder',
+  'homeWorkingDir.replace': 'Clear and replace folder',
   'homeWorkingDir.recent': 'Recent folders',
   'homeWorkingDir.recentEmpty': 'No recent folders',
   'homeWorkingDir.clear': 'Clear working directory',

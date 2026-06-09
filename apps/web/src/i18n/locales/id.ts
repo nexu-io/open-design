@@ -532,6 +532,7 @@ export const id: Dict = {
   'homeHero.chip.templateHint': 'Mulai dari templat bawaan.',
   'homeWorkingDir.trigger': 'Select working directory',
   'homeWorkingDir.pick': 'Choose folder',
+  'homeWorkingDir.replace': 'Clear and replace folder',
   'homeWorkingDir.recent': 'Recent folders',
   'homeWorkingDir.recentEmpty': 'No recent folders',
   'homeWorkingDir.clear': 'Clear working directory',

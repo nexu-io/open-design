@@ -894,6 +894,7 @@ export interface Dict {
   'homeHero.chip.templateHint': string;
   'homeWorkingDir.trigger': string;
   'homeWorkingDir.pick': string;
+  'homeWorkingDir.replace': string;
   'homeWorkingDir.recent': string;
   'homeWorkingDir.recentEmpty': string;
   'homeWorkingDir.clear': string;
