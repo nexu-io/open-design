@@ -1615,7 +1615,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const base = projectMetadata ?? { kind: 'prototype' as const };
       const metadata: ProjectMetadata = { ...base, linkedDirs: [dir] };
       const result = await patchProject(projectId, { metadata });
-      if (result?.metadata) onProjectMetadataChange?.(result.metadata);
+      // The daemon rejects stale/inaccessible/system dirs with
+      // INVALID_LINKED_DIR (patchProject → null). Only commit the selection
+      // and promote it in recents when the project accepted it; otherwise
+      // surface the failure and leave recents untouched so a rejected path
+      // isn't re-promoted to the top of the menu.
+      if (!result?.metadata) {
+        onShowToast?.(t('homeWorkingDir.applyFailed'));
+        return;
+      }
+      onProjectMetadataChange?.(result.metadata);
       void rememberRecentDir(dir);
     }
     async function handlePickWorkingDir() {

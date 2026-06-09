@@ -539,6 +539,7 @@ export const de: Dict = {
   'homeWorkingDir.clear': 'Clear working directory',
   'homeWorkingDir.hint': 'Let the agent read this local folder (not imported into Design Files)',
   'homeWorkingDir.missing': 'This working folder no longer exists — pick another',
+  'homeWorkingDir.applyFailed': 'Couldn\'t set the working directory — the folder may no longer exist',
   'workingDirPicker.title': 'Ordner',
   'workingDirPicker.homeTitle': 'Im lokalen Speicher gespeichert – zum Ordner auswählen klicken',
   'workingDirPicker.processing': 'Wird verarbeitet…',

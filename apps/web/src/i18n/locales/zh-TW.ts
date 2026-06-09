@@ -539,6 +539,7 @@ export const zhTW: Dict = {
   'homeWorkingDir.clear': '清除工作目錄',
   'homeWorkingDir.hint': '讓 Agent 可讀取該本機目錄（不會匯入 Design Files）',
   'homeWorkingDir.missing': '該工作目錄已不存在，請重新選擇',
+  'homeWorkingDir.applyFailed': '無法設定工作目錄，該資料夾可能已不存在',
   'workingDirPicker.title': '目錄',
   'workingDirPicker.homeTitle': '預設存在本機儲存，點擊可選擇資料夾',
   'workingDirPicker.processing': '處理中…',
