@@ -87,7 +87,7 @@ import { localizePluginDescription } from './plugins-home/localization';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
 import { AnimatePresence } from 'motion/react';
 
-interface ActivePlugin {
+export interface ActivePlugin {
   record: InstalledPluginRecord;
   // `result` is `null` during the optimistic window — set on chip
   // click before applyPlugin's roundtrip finishes — and is filled in
@@ -126,6 +126,13 @@ interface ActivePlugin {
   // would back-fill the textarea, defeating the suppression that
   // the chip click set up.
   suppressPromptSync: boolean;
+  // True when the user explicitly picked THIS plugin — an example-prompt preset
+  // card or a Community card / detail modal — rather than a type chip binding
+  // its default plugin. Drives the active chip's clear (×) affordance. Persisted
+  // rather than re-derived from id equality, because a preset's plugin can
+  // legitimately equal the chip's default plugin id (e.g. the prototype rail's
+  // `example-web-prototype`).
+  explicitPick: boolean;
 }
 
 // `inlineBacked` distinguishes a context inserted as an inline `@mention` pill
@@ -594,17 +601,18 @@ export function HomeView({
   // would mislabel what the user actually picked.
   const activeBadge = useMemo(() => {
     if (!active) return { title: null as string | null, isExplicitPlugin: false };
-    if (active.chipId) {
+    // A type-chip's default-plugin binding stands in for the task chip: show the
+    // chip label and defer clearing to the footer ActiveTypeChip. An explicit
+    // pick (example-prompt preset / Community card / detail modal) always shows
+    // its own plugin title and owns the clear (×) button — even when the
+    // preset's plugin id equals the chip's default plugin.
+    if (!active.explicitPick && active.chipId) {
       const defaultPluginId = defaultPluginIdForChip(active.chipId);
       const chip = findChip(active.chipId);
       if (chip && (defaultPluginId === null || defaultPluginId === active.record.id)) {
-        // The badge stands in for a task-type chip (its default plugin), so the
-        // footer ActiveTypeChip owns the clear affordance — not the plugin chip.
         return { title: homeHeroChipLabelForId(chip.id, t), isExplicitPlugin: false };
       }
     }
-    // A specific plugin the user picked (Community card or example-prompt
-    // preset): the chip shows the plugin's own title and owns its clear button.
     return { title: active.record.title, isExplicitPlugin: true };
   }, [active, t]);
   const activeBadgeTitle = activeBadge.title;
@@ -670,6 +678,10 @@ export function HomeView({
       // their apply deferred makes Prototype <-> Deck <-> Media changes
       // feel instant; submit() still resolves the snapshot before sending.
       deferApply?: boolean;
+      // True when the user explicitly picked this plugin (example-prompt preset
+      // or Community card / detail modal) rather than a type chip's default
+      // plugin. Stored on `active.explicitPick`; gates the chip's clear button.
+      explicitPick?: boolean;
     },
   ) {
     const applyRequestId = activePluginApplyRequestRef.current + 1;
@@ -728,6 +740,7 @@ export function HomeView({
       editableInputNames: options?.editableInputNames ?? [],
       preserveInputFields: options?.preserveInputFields === true,
       suppressPromptSync: suppressPromptUpdate,
+      explicitPick: options?.explicitPick === true,
     });
     setFallbackProjectKind(null);
     setFallbackProjectMetadata(null);
@@ -920,6 +933,7 @@ export function HomeView({
         ...(inputs ? { inputs } : {}),
         queryTemplate: hasTemplate ? rawQueryTemplate : null,
         queryTemplateAllowsPrefix: hasTemplate && currentDraft.length > 0,
+        explicitPick: true,
       });
       scrollHomeToTop();
       return;
@@ -927,6 +941,7 @@ export function HomeView({
     await usePlugin(record, undefined, {
       ...(inputs ? { inputs } : {}),
       suppressPromptUpdate: true,
+      explicitPick: true,
     });
     scrollHomeToTop();
   }
@@ -1017,6 +1032,7 @@ export function HomeView({
       projectKind: active?.projectKind ?? undefined,
       projectMetadata: active?.projectMetadata ?? null,
       deferApply: true,
+      explicitPick: true,
     });
     focusPromptAtEnd();
   }
@@ -1779,9 +1795,15 @@ function defaultPluginIdForChip(chipId: string | null): string | null {
   return null;
 }
 
-function shouldShowActivePluginChip(active: ActivePlugin | null): boolean {
+export function shouldShowActivePluginChip(active: ActivePlugin | null): boolean {
   if (!active) return false;
+  // An explicit pick (example-prompt preset / Community card / detail modal)
+  // always surfaces its own plugin chip — even when the preset's plugin id
+  // equals the chip's default plugin.
+  if (active.explicitPick) return true;
   if (!active.chipId) return true;
+  // Otherwise a type chip whose default plugin IS this record stands in for the
+  // task chip and suppresses a separate plugin chip.
   return active.record.id !== defaultPluginIdForChip(active.chipId);
 }
 
