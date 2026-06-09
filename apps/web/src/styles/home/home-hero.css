@@ -1087,7 +1087,9 @@
 .home-hero__workdir-row {
   width: 100%;
   max-width: 720px;
-  margin: 6px auto 0;
+  /* Hug the input card: cancel the 14px column gap and the trigger's 4px
+     top padding so the picker sits ~5px below the card. */
+  margin: -13px auto 0;
   display: flex;
   justify-content: flex-start;
 }
