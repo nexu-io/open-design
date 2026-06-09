@@ -17,6 +17,14 @@ export interface TemplateUseCase {
   copy: TemplateUseCaseCopy;
   zh?: Partial<TemplateUseCaseCopy>;
   keywords: readonly string[];
+  searchIntents?: readonly {
+    label: string;
+    description: string;
+    zh?: {
+      label: string;
+      description: string;
+    };
+  }[];
   pluginIds: readonly string[];
   faq: readonly {
     question: string;
@@ -337,6 +345,38 @@ export const TEMPLATE_USE_CASES = [
       intro: '这里把现有模板按“婚礼/生活方式”意图归组，用户搜婚礼相关词时能落到真正匹配的专题页。',
     },
     keywords: ['wedding media kit template', 'lifestyle editorial template', 'wedding invitation deck'],
+    searchIntents: [
+      {
+        label: 'Wedding media kit',
+        description:
+          'Package the couple story, venue mood, visual direction, schedule, and vendor notes into a polished shareable deck.',
+        zh: {
+          label: '婚礼媒体包',
+          description:
+            '给策划师、摄影师、场地、品牌合作方看的资料包：新人故事、场地气质、视觉方向、流程和协作信息放在同一个 deck 里。',
+        },
+      },
+      {
+        label: 'Lifestyle editorial feature',
+        description:
+          'Turn a wedding, dinner, travel stay, boutique launch, or personal story into a magazine-style editorial narrative.',
+        zh: {
+          label: '生活方式专题报道',
+          description:
+            '适合婚礼报道、私宴、旅行住宿、精品品牌发布或人物故事，把图片、长文、引用和章节排成杂志式专题。',
+        },
+      },
+      {
+        label: 'Invitation or event story deck',
+        description:
+          'Create a softer alternative to a static invitation: date, place, story, dress code, agenda, and travel notes in one link.',
+        zh: {
+          label: '邀请函/活动故事 Deck',
+          description:
+            '不是只做一张请柬，而是把日期地点、两人故事、着装建议、行程、交通住宿和 RSVP 信息做成可分享链接。',
+        },
+      },
+    ],
     pluginIds: [
       'example-html-ppt-zhangzara-soft-editorial',
       'example-html-ppt-zhangzara-pink-script',
