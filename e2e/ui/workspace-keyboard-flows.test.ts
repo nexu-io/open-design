@@ -137,7 +137,7 @@ test('[P1] keyboard chat panel resize persists after reload', async ({ page }) =
   expect(restoredWidth).toBe(resizedWidth);
 });
 
-test('[P0] project chat Enter sends while Shift+Enter inserts a newline', async ({ page }) => {
+test('[P0] @critical project chat Enter sends while Shift+Enter inserts a newline', async ({ page }) => {
   let runCount = 0;
   await page.route('**/api/runs', async (route) => {
     runCount += 1;

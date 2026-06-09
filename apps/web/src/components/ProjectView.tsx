@@ -4703,6 +4703,17 @@ export function ProjectView({
     [project, onProjectChange],
   );
 
+  const handleProjectInstructionsSave = useCallback((nextInstructions: string) => {
+    const trimmed = nextInstructions.trim();
+    const updated: Project = {
+      ...project,
+      customInstructions: trimmed || undefined,
+      updatedAt: Date.now(),
+    };
+    onProjectChange(updated);
+    void patchProject(project.id, { customInstructions: trimmed || null });
+  }, [project, onProjectChange]);
+
   const activeConversationChatState = useMemo(
     () =>
       activeConversationId
@@ -5584,26 +5595,33 @@ export function ProjectView({
               backLabel={t('project.backToProjects')}
               composerFooterAccessory={executionControls}
               composerLeadingAccessory={(
-                <WorkingDirPill
-                  projectId={project.id}
-                  resolvedDir={projectDetail.resolvedDir}
-                  onReplaced={({ project: updated }) => {
-                    if (updated) onProjectChange(updated);
-                    // The new working dir has a different file tree, so the
-                    // current listing, breadcrumb nav, and open tabs are all
-                    // stale. Refetch files; DesignFilesPanel's self-heal then
-                    // drops the now-unmatched currentDir back to root.
-                    // projectDetail.refresh() repulls resolvedDir so the
-                    // breadcrumb root + pill show the new folder name even on
-                    // the Electron path, which reports no updated project.
-                    setWorkingDirReplacing(true);
-                    refreshFilesAndDesignMd();
-                    void Promise.all([
-                      refreshWorkspaceItems(),
-                      projectDetail.refresh(),
-                    ]).finally(() => setWorkingDirReplacing(false));
-                  }}
-                />
+                <>
+                  <ProjectInstructionsControl
+                    instructions={project.customInstructions ?? ''}
+                    onSave={handleProjectInstructionsSave}
+                    t={t}
+                  />
+                  <WorkingDirPill
+                    projectId={project.id}
+                    resolvedDir={projectDetail.resolvedDir}
+                    onReplaced={({ project: updated }) => {
+                      if (updated) onProjectChange(updated);
+                      // The new working dir has a different file tree, so the
+                      // current listing, breadcrumb nav, and open tabs are all
+                      // stale. Refetch files; DesignFilesPanel's self-heal then
+                      // drops the now-unmatched currentDir back to root.
+                      // projectDetail.refresh() repulls resolvedDir so the
+                      // breadcrumb root + pill show the new folder name even on
+                      // the Electron path, which reports no updated project.
+                      setWorkingDirReplacing(true);
+                      refreshFilesAndDesignMd();
+                      void Promise.all([
+                        refreshWorkspaceItems(),
+                        projectDetail.refresh(),
+                      ]).finally(() => setWorkingDirReplacing(false));
+                    }}
+                  />
+                </>
               )}
               projectHeader={(
                 <span className="chat-project-title-line">
@@ -5804,6 +5822,89 @@ export function ProjectView({
         ) : null}
       </AnimatePresence>
     </div>
+  );
+}
+
+function ProjectInstructionsControl({
+  instructions,
+  onSave,
+  t,
+}: {
+  instructions: string;
+  onSave: (instructions: string) => void;
+  t: ReturnType<typeof useI18n>['t'];
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(instructions);
+
+  useEffect(() => {
+    if (!editing) setDraft(instructions);
+  }, [editing, instructions]);
+
+  if (!editing && instructions.trim().length > 0) {
+    return (
+      <div className="project-instructions project-instructions--saved">
+        <button
+          type="button"
+          className="project-instructions__preview"
+          onClick={() => setEditing(true)}
+          data-testid="project-instructions-preview"
+        >
+          {instructions}
+        </button>
+      </div>
+    );
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className="project-instructions__add"
+        onClick={() => setEditing(true)}
+        data-testid="project-instructions-add"
+      >
+        {t('project.customInstructions')}
+      </button>
+    );
+  }
+
+  return (
+    <form
+      className="project-instructions project-instructions--editing"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSave(draft);
+        setEditing(false);
+      }}
+    >
+      <textarea
+        className="project-instructions__textarea"
+        value={draft}
+        onChange={(event) => setDraft(event.currentTarget.value)}
+        placeholder={t('project.customInstructionsPlaceholder')}
+        data-testid="project-instructions-textarea"
+      />
+      <div className="project-instructions__actions">
+        <button
+          type="button"
+          className="project-instructions__button"
+          onClick={() => {
+            setDraft(instructions);
+            setEditing(false);
+          }}
+        >
+          {t('common.cancel')}
+        </button>
+        <button
+          type="submit"
+          className="project-instructions__button project-instructions__button--primary"
+          data-testid="project-instructions-save"
+        >
+          {t('common.save')}
+        </button>
+      </div>
+    </form>
   );
 }
 
