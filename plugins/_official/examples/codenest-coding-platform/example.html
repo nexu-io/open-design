@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CodeNest — Launch Your Coding Career</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #070b0a;
+      --accent: #5ed29c;
+      --transition: all 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Inter', -apple-system, system-ui, sans-serif;
+      background: var(--bg);
+      color: #fff;
+      min-height: 100vh;
+      position: relative;
+      overflow-x: hidden;
+    }
+    img, svg, video { display: block; }
+    button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+    a { color: inherit; text-decoration: none; }
+
+    /* ───── BACKGROUND VIDEO + OVERLAYS ───── */
+    .bg-wrap { position: fixed; inset: 0; z-index: 0; overflow: hidden; background: var(--bg); }
+    #bg-video {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; opacity: 0.6;
+    }
+    .overlay-left {
+      position: absolute; inset: 0; pointer-events: none;
+      background: linear-gradient(to right, #070b0a 0%, rgba(7,11,10,0.55) 35%, transparent 70%);
+    }
+    .overlay-bottom {
+      position: absolute; inset: 0; pointer-events: none;
+      background: linear-gradient(to top, #070b0a 0%, rgba(7,11,10,0.4) 30%, transparent 60%);
+    }
+    /* vertical grid lines at 25/50/75% */
+    .grid-lines { position: absolute; inset: 0; pointer-events: none; display: none; }
+    @media (min-width: 900px) { .grid-lines { display: block; } }
+    .grid-lines span {
+      position: absolute; top: 0; bottom: 0; width: 1px;
+      background: rgba(255,255,255,0.10);
+    }
+    .grid-lines span:nth-child(1) { left: 25%; }
+    .grid-lines span:nth-child(2) { left: 50%; }
+    .grid-lines span:nth-child(3) { left: 75%; }
+    /* central glow */
+    .glow { position: absolute; top: 4%; left: 50%; transform: translateX(-50%); pointer-events: none; opacity: 0.85; }
+
+    /* ───── SHELL ───── */
+    .shell { position: relative; z-index: 2; min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* ───── HEADER ───── */
+    header {
+      position: absolute; top: 0; left: 0; right: 0; z-index: 20;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 28px clamp(20px, 5vw, 64px);
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.05rem; letter-spacing: -0.02em; }
+    .logo svg { width: 26px; height: 26px; }
+    nav.desktop { display: none; gap: 36px; }
+    @media (min-width: 900px) { nav.desktop { display: flex; } }
+    nav.desktop a { font-size: 16px; font-weight: 500; color: rgba(255,255,255,0.85); transition: var(--transition); }
+    nav.desktop a:hover { color: var(--accent); }
+    .hamburger { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: rgba(255,255,255,0.06); }
+    @media (min-width: 900px) { .hamburger { display: none; } }
+
+    /* mobile menu overlay */
+    .mobile-menu {
+      position: fixed; inset: 0; z-index: 50; background: rgba(5,8,7,0.97);
+      backdrop-filter: blur(8px); display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 32px;
+      opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+    }
+    .mobile-menu.open { opacity: 1; pointer-events: auto; }
+    .mobile-menu a { font-size: 1.6rem; font-weight: 700; letter-spacing: 0.02em; }
+    .mobile-menu a:hover { color: var(--accent); }
+    .mobile-close { position: absolute; top: 28px; right: clamp(20px,5vw,64px); width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; background: rgba(255,255,255,0.06); }
+
+    /* ───── HERO ───── */
+    .hero {
+      flex: 1; display: flex; flex-direction: column; justify-content: center;
+      padding: 140px clamp(20px, 5vw, 64px) 80px;
+      max-width: 1000px;
+    }
+    /* liquid glass card */
+    .glass-card {
+      position: relative; width: 200px; height: 200px; border-radius: 22px;
+      transform: translateY(-50px);
+      padding: 20px 18px; display: flex; flex-direction: column; justify-content: space-between;
+      background: rgba(255, 255, 255, 0.01);
+      background-blend-mode: luminosity;
+      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+      box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+      overflow: hidden;
+    }
+    .glass-card::before {
+      content: ''; position: absolute; inset: 0; border-radius: inherit;
+      padding: 1.4px; pointer-events: none;
+      background: linear-gradient(180deg, rgba(255,255,255,0.7), rgba(255,255,255,0.05));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+    }
+    .glass-card .gc-tag { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.85); letter-spacing: 0.02em; }
+    .glass-card .gc-head { font-size: 18px; line-height: 1.25; font-weight: 600; }
+    .glass-card .gc-head em { font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-weight: 400; }
+    .glass-card .gc-desc { font-size: 11px; line-height: 1.4; color: rgba(255,255,255,0.55); }
+
+    .eyebrow {
+      font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700;
+      font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 18px;
+    }
+    h1 {
+      font-family: 'Inter', sans-serif; font-weight: 800; text-transform: uppercase;
+      letter-spacing: -0.03em; line-height: 0.98;
+      font-size: clamp(40px, 8vw, 72px);
+      margin-bottom: 22px; max-width: 14ch;
+    }
+    h1 .dot { color: var(--accent); }
+    .lede {
+      font-size: 14px; line-height: 1.6; color: rgba(255,255,255,0.7);
+      max-width: 512px; margin-bottom: 36px;
+    }
+    .cta {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: var(--accent); color: var(--bg);
+      font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.85rem;
+      padding: 14px 26px; border-radius: 999px; transition: var(--transition);
+      align-self: flex-start;
+    }
+    .cta:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(94,210,156,0.3); }
+    .cta svg { width: 18px; height: 18px; }
+  </style>
+</head>
+<body>
+  <div class="bg-wrap">
+    <video id="bg-video" autoplay muted loop playsinline></video>
+    <div class="overlay-left"></div>
+    <div class="overlay-bottom"></div>
+    <div class="grid-lines"><span></span><span></span><span></span></div>
+    <svg class="glow" width="900" height="420" viewBox="0 0 900 420" aria-hidden="true">
+      <defs>
+        <filter id="glow-blur" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="25" />
+        </filter>
+        <radialGradient id="glow-grad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#5ed29c" stop-opacity="0.55" />
+          <stop offset="55%" stop-color="#1f7a5a" stop-opacity="0.25" />
+          <stop offset="100%" stop-color="#070b0a" stop-opacity="0" />
+        </radialGradient>
+      </defs>
+      <ellipse cx="450" cy="210" rx="400" ry="120" fill="url(#glow-grad)" filter="url(#glow-blur)" />
+    </svg>
+  </div>
+
+  <div class="shell">
+    <header>
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        CodeNest
+      </div>
+      <nav class="desktop">
+        <a href="#">PROJECTS</a>
+        <a href="#">BLOG</a>
+        <a href="#">ABOUT</a>
+        <a href="#">RESUME</a>
+      </nav>
+      <button class="hamburger" id="menu-open" aria-label="Open menu">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+      </button>
+    </header>
+
+    <div class="mobile-menu" id="mobile-menu">
+      <button class="mobile-close" id="menu-close" aria-label="Close menu">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <a href="#">PROJECTS</a>
+      <a href="#">BLOG</a>
+      <a href="#">ABOUT</a>
+      <a href="#">RESUME</a>
+    </div>
+
+    <main class="hero">
+      <div class="glass-card">
+        <div class="gc-tag">[ 2025 ]</div>
+        <div class="gc-head">Taught by <em>Industry</em> Professionals</div>
+        <div class="gc-desc">Learn directly from engineers who ship production code every day.</div>
+      </div>
+
+      <div class="eyebrow">Career-Ready Curriculum</div>
+      <h1>Launch your coding career<span class="dot">.</span></h1>
+      <p class="lede">Master in-demand coding skills through hands-on projects, real-world tooling, and mentorship from working professionals — built to take you from first commit to first offer.</p>
+      <a class="cta" href="#">
+        Get Started
+        <svg viewBox="0 0 24 24" fill="none" stroke="#070b0a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </a>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+  <script>
+    (function () {
+      var video = document.getElementById('bg-video');
+      var src = 'https://stream.mux.com/tLkHO1qZoaaQOUeVWo8hEBeGQfySP02EPS02BmnNFyXys.m3u8';
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = src;
+      } else if (window.Hls && window.Hls.isSupported()) {
+        var hls = new window.Hls({ enableWorker: false });
+        hls.loadSource(src);
+        hls.attachMedia(video);
+      }
+      var play = function () { var p = video.play(); if (p && p.catch) p.catch(function () {}); };
+      video.addEventListener('canplay', play);
+      play();
+
+      var menu = document.getElementById('mobile-menu');
+      document.getElementById('menu-open').addEventListener('click', function () { menu.classList.add('open'); });
+      document.getElementById('menu-close').addEventListener('click', function () { menu.classList.remove('open'); });
+      Array.prototype.forEach.call(menu.querySelectorAll('a'), function (a) {
+        a.addEventListener('click', function () { menu.classList.remove('open'); });
+      });
+    })();
+  </script>
+</body>
+</html>

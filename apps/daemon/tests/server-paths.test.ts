@@ -62,6 +62,27 @@ describe('resolveDaemonResourceRoot', () => {
     expect(resolveDaemonResourceRoot({ configured: safeBase, safeBases: [safeBase] })).toBe(safeBase);
   });
 
+  it('allows packaged launcher payload resources under the installation root', () => {
+    const installationRoot = path.resolve(import.meta.dirname, '..', 'fixtures', 'installation');
+    const configured = path.join(
+      installationRoot,
+      'launcher',
+      'channels',
+      'beta',
+      'namespaces',
+      'release-beta',
+      'versions',
+      '0.10.0-beta.15',
+      'payload',
+      'Open Design Beta.app',
+      'Contents',
+      'Resources',
+      'open-design',
+    );
+
+    expect(resolveDaemonResourceRoot({ configured, safeBases: [installationRoot] })).toBe(configured);
+  });
+
   it('rejects resource roots outside the safe bases', () => {
     const safeBase = path.resolve(import.meta.dirname, '..', 'fixtures', 'resources');
     const configured = path.resolve(import.meta.dirname, '..', 'fixtures-other', 'resources');

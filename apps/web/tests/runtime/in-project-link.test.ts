@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import { asInProjectFilePath } from '../../src/runtime/in-project-link';
 
@@ -64,6 +66,63 @@ describe('asInProjectFilePath', () => {
       // correctly; the catch arm below keeps malformed encodings
       // from throwing.
       expect(asInProjectFilePath('%E9%A6%96%E9%A1%B5.html')).toBe('首页.html');
+    });
+
+    it('extracts project raw file URLs produced by assistant file links', () => {
+      expect(asInProjectFilePath('/api/projects/project-1/raw/mutuals-v2.html')).toBe('mutuals-v2.html');
+    });
+
+    it('extracts project raw file URLs only when the route project matches the current project', () => {
+      expect(asInProjectFilePath('/api/projects/project-1/raw/mutuals-v2.html', undefined, 'project-1')).toBe(
+        'mutuals-v2.html',
+      );
+      expect(asInProjectFilePath('/api/projects/other-project/raw/index.html', new Set(['index.html']), 'project-1'))
+        .toBeNull();
+    });
+
+    it('extracts same-origin absolute project raw file URLs', () => {
+      expect(asInProjectFilePath(`${window.location.origin}/api/projects/project-1/raw/mutuals-v2.html`)).toBe(
+        'mutuals-v2.html',
+      );
+    });
+
+    it('matches local absolute paths against known project files', () => {
+      expect(
+        asInProjectFilePath(
+          '/Users/mac/open-design/open-design-preview-0.10.0/projects/Web%20Prototype/index.html',
+          new Set(['index.html']),
+        ),
+      ).toBe('index.html');
+    });
+
+    it('keeps unknown local absolute paths as normal links', () => {
+      expect(
+        asInProjectFilePath(
+          '/Users/mac/open-design/open-design-preview-0.10.0/projects/Web%20Prototype/index.html',
+          new Set(['summary.html']),
+        ),
+      ).toBeNull();
+    });
+
+    it('extracts encoded project raw file paths with nested folders', () => {
+      expect(asInProjectFilePath('/api/projects/project-1/raw/Web%20Prototype/mutuals-v2.html?v=2')).toBe(
+        'Web Prototype/mutuals-v2.html',
+      );
+    });
+
+    it('extracts project file routes from workspace links', () => {
+      expect(asInProjectFilePath('/projects/project-1/files/mutuals-v2.html')).toBe('mutuals-v2.html');
+      expect(asInProjectFilePath('/projects/project-1/conversations/conv-1/files/mutuals-v2.html')).toBe(
+        'mutuals-v2.html',
+      );
+    });
+
+    it('extracts workspace file routes only when the route project matches the current project', () => {
+      expect(asInProjectFilePath('/projects/project-1/files/mutuals-v2.html', undefined, 'project-1')).toBe(
+        'mutuals-v2.html',
+      );
+      expect(asInProjectFilePath('/projects/other-project/files/index.html', new Set(['index.html']), 'project-1'))
+        .toBeNull();
     });
 
     it('returns null for malformed percent-encoding rather than throwing', () => {

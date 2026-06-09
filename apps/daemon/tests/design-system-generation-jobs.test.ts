@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -187,6 +187,78 @@ describe('design system generation jobs', () => {
 
     expect(accepted?.status).toBe('accepted');
     expect(acceptedBody).toContain('## Revision Request: Visual Foundations');
+  });
+
+  it('creates a review-gated token contract rebuild revision with file changes', async () => {
+    const store = createDesignSystemGenerationJobStore({
+      root,
+      delayMs: 0,
+      idFactory: () => 'token-rebuild-1',
+    });
+    const created = await createUserDesignSystem(root, {
+      title: 'Token Product',
+      summary: 'Initial system.',
+      status: 'draft',
+    });
+    const baseBody = await readDesignSystem(root, created.id, { idPrefix: 'user:' });
+
+    const started = store.rebuildTokenContract({
+      designSystemId: created.id,
+      decision: {
+        designSystemId: created.id,
+        available: true,
+        recommended: true,
+        forced: false,
+        reason: 'Token contract rebuild recommended.',
+        triggers: ['quality report recommends rebuild'],
+        reportPath: 'source/token-contract.report.json',
+        grade: 'needs-review',
+        score: 42,
+      },
+      feedback: 'Rebuild TOKEN_SCHEMA slots from evidence.',
+      sectionTitle: 'Token Contract',
+      baseBody: baseBody ?? '',
+      proposedBody: `${baseBody ?? ''}\n\n## Token Contract Rebuild Review\n\nPending.\n`,
+      fileChanges: [{
+        path: 'source/token-contract.rebuild-request.md',
+        baseContent: '',
+        proposedContent: '# Token Contract Rebuild Request\n',
+      }],
+    });
+
+    expect(started).toMatchObject({
+      id: 'token-rebuild-1',
+      kind: 'token-contract-rebuild',
+      designSystemId: created.id,
+    });
+
+    const done = await waitForJob(store, 'token-rebuild-1');
+    const revisions = await listUserDesignSystemRevisions(root, created.id);
+    expect(done).toMatchObject({
+      status: 'succeeded',
+      revisionId: expect.any(String),
+    });
+    expect(revisions?.[0]).toMatchObject({
+      status: 'pending',
+      sectionTitle: 'Token Contract',
+      fileChanges: [
+        expect.objectContaining({
+          path: 'source/token-contract.rebuild-request.md',
+        }),
+      ],
+    });
+
+    await expect(readFile(path.join(root, 'token-product', 'source', 'token-contract.rebuild-request.md'), 'utf8'))
+      .rejects.toThrow();
+    const accepted = await updateUserDesignSystemRevisionStatus(
+      root,
+      created.id,
+      revisions?.[0]?.id ?? '',
+      'accepted',
+    );
+    expect(accepted?.status).toBe('accepted');
+    await expect(readFile(path.join(root, 'token-product', 'source', 'token-contract.rebuild-request.md'), 'utf8'))
+      .resolves.toContain('Token Contract Rebuild Request');
   });
 });
 

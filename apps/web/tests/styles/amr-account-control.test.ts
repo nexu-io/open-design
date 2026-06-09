@@ -19,11 +19,11 @@ function cssDeclarations(selector: string): string {
 }
 
 describe('AMR account control workspace styles', () => {
-  it('keeps settings startup errors visible while hiding profile badges', () => {
+  it('keeps settings startup errors and AMR profile badges visible', () => {
     const errorBlock = cssDeclarations('.agent-card-amr-auth .amr-account-control__error');
     const badgeBlock = cssDeclarations('.agent-card-amr-auth .amr-login-pill-badge');
 
     expect(errorBlock).not.toMatch(/(?:^|[;\n])\s*display:\s*none\s*;/);
-    expect(badgeBlock).toMatch(/(?:^|[;\n])\s*display:\s*none\s*;/);
+    expect(badgeBlock).not.toMatch(/(?:^|[;\n])\s*display:\s*none\s*;/);
   });
 });

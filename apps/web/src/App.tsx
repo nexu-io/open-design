@@ -100,10 +100,12 @@ import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
 import type {
   AgentInfo,
+  AgentModelChoice,
   ApiProtocol,
   AppConfig,
   AppVersionInfo,
   ChatAttachment,
+  DesignSystemGenerationJob,
   DesignSystemSummary,
   Project,
   ProjectTemplate,
@@ -111,6 +113,10 @@ import type {
   PromptTemplateSummary,
   SkillSummary,
 } from './types';
+
+const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
+const AMR_AGENT_ID = 'amr';
+const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
 
 export function shouldSyncMediaProvidersOnSave(
   mediaProviders: AppConfig['mediaProviders'],
@@ -130,6 +136,34 @@ function normalizeSavedComposioConfig(config: AppConfig['composio']): AppConfig[
     };
   }
   return { ...(config ?? {}) };
+}
+
+function amrProfileForConfig(config: AppConfig): string | null {
+  const profile = config.agentCliEnv?.[AMR_AGENT_ID]?.[AMR_PROFILE_ENV_KEY];
+  return typeof profile === 'string' && profile ? profile : null;
+}
+
+function sameAgentModelChoice(
+  left: AgentModelChoice | undefined,
+  right: AgentModelChoice | undefined,
+): boolean {
+  return (left?.model ?? null) === (right?.model ?? null)
+    && (left?.reasoning ?? null) === (right?.reasoning ?? null);
+}
+
+function clearStaleAmrModelChoiceOnProfileChange(
+  previous: AppConfig,
+  next: AppConfig,
+): AppConfig {
+  if (amrProfileForConfig(previous) === amrProfileForConfig(next)) return next;
+
+  const previousChoice = previous.agentModels?.[AMR_AGENT_ID];
+  const nextChoice = next.agentModels?.[AMR_AGENT_ID];
+  if (!nextChoice || !sameAgentModelChoice(previousChoice, nextChoice)) return next;
+
+  const nextAgentModels = { ...(next.agentModels ?? {}) };
+  delete nextAgentModels[AMR_AGENT_ID];
+  return { ...next, agentModels: nextAgentModels };
 }
 
 type ProjectListRequest = {
@@ -330,6 +364,7 @@ function AppInner() {
   const [daemonLive, setDaemonLive] = useState(false);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const amrModelsRef = useRef<AmrModelsResponse | null>(null);
+  const amrPollGenerationRef = useRef(0);
   const agentStreamRequestSeqRef = useRef(0);
   const [amrPollRestartToken, setAmrPollRestartToken] = useState(0);
   const [providerModelsCache, setProviderModelsCache] = useState<
@@ -343,6 +378,9 @@ function AppInner() {
   // EntryView Templates tab. See specs/current/skills-and-design-templates.md.
   const [designTemplates, setDesignTemplates] = useState<SkillSummary[]>([]);
   const [designSystems, setDesignSystems] = useState<DesignSystemSummary[]>([]);
+  const [pendingDesignSystemRevisionJobs, setPendingDesignSystemRevisionJobs] = useState<
+    Record<string, DesignSystemGenerationJob>
+  >({});
   const [projects, setProjects] = useState<Project[]>([]);
   const [petTaskCenter, setPetTaskCenter] = useState<PetTaskCenter>({
     running: [],
@@ -402,6 +440,11 @@ function AppInner() {
 
   const isCurrentAgentStreamRequest = useCallback((requestId: number) => {
     return agentStreamRequestSeqRef.current === requestId;
+  }, []);
+
+  const restartAmrPolling = useCallback(() => {
+    amrPollGenerationRef.current += 1;
+    setAmrPollRestartToken((current) => current + 1);
   }, []);
 
   // v2 schema removed the standalone `app_launch` event; the initial
@@ -617,13 +660,23 @@ function AppInner() {
     if (!daemonLive) return;
     let cancelled = false;
     let timer: number | null = null;
+    const pollGeneration = amrPollGenerationRef.current + 1;
+    amrPollGenerationRef.current = pollGeneration;
     const pollDelayMs = 1_000;
     const maxPresetPolls = 10;
     let presetPolls = 0;
 
     const applyAmrModels = async () => {
       const result = await fetchAmrModels();
-      if (cancelled || !result || !Array.isArray(result.models) || result.models.length === 0) return;
+      if (
+        cancelled ||
+        amrPollGenerationRef.current !== pollGeneration ||
+        !result ||
+        !Array.isArray(result.models) ||
+        result.models.length === 0
+      ) {
+        return;
+      }
       amrModelsRef.current = result;
       setAgents((current) => mergeAmrModelsIntoAgents(current, result));
       const shouldPollPreset =
@@ -647,8 +700,8 @@ function AppInner() {
 
   const handleAmrLoginStatusChange = useCallback((status: VelaLoginStatus | null) => {
     if (status?.loggedIn !== true) return;
-    setAmrPollRestartToken((current) => current + 1);
-  }, []);
+    restartAmrPolling();
+  }, [restartAmrPolling]);
 
   // Bootstrap — detect daemon, then fan out independent fetches so each
   // entry-view tab can render the moment its own data lands. Earlier this
@@ -805,7 +858,10 @@ function AppInner() {
           daemonMediaProvidersLoaded,
         );
         const next = mergeDaemonMediaProviders(
-          mergeDaemonConfig(baseConfig, daemonConfig),
+          clearStaleAmrModelChoiceOnProfileChange(
+            baseConfig,
+            mergeDaemonConfig(baseConfig, daemonConfig),
+          ),
           daemonMediaProvidersLoaded,
         );
         const hasLocalComposioKey = Boolean(next.composio?.apiKey?.trim());
@@ -1118,7 +1174,10 @@ function AppInner() {
   const refreshAgents = useCallback(
     async (options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] }) => {
       if (options && Object.prototype.hasOwnProperty.call(options, 'agentCliEnv')) {
-        const nextConfig = { ...config, agentCliEnv: options.agentCliEnv ?? {} };
+        const nextConfig = clearStaleAmrModelChoiceOnProfileChange(config, {
+          ...config,
+          agentCliEnv: options.agentCliEnv ?? {},
+        });
         amrModelsRef.current = null;
         saveConfig(nextConfig);
         await syncConfigToDaemon(nextConfig);
@@ -1154,6 +1213,25 @@ function AppInner() {
     },
     [beginAgentStreamRequest, config, isCurrentAgentStreamRequest],
   );
+
+  useEffect(() => {
+    const handleAppConfigChanged = () => {
+      void fetchDaemonConfig().then((daemonConfig) => {
+        const next = clearStaleAmrModelChoiceOnProfileChange(
+          latestPersistedConfigRef.current,
+          mergeDaemonConfig(latestPersistedConfigRef.current, daemonConfig),
+        );
+        latestPersistedConfigRef.current = next;
+        saveConfig(next);
+        setConfig(next);
+        amrModelsRef.current = null;
+        restartAmrPolling();
+        void refreshAgents();
+      });
+    };
+    window.addEventListener(APP_CONFIG_CHANGED_EVENT, handleAppConfigChanged);
+    return () => window.removeEventListener(APP_CONFIG_CHANGED_EVENT, handleAppConfigChanged);
+  }, [refreshAgents, restartAmrPolling]);
 
   const handleCreateProject = useCallback(
     async (
@@ -1202,7 +1280,7 @@ function AppInner() {
             area: 'new_project',
             project_source: 'create_button',
             project_id: null,
-            project_kind: projectKindToTracking(kind),
+            project_kind: projectKindToTracking(kind, input.metadata?.videoModel),
             fidelity,
             result: 'failed',
             error_code: 'CREATE_REQUEST_FAILED',
@@ -1280,7 +1358,7 @@ function AppInner() {
           area: 'new_project',
           project_source: 'create_button',
           project_id: result.project.id,
-          project_kind: projectKindToTracking(kind),
+          project_kind: projectKindToTracking(kind, input.metadata?.videoModel),
           fidelity,
           result: 'success',
         },
@@ -1597,6 +1675,23 @@ function AppInner() {
     },
     [iframeKeepAlivePool],
   );
+  const handleDesignSystemImportRebuildJob = useCallback(
+    (designSystemId: string, job: DesignSystemGenerationJob) => {
+      setPendingDesignSystemRevisionJobs((current) => ({
+        ...current,
+        [designSystemId]: job,
+      }));
+    },
+    [],
+  );
+  const handleDesignSystemRevisionJobConsumed = useCallback((designSystemId: string, jobId: string) => {
+    setPendingDesignSystemRevisionJobs((current) => {
+      if (current[designSystemId]?.id !== jobId) return current;
+      const next = { ...current };
+      delete next[designSystemId];
+      return next;
+    });
+  }, []);
 
   const activeProject =
     route.kind === 'project'
@@ -1866,6 +1961,10 @@ function AppInner() {
         onSetDefault={handleChangeDefaultDesignSystem}
         onSystemsRefresh={refreshDesignSystems}
         onProjectsRefresh={refreshProjects}
+        initialRevisionJob={pendingDesignSystemRevisionJobs[route.designSystemId] ?? null}
+        onInitialRevisionJobConsumed={(jobId) =>
+          handleDesignSystemRevisionJobConsumed(route.designSystemId, jobId)
+        }
       />
     );
   } else if (activeProject) {
@@ -1944,39 +2043,6 @@ function AppInner() {
         onRenameProject={handleRenameProject}
         onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
         onCreateDesignSystem={() => navigate({ kind: 'design-system-create' })}
-        renderDesignSystemCreation={(onBack, hooks) => (
-          <DesignSystemCreationFlow
-            chrome="embedded"
-            onBack={onBack}
-            onCreated={(projectId, project) => {
-              if (project) {
-                setProjects((curr) => [
-                  project,
-                  ...curr.filter((p) => p.id !== project.id),
-                ]);
-              }
-              // Creating a design system from the onboarding step 2 panel
-              // counts as completing onboarding, even though the user is
-              // about to leave the entry shell for the project view. The
-              // Skip path already marks completion via finishOnboarding;
-              // mirror that here so the first-run privacy banner can
-              // surface when the user later returns to home.
-              handleCompleteOnboarding();
-              navigate({ kind: 'project', projectId, conversationId: null, fileName: null });
-            }}
-            onProjectPrepared={(project) => {
-              setProjects((curr) => [
-                project,
-                ...curr.filter((p) => p.id !== project.id),
-              ]);
-            }}
-            onSystemsRefresh={refreshDesignSystems}
-            config={config}
-            onOpenConnectorsTab={() => openSettings('composio')}
-            {...(hooks?.onBeforeGenerate ? { onBeforeGenerate: hooks.onBeforeGenerate } : {})}
-            {...(hooks?.onGenerateSettled ? { onGenerateSettled: hooks.onGenerateSettled } : {})}
-          />
-        )}
         onOpenDesignSystem={(id: string) => navigate({ kind: 'design-system-detail', designSystemId: id })}
         onDesignSystemsRefresh={refreshDesignSystems}
         onPersistComposioKey={handleConfigPersistComposioKey}
@@ -2047,6 +2113,7 @@ function AppInner() {
           onProjectsRefresh={refreshProjects}
           onSkillsChanged={handleSkillsChanged}
           onDesignSystemsChanged={handleDesignSystemsChanged}
+          onDesignSystemImportRebuildJob={handleDesignSystemImportRebuildJob}
           providerModelsCache={providerModelsCache}
           onProviderModelsCacheChange={setProviderModelsCache}
         />

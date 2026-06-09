@@ -765,6 +765,13 @@ function assertWinInstallerBuildPlatform(): void {
   if (process.platform !== "win32") throw new Error("Windows installer build must run on Windows");
 }
 
+function logWinInstallerProgress(message: string, fields: Record<string, unknown> = {}): void {
+  const suffix = Object.entries(fields)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ");
+  process.stderr.write(`[tools-pack win] ${message}${suffix.length === 0 ? "" : ` ${suffix}`}\n`);
+}
+
 function createWinNsisTimingHelpers() {
   const timings: WinPackTiming[] = [];
   const runSegment = async <T>(
@@ -773,8 +780,18 @@ function createWinNsisTimingHelpers() {
     details: Record<string, unknown> = {},
   ): Promise<T> => {
     const startedAt = Date.now();
+    logWinInstallerProgress("segment:start", { phase });
     try {
-      return await task();
+      const result = await task();
+      logWinInstallerProgress("segment:done", { durationMs: Date.now() - startedAt, phase });
+      return result;
+    } catch (error) {
+      logWinInstallerProgress("segment:failed", {
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+        phase,
+      });
+      throw error;
     } finally {
       timings.push({ details, durationMs: Date.now() - startedAt, phase });
     }
@@ -791,6 +808,7 @@ function createWinNsisTimingHelpers() {
       command,
       cwd: options.cwd,
     };
+    logWinInstallerProgress("segment:start", { phase });
     try {
       const result = await execFileAsync(command, args, {
         cwd: options.cwd,
@@ -804,12 +822,18 @@ function createWinNsisTimingHelpers() {
         details.outputBytes = (await stat(options.outputPath)).size;
         details.outputPath = options.outputPath;
       }
+      logWinInstallerProgress("segment:done", { durationMs: Date.now() - startedAt, phase });
       timings.push({ details, durationMs: Date.now() - startedAt, phase });
     } catch (error) {
       const failure = error as { code?: unknown; stderr?: unknown; stdout?: unknown };
       details.code = failure.code;
       details.stdoutTail = typeof failure.stdout === "string" ? failure.stdout.slice(-2000) : undefined;
       details.stderrTail = typeof failure.stderr === "string" ? failure.stderr.slice(-2000) : undefined;
+      logWinInstallerProgress("segment:failed", {
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+        phase,
+      });
       timings.push({ details, durationMs: Date.now() - startedAt, phase });
       throw error;
     }

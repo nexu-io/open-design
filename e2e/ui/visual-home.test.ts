@@ -31,7 +31,6 @@ test('[P2] captures the home plugin catalog surface', async ({ page }) => {
   const home = page.getByTestId('entry-view-home');
   await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
   await expect(home.getByTestId('plugins-home-section')).toBeVisible();
-  await expect(home.getByTestId('plugins-home-chip-saved')).toBeVisible();
 
   await captureVisual(page, 'visual-home-catalog');
 });

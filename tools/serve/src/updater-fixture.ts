@@ -8,7 +8,9 @@ export type UpdaterFixtureOptions = {
   artifactBody?: Buffer | string;
   channel?: UpdaterFixtureChannel;
   host?: string;
+  includePayload?: boolean;
   platform?: "mac" | "win";
+  payloadBody?: Buffer | string;
   port?: number;
   version?: string;
 };
@@ -19,6 +21,9 @@ export type UpdaterFixtureInfo = {
   checksumUrl: string;
   metadataUrl: string;
   origin: string;
+  payloadChecksumUrl: string | null;
+  payloadSha256: string | null;
+  payloadUrl: string | null;
   platform: "mac" | "win";
   sha256: string;
   version: string;
@@ -205,6 +210,14 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
     ? options.artifactBody
     : Buffer.from(options.artifactBody ?? `Open Design updater fixture ${version}\n`, "utf8");
   const sha256 = createHash("sha256").update(artifactBody).digest("hex");
+  const payloadName = platform === "win"
+    ? `open-design-${version}-win-x64-payload.7z`
+    : `open-design-${version}-mac-arm64-payload.zip`;
+  const includePayload = options.includePayload === true;
+  const payloadBody = Buffer.isBuffer(options.payloadBody)
+    ? options.payloadBody
+    : Buffer.from(options.payloadBody ?? `Open Design launcher payload fixture ${version}\n`, "utf8");
+  const payloadSha256 = createHash("sha256").update(payloadBody).digest("hex");
 
   let info: UpdaterFixtureInfo | null = null;
   const server = createServer((request, response) => {
@@ -231,6 +244,17 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
                 size: artifactBody.byteLength,
                 url: info.artifactUrl,
               },
+              ...(includePayload && info.payloadUrl != null && info.payloadChecksumUrl != null
+                ? {
+                    payload: {
+                      contentType: platform === "win" ? "application/x-7z-compressed" : "application/zip",
+                      name: payloadName,
+                      sha256Url: info.payloadChecksumUrl,
+                      size: payloadBody.byteLength,
+                      url: info.payloadUrl,
+                    },
+                  }
+                : {}),
             },
             channel,
             enabled: true,
@@ -249,9 +273,18 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
       sendArtifact(request, response, artifactBody, contentType);
       return;
     }
+    if (includePayload && path === `/${channel}/versions/${version}/${payloadName}`) {
+      sendArtifact(request, response, payloadBody, platform === "win" ? "application/x-7z-compressed" : "application/zip");
+      return;
+    }
     if (path === `/${channel}/versions/${version}/${artifactName}.sha256`) {
       response.setHeader("content-type", "text/plain; charset=utf-8");
       response.end(`${sha256}  ${artifactName}\n`);
+      return;
+    }
+    if (includePayload && path === `/${channel}/versions/${version}/${payloadName}.sha256`) {
+      response.setHeader("content-type", "text/plain; charset=utf-8");
+      response.end(`${payloadSha256}  ${payloadName}\n`);
       return;
     }
     response.statusCode = 404;
@@ -261,12 +294,16 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
   await listen(server, port, host);
   const origin = serverOrigin(server);
   const artifactUrl = `${origin}/${channel}/versions/${version}/${artifactName}`;
+  const payloadUrl = includePayload ? `${origin}/${channel}/versions/${version}/${payloadName}` : null;
   info = {
     artifactUrl,
     channel,
     checksumUrl: `${artifactUrl}.sha256`,
     metadataUrl: `${origin}/${channel}/latest/metadata.json`,
     origin,
+    payloadChecksumUrl: payloadUrl == null ? null : `${payloadUrl}.sha256`,
+    payloadSha256: includePayload ? payloadSha256 : null,
+    payloadUrl,
     platform,
     sha256,
     version,

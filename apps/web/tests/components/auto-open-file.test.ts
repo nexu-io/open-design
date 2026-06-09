@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { decideAutoOpenAfterWrite } from '../../src/components/auto-open-file';
+import {
+  decideAutoOpenAfterWrite,
+  selectAutoOpenProducedHtml,
+} from '../../src/components/auto-open-file';
 
 describe('decideAutoOpenAfterWrite', () => {
   it('returns shouldOpen=false when filePath is empty', () => {
@@ -135,5 +138,33 @@ describe('decideAutoOpenAfterWrite', () => {
       { moduleFileNames: new Set(['icons.jsx']) },
     );
     expect(result).toEqual({ shouldOpen: true, fileName: 'landing.html' });
+  });
+});
+
+describe('selectAutoOpenProducedHtml', () => {
+  it('selects a newly produced html file for the turn-end auto-open fallback', () => {
+    const result = selectAutoOpenProducedHtml([
+      { name: 'notes.txt', path: 'notes.txt', kind: 'text', mtime: 20 },
+      { name: 'mutuals-v2.html', path: 'mutuals-v2.html', kind: 'html', mtime: 30 },
+    ]);
+
+    expect(result).toBe('mutuals-v2.html');
+  });
+
+  it('prefers the newest produced html file when a turn writes multiple html files', () => {
+    const result = selectAutoOpenProducedHtml([
+      { name: 'index.html', path: 'index.html', kind: 'html', mtime: 10 },
+      { name: 'mutuals-v2.html', path: 'mutuals-v2.html', kind: 'html', mtime: 30 },
+    ]);
+
+    expect(result).toBe('mutuals-v2.html');
+  });
+
+  it('returns null when the produced files are not html previews', () => {
+    const result = selectAutoOpenProducedHtml([
+      { name: 'deck.pptx', path: 'deck.pptx', kind: 'presentation', mtime: 30 },
+    ]);
+
+    expect(result).toBeNull();
   });
 });

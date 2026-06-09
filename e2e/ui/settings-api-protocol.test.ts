@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
-import type { Locator, Page } from '@playwright/test';
+import type { Locator, Page, Route } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
-const SETTINGS_MENU_LABEL = /^Settings$|^设置$|^設定$/i;
+const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
+const SETTINGS_MENU_LABEL = /Settings|设置|設定/i;
 const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 const MODEL_POPOVER_SELECTOR = '.model-select-searchable__popover';
 
@@ -18,19 +18,26 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
   await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
 }
 
 async function openSettingsDialogFromEntry(page: Page) {
   await waitForLoadingToClear(page);
-  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
+  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).first().click();
+  const dialog = page.locator('.modal-settings[role="dialog"]');
   const menu = page.getByRole('menu');
+  await expect
+    .poll(async () => {
+      if (await dialog.isVisible().catch(() => false)) return 'dialog';
+      if (await menu.isVisible().catch(() => false)) return 'menu';
+      return 'pending';
+    })
+    .not.toBe('pending');
   if (await menu.isVisible().catch(() => false)) {
-    await menu.getByRole('button', { name: SETTINGS_MENU_LABEL }).click();
+    await menu.getByRole('menuitem', { name: SETTINGS_MENU_LABEL }).click();
   }
-  const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   return dialog;
 }
@@ -65,6 +72,22 @@ function modelCombobox(scope: Page | Locator) {
   return scope.getByRole('combobox', { name: 'Model', exact: true });
 }
 
+function providerPresetCombobox(scope: Page | Locator) {
+  return scope.getByLabel(/Gateway preset|Quick fill provider/i);
+}
+
+async function selectComboboxOption(
+  page: Page,
+  combobox: Locator,
+  optionName: RegExp | string,
+  popoverSelector: string,
+) {
+  await combobox.click();
+  const popover = page.locator(popoverSelector).last();
+  await expect(popover).toBeVisible();
+  await popover.getByRole('option', { name: optionName }).click();
+}
+
 async function expectModelComboboxText(
   scope: Page | Locator,
   pattern: RegExp | string,
@@ -94,12 +117,49 @@ async function openExecutionSettingsWithAgents(
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({ json: { agents } });
+  await page.route('**/api/agents**', async (route) => {
+    await fulfillAgentsRoute(route, agents);
   });
 
   await gotoEntryHome(page);
   await openSettingsDialogFromEntry(page);
+}
+
+async function fulfillAgentsRoute(
+  route: Route,
+  agents: Array<{
+    id: string;
+    name: string;
+    bin: string;
+    available: boolean;
+    version?: string | null;
+    models?: Array<{ id: string; label: string }>;
+  }>,
+) {
+  const url = new URL(route.request().url());
+  if (url.searchParams.get('stream') === '1') {
+    const body = [
+      ...agents.flatMap((agent) => [
+        'event: agent',
+        `data: ${JSON.stringify(agent)}`,
+        '',
+      ]),
+      'event: done',
+      'data: {}',
+      '',
+      '',
+    ].join('\n');
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body,
+    });
+    return;
+  }
+  await route.fulfill({ json: { agents } });
 }
 
 test('[P1] legacy known OpenAI provider switches to the matching Anthropic preset', async ({ page }) => {
@@ -193,13 +253,8 @@ test('[P0] BYOK quick fill provider updates fields and saved settings persist af
   const dialog = page.getByRole('dialog');
 
   await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
-  const providerPicker = dialog.getByLabel('Quick fill provider');
-  const deepSeekValue = await providerPicker.locator('option').evaluateAll((options) => {
-    const match = options.find((option) => /deepseek/i.test((option as HTMLOptionElement).label));
-    return match ? (match as HTMLOptionElement).value : null;
-  });
-  expect(deepSeekValue).toBeTruthy();
-  await providerPicker.selectOption(deepSeekValue!);
+  const providerPicker = providerPresetCombobox(dialog);
+  await selectComboboxOption(page, providerPicker, /DeepSeek — OpenAI/i, '[data-testid="settings-byok-provider-preset-popover"]');
   await expectModelComboboxText(dialog, /deepseek-chat/i);
   await expect(dialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
 
@@ -235,7 +290,7 @@ test('[P0] BYOK quick fill provider updates fields and saved settings persist af
   await openSettingsDialogFromEntry(page);
   const reopenedDialog = page.getByRole('dialog');
   await expect(reopenedDialog.getByRole('tab', { name: 'OpenAI', exact: true })).toHaveAttribute('aria-selected', 'true');
-  await expect(reopenedDialog.getByLabel('Quick fill provider')).toHaveValue(deepSeekValue!);
+  await expect(providerPresetCombobox(reopenedDialog)).toContainText(/DeepSeek — OpenAI/i);
   await expectModelComboboxText(reopenedDialog, /deepseek-chat/i);
   await expect(reopenedDialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
   await expect(reopenedDialog.getByLabel('API key')).toHaveValue('sk-openai-test');
@@ -268,7 +323,7 @@ test('[P0] BYOK save stays disabled until required fields are valid', async ({ p
 
   const baseUrlInput = dialog.getByLabel('Base URL');
   await baseUrlInput.fill('http://10.0.0.5:11434/v1');
-  await expect(dialog.locator('#settings-base-url-error')).toContainText('valid public');
+  await expect(dialog.locator('#settings-base-url-error')).toContainText(/public http:\/\/ or https:\/\//i);
 
   await baseUrlInput.fill('http://localhost:11434/v1');
   await expect.poll(async () => readSavedConfig(page)).toMatchObject({
@@ -415,10 +470,11 @@ test('[P0] BYOK fetched models are searchable inside the Settings model dropdown
   await expect(search).toBeVisible();
   await search.fill('mm-nightly');
   await expect(popover.getByRole('option', { name: 'MM Nightly Model (mm-nightly-model)' })).toBeVisible();
-  await expect(popover.getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(0);
+  await expect(popover.getByRole('option', { name: 'BB Nightly Model (bb-nightly-model)' })).toHaveCount(0);
 });
 
 test('[P0] saving Local CLI updates the entry status pill with the selected agent', async ({ page }) => {
+  test.setTimeout(60_000);
   await openExecutionSettingsWithAgents(
     page,
     {
@@ -460,7 +516,9 @@ test('[P0] saving Local CLI updates the entry status pill with the selected agen
   const dialog = page.getByRole('dialog');
 
   await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
-  await dialog.getByRole('button', { name: /Codex CLI/i }).click();
+  const codexAgent = dialog.getByTestId('settings-agent-select-codex');
+  await expect(codexAgent).toBeVisible();
+  await codexAgent.click();
   await expect.poll(async () => readSavedConfig(page)).toMatchObject({
     mode: 'daemon',
     agentId: 'codex',

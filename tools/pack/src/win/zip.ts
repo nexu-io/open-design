@@ -9,6 +9,13 @@ import type { WinBuiltAppManifest, WinPackTiming, WinPaths } from "./types.js";
 
 const execFileAsync = promisify(execFile);
 
+function logWinZipProgress(message: string, fields: Record<string, unknown> = {}): void {
+  const suffix = Object.entries(fields)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ");
+  process.stderr.write(`[tools-pack win] ${message}${suffix.length === 0 ? "" : ` ${suffix}`}\n`);
+}
+
 // Produces a portable zip from the unpacked Electron build using the same 7z
 // binary that ships with tools-pack for the NSIS payload. The zip lays files
 // flat at the archive root so that users can extract it anywhere on Windows
@@ -29,8 +36,18 @@ export async function buildWinPortableZip(
   const timings: WinPackTiming[] = [];
   const runSegment = async <T>(phase: string, task: () => Promise<T>): Promise<T> => {
     const startedAt = Date.now();
+    logWinZipProgress("segment:start", { phase });
     try {
-      return await task();
+      const result = await task();
+      logWinZipProgress("segment:done", { durationMs: Date.now() - startedAt, phase });
+      return result;
+    } catch (error) {
+      logWinZipProgress("segment:failed", {
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+        phase,
+      });
+      throw error;
     } finally {
       timings.push({ durationMs: Date.now() - startedAt, phase });
     }
@@ -47,6 +64,7 @@ export async function buildWinPortableZip(
       command,
       cwd: options.cwd,
     };
+    logWinZipProgress("segment:start", { phase });
     try {
       const result = await execFileAsync(command, args, {
         cwd: options.cwd,
@@ -60,12 +78,18 @@ export async function buildWinPortableZip(
         details.outputBytes = (await stat(options.outputPath)).size;
         details.outputPath = options.outputPath;
       }
+      logWinZipProgress("segment:done", { durationMs: Date.now() - startedAt, phase });
       timings.push({ details, durationMs: Date.now() - startedAt, phase });
     } catch (error) {
       const failure = error as { code?: unknown; stderr?: unknown; stdout?: unknown };
       details.code = failure.code;
       details.stdoutTail = typeof failure.stdout === "string" ? failure.stdout.slice(-2000) : undefined;
       details.stderrTail = typeof failure.stderr === "string" ? failure.stderr.slice(-2000) : undefined;
+      logWinZipProgress("segment:failed", {
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+        phase,
+      });
       timings.push({ details, durationMs: Date.now() - startedAt, phase });
       throw error;
     }

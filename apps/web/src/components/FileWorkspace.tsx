@@ -14,6 +14,7 @@ import {
   trackFileManagerClick,
   trackFileUploadResult,
   trackPageView,
+  trackTabLauncherClick,
 } from '../analytics/events';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
 import { useT } from '../i18n';
@@ -162,14 +163,16 @@ interface Props {
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
   // Side Chat (`chat:<conversationId>` tab) wiring. Threaded from ProjectView
-  // so a secondary ChatPane can run against a seeded conversation without
+  // so a secondary ChatPane can render an already-open conversation tab without
   // FileWorkspace owning any chat state. All optional: a workspace mounted
-  // without these simply offers no "New Side Chat" launcher entry.
+  // without these simply does not render restored side-chat tabs. There is no
+  // launcher affordance to create new side chats — only persisted `chat:` tabs
+  // are restored.
   chatConfig?: AppConfig;
   chatAgentsById?: Map<string, AgentInfo>;
   chatLocale?: string;
   conversations?: Conversation[];
-  /** The primary chat's active conversation — the seed source for new side chats. */
+  /** The primary chat's active conversation. */
   activeConversationId?: string | null;
   onSelectConversation?: (id: string) => void;
   onDeleteConversation?: (id: string) => void;
@@ -177,8 +180,6 @@ interface Props {
   onConversationSessionModeChange?: (id: string, mode: ChatSessionMode) => void;
   onNewConversation?: () => void;
   activeConversationChat?: ActiveConversationChatState;
-  /** Create a context-seeded conversation and resolve its id (backs the launcher). */
-  onCreateSideChat?: (seedFromConversationId: string | null) => Promise<string | null>;
   onActiveContextChange?: (context: WorkspaceContextItem | null) => void;
   onWorkspaceContextsChange?: (contexts: WorkspaceContextItem[]) => void;
   messages?: ChatMessage[];
@@ -217,6 +218,8 @@ interface Props {
   // Bumped nonce that focuses the Questions tab (banner click / new form).
   focusQuestionsRequest?: { nonce: number } | null;
 }
+
+const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
 
 interface SketchState {
   version: number;
@@ -406,7 +409,6 @@ export function FileWorkspace({
   onConversationSessionModeChange,
   onNewConversation,
   activeConversationChat,
-  onCreateSideChat,
   onActiveContextChange,
   onWorkspaceContextsChange,
   messages = [],
@@ -428,12 +430,11 @@ export function FileWorkspace({
   focusQuestionsRequest = null,
 }: Props) {
   const t = useT();
-  // The Questions tab only exists while there's an unanswered form. Once the
-  // user replies, the answered copy moves back into chat and the tab must close
-  // — so gate on `questionFormSubmittedAnswers === undefined` rather than the
-  // mere presence of a form, otherwise a locked duplicate lingers in the panel.
-  const showQuestionsTab =
-    Boolean(questionForm || questionsGenerating) && questionFormSubmittedAnswers === undefined;
+  const amrProfile = chatConfig?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
+  // The chat column only shows a compact Questions banner; the form itself
+  // lives here, including after submission when a banner click can reopen the
+  // answered preview.
+  const showQuestionsTab = Boolean(questionForm || questionFormPreview || questionsGenerating);
   const analytics = useAnalytics();
   // P1 page_view page_name=file_manager — once per project the user lands
   // inside the workspace. Re-fire when the projectId changes so a
@@ -803,8 +804,21 @@ export function FileWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusQuestionsRequest?.nonce]);
 
-  // If the Questions tab is active but the form is gone (answered, or a new
-  // assistant turn without a form), fall back to the default root tab.
+  // Submitting from the right-hand panel should close the preview once. The
+  // answered form remains available, so a later chat-banner click can reopen
+  // the same Questions tab without this effect immediately closing it again.
+  const previousQuestionFormSubmittedAnswersRef = useRef(questionFormSubmittedAnswers);
+  useEffect(() => {
+    const wasAnswered = previousQuestionFormSubmittedAnswersRef.current !== undefined;
+    const isAnswered = questionFormSubmittedAnswers !== undefined;
+    previousQuestionFormSubmittedAnswersRef.current = questionFormSubmittedAnswers;
+    if (activeTab === QUESTIONS_TAB && !wasAnswered && isAnswered) {
+      setActiveTab(defaultRootTab);
+    }
+  }, [activeTab, defaultRootTab, questionFormSubmittedAnswers]);
+
+  // If the Questions tab is active but the form is gone because a new assistant
+  // turn has no form, fall back to the default root tab.
   useEffect(() => {
     if (activeTab === QUESTIONS_TAB && !showQuestionsTab) {
       setActiveTab(defaultRootTab);
@@ -1737,14 +1751,12 @@ export function FileWorkspace({
     && !activeFile;
 
   // The "+" launcher's create-new actions come from the registry. `openTab`
-  // reuses the same tab-state path as opening a file so a new chat:<id> /
-  // terminal:<id> tab is focused; `createBrowser` opens an embedded browser tab.
-  // `createSideChat` is only wired when the parent threaded the chat callbacks,
-  // so a chat-less workspace hides that action entirely.
+  // reuses the same tab-state path as opening a file so a new terminal:<id>
+  // tab is focused; `createBrowser` opens an embedded browser tab.
   // Built fresh each render (not memoized): `createBrowser` closes over
   // `openBrowserTab`, which reads the live `browserTabs` state — memoizing it
   // would capture a stale closure and make every "New Browser" click overwrite
-  // the same single tab. The terminal/side-chat actions route through `openFile`
+  // the same single tab. The terminal action routes through `openFile`
   // (ref-based), so freshness here is cheap and only matters while the launcher
   // is open.
   const launcherContext: LauncherContext = {
@@ -1753,9 +1765,6 @@ export function FileWorkspace({
     // Browser is owned by this branch's DesignBrowserPanel: spin up a browser
     // tab synchronously (no daemon round-trip) and let the launcher close.
     createBrowser: () => openBrowserTab(),
-    ...(onCreateSideChat
-      ? { createSideChat: () => onCreateSideChat(activeConversationId) }
-      : {}),
     // Terminal needs only the project id — spawn the PTY here and hand the
     // resulting session id back so the launcher opens a terminal:<id> tab.
     // Surface a toast when the daemon can't start one (e.g. node-pty not
@@ -2016,6 +2025,14 @@ export function FileWorkspace({
           launcherContext={launcherContext}
           onOpenFile={openFile}
           onOpenTab={focusWorkspaceTab}
+          onTrack={(input) =>
+            trackTabLauncherClick(analytics.track, {
+              page_name: 'file_manager',
+              area: 'tab_launcher',
+              ...(projectId ? { project_id: projectId } : {}),
+              ...input,
+            })
+          }
           onClose={() => setLauncherOpen(false)}
         />
       ) : null}
@@ -2116,6 +2133,7 @@ export function FileWorkspace({
             onLaunchTerminalAuth={onLaunchTerminalAuth}
             amrAuthorizeSourceDetail="generation_preview_authorize_retry"
             amrRechargeSourceDetail="generation_preview_recharge"
+            amrProfile={amrProfile}
             amrGuidance={
               generationPreview.promoteAmrSwitch
                 && generationPreview.errorCode

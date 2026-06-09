@@ -13,6 +13,7 @@ import type {
 } from '@open-design/contracts';
 import { applyPlugin, listPlugins } from '../state/projects';
 import { useI18n } from '../i18n';
+import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 
 interface Props {
   // Active project the apply will be scoped to. Omit on Home (the
@@ -93,25 +94,29 @@ export function InlinePluginsRail(props: Props) {
 
   return (
     <div className={className} role="list">
-      {plugins.map((p) => (
-        <button
-          key={p.id}
-          type="button"
-          role="listitem"
-          className="inline-plugins-rail__card"
-          onClick={() => onClick(p)}
-          disabled={pendingId !== null}
-          aria-busy={pendingId === p.id ? 'true' : undefined}
-          data-plugin-id={p.id}
-          title={p.manifest?.description ?? p.title}
-        >
-          <div className="inline-plugins-rail__title">{p.title}</div>
-          {p.manifest?.description ? (
-            <div className="inline-plugins-rail__desc">{p.manifest.description}</div>
-          ) : null}
-          <div className="inline-plugins-rail__trust">trust: {p.trust}</div>
-        </button>
-      ))}
+      {plugins.map((p) => {
+        const title = localizePluginTitle(locale, p);
+        const description = localizePluginDescription(locale, p);
+        return (
+          <button
+            key={p.id}
+            type="button"
+            role="listitem"
+            className="inline-plugins-rail__card"
+            onClick={() => onClick(p)}
+            disabled={pendingId !== null}
+            aria-busy={pendingId === p.id ? 'true' : undefined}
+            data-plugin-id={p.id}
+            title={description || title}
+          >
+            <div className="inline-plugins-rail__title">{title}</div>
+            {description ? (
+              <div className="inline-plugins-rail__desc">{description}</div>
+            ) : null}
+            <div className="inline-plugins-rail__trust">trust: {p.trust}</div>
+          </button>
+        );
+      })}
       {error ? (
         <div role="alert" className="inline-plugins-rail__error">
           {error}

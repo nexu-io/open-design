@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, assert, chmodSync, codex, cursorAgent, detectAgents, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
+  AGENT_DEFS, assert, chmodSync, codex, cursorAgent, detectAgents, grokBuild, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 import { codexNeedsDangerFullAccessSandbox } from '../../src/runtimes/defs/codex.js';
 import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
@@ -458,6 +458,26 @@ test('cursor-agent parses live model ids separately from display labels', () => 
     { id: 'auto', label: 'Auto' },
     { id: 'composer-2.5', label: 'Composer 2.5 (current)' },
     { id: 'grok-4.3', label: 'Grok 4.3 1M' },
+  ]);
+});
+
+test('grok-build filters login headers from live model discovery output', () => {
+  assert.ok(grokBuild.listModels, 'grok-build must define live model discovery');
+  const parsed = grokBuild.listModels.parse([
+    'You are logged in with grok.com.',
+    '',
+    'Default model: grok-build',
+    '',
+    'Available models:',
+    '',
+    '- grok-composer-2.5-fast',
+    '* grok-build (default)',
+  ].join('\n'));
+
+  assert.deepEqual(parsed, [
+    { id: 'default', label: 'Default (CLI config)' },
+    { id: 'grok-composer-2.5-fast', label: 'grok-composer-2.5-fast' },
+    { id: 'grok-build', label: 'grok-build' },
   ]);
 });
 

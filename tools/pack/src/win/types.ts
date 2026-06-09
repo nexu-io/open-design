@@ -1,4 +1,5 @@
 import type { DesktopEvalResult, DesktopScreenshotResult, DesktopStatusSnapshot, DesktopUpdateResult } from "@open-design/sidecar-proto";
+import type { ToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
 import type { CacheReport } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
 import type { INTERNAL_PACKAGES } from "./constants.js";
@@ -66,6 +67,7 @@ export type WinPaths = {
   installerBasePayloadPath: string;
   installerOverlayPayloadPath: string;
   installerScriptPath: string;
+  launcherPayloadPath: string;
   publicDesktopShortcutPath: string;
   latestYmlPath: string;
   installMarkerPath: string;
@@ -98,6 +100,7 @@ export type WinPackResult = {
   installerPath: string | null;
   latestYmlPath: string | null;
   outputRoot: string;
+  payloadPath: string | null;
   portableZipPath: string | null;
   resourceRoot: string;
   runtimeNamespaceRoot: string;
@@ -325,6 +328,7 @@ export type WinResetResult = {
 
 export type WinInspectResult = {
   eval?: DesktopEvalResult;
+  launcher: ToolPackLauncherRuntimeSnapshot;
   screenshot?: DesktopScreenshotResult;
   status: DesktopStatusSnapshot | null;
   update?: DesktopUpdateResult;

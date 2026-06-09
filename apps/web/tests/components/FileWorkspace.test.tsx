@@ -19,7 +19,7 @@ import {
   writeProjectTextFile,
   fetchProjectFolders,
 } from '../../src/providers/registry';
-import type { ChatMessage, ProjectFile, ProjectFolder } from '../../src/types';
+import type { AppConfig, ChatMessage, ProjectFile, ProjectFolder } from '../../src/types';
 
 vi.mock('../../src/components/AmrGuidance', () => ({
   AmrGuidance: ({
@@ -567,7 +567,7 @@ describe('FileWorkspace upload input', () => {
     const onUploadFiles = vi.fn();
     const { container } = renderDesignFilesPanel({ onUploadFiles });
 
-    fireEvent.drop(container.querySelector('.df-drop')!, {
+    fireEvent.drop(container.querySelector('.df-body')!, {
       dataTransfer: unreadableDropDataTransfer([fallbackFile]),
     });
 
@@ -579,7 +579,7 @@ describe('FileWorkspace upload input', () => {
     const onUploadFiles = vi.fn();
     const { container } = renderDesignFilesPanel({ onUploadFiles });
 
-    fireEvent.drop(container.querySelector('.df-drop')!, {
+    fireEvent.drop(container.querySelector('.df-body')!, {
       dataTransfer: unreadableDropDataTransfer(),
     });
 
@@ -724,41 +724,6 @@ describe('FileWorkspace launcher tab creation', () => {
       expect(onTabsStateChange).toHaveBeenCalledWith({
         tabs: ['chat:existing', 'terminal:term-1'],
         active: 'terminal:term-1',
-      });
-    });
-  });
-
-  it('appends a new side chat to the latest tab list after parent tabs change', async () => {
-    mockedFetchProjectFileText.mockResolvedValue('');
-    const onTabsStateChange = vi.fn();
-    const onCreateSideChat = vi.fn(async () => 'conversation-2');
-    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
-      projectId: 'project-1',
-      projectKind: 'prototype',
-      files: [],
-      liveArtifacts: [],
-      onRefreshFiles: vi.fn(),
-      isDeck: false,
-      tabsState: { tabs: [], active: null },
-      onTabsStateChange,
-      onCreateSideChat,
-    };
-
-    const { rerender } = render(<FileWorkspace {...baseProps} />);
-    rerender(
-      <FileWorkspace
-        {...baseProps}
-        tabsState={{ tabs: ['terminal:existing'], active: null }}
-      />,
-    );
-
-    fireEvent.click(screen.getByTestId('workspace-add-tab'));
-    fireEvent.click(await screen.findByRole('button', { name: /New Side Chat/i }));
-
-    await waitFor(() => {
-      expect(onTabsStateChange).toHaveBeenCalledWith({
-        tabs: ['terminal:existing', 'chat:conversation-2'],
-        active: 'chat:conversation-2',
       });
     });
   });
@@ -1187,6 +1152,34 @@ describe('FileWorkspace launcher tab creation', () => {
       });
     });
   });
+
+  it('focuses an already-open file tab without adding a duplicate tab', async () => {
+    const onTabsStateChange = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('Web Prototype mutuals-v2.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['Web Prototype mutuals-v2.html'],
+          active: 'notes.html',
+        }}
+        openRequest={{ name: 'Web Prototype mutuals-v2.html', nonce: 1 }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['Web Prototype mutuals-v2.html'],
+        active: 'Web Prototype mutuals-v2.html',
+      });
+    });
+  });
 });
 
 describe('FileWorkspace generation failure recovery', () => {
@@ -1308,6 +1301,7 @@ describe('FileWorkspace generation failure recovery', () => {
         isDeck={false}
         tabsState={{ tabs: ['generation'], active: 'generation' }}
         onTabsStateChange={vi.fn()}
+        chatConfig={{ agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'local' } } } as unknown as AppConfig}
         messages={[failedAssistantMessage('AMR_INSUFFICIENT_BALANCE', 'amr', 'AMR balance empty')]}
         onRetry={onRetry}
       />,
@@ -1326,7 +1320,7 @@ describe('FileWorkspace generation failure recovery', () => {
     expect(features).toBe('noopener,noreferrer');
     const parsedWalletUrl = new URL(String(walletUrl));
     expect(`${parsedWalletUrl.origin}${parsedWalletUrl.pathname}`).toBe(
-      'https://open-design.ai/amr/wallet',
+      'http://localhost:5173/wallet',
     );
     expect(parsedWalletUrl.searchParams.get('od_origin')).toBe('open_design');
     expect(parsedWalletUrl.searchParams.get('od_entry_source')).toBe(
@@ -1699,25 +1693,40 @@ describe('FileWorkspace Questions tab', () => {
     expect(screen.getByTestId('questions-tab')).toBeTruthy();
   });
 
-  it('removes the Questions tab once the form has been answered', () => {
-    // Regression for #3355: answering a question moved the answered copy back
-    // into chat but left a locked duplicate mounted in the Questions tab.
-    render(
+  it('closes the Questions preview after submit, then lets the answered form reopen', async () => {
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-1',
+      projectKind: 'prototype',
+      files: [],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+      questionForm: discoveryForm,
+      focusQuestionsRequest: { nonce: 1 },
+    };
+    const { rerender } = render(<FileWorkspace {...baseProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Quick brief')).toBeTruthy();
+    });
+
+    rerender(
       <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: [], active: null }}
-        onTabsStateChange={vi.fn()}
-        questionForm={discoveryForm}
+        {...baseProps}
         questionFormSubmittedAnswers={{ platform: 'Mobile' }}
       />,
     );
 
-    expect(screen.queryByTestId('questions-tab')).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByText('Quick brief')).toBeNull();
+    });
+    expect(screen.getByTestId('questions-tab')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('questions-tab'));
+    expect(screen.getByText('Quick brief')).toBeTruthy();
+    expect(screen.getByText('Mobile')).toBeTruthy();
   });
 });
 

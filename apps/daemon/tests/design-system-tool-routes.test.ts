@@ -29,6 +29,8 @@ function writeHybridDesignSystem(root: string, id: string): string {
   mkdirSync(path.join(dir, 'preview'), { recursive: true });
   writeFileSync(path.join(dir, 'DESIGN.md'), '# Test\n');
   writeFileSync(path.join(dir, 'tokens.css'), ':root { --bg: #fff; }');
+  writeFileSync(path.join(dir, 'design-tokens.json'), '{"format":"od-design-tokens/v1","tokens":[]}\n');
+  writeFileSync(path.join(dir, 'tailwind-v4.css'), '@import "tailwindcss";\n');
   writeFileSync(path.join(dir, 'components.html'), '<button>ok</button>');
   writeFileSync(path.join(dir, 'preview', 'colors.html'), '<h1>Colors</h1>');
   writeFileSync(path.join(dir, 'preview', 'spacing.html'), '<h1>Spacing</h1>');
@@ -41,6 +43,8 @@ function writeHybridDesignSystem(root: string, id: string): string {
     files: {
       design: 'DESIGN.md',
       tokens: 'tokens.css',
+      designTokens: 'design-tokens.json',
+      tailwind: 'tailwind-v4.css',
       components: 'components.html',
     },
     preview: {
@@ -129,6 +133,17 @@ describe('design-system pull tool route', () => {
       path: 'preview/colors.html',
       encoding: 'utf8',
       content: '<h1>Colors</h1>',
+    });
+
+    const derived = await jsonFetch(`${baseUrl}/api/tools/design-systems/read`, {
+      path: 'design-tokens.json',
+    });
+
+    expect(derived.status).toBe(200);
+    expect(derived.body.file).toMatchObject({
+      path: 'design-tokens.json',
+      encoding: 'utf8',
+      content: expect.stringContaining('od-design-tokens/v1'),
     });
   });
 

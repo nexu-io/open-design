@@ -134,7 +134,7 @@
    ================================================================ */
 
 .entry-nav-rail__btn {
-  transition: background-color 120ms ease, color 120ms ease, transform 100ms ease;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out), transform 100ms var(--ease-out);
 }
 .entry-nav-rail__btn:active:not(:disabled) {
   transform: scale(0.97);
@@ -265,7 +265,7 @@
    ================================================================ */
 
 .workspace-tab {
-  transition: background-color 120ms ease, color 120ms ease, transform 100ms ease;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out), transform 100ms var(--ease-out);
 }
 .workspace-tab:active {
   transform: scale(0.98);
@@ -285,7 +285,7 @@
 
 /* Marketplace card hover (no existing hover in stylesheet) */
 .marketplace-view__card {
-  transition: border-color 120ms ease, box-shadow 160ms ease, transform 160ms ease;
+  transition: border-color 120ms var(--ease-out), box-shadow 160ms var(--ease-out), transform 160ms var(--ease-out);
 }
 .marketplace-view__card:hover {
   border-color: var(--border-strong);
@@ -494,7 +494,7 @@
 button.primary:active:not(:disabled),
 button.primary-ghost:active:not(:disabled) {
   transform: scale(0.97);
-  transition: transform 80ms ease;
+  transition: transform 80ms var(--ease-out);
 }
 
 /* ================================================================

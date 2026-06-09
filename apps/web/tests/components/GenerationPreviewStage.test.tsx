@@ -154,6 +154,7 @@ describe('GenerationPreviewStage', () => {
       <GenerationPreviewStage
         model={failedModel('AMR_INSUFFICIENT_BALANCE', 'amr')}
         onRetry={vi.fn()}
+        amrProfile="test"
       />,
     );
     expect(markup).toContain('Account balance ran out');
@@ -161,6 +162,28 @@ describe('GenerationPreviewStage', () => {
     expect(markup).toContain('Top up AMR');
     // secondaryRetry surfaces the plain retry alongside the primary action.
     expect(markup).toContain('data-testid="generation-preview-retry"');
+  });
+
+  it('opens the profile-scoped wallet for the recharge action', () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const container = render(failedModel('AMR_INSUFFICIENT_BALANCE', 'amr'), {
+      onRetry: vi.fn(),
+      amrProfile: 'local',
+    });
+    const button = container.querySelector<HTMLButtonElement>(
+      '[data-testid="generation-preview-recharge"]',
+    );
+    expect(button).not.toBeNull();
+    act(() => {
+      button!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const [walletUrl, target, features] = openSpy.mock.calls[0] ?? [];
+    expect(target).toBe('_blank');
+    expect(features).toBe('noopener,noreferrer');
+    const parsedWalletUrl = new URL(String(walletUrl));
+    expect(`${parsedWalletUrl.origin}${parsedWalletUrl.pathname}`).toBe(
+      'http://localhost:5173/wallet',
+    );
   });
 
   it('renders the terminal sign-in action for an Antigravity auth failure', () => {

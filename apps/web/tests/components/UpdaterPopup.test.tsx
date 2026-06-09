@@ -38,6 +38,20 @@ function downloadedStatus(overrides: Partial<OpenDesignHostUpdaterStatusSnapshot
   };
 }
 
+function payloadDownloadedStatus(overrides: Partial<OpenDesignHostUpdaterStatusSnapshot> = {}): OpenDesignHostUpdaterStatusSnapshot {
+  return downloadedStatus({
+    artifact: {
+      name: 'open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+      platformKey: 'mac',
+      size: 1024,
+      type: 'payload',
+      url: 'https://example.test/payload.zip',
+    },
+    downloadPath: '/tmp/open-design-updater/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+    ...overrides,
+  });
+}
+
 describe('UpdaterPopup', () => {
   let restoreHost: (() => void) | null = null;
 
@@ -130,6 +144,30 @@ describe('UpdaterPopup', () => {
     expect(await screen.findByRole('dialog', { name: '更新已就绪' })).toBeTruthy();
     expect(screen.getByTestId('updater-install-button').textContent).toBe('安装更新');
     expect(screen.getByText('Open Design 1.2.3-beta.4 已就绪。Open Design 会关闭并打开安装器。')).toBeTruthy();
+  });
+
+  it('uses install-and-restart copy for payload updates', async () => {
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => payloadDownloadedStatus()),
+        },
+      },
+    });
+
+    render(
+      <I18nProvider initial="zh-CN">
+        <UpdaterPopup />
+      </I18nProvider>,
+    );
+
+    const button = await screen.findByTestId('entry-nav-updater');
+    expect(button.getAttribute('data-tooltip')).toBe('安装并重启');
+    fireEvent.click(button);
+
+    expect(await screen.findByRole('dialog', { name: '更新已就绪' })).toBeTruthy();
+    expect(screen.getByTestId('updater-install-button').textContent).toBe('安装并重启');
+    expect(screen.getByText('Open Design 1.2.3-beta.4 已就绪。Open Design 会关闭并自动重启。')).toBeTruthy();
   });
 
   it('dismisses the confirmation prompt before installation starts', async () => {

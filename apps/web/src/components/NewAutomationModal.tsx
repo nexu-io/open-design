@@ -4,6 +4,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
+import { useI18n } from '../i18n';
+import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import type {
   CreateRoutineRequest,
   ConnectorDetail,
@@ -255,6 +257,7 @@ export function NewAutomationModal({
   onClose,
   onSaved,
 }: Props) {
+  const { locale, t } = useI18n();
   const editingId = initial?.routine?.id ?? null;
   const [form, setForm] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
@@ -623,7 +626,7 @@ export function NewAutomationModal({
                 onClick={() => setPopover((p) => (p === 'template' ? null : 'template'))}
               >
                 <Icon name="sparkles" size={13} />
-                <span>{selectedTemplate?.defaultName ?? selectedTemplate?.title ?? 'Use template'}</span>
+                <span>{selectedTemplate?.title ?? selectedTemplate?.defaultName ?? t('automations.useTemplate')}</span>
                 <Icon name="chevron-down" size={11} />
               </button>
               {popover === 'template' ? (
@@ -722,8 +725,8 @@ export function NewAutomationModal({
                       <MentionItem
                         key={`plugin-${plugin.id}`}
                         icon="sparkles"
-                        label={plugin.title}
-                        meta={plugin.manifest?.description ?? plugin.id}
+                        label={localizePluginTitle(locale, plugin)}
+                        meta={localizePluginDescription(locale, plugin) || plugin.id}
                         selected={selectedPluginIds.includes(plugin.id)}
                         onPick={() => pickPlugin(plugin)}
                       />
@@ -918,7 +921,7 @@ function TemplatePopover({
             <Icon name={template.icon} size={14} />
           </span>
           <span className="automation-template-option__body">
-            <span className="automation-template-option__title">{template.defaultName ?? template.title}</span>
+            <span className="automation-template-option__title">{template.title ?? template.defaultName}</span>
             <span className="automation-template-option__meta">{kindLabel(template.kind)}</span>
           </span>
           {selectedId === template.id ? <Icon name="check" size={13} /> : null}

@@ -69,6 +69,43 @@ describe("updater fixture server", () => {
     }
   });
 
+  it("optionally serves launcher payload metadata without replacing the installer artifact", async () => {
+    const server = await startUpdaterFixtureServer({
+      artifactBody: "fixture installer",
+      channel: "beta",
+      includePayload: true,
+      payloadBody: "fixture payload",
+      platform: "win",
+      version: "2.0.0-beta-nightly.1",
+    });
+    try {
+      const metadataResponse = await fetch(server.info.metadataUrl);
+      expect(metadataResponse.ok).toBe(true);
+      const metadata = await metadataResponse.json() as {
+        platforms?: {
+          win?: {
+            artifacts?: {
+              installer?: { url?: string };
+              payload?: { contentType?: string; sha256Url?: string; url?: string };
+            };
+          };
+        };
+      };
+      expect(metadata.platforms?.win?.artifacts?.installer?.url).toBe(server.info.artifactUrl);
+      expect(metadata.platforms?.win?.artifacts?.payload?.url).toBe(server.info.payloadUrl);
+      expect(metadata.platforms?.win?.artifacts?.payload?.sha256Url).toBe(server.info.payloadChecksumUrl);
+      expect(metadata.platforms?.win?.artifacts?.payload?.contentType).toBe("application/x-7z-compressed");
+
+      const payload = await fetch(server.info.payloadUrl ?? "");
+      expect(await payload.text()).toBe("fixture payload");
+
+      const checksum = await fetch(server.info.payloadChecksumUrl ?? "");
+      expect(await checksum.text()).toContain(server.info.payloadSha256);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("serves artifact byte ranges for resumable download validation", async () => {
     const server = await startUpdaterFixtureServer({
       artifactBody: "fixture artifact",

@@ -189,43 +189,40 @@ function uniqueIdForTab(tab: WorkspaceChromeTab): string {
 function normalizeTabsState(state: WorkspaceTabsState): WorkspaceTabsState {
   let sourceTabs = state.tabs.length > 0 ? state.tabs : [createEntryTab('home')];
 
-  // Deduplicate Home tabs (singleton constraint)
-  const homeTabs = sourceTabs.filter((tab) => tab.kind === 'entry' && tab.view === 'home');
-  if (homeTabs.length > 1) {
-    // Find canonical Home tab:
-    // 1. Is one of them currently active?
-    // 2. Otherwise, pick the one with highest lastActiveAt.
-    // 3. Otherwise, pick the first one.
-    let canonicalHome = homeTabs.find((tab) => tab.id === state.activeTabId);
-    if (!canonicalHome) {
-      canonicalHome = homeTabs.reduce((newest, currentTab) =>
+  // Deduplicate entry tabs (singleton constraint): all sidebar sections
+  // (home / projects / tasks / design-systems / plugins / integrations) share
+  // ONE entry tab that switches its view in place. Keep the canonical one:
+  // 1. Is one of them currently active?
+  // 2. Otherwise, pick the one with highest lastActiveAt.
+  // 3. Otherwise, pick the first one.
+  const entryTabs = sourceTabs.filter((tab) => tab.kind === 'entry');
+  if (entryTabs.length > 1) {
+    let canonicalEntry = entryTabs.find((tab) => tab.id === state.activeTabId);
+    if (!canonicalEntry) {
+      canonicalEntry = entryTabs.reduce((newest, currentTab) =>
         currentTab.lastActiveAt > newest.lastActiveAt ? currentTab : newest,
-        homeTabs[0]!
+        entryTabs[0]!
       );
     }
-    // Filter out all duplicate Home tabs except the canonical one
-    sourceTabs = sourceTabs.filter((tab) => {
-      if (tab.kind === 'entry' && tab.view === 'home') {
-        return tab.id === canonicalHome!.id;
-      }
-      return true;
-    });
+    // Drop every other entry tab; the survivor keeps its own view so the
+    // section the user was on is preserved.
+    sourceTabs = sourceTabs.filter(
+      (tab) => tab.kind !== 'entry' || tab.id === canonicalEntry!.id,
+    );
   }
 
-  // Pin the Home tab to the leftmost position (Figma-style). It is the one
-  // permanent, non-closable tab; project / marketplace tabs always sit to its
-  // right in insertion order. If no Home tab survives normalization — e.g. a
-  // user who closed/replaced Home before this feature shipped reopens on a
-  // saved `[project, ...]` workspace — create one so the invariant "Home always
-  // exists and is leftmost" holds for migrated state too.
-  const homeIndex = sourceTabs.findIndex(
-    (tab) => tab.kind === 'entry' && tab.view === 'home',
-  );
-  if (homeIndex < 0) {
+  // Pin the single entry tab to the leftmost position (Figma-style). It is the
+  // one permanent, non-closable tab regardless of which section it currently
+  // shows; project / marketplace tabs always sit to its right in insertion
+  // order. If no entry tab survives normalization — e.g. a user who reopens on
+  // a saved `[project, ...]` workspace — create one so the invariant "an entry
+  // tab always exists and is leftmost" holds for migrated state too.
+  const entryIndex = sourceTabs.findIndex((tab) => tab.kind === 'entry');
+  if (entryIndex < 0) {
     sourceTabs = [createEntryTab('home'), ...sourceTabs];
-  } else if (homeIndex > 0) {
-    const [homeTab] = sourceTabs.splice(homeIndex, 1);
-    sourceTabs = [homeTab!, ...sourceTabs];
+  } else if (entryIndex > 0) {
+    const [entryTab] = sourceTabs.splice(entryIndex, 1);
+    sourceTabs = [entryTab!, ...sourceTabs];
   }
 
   const usedIds = new Set<string>();
@@ -312,28 +309,28 @@ function syncStateToRoute(state: WorkspaceTabsState, route: Route): WorkspaceTab
   const current = normalizeTabsState(state);
   const currentActive = current.tabs.find((tab) => tab.id === current.activeTabId) ?? null;
 
-  // 1. If we are navigating to Home:
-  if (route.kind === 'home' && route.view === 'home') {
-    const existingHomeTab = current.tabs.find(
-      (tab) => tab.kind === 'entry' && tab.view === 'home',
-    );
-    if (existingHomeTab) {
+  // 1. If we are navigating to any entry view (home / projects / tasks /
+  // design-systems / plugins / integrations / onboarding), reuse the single
+  // entry tab and switch its view IN PLACE — all sidebar sections collapse
+  // into the one leftmost tab. Only create one if none exists.
+  if (route.kind === 'home') {
+    const existingEntryTab = current.tabs.find((tab) => tab.kind === 'entry');
+    if (existingEntryTab) {
       return normalizeTabsState({
         ...current,
         tabs: current.tabs.map((tab) =>
-          tab.id === existingHomeTab.id
-            ? { ...tab, lastActiveAt: timestamp }
+          tab.id === existingEntryTab.id
+            ? { ...tab, view: route.view, lastActiveAt: timestamp }
             : tab,
         ),
-        activeTabId: existingHomeTab.id,
-      });
-    } else {
-      const nextTab = tabFromRoute(route, timestamp);
-      return normalizeTabsState({
-        tabs: [...current.tabs, nextTab],
-        activeTabId: nextTab.id,
+        activeTabId: existingEntryTab.id,
       });
     }
+    const nextTab = tabFromRoute(route, timestamp);
+    return normalizeTabsState({
+      tabs: [...current.tabs, nextTab],
+      activeTabId: nextTab.id,
+    });
   }
 
   // 2. If we are navigating to a project, and that project tab already exists:
@@ -359,9 +356,10 @@ function syncStateToRoute(state: WorkspaceTabsState, route: Route): WorkspaceTab
     }
 
     // 3. If we are navigating to a project, and the project tab does NOT exist,
-    // but the current active tab is the Home tab, we should NOT replace the Home tab.
-    // Instead, we should append a new project tab!
-    if (currentActive && currentActive.kind === 'entry' && currentActive.view === 'home') {
+    // but the current active tab is the (single) entry tab, we should NOT
+    // replace it — append a new project tab instead, regardless of which entry
+    // view it currently shows.
+    if (currentActive && currentActive.kind === 'entry') {
       const nextTab = tabFromRoute(route, timestamp);
       return normalizeTabsState({
         tabs: [...current.tabs, nextTab],
@@ -695,13 +693,11 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
 
   function createNewTab() {
     const normalized = normalizeTabsState(state);
-    const existingHomeTab = normalized.tabs.find(
-      (tab) => tab.kind === 'entry' && tab.view === 'home',
-    );
-    if (existingHomeTab) {
+    const existingEntryTab = normalized.tabs.find((tab) => tab.kind === 'entry');
+    if (existingEntryTab) {
       setState({
         ...normalized,
-        activeTabId: existingHomeTab.id,
+        activeTabId: existingEntryTab.id,
       });
       navigate({ kind: 'home', view: 'home' });
     } else {
@@ -720,9 +716,10 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
     const normalized = normalizeTabsState(state);
     const closingIndex = normalized.tabs.findIndex((tab) => tab.id === tabId);
     if (closingIndex < 0) return;
-    // The Home tab is permanent — never close it.
+    // The single entry tab is permanent — never close it, whatever section
+    // (home / projects / design-systems / …) it currently shows.
     const closingTab = normalized.tabs[closingIndex]!;
-    if (closingTab.kind === 'entry' && closingTab.view === 'home') return;
+    if (closingTab.kind === 'entry') return;
     let nextRoute: Route | null = null;
     const nextTabs = normalized.tabs.filter((tab) => tab.id !== tabId);
     let nextState: WorkspaceTabsState;
@@ -759,14 +756,12 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
     const strip = stripRef.current;
     if (!strip) return null;
 
-    // The Home tab is pinned leftmost: never expose a drop target that would
-    // place another tab before it. Coerce any 'before Home' edge to 'after Home'
-    // so the live drag indicator and the persisted order both keep Home first.
-    const homeTabId = state.tabs.find(
-      (tab) => tab.kind === 'entry' && tab.view === 'home',
-    )?.id;
+    // The single entry tab is pinned leftmost: never expose a drop target that
+    // would place another tab before it. Coerce any 'before entry' edge to
+    // 'after entry' so the live drag indicator and persisted order keep it first.
+    const entryTabId = state.tabs.find((tab) => tab.kind === 'entry')?.id;
     const resolveTarget = (target: TabDragTarget): TabDragTarget =>
-      target.tabId === homeTabId && target.edge === 'before'
+      target.tabId === entryTabId && target.edge === 'before'
         ? { tabId: target.tabId, edge: 'after' }
         : target;
 
@@ -885,9 +880,9 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
         {state.tabs.map((tab) => {
           const display = displayTabById.get(tab.id) ?? displayTabFor(tab, projectById, t);
           const active = tab.id === state.activeTabId;
-          // The Home tab is permanent and pinned leftmost: it cannot be closed
-          // or dragged out of the first slot.
-          const isHome = tab.kind === 'entry' && tab.view === 'home';
+          // The single entry tab is permanent and pinned leftmost: it cannot be
+          // closed or dragged out of the first slot, whatever section it shows.
+          const isPinned = tab.kind === 'entry';
           const dragOverClass =
             dragOverTarget?.tabId === tab.id && draggingTabId !== tab.id
               ? ` is-drag-over-${dragOverTarget.edge}`
@@ -895,12 +890,12 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
           return (
             <div
               key={tab.id}
-              className={`workspace-tab${active ? ' is-active' : ''}${isHome ? ' is-pinned' : ''}${draggingTabId === tab.id ? ' is-dragging' : ''}${dragOverClass}`}
+              className={`workspace-tab${active ? ' is-active' : ''}${isPinned ? ' is-pinned' : ''}${draggingTabId === tab.id ? ' is-dragging' : ''}${dragOverClass}`}
               data-workspace-tab-id={tab.id}
               role="tab"
               aria-selected={active}
               aria-describedby={hoverPreview?.tabId === tab.id ? 'workspace-tab-preview' : undefined}
-              draggable={!isHome && state.tabs.length > 1}
+              draggable={!isPinned && state.tabs.length > 1}
               onDragStart={(event) => handleTabDragStart(tab.id, event)}
               onDragEnd={handleTabDragEnd}
               onMouseEnter={(event) => scheduleHoverPreview(tab.id, event.currentTarget)}
@@ -921,7 +916,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                 </span>
                 <span className="workspace-tab__label">{display.title}</span>
               </button>
-              {isHome ? null : (
+              {isPinned ? null : (
                 <button
                   type="button"
                   className="workspace-tab__close od-tooltip"
@@ -1012,7 +1007,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                               <span className="workspace-tabs-list__meta">{display.meta}</span>
                             </span>
                           </button>
-                          {display.tab.kind === 'entry' && display.tab.view === 'home' ? null : (
+                          {display.tab.kind === 'entry' ? null : (
                             <button
                               type="button"
                               className="workspace-tabs-list__close od-tooltip"

@@ -138,6 +138,33 @@ describe('extractSubcategories', () => {
     expect(extractSubcategories(fixture({ id: 'cinema', tags: ['cinematic'], od: { mode: 'video' } }))).toEqual(['cinematic-story']);
   });
 
+  // Regression: the rail/catalog display order (SUBCATEGORY_DISPLAY_ORDER) must
+  // NOT change which bucket an overlapping-tag plugin lands in. Bucketing is
+  // decided by SUBCATEGORIES matching precedence, which stays stable even
+  // though Brand / design and Creative decks render first in the rails.
+  it('keeps bucket membership stable for overlapping-tag plugins regardless of display order', () => {
+    // `dashboard` + `design`: stays in Dashboards (not Brand / design).
+    expect(
+      extractSubcategories(fixture({ id: 'dash-glass', tags: ['dashboard', 'design'], od: { mode: 'prototype' } })),
+    ).toEqual(['business-dashboards']);
+    // mobile app + `design`: stays in Apps (not Brand / design).
+    expect(
+      extractSubcategories(fixture({ id: 'mobile', tags: ['mobile-app', 'design'], od: { mode: 'prototype' } })),
+    ).toEqual(['app-prototypes']);
+    // landing + `brand`: stays in Landing / marketing (not Brand / design).
+    expect(
+      extractSubcategories(fixture({ id: 'landing-brand', tags: ['saas-landing', 'brand'], od: { mode: 'prototype' } })),
+    ).toEqual(['landing-marketing']);
+    // launch deck + `marketing`: stays in Product / sales (not Creative decks).
+    expect(
+      extractSubcategories(fixture({ id: 'launch', tags: ['product-launch', 'marketing'], od: { mode: 'deck' } })),
+    ).toEqual(['product-sales']);
+    // pitch deck + `marketing`: stays in Pitch / business (not Creative decks).
+    expect(
+      extractSubcategories(fixture({ id: 'pitch-mkt', tags: ['pitch-deck', 'marketing'], od: { mode: 'deck' } })),
+    ).toEqual(['pitch-business']);
+  });
+
   it('keeps Live Artifact, HyperFrames, and Audio flat with no second-level buckets', () => {
     expect(
       extractSubcategories(
@@ -175,21 +202,23 @@ describe('buildFacetCatalog', () => {
       ['hyperframes', 1],
       ['audio', 1],
     ]);
+    // Display order (SUBCATEGORY_DISPLAY_ORDER) — distinct from the matching
+    // precedence encoded by the SUBCATEGORIES array order.
     expect((catalog.subcategory.prototype ?? []).map((o) => o.slug)).toEqual([
+      'landing-marketing',
+      'brand-design',
       'business-dashboards',
       'app-prototypes',
-      'landing-marketing',
       'developer-tools',
       'docs-reports',
-      'brand-design',
     ]);
     expect((catalog.subcategory.deck ?? []).map((o) => o.slug)).toEqual([
+      'creative-decks',
+      'engineering-talks',
       'pitch-business',
       'course-training',
       'reports-briefings',
       'product-sales',
-      'engineering-talks',
-      'creative-decks',
     ]);
     expect((catalog.subcategory.image ?? []).map((o) => o.slug)).toEqual([
       'ui-product-mockups',

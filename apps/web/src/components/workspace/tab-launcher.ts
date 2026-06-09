@@ -8,10 +8,10 @@ import type { Dict } from '../../i18n/types';
 // place where new *kinds* of working surfaces are created. Opening an existing
 // file is built into the menu directly (it is the common case and needs the
 // project file list), but every other "create a new tab" affordance —
-// Side Chat (Stage 2), Terminal (Stage 3), and the external Browser worktree —
-// registers exactly ONE LauncherAction here. Adding a tab kind is therefore a
-// two-line change: register an action below, and add a render branch in the
-// `.ws-body` switch of `FileWorkspace.tsx`.
+// Terminal (Stage 3) and the external Browser worktree — registers exactly ONE
+// LauncherAction here. Adding a tab kind is therefore a two-line change:
+// register an action below, and add a render branch in the `.ws-body` switch
+// of `FileWorkspace.tsx`.
 //
 // Keep this module tiny and dependency-light. It owns *what can be created*,
 // not *how it is rendered* — the dropdown (`TabLauncherMenu.tsx`) renders the
@@ -29,12 +29,6 @@ export interface LauncherContext {
    * `terminal:<id>` tab id.
    */
   openTab: (tabId: string) => void;
-  /**
-   * Create a new conversation seeded with the current chat's context and
-   * resolve its id. Backs the "New Side Chat" action. Returns null when the
-   * daemon could not create the conversation (the action then no-ops).
-   */
-  createSideChat?: () => Promise<string | null>;
   /**
    * Spawn a new PTY session for the project and resolve its terminal id. Backs
    * the "New Terminal" action. Returns null when the daemon could not start the
@@ -65,27 +59,13 @@ export interface LauncherAction {
 /**
  * Build the list of "create new" actions for the current context.
  *
- * Each tab kind contributes exactly one action. Stage 2 adds "New Side Chat":
- * it spins up a context-seeded conversation and opens it as a `chat:<id>` tab.
- * Stage 3 adds "New Terminal": it spawns a PTY session and opens it as a
- * `terminal:<id>` tab. The Browser action mounts this branch's
- * DesignBrowserPanel as a `__browser__:<n>` tab the same way, gated on context.
+ * Each tab kind contributes exactly one action. Stage 3 adds "New Terminal":
+ * it spawns a PTY session and opens it as a `terminal:<id>` tab. The Browser
+ * action mounts this branch's DesignBrowserPanel as a `__browser__:<n>` tab the
+ * same way, gated on context.
  */
 export function buildLauncherActions(ctx: LauncherContext): LauncherAction[] {
   const actions: LauncherAction[] = [];
-  if (ctx.createSideChat) {
-    actions.push({
-      id: 'new-side-chat',
-      iconName: 'comment',
-      labelKey: 'workspace.newSideChat',
-      descriptionKey: 'workspace.newSideChatDescription',
-      run: (runCtx) => {
-        void runCtx.createSideChat?.().then((conversationId) => {
-          if (conversationId) runCtx.openTab(`chat:${conversationId}`);
-        });
-      },
-    });
-  }
   if (ctx.createTerminal) {
     actions.push({
       id: 'new-terminal',

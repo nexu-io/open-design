@@ -2,7 +2,8 @@ import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
+const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
+const SETTINGS_MENU_LABEL = /Settings|设置|設定/i;
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -67,7 +68,7 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();
 }
@@ -75,6 +76,10 @@ async function gotoEntryHome(page: Page) {
 async function openSettingsDialogFromEntry(page: Page) {
   await waitForLoadingToClear(page);
   await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
+  const menu = page.getByRole('menu');
+  if (await menu.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await menu.getByRole('menuitem', { name: SETTINGS_MENU_LABEL }).click();
+  }
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   return dialog;

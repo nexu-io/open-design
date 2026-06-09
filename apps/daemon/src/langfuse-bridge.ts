@@ -8,7 +8,9 @@
 //
 // See: specs/change/20260507-langfuse-telemetry/spec.md
 
+import { createHash } from 'node:crypto';
 import os from 'node:os';
+import path from 'node:path';
 
 import { modelIdForTracking } from '@open-design/contracts/analytics';
 
@@ -19,12 +21,18 @@ import {
   readTelemetrySinkConfig,
   reportRunCompleted,
   reportRunFeedback,
+  type AgentEventSummary,
+  type ArtifactManifestEntry,
   type ArtifactSummary,
+  type AttachmentManifestEntry,
   type EventsSummary,
   type FeedbackReportContext,
+  type InputTextSnapshotManifestEntry,
+  type ObjectManifestCompleteness,
   type MessageSummary,
   type ReportContext,
   type RuntimeInfo,
+  type TelemetrySinkConfig,
   type ToolCallSummary,
   type TurnInfo,
 } from './langfuse-trace.js';
@@ -40,6 +48,8 @@ import {
 import { collectStderrTailSummary } from './run-diagnostics.js';
 import { classifyRunFailure } from './run-failure-classification.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
+import { buildTraceObjectManifests } from './trace-object-manifest.js';
+import type { TraceArtifactObjectSource } from './trace-object-manifest.js';
 
 interface DaemonRunRecord {
   id: string;
@@ -71,6 +81,21 @@ interface DaemonRunRecord {
   designSystemId?: string;
   clientType?: 'desktop' | 'web' | 'unknown';
   promptTelemetry?: PromptStackTelemetry;
+  projectAttachmentPaths?: string[];
+  projectMetadata?: Record<string, unknown> | null;
+}
+
+interface TraceSafeManifestResult {
+  attachmentManifest: AttachmentManifestEntry[];
+  artifactManifest: ArtifactManifestEntry[];
+  completeness: ObjectManifestCompleteness;
+}
+
+interface FinalTraceSafeManifests {
+  attachmentManifest: AttachmentManifestEntry[];
+  artifactManifest: ArtifactManifestEntry[];
+  inputTextSnapshotManifest?: InputTextSnapshotManifestEntry[];
+  completeness: ObjectManifestCompleteness;
 }
 
 export interface ReportRunCompletedFromDaemonOpts {
@@ -106,6 +131,84 @@ function getRuntimeInfo(appVersion?: AppVersionInfo | null): RuntimeInfo {
   return info;
 }
 
+function deriveManifestCompleteness(
+  entries: Array<
+    AttachmentManifestEntry | ArtifactManifestEntry | InputTextSnapshotManifestEntry
+  >,
+  fallbackUnavailableSelected: boolean,
+): ObjectManifestCompleteness {
+  if (fallbackUnavailableSelected) return 'unavailable';
+  if (entries.length === 0) return 'unavailable';
+  if (entries.some((entry) => entry.status === 'unavailable')) return 'unavailable';
+  if (entries.some((entry) => entry.status === 'partial')) return 'partial';
+  return 'complete';
+}
+
+function mergeTraceSafeManifests(
+  fallback: TraceSafeManifestResult,
+  uploaded: Awaited<ReturnType<typeof buildTraceObjectManifests>>,
+): FinalTraceSafeManifests {
+  const attachmentManifest = uploaded?.attachmentManifest ?? fallback.attachmentManifest;
+  const artifactManifest = uploaded?.artifactManifest ?? fallback.artifactManifest;
+  const inputTextSnapshotManifest = uploaded?.inputTextSnapshotManifest;
+  const entries = [
+    ...attachmentManifest,
+    ...artifactManifest,
+    ...(inputTextSnapshotManifest ?? []),
+  ];
+  const selectedFallbackUnavailable =
+    fallback.completeness === 'unavailable' &&
+    (uploaded === undefined ||
+      (uploaded.attachmentManifest === undefined && fallback.attachmentManifest.length > 0) ||
+      (uploaded.artifactManifest === undefined && fallback.artifactManifest.length > 0));
+  return {
+    attachmentManifest,
+    artifactManifest,
+    ...(inputTextSnapshotManifest ? { inputTextSnapshotManifest } : {}),
+    completeness: deriveManifestCompleteness(entries, selectedFallbackUnavailable),
+  };
+}
+
+function inferObjectRegistrationRelayUrl(env: NodeJS.ProcessEnv = process.env): string | null {
+  const objectRelayUrl = env.OPEN_DESIGN_OBJECT_RELAY_URL?.trim();
+  if (!objectRelayUrl) return null;
+  try {
+    const url = new URL(objectRelayUrl);
+    url.pathname = url.pathname.replace(/\/api\/objects\/batch\/?$/, '/api/langfuse');
+    return url.toString().replace(/\/+$/, '');
+  } catch {
+    return objectRelayUrl.replace(/\/api\/objects\/batch\/?$/, '/api/langfuse').replace(/\/+$/, '');
+  }
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseNonNegativeInt(value: string | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function objectRegistrationTelemetryConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): Extract<TelemetrySinkConfig, { kind: 'relay' }> | null {
+  const relayUrl = inferObjectRegistrationRelayUrl(env);
+  if (!relayUrl) return null;
+  return {
+    kind: 'relay',
+    relayUrl,
+    timeoutMs: parsePositiveInt(
+      env.OPEN_DESIGN_OBJECT_RELAY_TIMEOUT_MS ?? env.OPEN_DESIGN_TELEMETRY_TIMEOUT_MS,
+      20_000,
+    ),
+    retries: parseNonNegativeInt(env.OPEN_DESIGN_TELEMETRY_RETRIES, 1),
+  };
+}
+
 function turnInfoFromRun(
   run: DaemonRunRecord,
   agentReportedModel: string | null,
@@ -135,19 +238,27 @@ function summarizeEvents(
   events: DaemonRunRecord['events'],
   durationMs: number,
 ): EventsSummary {
-  let toolCalls = 0;
+  const toolCallIds = new Set<string>();
   let errors = 0;
   for (const rec of events) {
-    const data = rec.data as { type?: string } | null | undefined;
+    const data = rec.data as { type?: string; id?: unknown } | null | undefined;
     if (rec.event === 'agent') {
       const t = data?.type;
-      if (t === 'tool_use') toolCalls += 1;
-      else if (t === 'error') errors += 1;
+      if (t === 'tool_use') {
+        const toolId = data?.id;
+        if (typeof toolId === 'string' && toolId.length > 0) {
+          toolCallIds.add(toolId);
+        } else {
+          toolCallIds.add(`event-${rec.id}`);
+        }
+      } else if (t === 'error') {
+        errors += 1;
+      }
     } else if (rec.event === 'error') {
       errors += 1;
     }
   }
-  return { toolCalls, errors, durationMs };
+  return { toolCalls: toolCallIds.size, errors, durationMs };
 }
 
 function messageUsageFromAnalytics(
@@ -209,13 +320,33 @@ function eventTimestamp(
     : fallback;
 }
 
-function serializeToolPayload(value: unknown): string | undefined {
+const CONTENT_TOOL_NAMES = new Set([
+  'Read',
+  'Write',
+  'Edit',
+  'MultiEdit',
+  'NotebookEdit',
+]);
+
+function redactLocalPaths(value: string): string {
+  return value
+    .replace(/\/Users\/[^/\s"']+(?:\/[^ \n\r\t"'`<>)]*)?/g, '[REDACTED:local_path]')
+    .replace(/[A-Za-z]:\\Users\\[^\\\s"']+(?:\\[^ \n\r\t"'`<>)]*)?/g, '[REDACTED:local_path]');
+}
+
+function serializeToolPayload(
+  value: unknown,
+  opts: { toolName: string; direction: 'input' | 'output' },
+): string | undefined {
   if (value === undefined || value === null) return undefined;
-  if (typeof value === 'string') return redactSecrets(value);
+  if (CONTENT_TOOL_NAMES.has(opts.toolName)) {
+    return `[REDACTED:tool_${opts.direction}:content_tool:${opts.toolName}]`;
+  }
+  if (typeof value === 'string') return redactLocalPaths(redactSecrets(value));
   try {
-    return redactSecrets(JSON.stringify(value));
+    return redactLocalPaths(redactSecrets(JSON.stringify(value)));
   } catch {
-    return redactSecrets(String(value));
+    return redactLocalPaths(redactSecrets(String(value)));
   }
 }
 
@@ -247,7 +378,10 @@ function collectToolCalls(
         startedAt: timestamp,
         endedAt: timestamp,
       };
-      const input = serializeToolPayload(data.input);
+      const input = serializeToolPayload(data.input, {
+        toolName: summary.name,
+        direction: 'input',
+      });
       if (input !== undefined) summary.input = input;
       tools.set(data.id, summary);
     } else if (
@@ -265,7 +399,10 @@ function collectToolCalls(
           endedAt: timestamp,
         } satisfies ToolCallSummary);
       summary.endedAt = Math.max(summary.startedAt, timestamp);
-      const output = serializeToolPayload(data.content);
+      const output = serializeToolPayload(data.content, {
+        toolName: summary.name,
+        direction: 'output',
+      });
       if (output !== undefined) summary.output = output;
       summary.isError = data.isError === true;
       tools.set(data.toolUseId, summary);
@@ -282,15 +419,178 @@ function collectToolCalls(
   });
 }
 
+function collectAgentEvents(
+  events: DaemonRunRecord['events'],
+  runStartedAt: number,
+  runEndedAt: number,
+  agentId: string | null | undefined,
+): AgentEventSummary[] {
+  const out: AgentEventSummary[] = [];
+  const statusCounts = new Map<string, number>();
+  let thinkingCount = 0;
+  let usageCount = 0;
+  const source =
+    typeof agentId === 'string' && agentId.trim().length > 0
+      ? agentId.trim()
+      : undefined;
+  const eventInput = (eventType: string): Record<string, unknown> => ({
+    ...(source ? { source } : {}),
+    event_type: eventType,
+  });
+  for (const rec of events) {
+    if (rec.event !== 'agent') continue;
+    const data = rec.data as
+      | {
+          type?: string;
+          label?: unknown;
+          model?: unknown;
+          ttftMs?: unknown;
+          usage?: unknown;
+          costUsd?: unknown;
+          durationMs?: unknown;
+          stopReason?: unknown;
+        }
+      | null
+      | undefined;
+    const type = data?.type;
+    const timestamp = Math.min(
+      Math.max(eventTimestamp(rec, runStartedAt + rec.id), runStartedAt),
+      runEndedAt,
+    );
+    if (type === 'status') {
+      if (!data) continue;
+      const label =
+        typeof data.label === 'string' && data.label.length > 0
+          ? data.label
+          : 'working';
+      const index = statusCounts.get(label) ?? 0;
+      statusCounts.set(label, index + 1);
+      out.push({
+        id: `status-${label}-${index}`,
+        name: `agent-status:${label}`,
+        timestamp,
+        input: eventInput('status'),
+        output: {
+          label,
+          ...(typeof data.model === 'string' ? { model: data.model } : {}),
+          ...(typeof data.ttftMs === 'number' ? { ttft_ms: data.ttftMs } : {}),
+        },
+      });
+    } else if (type === 'thinking_start') {
+      const index = thinkingCount;
+      thinkingCount += 1;
+      out.push({
+        id: `thinking-start-${index}`,
+        name: 'agent-thinking-start',
+        timestamp,
+        input: eventInput('thinking_start'),
+        output: {
+          status: 'started',
+        },
+      });
+    } else if (type === 'usage') {
+      if (!data) continue;
+      const index = usageCount;
+      usageCount += 1;
+      out.push({
+        id: `usage-${index}`,
+        name: 'agent-usage',
+        timestamp,
+        input: eventInput('usage'),
+        output: {
+          usage: data.usage,
+          ...(typeof data.costUsd === 'number' ? { cost_usd: data.costUsd } : {}),
+          ...(typeof data.durationMs === 'number'
+            ? { duration_ms: data.durationMs }
+            : {}),
+          ...(typeof data.stopReason === 'string'
+            ? { stop_reason: data.stopReason }
+            : {}),
+        },
+      });
+    }
+  }
+  return out;
+}
+
+function stableObjectId(prefix: 'att' | 'art', parts: unknown[]): string {
+  const h = createHash('sha256')
+    .update(JSON.stringify(parts))
+    .digest('hex')
+    .slice(0, 16);
+  return `${prefix}_${h}`;
+}
+
+function extensionFromName(value: string): string | undefined {
+  const basename = value.split(/[\\/]/).pop() ?? '';
+  const dot = basename.lastIndexOf('.');
+  if (dot <= 0 || dot === basename.length - 1) return undefined;
+  return basename.slice(dot + 1).toLowerCase();
+}
+
+function safeSha256(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.startsWith('sha256:') ? trimmed : `sha256:${trimmed}`;
+}
+
+function safeStatus(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim().slice(0, 64)
+    : undefined;
+}
+
+function objectStorageRef(args: {
+  projectId: string | null | undefined;
+  runId: string;
+  objectClass: 'attachment' | 'artifact';
+  objectId: string;
+}): string {
+  const projectId = typeof args.projectId === 'string' && args.projectId
+    ? args.projectId
+    : 'unknown-project';
+  return [
+    'od://objects',
+    'workspaces',
+    'unknown',
+    'projects',
+    encodeURIComponent(projectId),
+    'runs',
+    encodeURIComponent(args.runId),
+    args.objectClass,
+    encodeURIComponent(args.objectId),
+  ].join('/');
+}
+
+function statusForSize(size: unknown): {
+  status: 'ok' | 'partial';
+  reason?: string;
+  sizeBytes?: number;
+} {
+  if (typeof size === 'number' && Number.isFinite(size) && size >= 0) {
+    return { status: 'ok', sizeBytes: Math.floor(size) };
+  }
+  return { status: 'partial', reason: 'size_unavailable' };
+}
+
+function sanitizeProducedFileSlug(item: Record<string, unknown>): string {
+  const filePath = typeof item.path === 'string' ? item.path : '';
+  const name = typeof item.name === 'string' ? item.name : '';
+  const raw = filePath || name;
+  if (!raw) return '';
+  // Keep the legacy field for existing dashboards, but never leak local
+  // absolute paths through Langfuse.
+  return raw.split(/[\\/]/).filter(Boolean).pop() ?? raw;
+}
+
 function summarizeProducedFiles(items: unknown): ArtifactSummary[] {
   if (!Array.isArray(items)) return [];
   const out: ArtifactSummary[] = [];
   for (const item of items) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
     const obj = item as Record<string, unknown>;
-    const name = typeof obj.name === 'string' ? obj.name : '';
-    const filePath = typeof obj.path === 'string' ? obj.path : '';
-    const slug = filePath || name;
+    const slug = sanitizeProducedFileSlug(obj);
     if (!slug) continue;
     out.push({
       slug,
@@ -299,6 +599,196 @@ function summarizeProducedFiles(items: unknown): ArtifactSummary[] {
     });
   }
   return out;
+}
+
+function buildTraceObjectArtifactSources(items: unknown): TraceArtifactObjectSource[] {
+  if (!Array.isArray(items)) return [];
+  const out: TraceArtifactObjectSource[] = [];
+  for (const item of items) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const obj = item as Record<string, unknown>;
+    const slug = sanitizeProducedFileSlug(obj);
+    if (!slug) continue;
+    const rawPath = typeof obj.path === 'string' && obj.path.trim()
+      ? obj.path
+      : typeof obj.name === 'string' && obj.name.trim()
+        ? obj.name
+        : undefined;
+    out.push({
+      summary: {
+        slug,
+        type: typeof obj.kind === 'string' ? obj.kind : 'unknown',
+        sizeBytes: typeof obj.size === 'number' ? obj.size : 0,
+      },
+      ...(rawPath ? { sourcePath: rawPath } : {}),
+    });
+  }
+  return out;
+}
+
+function collectPriorUserAttachments(
+  messages: Array<Record<string, unknown>>,
+  assistantIndex: number,
+): unknown {
+  const attachments: unknown[] = [];
+  const priorMessages = messages.slice(
+    0,
+    assistantIndex >= 0 ? assistantIndex : messages.length,
+  );
+  for (const message of priorMessages) {
+    if (message.role !== 'user') continue;
+    const raw = message.attachments;
+    if (!Array.isArray(raw)) continue;
+    attachments.push(...raw);
+  }
+  return attachments.length > 0 ? attachments : undefined;
+}
+
+function buildTraceSafeManifests(args: {
+  projectId: string | null | undefined;
+  runId: string;
+  attachmentsRaw: unknown;
+  producedFilesRaw: unknown;
+}): TraceSafeManifestResult {
+  const attachmentManifest: AttachmentManifestEntry[] = [];
+  const artifactManifest: ArtifactManifestEntry[] = [];
+  let partial = false;
+  let unavailable = false;
+
+  if (Array.isArray(args.attachmentsRaw)) {
+    for (const [index, raw] of args.attachmentsRaw.entries()) {
+      const obj = typeof raw === 'string'
+        ? { path: raw, name: raw }
+        : raw && typeof raw === 'object' && !Array.isArray(raw)
+          ? raw as Record<string, unknown>
+          : null;
+      if (!obj) {
+        partial = true;
+        continue;
+      }
+      const pathValue = typeof obj.path === 'string' ? obj.path : '';
+      const nameValue = typeof obj.name === 'string' ? obj.name : pathValue;
+      const attachmentId = stableObjectId('att', [
+        args.projectId ?? null,
+        args.runId,
+        pathValue || nameValue,
+        index,
+      ]);
+      const sizeInfo = statusForSize(obj.size);
+      if (sizeInfo.status === 'partial') partial = true;
+      const sha256 = safeSha256(obj.sha256 ?? obj.hash);
+      const extension = extensionFromName(nameValue || pathValue);
+      attachmentManifest.push({
+        attachment_id: attachmentId,
+        object_class: 'attachment',
+        storage_ref: objectStorageRef({
+          projectId: args.projectId,
+          runId: args.runId,
+          objectClass: 'attachment',
+          objectId: attachmentId,
+        }),
+        status: sizeInfo.status,
+        ...(sizeInfo.reason ? { reason: sizeInfo.reason } : {}),
+        project_id: args.projectId ?? null,
+        run_id: args.runId,
+        workspace_id: null,
+        ...(sizeInfo.sizeBytes !== undefined ? { size_bytes: sizeInfo.sizeBytes } : {}),
+        ...(sha256 ? { sha256 } : {}),
+        ...(typeof obj.mime === 'string' ? { mime_type: obj.mime } : {}),
+        ...(extension ? { extension } : {}),
+        redacted: false,
+        truncated: false,
+        stored_in_open_design: true,
+        retention_policy: 'project_lifetime',
+        access_scope: 'project',
+        sensitivity: 'private',
+        source: 'user_upload',
+        expires_at: null,
+        approved_by: null,
+      });
+    }
+  } else if (args.attachmentsRaw !== undefined && args.attachmentsRaw !== null) {
+    unavailable = true;
+  }
+
+  if (Array.isArray(args.producedFilesRaw)) {
+    for (const [index, raw] of args.producedFilesRaw.entries()) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        partial = true;
+        continue;
+      }
+      const obj = raw as Record<string, unknown>;
+      const slug = sanitizeProducedFileSlug(obj);
+      if (!slug) {
+        partial = true;
+        continue;
+      }
+      const manifest = obj.artifactManifest && typeof obj.artifactManifest === 'object'
+        && !Array.isArray(obj.artifactManifest)
+        ? obj.artifactManifest as Record<string, unknown>
+        : {};
+      const artifactId = stableObjectId('art', [
+        args.projectId ?? null,
+        args.runId,
+        slug,
+        index,
+      ]);
+      const sizeInfo = statusForSize(obj.size);
+      if (sizeInfo.status === 'partial') partial = true;
+      const type =
+        typeof obj.kind === 'string'
+          ? obj.kind
+          : typeof manifest.kind === 'string'
+            ? manifest.kind
+            : 'unknown';
+      const sha256 = safeSha256(obj.sha256 ?? obj.hash);
+      const extension = extensionFromName(slug);
+      const buildStatus = safeStatus(manifest.status);
+      artifactManifest.push({
+        artifact_id: artifactId,
+        object_class: 'artifact',
+        type,
+        storage_ref: objectStorageRef({
+          projectId: args.projectId,
+          runId: args.runId,
+          objectClass: 'artifact',
+          objectId: artifactId,
+        }),
+        status: sizeInfo.status,
+        ...(sizeInfo.reason ? { reason: sizeInfo.reason } : {}),
+        project_id: args.projectId ?? null,
+        run_id: args.runId,
+        workspace_id: null,
+        ...(sizeInfo.sizeBytes !== undefined ? { size_bytes: sizeInfo.sizeBytes } : {}),
+        ...(sha256 ? { sha256 } : {}),
+        ...(typeof obj.mime === 'string' ? { mime_type: obj.mime } : {}),
+        ...(extension ? { extension } : {}),
+        ...(typeof manifest.artifactKind === 'string' ? { artifact_kind: manifest.artifactKind } : {}),
+        ...(buildStatus ? { build_status: buildStatus } : {}),
+        preview_status: 'unavailable',
+        ...(Array.isArray(manifest.exports) && manifest.exports.length > 0
+          ? { export_status: 'available' }
+          : { export_status: 'unavailable' }),
+        redacted: false,
+        truncated: false,
+        stored_in_open_design: true,
+        retention_policy: 'project_lifetime',
+        access_scope: 'project',
+        sensitivity: 'private',
+        source: 'agent_generated',
+        expires_at: null,
+        approved_by: null,
+      });
+    }
+  } else if (args.producedFilesRaw !== undefined && args.producedFilesRaw !== null) {
+    unavailable = true;
+  }
+
+  return {
+    attachmentManifest,
+    artifactManifest,
+    completeness: unavailable ? 'unavailable' : partial ? 'partial' : 'complete',
+  };
 }
 
 function pickRunError(
@@ -341,6 +831,7 @@ export async function reportRunCompletedFromDaemon(
 
     let messageContent = '';
     let producedFilesRaw: unknown = undefined;
+    let attachmentsRaw: unknown = undefined;
     if (run.conversationId && run.assistantMessageId) {
       try {
         // Best-effort. Web persists assistant content via PUT /messages/:id
@@ -349,13 +840,16 @@ export async function reportRunCompletedFromDaemon(
         const messages = (
           listMessages as (db: unknown, cid: string) => unknown[]
         )(db, run.conversationId);
-        const m = (messages as Array<Record<string, unknown>>).find(
+        const allMessages = messages as Array<Record<string, unknown>>;
+        const assistantIndex = allMessages.findIndex(
           (x) => x.id === run.assistantMessageId,
         );
+        const m = assistantIndex >= 0 ? allMessages[assistantIndex] : undefined;
         if (m) {
           messageContent = typeof m.content === 'string' ? m.content : '';
           // listMessages returns producedFiles already parsed (db.ts:965).
           producedFilesRaw = m.producedFiles;
+          attachmentsRaw = collectPriorUserAttachments(allMessages, assistantIndex);
         }
       } catch (err) {
         console.warn('[langfuse-bridge] message read failed:', String(err));
@@ -414,7 +908,26 @@ export async function reportRunCompletedFromDaemon(
       ...getRuntimeInfo(opts.appVersion ?? null),
       ...(run.clientType ? { clientType: run.clientType } : {}),
     };
-    const ctx: ReportContext = {
+    const artifacts = summarizeProducedFiles(producedFilesRaw);
+    const manifests = buildTraceSafeManifests({
+      projectId: run.projectId,
+      runId: run.id,
+      attachmentsRaw,
+      producedFilesRaw,
+    });
+    const objectManifestOptions = {
+      installationId,
+      projectId: run.projectId ?? '',
+      runId: run.id,
+      projectsRoot: path.join(dataDir, 'projects'),
+      ...(run.projectMetadata ? { projectMetadata: run.projectMetadata } : {}),
+      ...(run.projectAttachmentPaths ? { attachmentPaths: run.projectAttachmentPaths } : {}),
+      artifacts: buildTraceObjectArtifactSources(producedFilesRaw),
+      prompt: telemetryPrompt,
+      prefs,
+      ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+    } satisfies Parameters<typeof buildTraceObjectManifests>[0];
+    const buildContext = (finalManifests: FinalTraceSafeManifests): ReportContext => ({
       installationId,
       projectId: run.projectId ?? '',
       conversationId: run.conversationId ?? '',
@@ -441,17 +954,40 @@ export async function reportRunCompletedFromDaemon(
         output: redactSecrets(messageContent),
         ...(usage ? { usage } : {}),
       },
-      artifacts: summarizeProducedFiles(producedFilesRaw),
+      artifacts,
+      attachmentManifest: finalManifests.attachmentManifest,
+      artifactManifest: finalManifests.artifactManifest,
+      ...(finalManifests.inputTextSnapshotManifest
+        ? { inputTextSnapshotManifest: finalManifests.inputTextSnapshotManifest }
+        : {}),
+      manifestCompleteness: finalManifests.completeness,
       tools: collectToolCalls(run.events, startedAt, endedAt),
+      agentEvents: collectAgentEvents(run.events, startedAt, endedAt, run.agentId),
       eventsSummary: summarizeEvents(run.events, durationMs),
       prefs,
       ...(turn ? { turn } : {}),
       runtime,
       ...(run.promptTelemetry ? { promptTelemetry: run.promptTelemetry } : {}),
-    };
+    });
 
+    const registrationManifests = await buildTraceObjectManifests({
+      ...objectManifestOptions,
+      uploadMode: 'manifest-only',
+    });
+    if (registrationManifests) {
+      await reportRunCompleted(
+        buildContext(mergeTraceSafeManifests(manifests, registrationManifests)),
+        {
+          config: objectRegistrationTelemetryConfig(),
+          ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+        },
+      );
+    }
+
+    const uploadedManifests = await buildTraceObjectManifests(objectManifestOptions);
+    const finalManifests = mergeTraceSafeManifests(manifests, uploadedManifests);
     await reportRunCompleted(
-      ctx,
+      buildContext(finalManifests),
       opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {},
     );
   } catch (err) {

@@ -75,6 +75,99 @@ describe('AssistantMessage — chat file-link routing (#1239)', () => {
     expect(onRequestOpenFile).toHaveBeenCalledWith('subdir/hero.html');
   });
 
+  it('routes project raw file URLs through onRequestOpenFile instead of opening a new window', () => {
+    const onRequestOpenFile = vi.fn();
+    const { container } = render(
+      <AssistantMessage
+        message={messageWithText('Open [mutuals-v2.html](/api/projects/project-1/raw/mutuals-v2.html).')}
+        streaming={false}
+        projectId="project-1"
+        onRequestOpenFile={onRequestOpenFile}
+      />,
+    );
+
+    const anchor = container.querySelector('a.md-link');
+    expect(anchor).not.toBeNull();
+    expect(anchor?.getAttribute('href')).toBe('/api/projects/project-1/raw/mutuals-v2.html');
+
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+    anchor!.dispatchEvent(clickEvent);
+
+    expect(onRequestOpenFile).toHaveBeenCalledTimes(1);
+    expect(onRequestOpenFile).toHaveBeenCalledWith('mutuals-v2.html');
+    expect(clickEvent.defaultPrevented).toBe(true);
+  });
+
+  it('does not route app file URLs for a different project through the current workspace opener', () => {
+    const onRequestOpenFile = vi.fn();
+    const { container } = render(
+      <AssistantMessage
+        message={messageWithText('Open [index.html](/projects/other-project/files/index.html).')}
+        streaming={false}
+        projectId="project-1"
+        projectFileNames={new Set(['index.html'])}
+        onRequestOpenFile={onRequestOpenFile}
+      />,
+    );
+
+    const anchor = container.querySelector('a.md-link');
+    expect(anchor).not.toBeNull();
+
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+    anchor!.dispatchEvent(clickEvent);
+
+    expect(onRequestOpenFile).not.toHaveBeenCalled();
+    expect(clickEvent.defaultPrevented).toBe(false);
+  });
+
+  it('routes same-origin absolute project raw URLs through onRequestOpenFile', () => {
+    const onRequestOpenFile = vi.fn();
+    const href = `${window.location.origin}/api/projects/project-1/raw/Web%20Prototype%20mutuals-v2.html`;
+    const { container } = render(
+      <AssistantMessage
+        message={messageWithText(`Open [Web Prototype mutuals-v2.html](${href}).`)}
+        streaming={false}
+        projectId="project-1"
+        onRequestOpenFile={onRequestOpenFile}
+      />,
+    );
+
+    const anchor = container.querySelector('a.md-link');
+    expect(anchor).not.toBeNull();
+
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+    anchor!.dispatchEvent(clickEvent);
+
+    expect(onRequestOpenFile).toHaveBeenCalledTimes(1);
+    expect(onRequestOpenFile).toHaveBeenCalledWith('Web Prototype mutuals-v2.html');
+    expect(clickEvent.defaultPrevented).toBe(true);
+  });
+
+  it('routes local absolute paths that match project files through onRequestOpenFile', () => {
+    const onRequestOpenFile = vi.fn();
+    const { container } = render(
+      <AssistantMessage
+        message={messageWithText(
+          '已完成单文件原型：[index.html](/Users/mac/open-design/open-design-preview-0.10.0/projects/Web%20Prototype/index.html)。',
+        )}
+        streaming={false}
+        projectId="project-1"
+        projectFileNames={new Set(['index.html'])}
+        onRequestOpenFile={onRequestOpenFile}
+      />,
+    );
+
+    const anchor = container.querySelector('a.md-link');
+    expect(anchor).not.toBeNull();
+
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+    anchor!.dispatchEvent(clickEvent);
+
+    expect(onRequestOpenFile).toHaveBeenCalledTimes(1);
+    expect(onRequestOpenFile).toHaveBeenCalledWith('index.html');
+    expect(clickEvent.defaultPrevented).toBe(true);
+  });
+
   it('does not intercept external https:// URLs — preserves default target="_blank" behavior', () => {
     const onRequestOpenFile = vi.fn();
     const { container } = render(

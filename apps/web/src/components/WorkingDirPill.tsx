@@ -9,6 +9,8 @@ import {
   replaceProjectWorkingDir,
 } from '../providers/registry';
 import { useT } from '../i18n';
+import { useAnalytics } from '../analytics/provider';
+import { trackComposerBarClick } from '../analytics/events';
 import type { Project } from '../types';
 import { Icon } from './Icon';
 
@@ -28,6 +30,7 @@ function shortPath(dir: string): string {
 
 export function WorkingDirPill({ projectId, resolvedDir: propResolvedDir, onReplaced }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +59,11 @@ export function WorkingDirPill({ projectId, resolvedDir: propResolvedDir, onRepl
   }, [projectId, propResolvedDir]);
 
   const resolvedDir = fetchedDir ?? propResolvedDir ?? null;
+  // Default-storage projects live at `.od/projects/<projectId>`, so the
+  // working dir's basename is the raw project UUID. Surfacing that to users
+  // is meaningless noise; show a friendly label instead. A user-picked /
+  // imported folder has a real basename and falls through to `shortPath`.
+  const isDefaultStorage = resolvedDir != null && shortPath(resolvedDir) === projectId;
 
   useEffect(() => {
     if (!open) return;
@@ -74,12 +82,25 @@ export function WorkingDirPill({ projectId, resolvedDir: propResolvedDir, onRepl
     };
   }, [open]);
 
+  // Both working-dir replacement paths (browser/fallback `applyDir` and the
+  // desktop host `handlePickDir`) funnel their success through this so the
+  // event fires once per successful switch on every platform.
+  function trackWorkingDirSwitch() {
+    trackComposerBarClick(analytics.track, {
+      page_name: 'chat_panel',
+      area: 'chat_composer',
+      element: 'working_dir_switch',
+      project_id: projectId,
+    });
+  }
+
   async function applyDir(dir: string) {
     setError(null);
     setBusy(true);
     setOpen(false);
     try {
       const result = await replaceProjectWorkingDir(projectId, dir);
+      trackWorkingDirSwitch();
       setFetchedDir(result.baseDir);
       onReplaced?.({
         baseDir: result.baseDir,
@@ -101,6 +122,7 @@ export function WorkingDirPill({ projectId, resolvedDir: propResolvedDir, onRepl
       try {
         const result = await pickAndReplaceHostProjectWorkingDir(projectId);
         if (result.ok) {
+          trackWorkingDirSwitch();
           setFetchedDir(result.baseDir);
           onReplaced?.({
             baseDir: result.baseDir,
@@ -171,11 +193,17 @@ export function WorkingDirPill({ projectId, resolvedDir: propResolvedDir, onRepl
         data-testid="working-dir-pill-trigger"
         onClick={() => setOpen((value) => !value)}
         disabled={busy}
-        title={resolvedDir ?? t('workingDirPicker.title')}
+        title={isDefaultStorage ? t('workingDirPicker.defaultLabel') : (resolvedDir ?? t('workingDirPicker.title'))}
       >
         <Icon name="folder" size={12} />
         <span className="working-dir-pill-label">
-          {busy ? t('workingDirPicker.processing') : resolvedDir ? shortPath(resolvedDir) : t('workingDirPicker.select')}
+          {busy
+            ? t('workingDirPicker.processing')
+            : isDefaultStorage
+              ? t('workingDirPicker.defaultLabel')
+              : resolvedDir
+                ? shortPath(resolvedDir)
+                : t('workingDirPicker.select')}
         </span>
         <Icon name="chevron-down" size={10} />
       </button>
