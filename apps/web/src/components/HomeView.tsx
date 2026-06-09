@@ -81,6 +81,7 @@ import { HomeTemplatesReveal } from './HomeTemplatesReveal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import type { FacetSelection } from './plugins-home/facets';
+import { localizePluginTitle } from './plugins-home/localization';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { examplePresetSeedPrompt } from './plugins-home/presetSeedPrompt';
 import { localizePluginDescription } from './plugins-home/localization';
@@ -613,8 +614,11 @@ export function HomeView({
         return { title: homeHeroChipLabelForId(chip.id, t), isExplicitPlugin: false };
       }
     }
-    return { title: active.record.title, isExplicitPlugin: true };
-  }, [active, t]);
+    return {
+      title: localizePluginTitle(locale, active.record),
+      isExplicitPlugin: true,
+    };
+  }, [active, locale, t]);
   const activeBadgeTitle = activeBadge.title;
   const activePluginIsExplicit = activeBadge.isExplicitPlugin;
   const showActivePluginChip = useMemo(

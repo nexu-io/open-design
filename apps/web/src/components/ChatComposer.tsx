@@ -55,6 +55,8 @@ import { buildVisualAnnotationAttachment, commentTargetDisplayName } from '../co
 import { Icon, type IconName } from "./Icon";
 import { SessionModeToggle } from './SessionModeToggle';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
+import { ComposerPluginPreview } from './ComposerPluginPreview';
+import { computeToolboxDetailPosition } from './composer-detail-position';
 import { PluginDetailsModal } from "./PluginDetailsModal";
 import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
 import { BUILT_IN_PETS, CUSTOM_PET_ID } from "./pet/pets";
@@ -3345,14 +3347,15 @@ function DesignToolboxPanel({
   }
   function showToolboxDetail(key: string, rect: DOMRect, node: ReactNode) {
     cancelDetailClose();
-    const detailWidth = 264;
-    const gap = 8;
-    const toRight = rect.right + gap;
-    const left =
-      toRight + detailWidth > window.innerWidth - 8
-        ? rect.left - gap - detailWidth
-        : toRight;
-    setToolboxDetail({ key, left, top: rect.top, node });
+    // Plugin rows render a tall visual preview; the helper clamps both axes
+    // into the viewport so the fixed panel never lands off-screen on a
+    // narrow pane (see computeToolboxDetailPosition).
+    const { left, top } = computeToolboxDetailPosition(
+      rect,
+      { width: window.innerWidth, height: window.innerHeight },
+      { detailWidth: 264, gap: 8, margin: 8, estimatedHeight: 340 },
+    );
+    setToolboxDetail({ key, left, top, node });
   }
   function scheduleToolboxDetailClose(key: string) {
     cancelDetailClose();
@@ -3448,18 +3451,25 @@ function DesignToolboxPanel({
                   }
                 }}
                 detail={
-                  <>
-                    <div className="plus-menu__detail-title">{resource.title}</div>
-                    {resource.subtitle ? (
-                      <div className="plus-menu__detail-desc">{resource.subtitle}</div>
-                    ) : null}
-                    <div className="plus-menu__detail-skill">
-                      {designToolboxResourceKindLabel(resource.kind, t)}
-                    </div>
-                    <div className="plus-menu__detail-badge">
-                      {active ? t('chat.designToolbox.selected') : resource.badge}
-                    </div>
-                  </>
+                  // Plugin rows reuse the rich visual preview (poster /
+                  // sandboxed example iframe + meta); every other kind keeps
+                  // the compact text detail since it has no preview asset.
+                  resource.kind === 'plugin' ? (
+                    <ComposerPluginPreview record={resource.plugin} locale={locale} />
+                  ) : (
+                    <>
+                      <div className="plus-menu__detail-title">{resource.title}</div>
+                      {resource.subtitle ? (
+                        <div className="plus-menu__detail-desc">{resource.subtitle}</div>
+                      ) : null}
+                      <div className="plus-menu__detail-skill">
+                        {designToolboxResourceKindLabel(resource.kind, t)}
+                      </div>
+                      <div className="plus-menu__detail-badge">
+                        {active ? t('chat.designToolbox.selected') : resource.badge}
+                      </div>
+                    </>
+                  )
                 }
               />
             );
