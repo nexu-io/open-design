@@ -39,12 +39,30 @@ in
     nativeBuildInputs = [
       nodejs
       pnpm_10
-      pnpmConfigHook
+      # Override pnpmConfigHook's propagatedBuildInputs to use the
+      # flake's pinned pnpm_10. The upstream hook hardcodes
+      # `propagatedBuildInputs = [ pnpm … ]` (the nixpkgs default
+      # pnpm attribute plus writable-tmpdir-as-home-hook and friends
+      # depending on nixpkgs version), which is what puts the wrong
+      # pnpm binary on PATH during the install phase and trips the
+      # package's engines.pnpm gate. Append pnpm_10 to the existing
+      # list rather than replacing it, so the upstream's
+      # writable-tmpdir-as-home-hook (which sets $HOME in the build
+      # sandbox) survives the override.
+      (pnpmConfigHook.overrideAttrs (old: {
+        propagatedBuildInputs =
+          (old.propagatedBuildInputs or [])
+          ++ [pnpm_10];
+      }))
     ];
 
     pnpmDeps = fetchPnpmDeps {
       inherit (finalAttrs) pname version src;
       hash = pnpmDepsHash;
+      # Force the deps-fetch derivation to use the flake's pinned
+      # pnpm_10 as well. fetchPnpmDeps defaults to `pkgs.pnpm` when
+      # the `pnpm` arg is omitted.
+      pnpm = pnpm_10;
       pnpmWorkspaces = pnpmWorkspaceFilters;
       fetcherVersion = 3;
     };
