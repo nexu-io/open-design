@@ -17,6 +17,11 @@ import path from 'node:path';
 
 export const PLUGIN_PREVIEWS_ROUTE = '/api/plugin-previews';
 
+// Public R2 (Cloudflare CDN) origin the baked clips are published to. Used as
+// the default so the packaged desktop app and the web deployment both serve
+// previews with zero configuration; OD_PLUGIN_PREVIEWS_BASE_URL overrides it.
+const DEFAULT_PUBLIC_BASE = 'https://repo-assets.open-design.ai/plugin-previews';
+
 interface BakeEntry {
   video: string;
   poster: string;
@@ -64,23 +69,17 @@ function loadManifest(dir: string): Record<string, BakeEntry> {
 export function bakedPreviewBlock(id: string, dir: string): BakedPreviewBlock | null {
   const entry = loadManifest(dir)[id];
   if (!entry || !entry.video || !entry.poster) return null;
-  // In production the clips live on R2 (OD_PLUGIN_PREVIEWS_BASE_URL =
-  // https://<r2-public-origin>/plugin-previews); locally they fall back to the
-  // daemon's own /api/plugin-previews static route over the on-disk dir.
-  const remoteBase = process.env.OD_PLUGIN_PREVIEWS_BASE_URL?.replace(/\/+$/, '');
-  // Only attach a baked preview when its clips are actually fetchable: a remote
-  // origin is configured, OR the files are present on disk to serve locally.
-  // The checked-in manifest records entries but keeps the binaries on R2, so a
-  // deployment that forgot OD_PLUGIN_PREVIEWS_BASE_URL would otherwise point the
-  // gallery at /api/plugin-previews URLs that 404 — breaking tiles instead of
-  // falling back to the live iframe.
-  if (
-    !remoteBase &&
-    (!existsSync(path.join(dir, entry.video)) || !existsSync(path.join(dir, entry.poster)))
-  ) {
-    return null;
-  }
-  const base = remoteBase || PLUGIN_PREVIEWS_ROUTE;
+  // Resolve where the clip is fetchable from, in priority order:
+  //   1. an explicit OD_PLUGIN_PREVIEWS_BASE_URL override;
+  //   2. the daemon's own /api/plugin-previews route when the clips are on disk
+  //      (local dev / a freshly-baked dir);
+  //   3. the public R2 origin — the default for the packaged desktop app and the
+  //      web deployment, so neither needs any config: the checked-in manifest
+  //      names the clips and they're served from R2's CDN.
+  const envBase = process.env.OD_PLUGIN_PREVIEWS_BASE_URL?.replace(/\/+$/, '');
+  const onDisk =
+    existsSync(path.join(dir, entry.video)) && existsSync(path.join(dir, entry.poster));
+  const base = envBase || (onDisk ? PLUGIN_PREVIEWS_ROUTE : DEFAULT_PUBLIC_BASE);
   return {
     poster: `${base}/${entry.poster}`,
     video: `${base}/${entry.video}`,
