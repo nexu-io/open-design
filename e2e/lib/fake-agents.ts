@@ -137,6 +137,14 @@ if (process.stdin.isTTY || agentId === 'deepseek') {
 async function emitRun(promptText) {
   if (emitted) return;
   emitted = true;
+  if (promptText.includes('Hold the daemon run open until canceled')) {
+    // Stay running (busy) without ever emitting a terminal result, so a test
+    // can queue a follow-up turn and interrupt it via send-now. Keep the event
+    // loop alive indefinitely; the daemon kills this child (SIGTERM) when the
+    // run is canceled.
+    setInterval(() => {}, 1 << 30);
+    return;
+  }
   if (promptText.includes('Return an intentional daemon smoke failure')) {
     emitFailure();
     return;
