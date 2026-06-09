@@ -661,21 +661,16 @@ function normalizeProjectIdOwnerKey(value: unknown): string | null {
   return /^[A-Za-z0-9._-]{1,64}$/u.test(key) ? key : null;
 }
 
-function hasProjectIdOwnerKey(id: string, key: string): boolean {
-  return id === key || id.startsWith(`${key}-`) || id.includes(`-${key}-`);
-}
-
 export function ownerScopedProjectId(
   id: string,
   owner: { projectIdOwnerKey?: string | null } | null | undefined,
 ): string {
   const key = normalizeProjectIdOwnerKey(owner?.projectIdOwnerKey);
-  if (!key || hasProjectIdOwnerKey(id, key)) return id;
-  const prefixed = `${key}-${id}`;
-  if (prefixed.length <= 128) return prefixed;
-  const digest = createHash('sha1').update(id).digest('hex').slice(0, 12);
-  const budget = 128 - key.length - digest.length - 2;
-  return `${key}-${id.slice(0, Math.max(1, budget))}-${digest}`;
+  if (!key) return id;
+  const digest = createHash('sha1').update(`${key}\0${id}`).digest('hex').slice(0, 12);
+  const prefix = `${key}-od-${digest}-`;
+  const budget = 128 - prefix.length;
+  return `${prefix}${id.slice(0, Math.max(1, budget))}`;
 }
 
 function ownerClause(column: string, scope?: ProjectOwnerScope) {
