@@ -108,6 +108,10 @@ interface Props {
   sessionMode?: ChatSessionMode;
   onSessionModeChange?: (mode: ChatSessionMode) => void;
   activePluginTitle: string | null;
+  // True when the active plugin chip shows a user-picked plugin (Community card
+  // or example-prompt preset) rather than a task-type chip's default plugin —
+  // an explicit pick owns its own clear (×) button even when a task chip is set.
+  activePluginIsExplicit?: boolean;
   activePluginRecord?: InstalledPluginRecord | null;
   activeChipId: string | null;
   onClearActivePlugin: () => void;
@@ -161,10 +165,6 @@ interface Props {
   contextItemCount: number;
   error: string | null;
   showActivePluginChip?: boolean;
-  // True when the active plugin chip shows a user-picked plugin (Community card
-  // or example-prompt preset) rather than a task-type chip's default plugin —
-  // an explicit pick owns its own clear (×) button even when a task chip is set.
-  activePluginIsExplicit?: boolean;
   workingDir?: string | null;
   onPickWorkingDir?: () => void;
   onClearWorkingDir?: () => void;
@@ -224,6 +224,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     sessionMode = 'design',
     onSessionModeChange,
     activePluginTitle,
+    activePluginIsExplicit = false,
     activePluginRecord = null,
     activeSkillId = null,
     activeSkillTitle = null,
@@ -269,7 +270,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     contextItemCount,
     error,
     showActivePluginChip = true,
-    activePluginIsExplicit = false,
     workingDir = null,
     onPickWorkingDir,
     onClearWorkingDir,
@@ -297,6 +297,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   const [mentionTrigger, setMentionTrigger] = useState<{ query: string } | null>(null);
   const [caretRect, setCaretRect] = useState<CaretRect | null>(null);
   const editorRef = useRef<LexicalComposerInputHandle | null>(null);
+  const promptEditorRef = useRef<HTMLDivElement | null>(null);
+  const mentionPickerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const shortcutsMenuRef = useRef<HTMLDivElement>(null);
   const canSubmit = (prompt.trim().length > 0 || stagedFiles.length > 0) && !submitDisabled;
@@ -322,16 +324,16 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   const pluginMatches = useMemo(
     () =>
       mentionActive
-        ? pluginOptions.filter((plugin) => pluginMatchesQuery(plugin, mentionQuery)).slice(0, 6)
+        ? pluginOptions.filter((plugin) => pluginMatchesQuery(plugin, mentionQuery, locale))
         : [],
-    [mentionActive, mentionQuery, pluginOptions],
+    [locale, mentionActive, mentionQuery, pluginOptions],
   );
   const skillMatches = useMemo(
     () =>
       mentionActive
-        ? skillOptions.filter((skill) => skillMatchesQuery(skill, mentionQuery)).slice(0, 6)
+        ? skillOptions.filter((skill) => skillMatchesQuery(skill, mentionQuery, locale))
         : [],
-    [mentionActive, mentionQuery, skillOptions],
+    [locale, mentionActive, mentionQuery, skillOptions],
   );
   const mcpMatches = useMemo(
     () =>
@@ -546,6 +548,38 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   }, [pickerOpen]);
 
   useEffect(() => {
+    if (!pickerOpen) return;
+    const isInsideMentionSurface = (target: EventTarget | null) => {
+      if (!(target instanceof Node)) return false;
+      return (
+        promptEditorRef.current?.contains(target) ||
+        mentionPickerRef.current?.contains(target)
+      );
+    };
+    const closePicker = () => {
+      setMentionTrigger(null);
+      setMentionTab('all');
+    };
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!isInsideMentionSurface(event.target)) closePicker();
+    };
+    const closeOnOutsideMouse = (event: MouseEvent) => {
+      if (!isInsideMentionSurface(event.target)) closePicker();
+    };
+    const closeOnOutsideFocus = (event: FocusEvent) => {
+      if (!isInsideMentionSurface(event.target)) closePicker();
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer, true);
+    document.addEventListener('mousedown', closeOnOutsideMouse, true);
+    document.addEventListener('focusin', closeOnOutsideFocus);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer, true);
+      document.removeEventListener('mousedown', closeOnOutsideMouse, true);
+      document.removeEventListener('focusin', closeOnOutsideFocus);
+    };
+  }, [pickerOpen]);
+
+  useEffect(() => {
     setSelectedPromptExample(null);
     setSelectedSubcategory(null);
   }, [activeChipId]);
@@ -746,6 +780,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   }
 
   function usePromptExample(example: string) {
+    trackHomeChatComposerClick(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      element: 'example_prompt',
+      chip_id: activeChipId ?? 'prototype',
+    });
     setSelectedPromptExample({
       label: promptExampleChipLabel(example),
       promptText: example,
@@ -762,6 +802,14 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   }
 
   function pickExamplePluginPreset(record: InstalledPluginRecord, chipId: string, promptText: string) {
+    trackHomeChatComposerClick(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      element: 'example_prompt',
+      chip_id: chipId,
+      plugin_id: record.sourceMarketplaceEntryName ?? record.id,
+      plugin_type: record.marketplaceTrust ?? 'official',
+    });
     setSelectedPromptExample({
       label: record.title,
       promptText,
@@ -1050,7 +1098,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           </div>
         ) : null}
         <div className="home-hero__prompt-surface">
-          <div className="home-hero__prompt-editor home-hero__lexical">
+          <div ref={promptEditorRef} className="home-hero__prompt-editor home-hero__lexical">
             <LexicalComposerInput
               ref={editorRef}
               testId="home-hero-input"
@@ -1090,6 +1138,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         </div>
         <CaretFloatingLayer caret={caretRect} open={pickerOpen}>
           <div
+            ref={mentionPickerRef}
             id="home-hero-context-picker"
             className="home-hero__plugin-picker home-hero__plugin-picker--floating"
             role="listbox"
@@ -1427,10 +1476,26 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           subChips={activeSubChips}
           selectedSlug={selectedSubcategory}
           pluginsLoading={pluginsLoading}
-          onPickSubChip={(sub) =>
-            setSelectedSubcategory((current) => (current === sub.slug ? null : sub.slug))
-          }
-          onSelectAll={() => setSelectedSubcategory(null)}
+          onPickSubChip={(sub) => {
+            trackHomeChatComposerClick(analytics.track, {
+              page_name: 'home',
+              area: 'chat_composer',
+              element: 'subcategory_chip',
+              chip_id: activeChipId ?? undefined,
+              subcategory: sub.slug,
+            });
+            setSelectedSubcategory((current) => (current === sub.slug ? null : sub.slug));
+          }}
+          onSelectAll={() => {
+            trackHomeChatComposerClick(analytics.track, {
+              page_name: 'home',
+              area: 'chat_composer',
+              element: 'subcategory_chip',
+              chip_id: activeChipId ?? undefined,
+              subcategory: 'all',
+            });
+            setSelectedSubcategory(null);
+          }}
         />
       ) : null}
 
@@ -2277,14 +2342,16 @@ function fileMatchesQuery(file: File, query: string): boolean {
     .includes(q);
 }
 
-function pluginMatchesQuery(plugin: InstalledPluginRecord, query: string): boolean {
+function pluginMatchesQuery(plugin: InstalledPluginRecord, query: string, locale: Locale): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   return [
     plugin.title,
+    localizePluginTitle(locale, plugin),
     plugin.id,
     plugin.sourceKind,
     plugin.manifest?.description ?? '',
+    localizePluginDescription(locale, plugin),
     ...(plugin.manifest?.tags ?? []),
   ]
     .join(' ')
@@ -2292,13 +2359,15 @@ function pluginMatchesQuery(plugin: InstalledPluginRecord, query: string): boole
     .includes(q);
 }
 
-function skillMatchesQuery(skill: SkillSummary, query: string): boolean {
+function skillMatchesQuery(skill: SkillSummary, query: string, locale: Locale): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   return [
     skill.id,
     skill.name,
+    localizeSkillName(locale, skill),
     skill.description,
+    localizeSkillDescription(locale, skill),
     skill.mode,
     skill.surface ?? '',
     ...skill.triggers,
@@ -3686,6 +3755,7 @@ export function homeHeroChipPromptExamplesForLocale(chipId: string, locale: Loca
 function homeHeroChipPromptExamples(chipId: string, locale: Locale): string[] {
   return homeHeroChipPromptExamplesForLocale(chipId, locale);
 }
+
 
 function briefForChipId(chipId: string): Record<string, string> {
   switch (chipId) {

@@ -34,6 +34,7 @@ interface Props {
   onClose: () => void;
   onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
   isApplying?: boolean;
+  hideUseAction?: boolean;
 }
 
 interface ContextRef {
@@ -66,6 +67,7 @@ export function PluginDesignSystemDetail({
   onClose,
   onUse,
   isApplying,
+  hideUseAction,
 }: Props) {
   const { t, locale } = useI18n();
   const localizedTitle = localizePluginTitle(locale, record);
@@ -173,14 +175,16 @@ export function PluginDesignSystemDetail({
           </div>
         ),
       }}
-      primaryAction={{
-        label: t('preview.usePlugin'),
-        onClick: () => onUse(record, 'use'),
-        busy: !!isApplying,
-        busyLabel: 'Applying…',
-        testId: `plugin-details-use-${record.id}`,
-        menu: buildPluginUseMenu(record, onUse, t),
-      }}
+      primaryAction={hideUseAction
+        ? undefined
+        : {
+            label: t('preview.usePlugin'),
+            onClick: () => onUse(record, 'use'),
+            busy: !!isApplying,
+            busyLabel: 'Applying…',
+            testId: `plugin-details-use-${record.id}`,
+            menu: buildPluginUseMenu(record, onUse, t),
+          }}
       headerExtras={<PluginShareMenu record={record} variant="inline" />}
     />
   );

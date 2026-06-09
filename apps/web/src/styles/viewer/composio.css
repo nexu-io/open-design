@@ -1095,6 +1095,22 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* Answered: a quiet "done" marker. No hover/click affordance, muted surface,
+   and a green check in place of the question icon. */
+.questions-banner-answered,
+.questions-banner-answered:hover {
+  cursor: default;
+  border-color: var(--border);
+  background: var(--bg-panel);
+  box-shadow: none;
+  color: var(--text-muted);
+}
+.questions-banner-answered .questions-banner-icon {
+  background: var(--success, #16a34a);
+}
+.questions-banner-answered .questions-banner-label {
+  font-weight: 500;
+}
 .questions-banner-icon {
   display: inline-flex;
   align-items: center;

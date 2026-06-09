@@ -857,16 +857,13 @@ export function HomeView({
     action: PluginUseAction = 'use',
     inputs?: Record<string, unknown>,
   ) {
-    // Applying a plugin into the composer — from a Community card's Use button
-    // or the plugin detail modal's primary action (incl. its split-menu). The
-    // `action` distinguishes plain attach vs attach + example-prompt seed.
     trackCommunityGalleryClick(analytics.track, {
       page_name: 'home',
       area: 'community_gallery',
       element: 'use_plugin',
-      action: action === 'use-with-query' ? 'use_with_query' : 'use',
       plugin_id: record.sourceMarketplaceEntryName ?? record.id,
       plugin_type: record.marketplaceTrust ?? 'official',
+      action: action === 'use-with-query' ? 'use_with_query' : 'use',
     });
     if (action === 'use-with-query') {
       // "Replicate this content" seeds the composer with the SAME human-friendly
@@ -1477,6 +1474,7 @@ export function HomeView({
     onSubmit({
       prompt: trimmed,
       pluginId: routedPluginId,
+      pluginType: submittedActive?.record.marketplaceTrust ?? (routedPluginId ? 'official' : null),
       skillId: resolvedSkillId,
       appliedPluginSnapshotId: submittedActive?.result?.appliedPlugin?.snapshotId ?? null,
       pluginTitle: submittedActive?.record.title ?? null,

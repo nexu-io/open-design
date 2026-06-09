@@ -28,6 +28,7 @@ interface Props {
   onClose: () => void;
   onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
   isApplying?: boolean;
+  hideUseAction?: boolean;
 }
 
 interface MediaPreview {
@@ -78,6 +79,7 @@ export function PluginMediaDetail({
   onClose,
   onUse,
   isApplying,
+  hideUseAction,
 }: Props) {
   const t = useT();
   const [copied, setCopied] = useState(false);
@@ -224,14 +226,16 @@ export function PluginMediaDetail({
         contentKey: record.id,
         content: sidebar,
       }}
-      primaryAction={{
-        label: t('preview.usePlugin'),
-        onClick: () => onUse(record, 'use'),
-        busy: !!isApplying,
-        busyLabel: 'Applying…',
-        testId: `plugin-details-use-${record.id}`,
-        menu: buildPluginUseMenu(record, onUse, t),
-      }}
+      primaryAction={hideUseAction
+        ? undefined
+        : {
+            label: t('preview.usePlugin'),
+            onClick: () => onUse(record, 'use'),
+            busy: !!isApplying,
+            busyLabel: 'Applying…',
+            testId: `plugin-details-use-${record.id}`,
+            menu: buildPluginUseMenu(record, onUse, t),
+          }}
       headerExtras={<PluginShareMenu record={record} variant="inline" />}
     />
   );

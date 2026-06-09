@@ -19,41 +19,7 @@ import {
   writeProjectTextFile,
   fetchProjectFolders,
 } from '../../src/providers/registry';
-import type { AppConfig, ChatMessage, ProjectFile, ProjectFolder } from '../../src/types';
-
-vi.mock('../../src/components/AmrGuidance', () => ({
-  AmrGuidance: ({
-    errorCode,
-    projectId,
-    projectKind,
-    conversationId,
-    assistantMessageId,
-    runId,
-    onActivate,
-  }: {
-    errorCode: string;
-    projectId: string;
-    projectKind: string | null;
-    conversationId: string | null;
-    assistantMessageId: string;
-    runId: string | null;
-    onActivate?: (() => void) | undefined;
-  }) => (
-    <div
-      data-testid="mock-amr-guidance"
-      data-error-code={errorCode}
-      data-project-id={projectId}
-      data-project-kind={projectKind ?? ''}
-      data-conversation-id={conversationId ?? ''}
-      data-assistant-message-id={assistantMessageId}
-      data-run-id={runId ?? ''}
-    >
-      <button type="button" data-testid="mock-amr-guidance-activate" onClick={onActivate}>
-        Switch to AMR
-      </button>
-    </div>
-  ),
-}));
+import type { ChatMessage, ProjectFile, ProjectFolder } from '../../src/types';
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -175,40 +141,6 @@ function workspaceFile(name: string): ProjectFile {
     mtime: 1700000000,
     kind: name.endsWith('.html') ? 'html' : 'text',
     mime: name.endsWith('.html') ? 'text/html' : 'text/plain',
-  };
-}
-
-function failedAssistantMessage(
-  code: string,
-  agentId: string,
-  detail = 'Recovered upstream failure',
-): ChatMessage {
-  return {
-    id: `msg-${code.toLowerCase()}`,
-    role: 'assistant',
-    content: '',
-    createdAt: 1700000000,
-    startedAt: 1700000000,
-    runId: `run-${code.toLowerCase()}`,
-    runStatus: 'failed',
-    agentId,
-    preTurnFileNames: [],
-    events: [{ kind: 'status', label: 'error', detail, code }],
-  };
-}
-
-function generatingAssistantMessage(): ChatMessage {
-  return {
-    id: 'msg-generating',
-    role: 'assistant',
-    content: '',
-    createdAt: 1700000000,
-    startedAt: 1700000000,
-    runId: 'run-generating',
-    runStatus: 'running',
-    agentId: 'claude',
-    preTurnFileNames: [],
-    events: [{ kind: 'status', label: 'thinking' }],
   };
 }
 
@@ -662,7 +594,10 @@ describe('FileWorkspace upload input', () => {
 });
 
 describe('FileWorkspace launcher tab creation', () => {
-  it('reports the active Design Files tab as workspace context', async () => {
+  it('does not report a Design Files context for an empty project', async () => {
+    // A brand-new project has no files, live artifacts, or folders. The
+    // composer must not auto-stage a "Design files" chip that points at
+    // nothing, so the active workspace context stays null.
     const onActiveContextChange = vi.fn();
     render(
       <FileWorkspace
@@ -670,6 +605,29 @@ describe('FileWorkspace launcher tab creation', () => {
         projectKind="prototype"
         resolvedDir="/tmp/open-design/project-1"
         files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        onActiveContextChange={onActiveContextChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onActiveContextChange).toHaveBeenCalled();
+    });
+    expect(onActiveContextChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it('reports the active Design Files tab as workspace context once files exist', async () => {
+    const onActiveContextChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        resolvedDir="/tmp/open-design/project-1"
+        files={[workspaceFile('cover.html')]}
         liveArtifacts={[]}
         onRefreshFiles={vi.fn()}
         isDeck={false}
@@ -1067,274 +1025,6 @@ describe('FileWorkspace launcher tab creation', () => {
         active: 'Web Prototype mutuals-v2.html',
       });
     });
-  });
-});
-
-describe('FileWorkspace generation failure recovery', () => {
-  it('surfaces authorize-and-retry on the failed preview surface for AMR auth failures', () => {
-    const onAuthorizeAndRetry = vi.fn();
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['generation'], active: 'generation' }}
-        onTabsStateChange={vi.fn()}
-        messages={[failedAssistantMessage('AMR_AUTH_REQUIRED', 'amr', 'AMR auth expired')]}
-        onAuthorizeAndRetry={onAuthorizeAndRetry}
-      />,
-    );
-
-    expect(screen.getByTestId('generation-preview-stage')).toBeTruthy();
-    expect(screen.getByTestId('generation-preview-authorize').textContent).toContain('Authorize');
-    expect(screen.queryByTestId('mock-amr-guidance')).toBeNull();
-
-    fireEvent.click(screen.getByTestId('generation-preview-authorize'));
-
-    expect(onAuthorizeAndRetry).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'msg-amr_auth_required', agentId: 'amr' }),
-    );
-  });
-
-  it('surfaces the AMR promotion card and retry action for non-AMR rate-limited failures', () => {
-    const onRetry = vi.fn();
-    const onAuthorizeAndRetry = vi.fn();
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['generation'], active: 'generation' }}
-        onTabsStateChange={vi.fn()}
-        messages={[failedAssistantMessage('RATE_LIMITED', 'claude', 'Claude quota exhausted')]}
-        onRetry={onRetry}
-        onAuthorizeAndRetry={onAuthorizeAndRetry}
-        conversationId="conv-1"
-      />,
-    );
-
-    expect(screen.getByTestId('generation-preview-stage')).toBeTruthy();
-    expect(screen.getByTestId('generation-preview-retry')).toBeTruthy();
-    const guidance = screen.getByTestId('mock-amr-guidance');
-    expect(guidance.getAttribute('data-error-code')).toBe('RATE_LIMITED');
-    expect(guidance.getAttribute('data-project-id')).toBe('project-1');
-    expect(guidance.getAttribute('data-project-kind')).toBe('prototype');
-    expect(guidance.getAttribute('data-conversation-id')).toBe('conv-1');
-    expect(guidance.getAttribute('data-assistant-message-id')).toBe('msg-rate_limited');
-    expect(guidance.getAttribute('data-run-id')).toBe('run-rate_limited');
-
-    fireEvent.click(screen.getByTestId('generation-preview-retry'));
-    fireEvent.click(screen.getByTestId('mock-amr-guidance-activate'));
-
-    expect(onRetry).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'msg-rate_limited', agentId: 'claude' }),
-    );
-    expect(onAuthorizeAndRetry).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'msg-rate_limited', agentId: 'claude' }),
-    );
-  });
-
-  it('suppresses the AMR promotion card for upstream outages while keeping retry available', () => {
-    const onRetry = vi.fn();
-    const onAuthorizeAndRetry = vi.fn();
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['generation'], active: 'generation' }}
-        onTabsStateChange={vi.fn()}
-        messages={[failedAssistantMessage('UPSTREAM_UNAVAILABLE', 'claude', 'Model provider unavailable')]}
-        onRetry={onRetry}
-        onAuthorizeAndRetry={onAuthorizeAndRetry}
-        conversationId="conv-1"
-      />,
-    );
-
-    expect(screen.getByTestId('generation-preview-stage')).toBeTruthy();
-    expect(screen.getByTestId('generation-preview-retry')).toBeTruthy();
-    expect(screen.queryByTestId('mock-amr-guidance')).toBeNull();
-
-    fireEvent.click(screen.getByTestId('generation-preview-retry'));
-
-    expect(onRetry).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'msg-upstream_unavailable', agentId: 'claude' }),
-    );
-    expect(onAuthorizeAndRetry).not.toHaveBeenCalled();
-  });
-
-  it('surfaces recharge and retry actions on the failed preview surface for AMR balance errors', () => {
-    const onRetry = vi.fn();
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['generation'], active: 'generation' }}
-        onTabsStateChange={vi.fn()}
-        chatConfig={{ agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'local' } } } as unknown as AppConfig}
-        messages={[failedAssistantMessage('AMR_INSUFFICIENT_BALANCE', 'amr', 'AMR balance empty')]}
-        onRetry={onRetry}
-      />,
-    );
-
-    expect(screen.getByTestId('generation-preview-stage')).toBeTruthy();
-    expect(screen.getByTestId('generation-preview-recharge').textContent).toContain('Top up AMR');
-    expect(screen.getByTestId('generation-preview-retry')).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId('generation-preview-recharge'));
-    fireEvent.click(screen.getByTestId('generation-preview-retry'));
-
-    expect(openSpy).toHaveBeenCalledTimes(1);
-    const [walletUrl, target, features] = openSpy.mock.calls[0] ?? [];
-    expect(target).toBe('_blank');
-    expect(features).toBe('noopener,noreferrer');
-    const parsedWalletUrl = new URL(String(walletUrl));
-    expect(`${parsedWalletUrl.origin}${parsedWalletUrl.pathname}`).toBe(
-      'http://localhost:5173/wallet',
-    );
-    expect(parsedWalletUrl.searchParams.get('od_origin')).toBe('open_design');
-    expect(parsedWalletUrl.searchParams.get('od_entry_source')).toBe(
-      'generation_preview_recharge',
-    );
-    expect(parsedWalletUrl.searchParams.get('od_entry_id')).toMatch(/^od-amr-/u);
-    expect(Number.isFinite(Date.parse(parsedWalletUrl.searchParams.get('od_entry_at') ?? ''))).toBe(
-      true,
-    );
-    expect(onRetry).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'msg-amr_insufficient_balance', agentId: 'amr' }),
-    );
-  });
-
-  it('wires the terminal auth launcher and retry to the failed assistant for antigravity auth failures', () => {
-    const onRetry = vi.fn();
-    const onLaunchTerminalAuth = vi.fn();
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['generation'], active: 'generation' }}
-        onTabsStateChange={vi.fn()}
-        messages={[failedAssistantMessage('AGENT_AUTH_REQUIRED', 'antigravity', 'Sign in with agy first')]}
-        onRetry={onRetry}
-        onLaunchTerminalAuth={onLaunchTerminalAuth}
-      />,
-    );
-
-    expect(screen.getByTestId('generation-preview-launch-terminal')).toBeTruthy();
-    expect(screen.getByTestId('generation-preview-retry')).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId('generation-preview-launch-terminal'));
-    fireEvent.click(screen.getByTestId('generation-preview-retry'));
-
-    expect(onLaunchTerminalAuth).toHaveBeenCalledTimes(1);
-    expect(onRetry).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'msg-agent_auth_required', agentId: 'antigravity' }),
-    );
-  });
-
-  it('wires the terminal model-switch launcher and retry to the failed assistant for antigravity rate limits', () => {
-    const onRetry = vi.fn();
-    const onLaunchTerminalAuth = vi.fn();
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['generation'], active: 'generation' }}
-        onTabsStateChange={vi.fn()}
-        messages={[failedAssistantMessage('RATE_LIMITED', 'antigravity', 'Switch agy models in the terminal')]}
-        onRetry={onRetry}
-        onLaunchTerminalAuth={onLaunchTerminalAuth}
-      />,
-    );
-
-    expect(screen.getByTestId('generation-preview-launch-terminal')).toBeTruthy();
-    expect(screen.getByTestId('generation-preview-retry')).toBeTruthy();
-    expect(screen.queryByTestId('mock-amr-guidance')).toBeNull();
-
-    fireEvent.click(screen.getByTestId('generation-preview-launch-terminal'));
-    fireEvent.click(screen.getByTestId('generation-preview-retry'));
-
-    expect(onLaunchTerminalAuth).toHaveBeenCalledTimes(1);
-    expect(onRetry).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'msg-rate_limited', agentId: 'antigravity' }),
-    );
-  });
-
-  // Regression guard for #3516: the giant Lexical-composer merge added an
-  // `activeTab !== DESIGN_FILES_TAB` clause to `showGenerationPreview`, which
-  // suppressed the generation progress card on the design-files tab — the
-  // default landing tab. While a run is in flight and no previewable artifact
-  // exists yet, the progress card must take priority over the empty
-  // "Creations will appear here" file list instead of being hidden behind it.
-  it('keeps the generation preview on the design-files tab while generating with no artifacts yet', () => {
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        streaming
-        tabsState={{ tabs: [], active: DESIGN_FILES_TAB }}
-        onTabsStateChange={vi.fn()}
-        messages={[generatingAssistantMessage()]}
-      />,
-    );
-
-    expect(screen.getByTestId('generation-preview-stage')).toBeTruthy();
-  });
-
-  // The override above is scoped to the *empty* design-files tab. A populated
-  // project must keep its file browser while a run is in flight instead of
-  // having the generation card hijack the tab — otherwise the fresh-project fix
-  // would regress browsing for everyone with existing files.
-  it('keeps the file browser on a populated design-files tab while a run is active', async () => {
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[workspaceFile('index.html')]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        streaming
-        tabsState={{ tabs: [], active: DESIGN_FILES_TAB }}
-        onTabsStateChange={vi.fn()}
-        messages={[generatingAssistantMessage()]}
-      />,
-    );
-
-    expect(await screen.findByText('index.html')).toBeTruthy();
-    expect(screen.queryByTestId('generation-preview-stage')).toBeNull();
   });
 });
 
@@ -2063,4 +1753,48 @@ describe('FileWorkspace add-module menu', () => {
     });
   });
 
+});
+
+describe('FileWorkspace empty-project generation contract', () => {
+  function assistantMessage(runStatus: 'running' | 'failed'): ChatMessage {
+    return {
+      id: `msg-${runStatus}`,
+      role: 'assistant',
+      content: '',
+      createdAt: 1700000000,
+      startedAt: 1700000000,
+      runId: `run-${runStatus}`,
+      runStatus,
+      agentId: 'claude',
+      preTurnFileNames: [],
+      events: [{ kind: 'status', label: runStatus === 'failed' ? 'error' : 'thinking' }],
+    };
+  }
+
+  // The generation-preview card / transient `generating-tab` were removed: an
+  // empty project keeps the plain `design-files-empty` placeholder for running
+  // AND failed turns, with no card hijacking the surface.
+  it.each(['running', 'failed'] as const)(
+    'keeps the design-files empty placeholder and shows no generation card for a %s turn',
+    (runStatus) => {
+      render(
+        <FileWorkspace
+          projectId="project-1"
+          projectKind="prototype"
+          files={[]}
+          liveArtifacts={[]}
+          onRefreshFiles={vi.fn()}
+          isDeck={false}
+          streaming={runStatus === 'running'}
+          tabsState={{ tabs: [], active: DESIGN_FILES_TAB }}
+          onTabsStateChange={vi.fn()}
+          messages={[assistantMessage(runStatus)]}
+        />,
+      );
+
+      expect(screen.queryByTestId('generating-tab')).toBeNull();
+      expect(screen.queryByTestId('generation-preview-stage')).toBeNull();
+      expect(screen.getByTestId('design-files-empty')).toBeTruthy();
+    },
+  );
 });

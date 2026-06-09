@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { KEY_ENTER_COMMAND } from 'lexical';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +12,7 @@ import type {
   TrustTier,
 } from '@open-design/contracts';
 import { HomeHero } from '../../src/components/HomeHero';
+import { I18nProvider } from '../../src/i18n';
 import {
   getHomeHeroEditor,
   setHomeHeroPrompt,
@@ -195,6 +196,177 @@ describe('HomeHero plugin picker', () => {
       expect.objectContaining({ id: 'sample-user-plugin' }),
       'Make @Sample User Plugin ',
     );
+  });
+
+  it('does not truncate home @ plugin results to six entries', async () => {
+    const pluginOptions = Array.from({ length: 9 }, (_, index) =>
+      makePlugin(`catalog-plugin-${index}`, `Catalog Plugin ${index + 1}`),
+    );
+    render(
+      <HomeHero
+        prompt=""
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+        activePluginTitle={null}
+        activeChipId={null}
+        onClearActivePlugin={() => undefined}
+        pluginOptions={pluginOptions}
+        pluginsLoading={false}
+        pendingPluginId={null}
+        pendingChipId={null}
+        onPickPlugin={() => undefined}
+        onPickChip={() => undefined}
+        contextItemCount={0}
+        error={null}
+      />,
+    );
+
+    setHomeHeroPrompt('@catalog');
+    await settle();
+
+    const picker = screen.getByTestId('home-hero-plugin-picker');
+    expect(within(picker).getAllByRole('option')).toHaveLength(9);
+    expect(within(picker).getByText('Catalog Plugin 9')).toBeTruthy();
+    expect(within(picker).getByRole('tab', { name: /plugins/i }).textContent).toContain('9');
+  });
+
+  it('matches localized plugin and skill text in the home @ picker', async () => {
+    const localizedPlugin = makePlugin('localized-plugin', 'Localized Plugin');
+    localizedPlugin.manifest.title_i18n = { 'zh-CN': '官方看板' };
+    localizedPlugin.manifest.description_i18n = { 'zh-CN': '内置官方插件。' };
+    const localizedSkill = makeSkill('localized-skill', 'localized-skill');
+    localizedSkill.displayName = { 'zh-CN': '杂志文章' };
+    localizedSkill.descriptionI18n = { 'zh-CN': '中文能力描述' };
+    const { rerender } = render(
+      <I18nProvider initial="zh-CN">
+        <HomeHero
+          prompt=""
+          onPromptChange={() => undefined}
+          onSubmit={() => undefined}
+          activePluginTitle={null}
+          activeChipId={null}
+          onClearActivePlugin={() => undefined}
+          pluginOptions={[localizedPlugin]}
+          pluginsLoading={false}
+          skillOptions={[localizedSkill]}
+          skillsLoading={false}
+          pendingPluginId={null}
+          pendingChipId={null}
+          onPickPlugin={() => undefined}
+          onPickSkill={() => undefined}
+          onPickChip={() => undefined}
+          contextItemCount={0}
+          error={null}
+        />
+      </I18nProvider>,
+    );
+
+    setHomeHeroPrompt('@看板');
+    await settle();
+
+    expect(screen.getByRole('option', { name: /官方看板/i })).toBeTruthy();
+
+    rerender(
+      <I18nProvider initial="zh-CN">
+        <HomeHero
+          prompt=""
+          onPromptChange={() => undefined}
+          onSubmit={() => undefined}
+          activePluginTitle={null}
+          activeChipId={null}
+          onClearActivePlugin={() => undefined}
+          pluginOptions={[localizedPlugin]}
+          pluginsLoading={false}
+          skillOptions={[localizedSkill]}
+          skillsLoading={false}
+          pendingPluginId={null}
+          pendingChipId={null}
+          onPickPlugin={() => undefined}
+          onPickSkill={() => undefined}
+          onPickChip={() => undefined}
+          contextItemCount={0}
+          error={null}
+        />
+      </I18nProvider>,
+    );
+
+    setHomeHeroPrompt('@中文能力');
+    await settle();
+
+    expect(screen.getByRole('option', { name: /杂志文章/i })).toBeTruthy();
+  });
+
+  it('closes the home @ picker when focus moves outside the composer', async () => {
+    render(
+      <>
+        <HomeHero
+          prompt=""
+          onPromptChange={() => undefined}
+          onSubmit={() => undefined}
+          activePluginTitle={null}
+          activeChipId={null}
+          onClearActivePlugin={() => undefined}
+          pluginOptions={[makePlugin('sample-plugin', 'Sample Plugin')]}
+          pluginsLoading={false}
+          pendingPluginId={null}
+          pendingChipId={null}
+          onPickPlugin={() => undefined}
+          onPickChip={() => undefined}
+          contextItemCount={0}
+          error={null}
+        />
+        <button type="button" data-testid="outside-control">Outside</button>
+      </>,
+    );
+
+    setHomeHeroPrompt('@sample');
+    await settle();
+
+    expect(screen.getByTestId('home-hero-plugin-picker')).toBeTruthy();
+
+    fireEvent.mouseDown(screen.getByTestId('outside-control'));
+    fireEvent.focusIn(screen.getByTestId('outside-control'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-hero-plugin-picker')).toBeNull();
+    });
+  });
+
+  it('keeps the home @ picker open while interacting with its tabs', async () => {
+    render(
+      <HomeHero
+        prompt=""
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+        activePluginTitle={null}
+        activeChipId={null}
+        onClearActivePlugin={() => undefined}
+        pluginOptions={[makePlugin('sample-plugin', 'Sample Plugin')]}
+        pluginsLoading={false}
+        skillOptions={[makeSkill('sample-skill', 'Sample Skill')]}
+        skillsLoading={false}
+        pendingPluginId={null}
+        pendingChipId={null}
+        onPickPlugin={() => undefined}
+        onPickSkill={() => undefined}
+        onPickChip={() => undefined}
+        contextItemCount={0}
+        error={null}
+      />,
+    );
+
+    setHomeHeroPrompt('@sample');
+    await settle();
+
+    const picker = screen.getByTestId('home-hero-plugin-picker');
+    const skillsTab = within(picker).getByRole('tab', { name: /skills/i });
+    fireEvent.pointerDown(skillsTab);
+    fireEvent.click(skillsTab);
+
+    await settle();
+
+    expect(screen.getByTestId('home-hero-plugin-picker')).toBeTruthy();
+    expect(within(screen.getByTestId('home-hero-plugin-picker')).getByRole('tab', { name: /skills/i }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('renders selected @ plugins inside the prompt as mention pills', async () => {

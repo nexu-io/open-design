@@ -264,6 +264,9 @@ export type TrackingRunFailureDetail =
   | 'agent_protocol_error'
   | 'permission_request_not_found'
   | 'qoder_stop_sequence'
+  | 'signal_killed'
+  | 'process_crashed'
+  | 'interrupted'
   | 'exit_code'
   | 'terminated_unknown'
   | 'execution_failed'
@@ -1062,6 +1065,14 @@ export interface HomeChatComposerClickProps {
     // plugin id.
     | 'plugin_chip_clear'
     | 'task_chip'
+    // Sub-category filter pill under the task rail (全部 / Landing / Brand /
+    // Dashboards / …). `subcategory` carries the picked slug; '全部' sends
+    // `subcategory: 'all'`. `chip_id` is the parent task type.
+    | 'subcategory_chip'
+    // An example-prompt card below the rail ("示例提示词"). `chip_id` is the
+    // task type; for plugin-preset cards `plugin_id` / `plugin_type` identify
+    // the preset. The raw prompt text is never sent (free text / PII rule).
+    | 'example_prompt'
     // The "+" menu on the home composer (same control as the in-project
     // composer's `plus_*` events): opening it, inserting a
     // connector/plugin/mcp mention (`resource_kind` + `resource_id`), or
@@ -1075,6 +1086,11 @@ export interface HomeChatComposerClickProps {
   // For plugin / action / task chips, the specific id (e.g. `prototype`,
   // `from_figma`, `hyperframes`).
   chip_id?: string;
+  // For `subcategory_chip`: the picked sub-category slug ('all' on 全部).
+  subcategory?: string;
+  // For `example_prompt` cards backed by a plugin preset: which preset.
+  plugin_id?: string;
+  plugin_type?: string;
 }
 
 export interface UpdateIndicatorClickProps {
@@ -1315,14 +1331,13 @@ export interface PluginLoopClickProps {
 export interface CommunityGalleryClickProps {
   page_name: 'home';
   area: 'community_gallery';
-  // `use_plugin`: the user actually applied the plugin into the composer —
-  // either from a Community card's Use button or the plugin detail modal's
-  // primary action — as opposed to merely opening the card (`card`).
+  // `use_plugin` is the user actually applying a community plugin into the
+  // composer (from the gallery card's Use button or its detail modal), as
+  // opposed to just opening the card. `action` distinguishes a plain apply
+  // from use-with-query.
   element: 'card' | 'card_open_external' | 'use_plugin';
   plugin_id?: string;
   plugin_type?: string;
-  // For `use_plugin`: which variant of the split action ran — plain attach
-  // (`use`) or attach + seed the example prompt (`use_with_query`).
   action?: 'use' | 'use_with_query';
 }
 
@@ -2110,6 +2125,11 @@ export interface ProjectCreateResultProps {
   reference_template?: string;
   model_id?: string;
   aspect?: string;
+  // The scenario plugin the send was routed through (when any), so a
+  // successful/failed create can be attributed to a specific plugin —
+  // e.g. an example-prompt preset or a community plugin the user applied.
+  plugin_id?: string;
+  plugin_type?: string;
   result: TrackingResult;
   error_code?: string;
 }
