@@ -662,7 +662,10 @@ describe('FileWorkspace upload input', () => {
 });
 
 describe('FileWorkspace launcher tab creation', () => {
-  it('reports the active Design Files tab as workspace context', async () => {
+  it('does not report a Design Files context for an empty project', async () => {
+    // A brand-new project has no files, live artifacts, or folders. The
+    // composer must not auto-stage a "Design files" chip that points at
+    // nothing, so the active workspace context stays null.
     const onActiveContextChange = vi.fn();
     render(
       <FileWorkspace
@@ -670,6 +673,29 @@ describe('FileWorkspace launcher tab creation', () => {
         projectKind="prototype"
         resolvedDir="/tmp/open-design/project-1"
         files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        onActiveContextChange={onActiveContextChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onActiveContextChange).toHaveBeenCalled();
+    });
+    expect(onActiveContextChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it('reports the active Design Files tab as workspace context once files exist', async () => {
+    const onActiveContextChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        resolvedDir="/tmp/open-design/project-1"
+        files={[workspaceFile('cover.html')]}
         liveArtifacts={[]}
         onRefreshFiles={vi.fn()}
         isDeck={false}
@@ -1294,7 +1320,7 @@ describe('FileWorkspace generation failure recovery', () => {
   // default landing tab. While a run is in flight and no previewable artifact
   // exists yet, the progress card must take priority over the empty
   // "Creations will appear here" file list instead of being hidden behind it.
-  it('keeps the generation preview on the design-files tab while generating with no artifacts yet', () => {
+  it('surfaces generation in its own auto-focused tab on a fresh project, leaving Design Files switchable', () => {
     render(
       <FileWorkspace
         projectId="project-1"
@@ -1310,7 +1336,53 @@ describe('FileWorkspace generation failure recovery', () => {
       />,
     );
 
+    // A transient Generating tab appears and auto-focuses, so the user lands on
+    // the progress card instead of an empty file list.
+    const generatingTab = screen.getByTestId('generating-tab');
+    expect(generatingTab.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByTestId('generation-preview-stage')).toBeTruthy();
+
+    // The Design Files tab is still present and switchable mid-run: clicking it
+    // hides the progress card and shows the (empty) file browser.
+    fireEvent.click(screen.getByTestId('design-files-tab'));
+    expect(screen.queryByTestId('generation-preview-stage')).toBeNull();
+    expect(screen.getByTestId('design-files-empty')).toBeTruthy();
+
+    // And the Generating tab is still there to switch back to.
+    fireEvent.click(screen.getByTestId('generating-tab'));
+    expect(screen.getByTestId('generation-preview-stage')).toBeTruthy();
+  });
+
+  // When the agent pauses to ask a question (awaiting-input), the Questions tab
+  // owns that state — the Generating tab must NOT appear and steal focus from
+  // the form the user needs to answer on the discovery path.
+  it('does not surface a Generating tab while awaiting question-form input', () => {
+    const awaitingInput: ChatMessage = {
+      id: 'msg-awaiting',
+      role: 'assistant',
+      content: '<question-form id="discovery" title="Brief">{"questions":[]}</question-form>',
+      runStatus: 'succeeded',
+      startedAt: 1700000000,
+      events: [
+        { kind: 'text', text: '<question-form id="discovery">{"questions":[]}</question-form>' },
+      ],
+    };
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: DESIGN_FILES_TAB }}
+        onTabsStateChange={vi.fn()}
+        messages={[awaitingInput]}
+      />,
+    );
+
+    expect(screen.queryByTestId('generating-tab')).toBeNull();
+    expect(screen.queryByTestId('generation-preview-stage')).toBeNull();
   });
 
   // The override above is scoped to the *empty* design-files tab. A populated

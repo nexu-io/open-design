@@ -611,6 +611,7 @@ export function EntryShell({
       metadata,
       pendingPrompt: payload.prompt,
       ...(payload.pluginId ? { pluginId: payload.pluginId } : {}),
+      ...(payload.pluginType ? { pluginType: payload.pluginType } : {}),
       ...(payload.appliedPluginSnapshotId
         ? { appliedPluginSnapshotId: payload.appliedPluginSnapshotId }
         : {}),
@@ -757,6 +758,7 @@ export function EntryShell({
           >
             <div data-testid="entry-view-home" data-active={view === 'home' ? 'true' : 'false'} {...inactiveViewProps(view === 'home')}>
               <HomeView
+                isActive={view === 'home'}
                 projects={projects}
                 projectsLoading={projectsLoading}
                 designSystems={designSystems}

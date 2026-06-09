@@ -194,14 +194,7 @@ describe('listFiles with metadata.baseDir', () => {
     expect(paths.some((p) => p.includes('/target/'))).toBe(false);
   });
 
-  it('does not skip those dirs for non-baseDir projects (back-compat)', async () => {
-    // Without metadata.baseDir, listFiles points at the standard project dir.
-    // We don't have one set up for this test — just assert the call doesn't
-    // *apply* the skip filter when the metadata is absent. We check this
-    // indirectly: passing the same baseDir as a non-baseDir directory
-    // (impossible here since listFiles uses standard path). So instead,
-    // verify the default path behavior is unchanged: no metadata, no
-    // skipDirs, no baseDir resolution.
+  it('skips dependency dirs for non-baseDir projects too', async () => {
     const standardDir = mkdtempSync(path.join(tmpdir(), 'od-list-std-'));
     try {
       await mkdir(path.join(standardDir, 'std-project'), { recursive: true });
@@ -211,9 +204,8 @@ describe('listFiles with metadata.baseDir', () => {
 
       const files = await listFiles(standardDir, 'std-project');
       const paths = files.map((f) => f.path).sort();
-      // node_modules contents *do* appear when no skip filter is applied
       expect(paths).toContain('main.html');
-      expect(paths).toContain('node_modules/a.js');
+      expect(paths).not.toContain('node_modules/a.js');
     } finally {
       rmSync(standardDir, { recursive: true, force: true });
     }
