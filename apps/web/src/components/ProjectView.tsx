@@ -4156,18 +4156,28 @@ export function ProjectView({
   // "Share to Open Design" — kicks off the bundled `od-share-to-community`
   // scenario in the active conversation. We just inject the trigger prompt
   // through the standard chat-send path; the agent then loads SKILL.md and
-  // drives the rest. Busy flag debounces the double-click while the send
-  // request is in flight (handleSend is async).
-  const [shareToOpenDesignBusy, setShareToOpenDesignBusy] = useState(false);
-  const shareToOpenDesignBusyRef = useRef(false);
-  const handleShareToOpenDesign = useCallback(() => {
-    if (currentConversationActionDisabled || shareToOpenDesignBusyRef.current) return;
-    shareToOpenDesignBusyRef.current = true;
-    setShareToOpenDesignBusy(true);
+  // drives the rest. Keep this preparing state alive for the resulting chat
+  // run so the action reads as async packaging instead of instant sharing.
+  const [shareToOpenDesignBusyMessageId, setShareToOpenDesignBusyMessageId] = useState<string | null>(null);
+  const shareToOpenDesignBusyMessageIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!shareToOpenDesignBusyMessageIdRef.current || currentConversationBusy) return;
+    shareToOpenDesignBusyMessageIdRef.current = null;
+    setShareToOpenDesignBusyMessageId(null);
+  }, [currentConversationBusy]);
+  const handleShareToOpenDesign = useCallback((assistantMessageId: string) => {
+    if (currentConversationActionDisabled || shareToOpenDesignBusyMessageIdRef.current) return;
+    shareToOpenDesignBusyMessageIdRef.current = assistantMessageId;
+    setShareToOpenDesignBusyMessageId(assistantMessageId);
     void Promise.resolve(handleSend(SHARE_TO_COMMUNITY_PROMPT, [], []))
-      .finally(() => {
-        shareToOpenDesignBusyRef.current = false;
-        setShareToOpenDesignBusy(false);
+      .then((started) => {
+        if (started) return;
+        shareToOpenDesignBusyMessageIdRef.current = null;
+        setShareToOpenDesignBusyMessageId(null);
+      })
+      .catch(() => {
+        shareToOpenDesignBusyMessageIdRef.current = null;
+        setShareToOpenDesignBusyMessageId(null);
       });
   }, [currentConversationActionDisabled, handleSend]);
 
@@ -4768,7 +4778,7 @@ export function ProjectView({
   // deliberately no generic "continue editing" / "optimize visuals" action —
   // free-form follow-ups belong in the composer and the visual directions are
   // already covered by the concrete chips, so vague catch-alls only added noise.
-  const handleArtifactChip = useCallback((_fileName: string, prompt: string) => {
+  const handleArtifactChip = useCallback((_fileName: string | null, prompt: string) => {
     setComposerDraftSignal({ text: prompt, nonce: Date.now() });
   }, []);
   const handleArtifactShare = useCallback(
@@ -5362,7 +5372,7 @@ export function ProjectView({
               activePluginActionPaths={activePluginActionPaths}
               hiddenPluginActionPaths={hiddenAssistantPluginActionPaths}
               onShareToOpenDesign={handleShareToOpenDesign}
-              shareToOpenDesignBusy={shareToOpenDesignBusy}
+              shareToOpenDesignBusyMessageId={shareToOpenDesignBusyMessageId}
               forceStreamingMessageIds={forceStreamingPluginMessageIds}
               initialDraft={chatInitialDraft}
               onSubmitForm={(text) => {

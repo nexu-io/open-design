@@ -143,12 +143,17 @@ describe('AssistantMessage feedback gate', () => {
 
     render(<Harness />);
 
-    fireEvent.click(screen.getByTestId('assistant-share-to-od'));
-    expect(screen.getByTestId<HTMLButtonElement>('assistant-share-to-od').disabled).toBe(true);
-    fireEvent.click(screen.getByTestId('assistant-share-to-od'));
+    const button = screen.getByTestId<HTMLButtonElement>('assistant-share-to-od');
+
+    expect(screen.getByTestId('assistant-share-to-od-panel').contains(button)).toBe(true);
+    expect(button.closest('.assistant-completion-row')).toBeNull();
+
+    fireEvent.click(button);
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
 
     expect(onShare).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: 'Sharing…' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Preparing package…' })).toBeTruthy();
   });
 
   it('does not show the fork action while the assistant is streaming', () => {

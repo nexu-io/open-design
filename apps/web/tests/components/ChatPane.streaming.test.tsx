@@ -46,8 +46,33 @@ vi.mock('../../src/i18n', () => ({
 }));
 
 vi.mock('../../src/components/AssistantMessage', () => ({
-  AssistantMessage: ({ streaming, message }: { streaming: boolean; message: ChatMessage }) => (
-    <output data-testid={`assistant-streaming-${message.id}`}>{streaming ? 'streaming' : 'idle'}</output>
+  AssistantMessage: ({
+    streaming,
+    message,
+    isLast,
+    onShareToOpenDesign,
+    shareToOpenDesignBusy,
+  }: {
+    streaming: boolean;
+    message: ChatMessage;
+    isLast?: boolean;
+    onShareToOpenDesign?: () => void;
+    shareToOpenDesignBusy?: boolean;
+  }) => (
+    <>
+      <output data-testid={`assistant-streaming-${message.id}`}>{streaming ? 'streaming' : 'idle'}</output>
+      <output data-testid={`assistant-last-${message.id}`}>{isLast ? 'last' : 'not-last'}</output>
+      {onShareToOpenDesign ? (
+        <button
+          type="button"
+          data-testid={`share-to-od-${message.id}`}
+          disabled={shareToOpenDesignBusy}
+          onClick={onShareToOpenDesign}
+        >
+          {shareToOpenDesignBusy ? 'Preparing package…' : 'Share to Open Design'}
+        </button>
+      ) : null}
+    </>
   ),
 }));
 
@@ -587,6 +612,74 @@ Expected output:
 
     expect(screen.getByTestId('composer-streaming').textContent).toBe('idle');
     expect(screen.getByTestId('assistant-streaming-assistant-1').textContent).toBe('streaming');
+  });
+
+  it('keeps Share to Open Design busy on the assistant turn that started packaging', () => {
+    const onShareToOpenDesign = vi.fn();
+    const completedAssistant: ChatMessage = {
+      id: 'assistant-1',
+      role: 'assistant',
+      content: 'Done',
+      createdAt: 2,
+      startedAt: 2,
+      endedAt: 3,
+      runStatus: 'succeeded',
+    };
+    const initialMessages: ChatMessage[] = [
+      { id: 'user-1', role: 'user', content: 'Make the landing page', createdAt: 1 },
+      completedAssistant,
+    ];
+    const commonProps = {
+      projectKindForTracking: 'prototype' as const,
+      streaming: false,
+      error: null,
+      projectId: 'project-1',
+      projectFiles: [],
+      onEnsureProject: async () => 'project-1',
+      onSend: vi.fn(),
+      onStop: vi.fn(),
+      conversations,
+      activeConversationId: 'conv-1',
+      onSelectConversation: vi.fn(),
+      onDeleteConversation: vi.fn(),
+      projectMetadata,
+      onShareToOpenDesign,
+    };
+
+    const { rerender } = render(
+      <ChatPane
+        {...commonProps}
+        messages={initialMessages}
+        shareToOpenDesignBusyMessageId={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('share-to-od-assistant-1'));
+    expect(onShareToOpenDesign).toHaveBeenCalledWith('assistant-1');
+
+    rerender(
+      <ChatPane
+        {...commonProps}
+        messages={[
+          ...initialMessages,
+          { id: 'user-2', role: 'user', content: 'Share to Open Design', createdAt: 4 },
+          {
+            id: 'assistant-2',
+            role: 'assistant',
+            content: '',
+            createdAt: 5,
+            runId: 'run-share-to-od',
+            runStatus: 'running',
+          },
+        ]}
+        shareToOpenDesignBusyMessageId="assistant-1"
+      />,
+    );
+
+    const sourceAction = screen.getByTestId<HTMLButtonElement>('share-to-od-assistant-1');
+    expect(screen.getByTestId('assistant-last-assistant-1').textContent).toBe('not-last');
+    expect(sourceAction.disabled).toBe(true);
+    expect(sourceAction.textContent).toBe('Preparing package…');
   });
 
   it('clears stale anchor spacer before sending another local turn', () => {

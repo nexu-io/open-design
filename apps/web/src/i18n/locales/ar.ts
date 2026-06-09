@@ -2295,7 +2295,7 @@ export const ar: Dict = {
   'assistant.forkConversation': 'تفرع من هنا',
   'assistant.forkingConversation': 'جارٍ التفرع…',
   'assistant.shareToOpenDesign': 'المشاركة على Open Design',
-  'assistant.shareToOpenDesignBusy': 'جارٍ المشاركة…',
+  'assistant.shareToOpenDesignBusy': 'جارٍ تجهيز الحزمة…',
   'assistant.feedbackPrompt': 'ملاحظات',
   'assistant.feedbackPositive': 'مفيد',
   'assistant.feedbackNegative': 'غير مفيد',

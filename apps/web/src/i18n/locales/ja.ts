@@ -2295,7 +2295,7 @@ export const ja: Dict = {
   'assistant.forkConversation': 'ここからフォーク',
   'assistant.forkingConversation': 'フォーク中…',
   'assistant.shareToOpenDesign': 'Open Design に共有',
-  'assistant.shareToOpenDesignBusy': '共有中…',
+  'assistant.shareToOpenDesignBusy': 'パッケージを準備中…',
   'assistant.feedbackPrompt': 'フィードバック',
   'assistant.feedbackPositive': '役に立った',
   'assistant.feedbackNegative': '役に立たなかった',

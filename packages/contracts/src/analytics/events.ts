@@ -1498,16 +1498,16 @@ export interface ComposerBarClickProps {
   project_id?: string;
 }
 
-// Next-step action affordance shown under the last assistant message after a
-// previewable artifact is produced. `next_step_exposed` fires once when the
-// affordance becomes visible so the funnel can divide clicks by exposure;
-// the action elements drive the "second-turn rate" / "share rate" acceptance
-// metrics. `chip_id` carries the recommended-chip identity (e.g.
-// `polish_visual`, `second_version`) for the `chip` element.
+// Next-step action affordance shown under the last successful assistant
+// message. `next_step_exposed` fires once when the affordance becomes visible
+// so the funnel can divide clicks by exposure; the action elements drive the
+// "second-turn rate" / "share rate" acceptance metrics. `chip_id` carries the
+// recommended-chip identity (e.g. `polish_visual`, `second_version`) for the
+// `chip` element.
 export interface NextStepActionClickProps {
   page_name: 'chat_panel';
   area: 'next_step';
-  element: 'next_step_exposed' | 'share' | 'chip';
+  element: 'next_step_exposed' | 'share' | 'chip' | 'share_to_open_design';
   chip_id?: string;
 }
 

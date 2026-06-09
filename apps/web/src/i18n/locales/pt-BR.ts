@@ -2295,7 +2295,7 @@ export const ptBR: Dict = {
   'assistant.forkConversation': 'Bifurcar daqui',
   'assistant.forkingConversation': 'Bifurcando…',
   'assistant.shareToOpenDesign': 'Compartilhar com Open Design',
-  'assistant.shareToOpenDesignBusy': 'Compartilhando…',
+  'assistant.shareToOpenDesignBusy': 'Preparando pacote…',
   'assistant.feedbackPrompt': 'Feedback',
   'assistant.feedbackPositive': 'Útil',
   'assistant.feedbackNegative': 'Não útil',

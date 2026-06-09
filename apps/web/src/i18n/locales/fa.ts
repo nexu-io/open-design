@@ -2295,7 +2295,7 @@ export const fa: Dict = {
   'assistant.forkConversation': 'فورک از اینجا',
   'assistant.forkingConversation': 'در حال فورک…',
   'assistant.shareToOpenDesign': 'اشتراک‌گذاری در Open Design',
-  'assistant.shareToOpenDesignBusy': 'در حال اشتراک‌گذاری…',
+  'assistant.shareToOpenDesignBusy': 'در حال آماده‌سازی بسته…',
   'assistant.feedbackPrompt': 'بازخورد',
   'assistant.feedbackPositive': 'مفید',
   'assistant.feedbackNegative': 'غیرمفید',
