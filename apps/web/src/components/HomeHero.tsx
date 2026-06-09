@@ -94,6 +94,7 @@ export interface ExamplePromptInfo {
 }
 
 interface Props {
+  active?: boolean;
   prompt: string;
   onPromptChange: (value: string) => void;
   onSubmit: HomeHeroSubmitHandler;
@@ -205,6 +206,7 @@ const EMPTY_CONNECTOR_OPTIONS: ConnectorDetail[] = [];
 
 export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   {
+    active = true,
     prompt,
     onPromptChange,
     onSubmit,
@@ -333,7 +335,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         : [],
     [connectorOptions, mentionActive, mentionQuery],
   );
-  const pickerOpen = mentionActive;
+  const pickerOpen = active && mentionActive;
   const tabs: Array<{ id: HomeMentionTab; label: string; count: number }> = [
     // The All overview previews at most HOME_MENTION_ALL_TAB_PREVIEW files, so
     // its badge counts the previewed slice — not the full staged total — to keep
@@ -661,6 +663,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     slash: { q: string } | null;
     anchorRect: CaretRect | null;
   }) {
+    if (!active) {
+      setCaretRect(null);
+      setMentionTrigger(null);
+      setMentionTab('all');
+      return;
+    }
     setCaretRect(anchorRect);
     if (nextMention) {
       setMentionTrigger((prev) => {
@@ -679,6 +687,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     setHoveredPlugin(null);
     setSelectedIndex(0);
   }
+
+  useEffect(() => {
+    if (!active) dismissMentionPicker();
+  }, [active]);
 
   // Routes popover navigation keys from the Lexical editor over the visible
   // picker option union. Returns true when consumed so the editor can

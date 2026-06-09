@@ -106,6 +106,55 @@ afterEach(() => {
 });
 
 describe('HomeHero plugin picker', () => {
+  it('closes the portal picker when the home view becomes inactive', async () => {
+    const { rerender } = render(
+      <HomeHero
+        active
+        prompt=""
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+        activePluginTitle={null}
+        activeChipId={null}
+        onClearActivePlugin={() => undefined}
+        pluginOptions={[makePlugin('sample-plugin', 'Sample Plugin')]}
+        pluginsLoading={false}
+        pendingPluginId={null}
+        pendingChipId={null}
+        onPickPlugin={() => undefined}
+        onPickChip={() => undefined}
+        contextItemCount={0}
+        error={null}
+      />,
+    );
+
+    setHomeHeroPrompt('@');
+    await settle();
+    expect(screen.getByTestId('home-hero-plugin-picker')).toBeTruthy();
+
+    rerender(
+      <HomeHero
+        active={false}
+        prompt="@"
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+        activePluginTitle={null}
+        activeChipId={null}
+        onClearActivePlugin={() => undefined}
+        pluginOptions={[makePlugin('sample-plugin', 'Sample Plugin')]}
+        pluginsLoading={false}
+        pendingPluginId={null}
+        pendingChipId={null}
+        onPickPlugin={() => undefined}
+        onPickChip={() => undefined}
+        contextItemCount={0}
+        error={null}
+      />,
+    );
+    await settle();
+
+    expect(screen.queryByTestId('home-hero-plugin-picker')).toBeNull();
+  });
+
   it('opens plugin search from an @ token across community and my plugins', async () => {
     const onPromptChange = vi.fn();
     const onPickPlugin = vi.fn();

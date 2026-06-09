@@ -757,6 +757,7 @@ export function EntryShell({
           >
             <div data-testid="entry-view-home" data-active={view === 'home' ? 'true' : 'false'} {...inactiveViewProps(view === 'home')}>
               <HomeView
+                isActive={view === 'home'}
                 projects={projects}
                 projectsLoading={projectsLoading}
                 designSystems={designSystems}

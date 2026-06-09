@@ -178,6 +178,7 @@ const AUTHORING_DEFAULT_SCENARIO_INPUTS = {
 
 
 interface Props {
+  isActive?: boolean;
   projects: Project[];
   projectsLoading?: boolean;
   designSystems?: DesignSystemSummary[];
@@ -206,6 +207,7 @@ const EMPTY_CONNECTORS: ConnectorDetail[] = [];
 const EMPTY_PROMPT_TEMPLATES: PromptTemplateSummary[] = [];
 
 export function HomeView({
+  isActive = true,
   projects,
   projectsLoading,
   designSystems = EMPTY_DESIGN_SYSTEMS,
@@ -1489,6 +1491,7 @@ export function HomeView({
     <div className="home-view" data-testid="home-view" ref={homeViewRef}>
       <HomeHero
         ref={inputRef}
+        active={isActive}
         prompt={prompt}
         onPromptChange={handlePromptChange}
         onSubmit={submit}
