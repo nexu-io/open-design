@@ -56,6 +56,7 @@ import { Icon, type IconName } from "./Icon";
 import { SessionModeToggle } from './SessionModeToggle';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
 import { ComposerPluginPreview } from './ComposerPluginPreview';
+import { computeToolboxDetailPosition } from './composer-detail-position';
 import { PluginDetailsModal } from "./PluginDetailsModal";
 import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
 import { BUILT_IN_PETS, CUSTOM_PET_ID } from "./pet/pets";
@@ -3346,27 +3347,13 @@ function DesignToolboxPanel({
   }
   function showToolboxDetail(key: string, rect: DOMRect, node: ReactNode) {
     cancelDetailClose();
-    const detailWidth = 264;
-    const gap = 8;
-    const toRight = rect.right + gap;
-    const preferredLeft =
-      toRight + detailWidth > window.innerWidth - 8
-        ? rect.left - gap - detailWidth
-        : toRight;
-    // The left-side fallback can go negative on a narrow pane (row near the
-    // left edge, or viewport narrower than detailWidth + gap*2), which would
-    // push the fixed panel off-screen and out of reach. Clamp into the
-    // viewport so it always degrades gracefully.
-    const left = Math.max(
-      8,
-      Math.min(preferredLeft, window.innerWidth - 8 - detailWidth),
-    );
-    // Plugin rows render a tall visual preview; clamp the top so the panel
-    // never spills past the viewport bottom (CSS still scrolls if it must).
-    const estimatedHeight = 340;
-    const top = Math.max(
-      8,
-      Math.min(rect.top, window.innerHeight - 8 - estimatedHeight),
+    // Plugin rows render a tall visual preview; the helper clamps both axes
+    // into the viewport so the fixed panel never lands off-screen on a
+    // narrow pane (see computeToolboxDetailPosition).
+    const { left, top } = computeToolboxDetailPosition(
+      rect,
+      { width: window.innerWidth, height: window.innerHeight },
+      { detailWidth: 264, gap: 8, margin: 8, estimatedHeight: 340 },
     );
     setToolboxDetail({ key, left, top, node });
   }
