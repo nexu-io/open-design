@@ -1815,6 +1815,52 @@
   cursor: progress;
   opacity: 0.6;
 }
+/* Split-button variant: the "Use plugin" CTA grows a caret toggle that opens
+   a menu of use-variants ("Use plugin" / "Use with query"). Mirrors the home
+   plugin-card use-menu. The group anchors the absolutely-positioned popover. */
+.ds-modal-primary-action-group {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+.ds-modal-primary-action--split {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.ds-modal-primary-action-caret {
+  padding-left: 8px;
+  padding-right: 8px;
+  gap: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left-color: rgba(255, 255, 255, 0.32);
+  margin-left: -1px;
+}
+.ds-modal-primary-action-popover {
+  min-width: 248px;
+  /* The group container is not a `.share-menu`, so the shared
+     `--viewer-action-menu-z` custom property is out of scope here. Supply an
+     explicit fallback so the popover paints above the preview stage iframe
+     instead of being covered by it. */
+  z-index: var(--viewer-action-menu-z, 240);
+}
+.ds-modal-primary-action-option {
+  align-items: flex-start;
+}
+.ds-modal-primary-action-option__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ds-modal-primary-action-option__label {
+  font-weight: 600;
+  color: var(--text);
+}
+.ds-modal-primary-action-option__desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
 /* Dedicated icon-button shape for the modal close affordance. Matches the
    visual language used by plugin-media-detail__close and
    new-project-modal__close so every modal closes with the same control. */

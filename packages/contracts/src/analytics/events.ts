@@ -1059,6 +1059,11 @@ export interface HomeChatComposerClickProps {
     // is the task-type rail (原型 / 幻灯片 / HyperFrames / 视频 / …).
     | 'working_dir'
     | 'working_dir_clear'
+    // The × on the active plugin chip above the composer (mirrors
+    // `working_dir_clear`): removes the bound plugin, whether it was attached
+    // from a Community card or an example-prompt preset. `chip_id` is the
+    // plugin id.
+    | 'plugin_chip_clear'
     // Re-selecting a previously used folder from the working-dir picker's
     // "Recent folders" submenu.
     | 'working_dir_recent'

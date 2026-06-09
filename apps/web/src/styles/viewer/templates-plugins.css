@@ -2045,6 +2045,67 @@
   opacity: 0.6;
   cursor: progress;
 }
+/* Split "Use plugin / Replicate this content" button in the scenario footer —
+   mirrors the PreviewModal primary-action split menu, but the popover opens
+   upward since the footer sits at the bottom of the modal. */
+.plugin-details-modal__use-split {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+.plugin-details-modal__use-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.plugin-details-modal__use-caret {
+  padding-left: 8px;
+  padding-right: 8px;
+  gap: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left-color: rgba(255, 255, 255, 0.32);
+  margin-left: -1px;
+}
+.plugin-details-modal__use-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  z-index: 10;
+  min-width: 248px;
+  padding: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 8px);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+}
+.plugin-details-modal__use-menu-item {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+}
+.plugin-details-modal__use-menu-item:hover {
+  background: var(--bg-subtle);
+}
+.plugin-details-modal__use-menu-label {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.plugin-details-modal__use-menu-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
 
 .plugin-share-confirm__panel {
   max-width: 720px;

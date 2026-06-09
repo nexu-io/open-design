@@ -341,6 +341,42 @@ const WEB_PROTOTYPE_APPLY_RESULT = {
   },
 };
 
+// A plugin whose useCase.query is a generator-facing meta-instruction (not a
+// human-readable brief). use-with-query must surface the description instead,
+// matching the Home example-prompt cards.
+const META_INSTRUCTION_PLUGIN = {
+  ...DEFAULT_PLUGIN,
+  id: 'example-meta-landing',
+  title: 'Meta Landing',
+  source: '/tmp/meta-landing',
+  fsPath: '/tmp/meta-landing',
+  manifest: {
+    ...DEFAULT_PLUGIN.manifest,
+    name: 'example-meta-landing',
+    title: 'Meta Landing',
+    description: 'Cinematic parallax landing page.',
+    od: {
+      kind: 'scenario',
+      taskKind: 'new-generation',
+      useCase: {
+        query: 'Follow the en field verbatim; start from the bundled example.html.',
+      },
+    },
+  },
+};
+
+const META_INSTRUCTION_APPLY_RESULT = {
+  ...WEB_PROTOTYPE_APPLY_RESULT,
+  query: META_INSTRUCTION_PLUGIN.manifest.od.useCase.query,
+  inputs: [],
+  appliedPlugin: {
+    ...WEB_PROTOTYPE_APPLY_RESULT.appliedPlugin,
+    snapshotId: 'snap-meta-landing',
+    pluginId: 'example-meta-landing',
+    inputs: {},
+  },
+};
+
 const SIMPLE_DECK_APPLY_RESULT = {
   ...AUTHORING_APPLY_RESULT,
   query: SIMPLE_DECK_PLUGIN.manifest.od.useCase.query,
@@ -1347,12 +1383,12 @@ describe('HomeView prompt handoff', () => {
     ));
   });
 
-  it('extracts edited values from a hydrated use-with-query prompt into the submitted inputs', async () => {
-    // Regression: routing use-with-query passed the rendered prompt as
-    // nextPrompt, which nulled active.queryTemplate, so editing a hydrated
-    // `{{...}}` value no longer flowed back into pluginInputs and the snapshot
-    // refreshed from stale defaults. routePluginUse now passes an aligned
-    // queryTemplate so extraction keeps working on the appended draft + query.
+  it('seeds the rendered query on use-with-query and writes placeholder edits back into inputs', async () => {
+    // For a plugin whose query is already human-readable, use-with-query seeds
+    // the rendered query itself. Because the seed came from the query (not a
+    // description/meta-instruction fallback), the raw `{{...}}` template is kept
+    // so editing a hydrated value in the composer flows back into pluginInputs
+    // and submit resolves the snapshot from what the user sees.
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
@@ -1382,7 +1418,7 @@ describe('HomeView prompt handoff', () => {
     );
 
     await screen.findByTestId('home-hero-input');
-    // Empty draft + use-with-query hydrates the rendered query into the editor.
+    // Empty draft + use-with-query seeds the example-preset text into the editor.
     rerender(
       <HomeView
         projects={[]}
@@ -1395,18 +1431,17 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    const hydrated =
+    const seed =
       'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.';
-    await waitFor(() => expect(homeHeroPromptText()).toBe(hydrated));
+    await waitFor(() => expect(homeHeroPromptText()).toBe(seed));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/plugins/example-web-prototype/apply',
       expect.anything(),
     ));
 
-    // The user edits the hydrated audience from "product evaluators" to a new
-    // value. With the query template preserved, that edit must flow back into
-    // the submitted pluginInputs (not stay at the stale default).
-    const edited = hydrated.replace('product evaluators', 'enterprise architects');
+    // The user edits the seeded audience; the placeholder edit flows back into
+    // the submitted pluginInputs (not the stale applied default).
+    const edited = seed.replace('product evaluators', 'enterprise architects');
     await setPromptAndSettle(edited);
     await waitFor(() => {
       expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
@@ -1420,12 +1455,11 @@ describe('HomeView prompt handoff', () => {
   });
 
   it('extracts a placeholder edit even after the use-with-query draft prefix is also edited', async () => {
-    // Regression: the appended query template must not bake in the mutable
-    // draft prefix. With an existing draft, use-with-query appends the query;
-    // the user then edits BOTH the prefix and a hydrated placeholder. The
-    // placeholder edit must still reach pluginInputs (extraction matches the
-    // query as a suffix after any prefix), so the snapshot agrees with the
-    // visible prompt instead of refreshing from stale defaults.
+    // The "tweak a preset before running" case: with an existing draft,
+    // use-with-query appends the rendered query; the user then edits BOTH the
+    // prefix and a hydrated placeholder. `queryTemplateAllowsPrefix` matches the
+    // query as a suffix after any prefix, so the placeholder edit still reaches
+    // pluginInputs and submit resolves the snapshot from the visible prompt.
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
@@ -1478,7 +1512,6 @@ describe('HomeView prompt handoff', () => {
       expect.anything(),
     ));
 
-    // Edit BOTH the draft prefix and the hydrated audience placeholder.
     const edited = appended
       .replace('Keep my current brief', 'Rewritten brief for the board')
       .replace('product evaluators', 'enterprise architects');
@@ -1492,6 +1525,132 @@ describe('HomeView prompt handoff', () => {
       pluginId: 'example-web-prototype',
       pluginInputs: expect.objectContaining({ audience: 'enterprise architects' }),
     })));
+  });
+
+  it('extracts a placeholder edit after the user prepends an intro to an empty-draft use-with-query seed', async () => {
+    // The empty-draft → add-prefix → edit-placeholder case: the seed lands in an
+    // empty composer, then the user prepends an intro AND edits a hydrated value.
+    // queryTemplateAllowsPrefix must stay on (we have a query template) so the
+    // extractor matches the query as a suffix after the freshly-added prefix and
+    // the placeholder edit still flows into pluginInputs.
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')) {
+        return new Response(JSON.stringify(WEB_PROTOTYPE_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    const { rerender } = render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
+    // Empty draft + use-with-query seeds the rendered query into the editor.
+    rerender(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        promptHandoff={createPluginUseHandoff(6, 'example-web-prototype', {
+          action: 'use-with-query',
+        })}
+      />,
+    );
+
+    const seed =
+      'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.';
+    await waitFor(() => expect(homeHeroPromptText()).toBe(seed));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-web-prototype/apply',
+      expect.anything(),
+    ));
+
+    // The user now PREPENDS an intro above the seed and edits the audience.
+    const edited = `My intro for the board\n\n${seed.replace('product evaluators', 'enterprise architects')}`;
+    await setPromptAndSettle(edited);
+    await waitFor(() => {
+      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-web-prototype',
+      pluginInputs: expect.objectContaining({ audience: 'enterprise architects' }),
+    })));
+  });
+
+  it('seeds the plugin description, not the raw meta-instruction query, on use-with-query', async () => {
+    // The plugin's useCase.query is a generator-facing meta-instruction
+    // ("follow the en field verbatim; start from example.html"). The Home
+    // example-prompt cards surface the description instead; the detail modal's
+    // "Replicate this content" (use-with-query) must do the same rather than
+    // dumping the meta-instruction into the composer.
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [META_INSTRUCTION_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-meta-landing/apply')) {
+        return new Response(JSON.stringify(META_INSTRUCTION_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    const { rerender } = render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
+    rerender(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        promptHandoff={createPluginUseHandoff(5, 'example-meta-landing', {
+          action: 'use-with-query',
+        })}
+      />,
+    );
+
+    await waitFor(() => expect(homeHeroPromptText()).toBe('Cinematic parallax landing page.'));
+    expect(homeHeroPromptText()).not.toContain('verbatim');
+    expect(homeHeroPromptText()).not.toContain('example.html');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-meta-landing/apply',
+      expect.anything(),
+    ));
   });
 
   it('binds od-plugin-authoring before submitting the rail create-plugin prompt', async () => {

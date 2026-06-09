@@ -55,6 +55,13 @@ import {
 } from '../utils/inlineMentions';
 import { useI18n, useT } from '../i18n';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
+import {
+  examplePresetSeedPrompt,
+  pluginPresetQuery,
+  renderPluginPresetQuery,
+  promptLocaleKind,
+  type PromptLocaleKind,
+} from './plugins-home/presetSeedPrompt';
 import type { Locale } from '../i18n/types';
 import {
   localizeSkillDescription,
@@ -102,6 +109,10 @@ interface Props {
   sessionMode?: ChatSessionMode;
   onSessionModeChange?: (mode: ChatSessionMode) => void;
   activePluginTitle: string | null;
+  // True when the active plugin chip shows a user-picked plugin (Community card
+  // or example-prompt preset) rather than a task-type chip's default plugin —
+  // an explicit pick owns its own clear (×) button even when a task chip is set.
+  activePluginIsExplicit?: boolean;
   activePluginRecord?: InstalledPluginRecord | null;
   activeChipId: string | null;
   onClearActivePlugin: () => void;
@@ -216,6 +227,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     sessionMode = 'design',
     onSessionModeChange,
     activePluginTitle,
+    activePluginIsExplicit = false,
     activePluginRecord = null,
     activeSkillId = null,
     activeSkillTitle = null,
@@ -973,11 +985,19 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   </span>
                   <span className="home-hero__active-label">{activePluginTitle}</span>
                 </button>
-                {activeCreateChip ? null : (
+                {activeCreateChip && !activePluginIsExplicit ? null : (
                   <button
                     type="button"
                     className="home-hero__active-clear od-tooltip"
-                    onClick={onClearActivePlugin}
+                    onClick={() => {
+                      trackHomeChatComposerClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'chat_composer',
+                        element: 'plugin_chip_clear',
+                        chip_id: activePluginRecord?.id,
+                      });
+                      onClearActivePlugin();
+                    }}
                     aria-label={t('homeHero.clearActivePlugin')}
                     title={t('homeHero.clearActivePlugin')}
                     data-tooltip={t('homeHero.clearActivePlugin')}
@@ -1610,7 +1630,11 @@ function PluginPromptPresetCard({
   // Example-prompt preset tiles are thumbnails too — prefer the cheap baked
   // hover-pan clip when one exists (same as the gallery cards).
   const preview = useMemo(() => inferPluginPreview(record, { preferBaked: true }), [record]);
-  const seedPrompt = examplePresetSeedPrompt(record, locale, chipId);
+  // Home cards keep their richer structured-preview path as the last-resort
+  // fallback (the detail modal injects a simpler one).
+  const seedPrompt = examplePresetSeedPrompt(record, locale, () =>
+    pluginPresetPromptPreview(record, locale, chipId),
+  ).text;
   return (
     <button
       type="button"
@@ -1671,9 +1695,6 @@ function formatFileSize(bytes: number): string {
 
 const HOME_HERO_PROMPT_MAX_HEIGHT = 180;
 const HOME_HERO_AUTHORING_PROMPT_MAX_HEIGHT = 132;
-// `{{name}}` plugin-input placeholder — still used when rendering plugin
-// preset query previews (renderPluginPresetQuery).
-const INPUT_PLACEHOLDER_PATTERN = /\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g;
 
 function pluginMentionText(record: InstalledPluginRecord): string {
   return inlineMentionToken(record.title);
@@ -2814,91 +2835,6 @@ function pluginPresetPromptPreview(
   return textPromptForPluginPreset(record, rendered, chipId, locale);
 }
 
-// The seed text dropped into the composer when a preset card is picked.
-// The full build spec now rides along as plugin context (SKILL.md +
-// example.html injected once the plugin is applied), so the textarea only
-// needs a short, human-readable, editable hook — not the verbatim spec.
-function examplePresetSeedPrompt(
-  record: InstalledPluginRecord,
-  locale: Locale,
-  chipId: string,
-): string {
-  const description = localizePluginDescription(locale, record).trim();
-  // zh: the localized useCase.query is a generator-facing meta-instruction
-  // ("follow the en field verbatim; start from example.html"), useless as a
-  // human seed — surface the curated one-line description instead.
-  if (promptLocaleKind(locale) === 'zh' && description) return description;
-  const query = pluginPresetQuery(record, locale);
-  if (query) {
-    const head = firstPromptParagraph(renderPluginPresetQuery(record, query));
-    // Skip meta-instructions that reference fields/assets the model can't see
-    // from the textarea; fall back to the description.
-    if (head && !isMetaInstructionSeed(head)) return head;
-  }
-  if (description) return description;
-  return pluginPresetPromptPreview(record, locale, chipId);
-}
-
-function firstPromptParagraph(value: string): string {
-  const normalized = value.replace(/\r\n/g, '\n').trim();
-  if (!normalized) return '';
-  // First paragraph = text up to the first blank line / markdown rule fence.
-  const [head] = normalized.split(/\n\s*\n/);
-  return (head ?? normalized).trim();
-}
-
-function isMetaInstructionSeed(value: string): boolean {
-  return /逐字注入|以\s*en\s*字段为准|verbatim|example\.html/iu.test(value);
-}
-
-function pluginPresetQuery(record: InstalledPluginRecord, locale: Locale): string | null {
-  const query = record.manifest?.od?.useCase?.query;
-  if (typeof query === 'string') return query;
-  if (query && typeof query === 'object') {
-    const localized = query as Record<string, unknown>;
-    const exact = localized[locale];
-    if (typeof exact === 'string') return exact;
-    const language = locale.split('-')[0];
-    const languageMatch = Object.entries(localized).find(([key, value]) => (
-      key.toLowerCase().startsWith(`${language}-`) && typeof value === 'string'
-    ));
-    if (typeof languageMatch?.[1] === 'string') return languageMatch[1];
-    for (const key of ['zh-CN', 'en', 'default']) {
-      if (typeof localized[key] === 'string') return localized[key];
-    }
-    const first = Object.values(localized).find((value) => typeof value === 'string');
-    if (typeof first === 'string') return first;
-  }
-  return null;
-}
-
-function renderPluginPresetQuery(record: InstalledPluginRecord, query: string): string {
-  const fields = record.manifest?.od?.inputs ?? [];
-  const valueByName = new Map<string, string>();
-  for (const field of fields) {
-    const value = field.default ?? field.placeholder ?? field.label ?? field.name;
-    valueByName.set(field.name, String(value));
-  }
-  return query
-    .replace(
-      HOME_ESCAPED_ARGUMENT_PLACEHOLDER_PATTERN,
-      (_placeholder, _name: string | undefined, defaultValue: string | undefined) => defaultValue ?? '',
-    )
-    .replace(
-      HOME_ARGUMENT_PLACEHOLDER_PATTERN,
-      (
-        _placeholder,
-        _doubleName: string | undefined,
-        _singleName: string | undefined,
-        doubleDefault: string | undefined,
-        singleDefault: string | undefined,
-      ) => doubleDefault ?? singleDefault ?? '',
-    )
-    .replace(INPUT_PLACEHOLDER_PATTERN, (_placeholder, key: string) => (
-      valueByName.get(key) ?? key
-    ));
-}
-
 function textPromptForPluginPreset(
   record: InstalledPluginRecord,
   prompt: string,
@@ -3074,12 +3010,6 @@ function fallbackPluginPresetPrompt(
   }
   return `Create ${englishArticle(artifact)} ${artifact} with the "${title}" preset${description ? `: ${description}` : '.'}`;
 }
-
-const HOME_ESCAPED_ARGUMENT_PLACEHOLDER_PATTERN =
-  /\{argument\s+name=\\"([^"]+)\\"\s+default=\\"([^"]*)\\"[^}]*\}/g;
-
-const HOME_ARGUMENT_PLACEHOLDER_PATTERN =
-  /\{argument\s+name=(?:"([^"]+)"|'([^']+)')\s+default=(?:"([^"]*)"|'([^']*)')[^}]*\}/g;
 
 const HOME_PROMPT_EXAMPLES: Record<Locale, Record<string, string[]>> = {
   "en": {
@@ -3826,13 +3756,6 @@ function homeHeroChipPromptExamples(chipId: string, locale: Locale): string[] {
   return homeHeroChipPromptExamplesForLocale(chipId, locale);
 }
 
-type PromptLocaleKind = 'zh' | 'ja' | 'en';
-
-function promptLocaleKind(locale: Locale): PromptLocaleKind {
-  if (locale === 'zh-CN' || locale === 'zh-TW') return 'zh';
-  if (locale === 'ja') return 'ja';
-  return 'en';
-}
 
 function briefForChipId(chipId: string): Record<string, string> {
   switch (chipId) {
