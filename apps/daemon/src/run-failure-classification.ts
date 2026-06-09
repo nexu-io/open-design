@@ -51,11 +51,16 @@ function eventErrorText(data: unknown): string[] {
   const nested = payload.error && typeof payload.error === 'object'
     ? payload.error as Record<string, unknown>
     : {};
+  const nestedData = nested.data && typeof nested.data === 'object'
+    ? nested.data as Record<string, unknown>
+    : {};
   return [
     readString(payload.message),
     readString(payload.code),
     readString(nested.message),
     readString(nested.code),
+    readString(nestedData.message),
+    typeof nestedData.statusCode === 'number' ? `statusCode:${nestedData.statusCode}` : undefined,
   ].filter((value): value is string => Boolean(value));
 }
 
@@ -81,7 +86,13 @@ function latestRetryable(
     const nested = payload.error && typeof payload.error === 'object'
       ? payload.error as Record<string, unknown>
       : {};
-    const retryable = readBool(payload.retryable) ?? readBool(nested.retryable);
+    const nestedData = nested.data && typeof nested.data === 'object'
+      ? nested.data as Record<string, unknown>
+      : {};
+    const retryable =
+      readBool(payload.retryable) ??
+      readBool(nested.retryable) ??
+      readBool(nestedData.isRetryable);
     if (retryable !== undefined) return retryable;
   }
   return undefined;
@@ -121,8 +132,23 @@ function isEmptyOutputText(text: string): boolean {
 }
 
 function isToolErrorText(text: string): boolean {
-  return /\b(tool|mcp|connector)\b/i.test(text) &&
+  if (isPluginArtifactMissingText(text)) return true;
+  return /\b(tool|mcp|connector|plugin)\b/i.test(text) &&
     /\b(error|failed|failure)\b/i.test(text);
+}
+
+function isPluginArtifactMissingText(text: string): boolean {
+  return /\bPlugin authoring ended before generating the required generated-plugin artifacts\b/i
+    .test(text);
+}
+
+function isAgentConfigInvalidText(text: string): boolean {
+  return /\bError loading config\.toml: unknown variant\b/i.test(text) ||
+    /\bunknown variant [`'"][^`'"]+[`'"], expected\b[\s\S]*\bin `service_tier`/i.test(text);
+}
+
+function isFabricatedRoleMarkerText(text: string): boolean {
+  return /\bmodel emitted fabricated role marker\b/i.test(text);
 }
 
 function isPermissionRequestNotFoundText(text: string): boolean {
@@ -141,7 +167,12 @@ function isPromptTooLargeText(text: string): boolean {
 }
 
 function isUpstreamDetailText(text: string): boolean {
-  return /\b(stream disconnected before completion|response\.completed|Transport error: network error|Upstream request failed|websocket closed|socket connection was closed unexpectedly|tls handshake eof|Connection reset by peer|TLS close_notify|Broken pipe|remote host|远程主机强迫关闭|No route to host|Connection refused|error sending request|Provider returned error|high demand|upstream_error|http2: response body closed)\b/i
+  return /\b(stream disconnected before completion|response\.completed|Transport error: network error|Upstream request failed|websocket closed|socket connection was closed unexpectedly|tls handshake eof|Connection reset by (?:peer|server)|TLS close_notify|Broken pipe|remote host|远程主机强迫关闭|No route to host|Connection refused|error sending request|Provider returned error|high demand|upstream_error|http2: response body closed|AMR model catalog is unavailable|statusCode[\"']?\s*:\s*(?:400|404)|400 Bad Request|404 Not Found)\b/i
+    .test(text);
+}
+
+function isUpstreamClientErrorText(text: string): boolean {
+  return /\b(statusCode[\"']?\s*:\s*(?:400|404)|400 Bad Request|404 Not Found)\b/i
     .test(text);
 }
 
@@ -179,7 +210,7 @@ function authDetail(text: string): TrackingRunFailureDetail {
 }
 
 function upstreamDetail(text: string): TrackingRunFailureDetail {
-  if (/\b(no endpoints found that support tool use|provider routing)\b/i.test(text)) {
+  if (/\b(AMR model catalog is unavailable|no endpoints found that support tool use|provider routing)\b/i.test(text)) {
     return 'provider_routing_error';
   }
   if (/\bhigh demand|temporary errors\b/i.test(text)) return 'provider_high_demand';
@@ -191,6 +222,7 @@ function upstreamDetail(text: string): TrackingRunFailureDetail {
     .test(text)) {
     return 'upstream_5xx';
   }
+  if (isUpstreamClientErrorText(text)) return 'upstream_client_error';
   return 'network_error';
 }
 
@@ -252,6 +284,11 @@ function signalInterruptClassification(
   return classification('process_exit', 'terminated_unknown', 'child_close', false, 'none');
 }
 
+function toolErrorDetail(text: string): TrackingRunFailureDetail {
+  if (isPluginArtifactMissingText(text)) return 'plugin_artifact_missing';
+  return 'tool_error';
+}
+
 function processExitDetail(
   errorCode: string,
   text: string,
@@ -264,6 +301,8 @@ function processExitDetail(
   if (/\bspawn failed: spawn EPERM\b/i.test(text)) return 'spawn_eperm';
   if (/\bspawn failed: spawn\b/i.test(text)) return 'spawn_failed';
   if (/\bstdin: write EOF\b/i.test(text)) return 'stdin_write_eof';
+  if (isAgentConfigInvalidText(text)) return 'agent_config_invalid';
+  if (isFabricatedRoleMarkerText(text)) return 'fabricated_role_marker';
   if (/\bjson-rpc id \d+: Internal error\b/i.test(text)) {
     return 'agent_protocol_error';
   }
@@ -390,6 +429,16 @@ export function classifyRunFailure(
     );
   }
 
+  if (isAgentConfigInvalidText(text)) {
+    return classification(
+      'process_exit',
+      'agent_config_invalid',
+      'session_init',
+      false,
+      'fix_config',
+    );
+  }
+
   const serviceFailure = classifyAgentServiceFailure(text);
   if (serviceFailure === 'AGENT_AUTH_REQUIRED' || isAuthDetailText(text)) {
     return classification(
@@ -417,12 +466,13 @@ export function classifyRunFailure(
     serviceFailure === 'UPSTREAM_UNAVAILABLE' ||
     isUpstreamDetailText(text)
   ) {
+    const retryable = retryableHint ?? !isUpstreamClientErrorText(text);
     return classification(
       'upstream_unavailable',
       upstreamDetail(text),
       'first_token_wait',
-      retryableHint ?? true,
-      'retry',
+      retryable,
+      retryable ? 'retry' : 'none',
     );
   }
 
@@ -450,12 +500,24 @@ export function classifyRunFailure(
   }
 
   if (isToolErrorText(text)) {
+    const retryable = retryableHint ?? !isPluginArtifactMissingText(text);
     return classification(
       'tool_error',
-      'tool_error',
-      'tool_execution',
-      retryableHint ?? false,
-      retryableHint ? 'retry' : 'none',
+      toolErrorDetail(text),
+      isPluginArtifactMissingText(text) ? 'artifact_write' : 'tool_execution',
+      retryable,
+      retryable ? 'retry' : 'none',
+    );
+  }
+
+  if (isFabricatedRoleMarkerText(text)) {
+    const retryable = retryableHint ?? true;
+    return classification(
+      'process_exit',
+      'fabricated_role_marker',
+      'child_close',
+      retryable,
+      retryable ? 'retry' : 'none',
     );
   }
 

@@ -18,6 +18,7 @@ import { readAppConfig } from './app-config.js';
 import type { AppVersionInfo } from './app-version.js';
 import { listMessages } from './db.js';
 import {
+  deriveLangfuseDeliveryState,
   readTelemetrySinkConfig,
   reportRunCompleted,
   reportRunFeedback,
@@ -27,6 +28,7 @@ import {
   type AttachmentManifestEntry,
   type EventsSummary,
   type FeedbackReportContext,
+  type LangfuseDeliveryState,
   type InputTextSnapshotManifestEntry,
   type ObjectManifestCompleteness,
   type MessageSummary,
@@ -45,7 +47,11 @@ import {
   type RunTelemetryTimestamps,
   type RunUsageAnalytics,
 } from './run-analytics-observability.js';
-import { collectStderrTailSummary } from './run-diagnostics.js';
+import {
+  collectStderrTailSummary,
+  collectStdoutTailSummary,
+  summarizeRunDiagnosticsForAnalytics,
+} from './run-diagnostics.js';
 import { classifyRunFailure } from './run-failure-classification.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { buildTraceObjectManifests } from './trace-object-manifest.js';
@@ -821,12 +827,14 @@ function normalizeStatus(s: string): ReportContext['run']['status'] {
 
 export async function reportRunCompletedFromDaemon(
   opts: ReportRunCompletedFromDaemonOpts,
-): Promise<void> {
+): Promise<LangfuseDeliveryState> {
   try {
     const { db, dataDir, run } = opts;
     const cfg = await readAppConfig(dataDir);
     const prefs = cfg.telemetry ?? {};
-    if (prefs.metrics !== true) return;
+    if (prefs.metrics !== true) {
+      return deriveLangfuseDeliveryState(prefs, null);
+    }
     const installationId = cfg.installationId ?? null;
 
     let messageContent = '';
@@ -903,12 +911,23 @@ export async function reportRunCompletedFromDaemon(
     const stderr = status === 'succeeded'
       ? undefined
       : collectStderrTailSummary(run.events);
+    const stdout = status === 'succeeded'
+      ? undefined
+      : collectStdoutTailSummary(run.events);
     const turn = turnInfoFromRun(run, usageAnalytics.agent_reported_model);
     const runtime: RuntimeInfo = {
       ...getRuntimeInfo(opts.appVersion ?? null),
       ...(run.clientType ? { clientType: run.clientType } : {}),
     };
     const artifacts = summarizeProducedFiles(producedFilesRaw);
+    const diagnostics = summarizeRunDiagnosticsForAnalytics({
+      events: run.events,
+      exitCode: run.exitCode ?? null,
+      signal: run.signal ?? null,
+      cancelRequested: run.status === 'canceled',
+      firstTokenSeen: Boolean(run.analyticsTelemetry?.firstTokenAt),
+      artifactWriteSeen: artifacts.length > 0,
+    });
     const manifests = buildTraceSafeManifests({
       projectId: run.projectId,
       runId: run.id,
@@ -943,6 +962,8 @@ export async function reportRunCompletedFromDaemon(
         timings,
         ...(run.analyticsTelemetry ? { timingMarks: run.analyticsTelemetry } : {}),
         ...(stderr ? { stderr } : {}),
+        ...(stdout ? { stdout } : {}),
+        diagnostics,
       },
       message: {
         messageId: run.assistantMessageId ?? '',
@@ -986,12 +1007,17 @@ export async function reportRunCompletedFromDaemon(
 
     const uploadedManifests = await buildTraceObjectManifests(objectManifestOptions);
     const finalManifests = mergeTraceSafeManifests(manifests, uploadedManifests);
-    await reportRunCompleted(
+    return await reportRunCompleted(
       buildContext(finalManifests),
       opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {},
     );
   } catch (err) {
     console.warn('[langfuse-bridge] report failed:', String(err));
+    return {
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'network_error',
+    };
   }
 }
 

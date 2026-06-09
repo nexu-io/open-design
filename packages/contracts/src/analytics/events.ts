@@ -25,6 +25,7 @@ export type AnalyticsEventName =
   // Run lifecycle (daemon authoritative)
   | 'run_created'
   | 'run_finished'
+  | 'langfuse_report_result'
   | 'run_retry_attempted'
   | 'run_retry_finished'
   // Packaged updater lifecycle
@@ -247,6 +248,7 @@ export type TrackingRunFailureDetail =
   | 'cli_version_incompatible'
   | 'prompt_too_large'
   | 'upstream_5xx'
+  | 'upstream_client_error'
   | 'stream_disconnected'
   | 'network_error'
   | 'provider_high_demand'
@@ -255,13 +257,16 @@ export type TrackingRunFailureDetail =
   | 'timeout'
   | 'empty_output'
   | 'tool_error'
+  | 'plugin_artifact_missing'
   | 'cli_not_installed'
+  | 'agent_config_invalid'
   | 'spawn_failed'
   | 'spawn_enoexec'
   | 'spawn_ebadf'
   | 'spawn_eperm'
   | 'stdin_write_eof'
   | 'agent_protocol_error'
+  | 'fabricated_role_marker'
   | 'permission_request_not_found'
   | 'qoder_stop_sequence'
   | 'signal_killed'
@@ -290,6 +295,7 @@ export type TrackingRunFailureUserAction =
   | 'switch_model'
   | 'reduce_context'
   | 'install_cli'
+  | 'fix_config'
   | 'none';
 export type TrackingRunRetryStrategy = 'same_run_transient';
 export type TrackingRunRetryFinalResult =
@@ -320,6 +326,15 @@ export type TrackingStderrLineCountBucket =
   | '6_20'
   | '21_100'
   | 'gt_100';
+export type TrackingRunCloseReason =
+  | 'exit_0'
+  | 'exit_nonzero'
+  | 'signal'
+  | 'cancel_requested'
+  | 'stream_error'
+  | 'fatal_rpc_error'
+  | 'empty_output'
+  | 'unknown';
 export type TrackingLangfuseDeliveryStatus =
   | 'not_expected'
   | 'queued'
@@ -336,6 +351,14 @@ export type TrackingLangfuseDropReason =
   | 'langfuse_4xx'
   | 'langfuse_5xx'
   | 'network_error';
+export type TrackingLangfuseReportResult =
+  | 'accepted'
+  | 'failed'
+  | 'skipped';
+export type TrackingLangfuseReportSkipReason =
+  | 'run_not_found'
+  | 'duplicate_run'
+  | 'not_expected';
 
 export type TrackingFeedbackRating = 'positive' | 'negative';
 // Click events emit `none` when the user clears a previously-set rating, so
@@ -2249,6 +2272,14 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   diagnostic_source?: TrackingRunDiagnosticSource;
   stderr_present?: boolean;
   stderr_line_count_bucket?: TrackingStderrLineCountBucket;
+  stdout_present?: boolean;
+  stdout_line_count_bucket?: TrackingStderrLineCountBucket;
+  rpc_close_reason?: TrackingRunCloseReason;
+  first_token_seen?: boolean;
+  user_visible_output_seen?: boolean;
+  tool_call_seen?: boolean;
+  artifact_write_seen?: boolean;
+  live_artifact_seen?: boolean;
   artifact_count: number;
   // True when the run raised an AskUserQuestion clarification card. Such runs
   // are intent-clarification turns (the agent stops to ask the user a question)
@@ -2287,6 +2318,26 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   retry_attempt_count?: number;
   retry_final_result?: TrackingRunRetryFinalResult;
   retry_suppressed_reason?: TrackingRunRetrySuppressedReason;
+}
+
+export interface LangfuseReportResultProps {
+  page_name: 'chat_panel' | 'design_system_project';
+  area: 'chat_panel' | 'design_system_generation';
+  project_id: string | null;
+  conversation_id: string | null;
+  run_id: string;
+  langfuse_trace_id: string;
+  langfuse_expected: boolean;
+  langfuse_delivery_status: TrackingLangfuseDeliveryStatus;
+  langfuse_drop_reason?: TrackingLangfuseDropReason;
+  langfuse_report_result: TrackingLangfuseReportResult;
+  langfuse_report_trigger: 'final_message';
+  langfuse_report_skip_reason?: TrackingLangfuseReportSkipReason;
+  report_duration_ms?: number;
+  result?: TrackingRunResult;
+  error_code?: string;
+  agent_provider_id?: TrackingCliProviderId;
+  model_id?: string;
 }
 
 export interface RunRetryBaseProps {
@@ -2556,6 +2607,7 @@ export type AnalyticsEventPayload =
   | { event: 'plugin_replacement_result'; props: PluginReplacementResultProps }
   | { event: 'run_created'; props: RunCreatedProps }
   | { event: 'run_finished'; props: RunFinishedProps }
+  | { event: 'langfuse_report_result'; props: LangfuseReportResultProps }
   | { event: 'run_retry_attempted'; props: RunRetryAttemptedProps }
   | { event: 'run_retry_finished'; props: RunRetryFinishedProps }
   | { event: 'update_install_result'; props: UpdateInstallResultProps }
