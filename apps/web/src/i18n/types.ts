@@ -892,6 +892,12 @@ export interface Dict {
   'homeHero.chip.figmaHint': string;
   'homeHero.chip.folderHint': string;
   'homeHero.chip.templateHint': string;
+  'homeWorkingDir.trigger': string;
+  'homeWorkingDir.pick': string;
+  'homeWorkingDir.recent': string;
+  'homeWorkingDir.recentEmpty': string;
+  'homeWorkingDir.clear': string;
+  'homeWorkingDir.hint': string;
   'workingDirPicker.title': string;
   'workingDirPicker.homeTitle': string;
   'workingDirPicker.processing': string;

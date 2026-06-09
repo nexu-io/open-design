@@ -2012,6 +2012,43 @@ export async function openFolderDialog(): Promise<string | null> {
   }
 }
 
+// Global most-recently-used working directories (the local folders the user
+// grants the agent read-only awareness of). Persisted in the daemon's
+// app-config so they survive browser resets and are shared across projects
+// and the `od` CLI. Returns most-recent-first.
+export async function fetchRecentLinkedDirs(): Promise<string[]> {
+  try {
+    const resp = await fetch('/api/app-config');
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    const list = data?.config?.recentLinkedDirs;
+    return Array.isArray(list) ? list.filter((d: unknown): d is string => typeof d === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+// Record `dir` as the most-recently-used working directory and return the
+// updated list. PUT /api/app-config merges per-key, so sending only
+// `recentLinkedDirs` leaves every other preference untouched. The daemon
+// also trims/de-dupes/caps the list, but we do it client-side too so the
+// optimistic UI matches what gets persisted.
+export async function pushRecentLinkedDir(dir: string): Promise<string[]> {
+  const existing = await fetchRecentLinkedDirs();
+  const next = [dir, ...existing.filter((d) => d !== dir)].slice(0, 10);
+  try {
+    await fetch('/api/app-config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recentLinkedDirs: next }),
+    });
+  } catch {
+    // Daemon offline — the picked dir still applies to this project; the
+    // recents list just won't persist for next time.
+  }
+  return next;
+}
+
 // "Replace working directory" — points an existing project at a new
 // folder. Mirrors the import-folder trust gate but updates the current
 // project record instead of creating a new project.

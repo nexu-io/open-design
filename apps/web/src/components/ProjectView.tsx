@@ -46,8 +46,11 @@ import {
   fetchLiveArtifacts,
   fetchProjectFiles,
   fetchSkill,
+  fetchRecentLinkedDirs,
+  openFolderDialog,
   patchPreviewCommentStatus,
   projectRawUrl,
+  pushRecentLinkedDir,
   uploadProjectFiles,
   upsertPreviewComment,
   writeProjectTextFile,
@@ -171,7 +174,7 @@ import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { ChatPane } from './ChatPane';
 import type { QuestionFormOpenRequest } from './AssistantMessage';
-import { WorkingDirPill } from './WorkingDirPill';
+import { WorkingDirPicker } from './WorkingDirPicker';
 import type { ChatSendMeta } from './ChatComposer';
 import {
   CritiqueTheaterMount,
@@ -870,7 +873,6 @@ export function ProjectView({
   // True while a working-dir replace is reindexing the new folder. Surfaced
   // to the Design Files panel so the file list shows a loading state instead
   // of silently sitting on the old tree for the few seconds the scan takes.
-  const [workingDirReplacing, setWorkingDirReplacing] = useState(false);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const projectFilesRef = useRef<ProjectFile[]>([]);
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
@@ -4190,6 +4192,49 @@ export function ProjectView({
     onProjectChange({ ...project, metadata });
     void patchProject(project.id, { metadata });
   }, [onProjectChange, project]);
+
+  // Working-directory awareness for the in-project composer. Like Home, the
+  // picker grants the agent read-only access to a local folder via the
+  // project's `linkedDirs` (→ `--add-dir`); it does NOT switch `baseDir`, so
+  // Design Files keeps showing only the managed artifact store. Linked dirs
+  // are surfaced as removable chips by the composer; this picker is the
+  // add/select entry point plus the shared global "recent folders" list.
+  const [recentDirs, setRecentDirs] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchRecentLinkedDirs().then((dirs) => {
+      if (!cancelled) setRecentDirs(dirs);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const rememberRecentDir = useCallback(async (dir: string) => {
+    setRecentDirs((prev) => [dir, ...prev.filter((d) => d !== dir)].slice(0, 10));
+    const persisted = await pushRecentLinkedDir(dir);
+    setRecentDirs(persisted);
+  }, []);
+  const addLinkedDir = useCallback(
+    (dir: string) => {
+      const existing = project.metadata?.linkedDirs ?? [];
+      if (!existing.includes(dir)) {
+        const metadata: ProjectMetadata = {
+          kind: project.metadata?.kind ?? 'other',
+          ...project.metadata,
+          linkedDirs: [...existing, dir],
+        };
+        onProjectChange({ ...project, metadata });
+        void patchProject(project.id, { metadata });
+      }
+      void rememberRecentDir(dir);
+    },
+    [project, onProjectChange, rememberRecentDir],
+  );
+  const handlePickLinkedDir = useCallback(async () => {
+    const picked = await openFolderDialog();
+    if (picked) addLinkedDir(picked);
+  }, [addLinkedDir]);
+
   const sendDesignSystemFeedback = useCallback((
     sectionTitle: string,
     feedback: string,
@@ -5444,25 +5489,19 @@ export function ProjectView({
               backLabel={t('project.backToProjects')}
               composerFooterAccessory={executionControls}
               composerLeadingAccessory={(
-                <WorkingDirPill
-                  projectId={project.id}
-                  resolvedDir={projectDetail.resolvedDir}
-                  onReplaced={({ project: updated }) => {
-                    if (updated) onProjectChange(updated);
-                    // The new working dir has a different file tree, so the
-                    // current listing, breadcrumb nav, and open tabs are all
-                    // stale. Refetch files; DesignFilesPanel's self-heal then
-                    // drops the now-unmatched currentDir back to root.
-                    // projectDetail.refresh() repulls resolvedDir so the
-                    // breadcrumb root + pill show the new folder name even on
-                    // the Electron path, which reports no updated project.
-                    setWorkingDirReplacing(true);
-                    refreshFilesAndDesignMd();
-                    void Promise.all([
-                      refreshWorkspaceItems(),
-                      projectDetail.refresh(),
-                    ]).finally(() => setWorkingDirReplacing(false));
-                  }}
+                // Grants the agent read-only awareness of a local folder via
+                // `linkedDirs` (→ `--add-dir`) instead of switching `baseDir`,
+                // so Design Files keeps showing only the managed artifact
+                // store. The picked folder shows as a removable chip in the
+                // composer; `workingDir={null}` keeps the trigger as a pure
+                // "add" entry point. No file-tree refresh is needed because
+                // the project's resolvedDir is unchanged.
+                <WorkingDirPicker
+                  placement="up"
+                  workingDir={null}
+                  recentDirs={recentDirs}
+                  onPickDirectory={() => void handlePickLinkedDir()}
+                  onSelectRecent={(dir) => addLinkedDir(dir)}
                 />
               )}
               projectHeader={(
@@ -5534,7 +5573,7 @@ export function ProjectView({
               ? baseDir.split(/[/\\]/).filter(Boolean).pop()
               : undefined;
           })()}
-          reloading={workingDirReplacing}
+          reloading={false}
           resolvedDir={projectDetail.resolvedDir}
           files={projectFiles}
           liveArtifacts={liveArtifacts}
