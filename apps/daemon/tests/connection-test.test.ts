@@ -2729,6 +2729,9 @@ process.stdin.on('end', () => {
               'json',
               '-m',
               'github-copilot/gpt-4o',
+              '--pure',
+              '--title',
+              'Connection test',
             ]),
           );
           await expect(fsp.readFile(stdinFile, 'utf8')).resolves.toBe('Reply with only: ok');
