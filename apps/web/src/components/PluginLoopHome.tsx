@@ -144,12 +144,28 @@ export function PluginLoopHome({ onSubmit }: Props) {
     const trimmed = prompt.trim();
     if (!trimmed) return;
     trackPluginLoopClick(analytics.track, { page_name: 'plugins', area: 'plugin_loop', element: 'submit', plugin_id: active?.record.id });
+    const record = active?.record;
+    const result = active?.result;
+    const manifest = record?.manifest;
     onSubmit({
       prompt: trimmed,
-      pluginId: active?.record.id ?? null,
-      appliedPluginSnapshotId: active?.result.appliedPlugin?.snapshotId ?? null,
-      pluginTitle: active?.record.title ?? null,
-      taskKind: active?.result.appliedPlugin?.taskKind ?? null,
+      pluginId: record?.id ?? null,
+      // Plugin-driven flow: forward the context so projects are created
+      // with the correct skill, design system, and context metadata.
+      skillId: result?.projectMetadata?.skillId ?? record?.id ?? null,
+      designSystemId: result?.projectMetadata?.designSystemId ?? null,
+      appliedPluginSnapshotId: result?.appliedPlugin?.snapshotId ?? null,
+      pluginTitle: record?.title ?? null,
+      taskKind: result?.appliedPlugin?.taskKind ?? null,
+      contextPlugins: record
+        ? [
+            {
+              id: record.id,
+              title: record.title,
+              ...(manifest?.description ? { description: manifest.description } : {}),
+            },
+          ]
+        : [],
     });
   }
 
