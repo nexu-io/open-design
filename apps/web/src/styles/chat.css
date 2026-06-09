@@ -1159,7 +1159,9 @@
 .composer-workdir-row {
   display: flex;
   justify-content: flex-start;
-  margin-top: 4px;
+  /* Hug the composer card so the picker sits ~5px below it (to the icon),
+     matching the Home placement. */
+  margin-top: -4px;
 }
 .composer-row {
   display: flex;
