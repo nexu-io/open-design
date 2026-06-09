@@ -2365,6 +2365,7 @@ export const id: Dict = {
   'qf.cardSampleText': 'Contoh teks',
   'questions.tabLabel': 'Questions',
   'questions.banner': 'Mind if I ask a couple of quick questions?',
+  'questions.bannerAnswered': 'Questions answered',
   'questions.continue': 'Continue',
   'questions.generating': 'Generating questions…',
   'questions.skipAll': 'Skip all',

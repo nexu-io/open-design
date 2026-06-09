@@ -2942,6 +2942,7 @@ export interface Dict {
   'qf.cardSampleText': string;
   'questions.tabLabel': string;
   'questions.banner': string;
+  'questions.bannerAnswered': string;
   'questions.continue': string;
   'questions.generating': string;
   'questions.skipAll': string;

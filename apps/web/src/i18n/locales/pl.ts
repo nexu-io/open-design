@@ -2365,6 +2365,7 @@ export const pl: Dict = {
   'qf.cardSampleText': 'Zażółć gęślą jaźń · 0123',
   'questions.tabLabel': 'Pytania',
   'questions.banner': 'Czy mogę zadać kilka krótkich pytań?',
+  'questions.bannerAnswered': 'Pytania uzupełnione',
   'questions.continue': 'Kontynuuj',
   'questions.generating': 'Generowanie pytań…',
   'questions.skipAll': 'Pomiń wszystkie',

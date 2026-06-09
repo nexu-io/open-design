@@ -2365,6 +2365,7 @@ export const ko: Dict = {
   'qf.cardSampleText': '다람쥐 헌 쳇바퀴에 타고파 · 0123',
   'questions.tabLabel': '질문',
   'questions.banner': '간단한 질문 몇 가지 드려도 될까요?',
+  'questions.bannerAnswered': '질문에 답변함',
   'questions.continue': '계속',
   'questions.generating': '질문 생성 중…',
   'questions.skipAll': '모두 건너뛰기',

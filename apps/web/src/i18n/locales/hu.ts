@@ -2365,6 +2365,7 @@ export const hu: Dict = {
   'qf.cardSampleText': 'Árvíztűrő tükörfúrógép · 0123',
   'questions.tabLabel': 'Kérdések',
   'questions.banner': 'Megengeded, hogy feltegyek néhány gyors kérdést?',
+  'questions.bannerAnswered': 'Kérdések megválaszolva',
   'questions.continue': 'Folytatás',
   'questions.generating': 'Kérdések generálása…',
   'questions.skipAll': 'Összes kihagyása',

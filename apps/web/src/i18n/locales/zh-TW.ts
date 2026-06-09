@@ -2365,6 +2365,7 @@ export const zhTW: Dict = {
   'qf.cardSampleText': '飛燕環宇 · 0123',
   'questions.tabLabel': '問題',
   'questions.banner': '方便問你幾個簡短的問題嗎？',
+  'questions.bannerAnswered': '已回答這些問題',
   'questions.continue': '繼續',
   'questions.generating': '正在產生問題…',
   'questions.skipAll': '全部略過',

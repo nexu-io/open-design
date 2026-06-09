@@ -2365,6 +2365,7 @@ export const th: Dict = {
   'qf.cardSampleText': 'สุนัขจิ้งจอกสีน้ำตาลตัวรวดเร็ว · 0123',
   'questions.tabLabel': 'คำถาม',
   'questions.banner': 'ขออนุญาตถามคำถามสั้น ๆ สองสามข้อได้ไหม',
+  'questions.bannerAnswered': 'ตอบคำถามแล้ว',
   'questions.continue': 'ดำเนินการต่อ',
   'questions.generating': 'กำลังสร้างคำถาม…',
   'questions.skipAll': 'ข้ามทั้งหมด',

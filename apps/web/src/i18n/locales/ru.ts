@@ -2365,6 +2365,7 @@ export const ru: Dict = {
   'qf.cardSampleText': 'Быстрая коричневая лиса · 0123',
   'questions.tabLabel': 'Вопросы',
   'questions.banner': 'Не против, если я задам пару коротких вопросов?',
+  'questions.bannerAnswered': 'На вопросы дан ответ',
   'questions.continue': 'Продолжить',
   'questions.generating': 'Генерация вопросов…',
   'questions.skipAll': 'Пропустить всё',

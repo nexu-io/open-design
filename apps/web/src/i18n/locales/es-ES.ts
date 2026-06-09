@@ -2365,6 +2365,7 @@ export const esES: Dict = {
   'qf.cardSampleText': 'El veloz murciélago hindú · 0123',
   'questions.tabLabel': 'Preguntas',
   'questions.banner': '¿Te importa si te hago un par de preguntas rápidas?',
+  'questions.bannerAnswered': 'Preguntas respondidas',
   'questions.continue': 'Continuar',
   'questions.generating': 'Generando preguntas…',
   'questions.skipAll': 'Omitir todo',

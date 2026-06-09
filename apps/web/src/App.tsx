@@ -2065,6 +2065,7 @@ function AppInner() {
         <WorkspaceTabsBar
           route={route}
           projects={projects}
+          onboardingCompleted={config.onboardingCompleted === true}
         />
         <div className="workspace-shell__body">
           {appMain}

@@ -2365,6 +2365,7 @@ export const it: Dict = {
   'qf.cardSampleText': 'Portate questo vecchio whisky al giudice biondo che fuma · 0123',
   'questions.tabLabel': 'Domande',
   'questions.banner': 'Posso farti un paio di domande veloci?',
+  'questions.bannerAnswered': 'Domande completate',
   'questions.continue': 'Continua',
   'questions.generating': 'Generazione domande…',
   'questions.skipAll': 'Salta tutto',

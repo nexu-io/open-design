@@ -2365,6 +2365,7 @@ export const de: Dict = {
   'qf.cardSampleText': 'Franz jagt im komplett verwahrlosten Taxi quer durch Bayern · 0123',
   'questions.tabLabel': 'Fragen',
   'questions.banner': 'Darf ich dir ein paar kurze Fragen stellen?',
+  'questions.bannerAnswered': 'Fragen beantwortet',
   'questions.continue': 'Fortfahren',
   'questions.generating': 'Fragen werden generiert…',
   'questions.skipAll': 'Alle überspringen',

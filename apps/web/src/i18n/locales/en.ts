@@ -2365,6 +2365,7 @@ export const en: Dict = {
   'qf.cardSampleText': 'The quick brown fox · 0123',
   'questions.tabLabel': 'Questions',
   'questions.banner': 'Mind if I ask a couple of quick questions?',
+  'questions.bannerAnswered': 'Questions answered',
   'questions.continue': 'Continue',
   'questions.generating': 'Generating questions…',
   'questions.skipAll': 'Skip all',

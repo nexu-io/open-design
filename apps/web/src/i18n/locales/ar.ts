@@ -2365,6 +2365,7 @@ export const ar: Dict = {
   'qf.cardSampleText': 'الثعلب البني السريع · 0123',
   'questions.tabLabel': 'أسئلة',
   'questions.banner': 'هل تمانع أن أطرح عليك بضعة أسئلة سريعة؟',
+  'questions.bannerAnswered': 'تمت الإجابة عن الأسئلة',
   'questions.continue': 'متابعة',
   'questions.generating': 'جارٍ إنشاء الأسئلة…',
   'questions.skipAll': 'تخطّي الكل',

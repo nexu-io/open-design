@@ -2365,6 +2365,7 @@ export const ptBR: Dict = {
   'qf.cardSampleText': 'A rápida raposa marrom · 0123',
   'questions.tabLabel': 'Perguntas',
   'questions.banner': 'Posso fazer algumas perguntas rápidas?',
+  'questions.bannerAnswered': 'Perguntas respondidas',
   'questions.continue': 'Continuar',
   'questions.generating': 'Gerando perguntas…',
   'questions.skipAll': 'Pular tudo',

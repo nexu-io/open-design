@@ -2013,22 +2013,37 @@ function ProseBlock({
 // Chat-side banner that points to the right-hand Questions tab where discovery
 // forms live. The chat column always stays compact: no inline form preview,
 // answered or not.
-function QuestionsBanner({ onOpen }: { onOpen?: () => void }) {
+function QuestionsBanner({
+  onOpen,
+  answered = false,
+}: {
+  onOpen?: () => void;
+  answered?: boolean;
+}) {
   const t = useT();
+  // Once the form has been answered there is nothing left to open, so the
+  // banner becomes a non-interactive "done" marker: no chevron affordance, no
+  // click target, muted styling.
   return (
     <button
       type="button"
-      className="questions-banner"
+      className={`questions-banner${answered ? " questions-banner-answered" : ""}`}
       data-testid="questions-banner"
-      onClick={() => onOpen?.()}
+      data-answered={answered ? "true" : undefined}
+      disabled={answered}
+      onClick={answered ? undefined : () => onOpen?.()}
     >
       <span className="questions-banner-icon" aria-hidden>
-        <Icon name="help-circle" size={15} />
+        <Icon name={answered ? "check" : "help-circle"} size={15} />
       </span>
-      <span className="questions-banner-label">{t("questions.banner")}</span>
-      <span className="questions-banner-cta" aria-hidden>
-        <Icon name="chevron-right" size={14} />
+      <span className="questions-banner-label">
+        {answered ? t("questions.bannerAnswered") : t("questions.banner")}
       </span>
+      {answered ? null : (
+        <span className="questions-banner-cta" aria-hidden>
+          <Icon name="chevron-right" size={14} />
+        </span>
+      )}
     </button>
   );
 }
@@ -2050,12 +2065,16 @@ function FormBlock({
   nextUserContent?: string;
   onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
 }) {
+  // A "[form answers …]" reply parked right after this message means the form
+  // was already submitted; the banner then renders as an answered/done state.
+  const submittedFromHistory = useMemo(
+    () => (nextUserContent ? parseSubmittedAnswers(form, nextUserContent) : null),
+    [form, nextUserContent],
+  );
   return (
     <QuestionsBanner
+      answered={submittedFromHistory != null}
       onOpen={() => {
-        const submittedFromHistory = nextUserContent
-          ? parseSubmittedAnswers(form, nextUserContent)
-          : null;
         onOpenQuestions?.({
           form,
           messageId: assistantMessageId,

@@ -2365,6 +2365,7 @@ export const zhCN: Dict = {
   'qf.cardSampleText': '飞燕环宇 · 0123',
   'questions.tabLabel': '问题',
   'questions.banner': '想先跟你确认几个小问题～',
+  'questions.bannerAnswered': '已回答这些问题',
   'questions.continue': '继续',
   'questions.generating': '正在生成问题…',
   'questions.skipAll': '一键跳过',

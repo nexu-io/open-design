@@ -2365,6 +2365,7 @@ export const tr: Dict = {
   'qf.cardSampleText': 'Pijamalı hasta yağız şoföre çabucak güvendi · 0123',
   'questions.tabLabel': 'Sorular',
   'questions.banner': 'Birkaç kısa soru sormamın sakıncası var mı?',
+  'questions.bannerAnswered': 'Sorular yanıtlandı',
   'questions.continue': 'Devam et',
   'questions.generating': 'Sorular oluşturuluyor…',
   'questions.skipAll': 'Tümünü atla',

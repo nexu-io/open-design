@@ -2365,6 +2365,7 @@ export const ja: Dict = {
   'qf.cardSampleText': 'いろはにほへと · 0123',
   'questions.tabLabel': '質問',
   'questions.banner': 'いくつか簡単な質問をしてもよろしいですか？',
+  'questions.bannerAnswered': '質問に回答済み',
   'questions.continue': '続ける',
   'questions.generating': '質問を生成中…',
   'questions.skipAll': 'すべてスキップ',

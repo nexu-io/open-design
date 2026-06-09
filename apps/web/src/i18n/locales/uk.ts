@@ -2365,6 +2365,7 @@ export const uk: Dict = {
   'qf.cardSampleText': 'Швидка коричнева лисиця · 0123',
   'questions.tabLabel': 'Запитання',
   'questions.banner': 'Не проти, якщо я поставлю кілька швидких запитань?',
+  'questions.bannerAnswered': 'На запитання дано відповідь',
   'questions.continue': 'Продовжити',
   'questions.generating': 'Генерація запитань…',
   'questions.skipAll': 'Пропустити все',

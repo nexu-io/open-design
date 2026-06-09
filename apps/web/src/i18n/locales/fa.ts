@@ -2365,6 +2365,7 @@ export const fa: Dict = {
   'qf.cardSampleText': 'روباه قهوه‌ای سریع · ۰۱۲۳',
   'questions.tabLabel': 'پرسش‌ها',
   'questions.banner': 'اشکالی ندارد چند پرسش کوتاه بپرسم؟',
+  'questions.bannerAnswered': 'به پرسش‌ها پاسخ داده شد',
   'questions.continue': 'ادامه',
   'questions.generating': 'در حال تولید سؤالات…',
   'questions.skipAll': 'رد کردن همه',
