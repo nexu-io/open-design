@@ -87,9 +87,6 @@ import {
   type SketchItem,
 } from './sketch-model';
 import { AnimatePresence } from 'motion/react';
-import { GenerationPreviewStage } from './GenerationPreviewStage';
-import { AmrGuidance } from './AmrGuidance';
-import { buildGenerationPreviewState } from '../runtime/generation-preview';
 import type { ChatMessage } from '../types';
 
 interface Props {
@@ -218,8 +215,6 @@ interface Props {
   // Bumped nonce that focuses the Questions tab (banner click / new form).
   focusQuestionsRequest?: { nonce: number } | null;
 }
-
-const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
 
 interface SketchState {
   version: number;
@@ -412,11 +407,6 @@ export function FileWorkspace({
   onActiveContextChange,
   onWorkspaceContextsChange,
   messages = [],
-  artifactHtml,
-  conversationError,
-  onRetry,
-  onAuthorizeAndRetry,
-  onLaunchTerminalAuth,
   conversationId,
   headerActions,
   questionForm = null,
@@ -430,7 +420,6 @@ export function FileWorkspace({
   focusQuestionsRequest = null,
 }: Props) {
   const t = useT();
-  const amrProfile = chatConfig?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
   // The chat column only shows a compact Questions banner; the form itself
   // lives here, including after submission when a banner click can reopen the
   // answered preview.
@@ -563,20 +552,15 @@ export function FileWorkspace({
     };
   }, [projectId]);
 
-  const generationPreview = useMemo(
-    () =>
-      buildGenerationPreviewState({
-        designSystemProject: Boolean(designSystemProject),
-        messages,
-        streaming: Boolean(streaming),
-        activeTab,
-        projectFiles: visibleFiles,
-        liveArtifacts,
-        artifactHtml,
-        conversationError,
-      }),
-    [designSystemProject, messages, streaming, activeTab, visibleFiles, liveArtifacts, artifactHtml, conversationError],
-  );
+  // True when the Design Files tab has nothing to attach: no files, no live
+  // artifacts, no folders. Mirrors DesignFilesPanel's own empty-state gate so
+  // the "Design files" composer context and the empty placeholder agree on
+  // when the tab is actually empty. Reused below to suppress the auto-attached
+  // workspace context for a brand-new/empty project.
+  const designFilesTabIsEmpty =
+    visibleFiles.length === 0
+    && liveArtifactEntries.length === 0
+    && projectFolders.length === 0;
 
   // Pull the persisted active tab in when the parent's hydration completes
   // (or on project switch). Fall back to the Design Files browser so a
@@ -716,7 +700,11 @@ export function FileWorkspace({
   // back to the last remaining tab. Skip transient activeTab values
   // (DESIGN_FILES_TAB, pending sketches) since those aren't in persistedTabs.
   useEffect(() => {
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === QUESTIONS_TAB) return;
+    if (
+      activeTab === DESIGN_FILES_TAB
+      || activeTab === DESIGN_SYSTEM_TAB
+      || activeTab === QUESTIONS_TAB
+    ) return;
     if (isBrowserTabId(activeTab)) {
       if (!browserTabs.some((tab) => tab.id === activeTab)) {
         setActiveTab(DESIGN_FILES_TAB);
@@ -865,7 +853,7 @@ export function FileWorkspace({
   function activateWorkspaceTab(tabId: string) {
     if (tabId === QUESTIONS_TAB) {
       setUploadError(null);
-      setActiveTab(QUESTIONS_TAB);
+      setActiveTab(tabId);
       return;
     }
     const sketchEntry = sketches[tabId];
@@ -1466,6 +1454,8 @@ export function FileWorkspace({
       };
     }
     if (activeTab === DESIGN_FILES_TAB) {
+      // Nothing to reference yet — don't auto-stage an empty "Design files" chip.
+      if (designFilesTabIsEmpty) return null;
       const trimmedDir = uploadDir.trim();
       const label = trimmedDir.split('/').filter(Boolean).pop() || t('workspace.designFiles');
       return {
@@ -1537,6 +1527,7 @@ export function FileWorkspace({
     activeTab,
     browserTabs,
     conversations,
+    designFilesTabIsEmpty,
     designSystemProject,
     resolvedDir,
     t,
@@ -1726,30 +1717,6 @@ export function FileWorkspace({
 
   const isActiveSketch = activeFile?.kind === 'sketch' && isSketchName(activeFile.name);
   const activeSketch = activeFile && isActiveSketch ? sketches[activeFile.name] : null;
-  // The design-files tab is the default landing tab, so while a run is in
-  // flight and no previewable artifact exists yet the progress card must take
-  // over its empty "Creations will appear here" state rather than leave an idle
-  // empty list. (Pre-#3516 the preview branch rendered before the design-files
-  // branch with no tab guard; the composer rewrite added an `activeTab !==
-  // DESIGN_FILES_TAB` clause here that hid the progress card on the default
-  // tab.) But the override is scoped to the *empty* design-files tab: a
-  // populated project keeps its file browser while generating. The condition
-  // mirrors DesignFilesPanel's own empty-state gate exactly (no files, no live
-  // artifacts, no folders), so the card only wins where the panel would have
-  // shown its empty placeholder.
-  const designFilesTabIsEmpty =
-    visibleFiles.length === 0
-    && liveArtifactEntries.length === 0
-    && projectFolders.length === 0;
-  const showGenerationPreview = Boolean(generationPreview)
-    && activeTab !== DESIGN_SYSTEM_TAB
-    && (activeTab !== DESIGN_FILES_TAB || designFilesTabIsEmpty)
-    && !isBrowserTabId(activeTab)
-    && !isSideChatTabId(activeTab)
-    && !isTerminalTabId(activeTab)
-    && !activeLiveArtifact
-    && !activeFile;
-
   // The "+" launcher's create-new actions come from the registry. `openTab`
   // reuses the same tab-state path as opening a file so a new terminal:<id>
   // tab is focused; `createBrowser` opens an embedded browser tab.
@@ -2117,47 +2084,13 @@ export function FileWorkspace({
             onConnectRepo={onConnectRepo}
             githubConnected={githubConnected}
           />
-        ) : showGenerationPreview && generationPreview ? (
-          <GenerationPreviewStage
-            model={generationPreview}
-            onRetry={
-              generationPreview.retryTarget && onRetry
-                ? () => onRetry(generationPreview.retryTarget!)
-                : undefined
-            }
-            onAuthorizeAndRetry={
-              generationPreview.retryTarget && onAuthorizeAndRetry
-                ? () => onAuthorizeAndRetry(generationPreview.retryTarget!)
-                : undefined
-            }
-            onLaunchTerminalAuth={onLaunchTerminalAuth}
-            amrAuthorizeSourceDetail="generation_preview_authorize_retry"
-            amrRechargeSourceDetail="generation_preview_recharge"
-            amrProfile={amrProfile}
-            amrGuidance={
-              generationPreview.promoteAmrSwitch
-                && generationPreview.errorCode
-                && generationPreview.retryTarget
-                && onAuthorizeAndRetry ? (
-                <AmrGuidance
-                  errorCode={generationPreview.errorCode}
-                  projectId={projectId}
-                  projectKind={projectKind}
-                  conversationId={conversationId ?? null}
-                  assistantMessageId={generationPreview.retryTarget.id}
-                  runId={generationPreview.retryTarget.runId ?? null}
-                  sourceDetail="generation_preview_switch_retry_card"
-                  onActivate={() => onAuthorizeAndRetry(generationPreview.retryTarget!)}
-                />
-              ) : undefined
-            }
-          />
         ) : activeTab === DESIGN_FILES_TAB ? (
           <DesignFilesPanel
             key={projectId}
             projectId={projectId}
             rootDirName={rootDirName}
             reloading={reloading}
+            running={Boolean(streaming)}
             files={visibleFiles}
             folders={projectFolders}
             liveArtifacts={liveArtifactEntries}

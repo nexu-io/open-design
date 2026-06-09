@@ -605,43 +605,93 @@
 
 /* Static useful-info footer pinned above the drop zone. */
 /* Footer cluster pinned to the bottom: drag hint above the useful-info. */
+/* Footer band pinned to the bottom, mirroring Claude Design's empty-state
+   hint strip: a faint warm band carrying the drag hint above a typewriter
+   "tip" line. */
 .df-footer-info {
-  margin: auto 20px 4px;
+  margin: auto 0 0;
+  min-height: 100px;
+  padding: 16px 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  justify-content: center;
+  gap: 10px;
+  background: color-mix(in srgb, var(--accent) 3.5%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 }
 .df-drop-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+}
+.df-drop-hint-label {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.2;
   color: var(--text-faint);
 }
-.df-drop-hint svg {
+.df-drop-hint-label svg {
   flex: 0 0 auto;
   opacity: 0.8;
 }
+.df-drop-hint-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
 .df-useful-info {
   margin: 0;
-  padding: 12px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  border-top: 1px solid var(--border);
+  gap: 5px;
+}
+.df-useful-info-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+}
+.df-useful-info-head > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
 }
 .df-useful-info-label {
   font-size: 10.5px;
-  letter-spacing: 0.08em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  font-weight: 600;
   color: var(--accent);
 }
 .df-useful-info-tip {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
-  color: var(--text-muted);
+  color: var(--text);
+  min-height: 1.5em;
+}
+.df-tip-caret {
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  animation: df-tip-caret-blink 1s steps(1) infinite;
+}
+@keyframes df-tip-caret-blink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .df-tip-caret {
+    animation: none;
+    opacity: 0;
+  }
 }
 
 /* Drag-to-upload: the whole panel is a drop target. While dragging files

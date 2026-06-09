@@ -339,6 +339,7 @@ jobs:
             --require-vela-cli
             --json
             --signed
+            --notarize
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then
             printf '%s\n' "$build_output" | tee "$build_json_path"
@@ -453,12 +454,46 @@ jobs:
       - name: Prepare mac release assets
         id: assets
         env:
-          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_ARTIFACT_MODE: all
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_NAMESPACE: ${{ needs.metadata.outputs.namespace }}
           RELEASE_NOTES: Open Design ${{ needs.metadata.outputs.release_version }}
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          TOOLS_PACK_NAMESPACE: ${{ needs.metadata.outputs.namespace }}
-        run: bash .github/scripts/release/assets/mac.sh
+          TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: bash .github/workflow/scripts/release/prepare-platform-assets.sh
+
+      - name: Publish mac platform
+        env:
+          RELEASE_ARTIFACT_MODE: all
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
+          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/mac_arm64.json
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac
+          RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac-report.zip
+          RELEASE_SIGNED: "true"
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_TARGET: mac_arm64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+        run: node --experimental-strip-types .github/workflow/scripts/release/storage/publish-platform.ts
+
+      - name: Upload mac publish manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-release-mac-arm64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifests/mac_arm64.json
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Upload mac release bundle
         uses: actions/upload-artifact@v7
@@ -524,15 +559,49 @@ jobs:
             --to all \
             --require-vela-cli \
             --json \
-            --signed
+            --signed \
+            --notarize
 
       - name: Prepare mac intel release assets
         id: assets
         env:
+          RELEASE_ARTIFACT_MODE: all
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_NAMESPACE: ${{ needs.metadata.outputs.mac_intel_namespace }}
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_TARGET: mac_x64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          TOOLS_PACK_NAMESPACE: ${{ needs.metadata.outputs.mac_intel_namespace }}
-        run: bash .github/scripts/release/assets/mac-intel.sh
+          TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: bash .github/workflow/scripts/release/prepare-platform-assets.sh
+
+      - name: Publish mac intel platform
+        env:
+          RELEASE_ARTIFACT_MODE: all
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
+          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/mac_x64.json
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_SIGNED: "true"
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_TARGET: mac_x64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+        run: node --experimental-strip-types .github/workflow/scripts/release/storage/publish-platform.ts
+
+      - name: Upload mac intel publish manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-release-mac-x64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifests/mac_x64.json
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Upload mac intel release bundle
         uses: actions/upload-artifact@v7
@@ -715,13 +784,46 @@ jobs:
 
       - name: Prepare windows release assets
         shell: pwsh
+        run: |
+          .\.github\workflow\scripts\release\prepare-platform-assets.ps1 `
+            -ReleaseTarget win_x64 `
+            -ReleaseAssetsDir "${{ runner.temp }}\release-assets" `
+            -BuildJsonPath "${{ runner.temp }}\windows-tools-pack-build.json" `
+            -ReleaseNamespace "${{ needs.metadata.outputs.win_namespace }}" `
+            -ReleaseVersion "${{ needs.metadata.outputs.release_version }}" `
+            -ReleaseAssetSuffix "" `
+            -ReleaseChannel "${{ needs.metadata.outputs.channel }}" `
+            -ReleasePublicOrigin "${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}" `
+            -ReleaseNotes "Open Design ${{ needs.metadata.outputs.release_version }}" `
+            -IncludeZip $true
+
+      - name: Publish windows platform
         env:
-          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}\release-assets
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
-          RELEASE_NOTES: Open Design ${{ needs.metadata.outputs.release_version }}
+          RELEASE_MANIFEST_DIR: ${{ runner.temp }}\release-platform-manifests
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}\release-platform-outputs\win_x64.json
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win
+          RELEASE_SIGNED: "false"
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_TARGET: win_x64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          TOOLS_PACK_NAMESPACE: ${{ needs.metadata.outputs.win_namespace }}
-        run: ./.github/scripts/release/assets/win.ps1
+          WIN_INCLUDE_ZIP: "true"
+        run: node --experimental-strip-types .github/workflow/scripts/release/storage/publish-platform.ts
+
+      - name: Upload windows publish manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-release-win-x64-publish-manifest
+          path: ${{ runner.temp }}\release-platform-manifests\win_x64.json
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Upload windows release bundle
         uses: actions/upload-artifact@v7
@@ -831,9 +933,42 @@ jobs:
 
       - name: Prepare linux release assets
         env:
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
+          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_NAMESPACE: ${{ needs.metadata.outputs.linux_namespace }}
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_TARGET: linux_x64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          TOOLS_PACK_NAMESPACE: ${{ needs.metadata.outputs.linux_namespace }}
-        run: bash .github/scripts/release/assets/linux.sh
+          TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: bash .github/workflow/scripts/release/prepare-platform-assets.sh
+
+      - name: Publish linux platform
+        env:
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
+          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/linux_x64.json
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/linux
+          RELEASE_SIGNED: "false"
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_TARGET: linux_x64
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+        run: node --experimental-strip-types .github/workflow/scripts/release/storage/publish-platform.ts
+
+      - name: Upload linux publish manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-release-linux-x64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifests/linux_x64.json
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Upload linux release bundle
         uses: actions/upload-artifact@v7
@@ -865,11 +1000,11 @@ jobs:
       }}
     runs-on: ubuntu-latest
     outputs:
-      version_metadata_url: ${{ steps.r2.outputs.version_metadata_url }}
-      mac_arm64_url: ${{ steps.r2.outputs.mac_dmg_url }}
-      mac_intel_url: ${{ steps.r2.outputs.mac_intel_dmg_url }}
-      win_url: ${{ steps.r2.outputs.win_installer_url }}
-      linux_url: ${{ steps.r2.outputs.linux_appimage_url }}
+      version_metadata_url: ${{ steps.outputs.outputs.version_metadata_url }}
+      mac_arm64_url: ${{ steps.outputs.outputs.mac_arm64_dmg_url }}
+      mac_intel_url: ${{ steps.outputs.outputs.mac_x64_dmg_url }}
+      win_url: ${{ steps.outputs.outputs.win_x64_installer_url }}
+      linux_url: ${{ steps.outputs.outputs.linux_x64_appImage_url }}
     env:
       GH_TOKEN: ${{ github.token }}
       # Record the real built commit in metadata.json. Under workflow_call the
@@ -910,6 +1045,31 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
+
+      - name: Download mac publish manifest
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-release-mac-arm64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifests
+
+      - name: Download mac intel publish manifest
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-release-mac-x64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifests
+
+      - name: Download windows publish manifest
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-release-win-x64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifests
+
+      - name: Download linux publish manifest
+        if: ${{ needs.build_linux.result == 'success' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-release-linux-x64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Pre-flight tag/release check
         if: ${{ needs.metadata.outputs.github_release_enabled == 'true' }}
@@ -1000,24 +1160,58 @@ jobs:
           fi
           gh release upload "$VERSION_TAG" "$all_release_dir"/*
 
-      - name: Publish release assets and metadata to R2
-        id: r2
-        run: bash .github/scripts/release/r2/publish.sh
-
-      - name: Verify R2 release publish
+      - name: Publish release metadata to R2
         env:
-          R2_LINUX_APPIMAGE_URL: ${{ steps.r2.outputs.linux_appimage_url }}
-          R2_MAC_DMG_URL: ${{ steps.r2.outputs.mac_dmg_url }}
-          R2_MAC_FEED_URL: ${{ steps.r2.outputs.mac_feed_url }}
-          R2_MAC_INTEL_DMG_URL: ${{ steps.r2.outputs.mac_intel_dmg_url }}
-          R2_MAC_INTEL_ZIP_URL: ${{ steps.r2.outputs.mac_intel_zip_url }}
-          R2_MAC_ZIP_URL: ${{ steps.r2.outputs.mac_zip_url }}
-          R2_METADATA_URL: ${{ steps.r2.outputs.metadata_url }}
-          R2_REPORT_ZIP_URL: ${{ steps.r2.outputs.report_zip_url }}
-          R2_WIN_FEED_URL: ${{ steps.r2.outputs.win_feed_url }}
-          R2_WIN_INSTALLER_URL: ${{ steps.r2.outputs.win_installer_url }}
-          R2_WIN_PORTABLE_ZIP_URL: ${{ steps.r2.outputs.win_portable_zip_url }}
-        run: bash .github/scripts/release/r2/verify.sh
+          BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
+          ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
+          ENABLE_MAC_ARM64: "true"
+          ENABLE_MAC_X64: "true"
+          ENABLE_WIN_X64: "true"
+          LINUX_X64_RESULT: ${{ needs.build_linux.result }}
+          MAC_ARM64_RESULT: ${{ needs.build_mac.result }}
+          MAC_X64_RESULT: ${{ needs.build_mac_intel.result }}
+          RELEASE_ASSET_SUFFIX: ""
+          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
+          RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-metadata/outputs.json
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_SIGNED: "true"
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          STABLE_VERSION: ${{ needs.metadata.outputs.stable_version }}
+          STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}
+          VERSION_TAG: ${{ needs.metadata.outputs.version_tag }}
+          WIN_X64_RESULT: ${{ needs.build_win.result }}
+        run: node --experimental-strip-types .github/workflow/scripts/release/storage/publish-metadata.ts
+
+      - name: Read metadata outputs
+        id: outputs
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("fs");
+            const outputs = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release-metadata/outputs.json`, "utf8"));
+            for (const [key, value] of Object.entries(outputs)) core.setOutput(key, String(value));
+
+      - name: Verify release metadata
+        env:
+          ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
+          ENABLE_MAC_ARM64: "true"
+          ENABLE_MAC_X64: "true"
+          ENABLE_WIN_X64: "true"
+          LINUX_X64_RESULT: ${{ needs.build_linux.result }}
+          MAC_ARM64_RESULT: ${{ needs.build_mac.result }}
+          MAC_X64_RESULT: ${{ needs.build_mac_intel.result }}
+          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          WIN_X64_RESULT: ${{ needs.build_win.result }}
+        run: node --experimental-strip-types .github/workflow/scripts/release/storage/verify-metadata.ts
 
       - name: Promote draft to published latest
         if: ${{ needs.metadata.outputs.github_release_enabled == 'true' }}
@@ -1038,20 +1232,12 @@ jobs:
 
       - name: Publish summary
         env:
-          R2_LINUX_APPIMAGE_URL: ${{ steps.r2.outputs.linux_appimage_url }}
-          R2_MAC_DMG_URL: ${{ steps.r2.outputs.mac_dmg_url }}
-          R2_MAC_FEED_URL: ${{ steps.r2.outputs.mac_feed_url }}
-          R2_MAC_INTEL_DMG_URL: ${{ steps.r2.outputs.mac_intel_dmg_url }}
-          R2_MAC_INTEL_ZIP_URL: ${{ steps.r2.outputs.mac_intel_zip_url }}
-          R2_MAC_ZIP_URL: ${{ steps.r2.outputs.mac_zip_url }}
-          R2_METADATA_URL: ${{ steps.r2.outputs.metadata_url }}
-          R2_REPORT_ZIP_URL: ${{ steps.r2.outputs.report_zip_url }}
-          R2_VERSION_METADATA_URL: ${{ steps.r2.outputs.version_metadata_url }}
-          R2_VERSION_PREFIX: ${{ steps.r2.outputs.version_prefix }}
-          R2_WIN_FEED_URL: ${{ steps.r2.outputs.win_feed_url }}
-          R2_WIN_INSTALLER_URL: ${{ steps.r2.outputs.win_installer_url }}
-          R2_WIN_PORTABLE_ZIP_URL: ${{ steps.r2.outputs.win_portable_zip_url }}
-        run: bash .github/scripts/release/r2/summary.sh
+          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
+          RELEASE_SUMMARY_PATH: ${{ runner.temp }}/release-metadata/summary.md
+        run: |
+          node --experimental-strip-types .github/workflow/scripts/release/storage/summary-metadata.ts
+          cat "${{ runner.temp }}/release-metadata/summary.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cleanup workflow artifacts
         if: ${{ success() }}

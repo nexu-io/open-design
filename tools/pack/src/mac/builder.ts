@@ -126,7 +126,7 @@ export async function runElectronBuilder(
       hardenedRuntime: config.signed,
       icon: macResources.icon,
       identity: config.signed ? undefined : null,
-      notarize: false,
+      notarize: config.macNotarize ? undefined : false,
       target: targets,
     },
     nodeGypRebuild: false,

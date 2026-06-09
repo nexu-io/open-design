@@ -275,6 +275,82 @@
   background: color-mix(in oklab, var(--accent) 14%, var(--bg-subtle));
 }
 
+.project-instructions {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.project-instructions__add,
+.project-instructions__preview,
+.project-instructions__button {
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.project-instructions__add {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.project-instructions__preview {
+  max-width: 260px;
+  height: 30px;
+  padding: 0 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  text-align: left;
+}
+.project-instructions__add:hover,
+.project-instructions__preview:hover,
+.project-instructions__button:hover {
+  border-color: var(--border-strong);
+}
+.project-instructions--editing {
+  display: grid;
+  gap: 6px;
+  width: min(360px, calc(100vw - 48px));
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
+}
+.project-instructions__textarea {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 8px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.project-instructions__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.project-instructions__button {
+  height: 26px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+.project-instructions__button--primary {
+  border-color: color-mix(in oklab, var(--accent) 48%, var(--border));
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
 /* ===========================================================
    Modal / Settings
    =========================================================== */

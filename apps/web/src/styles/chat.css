@@ -933,7 +933,11 @@
 }
 /* When the chat pane is narrow, compact the footer cluster: tighten the
    model chip + mode toggle, collapse the mode label, and make send/stop
-   icon-only — so the action buttons never overflow or deform. */
+   icon-only — so the action buttons never overflow or deform. This @container
+   block is shared by every `.composer-shell` (chat footer, comment composer,
+   …), so the breakpoint stays generic; the fixed-layer footer keeps its side
+   inset via child margins rather than shell padding, leaving this width — and
+   every other composer's collapse behavior — untouched. */
 @container (max-width: 430px) {
   .composer-row .inline-switcher__chip { padding: 0 7px 0 5px; gap: 5px; }
   /* Hide ONLY the trigger's label — the popover options share this class
@@ -1150,6 +1154,15 @@
 .composer-inline-mention--file       { --m-hue: var(--blue);    --m-tint: var(--blue-bg); }
 .composer-inline-mention--connector  { --m-hue: var(--green);   --m-tint: var(--green-bg); }
 .composer-inline-mention--asset      { --m-hue: var(--text-soft); --m-tint: var(--bg-subtle); }
+/* Working-directory picker row, directly below the input and above the
+   controls — mirrors the Home composer's placement. */
+.composer-workdir-row {
+  display: flex;
+  justify-content: flex-start;
+  /* Hug the composer card so the picker sits ~5px below it (to the icon),
+     matching the Home placement. */
+  margin-top: -4px;
+}
 .composer-row {
   display: flex;
   align-items: center;

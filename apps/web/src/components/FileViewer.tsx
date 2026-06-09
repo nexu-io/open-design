@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
 import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
 import {
@@ -7339,11 +7339,15 @@ function HtmlViewer({
     }
   }, [captureExportImageSnapshot, t]);
 
-  const openImageExportModal = () => {
-    setDownloadMenuOpen(false);
+  const openImageExportModal = async () => {
+    flushSync(() => {
+      setDownloadMenuOpen(false);
+    });
     setImageExportError(null);
     setImageExportPreparedBlob(null);
     imageExportSnapshotDataUrlRef.current = null;
+    await waitForAnimationFrame();
+    await waitForAnimationFrame();
     setImageExportModalOpen(true);
     void prepareImageExportBlob(imageExportFormat);
   };
@@ -8166,13 +8170,12 @@ function HtmlViewer({
                 <div className="share-menu chrome-share-menu">
                   <button
                     type="button"
-                    className="chrome-action chrome-action-secondary chrome-action-with-label"
+                    className="chrome-action chrome-action-secondary chrome-action-with-label chrome-action-text-only"
                     aria-haspopup="menu"
                     aria-expanded={deployMenuOpen}
                     aria-label={shareMenuLabel}
                     onClick={openDeployMenu}
                   >
-                    <RemixIcon name="share-forward-line" size={15} />
                     <span>{shareMenuLabel}</span>
                   </button>
                   {deployMenuOpen ? (
@@ -8310,7 +8313,6 @@ function HtmlViewer({
                     aria-expanded={downloadMenuOpen}
                     onClick={openDownloadMenu}
                   >
-                    <RemixIcon name="download-line" size={15} />
                     <span>{t('fileViewer.download')}</span>
                   </button>
                   {downloadMenuOpen ? (

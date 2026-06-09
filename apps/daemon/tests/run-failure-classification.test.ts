@@ -468,3 +468,131 @@ describe('classifyRunFailure', () => {
     });
   });
 });
+
+// Regression coverage for the signal/interrupt mis-attribution bug: process
+// crashes (SIGKILL/SIGSEGV/...), daemon shutdowns (SIGTERM), and cancellations
+// (SIGINT / exit 130) must NOT be laundered into a retryable `timeout`. Each
+// has a non-retryable home so the safe-retry policy never re-spawns an
+// OOM/crash that is near-certain to reproduce.
+describe('classifyRunFailure — signal and interrupt attribution', () => {
+  function classifySignal(
+    signal: string,
+    message = '',
+    exitCode: number | null = null,
+  ) {
+    const errorCode = `AGENT_SIGNAL_${signal}`;
+    return classifyRunFailure({
+      result: 'failed',
+      status: {
+        status: 'failed',
+        error: message || null,
+        signal,
+        exitCode,
+        errorCode: null,
+      },
+      errorCode,
+      agentId: 'claude',
+      events: [],
+    });
+  }
+
+  function classifyExit(
+    exitCode: number,
+    message = '',
+  ) {
+    const errorCode = `AGENT_EXIT_${exitCode}`;
+    return classifyRunFailure({
+      result: 'failed',
+      status: {
+        status: 'failed',
+        error: message || null,
+        signal: null,
+        exitCode,
+        errorCode: null,
+      },
+      errorCode,
+      agentId: 'claude',
+      events: [],
+    });
+  }
+
+  it('classifies SIGKILL as a non-retryable process kill, not a timeout', () => {
+    expect(classifySignal('SIGKILL', 'Killed')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'signal_killed',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('classifies hard crash signals as non-retryable process crashes', () => {
+    for (const signal of ['SIGSEGV', 'SIGABRT', 'SIGILL', 'SIGTRAP', 'SIGBUS']) {
+      expect(classifySignal(signal, 'core dumped')).toMatchObject({
+        failure_category: 'process_exit',
+        failure_detail: 'process_crashed',
+        retryable: false,
+        user_action: 'none',
+      });
+    }
+  });
+
+  it('classifies SIGINT as a non-retryable interruption', () => {
+    expect(classifySignal('SIGINT', 'Interrupted')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'interrupted',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('classifies exit code 130 (128+SIGINT) as a non-retryable interruption', () => {
+    expect(classifyExit(130, 'Request was cancelled')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'interrupted',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('routes an interrupted run whose text names a stream disconnect to upstream', () => {
+    expect(
+      classifyExit(130, 'stream disconnected before completion'),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'stream_disconnected',
+      retryable: true,
+      user_action: 'retry',
+    });
+    expect(
+      classifySignal('SIGINT', 'Upstream request failed; aborting stream'),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+
+  it('classifies a plain SIGTERM (not inactivity) as a non-retryable termination', () => {
+    expect(classifySignal('SIGTERM', 'Terminated')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'terminated_unknown',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('still classifies an inactivity-driven SIGTERM as a retryable timeout', () => {
+    expect(
+      classifySignal(
+        'SIGTERM',
+        'Agent stalled without emitting any new output for 120s.',
+      ),
+    ).toMatchObject({
+      failure_category: 'timeout',
+      failure_detail: 'inactivity_timeout',
+      failure_stage: 'first_token_wait',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+});

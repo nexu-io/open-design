@@ -27,6 +27,7 @@ function createPackagedConfig(
     ...entrypoints,
     namespace: config.namespace,
     ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
+    ...(config.updateMetadataUrl == null ? {} : { updateMetadataUrl: config.updateMetadataUrl }),
     ...(config.posthogKey == null ? {} : { posthogKey: config.posthogKey }),
     ...(config.posthogHost == null ? {} : { posthogHost: config.posthogHost }),
     webOutputMode: config.webOutputMode,

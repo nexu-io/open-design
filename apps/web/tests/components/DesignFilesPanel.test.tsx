@@ -157,11 +157,22 @@ describe('DesignFilesPanel sections', () => {
     expect(row.textContent).not.toContain('KB');
   });
 
-  it('renders a static useful-info footer', () => {
+  it('shows the upload hint in the footer while idle', () => {
     renderPanel([file({ name: 'page.html', kind: 'html' })]);
 
+    expect(document.querySelector('.df-drop-hint')).toBeTruthy();
+    expect(document.querySelector('.df-useful-info')).toBeNull();
+  });
+
+  it('types out the first useful-info tip in the footer while the agent runs', async () => {
+    renderPanel([file({ name: 'page.html', kind: 'html' })], { running: true });
+
+    expect(document.querySelector('.df-drop-hint')).toBeNull();
     expect(document.querySelector('.df-useful-info-label')?.textContent).toBe('Useful info');
-    expect(document.querySelector('.df-useful-info-tip')?.textContent).toContain('Double-click');
+    // The tip types in character by character, so wait for the first word.
+    await waitFor(() =>
+      expect(document.querySelector('.df-useful-info-tip')?.textContent).toContain('Double-click'),
+    );
   });
 });
 

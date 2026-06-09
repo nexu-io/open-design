@@ -251,6 +251,17 @@ export function createAmrEnvironmentProfileMenuItems(
   ];
 }
 
+export function resolveAboutPanelVersion(options: DesktopMainOptions): string | null {
+  const version = options.update?.currentVersion?.trim();
+  return version == null || version.length === 0 ? null : version;
+}
+
+function configureAboutPanel(options: DesktopMainOptions): void {
+  const version = resolveAboutPanelVersion(options);
+  if (version == null) return;
+  app.setAboutPanelOptions({ version });
+}
+
 function appConfigUrl(baseUrl: string): string {
   return new URL("/api/app-config", baseUrl).toString();
 }
@@ -550,6 +561,7 @@ export async function runDesktopMain(
   const osLocale = applyOsLocaleSwitch(app);
 
   await app.whenReady();
+  configureAboutPanel(options);
 
   // PR #974: mint a per-process auth secret and hand it to the daemon
   // BEFORE the BrowserWindow loads. The daemon uses it to verify the
@@ -690,6 +702,9 @@ export async function runDesktopMain(
           return await activeDesktop.screenshot(request.input as DesktopScreenshotInput);
         case SIDECAR_MESSAGES.CONSOLE:
           return activeDesktop.console();
+        case SIDECAR_MESSAGES.SHOW:
+          activeDesktop.show();
+          return { accepted: true };
         case SIDECAR_MESSAGES.CLICK:
           return await activeDesktop.click(request.input as DesktopClickInput);
         case SIDECAR_MESSAGES.EXPORT_PDF:

@@ -11,6 +11,21 @@ const VISUAL_STYLE_ID = 'od-visual-stability-style';
 const VISUAL_GITHUB_REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
 const VISUAL_GITHUB_STARS = 40_000;
 
+type VisualConfig = {
+  mode: 'daemon' | 'api';
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  apiProtocol?: 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama' | 'senseaudio' | 'aihubmix';
+  agentId: string | null;
+  skillId: string | null;
+  designSystemId: string | null;
+  onboardingCompleted: boolean;
+  agentModels: Record<string, { model?: string; reasoning?: string }>;
+  privacyDecisionAt: number | null;
+  telemetry: { metrics?: boolean; content?: boolean; artifactManifest?: boolean };
+};
+
 const VISUAL_CONFIG = {
   mode: 'daemon',
   apiKey: '',
@@ -23,7 +38,7 @@ const VISUAL_CONFIG = {
   agentModels: {},
   privacyDecisionAt: 1,
   telemetry: { metrics: false, content: false, artifactManifest: false },
-} as const;
+} satisfies VisualConfig;
 
 const MOCK_AGENT = {
   id: 'mock',
@@ -61,6 +76,8 @@ type VisualProject = (typeof VISUAL_PROJECTS)[number];
 
 type VisualPageOptions = {
   projects?: readonly VisualProject[];
+  config?: Partial<VisualConfig>;
+  agents?: readonly unknown[];
 };
 
 const VISUAL_PLUGINS = [
@@ -133,6 +150,8 @@ const VISUAL_DESIGN_SYSTEMS = [
 
 export async function configureVisualPage(page: Page, options: VisualPageOptions = {}): Promise<void> {
   const projects = options.projects ?? VISUAL_PROJECTS;
+  const config = { ...VISUAL_CONFIG, ...(options.config ?? {}) };
+  const agents = options.agents ?? [MOCK_AGENT];
 
   await page.addInitScript(([key, config, githubStarsKey, githubStarsCount]) => {
     window.localStorage.setItem(key, JSON.stringify(config));
@@ -140,14 +159,27 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
       githubStarsKey,
       JSON.stringify({ count: githubStarsCount, ts: Date.now() }),
     );
-  }, [STORAGE_KEY, VISUAL_CONFIG, GITHUB_STARS_STORAGE_KEY, VISUAL_GITHUB_STARS] as const);
+  }, [STORAGE_KEY, config, GITHUB_STARS_STORAGE_KEY, VISUAL_GITHUB_STARS] as const);
 
   await page.route('**/api/app-config', async (route) => {
-    await fulfillGet(route, { config: VISUAL_CONFIG });
+    await fulfillGet(route, { config });
   });
 
   await page.route('**/api/agents**', async (route) => {
-    await fulfillAgentsRoute(route, [MOCK_AGENT]);
+    await fulfillAgentsRoute(route, agents);
+  });
+
+  await page.route('**/api/health', async (route) => {
+    await fulfillGet(route, { ok: true });
+  });
+
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await fulfillGet(route, {
+      loggedIn: false,
+      profile: 'local',
+      configPath: '/tmp/.amr/config.json',
+      user: null,
+    });
   });
 
   await page.route(VISUAL_GITHUB_REPO_API, async (route) => {
@@ -163,6 +195,25 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
 
   await page.route('**/api/projects', async (route) => {
     await fulfillGet(route, { projects });
+  });
+
+  await page.route('**/api/projects/*/upload', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        files: [
+          {
+            name: 'visual-reference.txt',
+            originalName: 'visual-reference.txt',
+            path: 'visual-reference.txt',
+            size: 55,
+          },
+        ],
+      },
+    });
   });
 
   await page.route('**/api/routines', async (route) => {
@@ -190,6 +241,45 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
     await route.fulfill({
       contentType: 'text/html',
       body: `<!doctype html><html><body><main><h1>${escapeHtml(id)} preview</h1></main></body></html>`,
+    });
+  });
+
+  await page.route('**/api/plugins/*/apply', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2) ?? 'plugin');
+    await route.fulfill({
+      json: {
+        ok: true,
+        query: `Design a ${id} concept.`,
+        contextItems: [],
+        inputs: [],
+        assets: [],
+        mcpServers: [],
+        projectMetadata: {},
+        trust: 'trusted',
+        capabilitiesGranted: ['prompt:inject'],
+        capabilitiesRequired: ['prompt:inject'],
+        appliedPlugin: {
+          snapshotId: `visual-snapshot-${id}`,
+          pluginId: id,
+          pluginVersion: '1.0.0',
+          manifestSourceDigest: 'a'.repeat(64),
+          inputs: {},
+          resolvedContext: { items: [] },
+          capabilitiesGranted: ['prompt:inject'],
+          capabilitiesRequired: ['prompt:inject'],
+          assetsStaged: [],
+          taskKind: 'new-generation',
+          appliedAt: 0,
+          connectorsRequired: [],
+          connectorsResolved: [],
+          mcpServers: [],
+          status: 'fresh',
+        },
+      },
     });
   });
 

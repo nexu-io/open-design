@@ -25,7 +25,9 @@ import {
 } from "@open-design/platform";
 
 import type { ToolPackConfig } from "../config.js";
+import { resolveToolPackLauncherLayout } from "../launcher-layout.js";
 import { readToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
+import { readToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
 import { DESKTOP_LOG_ECHO_ENV } from "./constants.js";
 import { listDirectories, pathExists, removeTree } from "./fs.js";
 import { readBuiltAppManifest } from "./manifest.js";
@@ -362,6 +364,7 @@ export async function uninstallPackedWinApp(config: ToolPackConfig): Promise<Win
 
 export async function cleanupPackedWinNamespace(config: ToolPackConfig): Promise<WinCleanupResult> {
   const paths = resolveWinPaths(config);
+  const launcher = resolveToolPackLauncherLayout(config);
   const registeredPaths = await resolveWinRegisteredPaths(config, paths);
   const removalPlan = await createWinRemovalPlan(config);
   if (await pathExists(registeredPaths.uninstallerPath)) {
@@ -370,6 +373,7 @@ export async function cleanupPackedWinNamespace(config: ToolPackConfig): Promise
   const stop = await stopPackedWinApp(config);
   const removedOutputRoot = await pathExists(config.roots.output.namespaceRoot);
   const removedRuntimeNamespaceRoot = await pathExists(config.roots.runtime.namespaceRoot);
+  const removedLauncherNamespaceRoot = await pathExists(launcher.paths.namespaceRoot);
   const removedProductUserDataRoot = removalPlan.some((target) => target.scope === "product-user-data" && target.willRemove && target.exists);
   await cleanupWinRegistryResidues(registeredPaths, config);
   for (const target of removalPlan) {
@@ -377,8 +381,10 @@ export async function cleanupPackedWinNamespace(config: ToolPackConfig): Promise
   }
   await removeTree(config.roots.output.namespaceRoot);
   await removeTree(config.roots.runtime.namespaceRoot);
+  await removeTree(launcher.paths.namespaceRoot);
   return {
     namespace: config.namespace,
+    removedLauncherNamespaceRoot,
     removedOutputRoot,
     removedProductUserDataRoot,
     removedRuntimeNamespaceRoot,
@@ -452,6 +458,8 @@ export async function inspectPackedWinApp(config: ToolPackConfig, options: { exp
   const stamp = desktopStamp(config);
   const status = await requestJsonIpc<DesktopStatusSnapshot>(stamp.ipc, { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs: 2000 }).catch(() => null);
   const updateAction = resolveUpdateAction(options.updateAction);
+  const launcher = await readToolPackLauncherRuntimeSnapshot(config);
+  const updateCache = await readToolPackUpdateCacheLifecycleSnapshot(config);
   return {
     ...(options.expr == null ? {} : {
       eval: await requestJsonIpc<DesktopEvalResult>(
@@ -460,7 +468,18 @@ export async function inspectPackedWinApp(config: ToolPackConfig, options: { exp
         { timeoutMs: 5000 },
       ),
     }),
-    launcher: await readToolPackLauncherRuntimeSnapshot(config),
+    launcher,
+    launcherSource: {
+      kind: "tools-pack-runtime",
+      note: "launcher snapshot is read from the tools-pack runtime root; user-installed launcher state is reported by the running desktop status and its AppData paths",
+      root: launcher.root,
+    },
+    updateCache,
+    updateCacheSource: {
+      kind: "tools-pack-runtime",
+      note: "update cache snapshot is read from the tools-pack runtime root; user-installed update cache is reported by status.update.paths",
+      root: updateCache.updateRoot,
+    },
     ...(options.path == null ? {} : {
       screenshot: await requestJsonIpc<DesktopScreenshotResult>(
         stamp.ipc,

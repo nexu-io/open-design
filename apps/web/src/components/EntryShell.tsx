@@ -597,7 +597,13 @@ export function EntryShell({
       ...(payload.contextConnectors && payload.contextConnectors.length > 0
         ? { contextConnectors: payload.contextConnectors }
         : {}),
-      ...(payload.workingDir ? { userWorkingDir: payload.workingDir } : {}),
+      // The Home working-directory picker grants the agent read-only
+      // awareness of a local folder (via `--add-dir`), it does NOT import
+      // that folder into Design Files. So the picked path becomes the new
+      // project's `linkedDirs` rather than its `baseDir`/`userWorkingDir`:
+      // Design Files stays the managed `.od/projects/<id>` artifact store,
+      // independent of the user's local files.
+      ...(payload.workingDir ? { linkedDirs: [payload.workingDir] } : {}),
       ...(payload.examplePromptContext ? {
         examplePrompt: true,
         examplePromptTitle: payload.examplePromptContext.title,
@@ -611,6 +617,7 @@ export function EntryShell({
       metadata,
       pendingPrompt: payload.prompt,
       ...(payload.pluginId ? { pluginId: payload.pluginId } : {}),
+      ...(payload.pluginType ? { pluginType: payload.pluginType } : {}),
       ...(payload.appliedPluginSnapshotId
         ? { appliedPluginSnapshotId: payload.appliedPluginSnapshotId }
         : {}),
@@ -619,7 +626,10 @@ export function EntryShell({
       ...(payload.attachments && payload.attachments.length > 0
         ? { pendingFiles: payload.attachments }
         : {}),
-      ...(payload.workingDirToken ? { userWorkingDirToken: payload.workingDirToken } : {}),
+      // No `userWorkingDirToken`: linkedDirs grant read-only `--add-dir`
+      // access and are validated by the daemon at create time, so they do
+      // not need the desktop main-process trust token that baseDir imports
+      // require for write access.
       autoSendFirstMessage: true,
     });
   }
@@ -757,6 +767,7 @@ export function EntryShell({
           >
             <div data-testid="entry-view-home" data-active={view === 'home' ? 'true' : 'false'} {...inactiveViewProps(view === 'home')}>
               <HomeView
+                isActive={view === 'home'}
                 projects={projects}
                 projectsLoading={projectsLoading}
                 designSystems={designSystems}

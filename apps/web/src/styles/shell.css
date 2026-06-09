@@ -704,7 +704,7 @@
 .chrome-file-action-menus {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .chrome-action-with-label {
   gap: 8px;
@@ -796,6 +796,8 @@
 @media (max-width: 880px) {
   .chrome-action-secondary span { display: none; }
   .chrome-action-secondary { padding: 0 10px; }
+  .chrome-action-secondary.chrome-action-text-only span { display: inline; }
+  .chrome-action-secondary.chrome-action-text-only { padding: 0 12px; }
 }
 @media (max-width: 720px) {
   .app-chrome-content { display: none; }
