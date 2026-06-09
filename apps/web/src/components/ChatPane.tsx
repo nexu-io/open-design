@@ -947,6 +947,16 @@ export function ChatPane({
       errorDiagnosticCopyTimerRef.current = null;
     }
   }, []);
+  // Unclassified failures fall through to the raw upstream payload, which can
+  // be a multi-KB JSON/HTML blob (#3907). Clamp the card to a short summary
+  // and keep the full payload behind an explicit details toggle. Anything
+  // multiline or longer than a sentence-ish line gets the toggle.
+  const errorNeedsClamp =
+    !!displayError && (displayError.length > 160 || displayError.includes('\n'));
+  const [errorDetailsExpanded, setErrorDetailsExpanded] = useState(false);
+  useEffect(() => {
+    setErrorDetailsExpanded(false);
+  }, [displayError]);
   // The failed run whose error this top-level card represents. AssistantMessage
   // suppresses only THIS message's per-message error pill (to avoid the
   // duplicate); other failed turns — older history, or once a follow-up makes
@@ -2016,10 +2026,30 @@ export function ChatPane({
                 scrollContainerRef={logRef}
               />
               {displayError ? (
-                <div className="msg error">
-                  <span className="chat-error-text">{displayError}</span>
+                <div className="msg error" data-error-expanded={errorDetailsExpanded ? 'true' : 'false'}>
+                  <span
+                    className="chat-error-text"
+                    data-clamped={errorNeedsClamp && !errorDetailsExpanded ? 'true' : 'false'}
+                  >
+                    {displayError}
+                  </span>
+                  {/* errorDiagnosticText is non-null whenever displayError is,
+                      so this container — and the details toggle inside it —
+                      always renders for a clamped error. If diagnostics ever
+                      become conditional, the toggle must move out of this gate
+                      or long errors would clamp with no way to expand. */}
                   {errorDiagnosticText || showErrorActions || (retryAssistant && onRetry && runFailureUi) ? (
                     <div className="chat-error-actions">
+                      {errorNeedsClamp ? (
+                        <button
+                          type="button"
+                          className="ghost chat-error-details-toggle"
+                          aria-expanded={errorDetailsExpanded}
+                          onClick={() => setErrorDetailsExpanded((prev) => !prev)}
+                        >
+                          {errorDetailsExpanded ? t('chat.errorHideDetails') : t('chat.errorShowDetails')}
+                        </button>
+                      ) : null}
                       {showByokRecoveryCta ? (
                         <button
                           type="button"

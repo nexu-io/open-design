@@ -1510,6 +1510,8 @@ export const tr: Dict = {
   'chat.openFile': '{name}’ı aç',
   'chat.copyPrompt': 'Promptu kopyala',
   'chat.copyErrorDiagnostic': 'Hata tanısını kopyala',
+  'chat.errorShowDetails': 'Ayrıntıları göster',
+  'chat.errorHideDetails': 'Ayrıntıları gizle',
   'chat.copyDone': 'Kopyalandı!',
   'chat.inspect.noEditableTargets': 'This page has no editable elements yet.',
   'chat.inspect.noCommentTargets': 'This page has no commentable elements yet.',

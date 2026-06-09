@@ -740,7 +740,31 @@
   justify-content: space-between;
   gap: 10px;
 }
-.chat-error-text { min-width: 0; }
+.chat-error-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* Collapsed: show a summary-sized slice of the payload (#3907). The full
+   text stays in the DOM so selection/copy keep working. */
+.chat-error-text[data-clamped='true'] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+/* Expanded: bounded, scrollable details instead of flooding the column. */
+.msg.error[data-error-expanded='true'] {
+  align-items: flex-start;
+}
+.msg.error[data-error-expanded='true'] .chat-error-text {
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.chat-error-details-toggle {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 .chat-error-actions {
   flex: 0 0 auto;
   display: flex;

@@ -1510,6 +1510,8 @@ export const ptBR: Dict = {
   'chat.openFile': 'Abrir {name}',
   'chat.copyPrompt': 'Copiar prompt',
   'chat.copyErrorDiagnostic': 'Copiar diagnóstico do erro',
+  'chat.errorShowDetails': 'Mostrar detalhes',
+  'chat.errorHideDetails': 'Ocultar detalhes',
   'chat.copyDone': 'Copiado!',
   'chat.inspect.noEditableTargets': 'This page has no editable elements yet.',
   'chat.inspect.noCommentTargets': 'This page has no commentable elements yet.',

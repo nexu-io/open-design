@@ -2061,6 +2061,8 @@ export interface Dict {
   'chat.openFile': string;
   'chat.copyPrompt': string;
   'chat.copyErrorDiagnostic': string;
+  'chat.errorShowDetails': string;
+  'chat.errorHideDetails': string;
   'chat.copyDone': string;
   'chat.composerPlaceholder': string;
   'chat.activeFileEditingLabel': string;

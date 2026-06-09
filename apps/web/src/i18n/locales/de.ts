@@ -1510,6 +1510,8 @@ export const de: Dict = {
   'chat.openFile': '{name} öffnen',
   'chat.copyPrompt': 'Prompt kopieren',
   'chat.copyErrorDiagnostic': 'Fehlerdiagnose kopieren',
+  'chat.errorShowDetails': 'Details anzeigen',
+  'chat.errorHideDetails': 'Details ausblenden',
   'chat.copyDone': 'Kopiert!',
   'chat.inspect.noEditableTargets': 'This page has no editable elements yet.',
   'chat.inspect.noCommentTargets': 'This page has no commentable elements yet.',

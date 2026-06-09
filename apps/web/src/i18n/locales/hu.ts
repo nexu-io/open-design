@@ -1510,6 +1510,8 @@ export const hu: Dict = {
   'chat.openFile': '{name} megnyitása',
   'chat.copyPrompt': 'Prompt másolása',
   'chat.copyErrorDiagnostic': 'Hibadiagnosztika másolása',
+  'chat.errorShowDetails': 'Részletek megjelenítése',
+  'chat.errorHideDetails': 'Részletek elrejtése',
   'chat.copyDone': 'Másolva!',
   'chat.inspect.noEditableTargets': 'This page has no editable elements yet.',
   'chat.inspect.noCommentTargets': 'This page has no commentable elements yet.',

@@ -1510,6 +1510,8 @@ export const ar: Dict = {
   'chat.openFile': 'فتح {name}',
   'chat.copyPrompt': 'نسخ الأمر',
   'chat.copyErrorDiagnostic': 'نسخ تشخيصات الخطأ',
+  'chat.errorShowDetails': 'عرض التفاصيل',
+  'chat.errorHideDetails': 'إخفاء التفاصيل',
   'chat.copyDone': 'تم النسخ!',
   'chat.inspect.noEditableTargets': 'لم يُعثر على نصوص قابلة للتحرير أو أهداف نمط.',
   'chat.inspect.noCommentTargets': 'لم يُعثر على نصوص قابلة للتعليق أو أهداف مرئية.',

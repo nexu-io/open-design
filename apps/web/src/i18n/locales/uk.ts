@@ -1510,6 +1510,8 @@ export const uk: Dict = {
   'chat.openFile': 'Відкрити {name}',
   'chat.copyPrompt': 'Копіювати запит',
   'chat.copyErrorDiagnostic': 'Скопіювати діагностику помилки',
+  'chat.errorShowDetails': 'Показати деталі',
+  'chat.errorHideDetails': 'Приховати деталі',
   'chat.copyDone': 'Скопійовано!',
   'chat.inspect.noEditableTargets': 'Не знайдено редагованого тексту чи цілей стилю.',
   'chat.inspect.noCommentTargets': 'Не знайдено тексту чи візуальних цілей для коментування.',

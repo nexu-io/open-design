@@ -1510,6 +1510,8 @@ export const ja: Dict = {
   'chat.openFile': '{name} を開く',
   'chat.copyPrompt': 'プロンプトをコピー',
   'chat.copyErrorDiagnostic': 'エラー診断をコピー',
+  'chat.errorShowDetails': '詳細を表示',
+  'chat.errorHideDetails': '詳細を隠す',
   'chat.copyDone': 'コピーしました！',
   'chat.inspect.noEditableTargets': '編集可能なテキストまたはスタイルの対象が見つかりません。',
   'chat.inspect.noCommentTargets': 'コメント可能なテキストまたはビジュアルの対象が見つかりません。',

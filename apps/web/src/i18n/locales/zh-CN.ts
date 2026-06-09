@@ -1510,6 +1510,8 @@ export const zhCN: Dict = {
   'chat.openFile': '打开 {name}',
   'chat.copyPrompt': '复制提示词',
   'chat.copyErrorDiagnostic': '复制错误诊断信息',
+  'chat.errorShowDetails': '显示详情',
+  'chat.errorHideDetails': '收起详情',
   'chat.copyDone': '已复制！',
   'chat.inspect.noEditableTargets': '未找到可编辑的文本或样式目标。',
   'chat.inspect.noCommentTargets': '未找到可评论的文本或视觉目标。',
