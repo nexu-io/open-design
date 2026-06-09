@@ -511,6 +511,7 @@ export const esES: Dict = {
   'homeHero.footer.ratio': 'Proporción',
   'homeHero.footer.duration': 'Duración',
   'homeHero.footer.resolution': 'Resolución',
+  'homeHero.footer.pageQuantity': 'Cantidad de páginas',
   'homeHero.footer.speakerNotes': 'Notas',
   'homeHero.footer.noSpeakerNotes': 'Sin notas',
   'homeHero.footer.availableCount': '{n} disponibles',

@@ -358,6 +358,27 @@ describe('Plan §8 e2e — daemon-side anchors', () => {
     }
   });
 
+  it('keeps deferred manifest defaults out when resolving plugin snapshots', async () => {
+    await installLocal(FIXTURE_DIR);
+
+    const result = resolvePluginSnapshot({
+      db,
+      body: {
+        pluginId: 'sample-plugin',
+        pluginInputs: { topic: 'demo', audience: '' },
+        deferredDefaultInputNames: ['audience'],
+      },
+      projectId: 'project-1',
+      registry: REGISTRY_VIEW,
+    });
+
+    expect(result?.ok).toBe(true);
+    if (result?.ok) {
+      expect(result.snapshot.inputs).toMatchObject({ topic: 'demo' });
+      expect(result.snapshot.inputs).not.toHaveProperty('audience');
+    }
+  });
+
   it('capabilitiesRequiredError envelope shape stays stable for code agents', () => {
     const err = capabilitiesRequiredError({
       pluginId: 'sample',

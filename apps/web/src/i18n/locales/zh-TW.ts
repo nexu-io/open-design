@@ -511,6 +511,7 @@ export const zhTW: Dict = {
   'homeHero.footer.ratio': '比例',
   'homeHero.footer.duration': '時長',
   'homeHero.footer.resolution': '解析度',
+  'homeHero.footer.pageQuantity': '頁數',
   'homeHero.footer.speakerNotes': '备注',
   'homeHero.footer.noSpeakerNotes': '無備忘稿',
   'homeHero.footer.availableCount': '{n} 个可用',

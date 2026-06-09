@@ -511,6 +511,7 @@ export const id: Dict = {
   'homeHero.footer.ratio': 'Rasio',
   'homeHero.footer.duration': 'Durasi',
   'homeHero.footer.resolution': 'Resolusi',
+  'homeHero.footer.pageQuantity': 'Jumlah halaman',
   'homeHero.footer.speakerNotes': 'Catatan',
   'homeHero.footer.noSpeakerNotes': 'Tanpa catatan',
   'homeHero.footer.availableCount': '{n} tersedia',

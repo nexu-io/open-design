@@ -511,6 +511,7 @@ export const uk: Dict = {
   'homeHero.footer.ratio': 'Співвідношення',
   'homeHero.footer.duration': 'Тривалість',
   'homeHero.footer.resolution': 'Роздільність',
+  'homeHero.footer.pageQuantity': 'Кількість сторінок',
   'homeHero.footer.speakerNotes': 'Нотатки',
   'homeHero.footer.noSpeakerNotes': 'Без нотаток',
   'homeHero.footer.availableCount': 'Доступно: {n}',

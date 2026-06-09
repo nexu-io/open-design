@@ -76,6 +76,35 @@ describe('applyPlugin', () => {
     expect(result.result.appliedPlugin.inputs.audience).toBe('general');
   });
 
+  it('leaves deferred manifest defaults out of the applied snapshot', () => {
+    const result = applyPlugin({
+      plugin: pluginFixture(),
+      inputs: { topic: 'design' },
+      registry: REGISTRY,
+      deferredDefaultInputNames: ['audience'],
+    });
+    expect(result.result.appliedPlugin.inputs).not.toHaveProperty('audience');
+  });
+
+  it('does not pass through blank deferred manifest inputs', () => {
+    const result = applyPlugin({
+      plugin: pluginFixture(),
+      inputs: { topic: 'design', audience: '' },
+      registry: REGISTRY,
+      deferredDefaultInputNames: ['audience'],
+    });
+    expect(result.result.appliedPlugin.inputs).not.toHaveProperty('audience');
+  });
+
+  it('does not let deferred defaults bypass required inputs without defaults', () => {
+    expect(() => applyPlugin({
+      plugin: pluginFixture(),
+      inputs: {},
+      registry: REGISTRY,
+      deferredDefaultInputNames: ['topic'],
+    })).toThrow(MissingInputError);
+  });
+
   it('resolves localized use-case queries at apply time', () => {
     const base = pluginFixture();
     const result = applyPlugin({

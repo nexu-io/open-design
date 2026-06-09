@@ -73,6 +73,7 @@ export async function createProject(input: {
   pluginId?: string;
   appliedPluginSnapshotId?: string;
   pluginInputs?: Record<string, unknown>;
+  deferredDefaultInputNames?: string[];
 }): Promise<{ project: Project; conversationId: string; appliedPluginSnapshotId?: string }> {
   try {
     // `randomUUID` falls back to `crypto.getRandomValues` / `Math.random`
@@ -1283,6 +1284,7 @@ export async function applyPlugin(
   pluginId: string,
   options: {
     inputs?: Record<string, unknown>;
+    deferredDefaultInputNames?: string[];
     projectId?: string;
     grantCaps?: string[];
     locale?: string;
@@ -1296,6 +1298,7 @@ export async function applyPlugin(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           inputs: options.inputs ?? {},
+          deferredDefaultInputNames: options.deferredDefaultInputNames ?? [],
           projectId: options.projectId,
           grantCaps: options.grantCaps ?? [],
           locale: options.locale,

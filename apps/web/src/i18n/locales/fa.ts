@@ -511,6 +511,7 @@ export const fa: Dict = {
   'homeHero.footer.ratio': 'نسبت',
   'homeHero.footer.duration': 'مدت',
   'homeHero.footer.resolution': 'وضوح',
+  'homeHero.footer.pageQuantity': 'تعداد صفحات',
   'homeHero.footer.speakerNotes': 'یادداشت‌ها',
   'homeHero.footer.noSpeakerNotes': 'بدون یادداشت',
   'homeHero.footer.availableCount': '{n} در دسترس',

@@ -511,6 +511,7 @@ export const hu: Dict = {
   'homeHero.footer.ratio': 'Arány',
   'homeHero.footer.duration': 'Időtartam',
   'homeHero.footer.resolution': 'Felbontás',
+  'homeHero.footer.pageQuantity': 'Oldalszám',
   'homeHero.footer.speakerNotes': 'Jegyzetek',
   'homeHero.footer.noSpeakerNotes': 'Nincs jegyzet',
   'homeHero.footer.availableCount': '{n} elérhető',

@@ -511,6 +511,7 @@ export const zhCN: Dict = {
   'homeHero.footer.ratio': '比例',
   'homeHero.footer.duration': '时长',
   'homeHero.footer.resolution': '分辨率',
+  'homeHero.footer.pageQuantity': '页数',
   'homeHero.footer.speakerNotes': '备注',
   'homeHero.footer.noSpeakerNotes': '无备注',
   'homeHero.footer.availableCount': '{n} 个可用',

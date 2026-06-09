@@ -1984,13 +1984,14 @@ function FooterInputOption({
     );
   }
   if (field.type === 'select' && Array.isArray(field.options)) {
+    const emptyOptionLabel = footerEmptyOptionLabel(field, t);
     return (
       <FooterSelectOption
         fieldName={field.name}
         label={label}
         value={value === undefined || value === null ? '' : String(value)}
         options={[
-          ...(field.placeholder ? [{ value: '', label: field.placeholder }] : []),
+          ...(emptyOptionLabel ? [{ value: '', label: emptyOptionLabel }] : []),
           ...field.options.map((option) => ({
             value: option,
             label: footerInputValueLabel(field, option, t),
@@ -2015,6 +2016,11 @@ function FooterInputOption({
       />
     </label>
   );
+}
+
+function footerEmptyOptionLabel(field: InputFieldSpec, t: ReturnType<typeof useT>): string | null {
+  if (field.name === 'slideCount') return field.placeholder ?? t('homeHero.footer.pageQuantity');
+  return field.placeholder ?? null;
 }
 
 function FooterSelectOption({

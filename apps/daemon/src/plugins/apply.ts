@@ -77,6 +77,11 @@ export interface ApplyInput {
   // tests), the connector bindings stay in `pending` status and no
   // auto-prompt is derived.
   connectorProbe?: ConnectorProbe | undefined;
+  // Apply callers can intentionally defer selected manifest defaults when a
+  // visible UI control is still neutral. Deferred names stay out of the applied
+  // snapshot so first-turn discovery can ask instead of treating defaults as
+  // user-confirmed answers.
+  deferredDefaultInputNames?: string[] | undefined;
 }
 
 export interface ApplyComputed {
@@ -93,7 +98,7 @@ export function applyPlugin(input: ApplyInput): ApplyComputed {
   const rawTrust: TrustTier = input.trust ?? input.plugin.trust;
   const trust: ApplyTrust = rawTrust === 'restricted' ? 'restricted' : 'trusted';
 
-  const validated = validateInputs(manifest, input.inputs);
+  const validated = validateInputs(manifest, input.inputs, new Set(input.deferredDefaultInputNames ?? []));
   if (validated.missing.length > 0) {
     throw new MissingInputError(validated.missing);
   }
@@ -233,18 +238,26 @@ interface ValidationResult {
   missing: string[];
 }
 
-function validateInputs(manifest: PluginManifest, raw: Record<string, unknown>): ValidationResult {
+function validateInputs(
+  manifest: PluginManifest,
+  raw: Record<string, unknown>,
+  deferredDefaultInputNames: ReadonlySet<string> = new Set(),
+): ValidationResult {
   const fields = manifest.od?.inputs ?? [];
   const coerced: Record<string, string | number | boolean> = {};
   const missing: string[] = [];
+  const declaredInputNames = new Set<string>();
 
   for (const field of fields) {
     const name = field.name;
     if (!name) continue;
+    declaredInputNames.add(name);
     const provided = raw[name];
     if (provided === undefined || provided === null || provided === '') {
       const fallback = field.default;
-      if (fallback !== undefined && fallback !== null && fallback !== '') {
+      const hasDefault = fallback !== undefined && fallback !== null && fallback !== '';
+      if (deferredDefaultInputNames.has(name) && hasDefault) continue;
+      if (hasDefault) {
         coerced[name] = coerceScalar(fallback as unknown);
       } else if (field.required === true) {
         missing.push(name);
@@ -259,6 +272,7 @@ function validateInputs(manifest: PluginManifest, raw: Record<string, unknown>):
   // but predictable; the digest captures whatever survives coercion.
   for (const [key, value] of Object.entries(raw)) {
     if (key in coerced) continue;
+    if (declaredInputNames.has(key)) continue;
     if (value === undefined || value === null) continue;
     coerced[key] = coerceScalar(value);
   }

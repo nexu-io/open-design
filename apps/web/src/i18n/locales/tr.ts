@@ -511,6 +511,7 @@ export const tr: Dict = {
   'homeHero.footer.ratio': 'Oran',
   'homeHero.footer.duration': 'Süre',
   'homeHero.footer.resolution': 'Çözünürlük',
+  'homeHero.footer.pageQuantity': 'Sayfa sayısı',
   'homeHero.footer.speakerNotes': 'Notlar',
   'homeHero.footer.noSpeakerNotes': 'Not yok',
   'homeHero.footer.availableCount': '{n} mevcut',

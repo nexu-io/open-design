@@ -511,6 +511,7 @@ export const th: Dict = {
   'homeHero.footer.ratio': 'สัดส่วน',
   'homeHero.footer.duration': 'ระยะเวลา',
   'homeHero.footer.resolution': 'ความละเอียด',
+  'homeHero.footer.pageQuantity': 'จำนวนหน้า',
   'homeHero.footer.speakerNotes': 'บันทึก',
   'homeHero.footer.noSpeakerNotes': 'ไม่มีโน้ต',
   'homeHero.footer.availableCount': 'พร้อมใช้งาน {n} รายการ',

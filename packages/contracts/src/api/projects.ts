@@ -249,6 +249,7 @@ export interface CreateProjectRequest {
   pluginId?: string;
   appliedPluginSnapshotId?: string;
   pluginInputs?: Record<string, unknown>;
+  deferredDefaultInputNames?: string[];
   /** Session mode for the default conversation seeded with the project. */
   conversationMode?: ChatSessionMode;
   customInstructions?: string;

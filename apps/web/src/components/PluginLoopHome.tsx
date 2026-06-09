@@ -31,6 +31,7 @@ export interface PluginLoopSubmit {
   pluginTitle: string | null;
   taskKind: string | null;
   pluginInputs?: Record<string, unknown> | null;
+  deferredDefaultInputNames?: string[] | null;
   contextPlugins?: Array<{ id: string; title: string; description?: string }> | null;
   contextMcpServers?: Array<{ id: string; label?: string; transport?: string; url?: string; command?: string }> | null;
   contextConnectors?: Array<{ id: string; name: string; provider?: string; category?: string; status?: string; accountLabel?: string }> | null;
