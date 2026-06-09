@@ -15,6 +15,9 @@
  * after every navigation so the host can render its own counter / dots.
  */
 import {
+  injectOpenDesignAttribution,
+} from '@open-design/contracts';
+import {
   buildManualEditBridge,
   buildManualEditBridgeStyle,
   MANUAL_EDIT_DISCOVERY_SELECTOR,
@@ -32,6 +35,7 @@ export type SrcdocOptions = {
   paletteBridge?: boolean;
   initialPalette?: string | null;
   previewFocusGuard?: boolean;
+  attribution?: boolean;
 };
 
 export function buildSrcdoc(
@@ -79,7 +83,10 @@ export function buildSrcdoc(
   // it to a per-call option would force iframe srcdoc regeneration (and a
   // visible flash) every time the host toggle flips.
   const withTweaks = injectTweaksBridge(withEdit);
-  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withTweaks));
+  const withAttribution = options.attribution
+    ? injectOpenDesignAttribution(withTweaks)
+    : withTweaks;
+  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withAttribution));
 }
 
 /**

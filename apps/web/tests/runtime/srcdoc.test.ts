@@ -37,6 +37,13 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('foreignObject');
   });
 
+  it('injects Open Design attribution when requested for previews', () => {
+    const srcdoc = buildSrcdoc('<main>Hero</main>', { attribution: true });
+
+    expect(srcdoc).toContain('data-open-design-attribution="true"');
+    expect(srcdoc).toContain('Made with Open Design');
+  });
+
   it('paints an opaque background before drawing so empty rasters never flatten to black', () => {
     const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
 

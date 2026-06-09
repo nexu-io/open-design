@@ -5271,6 +5271,7 @@ function HtmlViewer({
       editBridge: manualEditRequiresSrcDoc,
       paletteBridge: false,
       previewFocusGuard: true,
+      attribution: true,
     }) : ''),
     [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditRequiresSrcDoc],
   );

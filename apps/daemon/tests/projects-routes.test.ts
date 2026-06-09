@@ -375,7 +375,15 @@ describe('GET /api/projects/:id resolvedDir', () => {
     const rawResp = await fetch(`${baseUrl}/api/projects/${projectId}/raw/index.html`);
     expect(rawResp.status).toBe(200);
     expect(rawResp.headers.get('content-type')).toContain('text/html');
-    expect(await rawResp.text()).toContain('<h1>ok</h1>');
+    const rawHtml = await rawResp.text();
+    expect(rawHtml).toContain('<h1>ok</h1>');
+    expect(rawHtml).not.toContain('Made with Open Design');
+
+    const previewResp = await fetch(`${baseUrl}/api/projects/${projectId}/raw/index.html?odPreviewBridge=scroll`);
+    expect(previewResp.status).toBe(200);
+    const previewHtml = await previewResp.text();
+    expect(previewHtml).toContain('<h1>ok</h1>');
+    expect(previewHtml).toContain('Made with Open Design');
 
     const fileResp = await fetch(`${baseUrl}/api/projects/${projectId}/files/index.html`);
     expect(fileResp.status).toBe(200);

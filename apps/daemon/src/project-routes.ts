@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { Express, Response } from 'express';
 import {
   defaultScenarioPluginIdForProjectMetadata,
+  injectOpenDesignAttribution,
   type ChatSessionMode,
   type PluginManifest,
 } from '@open-design/contracts';
@@ -2240,6 +2241,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             if (wantsUrlPreviewSnapshotBridge(req.query.odPreviewBridge)) {
               html = injectUrlPreviewBridge(html, 'snapshot');
             }
+            html = injectOpenDesignAttribution(html);
             return html;
           }
           return file.buffer;
