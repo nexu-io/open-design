@@ -25,6 +25,7 @@ interface AgentsBody {
 
 interface AnalyticsConfigBody {
   enabled: boolean;
+  env: string;
   key: string | null;
   host: string | null;
   installationId?: string | null;
@@ -215,6 +216,7 @@ describe('app-config auth context', () => {
     const aliceConfig = (await aliceRes.json()) as AnalyticsConfigBody;
     expect(aliceConfig).toEqual({
       enabled: true,
+      env: 'development',
       key: 'phc_test_key',
       host: 'https://posthog.example.test',
       installationId: 'alice-installation',
@@ -227,6 +229,7 @@ describe('app-config auth context', () => {
     const bobConfig = (await bobRes.json()) as AnalyticsConfigBody;
     expect(bobConfig).toEqual({
       enabled: false,
+      env: 'development',
       key: 'phc_test_key',
       host: 'https://posthog.example.test',
       installationId: 'bob-installation',
