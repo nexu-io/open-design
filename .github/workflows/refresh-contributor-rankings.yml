@@ -55,7 +55,7 @@ jobs:
           GITHUB_TOKEN: ${{ steps.open-design-bot-token.outputs.token }}
           REPO: ${{ github.repository }}
           GITHUB_RUN_STARTED_AT: ${{ github.event.repository.updated_at }}
-        run: node scripts/refresh-contributor-rankings.mjs
+        run: node --experimental-strip-types scripts/refresh-contributor-rankings.ts
 
       - name: Create refresh pull request
         uses: peter-evans/create-pull-request@v8
