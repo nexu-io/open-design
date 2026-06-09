@@ -162,6 +162,13 @@ interface Props {
 
 type HomeMentionTab = 'all' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors';
 
+// In the combined "All" overview, every surface is capped to a handful of top
+// matches so no single section floods the picker. The dedicated "Design files"
+// tab is exempt: staged files are the user's own finite content, so that tab
+// lists every match (the results panel scrolls) and its count reflects the true
+// total rather than the truncated preview.
+const HOME_MENTION_ALL_TAB_PREVIEW = 6;
+
 interface HomeMentionOption {
   id: string;
   icon: IconName;
@@ -295,7 +302,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         ? stagedFiles
             .map((file, index) => ({ file, index }))
             .filter(({ file }) => fileMatchesQuery(file, mentionQuery))
-            .slice(0, 6)
         : [],
     [mentionActive, mentionQuery, stagedFiles],
   );
@@ -329,7 +335,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   );
   const pickerOpen = mentionActive;
   const tabs: Array<{ id: HomeMentionTab; label: string; count: number }> = [
-    { id: 'all', label: t('common.all'), count: fileMatches.length + pluginMatches.length + skillMatches.length + mcpMatches.length + connectorMatches.length },
+    // The All overview previews at most HOME_MENTION_ALL_TAB_PREVIEW files, so
+    // its badge counts the previewed slice — not the full staged total — to keep
+    // the count aligned with what that tab actually renders. The dedicated files
+    // tab below lists every match and reports the true total.
+    { id: 'all', label: t('common.all'), count: Math.min(fileMatches.length, HOME_MENTION_ALL_TAB_PREVIEW) + pluginMatches.length + skillMatches.length + mcpMatches.length + connectorMatches.length },
     { id: 'files', label: t('chat.mentionTabFiles'), count: fileMatches.length },
     { id: 'plugins', label: t('entry.navPlugins'), count: pluginMatches.length },
     { id: 'skills', label: t('homeHero.skills'), count: skillMatches.length },
@@ -346,7 +356,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       ? {
           id: 'files',
           label: t('chat.mentionSectionFiles'),
-          options: fileMatches.map(({ file, index }) => ({
+          options: (mentionTab === 'files' ? fileMatches : fileMatches.slice(0, HOME_MENTION_ALL_TAB_PREVIEW)).map(({ file, index }) => ({
             id: `file-${index}-${file.name}`,
             icon: isImageFile(file) ? 'image' : 'file',
             title: file.name,
