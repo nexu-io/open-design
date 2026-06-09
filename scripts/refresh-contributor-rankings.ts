@@ -336,8 +336,13 @@ function jsStr(s: string | null | undefined): string {
     .replace(/\n/g, "\\n");
 }
 
+// Render shape MUST end with a newline before `];` so it round-trips through
+// the CURATED_FIRST_ISSUES_RE regex below. The empty case also keeps the
+// newline (`[\n];`) — otherwise a zero-result week emits `[];` once and the
+// next scheduled run fails to re-find the block. Covered by the round-trip
+// assertion in main()'s self-test.
 function renderCurated(items: CuratedRow[]): string {
-  if (items.length === 0) return "const CURATED_FIRST_ISSUES = [];";
+  if (items.length === 0) return "const CURATED_FIRST_ISSUES = [\n];";
   const blocks = items.map((it) => {
     const labels = it.labels.map((l) => `{ name: '${jsStr(l.name)}' }`).join(", ");
     return [
@@ -351,6 +356,44 @@ function renderCurated(items: CuratedRow[]): string {
     ].join("\n");
   });
   return ["const CURATED_FIRST_ISSUES = [", blocks.join(",\n"), "];"].join("\n");
+}
+
+const RANKING_SNAPSHOT_RE = /const RANKING_SNAPSHOT = \{[\s\S]*?\n\};/;
+const CURATED_FIRST_ISSUES_RE = /const CURATED_FIRST_ISSUES = \[[\s\S]*?\n\];/;
+
+// Self-test: every shape renderCurated/renderSnapshot can produce must match
+// its replacement regex. Failing here is preferable to producing a one-shot
+// snapshot that the *next* run can't read.
+function assertRoundTrips(): void {
+  const cases: { label: string; rendered: string; re: RegExp }[] = [
+    { label: "renderCurated([])", rendered: renderCurated([]), re: CURATED_FIRST_ISSUES_RE },
+    {
+      label: "renderCurated(populated)",
+      rendered: renderCurated([
+        {
+          number: 1,
+          title: "x",
+          html_url: "https://example.com",
+          labels: [{ name: "good first issue" }],
+          skill: "Polish",
+        },
+      ]),
+      re: CURATED_FIRST_ISSUES_RE,
+    },
+    {
+      label: "renderSnapshot(empty)",
+      rendered: renderSnapshot({ generatedAt: "1970-01-01T00:00:00Z", weekly: [], allTime: [] }),
+      re: RANKING_SNAPSHOT_RE,
+    },
+  ];
+  for (const c of cases) {
+    if (!c.re.test(c.rendered)) {
+      throw new Error(
+        `Round-trip self-test failed: ${c.label} did not match its replacement regex.\n` +
+          `Rendered:\n${c.rendered}`,
+      );
+    }
+  }
 }
 
 function renderSnapshot(args: {
@@ -407,6 +450,8 @@ function replaceBlock(source: string, re: RegExp, replacement: string, label: st
 }
 
 async function main(): Promise<void> {
+  assertRoundTrips();
+
   const generatedAt = process.env.GITHUB_RUN_STARTED_AT || new Date().toISOString();
   console.log(`Refreshing contributor rankings @ ${generatedAt} for ${REPO}`);
 
@@ -429,8 +474,8 @@ async function main(): Promise<void> {
 
   const html = await readFile(HTML_PATH, "utf8");
   const next = replaceBlock(
-    replaceBlock(html, /const RANKING_SNAPSHOT = \{[\s\S]*?\n\};/, snapshotBlock, "RANKING_SNAPSHOT"),
-    /const CURATED_FIRST_ISSUES = \[[\s\S]*?\n\];/,
+    replaceBlock(html, RANKING_SNAPSHOT_RE, snapshotBlock, "RANKING_SNAPSHOT"),
+    CURATED_FIRST_ISSUES_RE,
     curatedBlock,
     "CURATED_FIRST_ISSUES",
   );
