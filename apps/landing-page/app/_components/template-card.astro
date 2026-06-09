@@ -116,9 +116,6 @@ const modeLabel = localizeTaxonomyValue(record.mode, locale);
 const scenarioLabel = localizeTaxonomyValue(record.scenario, locale);
 
 const isVideoPreview = record.previewType === 'video' && record.previewVideo;
-const fallbackMediaLabel = record.previewEntryUrl
-  ? (locale === 'zh' || locale === 'zh-tw' ? 'HTML 实时模板' : 'Live HTML template')
-  : (locale === 'zh' || locale === 'zh-tw' ? 'Open Design 模板' : 'Open Design template');
 ---
 
 <article class={`tpl-card${featured ? ' tpl-card-featured' : ''}`} data-mode={record.mode ?? 'misc'} data-scene={dataScene}>
@@ -146,10 +143,7 @@ const fallbackMediaLabel = record.previewEntryUrl
         decoding="async"
       />
     ) : (
-      <span class="tpl-media-empty">
-        <span class="tpl-media-empty-kicker">{fallbackMediaLabel}</span>
-        <span class="tpl-media-empty-title">{name}</span>
-      </span>
+      <span class="tpl-media-empty" aria-hidden="true" />
     )}
     {modeLabel && <span class="tpl-media-kind">{modeLabel}</span>}
   </a>

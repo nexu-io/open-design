@@ -20,11 +20,8 @@ import {
   resolveBundledTitle,
   type BundledPluginRecord,
 } from '../../../_lib/bundled-plugins';
+import { buildPluginDetailFaq } from '../../../_lib/plugin-detail-faq';
 import { getPluginsCopy } from '../../../_lib/plugins-i18n';
-import {
-  getTemplateUseCaseCopy,
-  getTemplateUseCasesForPlugin,
-} from '../../../_lib/template-use-cases';
 import { localeFromPath, localizedHref } from '../../../i18n';
 
 export async function getStaticPaths() {
@@ -73,7 +70,7 @@ const authorUrl = plugin.authorUrl
 
 const title = `${pluginTitle} · Open Design plugin`;
 const description = pluginDescription;
-const templateUseCases = getTemplateUseCasesForPlugin(plugin);
+const detailFaq = buildPluginDetailFaq(plugin, pluginTitle, pluginDescription, locale);
 
 /*
  * Share-dialog copy. The English template stays as a fallback inside
@@ -105,6 +102,18 @@ const jsonLd = [
     programmingLanguage: 'JSON',
     keywords: plugin.tags.join(', '),
     license: 'https://www.apache.org/licenses/LICENSE-2.0',
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: detailFaq.map((item) => ({
+      '@type': 'Question',
+      name: item.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: item.answer,
+      },
+    })),
   },
 ];
 ---
@@ -341,22 +350,6 @@ const jsonLd = [
       </Fragment>
     </dl>
 
-    {templateUseCases.length > 0 && (
-      <section class="detail-block detail-template-usecases">
-        <h2>{locale === 'zh' || locale === 'zh-tw' ? '收录于这些使用场景' : 'Appears in these template use cases'}</h2>
-        <ul class="detail-template-usecase-list">
-          {templateUseCases.map((useCase) => {
-            const useCaseCopy = getTemplateUseCaseCopy(useCase, locale);
-            return (
-              <li>
-                <a href={href(`/templates/${useCase.slug}/`)}>{useCaseCopy.title}</a>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-    )}
-
     {plugin.tags.length > 0 && (
       <section class="detail-block">
         <h2>{pcopy.detailTags}</h2>
@@ -365,6 +358,18 @@ const jsonLd = [
         </ul>
       </section>
     )}
+
+    <section class="detail-block detail-faq" aria-label={locale === 'zh' || locale === 'zh-tw' ? '模板问答' : 'Template Q&A'}>
+      <h2>{locale === 'zh' || locale === 'zh-tw' ? '模板问答' : 'Template Q&A'}</h2>
+      <div class="detail-faq-list">
+        {detailFaq.map((item, index) => (
+          <details class="detail-faq-item" open={index === 0}>
+            <summary>{item.question}</summary>
+            <p>{item.answer}</p>
+          </details>
+        ))}
+      </div>
+    </section>
   </article>
 </Layout>
 
@@ -384,25 +389,27 @@ const jsonLd = [
     background: #000;
   }
 
-  .detail-template-usecase-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
+  .detail-faq-list {
+    display: grid;
+    gap: 12px;
   }
 
-  .detail-template-usecase-list a {
-    display: inline-flex;
+  .detail-faq-item {
     border: 1px solid var(--line);
-    border-radius: 999px;
-    padding: 9px 13px;
-    color: var(--ink);
-    text-decoration: none;
+    border-radius: 8px;
+    background: var(--paper);
+    padding: 18px 20px;
   }
 
-  .detail-template-usecase-list a:hover {
-    border-color: var(--ink);
+  .detail-faq-item summary {
+    cursor: pointer;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .detail-faq-item p {
+    margin: 12px 0 0;
+    color: var(--muted);
+    line-height: 1.65;
   }
 </style>

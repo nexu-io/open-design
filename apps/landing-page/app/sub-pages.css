@@ -1889,14 +1889,10 @@ body.sub-page {
   display: block;
 }
 .tpl-media-empty {
-  display: grid;
-  align-content: end;
-  gap: 8px;
+  display: block;
   width: 100%;
   height: 100%;
-  padding: 18px;
   background:
-    linear-gradient(180deg, rgba(247, 241, 222, 0.25), rgba(21, 20, 15, 0.12)),
     repeating-linear-gradient(
       135deg,
       var(--paper-dark),
@@ -1904,25 +1900,6 @@ body.sub-page {
       var(--paper-warm) 10px,
       var(--paper-warm) 20px
     );
-  color: var(--ink);
-}
-.tpl-media-empty-kicker {
-  width: fit-content;
-  border: 1px solid rgba(21, 20, 15, 0.22);
-  border-radius: 999px;
-  padding: 5px 9px;
-  background: rgba(247, 241, 222, 0.76);
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-.tpl-media-empty-title {
-  max-width: 88%;
-  font-family: var(--display);
-  font-size: clamp(1.35rem, 3vw, 2.15rem);
-  line-height: 1;
-  text-wrap: balance;
 }
 .tpl-media-kind {
   position: absolute;

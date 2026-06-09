@@ -153,8 +153,6 @@ export function Header({
   const productMenuCopy = getHeaderProductMenuCopy(locale);
   const localeDef = getLocaleDefinition(locale);
   const localeBasePath = stripLocaleFromPath(currentPath).pathname;
-  const templateUseCasesLabel =
-    locale === 'zh' || locale === 'zh-tw' ? '使用场景' : 'Template use cases';
   const localeOptions = LANDING_LOCALES.map((entry) => ({
     ...entry,
     href: localePath(entry.code, localeBasePath),
@@ -357,15 +355,6 @@ export function Header({
               {/* Labels come from the localized nav copy (Templates / Skills /
                 Systems) so the dropdown is translated in every locale. */}
               <ul className='nav-dropdown' role='menu'>
-                <li role='none'>
-                  <a
-                    role='menuitem'
-                    href={href('/templates/')}
-                    className={localeBasePath.startsWith('/templates') ? 'is-active' : undefined}
-                  >
-                    <span className='dropdown-name'>{templateUseCasesLabel}</span>
-                  </a>
-                </li>
                 <li role='none'>
                   <a
                     role='menuitem'

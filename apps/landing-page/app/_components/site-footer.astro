@@ -18,8 +18,6 @@ const locale = isLandingLocale(rawLocale) ? rawLocale : DEFAULT_LOCALE;
 const copy = getCommonCopy(locale).header;
 const ui = getLandingUiCopy(locale);
 const href = (path: string) => localizedHref(path, locale);
-const templateUseCasesLabel =
-  locale === 'zh' || locale === 'zh-tw' ? '使用场景' : 'Template use cases';
 const REPO = 'https://github.com/nexu-io/open-design';
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
 const X_TWITTER = 'https://x.com/nexudotio';
@@ -51,7 +49,6 @@ const X_TWITTER = 'https://x.com/nexudotio';
         <h5>{copy.nav.plugins}</h5>
         <ul>
           <li><a href={href('/plugins/templates/')}>{copy.nav.templates}</a></li>
-          <li><a href={href('/templates/')}>{templateUseCasesLabel}</a></li>
           <li><a href={href('/plugins/skills/')}>{copy.nav.skills}</a></li>
           <li><a href={href('/plugins/systems/')}>{copy.nav.systems}</a></li>
         </ul>
