@@ -1631,6 +1631,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const selected = await openFolderDialog();
       if (selected) await setWorkingDirFolder(selected);
     }
+    async function clearWorkingDir() {
+      if (!projectId) return;
+      const base = projectMetadata ?? { kind: 'prototype' as const };
+      const metadata: ProjectMetadata = { ...base, linkedDirs: [] };
+      const result = await patchProject(projectId, { metadata });
+      if (result?.metadata) onProjectMetadataChange?.(result.metadata);
+    }
 
     async function handleSwitchDesignSystem(
       designSystemId: string | null,
@@ -2420,6 +2427,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onOpen={() => void checkWorkingDir()}
               onPickDirectory={() => void handlePickWorkingDir()}
               onSelectRecent={(dir) => void setWorkingDirFolder(dir)}
+              onClear={() => void clearWorkingDir()}
             />
           </div>
         ) : null}

@@ -536,7 +536,7 @@ export const uk: Dict = {
   'homeWorkingDir.replace': 'Change working directory',
   'homeWorkingDir.recent': 'Recent folders',
   'homeWorkingDir.recentEmpty': 'No recent folders',
-  'homeWorkingDir.clear': 'Clear working directory',
+  'homeWorkingDir.clear': 'Remove working directory',
   'homeWorkingDir.hint': 'Let the agent read this local folder (not imported into Design Files)',
   'homeWorkingDir.missing': 'This working folder no longer exists — pick another',
   'homeWorkingDir.applyFailed': 'Couldn\'t set the working directory — the folder may no longer exist',

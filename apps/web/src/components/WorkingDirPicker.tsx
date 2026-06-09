@@ -106,20 +106,6 @@ export function WorkingDirPicker({
           </span>
           <Icon name="chevron-down" size={11} className={styles.triggerChevron} />
         </button>
-        {workingDir && onClear ? (
-          <button
-            type="button"
-            className={styles.clear}
-            aria-label={t('homeWorkingDir.clear')}
-            title={t('homeWorkingDir.clear')}
-            onClick={() => {
-              onClear();
-              setOpen(false);
-            }}
-          >
-            <Icon name="close" size={10} />
-          </button>
-        ) : null}
       </div>
 
       {open ? (
@@ -190,6 +176,22 @@ export function WorkingDirPicker({
               </div>
             ) : null}
           </div>
+
+          {workingDir && onClear ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.item}
+              data-testid="working-dir-clear"
+              onClick={() => {
+                onClear();
+                setOpen(false);
+              }}
+            >
+              <Icon name="close" size={14} className={styles.itemIcon} />
+              <span>{t('homeWorkingDir.clear')}</span>
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>
