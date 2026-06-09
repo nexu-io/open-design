@@ -759,6 +759,41 @@
   flex: 0 0 auto;
   padding: 4px 10px;
 }
+.chat-error-notice {
+  border: 1px solid var(--red-border);
+  background: var(--red-bg);
+  color: var(--red);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 8px;
+  white-space: normal;
+}
+.chat-error-notice__message {
+  font-weight: 600;
+}
+.chat-error-notice__hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.chat-error-notice__details {
+  font-size: 12px;
+}
+.chat-error-notice__details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.chat-error-notice__details pre {
+  margin: 8px 0 0;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}
+.msg.error .chat-error-notice {
+  flex: 1 1 auto;
+}
 /* Contextual primary action in the gray error card (Authorize & retry / Top up). */
 .chat-error-action {
   flex: 0 0 auto;

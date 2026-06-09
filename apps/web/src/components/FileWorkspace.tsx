@@ -89,6 +89,7 @@ import {
 import { AnimatePresence } from 'motion/react';
 import { GenerationPreviewStage } from './GenerationPreviewStage';
 import { AmrGuidance } from './AmrGuidance';
+import { normalizeChatError, type ChatErrorNoticeValue } from './ChatErrorNotice';
 import { buildGenerationPreviewState } from '../runtime/generation-preview';
 import type { ChatMessage } from '../types';
 
@@ -184,7 +185,7 @@ interface Props {
   onWorkspaceContextsChange?: (contexts: WorkspaceContextItem[]) => void;
   messages?: ChatMessage[];
   artifactHtml?: string | null;
-  conversationError?: string | null;
+  conversationError?: ChatErrorNoticeValue | null;
   onRetry?: (message: ChatMessage) => void;
   // Contextual failure recovery, mirrored from the chat error card so the
   // preview surface can offer the same one-click fix (AMR authorize, terminal
@@ -545,6 +546,10 @@ export function FileWorkspace({
     [liveArtifacts],
   );
 
+  const conversationErrorMessage = conversationError
+    ? normalizeChatError(conversationError).message
+    : null;
+
   const refreshProjectFolders = useCallback(async (): Promise<ProjectFolder[]> => {
     const next = await fetchProjectFolders(projectId);
     setProjectFolders(next);
@@ -573,9 +578,9 @@ export function FileWorkspace({
         projectFiles: visibleFiles,
         liveArtifacts,
         artifactHtml,
-        conversationError,
+        conversationError: conversationErrorMessage,
       }),
-    [designSystemProject, messages, streaming, activeTab, visibleFiles, liveArtifacts, artifactHtml, conversationError],
+    [designSystemProject, messages, streaming, activeTab, visibleFiles, liveArtifacts, artifactHtml, conversationErrorMessage],
   );
 
   // Pull the persisted active tab in when the parent's hydration completes

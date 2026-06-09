@@ -54,6 +54,7 @@ vi.mock('../../src/providers/anthropic', () => ({
 
 vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
+  isDaemonAgentExitError: vi.fn().mockReturnValue(false),
   fetchVelaLoginStatus: (...args: unknown[]) => fetchVelaLoginStatus(...args),
   launchAntigravityOauth: (...args: unknown[]) => launchAntigravityOauth(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),

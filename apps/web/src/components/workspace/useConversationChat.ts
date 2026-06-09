@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { streamViaDaemon } from '../../providers/daemon';
+import { isDaemonAgentExitError, streamViaDaemon } from '../../providers/daemon';
 import { listMessages, saveMessage } from '../../state/projects';
-import { appendErrorStatusEvent } from '../../runtime/chat-events';
+import { appendErrorStatusEvent, type ErrorStatusMetadata } from '../../runtime/chat-events';
 import { agentModelDisplayName } from '../../utils/agentLabels';
 import { randomUUID } from '../../utils/uuid';
 import { effectiveAgentModelChoice } from '../agentModelSelection';
+import type { ChatErrorNoticeValue } from '../ChatErrorNotice';
 import {
   createBufferedTextUpdates,
   finalizeActiveAssistantMessagesOnStop,
@@ -46,6 +47,27 @@ function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
 }
 
+function chatErrorFromError(err: Error): ChatErrorNoticeValue {
+  if (!isDaemonAgentExitError(err)) return err.message;
+  return {
+    message: err.message,
+    details: err.details,
+    category: err.category,
+    retryDelayMs: err.retryDelayMs,
+  };
+}
+
+function errorStatusMetadata(err: Error | undefined): ErrorStatusMetadata {
+  const code = (err as (Error & { code?: string }) | undefined)?.code;
+  if (!err || !isDaemonAgentExitError(err)) return code ? { code } : {};
+  return {
+    ...(code ? { code } : {}),
+    diagnostic: err.details,
+    category: err.category,
+    retryDelayMs: err.retryDelayMs,
+  };
+}
+
 export interface ConversationChatContext {
   /** Live app config — selects daemon-vs-api mode and the active agent. */
   config: AppConfig;
@@ -59,7 +81,7 @@ export interface ConversationChatContext {
 export interface UseConversationChatResult {
   messages: ChatMessage[];
   streaming: boolean;
-  error: string | null;
+  error: ChatErrorNoticeValue | null;
   /** True until the initial message load resolves. */
   loading: boolean;
   onSend: (
@@ -79,7 +101,7 @@ export function useConversationChat(
   const { config, agentsById, locale } = ctx;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ChatErrorNoticeValue | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Keep the latest config/agent map in refs so the stable `onSend` callback
@@ -256,12 +278,11 @@ export function useConversationChat(
         onError: (err: Error) => {
           textBuffer.flush();
           const endedAt = Date.now();
-          const code = (err as Error & { code?: string }).code;
-          setError(err.message);
+          setError(chatErrorFromError(err));
           setMessages((curr) => {
             const next = curr.map((m) => {
               if (m.id !== assistantId) return m;
-              const withError = appendErrorStatusEvent(m, err.message, code);
+              const withError = appendErrorStatusEvent(m, err.message, errorStatusMetadata(err));
               return {
                 ...withError,
                 endedAt,

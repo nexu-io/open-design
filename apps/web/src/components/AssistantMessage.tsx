@@ -1,6 +1,7 @@
 import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ToolCard, StreamingAskUserQuestionCard, isAskUserQuestionName } from "./ToolCard";
 import { FileOpsSummary } from "./FileOpsSummary";
+import { ChatErrorNotice } from "./ChatErrorNotice";
 import {
   renderMarkdown,
   type MarkdownLinkClickHandler,
@@ -62,6 +63,7 @@ import type {
   ChatMessageFeedbackReasonCode,
   ProjectFile,
 } from "../types";
+import { renderLinkedStatusDetail } from "./status-detail-links";
 
 type TranslateFn = (
   key: keyof Dict,
@@ -695,6 +697,18 @@ function AssistantMessageImpl({
             // this no longer the last assistant message — keep their pill so
             // the error detail still survives reload / history review.
             if (b.label === "error" && message.id === errorCardOwnerId) return null;
+            if (b.label === "error")
+              return (
+                <ChatErrorNotice
+                  key={i}
+                  error={{
+                    message: b.detail ?? "The agent failed.",
+                    details: b.diagnostic,
+                    category: b.category,
+                    retryDelayMs: b.retryDelayMs,
+                  }}
+                />
+              );
             // The pre-output "initializing" status is surfaced by the footer's
             // shimmering "Preparing…" label instead of its own pill.
             if (b.label === "initializing") return null;
@@ -2189,50 +2203,9 @@ function StatusPill({
       data-status={label}
     >
       <span className="status-label">{label}</span>
-      {detail ? <span className="status-detail">{renderStatusDetail(detail)}</span> : null}
+      {detail ? <span className="status-detail">{renderLinkedStatusDetail(detail)}</span> : null}
     </div>
   );
-}
-
-function renderStatusDetail(detail: string): ReactNode {
-  const segments: ReactNode[] = [];
-  const urlRe = /(https?:\/\/[^\s)<>"}\]]+)/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  let key = 0;
-
-  while ((match = urlRe.exec(detail))) {
-    if (match.index > lastIndex) {
-      segments.push(detail.slice(lastIndex, match.index));
-    }
-    const [href, suffix] = splitStatusDetailUrlPunctuation(match[1]!);
-    segments.push(
-      <a
-        key={`url-${key++}`}
-        className="md-link md-link-bare"
-        href={href}
-        target="_blank"
-        rel="noreferrer noopener"
-      >
-        {href}
-      </a>,
-    );
-    if (suffix) segments.push(suffix);
-    lastIndex = urlRe.lastIndex;
-  }
-
-  if (lastIndex < detail.length) {
-    segments.push(detail.slice(lastIndex));
-  }
-
-  return <>{segments}</>;
-}
-
-function splitStatusDetailUrlPunctuation(url: string): [string, string] {
-  const match = /([.,!?;:，。！？；：、'"」』】》〉）}\]]+)$/.exec(url);
-  if (!match?.[1]) return [url, ''];
-  const trimmed = url.slice(0, -match[1].length);
-  return trimmed ? [trimmed, match[1]] : [url, ''];
 }
 
 interface ToolItem {
@@ -2626,7 +2599,14 @@ type Block =
       confidence?: number | undefined;
       draftPath?: string | null | undefined;
     }
-  | { kind: "status"; label: string; detail?: string | undefined };
+  | {
+      kind: "status";
+      label: string;
+      detail?: string | undefined;
+      diagnostic?: string | undefined;
+      category?: string | undefined;
+      retryDelayMs?: number | undefined;
+    };
 
 /**
  * Walk the event stream and build the rendering layout list. We additionally
@@ -2782,9 +2762,19 @@ function buildBlocks(events: AgentEvent[]): Block[] {
         // (e.g. `claude-opus-4-7-high`) is silently replaced in the badge
         // by the stale initial default (`swe-1-6-fast`).
         last.detail = ev.detail;
+        last.diagnostic = ev.diagnostic;
+        last.category = ev.category;
+        last.retryDelayMs = ev.retryDelayMs;
         continue;
       }
-      out.push({ kind: "status", label: ev.label, detail: ev.detail });
+      out.push({
+        kind: "status",
+        label: ev.label,
+        detail: ev.detail,
+        diagnostic: ev.diagnostic,
+        category: ev.category,
+        retryDelayMs: ev.retryDelayMs,
+      });
       continue;
     }
   }

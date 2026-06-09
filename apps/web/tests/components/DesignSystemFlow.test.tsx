@@ -36,6 +36,9 @@ const mocks = vi.hoisted(() => ({
   patchConversation: vi.fn(),
   saveMessage: vi.fn(),
   saveTabs: vi.fn(),
+  isDaemonAgentExitError: vi.fn((error: unknown) => (
+    Boolean(error && typeof error === 'object' && (error as { name?: string }).name === 'DaemonAgentExitError')
+  )),
   streamViaDaemon: vi.fn(),
   uploadProjectFile: vi.fn(),
   writeProjectTextFile: vi.fn(),
@@ -47,28 +50,46 @@ vi.mock('../../src/components/ChatPane', () => ({
     onNewConversation,
     onSend,
   }: {
-    error?: string | null;
+    error?: string | {
+      message: string;
+      details?: string | null;
+      retryDelayMs?: number | null;
+    } | null;
     onNewConversation?: () => void;
     onSend: (prompt: string, attachments: unknown[], commentAttachments: unknown[]) => void;
-  }) => (
-    <>
-      {error ? <div role="alert">{error}</div> : null}
-      <button
-        type="button"
-        data-testid="new-conversation"
-        onClick={() => onNewConversation?.()}
-      >
-        New
-      </button>
-      <button
-        type="button"
-        data-testid="design-system-chat-send"
-        onClick={() => onSend('Update the design tokens', [], [])}
-      >
-        send
-      </button>
-    </>
-  ),
+  }) => {
+    const payload = typeof error === 'string' ? { message: error } : error;
+    return (
+      <>
+        {payload ? (
+          <div role="alert">
+            <div>{payload.message}</div>
+            {payload.retryDelayMs ? <div>Retry after about {Math.round(payload.retryDelayMs / 1000)}s.</div> : null}
+            {payload.details ? (
+              <details>
+                <summary>Show details</summary>
+                <pre>{payload.details}</pre>
+              </details>
+            ) : null}
+          </div>
+        ) : null}
+        <button
+          type="button"
+          data-testid="new-conversation"
+          onClick={() => onNewConversation?.()}
+        >
+          New
+        </button>
+        <button
+          type="button"
+          data-testid="design-system-chat-send"
+          onClick={() => onSend('Update the design tokens', [], [])}
+        >
+          send
+        </button>
+      </>
+    );
+  },
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
@@ -76,6 +97,7 @@ vi.mock('../../src/components/FileWorkspace', () => ({
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
+  isDaemonAgentExitError: (error: unknown) => mocks.isDaemonAgentExitError(error),
   streamViaDaemon: (...args: unknown[]) => mocks.streamViaDaemon(...args),
 }));
 
@@ -2232,6 +2254,219 @@ describe('DesignSystemDetailView', () => {
       }),
     );
     expect(screen.queryByText('Could not open the design system workspace.')).toBeNull();
+  });
+
+  it('preserves structured daemon errors in design-system workspace chat', async () => {
+    const system: DesignSystemDetail = {
+      id: 'user:acme-design-system',
+      title: 'Acme Design System',
+      category: 'Custom',
+      summary: 'Acme product workspace.',
+      swatches: [],
+      surface: 'web',
+      body: '# Acme Design System\n',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+      projectId: 'ds-acme-design-system',
+    };
+    const project: Project = {
+      id: 'ds-acme-design-system',
+      name: 'Acme Design System',
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: {
+        kind: 'other',
+        importedFrom: 'design-system',
+        entryFile: 'DESIGN.md',
+        sourceFileName: system.id,
+      },
+    };
+    const files: ProjectFile[] = [
+      { name: 'DESIGN.md', size: 42, mtime: 1, kind: 'text', mime: 'text/markdown' },
+    ];
+    const conversation = {
+      id: 'conv-design-system',
+      projectId: project.id,
+      title: 'Design system',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const error = Object.assign(
+      new Error('Gemini quota is exhausted. Try again in about 10s.'),
+      {
+        name: 'DaemonAgentExitError',
+        category: 'quota_exhausted',
+        details: [
+          'AGENT_EXECUTION_FAILED',
+          'Error: request failed',
+          'retryDelayMs: 10000',
+        ].join('\n'),
+        retryDelayMs: 10000,
+      },
+    );
+
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValue(null);
+    mocks.getProject.mockResolvedValue(project);
+    mocks.fetchProjectFiles.mockResolvedValue(files);
+    mocks.createConversation.mockResolvedValue(conversation);
+    mocks.streamViaDaemon.mockImplementation(async (options: {
+      handlers: { onError: (err: Error) => void };
+    }) => {
+      options.handlers.onError(error);
+    });
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={system.id}
+        config={{
+          mode: 'daemon',
+          apiKey: '',
+          baseUrl: '',
+          model: '',
+          agentId: 'agent-1',
+          agentModels: {},
+          skillId: null,
+          designSystemId: null,
+        }}
+        agents={[{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId('design-system-chat-send'));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    expect(screen.getByText('Gemini quota is exhausted. Try again in about 10s.')).toBeTruthy();
+    expect(screen.getByText('Retry after about 10s.')).toBeTruthy();
+    expect(screen.getByText('Show details')).toBeTruthy();
+    expect(screen.getByText(/AGENT_EXECUTION_FAILED/)).toBeTruthy();
+
+    await waitFor(() => {
+      const savedAssistant = mocks.saveMessage.mock.calls
+        .map((call) => call[2] as { role?: string; runStatus?: string; events?: unknown[] })
+        .find((message) => message.role === 'assistant' && message.runStatus === 'failed');
+      expect(savedAssistant?.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'status',
+          label: 'error',
+          detail: error.message,
+          diagnostic: error.details,
+          category: 'quota_exhausted',
+          retryDelayMs: 10000,
+        }),
+      ]));
+    });
+  });
+
+  it('preserves structured daemon error codes in design-system workspace chat', async () => {
+    const system: DesignSystemDetail = {
+      id: 'user:amr-design-system',
+      title: 'AMR Design System',
+      category: 'Custom',
+      summary: 'AMR product workspace.',
+      swatches: [],
+      surface: 'web',
+      body: '# AMR Design System\n',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+      projectId: 'ds-amr-design-system',
+    };
+    const project: Project = {
+      id: 'ds-amr-design-system',
+      name: 'AMR Design System',
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: {
+        kind: 'other',
+        importedFrom: 'design-system',
+        entryFile: 'DESIGN.md',
+        sourceFileName: system.id,
+      },
+    };
+    const conversation = {
+      id: 'conv-design-system-code',
+      projectId: project.id,
+      title: 'Design system',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const error = Object.assign(
+      new Error('AMR sign-in is required. Sign in to AMR Cloud again, then retry this run.'),
+      {
+        code: 'AMR_AUTH_REQUIRED',
+        details: {
+          kind: 'amr_account',
+          action: 'relogin',
+        },
+      },
+    );
+
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValue(null);
+    mocks.getProject.mockResolvedValue(project);
+    mocks.fetchProjectFiles.mockResolvedValue([
+      { name: 'DESIGN.md', size: 42, mtime: 1, kind: 'text', mime: 'text/markdown' },
+    ]);
+    mocks.createConversation.mockResolvedValue(conversation);
+    mocks.streamViaDaemon.mockImplementation(async (options: {
+      handlers: { onError: (err: Error) => void };
+    }) => {
+      options.handlers.onError(error);
+    });
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={system.id}
+        config={{
+          mode: 'daemon',
+          apiKey: '',
+          baseUrl: '',
+          model: '',
+          agentId: 'agent-1',
+          agentModels: {},
+          skillId: null,
+          designSystemId: null,
+        }}
+        agents={[{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId('design-system-chat-send'));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    expect(screen.getByText('AMR sign-in is required. Sign in to AMR Cloud again, then retry this run.')).toBeTruthy();
+
+    await waitFor(() => {
+      const savedAssistant = mocks.saveMessage.mock.calls
+        .map((call) => call[2] as { role?: string; runStatus?: string; events?: unknown[] })
+        .find((message) => message.role === 'assistant' && message.runStatus === 'failed');
+      expect(savedAssistant?.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'status',
+          label: 'error',
+          detail: error.message,
+          code: 'AMR_AUTH_REQUIRED',
+        }),
+      ]));
+    });
   });
 
   it('starts a new design-system conversation by opening the workspace first', async () => {

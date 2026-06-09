@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { Button, Textarea } from '@open-design/components';
 import type { ConnectorConnectResponse, ConnectorDetail, ConnectorStatusResponse } from '@open-design/contracts';
-import { streamViaDaemon } from '../providers/daemon';
+import { isDaemonAgentExitError, streamViaDaemon } from '../providers/daemon';
 import {
   connectConnector,
   createDesignSystemDraft,
@@ -64,6 +64,7 @@ import type {
 } from '../types';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { ChatPane } from './ChatPane';
+import type { ChatErrorNoticeValue } from './ChatErrorNotice';
 import { notifyConnectorsChanged } from './connectors-events';
 import { connectorAuthSnapshotChanged } from './connectors-state';
 import { FileWorkspace } from './FileWorkspace';
@@ -152,6 +153,27 @@ const SOURCE_PROCESSING_LOADING_BYTES = 4 * 1024 * 1024;
 const SOURCE_FILE_DIALOG_FOCUS_DELAY_MS = 120;
 const SOURCE_FILE_DIALOG_WARMUP_MS = 450;
 const SOURCE_FILE_DIALOG_STALE_MS = 30_000;
+
+function chatErrorFromError(err: Error): ChatErrorNoticeValue {
+  if (!isDaemonAgentExitError(err)) return err.message;
+  return {
+    message: err.message,
+    details: err.details,
+    category: err.category,
+    retryDelayMs: err.retryDelayMs,
+  };
+}
+
+function errorStatusMetadata(err: Error | undefined) {
+  const code = (err as (Error & { code?: string }) | undefined)?.code;
+  if (!err || !isDaemonAgentExitError(err)) return code ? { code } : {};
+  return {
+    ...(code ? { code } : {}),
+    diagnostic: err.details,
+    category: err.category,
+    retryDelayMs: err.retryDelayMs,
+  };
+}
 
 interface DetailProps {
   id: string;
@@ -935,7 +957,7 @@ export function DesignSystemDetailView({
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [projectChatMessages, setProjectChatMessages] = useState<ChatMessage[]>([]);
   const [chatStreaming, setChatStreaming] = useState(false);
-  const [chatError, setChatError] = useState<string | null>(null);
+  const [chatError, setChatError] = useState<ChatErrorNoticeValue | null>(null);
   const [workspaceTabsState, setWorkspaceTabsState] = useState<OpenTabsState>({
     tabs: [],
     active: null,
@@ -1651,10 +1673,10 @@ export function DesignSystemDetailView({
           },
           onError: (error) => {
             const message = error.message;
-            setChatError(message);
+            setChatError(chatErrorFromError(error));
             updateAssistant(
               (previous) => ({
-                ...appendErrorStatusEvent(previous, message),
+                ...appendErrorStatusEvent(previous, message, errorStatusMetadata(error)),
                 endedAt: Date.now(),
                 runStatus: 'failed',
               }),

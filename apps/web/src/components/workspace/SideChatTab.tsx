@@ -13,6 +13,7 @@ import type {
 } from '../../types';
 import type { ChatSessionMode } from '@open-design/contracts';
 import type { ChatSendMeta } from '../ChatComposer';
+import type { ChatErrorNoticeValue } from '../ChatErrorNotice';
 import { useConversationChat } from './useConversationChat';
 import styles from './SideChatTab.module.css';
 
@@ -28,7 +29,7 @@ export interface ActiveConversationChatState {
     attachments?: ChatAttachment[];
     commentAttachments?: ChatCommentAttachment[];
   }>;
-  error: string | null;
+  error: ChatErrorNoticeValue | null;
   onSend: (
     prompt: string,
     attachments: ChatAttachment[],

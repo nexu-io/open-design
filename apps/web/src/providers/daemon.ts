@@ -48,6 +48,7 @@ function detectClientType(): 'desktop' | 'web' | 'unknown' {
 }
 import { parseSseFrame } from './sse';
 import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observability/stuck-run';
+import { formatRetryDelayMs } from '../runtime/retry-delay';
 
 const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
 const LARGE_TOOL_RESULT_CHARS = 8_000;
@@ -252,6 +253,7 @@ export interface DaemonStreamOptions {
 
 export interface DaemonReattachOptions {
   runId: string;
+  agentId?: string | null;
   signal: AbortSignal;
   cancelSignal?: AbortSignal;
   handlers: DaemonStreamHandlers;
@@ -284,6 +286,243 @@ function daemonSseErrorMessage(data: SseErrorPayload): string {
       : null;
   if (!detail || detail === message || message.includes(detail)) return message;
   return `${message}\n${detail}`;
+}
+
+export type DaemonAgentFailureCategory =
+  | 'quota_exhausted'
+  | 'auth_required'
+  | 'prompt_too_large'
+  | 'cli_version_mismatch'
+  | 'binary_not_found'
+  | 'network'
+  | 'agent_crashed';
+
+export class DaemonAgentExitError extends Error {
+  readonly code?: string;
+  readonly category: DaemonAgentFailureCategory;
+  readonly details: string;
+  readonly retryDelayMs?: number;
+  readonly exitCode: number | null;
+  readonly exitSignal: string | null;
+
+  constructor(
+    message: string,
+    options: {
+      category: DaemonAgentFailureCategory;
+      details: string;
+      code?: string | null;
+      retryDelayMs?: number;
+      exitCode: number | null;
+      exitSignal: string | null;
+    },
+  ) {
+    super(message);
+    this.name = 'DaemonAgentExitError';
+    if (options.code) this.code = options.code;
+    this.category = options.category;
+    this.details = options.details;
+    this.retryDelayMs = options.retryDelayMs;
+    this.exitCode = options.exitCode;
+    this.exitSignal = options.exitSignal;
+  }
+}
+
+export function isDaemonAgentExitError(err: unknown): err is DaemonAgentExitError {
+  return err instanceof DaemonAgentExitError;
+}
+
+function buildDaemonAgentExitError({
+  agentId,
+  stderr,
+  errorCode,
+  exitCode,
+  exitSignal,
+}: {
+  agentId?: string | null;
+  stderr: string;
+  errorCode?: string | null;
+  exitCode: number | null;
+  exitSignal: string | null;
+}): DaemonAgentExitError | null {
+  const details = stderr.trim();
+  if (!details) return null;
+  const code = errorCode?.trim() || undefined;
+  const text = details.toLowerCase();
+  const retryDelayMs = extractRetryDelayMs(details);
+  const label = agentLabel(agentId, details);
+  const retryHint = retryDelayMs
+    ? ` Try again in about ${formatRetryDelayMs(retryDelayMs)}, switch models, or check the provider quota.`
+    : ' Try again later, switch models, or check the provider quota.';
+
+  if (
+    hasQuotaStatusCode(details) ||
+    hasProviderQuotaSignal(details)
+  ) {
+    const message = text.includes('capacity on this model')
+      ? `${label} hit a per-model capacity limit.${retryHint}`
+      : `${label} hit a provider quota or rate limit.${retryHint}`;
+    return new DaemonAgentExitError(message, {
+      category: 'quota_exhausted',
+      details,
+      code,
+      retryDelayMs,
+      exitCode,
+      exitSignal,
+    });
+  }
+
+  if (
+    hasAuthStatusCode(details) ||
+    /not logged in/i.test(details) ||
+    /please run\s+\/?login/i.test(details) ||
+    /run\s+[`'"]?[^`'"\n]*login/i.test(details) ||
+    /(auth|oauth|credential|token|api key).*(fail|invalid|missing|expired|required|unauthorized|rejected|not found|none)/i.test(details) ||
+    /(unauthorized|forbidden|invalid api key|missing api key|authentication failed|could not authenticate)/i.test(details)
+  ) {
+    return new DaemonAgentExitError(
+      `${label} needs authentication before it can run. Sign in with the agent CLI, then retry.`,
+      {
+        category: 'auth_required',
+        details,
+        code,
+        exitCode,
+        exitSignal,
+      },
+    );
+  }
+
+  if (
+    /enametoolong/i.test(details) ||
+    /argument list too long/i.test(details) ||
+    /argv limit/i.test(details) ||
+    /prompt exceeds/i.test(details)
+  ) {
+    return new DaemonAgentExitError(
+      "The composed prompt is too large for this agent CLI. Start a shorter turn or reduce the attached context, then retry.",
+      {
+        category: 'prompt_too_large',
+        details,
+        code,
+        exitCode,
+        exitSignal,
+      },
+    );
+  }
+
+  if (
+    /unknown arguments?:/i.test(details) ||
+    /unknown option/i.test(details) ||
+    /unrecognized option/i.test(details) ||
+    /unsupported flag/i.test(details) ||
+    /no such option/i.test(details)
+  ) {
+    return new DaemonAgentExitError(
+      `${label} rejected one of Open Design's CLI flags. Update the agent CLI, then retry.`,
+      {
+        category: 'cli_version_mismatch',
+        details,
+        code,
+        exitCode,
+        exitSignal,
+      },
+    );
+  }
+
+  if (
+    /\bspawn(?:\s+\S+)?\s+enoent\b/i.test(details) ||
+    /command not found/i.test(details) ||
+    /not recognized as an internal or external command/i.test(details)
+  ) {
+    const bin = extractMissingBinary(details);
+    return new DaemonAgentExitError(
+      `Could not find ${bin ? `\`${bin}\`` : 'the agent CLI'} on PATH. Install it or update the Open Design agent settings, then retry.`,
+      {
+        category: 'binary_not_found',
+        details,
+        code,
+        exitCode,
+        exitSignal,
+      },
+    );
+  }
+
+  if (
+    /\b(?:enotfound|econnrefused|econnreset|etimedout|eai_again|socket hang up|fetch failed)\b/i.test(details) ||
+    /network/i.test(details)
+  ) {
+    return new DaemonAgentExitError(
+      `${label} could not reach its provider or local service. Check your network, proxy, and endpoint settings, then retry.`,
+      {
+        category: 'network',
+        details,
+        code,
+        retryDelayMs,
+        exitCode,
+        exitSignal,
+      },
+    );
+  }
+
+  return new DaemonAgentExitError('The agent process exited before finishing.', {
+    category: 'agent_crashed',
+    details,
+    code,
+    exitCode,
+    exitSignal,
+  });
+}
+
+function hasQuotaStatusCode(details: string): boolean {
+  return /(?:\b(?:code|status|statuscode|httpstatus|http status|last status|response status)\b\s*[:=]?\s*["']?429\b|\bhttp\s*429\b|\b429\b[^\n]{0,80}\b(?:too many requests|rate[-_ ]?limit|quota|resource[-_ ]?exhausted|capacity)\b|\b(?:too many requests|rate[-_ ]?limit|quota|resource[-_ ]?exhausted|capacity)\b[^\n]{0,80}\b429\b)/i.test(details);
+}
+
+function hasProviderQuotaSignal(details: string): boolean {
+  return (
+    /\b(?:resource[-_ ]?exhausted|rate[-_ ]?limit|too many requests|capacity on this model)\b/i.test(details) ||
+    /\b(?:openai|anthropic|claude|gemini|google|vertex|generativelanguage|openrouter|provider)\b[^\n]{0,120}\b(?:quota|exhausted|capacity)\b/i.test(details) ||
+    /\b(?:quota|exhausted|capacity)\b[^\n]{0,120}\b(?:openai|anthropic|claude|gemini|google|vertex|generativelanguage|openrouter|provider)\b/i.test(details)
+  );
+}
+
+function hasAuthStatusCode(details: string): boolean {
+  return /(?:\b(?:code|status|statuscode|httpstatus|http status|last status|response status)\b\s*[:=]?\s*["']?(?:401|403)\b|\bhttp\s*(?:401|403)\b|\b(?:401|403)\b[^\n]{0,80}\b(?:unauthorized|forbidden|auth|oauth|credential|token|api key|login)\b|\b(?:unauthorized|forbidden|auth|oauth|credential|token|api key|login)\b[^\n]{0,80}\b(?:401|403)\b)/i.test(details);
+}
+
+function runStatusDiagnostic(error: string | null | undefined, errorCode: string | null | undefined): string {
+  const parts: string[] = [];
+  const code = errorCode?.trim();
+  const message = error?.trim();
+  if (code) parts.push(`errorCode: ${code}`);
+  if (message) parts.push(message);
+  return parts.join('\n');
+}
+
+function agentLabel(agentId: string | null | undefined, stderr: string): string {
+  const id = (agentId ?? '').toLowerCase();
+  if (id.includes('gemini') || /gemini/i.test(stderr)) return 'Gemini';
+  if (id.includes('claude')) return 'Claude Code';
+  if (id.includes('codex')) return 'Codex';
+  if (id.includes('cursor')) return 'Cursor Agent';
+  if (id.includes('qoder')) return 'Qoder';
+  return 'The agent';
+}
+
+function extractRetryDelayMs(stderr: string): number | undefined {
+  const match =
+    /\bretryDelayMs\b["'\s:=]+(\d{2,})/i.exec(stderr) ||
+    /\bretry[_-]?after\b["'\s:=]+(\d{1,})/i.exec(stderr);
+  if (!match) return undefined;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+  return /retryDelayMs/i.test(match[0]) ? value : value * 1000;
+}
+
+function extractMissingBinary(stderr: string): string | null {
+  const spawnMatch = /spawn\s+([^\s]+)\s+enoent/i.exec(stderr);
+  if (spawnMatch?.[1]) return spawnMatch[1].replace(/^["']|["']$/g, '');
+  const commandMatch = /([^\s:]+): command not found/i.exec(stderr);
+  if (commandMatch?.[1]) return commandMatch[1].replace(/^["']|["']$/g, '');
+  return null;
 }
 
 function daemonSseError(data: SseErrorPayload): Error {
@@ -862,12 +1101,14 @@ async function consumeDaemonRun({
   initialLastEventId,
   onRunStatus,
   onRunEventId,
-}: DaemonReattachOptions & { agentId?: string }): Promise<void> {
+}: DaemonReattachOptions & { agentId?: string | null }): Promise<void> {
   let acc = '';
   let stderrBuf = '';
   let exitCode: number | null = null;
   let exitSignal: string | null = null;
   let endStatus: ChatRunStatus | null = null;
+  let fallbackRunError: string | null = null;
+  let fallbackRunErrorCode: string | null = null;
   // Tracks whether the server explicitly declared `status: 'succeeded'` in
   // the SSE end payload (or via the fallback run-status fetch). Distinct
   // from `endStatus === 'succeeded'`, which can be a local fallback when
@@ -1016,6 +1257,8 @@ async function consumeDaemonRun({
         endStatus = status.status;
         exitCode = status.exitCode ?? null;
         exitSignal = status.signal ?? null;
+        fallbackRunError = status.error ?? null;
+        fallbackRunErrorCode = status.errorCode ?? null;
         // Fallback REST path: `status.status` is explicitly declared by the
         // daemon's run record (it passed `isChatRunStatus()` above), so an
         // explicit `'succeeded'` here is just as authoritative as the SSE
@@ -1052,17 +1295,60 @@ async function consumeDaemonRun({
       (!serverDeclaredSuccess &&
         (exitSignal || (exitCode !== null && exitCode !== 0)));
     if (looksLikeFailure) {
-      if (shouldSuppressLifecycleExitFallback(agentId, exitCode, exitSignal, stderrBuf)) {
+      if (shouldSuppressLifecycleExitFallback(agentId ?? undefined, exitCode, exitSignal, stderrBuf)) {
         handlers.onDone(acc);
         return;
       }
-      const cleanedStderr = cleanAmrOpenCodeStderrFallback(agentId, stderrBuf);
+      // On a resumed `/events` stream that does deliver `end`, `stderrBuf`
+      // may be a partial replay (the earlier provider payload was already
+      // flushed before the reattach). The daemon's persisted run record is
+      // the authoritative failure source in that case, so hydrate
+      // `fallbackRunError` / `fallbackRunErrorCode` from `GET /api/runs/:id`
+      // before classifying whenever the no-`end` fallback at line 808-827
+      // didn't already populate them. Without this the classifier sees only
+      // the truncated stderr tail and can mislabel the run or hide the
+      // useful remediation text this path is meant to preserve.
+      if (fallbackRunError === null && fallbackRunErrorCode === null) {
+        const status = await fetchChatRunStatus(runId);
+        if (status) {
+          fallbackRunError = status.error ?? null;
+          fallbackRunErrorCode = status.errorCode ?? null;
+        }
+      }
+      const cleanedStderr = cleanAmrOpenCodeStderrFallback(agentId ?? undefined, stderrBuf);
       const formattedOpenCodeError = formatLegacyOpenCodeSessionError(cleanedStderr);
-      const tail = (formattedOpenCodeError ?? cleanedStderr).trim().slice(-400);
-      const fallbackTail =
-        tail || (isAmrOpenCodeExitFallback(agentId, stderrBuf) ? AMR_OPENCODE_INCOMPLETE_MESSAGE : '');
+      const fallbackMessage =
+        formattedOpenCodeError ??
+        (!cleanedStderr && isAmrOpenCodeExitFallback(agentId ?? undefined, stderrBuf)
+          ? AMR_OPENCODE_INCOMPLETE_MESSAGE
+          : null);
+      const fallbackDiagnostic =
+        fallbackMessage ??
+        cleanedStderr;
+      const diagnostic = combineFailureDiagnostics(
+        fallbackDiagnostic,
+        runStatusDiagnostic(fallbackRunError, fallbackRunErrorCode),
+      );
+      const classified = buildDaemonAgentExitError({
+        agentId,
+        stderr: diagnostic,
+        errorCode: fallbackRunErrorCode,
+        exitCode,
+        exitSignal,
+      });
+      const userFacing =
+        fallbackMessage && classified?.category === 'agent_crashed'
+          ? new DaemonAgentExitError(fallbackMessage, {
+              category: 'agent_crashed',
+              details: diagnostic,
+              code: fallbackRunErrorCode,
+              exitCode,
+              exitSignal,
+            })
+          : classified;
       handlers.onError(
-        new Error(`agent exited with ${exitSignal ? `signal ${exitSignal}` : `code ${exitCode}`}${fallbackTail ? `\n${fallbackTail}` : ''}`),
+        userFacing ??
+        new Error(`agent exited with ${exitSignal ? `signal ${exitSignal}` : `code ${exitCode}`}`),
       );
       return;
     }
@@ -1075,6 +1361,14 @@ async function consumeDaemonRun({
     // is a no-op for unknown runIds.
     trackRunTerminal(runId, endStatus ?? (canceled ? 'canceled' : 'unknown'));
   }
+}
+
+function combineFailureDiagnostics(stderr: string, statusDiagnostic: string): string {
+  const stderrDiagnostic = stderr.trim();
+  const persistedDiagnostic = statusDiagnostic.trim();
+  if (!stderrDiagnostic) return persistedDiagnostic;
+  if (!persistedDiagnostic || stderrDiagnostic.includes(persistedDiagnostic)) return stderrDiagnostic;
+  return `${stderrDiagnostic}\n${persistedDiagnostic}`;
 }
 
 function isChatRunStatus(value: unknown): value is ChatRunStatus {

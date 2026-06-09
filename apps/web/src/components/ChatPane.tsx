@@ -42,6 +42,7 @@ import {
   type ChatComposerHandle,
   type ChatSendMeta,
 } from './ChatComposer';
+import { ChatErrorNotice, type ChatErrorNoticeValue } from './ChatErrorNotice';
 import { listDesignArtifactCandidates } from './design-files/designArtifacts';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { Icon, type IconName } from './Icon';
@@ -415,7 +416,7 @@ interface Props {
   messages: ChatMessage[];
   streaming: boolean;
   loading?: boolean;
-  error: string | null;
+  error: ChatErrorNoticeValue | null;
   projectId: string | null;
   sessionMode?: ChatSessionMode;
   onSessionModeChange?: (mode: ChatSessionMode) => void;
@@ -867,12 +868,32 @@ export function ChatPane({
   // Prefer a case-specific message (AMR auth / balance) over the raw upstream
   // string; fall back to the live global error (also covers conversation-load
   // / audio errors) then the persisted run error so a reload still shows it.
-  const rawError = error ?? failedRunErrorEvent?.detail ?? null;
+  const persistedRunError: ChatErrorNoticeValue | null = failedRunErrorEvent
+    ? {
+        message: failedRunErrorEvent.detail ?? 'The agent failed.',
+        details: failedRunErrorEvent.diagnostic,
+        category: failedRunErrorEvent.category,
+        retryDelayMs: failedRunErrorEvent.retryDelayMs,
+      }
+    : null;
+  const rawError = error ?? persistedRunError;
   const displayError = runFailureUi?.messageKey ? t(runFailureUi.messageKey) : rawError;
-  const errorDiagnosticText = displayError
+  const displayErrorNotice: ChatErrorNoticeValue | null =
+    typeof displayError === 'string' && rawError && typeof rawError !== 'string'
+      ? { ...rawError, message: displayError }
+      : displayError;
+  const displayErrorMessage =
+    typeof displayErrorNotice === 'string'
+      ? displayErrorNotice
+      : displayErrorNotice?.message ?? null;
+  const rawErrorDiagnostic =
+    typeof rawError === 'string'
+      ? rawError
+      : rawError?.details ?? rawError?.message ?? null;
+  const errorDiagnosticText = displayErrorMessage
     ? buildRunErrorDiagnosticText({
-        message: displayError,
-        rawMessage: rawError,
+        message: displayErrorMessage,
+        rawMessage: rawErrorDiagnostic,
         errorCode: failedRunErrorEvent?.code,
         traceId: retryAssistant?.runId,
         projectId,
@@ -1966,9 +1987,9 @@ export function ChatPane({
                 onOpenQuestions={onOpenQuestions}
                 scrollContainerRef={logRef}
               />
-              {displayError ? (
+              {displayErrorNotice ? (
                 <div className="msg error">
-                  <span className="chat-error-text">{displayError}</span>
+                  <ChatErrorNotice error={displayErrorNotice} className="chat-error-text" />
                   {errorDiagnosticText || showErrorActions || (retryAssistant && onRetry && runFailureUi) ? (
                     <div className="chat-error-actions">
                       {showByokRecoveryCta ? (
@@ -2059,6 +2080,14 @@ export function ChatPane({
                         </>
                       ) : null}
                     </div>
+                  ) : retryAssistant && onRetry ? (
+                    <button
+                      type="button"
+                      className="ghost chat-error-retry"
+                      onClick={() => onRetry(retryAssistant)}
+                    >
+                      {t('promptTemplates.retry')}
+                    </button>
                   ) : null}
                 </div>
               ) : null}
