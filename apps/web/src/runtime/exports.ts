@@ -727,7 +727,7 @@ export function exportAsImage(dataUrl: string, title: string): void {
   }
 }
 
-export type ProjectPdfExportResult = 'desktop' | 'fallback';
+export type ProjectPdfExportResult = 'desktop' | 'fallback' | 'cancelled';
 
 export async function exportProjectAsPdf(opts: {
   deck: boolean;
@@ -748,6 +748,7 @@ export async function exportProjectAsPdf(opts: {
     });
     if (!resp.ok) throw new Error(`desktop PDF export unavailable (${resp.status})`);
     const body = await resp.json().catch(() => ({}));
+    if (body?.canceled === true) return 'cancelled';
     if (body && body.ok === false) throw new Error(body.error || 'desktop PDF export failed');
     return 'desktop';
   } catch (err) {

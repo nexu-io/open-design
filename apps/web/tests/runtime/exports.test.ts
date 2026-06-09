@@ -220,6 +220,22 @@ describe('exportProjectAsPdf', () => {
     });
   });
 
+  it('treats a canceled desktop PDF save dialog as a silent no-op', async () => {
+    const fallback = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true, canceled: true }), { status: 200 })));
+
+    const result = await exportProjectAsPdf({
+      deck: true,
+      fallbackPdf: fallback,
+      filePath: 'deck/index.html',
+      projectId: 'proj-1',
+      title: 'Seed Deck',
+    });
+
+    expect(result).toBe('cancelled');
+    expect(fallback).not.toHaveBeenCalled();
+  });
+
   it('falls back to browser print when the desktop PDF export API is unavailable', async () => {
     const fallback = vi.fn();
     vi.spyOn(console, 'warn').mockImplementation(() => {});
