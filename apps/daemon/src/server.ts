@@ -227,6 +227,7 @@ import {
   cursorAuthGuidance,
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
+import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
@@ -12531,6 +12532,19 @@ export async function startServer({
     let spawnedAgentEnv = null;
     let agentStdoutTail = '';
     let agentStderrTail = '';
+    const agentStderrFilter = createAgentStderrVisibilityFilter(agentId);
+    const emitVisibleAgentStderr = (chunk: unknown) => {
+      const visibleChunk = agentStderrFilter.write(chunk);
+      if (!visibleChunk) return;
+      agentStderrTail = `${agentStderrTail}${visibleChunk}`.slice(-2000);
+      send('stderr', { chunk: visibleChunk });
+    };
+    const flushVisibleAgentStderr = () => {
+      const visibleChunk = agentStderrFilter.flush();
+      if (!visibleChunk) return;
+      agentStderrTail = `${agentStderrTail}${visibleChunk}`.slice(-2000);
+      send('stderr', { chunk: visibleChunk });
+    };
     try {
       // Prompt delivery via stdin is now the universal default. This bypasses
       // both the cmd.exe 8KB limit and the CreateProcess 32KB limit.
@@ -12819,9 +12833,10 @@ export async function startServer({
         // is owned solely by the orchestrator's awaited result below.
         child.stderr.on('data', (chunk) => {
           noteAgentActivity();
-          send('stderr', { chunk });
+          emitVisibleAgentStderr(chunk);
         });
         child.on('error', (err) => {
+          flushVisibleAgentStderr();
           send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
         });
 
@@ -12830,7 +12845,10 @@ export async function startServer({
         // flow. Without this the orchestrator can't tell a non-zero exit
         // apart from a clean ship and may misclassify failures.
         const childExitPromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
-          child.once('close', (code, signal) => resolve({ code, signal }));
+          child.once('close', (code, signal) => {
+            flushVisibleAgentStderr();
+            resolve({ code, signal });
+          });
         });
         try {
           const orchestratorResult = await runOrchestrator({
@@ -12873,6 +12891,7 @@ export async function startServer({
             design.runs.finish(run, 'failed', 1, null);
           }
         } catch (err) {
+          flushVisibleAgentStderr();
           send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err)));
           design.runs.finish(run, 'failed', 1, null);
         } finally {
@@ -13018,6 +13037,7 @@ export async function startServer({
     const sendAgentEvent = (ev) => {
       if (ev?.type === 'error') {
         if (agentStreamError) return;
+        flushVisibleAgentStderr();
         const failureText = [
           String(ev.message || 'Agent stream error'),
           typeof ev.raw === 'string' ? ev.raw : '',
@@ -13075,6 +13095,7 @@ export async function startServer({
       const claude = createClaudeStreamHandler((ev) => {
         if (ev?.type === 'error') {
           if (agentStreamError) return;
+          flushVisibleAgentStderr();
           const message = String((ev as any).message || 'Claude Code stream error');
           const failureText = [
             message,
@@ -13173,6 +13194,7 @@ export async function startServer({
             sendAgentEvent(payload);
           } else if (channel === 'error') {
             if (agentStreamError) return;
+            flushVisibleAgentStderr();
             agentStreamError = String(payload?.message || 'Pi session error');
             const piErrorCode = typeof payload?.code === 'string' ? payload.code : null;
             if (piErrorCode) {
@@ -13211,6 +13233,7 @@ export async function startServer({
           }
           noteAgentActivity();
           if (event === 'agent') noteFirstTokenFromAgentEvent(data);
+          if (event === 'error') flushVisibleAgentStderr();
           if (def.id === 'amr' && event === 'error') {
             const failure = classifyAmrAccountFailure(
               [
@@ -13286,13 +13309,13 @@ export async function startServer({
     run.acpSession = acpSession;
     child.stderr.on('data', (chunk) => {
       noteAgentActivity();
-      agentStderrTail = `${agentStderrTail}${chunk}`.slice(-2000);
-      send('stderr', { chunk });
+      emitVisibleAgentStderr(chunk);
     });
 
     child.on('error', (err) => {
       clearInactivityWatchdog();
       cleanupPromptFile();
+      flushVisibleAgentStderr();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
@@ -13301,6 +13324,7 @@ export async function startServer({
     child.on('close', async (code, signal) => {
       try {
       clearInactivityWatchdog();
+      flushVisibleAgentStderr();
       if (watchdogRetryRestarted) {
         // The inactivity watchdog already failed this attempt and the same-run
         // retry restarted on a fresh child. Finalization and event-sink / run-
