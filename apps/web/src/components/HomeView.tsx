@@ -932,7 +932,12 @@ export function HomeView({
       await usePlugin(record, combined, {
         ...(inputs ? { inputs } : {}),
         queryTemplate: hasTemplate ? rawQueryTemplate : null,
-        queryTemplateAllowsPrefix: hasTemplate && currentDraft.length > 0,
+        // Allow an arbitrary prefix whenever we track the query template, so the
+        // placeholder extractor matches the query as a suffix even when the user
+        // PREPENDS an intro AFTER the seed was inserted (the empty-draft → add
+        // prefix → edit placeholder case). Suffix matching is equally correct
+        // when there is no prefix at all.
+        queryTemplateAllowsPrefix: hasTemplate,
         explicitPick: true,
       });
       scrollHomeToTop();

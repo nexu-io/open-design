@@ -1527,6 +1527,76 @@ describe('HomeView prompt handoff', () => {
     })));
   });
 
+  it('extracts a placeholder edit after the user prepends an intro to an empty-draft use-with-query seed', async () => {
+    // The empty-draft → add-prefix → edit-placeholder case: the seed lands in an
+    // empty composer, then the user prepends an intro AND edits a hydrated value.
+    // queryTemplateAllowsPrefix must stay on (we have a query template) so the
+    // extractor matches the query as a suffix after the freshly-added prefix and
+    // the placeholder edit still flows into pluginInputs.
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')) {
+        return new Response(JSON.stringify(WEB_PROTOTYPE_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    const { rerender } = render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
+    // Empty draft + use-with-query seeds the rendered query into the editor.
+    rerender(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        promptHandoff={createPluginUseHandoff(6, 'example-web-prototype', {
+          action: 'use-with-query',
+        })}
+      />,
+    );
+
+    const seed =
+      'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.';
+    await waitFor(() => expect(homeHeroPromptText()).toBe(seed));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-web-prototype/apply',
+      expect.anything(),
+    ));
+
+    // The user now PREPENDS an intro above the seed and edits the audience.
+    const edited = `My intro for the board\n\n${seed.replace('product evaluators', 'enterprise architects')}`;
+    await setPromptAndSettle(edited);
+    await waitFor(() => {
+      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-web-prototype',
+      pluginInputs: expect.objectContaining({ audience: 'enterprise architects' }),
+    })));
+  });
+
   it('seeds the plugin description, not the raw meta-instruction query, on use-with-query', async () => {
     // The plugin's useCase.query is a generator-facing meta-instruction
     // ("follow the en field verbatim; start from example.html"). The Home
