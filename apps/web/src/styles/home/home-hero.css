@@ -2076,6 +2076,14 @@
   transform: scale(0.172);
 }
 
+/* Baked clips are framed 1.31:1 for the Community grid; the wider preset tiles
+   would otherwise object-fit:cover-crop the hero out of the middle. Anchor to
+   the top so the hero headline stays in frame. Scoped to the preset cards. */
+.home-hero__plugin-preset-preview .plugins-home__media-video,
+.home-hero__plugin-preset-preview .plugins-home__media-img {
+  object-position: top center;
+}
+
 .home-hero__plugin-preset-title {
   min-width: 0;
   overflow: hidden;

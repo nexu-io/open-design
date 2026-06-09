@@ -1145,20 +1145,28 @@ button.plugins-home__use-menu-item:focus-visible {
   display: flex;
   flex-direction: column;
 }
-/* Collapsed: clip the gallery to zero height and fade it out. The large
-   max-height ceiling lets the expand transition animate to natural height
-   without measuring it. */
+/* Collapsed: clip the gallery to zero height and fade it out. Uses the repo's
+   canonical auto-height pattern (grid-template-rows 0fr -> 1fr) so the expand
+   animates to the gallery's NATURAL height — a fixed max-height ceiling (was
+   6000px) clipped the last rows once the gallery outgrew it. The inner wrapper
+   owns overflow:hidden so the collapsed rows clip cleanly. */
 .home-templates-reveal__body {
-  max-height: 0;
+  display: grid;
+  grid-template-rows: 0fr;
   opacity: 0;
-  overflow: hidden;
   transition:
-    max-height 420ms cubic-bezier(0.23, 1, 0.32, 1),
+    grid-template-rows 420ms cubic-bezier(0.23, 1, 0.32, 1),
     opacity 320ms cubic-bezier(0.23, 1, 0.32, 1);
 }
+.home-templates-reveal__inner {
+  min-height: 0;
+  overflow: hidden;
+}
 .home-templates-reveal.is-revealed .home-templates-reveal__body {
-  max-height: 6000px;
+  grid-template-rows: 1fr;
   opacity: 1;
+}
+.home-templates-reveal.is-revealed .home-templates-reveal__inner {
   /* Leave room for the fixed collapse pill so it never covers the last row. */
   padding-bottom: 64px;
 }

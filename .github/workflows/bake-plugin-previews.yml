@@ -37,10 +37,14 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
 
-      - name: Install ffmpeg + puppeteer-core
+      - name: Install ffmpeg + CJK fonts + puppeteer-core
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          # ffmpeg encodes the clips; the Noto CJK + emoji fonts give headless
+          # Chrome a real CJK/emoji fallback so templates that rely on system
+          # fonts for 中文/日本語/한국어 (or load Noto SC from Google Fonts but
+          # race) render glyphs instead of missing-glyph tofu boxes.
+          sudo apt-get install -y ffmpeg fonts-noto-cjk fonts-noto-color-emoji
           # npm chokes on the workspace:* root manifest; use pnpm to drop
           # puppeteer-core into the workspace node_modules (CI-only, not committed).
           pnpm add -w puppeteer-core

@@ -42,12 +42,23 @@ import path from 'node:path';
 
 // Bump when the bake recipe changes (capture geometry, timing, encoder, waits…)
 // so every plugin re-bakes even though its page content is byte-identical.
-const BAKE_VERSION = 1;
+//   v2: deck mode (16:9 + slide-walk for fixed-viewport PPT/slideshow pages) +
+//       force-load webfonts before capture (CJK templates were baking tofu).
+const BAKE_VERSION = 2;
 
 // ---- config ---------------------------------------------------------------
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:17579';
 const RENDER_W = 1440;          // pages lay out at their desktop width
 const VIEW_H = 1099;            // 1.31-aspect window showing the FULL width (no clip)
+// Decks (PPT/slideshow: a fixed 100vh page navigated by arrow keys or the wheel,
+// NOT vertical scroll) are captured at the SAME 1.31 tile aspect as everything
+// else — so the clip fills the card with no crop or letterbox — but at a larger
+// width. At the normal 1440 width decks hit a width breakpoint and collapse into
+// a compact variant (hero headline -> condensed strip); 1760 clears it.
+const DECK_W = 1760;
+const DECK_H = 1344;            // 1760/1344 = 1.31, the tile aspect
+const SLIDE_MS = 1150;          // deck per-slide dwell: ~.9s CSS transition + settle
+const MAX_SLIDES = 6;           // advance budget; HOLD + slides stays ~<=9s
 const OUT_W = Number(process.env.PREVIEW_W || 640); // small — tile renders ~393px
 const FPS = Number(process.env.PREVIEW_FPS || 30);  // 30 is smooth for a gentle pan, half the bytes of 60
 const VELOCITY = 0.30;          // px/ms — base pan pace (snappy but readable)
@@ -99,6 +110,60 @@ async function discoverIds() {
   return LIMIT ? ids.slice(0, LIMIT) : ids;
 }
 
+// ---- deck (PPT/slideshow) driving -----------------------------------------
+// A structural fingerprint of the current slide, robust across deck styles:
+// the transform of any slide-rail wider/taller than the viewport, the scroll
+// offset of a horizontal track, and any active-slide marker. Deliberately does
+// NOT read canvas pixels, so a continuously-animating WebGL background doesn't
+// look like a slide change. Runs in the page; must stay self-contained.
+function deckSignal() {
+  const parts = [location.hash];
+  for (const el of document.querySelectorAll('*')) {
+    const r = el.getBoundingClientRect();
+    if (r.width > window.innerWidth * 1.5 || r.height > window.innerHeight * 1.5) {
+      parts.push(getComputedStyle(el).transform);
+    }
+    if (el.scrollWidth > el.clientWidth + 4) parts.push(`sl${el.scrollLeft}`);
+  }
+  const a = document.querySelector('.active,.is-active,[aria-current="true"],[data-active="true"]');
+  if (a) parts.push((a.id || '') + (a.className || ''));
+  return parts.join('|').slice(0, 4000);
+}
+
+async function driveDeck(page, driver) {
+  if (driver === 'arrow') { await page.keyboard.press('ArrowRight'); return; }
+  if (driver === 'wheel') {
+    await page.evaluate(() => {
+      const mk = () => new WheelEvent('wheel', { deltaY: 800, bubbles: true, cancelable: true });
+      (document.querySelector('#deck,main,section') || document.body).dispatchEvent(mk());
+      window.dispatchEvent(mk());
+    });
+    return;
+  }
+  await page.evaluate(() => {
+    const b = document.querySelector('[class*="next" i],[aria-label*="next" i],[data-dir="next"],.arrow-right,.next');
+    if (b) b.click();
+  });
+}
+
+// Walk a deck through its slides with the driver detection already found (arrow
+// or wheel), played past the HOLD on hover. Stops at the last slide (an input
+// that no longer changes deckSignal). A null driver is a fixed single slide with
+// no navigation — just hold. Returns the wall-clock span (the manifest durationMs).
+async function walkSlides(page, driver) {
+  if (!driver) return SLIDE_MS;
+  let moved = 0;
+  const t0 = Date.now();
+  for (let s = 0; s < MAX_SLIDES; s += 1) {
+    const before = await page.evaluate(deckSignal);
+    await driveDeck(page, driver);
+    await sleep(SLIDE_MS);
+    if ((await page.evaluate(deckSignal)) === before) break; // reached the last slide
+    moved += 1;
+  }
+  return Math.max(SLIDE_MS, Date.now() - t0);
+}
+
 // ---- render + encode one plugin -------------------------------------------
 async function bakeOne(browser, id, hash) {
   const page = await browser.newPage();
@@ -109,6 +174,39 @@ async function bakeOne(browser, id, hash) {
     if (!res || !res.ok()) { await page.close(); return { id, skipped: `status ${res ? res.status() : 'none'}` }; }
   } catch (e) { await page.close(); return { id, skipped: `load ${e.message}` }; }
   await sleep(1000);
+
+  // Classify navigation by PROBING, not guessing from scrollHeight: press the
+  // arrow key, then nudge the wheel, and see whether a slide actually moves
+  // (deckSignal ignores the WebGL background, so only real navigation counts).
+  // Most decks are arrow-key; some advance on the wheel; the rest are ordinary
+  // vertical-scroll pages (incl. up/down decks) and keep the linear pan. Probing
+  // advances the deck, so decks reload to reset to slide 1 before capturing.
+  let deckDriver = null;
+  {
+    const sig0 = await page.evaluate(deckSignal);
+    await driveDeck(page, 'arrow');
+    await sleep(900);
+    if ((await page.evaluate(deckSignal)) !== sig0) deckDriver = 'arrow';
+    else {
+      await driveDeck(page, 'wheel');
+      await sleep(900);
+      if ((await page.evaluate(deckSignal)) !== sig0) deckDriver = 'wheel';
+    }
+  }
+  const vScrollable = await page.evaluate(
+    () => document.documentElement.scrollHeight > window.innerHeight * 1.15,
+  );
+  // A horizontally-navigable deck OR a fixed-viewport single slide is a deck:
+  // capture at the deck aspect and walk it. A page that only scrolls vertically
+  // (a landing page, or an up/down deck) keeps the linear pan.
+  const isDeck = deckDriver !== null || !vScrollable;
+  let capW = RENDER_W, capH = VIEW_H;
+  if (isDeck) {
+    capW = DECK_W; capH = DECK_H;
+    await page.setViewport({ width: capW, height: capH, deviceScaleFactor: 1 });
+    try { await page.reload({ waitUntil: 'domcontentloaded', timeout: 25000 }); } catch {}
+    await sleep(1000);
+  }
 
   // Trigger lazy images by scrolling through, then wait for them, then reset.
   await page.evaluate(async () => {
@@ -129,7 +227,27 @@ async function bakeOne(browser, id, hash) {
   try {
     await page.evaluate((capMs) => {
       const cap = new Promise((r) => setTimeout(r, capMs));
-      const fonts = document.fonts ? document.fonts.ready.catch(() => {}) : Promise.resolve();
+      // CJK-heavy templates pull Noto Serif/Sans SC from Google Fonts with
+      // display=swap; awaiting fonts.ready alone can resolve on the swap
+      // fallback. Force every registered face to load, THEN await ready, so the
+      // capture isn't a fallback/tofu render. (The CI bake also installs
+      // fonts-noto-cjk so the fallback itself carries CJK glyphs if a webfont is
+      // slow or blocked, instead of rendering missing-glyph boxes.)
+      // Double-pass: await ready FIRST so faces registered by a late-arriving
+      // Google Fonts stylesheet are present, force-load any still unloaded, then
+      // await ready again — a single pass can enumerate before display=swap
+      // faces exist and capture the fallback (e.g. a Shrikhand/Playfair heading).
+      const fonts = document.fonts
+        ? document.fonts.ready
+            .catch(() => {})
+            .then(() => Promise.all(
+              Array.from(document.fonts).map((f) =>
+                f.status === 'loaded' ? null : f.load().catch(() => {}),
+              ),
+            ))
+            .then(() => document.fonts.ready)
+            .catch(() => {})
+        : Promise.resolve();
       const imgs = Array.from(document.images)
         .filter((i) => !i.complete)
         .map((i) => new Promise((res) => {
@@ -171,31 +289,37 @@ async function bakeOne(browser, id, hash) {
     try { await client.send('Page.screencastFrameAck', { sessionId: e.sessionId }); } catch {}
   });
 
-  const maxY = await page.evaluate(() =>
+  const maxY = isDeck ? 0 : await page.evaluate(() =>
     Math.max(0, document.documentElement.scrollHeight - window.innerHeight));
-  // Pre-computed from the measured page height so the pan always reaches the
-  // bottom within MAX_PAN (whole clip stays ~<=10s): base VELOCITY for normal
-  // pages, auto-sped-up (capped duration) for tall ones.
-  const durMs = maxY <= 0 ? 2500 : Math.min(MAX_PAN, Math.round(maxY / VELOCITY));
 
   await client.send('Page.startScreencast',
-    { format: 'jpeg', quality: 80, everyNthFrame: 1, maxWidth: RENDER_W, maxHeight: VIEW_H });
-  // Phase 1 — HOLD at the top, capturing the page's in-place animation. The
-  // gallery loops this leading span while idle (no pan), so animated pages
-  // still look alive without auto-scrolling.
+    { format: 'jpeg', quality: 80, everyNthFrame: 1, maxWidth: capW, maxHeight: capH });
+  // Phase 1 — HOLD on the first slide / page top, capturing in-place animation.
+  // The gallery loops this leading span while idle (no advance), so animated
+  // pages still look alive without auto-playing.
   await sleep(HOLD_MS);
-  // Phase 2 — linear pan top -> bottom (played past the hold on hover).
-  await page.evaluate((dur, my) => new Promise((res) => {
-    if (my <= 0) { setTimeout(res, dur); return; }
-    let start = null;
-    function step(t) {
-      if (start === null) start = t;
-      const e = Math.min(1, (t - start) / dur);
-      window.scrollTo(0, Math.round(my * e)); // linear = constant velocity
-      if (e < 1) requestAnimationFrame(step); else res();
-    }
-    requestAnimationFrame(step);
-  }), durMs, maxY);
+  // Phase 2 — played past the hold on hover: decks walk their slides; scrollable
+  // pages linear-pan (constant velocity) top -> bottom.
+  let durMs;
+  if (isDeck) {
+    durMs = await walkSlides(page, deckDriver);
+  } else {
+    // Pre-computed from the measured page height so the pan always reaches the
+    // bottom within MAX_PAN (whole clip stays ~<=10s): base VELOCITY for normal
+    // pages, auto-sped-up (capped duration) for tall ones.
+    durMs = maxY <= 0 ? 2500 : Math.min(MAX_PAN, Math.round(maxY / VELOCITY));
+    await page.evaluate((dur, my) => new Promise((res) => {
+      if (my <= 0) { setTimeout(res, dur); return; }
+      let start = null;
+      function step(t) {
+        if (start === null) start = t;
+        const e = Math.min(1, (t - start) / dur);
+        window.scrollTo(0, Math.round(my * e)); // linear = constant velocity
+        if (e < 1) requestAnimationFrame(step); else res();
+      }
+      requestAnimationFrame(step);
+    }), durMs, maxY);
+  }
   await client.send('Page.stopScreencast');
   await page.close();
 
