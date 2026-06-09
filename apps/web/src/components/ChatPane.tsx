@@ -37,6 +37,7 @@ import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } 
 import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
 import { AmrGuidance } from './AmrGuidance';
 import { amrRechargeUrlForProfile, resolveRunFailureUi } from '../runtime/amr-guidance';
+import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import {
   ChatComposer,
   type ChatComposerHandle,
@@ -450,6 +451,7 @@ interface Props {
     meta?: ChatSendMeta,
   ) => void;
   onRetry?: (assistantMessage: ChatMessage) => void;
+  onResumeRun?: (assistantMessage: ChatMessage) => void;
   onStop: () => void;
   // Skills available for @-mention assembly. ProjectView filters out the
   // user's disabled set before passing them in here.
@@ -659,6 +661,7 @@ export function ChatPane({
   onDeleteComment,
   onSend,
   onRetry,
+  onResumeRun,
   onStop,
   onRemoveQueuedSend,
   onUpdateQueuedSend,
@@ -864,6 +867,21 @@ export function ChatPane({
   const runFailureUi = retryAssistant
     ? resolveRunFailureUi(failedRunErrorEvent?.code, retryAssistant.agentId)
     : null;
+  // Offer Continue (resume) when the failed run is resumable AND the active
+  // agent still matches the agent that produced it. The daemon stores a
+  // resumable session per (conversation, agent); after an agent switch the new
+  // agent has no id for that session, so a resume would silently start fresh —
+  // fall back to the from-scratch Retry instead. We do NOT require `onResumeRun`
+  // here: because the daemon persists the resumable session, the plain Retry
+  // path (which re-sends the original prompt) would itself silently resume that
+  // session and double the work. So every ChatPane surface must offer Continue
+  // for a resumable failure — `onResumeRun` when wired (primary chat, carries
+  // the resume_continue analytics), otherwise a plain `onSend` of the canonical
+  // continue prompt (resumes the session without re-sending the original turn).
+  const canResumeFailedRun =
+    !!retryAssistant?.resumable &&
+    !!retryAssistant?.agentId &&
+    retryAssistant.agentId === config?.agentId;
   // Prefer a case-specific message (AMR auth / balance) over the raw upstream
   // string; fall back to the live global error (also covers conversation-load
   // / audio errors) then the persisted run error so a reload still shows it.
@@ -2047,7 +2065,26 @@ export function ChatPane({
                               {t('chat.amrError.rechargeCta')}
                             </button>
                           ) : null}
-                          {runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry ? (
+                          {canResumeFailedRun ? (
+                            // Resumable failure: continue the agent's existing
+                            // CLI session instead of restarting from scratch, so
+                            // partial work is kept. Replaces the from-scratch
+                            // Retry as the single primary recovery action. Use
+                            // the wired resume handler when present, otherwise a
+                            // plain send of the continue prompt — never the
+                            // re-sending Retry path, which would resume + repeat.
+                            <button
+                              type="button"
+                              className="ghost chat-error-retry"
+                              onClick={() =>
+                                onResumeRun
+                                  ? onResumeRun(retryAssistant)
+                                  : onSend(RESUME_CONTINUE_PROMPT, [], [])
+                              }
+                            >
+                              {t('chat.resumeRunCta')}
+                            </button>
+                          ) : runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry ? (
                             <button
                               type="button"
                               className="ghost chat-error-retry"

@@ -68,6 +68,74 @@ describe('streamViaDaemon', () => {
     expect(body.currentPrompt).toBe('post-consent revision');
   });
 
+  it('does not surface an error when a still-running same-run retry later succeeds', async () => {
+    // The daemon emits the `error` frame for the failed first attempt BEFORE it
+    // decides to retry. At that moment the run status is still `running` (the
+    // retry is in flight — it may be slow). The consumer must NOT surface the
+    // transient error; it keeps consuming and the later `end` frame resolves the
+    // run as a success. Surfacing here (or on a poll timeout) would turn a
+    // recovered run into a visible failure and drop the successful stream.
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse(
+          'event: error\ndata: {"code":"AGENT_EXECUTION_FAILED","message":"upstream drop","retryable":true}\n\n' +
+          'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        );
+      }
+      if (url === '/api/runs/run-1') {
+        // Retry still in flight when the error frame is observed.
+        return jsonResponse({ id: 'run-1', status: 'running' });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'do the thing' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces a terminal failure with the finalized resumable flag', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse(
+          'event: error\ndata: {"code":"AGENT_EXECUTION_FAILED","message":"upstream drop","retryable":true}\n\n',
+        );
+      }
+      if (url === '/api/runs/run-1') {
+        return jsonResponse({ id: 'run-1', status: 'failed', resumable: true });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'do the thing' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onDone).not.toHaveBeenCalled();
+    expect(handlers.onError).toHaveBeenCalledTimes(1);
+    const err = handlers.onError.mock.calls[0]![0] as Error & { resumable?: boolean };
+    expect(err.resumable).toBe(true);
+  });
+
   it('sends run-scoped media execution policy to the daemon', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

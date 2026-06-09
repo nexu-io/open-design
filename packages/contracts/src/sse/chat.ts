@@ -71,6 +71,11 @@ export interface ChatSseEndPayload {
   code: number | null;
   signal?: string | null;
   status?: 'succeeded' | 'failed' | 'canceled';
+  /** True when a `failed` run can be recovered by resuming the agent's CLI
+   *  session (transient upstream drop / inactivity on a session-resuming
+   *  runtime). Lets the chat offer a Continue affordance without a separate
+   *  run-status fetch. Mirrors ChatRunStatusResponse.resumable. */
+  resumable?: boolean;
 }
 
 export type DaemonAgentPayload =

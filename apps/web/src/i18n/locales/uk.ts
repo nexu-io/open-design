@@ -2321,6 +2321,7 @@ export const uk: Dict = {
   'assistant.unfinishedSummary': 'залишилось {n} завдання(нь)',
   'assistant.unfinishedMore': '+ще {n}',
   'assistant.continueRemaining': 'Продовжити залишкові завдання',
+  'chat.resumeRunCta': 'Продовжити виконання',
   'assistant.outTokens': '{n} вихід',
   'assistant.producedFiles': 'Файли з цієї черги',
   'assistant.openFile': 'Відкрити',

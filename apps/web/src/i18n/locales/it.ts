@@ -2321,6 +2321,7 @@ export const it: Dict = {
   'assistant.unfinishedSummary': '{n} attività rimanenti',
   'assistant.unfinishedMore': '+{n} in più',
   'assistant.continueRemaining': 'Continua le attività rimanenti',
+  'chat.resumeRunCta': 'Riprendi l’esecuzione',
   'assistant.outTokens': '{n} output',
   'assistant.producedFiles': 'File di questo turno',
   'assistant.openFile': 'Apri',

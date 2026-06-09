@@ -2321,6 +2321,7 @@ export const ar: Dict = {
   'assistant.unfinishedSummary': 'تبقى {n} مهمة/مهام',
   'assistant.unfinishedMore': '+{n} أكثر',
   'assistant.continueRemaining': 'متابعة المهام المتبقية',
+  'chat.resumeRunCta': 'متابعة التشغيل',
   'assistant.outTokens': '{n} خرج',
   'assistant.producedFiles': 'الملفات من هذا الدور',
   'assistant.openFile': 'فتح',

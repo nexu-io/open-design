@@ -100,7 +100,7 @@ async function discoverIds() {
 }
 
 // ---- render + encode one plugin -------------------------------------------
-async function bakeOne(browser, id) {
+async function bakeOne(browser, id, hash) {
   const page = await browser.newPage();
   await page.setViewport({ width: RENDER_W, height: VIEW_H, deviceScaleFactor: 1 });
   try {
@@ -213,8 +213,13 @@ async function bakeOne(browser, id) {
   const listPath = path.join(frameDir, 'list.txt');
   writeFileSync(listPath, lines.join('\n'));
 
-  const video = path.join(OUT, `${id}.mp4`);
-  const poster = path.join(OUT, `${id}.poster.jpg`);
+  // Content-hashed filenames so a re-bake publishes a NEW URL the daemon points
+  // at via the manifest, instead of overwriting the same key — which the CDN
+  // edge would keep serving stale until its TTL expired. New name => new cache
+  // entry => safe to cache immutably forever.
+  const slug = hash ? `${id}.${hash}` : id;
+  const video = path.join(OUT, `${slug}.mp4`);
+  const poster = path.join(OUT, `${slug}.poster.jpg`);
   const ff = (a) => execFileSync('ffmpeg', ['-y', ...a], { stdio: 'ignore' });
   // H.264 MP4, constant frame rate (the fps filter resamples the concat's
   // real-time timeline to a constant FPS). H.264 decodes reliably in both
@@ -228,7 +233,7 @@ async function bakeOne(browser, id) {
     '-q:v', '5', '-frames:v', '1', poster]);
   rmSync(frameDir, { recursive: true, force: true });
 
-  return { id, durationMs: durMs, holdMs: HOLD_MS, video: `${id}.mp4`, poster: `${id}.poster.jpg`,
+  return { id, durationMs: durMs, holdMs: HOLD_MS, video: `${slug}.mp4`, poster: `${slug}.poster.jpg`,
     bytes: statSync(video).size, posterBytes: statSync(poster).size };
 }
 
@@ -269,7 +274,7 @@ for (const id of ids) {
     continue;
   }
   let r;
-  try { r = await bakeOne(browser, id); } catch (e) { r = { id, skipped: `error ${e.message}` }; }
+  try { r = await bakeOne(browser, id, hash); } catch (e) { r = { id, skipped: `error ${e.message}` }; }
   if (r.skipped) { skip += 1; console.log(`  ~ ${id}: skip (${r.skipped})`); continue; }
   previews[id] = { video: r.video, poster: r.poster, durationMs: r.durationMs, holdMs: r.holdMs, hash };
   ok += 1;

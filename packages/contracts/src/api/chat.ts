@@ -73,7 +73,11 @@ export type ChatAnalyticsEntryFrom =
   | 'chat_composer'
   | 'design_system_create'
   | 'onboarding_design_system'
-  | 'regenerate_from_review';
+  | 'regenerate_from_review'
+  // A turn started by the "Continue the run" affordance on a resumable failed
+  // run. Lets run_created / run_finished isolate resume-continuations so the
+  // recovery mechanism's usage and success rate are measurable.
+  | 'resume_continue';
 
 export type ChatAnalyticsLengthBucket =
   | '0'
@@ -252,6 +256,13 @@ export interface ChatRunStatusResponse {
   signal?: string | null;
   error?: string | null;
   errorCode?: string | null;
+  /** True when this terminal failure can be recovered by resuming the agent's
+   *  existing CLI session (a transient upstream drop / inactivity timeout on a
+   *  session-resuming runtime), rather than only restarting from scratch. The
+   *  chat uses it to offer a Continue affordance; the next turn in the same
+   *  conversation resumes the persisted session. Absent/false on success,
+   *  non-resumable failures, and runtimes without CLI session resume. */
+  resumable?: boolean;
   /** Absolute path to the per-run JSONL event log the daemon mirrors
    *  the SSE stream to (see runs.ts `runsLogDir`). Null when the
    *  daemon was launched without event persistence configured. */
@@ -357,6 +368,11 @@ export interface ChatMessage {
   createdAt?: number;
   runId?: string;
   runStatus?: ChatRunStatus;
+  /** True when this message's failed run can be recovered by resuming the
+   *  agent's CLI session (transient upstream drop / inactivity on a
+   *  session-resuming runtime). Drives the chat's Continue affordance; mirrors
+   *  ChatRunStatusResponse.resumable. */
+  resumable?: boolean;
   lastRunEventId?: string;
   startedAt?: number;
   endedAt?: number;

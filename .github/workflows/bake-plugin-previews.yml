@@ -92,9 +92,12 @@ jobs:
         run: |
           endpoint="${R2_ENDPOINT%/}"
           # cp (not sync --delete) so untouched clips already on R2 stay put.
+          # Filenames are content-hashed, so the clips are immutable — let the
+          # CDN cache them forever (a content change ships a new filename).
           aws s3 cp .tmp/plugin-previews "s3://$R2_BUCKET/plugin-previews/" \
             --recursive --no-progress \
             --endpoint-url "$endpoint" \
+            --cache-control "public, max-age=31536000, immutable" \
             --exclude manifest.json
 
       - name: Open manifest PR for review
