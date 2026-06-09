@@ -5,6 +5,7 @@ import {
   SIDECAR_SOURCES,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
+import { parseLauncherAfterQuitArgs } from "@open-design/launcher-proto";
 import {
   bootstrapSidecarRuntime,
   createSidecarLaunchEnv,
@@ -18,6 +19,7 @@ import { app, dialog } from "electron";
 import { readPackagedConfig } from "./config.js";
 import { writePackagedDesktopIdentity } from "./identity.js";
 import { PackagedPathAccessError } from "./errors.js";
+import { inspectExistingDesktopForLauncher, waitForLauncherAfterQuit } from "./launcher-after-quit.js";
 import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "./launcher-runtime.js";
 import {
   applyPackagedElectronPathOverrides,
@@ -32,6 +34,7 @@ import {
 import { resolvePackagedNamespacePaths } from "./paths.js";
 import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
 import { startPackagedSidecars } from "./sidecars.js";
+import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
 
 let packagedLogger: PackagedDesktopLogger | null = null;
 let pendingSecondInstanceFocus = false;
@@ -63,6 +66,12 @@ function applyLaunchEnv(base: string, stamp: SidecarStamp): void {
   }
 }
 
+function applyPackagedUpdaterEnv(updateMetadataUrl: string | null): void {
+  if (updateMetadataUrl == null) return;
+  if (process.env.OD_UPDATE_METADATA_URL != null && process.env.OD_UPDATE_METADATA_URL.length > 0) return;
+  process.env.OD_UPDATE_METADATA_URL = updateMetadataUrl;
+}
+
 async function main(): Promise<void> {
   // Must run BEFORE `app.whenReady()` below, because Chromium consumes
   // `--lang` at session bootstrap. Doing it here lets the packaged
@@ -72,10 +81,19 @@ async function main(): Promise<void> {
   applyOsLocaleSwitch(app);
 
   const config = await readPackagedConfig();
+  const afterQuit = parseLauncherAfterQuitArgs(process.argv.slice(1));
   const argvStamp = readProcessStamp(process.argv.slice(1), OPEN_DESIGN_SIDECAR_CONTRACT);
   const namespace = argvStamp?.namespace ?? config.namespace;
   const namespaceConfig = namespace === config.namespace ? config : { ...config, namespace };
   const initialPaths = resolvePackagedNamespacePaths(namespaceConfig, namespace, process.env);
+  await waitForLauncherAfterQuit(afterQuit, initialPaths);
+  const existingDesktop = await inspectExistingDesktopForLauncher(namespace, {
+    logger: console,
+    paths: initialPaths,
+  });
+  if (existingDesktop.action === "exit") {
+    return;
+  }
   const launcherRuntime = await resolvePackagedLauncherRuntime(namespaceConfig, initialPaths);
   const activeConfig = launcherRuntime.config;
   const paths = launcherRuntime.paths;
@@ -85,6 +103,7 @@ async function main(): Promise<void> {
   packagedLogger = createPackagedDesktopLogger(paths);
   attachPackagedDesktopProcessLogging({ logger: packagedLogger, paths, stamp });
   applyPackagedElectronPathOverrides(paths);
+  applyPackagedUpdaterEnv(activeConfig.updateMetadataUrl);
   if (!claimPackagedSingleInstanceLock(app, () => {
     if (showExistingDesktop == null) {
       pendingSecondInstanceFocus = true;
@@ -158,6 +177,12 @@ async function main(): Promise<void> {
     onDesktopReady(controls) {
       void confirmPackagedLauncherRuntime(launcherRuntime).catch((error: unknown) => {
         packagedLogger?.warn("failed to confirm packaged launcher runtime", { error });
+      });
+      void syncWindowsUninstallDisplayVersion({
+        namespace,
+        version: launcherRuntime.config.appVersion,
+      }).catch((error: unknown) => {
+        packagedLogger?.warn("failed to sync Windows uninstall registry version", { error });
       });
       showExistingDesktop = controls.show;
       if (!pendingSecondInstanceFocus) return;

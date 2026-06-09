@@ -264,6 +264,9 @@ export type TrackingRunFailureDetail =
   | 'agent_protocol_error'
   | 'permission_request_not_found'
   | 'qoder_stop_sequence'
+  | 'signal_killed'
+  | 'process_crashed'
+  | 'interrupted'
   | 'exit_code'
   | 'terminated_unknown'
   | 'execution_failed'
@@ -1057,6 +1060,14 @@ export interface HomeChatComposerClickProps {
     | 'working_dir'
     | 'working_dir_clear'
     | 'task_chip'
+    // Sub-category filter pill under the task rail (全部 / Landing / Brand /
+    // Dashboards / …). `subcategory` carries the picked slug; '全部' sends
+    // `subcategory: 'all'`. `chip_id` is the parent task type.
+    | 'subcategory_chip'
+    // An example-prompt card below the rail ("示例提示词"). `chip_id` is the
+    // task type; for plugin-preset cards `plugin_id` / `plugin_type` identify
+    // the preset. The raw prompt text is never sent (free text / PII rule).
+    | 'example_prompt'
     // The "+" menu on the home composer (same control as the in-project
     // composer's `plus_*` events): opening it, inserting a
     // connector/plugin/mcp mention (`resource_kind` + `resource_id`), or
@@ -1070,6 +1081,11 @@ export interface HomeChatComposerClickProps {
   // For plugin / action / task chips, the specific id (e.g. `prototype`,
   // `from_figma`, `hyperframes`).
   chip_id?: string;
+  // For `subcategory_chip`: the picked sub-category slug ('all' on 全部).
+  subcategory?: string;
+  // For `example_prompt` cards backed by a plugin preset: which preset.
+  plugin_id?: string;
+  plugin_type?: string;
 }
 
 export interface UpdateIndicatorClickProps {
@@ -1302,6 +1318,24 @@ export interface PluginLoopClickProps {
   plugin_id?: string;
 }
 
+// COMMUNITY — the home "Community" gallery: a wall of live example.html
+// preview tiles (PluginsHomeSection cardLayout="gallery"). `card` opens
+// the plugin detail modal (tile body click or keyboard); `card_open_external`
+// is the ↗ that opens the real example page in a new tab, bypassing the
+// modal — a strong "go straight to the finished thing" intent signal.
+export interface CommunityGalleryClickProps {
+  page_name: 'home';
+  area: 'community_gallery';
+  // `use_plugin` is the user actually applying a community plugin into the
+  // composer (from the gallery card's Use button or its detail modal), as
+  // opposed to just opening the card. `action` distinguishes a plain apply
+  // from use-with-query.
+  element: 'card' | 'card_open_external' | 'use_plugin';
+  plugin_id?: string;
+  plugin_type?: string;
+  action?: 'use' | 'use_with_query';
+}
+
 // DESIGN SYSTEMS
 export interface DesignSystemsTopClickProps {
   page_name: 'design_systems';
@@ -1485,16 +1519,16 @@ export interface ComposerBarClickProps {
   project_id?: string;
 }
 
-// Next-step action affordance shown under the last assistant message after a
-// previewable artifact is produced. `next_step_exposed` fires once when the
-// affordance becomes visible so the funnel can divide clicks by exposure;
-// the action elements drive the "second-turn rate" / "share rate" acceptance
-// metrics. `chip_id` carries the recommended-chip identity (e.g.
-// `polish_visual`, `second_version`) for the `chip` element.
+// Next-step action affordance shown under the last successful assistant
+// message. `next_step_exposed` fires once when the affordance becomes visible
+// so the funnel can divide clicks by exposure; the action elements drive the
+// "second-turn rate" / "share rate" acceptance metrics. `chip_id` carries the
+// recommended-chip identity (e.g. `polish_visual`, `second_version`) for the
+// `chip` element.
 export interface NextStepActionClickProps {
   page_name: 'chat_panel';
   area: 'next_step';
-  element: 'next_step_exposed' | 'share' | 'chip';
+  element: 'next_step_exposed' | 'share' | 'chip' | 'share_to_open_design';
   chip_id?: string;
 }
 
@@ -1934,6 +1968,7 @@ export type UiClickProps =
   | PluginsSourcesTabClickProps
   | PluginDetailClickProps
   | PluginLoopClickProps
+  | CommunityGalleryClickProps
   | DesignSystemsTopClickProps
   | DesignSystemsTemplateCardClickProps
   | DesignSystemsTemplatesModalClickProps
@@ -1994,6 +2029,16 @@ export interface PluginReplacementModalSurfaceViewProps {
   area: 'plugin_replacement_modal';
 }
 
+// Impression of the plugin detail modal opened from the home Community
+// gallery. Fires once per open so the gallery → detail funnel has a
+// denominator (card clicks) and a numerator (modal exposures).
+export interface PluginDetailModalSurfaceViewProps {
+  page_name: 'home';
+  area: 'plugin_detail_modal';
+  plugin_id?: string;
+  plugin_type?: string;
+}
+
 export interface DesignSystemsTemplatesModalSurfaceViewProps {
   page_name: 'design_systems';
   area: 'templates_modal';
@@ -2051,6 +2096,7 @@ export type SurfaceViewProps =
   | HelpPopoverSurfaceViewProps
   | NewProjectModalSurfaceViewProps
   | PluginReplacementModalSurfaceViewProps
+  | PluginDetailModalSurfaceViewProps
   | DesignSystemsTemplatesModalSurfaceViewProps
   | AssistantFeedbackReasonPanelSurfaceViewProps
   | UpdateIndicatorSurfaceViewProps
@@ -2074,6 +2120,11 @@ export interface ProjectCreateResultProps {
   reference_template?: string;
   model_id?: string;
   aspect?: string;
+  // The scenario plugin the send was routed through (when any), so a
+  // successful/failed create can be attributed to a specific plugin —
+  // e.g. an example-prompt preset or a community plugin the user applied.
+  plugin_id?: string;
+  plugin_type?: string;
   result: TrackingResult;
   error_code?: string;
 }

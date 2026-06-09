@@ -933,7 +933,11 @@
 }
 /* When the chat pane is narrow, compact the footer cluster: tighten the
    model chip + mode toggle, collapse the mode label, and make send/stop
-   icon-only — so the action buttons never overflow or deform. */
+   icon-only — so the action buttons never overflow or deform. This @container
+   block is shared by every `.composer-shell` (chat footer, comment composer,
+   …), so the breakpoint stays generic; the fixed-layer footer keeps its side
+   inset via child margins rather than shell padding, leaving this width — and
+   every other composer's collapse behavior — untouched. */
 @container (max-width: 430px) {
   .composer-row .inline-switcher__chip { padding: 0 7px 0 5px; gap: 5px; }
   /* Hide ONLY the trigger's label — the popover options share this class

@@ -34,7 +34,7 @@ import {
   type QuestionForm,
 } from "../artifacts/question-form";
 import { parseSubmittedAnswers } from "./QuestionForm";
-import { splitStreamingArtifact, stripArtifact } from "../artifacts/strip";
+import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from "../artifacts/strip";
 import {
   getPluginFolderCandidates,
   type PluginFolderCandidate,
@@ -270,9 +270,9 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
-  // Click handler for the "Share to Open Design" button rendered next to
-  // the post-completion Discord prompt. ProjectView wires this to
-  // handleSend with the bundled `od-share-to-community` trigger prompt.
+  // Click handler for the post-completion "Share to Open Design" submission
+  // action. ProjectView wires this to handleSend with the bundled
+  // `od-share-to-community` trigger prompt.
   onShareToOpenDesign?: () => void;
   shareToOpenDesignBusy?: boolean;
   // True only for the most recent assistant message.
@@ -298,11 +298,11 @@ interface Props {
   onFeedback?: (change: ChatMessageFeedbackChange) => void;
   suppressDirectionForms?: boolean;
   hasDesignSystemContext?: boolean;
-  // "Next step" affordance handlers, surfaced under the last assistant message
-  // once it has produced a previewable (HTML) artifact. Omitting them hides
-  // the affordance entirely (e.g. in tests that don't wire chat send).
+  // "Next step" affordance handlers, surfaced under the last successful
+  // assistant message. Omitting them hides the affordance entirely (e.g. in
+  // tests that don't wire chat send).
   onArtifactShare?: (fileName: string) => void;
-  onArtifactChip?: (fileName: string, prompt: string) => void;
+  onArtifactChip?: (fileName: string | null, prompt: string) => void;
 }
 
 // Props compared by reference to decide whether a memoized AssistantMessage can
@@ -579,6 +579,14 @@ function AssistantMessageImpl({
     hasEmptyResponse ||
     !!copyMarkdown ||
     canFork;
+  const canShowOpenDesignSubmission = !!onShareToOpenDesign && showFeedback && runSucceeded;
+  const showOpenDesignSubmission =
+    canShowOpenDesignSubmission && (!!isLast || shareToOpenDesignBusy);
+  const showNextStepActions =
+    !streaming &&
+    !!projectId &&
+    runSucceeded &&
+    ((!!isLast && !!onArtifactChip) || showOpenDesignSubmission);
   // Pre-output vs working: before any real content (text / thinking / tools /
   // files) the footer shimmers "Preparing…"; the moment content lands it
   // flips to "Working". The elapsed clock stays anchored to the persisted run
@@ -633,6 +641,7 @@ function AssistantMessageImpl({
               <ProseBlock
                 key={i}
                 text={b.text}
+                hideRecoveredHtmlFallback={message.agentId === "grok-build" && !streaming}
                 assistantMessageId={message.id}
                 isLastAssistant={!!isLast}
                 streaming={streaming}
@@ -706,18 +715,6 @@ function AssistantMessageImpl({
             files={displayedProduced}
             projectId={projectId}
             onRequestOpenFile={onRequestOpenFile}
-          />
-        ) : null}
-        {!streaming &&
-        isLast &&
-        projectId &&
-        nextStepArtifactName &&
-        onArtifactShare &&
-        onArtifactChip ? (
-          <NextStepActions
-            fileName={nextStepArtifactName}
-            onShare={onArtifactShare}
-            onChip={onArtifactChip}
           />
         ) : null}
         {!streaming && projectId && pluginActionFolders.length > 0 ? (
@@ -805,29 +802,16 @@ function AssistantMessageImpl({
                 isLast={!!isLast}
               />
             )}
-            {/*
-              "Share to Open Design" — pairs with the post-feedback Discord
-              prompt (assistant-feedback-discord-note). Only shows on the most
-              recent assistant message after a successful run. The thumbs row
-              now also renders on failed/canceled turns, so Share keeps its own
-              `runSucceeded` gate to stay off errored runs, partial streams, or
-              empty responses. Click hands the user a packaged plugin via the
-              bundled od-share-to-community scenario.
-            */}
-            {onShareToOpenDesign && isLast && showFeedback && runSucceeded ? (
-              <button
-                type="button"
-                className="assistant-share-to-od-btn"
-                data-testid="assistant-share-to-od"
-                disabled={shareToOpenDesignBusy}
-                onClick={onShareToOpenDesign}
-              >
-                {shareToOpenDesignBusy
-                  ? t('assistant.shareToOpenDesignBusy')
-                  : t('assistant.shareToOpenDesign')}
-              </button>
-            ) : null}
           </div>
+        ) : null}
+        {showNextStepActions ? (
+          <NextStepActions
+            fileName={isLast ? nextStepArtifactName : null}
+            onShare={isLast && nextStepArtifactName ? onArtifactShare : undefined}
+            onChip={isLast ? onArtifactChip : undefined}
+            onShareToOpenDesign={showOpenDesignSubmission ? onShareToOpenDesign : undefined}
+            shareToOpenDesignBusy={shareToOpenDesignBusy}
+          />
         ) : null}
       </div>
     </div>
@@ -1890,6 +1874,7 @@ function hasPluginFinalActionHint(content: string): boolean {
 
 function ProseBlock({
   text,
+  hideRecoveredHtmlFallback,
   assistantMessageId,
   isLastAssistant,
   streaming,
@@ -1902,6 +1887,7 @@ function ProseBlock({
   onRequestOpenFile,
 }: {
   text: string;
+  hideRecoveredHtmlFallback?: boolean;
   assistantMessageId: string;
   isLastAssistant: boolean;
   streaming: boolean;
@@ -1914,7 +1900,10 @@ function ProseBlock({
   onRequestOpenFile?: (name: string) => void;
 }) {
   const t = useT();
-  const cleaned = useMemo(() => stripArtifact(text), [text]);
+  const cleaned = useMemo(() => {
+    const stripped = stripArtifact(text);
+    return hideRecoveredHtmlFallback ? stripRecoveredHtmlFallbackForDisplay(stripped, text) : stripped;
+  }, [hideRecoveredHtmlFallback, text]);
   // While the latest turn is still streaming a not-yet-closed question-form,
   // drop the partial `<question-form>{…` markup from the prose so the chat
   // doesn't flash raw JSON; we surface a banner for it instead. The actual
@@ -2024,22 +2013,37 @@ function ProseBlock({
 // Chat-side banner that points to the right-hand Questions tab where discovery
 // forms live. The chat column always stays compact: no inline form preview,
 // answered or not.
-function QuestionsBanner({ onOpen }: { onOpen?: () => void }) {
+function QuestionsBanner({
+  onOpen,
+  answered = false,
+}: {
+  onOpen?: () => void;
+  answered?: boolean;
+}) {
   const t = useT();
+  // Once the form has been answered there is nothing left to open, so the
+  // banner becomes a non-interactive "done" marker: no chevron affordance, no
+  // click target, muted styling.
   return (
     <button
       type="button"
-      className="questions-banner"
+      className={`questions-banner${answered ? " questions-banner-answered" : ""}`}
       data-testid="questions-banner"
-      onClick={() => onOpen?.()}
+      data-answered={answered ? "true" : undefined}
+      disabled={answered}
+      onClick={answered ? undefined : () => onOpen?.()}
     >
       <span className="questions-banner-icon" aria-hidden>
-        <Icon name="help-circle" size={15} />
+        <Icon name={answered ? "check" : "help-circle"} size={15} />
       </span>
-      <span className="questions-banner-label">{t("questions.banner")}</span>
-      <span className="questions-banner-cta" aria-hidden>
-        <Icon name="chevron-right" size={14} />
+      <span className="questions-banner-label">
+        {answered ? t("questions.bannerAnswered") : t("questions.banner")}
       </span>
+      {answered ? null : (
+        <span className="questions-banner-cta" aria-hidden>
+          <Icon name="chevron-right" size={14} />
+        </span>
+      )}
     </button>
   );
 }
@@ -2061,12 +2065,16 @@ function FormBlock({
   nextUserContent?: string;
   onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
 }) {
+  // A "[form answers …]" reply parked right after this message means the form
+  // was already submitted; the banner then renders as an answered/done state.
+  const submittedFromHistory = useMemo(
+    () => (nextUserContent ? parseSubmittedAnswers(form, nextUserContent) : null),
+    [form, nextUserContent],
+  );
   return (
     <QuestionsBanner
+      answered={submittedFromHistory != null}
       onOpen={() => {
-        const submittedFromHistory = nextUserContent
-          ? parseSubmittedAnswers(form, nextUserContent)
-          : null;
         onOpenQuestions?.({
           form,
           messageId: assistantMessageId,

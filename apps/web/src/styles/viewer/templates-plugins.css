@@ -2111,6 +2111,42 @@
 .plugin-info-pane .plugin-meta-sections {
   display: block;
 }
+/* Developer-details disclosure (variant="minimal"): folds the dev
+   manifest sections away so designers see only author + example query
+   by default. */
+.plugin-meta-sections__advanced {
+  margin-top: 6px;
+  border-top: 1px solid var(--border-soft, var(--border));
+}
+.plugin-meta-sections__advanced-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 0 4px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  user-select: none;
+}
+.plugin-meta-sections__advanced-summary::-webkit-details-marker {
+  display: none;
+}
+.plugin-meta-sections__advanced-summary::before {
+  content: '▸';
+  font-size: 9px;
+  color: var(--text-faint);
+  transition: transform 120ms ease;
+}
+.plugin-meta-sections__advanced[open] .plugin-meta-sections__advanced-summary::before {
+  transform: rotate(90deg);
+}
+.plugin-meta-sections__advanced-summary:hover {
+  color: var(--text);
+}
 .plugin-info-pane .plugin-meta-sections.is-compact {
   font-size: 12px;
 }
@@ -2182,6 +2218,59 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------
+   Plugin info pane — calm, unified typography (designer-first).
+   Quieter section labels, a box-free author line, a single hairline
+   between sections, and a softer example-query block so the panel
+   reads as one coherent column instead of competing widgets.
+   --------------------------------------------------------------- */
+.plugin-info-pane .plugin-details-modal__section {
+  border-bottom: none;
+  padding: 15px 0;
+}
+.plugin-info-pane .plugin-details-modal__section + .plugin-details-modal__section {
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+.plugin-info-pane .plugin-details-modal__section-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.plugin-info-pane .plugin-details-modal__section-count {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text-muted);
+}
+/* Author — drop the capsule for a quiet avatar + two-line meta. */
+.plugin-info-pane .plugin-details-modal__byline {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  gap: 10px;
+  align-items: center;
+}
+.plugin-info-pane .plugin-details-modal__byline-meta {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+.plugin-info-pane .plugin-details-modal__byline .plugin-details-modal__avatar {
+  width: 32px;
+  height: 32px;
+}
+/* Example query — softer tint, hairline border, smaller radius. The
+   query is a natural-language prompt, so set it in the regular UI font
+   instead of monospace for a calmer, more readable block. */
+.plugin-info-pane .plugin-details-modal__query {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.6;
 }
 /* Design-system sidebar keeps the plugin inspector first, then exposes
    DESIGN.md as a secondary spec section. This makes design systems read

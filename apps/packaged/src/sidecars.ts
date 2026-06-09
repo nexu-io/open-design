@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { access, mkdir, open, type FileHandle } from "node:fs/promises";
+import { access, appendFile, mkdir, open, type FileHandle } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { delimiter, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -73,6 +73,7 @@ type ManagedSidecarChild = {
   child: ChildProcess;
   ipcPath: string;
   logHandle: FileHandle;
+  logPath: string;
 };
 
 type PackagedDaemonManagedPathEnv = {
@@ -372,7 +373,8 @@ async function spawnSidecarChild(options: {
     namespace: options.runtime.namespace,
     source: options.runtime.source,
   } satisfies SidecarStamp;
-  const logHandle = await openLog(logPathFor(options.paths, options.app));
+  const logPath = logPathFor(options.paths, options.app);
+  const logHandle = await openLog(logPath);
   const childEnv = createSidecarLaunchEnv({
     base: options.paths.runtimeRoot,
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -407,10 +409,14 @@ async function spawnSidecarChild(options: {
     child.once("spawn", resolveSpawn);
   });
 
-  return { app: options.app, child, ipcPath, logHandle };
+  return { app: options.app, child, ipcPath, logHandle, logPath };
 }
 
 async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
+  const appendLifecycleLog = async (message: string): Promise<void> => {
+    await appendFile(child.logPath, `${message}\n`, "utf8").catch(() => undefined);
+  };
+  await appendLifecycleLog(`[open-design packaged] shutdown requested app=${child.app} pid=${child.child.pid ?? "unknown"}`);
   try {
     await requestJsonIpc(child.ipcPath, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 1200 });
   } catch {
@@ -418,9 +424,11 @@ async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
   }
 
   if (!(await waitForProcessExit(child.child.pid, 5000))) {
+    await appendLifecycleLog(`[open-design packaged] shutdown timeout app=${child.app} pid=${child.child.pid ?? "unknown"}; forcing stop`);
     await stopProcesses([child.child.pid]);
   }
 
+  await appendLifecycleLog(`[open-design packaged] exited app=${child.app} pid=${child.child.pid ?? "unknown"} code=${child.child.exitCode ?? "unknown"} signal=${child.child.signalCode ?? "none"}`);
   await child.logHandle.close().catch(() => undefined);
 }
 

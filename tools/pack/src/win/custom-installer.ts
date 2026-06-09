@@ -5,6 +5,7 @@ import { dirname, join, relative } from "node:path";
 import { promisify } from "node:util";
 
 import type { ToolPackConfig } from "../config.js";
+import { buildInitialLauncherRuntimeDescriptor, resolveToolPackLauncherLayout } from "../launcher-layout.js";
 import { winResources } from "../resources.js";
 import { PRODUCT_NAME } from "./constants.js";
 import { pathExists } from "./fs.js";
@@ -87,6 +88,41 @@ function createNsisLangString(
       return `LangString ${key} \${${language.macro}} "${escapeNsisString(value)}"`;
     })
     .join("\n");
+}
+
+function createLauncherRuntimeSyncScript(
+  config: ToolPackConfig,
+  packagedVersion: string,
+  runtimePath: string,
+  attemptsPath: string,
+): string {
+  if (config.portable) {
+    return `
+Function SyncLauncherRuntime
+FunctionEnd
+`;
+  }
+  const descriptor = buildInitialLauncherRuntimeDescriptor(config, packagedVersion);
+  const descriptorJson = JSON.stringify(descriptor, null, 2).split("\n");
+  const runtimeDir = escapeNsisString(dirname(runtimePath));
+  const escapedRuntimePath = escapeNsisString(runtimePath);
+  const escapedAttemptsPath = escapeNsisString(attemptsPath);
+
+  return `
+Function SyncLauncherRuntime
+  Push $0
+  CreateDirectory "${runtimeDir}"
+  FileOpen $0 "${escapedRuntimePath}" w
+  IfErrors done
+${descriptorJson.map((line) => `  FileWrite $0 "${escapeNsisString(line)}$\\r$\\n"`).join("\n")}
+  FileClose $0
+  Delete "${escapedAttemptsPath}"
+  Push "event=launcher_runtime_after_write path=${escapedRuntimePath}"
+  Call LogInstallerEvent
+done:
+  Pop $0
+FunctionEnd
+`;
 }
 
 async function findFirstExistingPath(candidates: string[]): Promise<string | null> {
@@ -207,8 +243,9 @@ if ($ids) {
 `;
 }
 
-async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths): Promise<void> {
+async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths, packagedVersion: string): Promise<void> {
   const identity = resolveWinInstallIdentity(config);
+  const launcher = resolveToolPackLauncherLayout(config);
   const productName = escapeNsisString(identity.displayName);
   const exeName = escapeNsisString(identity.exeName);
   const uninstallerName = escapeNsisString(identity.uninstallerName);
@@ -349,6 +386,8 @@ write:
   Push "event=$LE target=$LT exists=$LX"
   Call LogInstallerEvent
 FunctionEnd
+
+${createLauncherRuntimeSyncScript(config, packagedVersion, launcher.paths.runtimePath, launcher.paths.attemptsPath)}
 
 Function un.LogInstallerEvent
   Exch $0
@@ -503,7 +542,7 @@ silent_detect_running_instances:
   IfFileExists "$INSTDIR\\${exeName}" existing_install no_existing_install
 existing_install:
   IfSilent 0 no_existing_install
-    Push "$(ExistingInstallSilentOverwrite)"
+    Push "existing installation found; silent install will overwrite it"
     Call LogInstallerEvent
     Goto no_existing_install
 
@@ -723,6 +762,7 @@ skip_silent_desktop_shortcut:
   WriteRegStr HKCU "${appPathsKey}" "" "$INSTDIR\\${exeName}"
   Push "event=registry_after_write key=${registryKey} appPathsKey=${appPathsKey}"
   Call LogInstallerEvent
+  Call SyncLauncherRuntime
   Push "install section done"
   Call LogInstallerEvent
 SectionEnd
@@ -958,7 +998,7 @@ export async function buildCustomWinNsisInstaller(
     await rm(paths.setupPath, { force: true });
   });
   await runSegment("nsis:write-script", async () => {
-    await writeInstallerScript(config, paths);
+    await writeInstallerScript(config, paths, packagedVersion);
   });
   await runSegment("nsis:makensis", async () => {
     await runExecSegment(

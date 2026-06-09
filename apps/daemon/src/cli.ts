@@ -266,7 +266,6 @@ const SUBCOMMAND_MAP = {
   memory: runMemory,
   run: runRun,
   files: runFiles,
-  shell: runShell,
   templates: runTemplates,
   conversation: runConversation,
   chat: runChat,

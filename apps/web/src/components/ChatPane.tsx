@@ -37,7 +37,7 @@ import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong, shortTi
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
 import { AmrGuidance } from './AmrGuidance';
-import { AMR_RECHARGE_URL, resolveRunFailureUi } from '../runtime/amr-guidance';
+import { amrRechargeUrlForProfile, resolveRunFailureUi } from '../runtime/amr-guidance';
 import {
   ChatComposer,
   type ChatComposerHandle,
@@ -963,8 +963,8 @@ interface Props {
   // "Share to Open Design" button on each completed assistant message —
   // wired by ProjectView to handleSend with the bundled
   // `od-share-to-community` scenario's trigger prompt.
-  onShareToOpenDesign?: () => void;
-  shareToOpenDesignBusy?: boolean;
+  onShareToOpenDesign?: (assistantMessageId: string) => void;
+  shareToOpenDesignBusyMessageId?: string | null;
   forceStreamingMessageIds?: Set<string>;
   // Live-only streaming tool-input partials keyed by tool-use id. Threaded to
   // AssistantMessage so an in-flight Write/Edit can render its code in real
@@ -980,7 +980,7 @@ interface Props {
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
   // "Next step" affordance handlers forwarded to the last assistant message.
   onArtifactShare?: (fileName: string) => void;
-  onArtifactChip?: (fileName: string, prompt: string) => void;
+  onArtifactChip?: (fileName: string | null, prompt: string) => void;
   onForkFromMessage?: (assistantMessage: ChatMessage) => void;
   forkingMessageId?: string | null;
   // Header "+" button — kicks off ProjectView's create-conversation flow.
@@ -1083,7 +1083,10 @@ interface Props {
   backLabel?: string;
   projectHeader?: ReactNode;
   designSystemPicker?: ReactNode;
+  config?: AppConfig;
 }
+
+const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
 
 type Tab = 'chat' | 'comments';
 
@@ -1164,7 +1167,7 @@ export function ChatPane({
   activePluginActionPaths,
   hiddenPluginActionPaths,
   onShareToOpenDesign,
-  shareToOpenDesignBusy,
+  shareToOpenDesignBusyMessageId,
   forceStreamingMessageIds,
   liveToolInput,
   initialDraft,
@@ -1227,9 +1230,11 @@ export function ChatPane({
   backLabel,
   projectHeader,
   designSystemPicker,
+  config,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
+  const amrProfile = config?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
   const logRef = useRef<HTMLDivElement | null>(null);
   const chatLogScrollIdleTimerRef = useRef<number | null>(null);
   const historyWrapRef = useRef<HTMLDivElement | null>(null);
@@ -2599,7 +2604,7 @@ export function ChatPane({
                 activePluginActionPaths={activePluginActionPaths}
                 hiddenPluginActionPaths={hiddenPluginActionPaths}
                 onShareToOpenDesign={onShareToOpenDesign}
-                shareToOpenDesignBusy={shareToOpenDesignBusy}
+                shareToOpenDesignBusyMessageId={shareToOpenDesignBusyMessageId}
                 forceStreamingMessageIds={forceStreamingMessageIds}
                 lastAssistantId={lastAssistantId}
                 firstUserMessageId={firstUserMessageId}
@@ -2695,7 +2700,7 @@ export function ChatPane({
                                   'chat_error_recharge',
                                 );
                                 window.open(
-                                  attributedAmrUrl(AMR_RECHARGE_URL, attribution),
+                                  attributedAmrUrl(amrRechargeUrlForProfile(amrProfile), attribution),
                                   '_blank',
                                   'noopener,noreferrer',
                                 );
@@ -2819,9 +2824,9 @@ interface AssistantCallbacks {
     | ((message: ChatMessage, change: ChatMessageFeedbackChange) => void)
     | undefined;
   onArtifactShare: ((fileName: string) => void) | undefined;
-  onArtifactChip: ((fileName: string, prompt: string) => void) | undefined;
+  onArtifactChip: ((fileName: string | null, prompt: string) => void) | undefined;
   onForkFromMessage: ((message: ChatMessage) => void) | undefined;
-  onShareToOpenDesign: (() => void) | undefined;
+  onShareToOpenDesign: ((assistantMessageId: string) => void) | undefined;
 }
 
 type ChatRenderItem = {
@@ -2865,7 +2870,7 @@ function ChatRows({
   activePluginActionPaths,
   hiddenPluginActionPaths,
   onShareToOpenDesign,
-  shareToOpenDesignBusy,
+  shareToOpenDesignBusyMessageId,
   forceStreamingMessageIds,
   lastAssistantId,
   firstUserMessageId,
@@ -2901,8 +2906,8 @@ function ChatRows({
   onRequestPluginFolderAgentAction?: (relativePath: string, action: PluginFolderAgentAction) => void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
-  onShareToOpenDesign?: () => void;
-  shareToOpenDesignBusy?: boolean;
+  onShareToOpenDesign?: (assistantMessageId: string) => void;
+  shareToOpenDesignBusyMessageId?: string | null;
   forceStreamingMessageIds?: Set<string>;
   lastAssistantId: string | undefined;
   firstUserMessageId: string | undefined;
@@ -2914,7 +2919,7 @@ function ChatRows({
   assistantCallbacksRef: MutableRefObject<AssistantCallbacks>;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onArtifactShare?: (fileName: string) => void;
-  onArtifactChip?: (fileName: string, prompt: string) => void;
+  onArtifactChip?: (fileName: string | null, prompt: string) => void;
   onForkFromMessage?: (message: ChatMessage) => void;
   onAssistantFeedback?: (message: ChatMessage, change: ChatMessageFeedbackChange) => void;
   forkingMessageId?: string | null;
@@ -2984,10 +2989,10 @@ function ChatRows({
         hiddenPluginActionPaths={hiddenPluginActionPaths}
         onShareToOpenDesign={
           onShareToOpenDesign
-            ? () => assistantCallbacksRef.current.onShareToOpenDesign?.()
+            ? () => assistantCallbacksRef.current.onShareToOpenDesign?.(m.id)
             : undefined
         }
-        shareToOpenDesignBusy={shareToOpenDesignBusy}
+        shareToOpenDesignBusy={shareToOpenDesignBusyMessageId === m.id}
         isLast={m.id === lastAssistantId}
         errorCardOwnerId={errorCardOwnerId}
         nextUserContent={nextUserContentByAssistantId.get(m.id)}
@@ -3473,6 +3478,7 @@ function QueuedSendStrip({
                   data-tooltip={t('chat.send')}
                   data-tooltip-placement="top"
                   aria-label={t('chat.send')}
+                  data-testid="chat-queued-send-now"
                   onClick={() => onSendNow?.(item.id)}
                   disabled={!onSendNow}
                 >

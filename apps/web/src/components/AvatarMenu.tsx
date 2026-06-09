@@ -11,7 +11,7 @@ import { mergeProviderModelOptions, providerModelsCacheKey } from './SettingsDia
 import { apiProtocolLabel } from '../utils/apiProtocol';
 import { fetchProviderModels } from '../providers/provider-models';
 import { isMacPlatform } from '../utils/platform';
-import { AMR_CONSOLE_URL } from '../runtime/amr-guidance';
+import { amrConsoleUrlForProfile } from '../runtime/amr-guidance';
 
 interface Props {
   config: AppConfig;
@@ -159,6 +159,8 @@ export function AvatarMenu({
   const amrAvailable = installedAgents.some((a) => a.id === 'amr');
   const showAmrAccountShortcut =
     config.mode === 'daemon' && currentAgent?.id === 'amr' && amrAvailable;
+  const amrProfile = config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE;
+  const amrConsoleUrl = amrConsoleUrlForProfile(amrProfile);
 
   // Resolve the user's model + reasoning pick for the active agent. Falls
   // back to the agent's first declared option (`'default'`) when the user
@@ -273,7 +275,7 @@ export function AvatarMenu({
           {showAmrAccountShortcut ? (
             <a
               className="avatar-amr-account-link"
-              href={AMR_CONSOLE_URL}
+              href={amrConsoleUrl}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setOpen(false)}

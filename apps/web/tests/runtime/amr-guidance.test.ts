@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { resolveRunFailureUi } from '../../src/runtime/amr-guidance';
+import { amrRechargeUrlForProfile, resolveRunFailureUi } from '../../src/runtime/amr-guidance';
+
+describe('amrRechargeUrlForProfile', () => {
+  it('matches the selected AMR profile wallet origin', () => {
+    expect(amrRechargeUrlForProfile('prod')).toBe('https://open-design.ai/amr/wallet');
+    expect(amrRechargeUrlForProfile('test')).toBe('https://vela.powerformer.net/wallet');
+    expect(amrRechargeUrlForProfile('local')).toBe('http://localhost:5173/wallet');
+    expect(amrRechargeUrlForProfile(' unknown ')).toBe('https://open-design.ai/amr/wallet');
+  });
+});
 
 describe('resolveRunFailureUi', () => {
   it('promotes AMR (switch card) for non-AMR model/auth/quota errors', () => {
@@ -21,6 +30,18 @@ describe('resolveRunFailureUi', () => {
     const ui = resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'claude');
     expect(ui).toMatchObject({ primaryAction: 'retry', showSwitchCard: false, messageKey: null });
     expect(resolveRunFailureUi('AGENT_UNAVAILABLE', 'codex').showSwitchCard).toBe(false);
+  });
+
+  it('localizes a mid-stream connection drop for any agent, no AMR promotion', () => {
+    for (const agent of ['claude', 'codex', null]) {
+      const ui = resolveRunFailureUi('AGENT_CONNECTION_DROPPED', agent);
+      expect(ui).toMatchObject({
+        primaryAction: 'retry',
+        messageKey: 'chat.connectionDropped',
+        secondaryRetry: false,
+        showSwitchCard: false,
+      });
+    }
   });
 
   it('offers authorize-and-retry for an unauthorized AMR run (no card)', () => {

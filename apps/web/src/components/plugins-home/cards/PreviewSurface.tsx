@@ -18,10 +18,15 @@ interface Props {
   pluginId: string;
   pluginTitle: string;
   preview: PluginPreviewSpec;
+  // Gallery layout renders the HTML iframe eagerly (no hover gate).
+  eager?: boolean;
 }
 
-export function PreviewSurface({ pluginId, pluginTitle, preview }: Props) {
-  const { ref, inView } = useInView<HTMLDivElement>({ rootMargin: '120px', once: false });
+export function PreviewSurface({ pluginId, pluginTitle, preview, eager = false }: Props) {
+  const { ref, inView } = useInView<HTMLDivElement>({
+    rootMargin: eager ? '480px' : '120px',
+    once: false,
+  });
 
   return (
     <div
@@ -37,6 +42,7 @@ export function PreviewSurface({ pluginId, pluginTitle, preview }: Props) {
           pluginId={pluginId}
           pluginTitle={pluginTitle}
           inView={inView}
+          eager={eager}
         />
       ) : preview.kind === 'design' ? (
         <DesignSystemSurface preview={preview} inView={inView} />

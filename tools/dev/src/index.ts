@@ -42,6 +42,7 @@ import {
   resolveStopApps,
   resolveTargetApps,
   resolveToolDevConfig,
+  WORKSPACE_ROOT,
   type ToolDevAppName,
   type ToolDevConfig,
   type ToolDevOptions,
@@ -64,6 +65,7 @@ import {
   waitForWebRuntime,
 } from "./sidecar-client.js";
 import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
+import { loadWorkspaceLocalEnv } from "./local-env.js";
 import { resolveSharedPortsFromRunningState } from "./shared-ports.js";
 
 type CliOptions = ToolDevOptions & {
@@ -88,6 +90,8 @@ function exitWithError(error: unknown): never {
 
 process.on("uncaughtException", exitWithError);
 process.on("unhandledRejection", exitWithError);
+
+loadWorkspaceLocalEnv({ workspaceRoot: WORKSPACE_ROOT });
 
 function printJson(payload: unknown): void {
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);

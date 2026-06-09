@@ -1,13 +1,18 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
-import { mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { basename, join, relative } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { LAUNCHER_SCHEMA_VERSION } from "@open-design/launcher-proto";
+import {
+  LAUNCHER_AFTER_QUIT_FLAG,
+  LAUNCHER_AFTER_QUIT_TARGET_PID_ARG,
+  LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG,
+  LAUNCHER_SCHEMA_VERSION,
+} from "@open-design/launcher-proto";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_STATES,
@@ -270,6 +275,18 @@ function metadataResponse(version: string): Response {
   }));
 }
 
+async function writeReleaseFixture(root: string, key: string, channel: FixtureChannel, version: string): Promise<string> {
+  const releaseDir = join(root, "releases", key);
+  await mkdir(releaseDir, { recursive: true });
+  await writeFile(join(releaseDir, "metadata.json"), `${JSON.stringify({
+    channel,
+    ...channelMetadata(channel, version),
+    version: 1,
+  }, null, 2)}\n`, "utf8");
+  await writeFile(join(releaseDir, "artifact.bin"), version, "utf8");
+  return releaseDir;
+}
+
 describe("desktop updater", () => {
   it("derives installer observation summary paths from safe flow ids only", () => {
     const root = makeRoot();
@@ -278,6 +295,49 @@ describe("desktop updater", () => {
       expect(() => installerObservationSummaryPath(root, "../escape")).toThrow(/flow_id/);
       expect(() => installerObservationSummaryPath(root, "..")).toThrow(/flow_id/);
     } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("adds session and source context to lifecycle logs", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture();
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() };
+    try {
+      const updater = createDesktopUpdater(
+        {
+          arch: "arm64",
+          downloadRoot: root,
+          env: updaterEnv(fixture.metadataUrl),
+          namespace: "release-beta",
+          source: SIDECAR_SOURCES.PACKAGED,
+        },
+        {
+          logger,
+          now: () => new Date("2026-06-09T07:50:51.000Z"),
+          processPid: 12345,
+        },
+      );
+
+      await updater.checkForUpdates({ autoDownload: false });
+
+      expect(logger.info).toHaveBeenCalledWith("[open-design updater] lifecycle", expect.objectContaining({
+        enabled: true,
+        event: "session-start",
+        metadataUrl: fixture.metadataUrl,
+        namespace: "release-beta",
+        sessionId: "2026-06-09T07:50:51.000Z-12345",
+        source: SIDECAR_SOURCES.PACKAGED,
+      }));
+      expect(logger.info).toHaveBeenCalledWith("[open-design updater] lifecycle", expect.objectContaining({
+        event: "check-start",
+        metadataUrl: fixture.metadataUrl,
+        namespace: "release-beta",
+        sessionId: "2026-06-09T07:50:51.000Z-12345",
+        source: SIDECAR_SOURCES.PACKAGED,
+      }));
+    } finally {
+      await fixture.close();
       rmSync(root, { force: true, recursive: true });
     }
   });
@@ -442,7 +502,8 @@ describe("desktop updater", () => {
     const launcherRoot = root;
     const versionRoot = join(root, "launcher", "channels", "beta", "namespaces", "release-beta-win", "versions");
     const launcherLaunchPath = join(root, "installed", "Open Design Beta.exe");
-    const launches: Array<{ appPid: number; installerPath: string; root: string }> = [];
+    const launches: Array<{ appPid: number; launchPath: string; root: string }> = [];
+    let extractCount = 0;
     try {
       await mkdir(join(root, "installed"), { recursive: true });
       await writeFile(launcherLaunchPath, "");
@@ -475,6 +536,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.PACKAGED,
       }, {
         extractLauncherPayloadArchive: async ({ destinationRoot }) => {
+          extractCount += 1;
           await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
           await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
           await writeFile(
@@ -494,13 +556,13 @@ describe("desktop updater", () => {
           );
           await writeFile(join(destinationRoot, "payload", "resources", "open-design-config.json"), "{}\n");
         },
-        launchInstallerAfterQuit: async (input) => {
+        launchAppAfterQuit: async (input) => {
           launches.push({
             appPid: input.appPid,
-            installerPath: input.installerPath,
+            launchPath: input.launchPath,
             root: input.root,
           });
-          return "";
+          return { helperLogPath: join(root, "updates", "helpers", "open-app-after-quit-test.log") };
         },
         processExecPath: "C:\\Program Files\\Open Design Beta\\Open Design Beta.exe",
         processPid: 4242,
@@ -512,19 +574,30 @@ describe("desktop updater", () => {
       expect(checked.artifact?.type).toBe("payload");
       expect(checked.artifact?.name).toBe("open-design-1.0.0-beta.2-win-x64-payload.7z");
       expect(await readFile(checked.downloadPath ?? "", "utf8")).toBe("open design windows payload fixture");
+      expect(extractCount).toBe(1);
+      expect(await readFile(join(root, "launcher", "channels", "beta", "namespaces", "release-beta-win", "versions", "1.0.0-beta.2", "manifest.json"), "utf8")).toContain("1.0.0-beta.2");
+      expect(JSON.parse(await readFile(launcherRuntimePath, "utf8"))).toMatchObject({
+        active: { generation: 0, version: "1.0.0-beta.1" },
+        lastSuccessful: { generation: 0, version: "1.0.0-beta.1" },
+      });
 
       const installed = await updater.installUpdate();
       expect(installed.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(installed.installResult?.path).toBe(checked.downloadPath);
+      expect(installed.installResult?.artifactPath).toBe(checked.downloadPath);
+      expect(installed.installResult?.activeVersion).toBe("1.0.0-beta.2");
+      expect(installed.installResult?.launchPath).toBe(launcherLaunchPath);
+      expect(installed.installResult?.launcherRuntimePath).toBe(launcherRuntimePath);
+      expect(installed.installResult?.helperLogPath).toEqual(expect.stringContaining("open-app-after-quit-test.log"));
       expect(installed.installResult?.dryRun).toBe(false);
+      expect(extractCount).toBe(1);
       expect(launches).toEqual([
         {
           appPid: 4242,
-          installerPath: launcherLaunchPath,
+          launchPath: launcherLaunchPath,
           root: await realpath(join(root, "updates")),
         },
       ]);
-      expect(await readFile(join(root, "launcher", "channels", "beta", "namespaces", "release-beta-win", "versions", "1.0.0-beta.2", "manifest.json"), "utf8")).toContain("1.0.0-beta.2");
       const runtime = JSON.parse(await readFile(launcherRuntimePath, "utf8")) as {
         active?: { generation?: number; version?: string };
         lastSuccessful?: { generation?: number; version?: string };
@@ -534,6 +607,107 @@ describe("desktop updater", () => {
       expect(existsSync(join(root, "launcher", "channels", "beta", "namespaces", "release-beta-win", "versions", "1.0.0-beta.1"))).toBe(true);
       expect(existsSync(join(root, "launcher", "channels", "beta", "namespaces", "release-beta-win", "versions", "0.9.0-beta.1"))).toBe(false);
       expect(existsSync(join(root, "launcher", "channels", "beta", "namespaces", "release-beta-win", "updates", "staging"))).toBe(false);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects launcher payloads that change before activation", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({
+      artifactBody: "open design windows installer fixture",
+      channel: "beta",
+      includePayload: true,
+      payloadBody: "open design windows payload fixture",
+      platform: "win",
+      version: "1.0.0-beta.2",
+    });
+    const launcherRuntimePath = join(root, "launcher", "runtime.json");
+    const launcherRoot = root;
+    const versionRoot = join(root, "launcher", "channels", "beta", "namespaces", "release-beta-win", "versions");
+    const launcherLaunchPath = join(root, "installed", "Open Design Beta.exe");
+    const launches: Array<{ appPid: number; launchPath: string; root: string }> = [];
+    let extractCount = 0;
+    try {
+      await mkdir(join(root, "installed"), { recursive: true });
+      await writeFile(launcherLaunchPath, "");
+      await mkdir(join(root, "launcher"), { recursive: true });
+      await mkdir(join(versionRoot, "1.0.0-beta.1"), { recursive: true });
+      await writeFile(
+        launcherRuntimePath,
+        `${JSON.stringify({
+          active: { generation: 0, version: "1.0.0-beta.1" },
+          channel: "beta",
+          lastSuccessful: { generation: 0, version: "1.0.0-beta.1" },
+          namespace: "release-beta-win",
+          schemaVersion: LAUNCHER_SCHEMA_VERSION,
+        })}\n`,
+      );
+      const updater = createDesktopUpdater({
+        arch: "x64",
+        currentVersion: "1.0.0-beta.1",
+        downloadRoot: join(root, "updates"),
+        env: {
+          ...updaterEnv(fixture.metadataUrl, "win32"),
+          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-beta.1",
+          [DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]: "0",
+        },
+        launcherRoot,
+        launcherLaunchPath,
+        launcherRuntimePath,
+        namespace: "release-beta-win",
+        source: SIDECAR_SOURCES.PACKAGED,
+      }, {
+        extractLauncherPayloadArchive: async ({ destinationRoot }) => {
+          extractCount += 1;
+          await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+          await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
+          await writeFile(
+            join(destinationRoot, "manifest.json"),
+            `${JSON.stringify({
+              channel: "beta",
+              entry: {
+                cwd: "payload",
+                executable: "payload/Open Design.exe",
+              },
+              namespace: "release-beta-win",
+              payloadRoot: "payload",
+              platform: "win32",
+              schemaVersion: LAUNCHER_SCHEMA_VERSION,
+              version: "1.0.0-beta.2",
+            })}\n`,
+          );
+          await writeFile(join(destinationRoot, "payload", "resources", "open-design-config.json"), "{}\n");
+        },
+        launchAppAfterQuit: async (input) => {
+          launches.push({
+            appPid: input.appPid,
+            launchPath: input.launchPath,
+            root: input.root,
+          });
+          return { helperLogPath: join(root, "updates", "helpers", "open-app-after-quit-test.log") };
+        },
+        processExecPath: "C:\\Program Files\\Open Design Beta\\Open Design Beta.exe",
+        processPid: 4242,
+      });
+
+      const checked = await updater.checkForUpdates();
+
+      expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(checked.artifact?.type).toBe("payload");
+      expect(extractCount).toBe(1);
+      await writeFile(checked.downloadPath ?? "", "tampered payload bytes", "utf8");
+
+      const installed = await updater.installUpdate();
+      expect(installed.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
+      expect(installed.error?.code).toBe("checksum-mismatch");
+      expect(installed.installResult).toBeUndefined();
+      expect(launches).toEqual([]);
+      expect(JSON.parse(await readFile(launcherRuntimePath, "utf8"))).toMatchObject({
+        active: { generation: 0, version: "1.0.0-beta.1" },
+        lastSuccessful: { generation: 0, version: "1.0.0-beta.1" },
+      });
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });
@@ -603,13 +777,10 @@ describe("desktop updater", () => {
       });
 
       const checked = await updater.checkForUpdates();
-      expect(checked.artifact?.type).toBe("payload");
 
-      const installed = await updater.installUpdate();
-
-      expect(installed.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
-      expect(installed.error?.code).toBe("launcher-payload-apply-failed");
-      expect(installed.error?.message).toContain("open-design-config.json");
+      expect(checked.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
+      expect(checked.error?.code).toBe("launcher-payload-prepare-failed");
+      expect(checked.error?.message).toContain("open-design-config.json");
       expect(existsSync(join(namespaceRoot, "versions", "1.0.0-beta.2"))).toBe(false);
       expect(JSON.parse(await readFile(launcherRuntimePath, "utf8"))).toMatchObject({
         active: { generation: 0, version: "1.0.0-beta.1" },
@@ -687,7 +858,7 @@ describe("desktop updater", () => {
     const launcherRuntimePath = join(root, "launcher", "runtime.json");
     const launcherRoot = root;
     const launcherLaunchPath = join(root, "installed", "Open Design Beta.app");
-    const launches: Array<{ appPid: number; installerPath: string; root: string }> = [];
+    const launches: Array<{ appPid: number; launchPath: string; root: string }> = [];
     try {
       await mkdir(launcherLaunchPath, { recursive: true });
       await mkdir(join(root, "launcher"), { recursive: true });
@@ -738,13 +909,13 @@ describe("desktop updater", () => {
             })}\n`,
           );
         },
-        launchInstallerAfterQuit: async (input) => {
+        launchAppAfterQuit: async (input) => {
           launches.push({
             appPid: input.appPid,
-            installerPath: input.installerPath,
+            launchPath: input.launchPath,
             root: input.root,
           });
-          return "";
+          return {};
         },
         processExecPath: join(root, "launcher", "channels", "beta", "namespaces", "release-beta", "versions", "1.0.0-beta.2", "payload", "Open Design Beta.app", "Contents", "MacOS", "Open Design Beta"),
         processPid: 4243,
@@ -761,7 +932,7 @@ describe("desktop updater", () => {
       expect(launches).toEqual([
         {
           appPid: 4243,
-          installerPath: launcherLaunchPath,
+          launchPath: launcherLaunchPath,
           root: await realpath(join(root, "updates")),
         },
       ]);
@@ -784,7 +955,7 @@ describe("desktop updater", () => {
     const launcherRuntimePath = join(root, "launcher", "runtime.json");
     const launcherRoot = root;
     const launcherLaunchPath = join(root, "installed", "Open Design.exe");
-    const launches: Array<{ appPid: number; installerPath: string; root: string }> = [];
+    const launches: Array<{ appPid: number; launchPath: string; root: string }> = [];
     try {
       await mkdir(join(root, "installed"), { recursive: true });
       await writeFile(launcherLaunchPath, "");
@@ -835,13 +1006,13 @@ describe("desktop updater", () => {
             })}\n`,
           );
         },
-        launchInstallerAfterQuit: async (input) => {
+        launchAppAfterQuit: async (input) => {
           launches.push({
             appPid: input.appPid,
-            installerPath: input.installerPath,
+            launchPath: input.launchPath,
             root: input.root,
           });
-          return "";
+          return {};
         },
         processExecPath: "C:\\Users\\runneradmin\\AppData\\Roaming\\Open Design Beta\\launcher\\channels\\beta\\namespaces\\release-beta-win\\versions\\1.0.0-beta.2\\payload\\Open Design.exe",
         processPid: 4244,
@@ -858,10 +1029,198 @@ describe("desktop updater", () => {
       expect(launches).toEqual([
         {
           appPid: 4244,
-          installerPath: launcherLaunchPath,
+          launchPath: launcherLaunchPath,
           root: await realpath(join(root, "updates")),
         },
       ]);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("fails launcher payload relaunch when the stable launcher entry is unavailable", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({
+      artifactBody: "open design windows installer fixture",
+      channel: "beta",
+      includePayload: true,
+      payloadBody: "open design windows payload fixture",
+      platform: "win",
+      version: "1.0.0-beta.3",
+    });
+    const launcherRuntimePath = join(root, "launcher", "runtime.json");
+    const launcherRoot = root;
+    const launcherLaunchPath = join(root, "installed", "Open Design.exe");
+    const launches: Array<{ appPid: number; launchPath: string; root: string }> = [];
+    try {
+      await mkdir(join(root, "installed"), { recursive: true });
+      await writeFile(launcherLaunchPath, "");
+      await mkdir(join(root, "launcher"), { recursive: true });
+      await mkdir(join(root, "launcher", "channels", "beta", "namespaces", "release-beta-win", "versions", "1.0.0-beta.2"), { recursive: true });
+      await writeFile(
+        launcherRuntimePath,
+        `${JSON.stringify({
+          active: { generation: 0, version: "1.0.0-beta.2" },
+          channel: "beta",
+          lastSuccessful: { generation: 0, version: "1.0.0-beta.2" },
+          namespace: "release-beta-win",
+          schemaVersion: LAUNCHER_SCHEMA_VERSION,
+        })}\n`,
+      );
+      const updater = createDesktopUpdater({
+        arch: "x64",
+        currentVersion: "1.0.0-beta.2",
+        downloadRoot: join(root, "updates"),
+        env: {
+          ...updaterEnv(fixture.metadataUrl, "win32"),
+          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-beta.2",
+          [DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]: "0",
+        },
+        launcherRoot,
+        launcherLaunchPath,
+        launcherRuntimePath,
+        namespace: "release-beta-win",
+        source: SIDECAR_SOURCES.PACKAGED,
+      }, {
+        extractLauncherPayloadArchive: async ({ destinationRoot }) => {
+          await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+          await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
+          await writeFile(join(destinationRoot, "payload", "resources", "open-design-config.json"), "{}\n");
+          await writeFile(
+            join(destinationRoot, "manifest.json"),
+            `${JSON.stringify({
+              channel: "beta",
+              entry: {
+                cwd: "payload",
+                executable: "payload/Open Design.exe",
+              },
+              namespace: "release-beta-win",
+              payloadRoot: "payload",
+              platform: "win32",
+              schemaVersion: LAUNCHER_SCHEMA_VERSION,
+              version: "1.0.0-beta.3",
+            })}\n`,
+          );
+        },
+        launchAppAfterQuit: async (input) => {
+          launches.push({
+            appPid: input.appPid,
+            launchPath: input.launchPath,
+            root: input.root,
+          });
+          return {};
+        },
+        processPid: 4246,
+      });
+
+      const checked = await updater.checkForUpdates();
+      expect(checked.artifact?.type).toBe("payload");
+      await rm(launcherLaunchPath, { force: true });
+
+      const installed = await updater.installUpdate();
+
+      expect(installed.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
+      expect(installed.error?.code).toBe("payload-relaunch-failed");
+      expect(installed.error?.message).toContain("Open Design.exe");
+      expect(launches).toEqual([]);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("starts the stable Windows launcher in after-quit mode for payload installs", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({
+      artifactBody: "open design windows installer fixture",
+      channel: "beta",
+      includePayload: true,
+      payloadBody: "open design windows payload fixture",
+      platform: "win",
+      version: "1.0.0-beta.3",
+    });
+    const launcherRuntimePath = join(root, "launcher", "runtime.json");
+    const launcherRoot = root;
+    const launcherLaunchPath = join(root, "installed", "Open Design.exe");
+    const spawned: Array<{ args: string[]; command: string; options: unknown }> = [];
+    const unref = vi.fn();
+    try {
+      await mkdir(join(root, "installed"), { recursive: true });
+      await writeFile(launcherLaunchPath, "");
+      await mkdir(join(root, "launcher"), { recursive: true });
+      await mkdir(join(root, "launcher", "channels", "beta", "namespaces", "release-beta-win", "versions", "1.0.0-beta.2"), { recursive: true });
+      await writeFile(
+        launcherRuntimePath,
+        `${JSON.stringify({
+          active: { generation: 0, version: "1.0.0-beta.2" },
+          channel: "beta",
+          lastSuccessful: { generation: 0, version: "1.0.0-beta.2" },
+          namespace: "release-beta-win",
+          schemaVersion: LAUNCHER_SCHEMA_VERSION,
+        })}\n`,
+      );
+      const updater = createDesktopUpdater({
+        arch: "x64",
+        currentVersion: "1.0.0-beta.2",
+        downloadRoot: join(root, "updates"),
+        env: {
+          ...updaterEnv(fixture.metadataUrl, "win32"),
+          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-beta.2",
+          [DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]: "0",
+        },
+        launcherRoot,
+        launcherLaunchPath,
+        launcherRuntimePath,
+        namespace: "release-beta-win",
+        source: SIDECAR_SOURCES.PACKAGED,
+      }, {
+        extractLauncherPayloadArchive: async ({ destinationRoot }) => {
+          await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+          await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
+          await writeFile(join(destinationRoot, "payload", "resources", "open-design-config.json"), "{}\n");
+          await writeFile(
+            join(destinationRoot, "manifest.json"),
+            `${JSON.stringify({
+              channel: "beta",
+              entry: {
+                cwd: "payload",
+                executable: "payload/Open Design.exe",
+              },
+              namespace: "release-beta-win",
+              payloadRoot: "payload",
+              platform: "win32",
+              schemaVersion: LAUNCHER_SCHEMA_VERSION,
+              version: "1.0.0-beta.3",
+            })}\n`,
+          );
+        },
+        processPid: 4245,
+        spawnDetached: (command, args, options) => {
+          spawned.push({ args, command, options });
+          return { unref };
+        },
+      });
+
+      const checked = await updater.checkForUpdates();
+      const installed = await updater.installUpdate();
+
+      expect(installed.error).toBeUndefined();
+      expect(installed.installResult?.path).toBe(checked.downloadPath);
+      expect(installed.installResult?.launchPath).toBe(launcherLaunchPath);
+      expect(installed.installResult?.helperLogPath).toBeUndefined();
+      expect(spawned).toHaveLength(1);
+      expect(unref).toHaveBeenCalledTimes(1);
+      expect(spawned[0]?.command).toBe(launcherLaunchPath);
+      expect(spawned[0]?.options).toEqual({ detached: true, stdio: "ignore", windowsHide: true });
+      const args = spawned[0]?.args ?? [];
+      expect(args).toEqual(expect.arrayContaining([
+        LAUNCHER_AFTER_QUIT_FLAG,
+        LAUNCHER_AFTER_QUIT_TARGET_PID_ARG,
+        "4245",
+        LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG,
+        "600000",
+      ]));
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });
@@ -930,11 +1289,9 @@ describe("desktop updater", () => {
       });
 
       const checked = await updater.checkForUpdates();
-      expect(checked.artifact?.type).toBe("payload");
 
-      const installed = await updater.installUpdate();
-      expect(installed.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
-      expect(installed.error?.code).toBe("launcher-payload-apply-failed");
+      expect(checked.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
+      expect(checked.error?.code).toBe("launcher-payload-prepare-failed");
       expect(await readFile(join(existingVersionRoot, "keep.txt"), "utf8")).toBe("existing");
       const stagingEntries = await readdir(join(namespaceRoot, "updates", "staging")).catch(() => []);
       expect(stagingEntries).toEqual([]);
@@ -1819,6 +2176,173 @@ describe("desktop updater", () => {
       expect(status.error).toBeUndefined();
       expect(metadata.incoming).toBeUndefined();
       expect(existsSync(stagingDir)).toBe(false);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("marks releases older than the current version deprecated when the next version is ready", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({ channel: "beta", platform: "win", version: "1.0.0-beta.3" });
+    try {
+      const updater = createDesktopUpdater({
+        arch: "x64",
+        downloadRoot: root,
+        env: {
+          ...updaterEnv(fixture.metadataUrl, "win32"),
+          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-beta.2",
+        },
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      await updater.status();
+      await writeReleaseFixture(root, "1.0.0-beta.0-win-x64-old0", "beta", "1.0.0-beta.0");
+      await writeReleaseFixture(root, "1.0.0-beta.1-win-x64-old1", "beta", "1.0.0-beta.1");
+      await writeReleaseFixture(root, "1.0.0-beta.2-win-x64-current", "beta", "1.0.0-beta.2");
+
+      const checked = await updater.checkForUpdates();
+      const cleanup = JSON.parse(await readFile(join(root, "state", "cleanup.json"), "utf8")) as {
+        releases: Array<{ deprecatedAt?: string; key: string; state: string; version?: string }>;
+      };
+
+      expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(checked.cache?.lifecycle?.lastTrigger).toBe("next-version-ready");
+      expect(checked.cache?.lifecycle?.releases.cleanupRemoved).toBe(2);
+      expect(checked.cache?.lifecycle?.releases.retained).toBe(2);
+      expect(cleanup.releases.filter((entry) => entry.state === "cleanup-removed").map((entry) => entry.version).sort()).toEqual([
+        "1.0.0-beta.0",
+        "1.0.0-beta.1",
+      ]);
+      expect(cleanup.releases.filter((entry) => entry.state === "retained").map((entry) => entry.version).sort()).toEqual([
+        "1.0.0-beta.2",
+        "1.0.0-beta.3",
+      ]);
+      expect(existsSync(join(root, "releases", "1.0.0-beta.0-win-x64-old0"))).toBe(false);
+      expect(existsSync(join(root, "releases", "1.0.0-beta.1-win-x64-old1"))).toBe(false);
+      expect(existsSync(join(root, "releases", "1.0.0-beta.2-win-x64-current"))).toBe(true);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("records missing release metadata as unknown without blocking next-version-ready", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({ channel: "beta", platform: "win", version: "1.0.0-beta.3" });
+    try {
+      const updater = createDesktopUpdater({
+        arch: "x64",
+        downloadRoot: root,
+        env: {
+          ...updaterEnv(fixture.metadataUrl, "win32"),
+          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-beta.2",
+        },
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      await updater.status();
+      await mkdir(join(root, "releases", "missing-metadata-release"), { recursive: true });
+
+      const checked = await updater.checkForUpdates();
+
+      expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(checked.cache?.lifecycle?.releases.unknown).toBe(1);
+      expect(checked.cache?.lifecycle?.releases.errors).toBe(1);
+      expect(existsSync(join(root, "releases", "missing-metadata-release"))).toBe(true);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("cleans deprecated release directories on cold start from the lifecycle descriptor", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({ channel: "beta", platform: "win", version: "1.0.0-beta.3" });
+    try {
+      const updater = createDesktopUpdater({
+        arch: "x64",
+        downloadRoot: root,
+        env: {
+          ...updaterEnv(fixture.metadataUrl, "win32"),
+          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-beta.2",
+        },
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      await updater.status();
+      await writeReleaseFixture(root, "1.0.0-beta.0-win-x64-old0", "beta", "1.0.0-beta.0");
+      await mkdir(join(root, "state"), { recursive: true });
+      await writeFile(join(root, "state", "cleanup.json"), `${JSON.stringify({
+        currentVersion: "1.0.0-beta.2",
+        platform: "win32",
+        releases: [
+          {
+            currentVersion: "1.0.0-beta.2",
+            deprecatedAt: "2026-06-08T00:00:00.000Z",
+            key: "1.0.0-beta.0-win-x64-old0",
+            metadataPath: "releases/1.0.0-beta.0-win-x64-old0/metadata.json",
+            path: "releases/1.0.0-beta.0-win-x64-old0",
+            reason: "older-than-current-version",
+            state: "deprecated",
+            updatedAt: "2026-06-08T00:00:00.000Z",
+            version: "1.0.0-beta.0",
+          },
+        ],
+        trigger: "next-version-ready",
+        updatedAt: "2026-06-08T00:00:00.000Z",
+        version: 1,
+      }, null, 2)}\n`, "utf8");
+
+      const restarted = createDesktopUpdater({
+        arch: "x64",
+        downloadRoot: root,
+        env: {
+          ...updaterEnv(fixture.metadataUrl, "win32"),
+          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-beta.2",
+        },
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      const status = await restarted.status();
+      const cleanup = JSON.parse(await readFile(join(root, "state", "cleanup.json"), "utf8")) as {
+        releases: Array<{ deprecatedAt?: string; state: string }>;
+      };
+
+      expect(status.cache?.lifecycle?.lastTrigger).toBe("cold-start");
+      expect(status.cache?.lifecycle?.releases.cleanupRemoved).toBe(1);
+      expect(cleanup.releases[0]?.state).toBe("cleanup-removed");
+      expect(cleanup.releases[0]?.deprecatedAt).toBe("2026-06-08T00:00:00.000Z");
+      expect(existsSync(join(root, "releases", "1.0.0-beta.0-win-x64-old0"))).toBe(false);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("uses the same release lifecycle summary shape on mac", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({ channel: "beta", platform: "mac", version: "1.0.0-beta.3" });
+    try {
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: {
+          ...updaterEnv(fixture.metadataUrl, "darwin"),
+          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-beta.2",
+        },
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      await updater.status();
+      await writeReleaseFixture(root, "1.0.0-beta.1-mac-arm64-old1", "beta", "1.0.0-beta.1");
+
+      const checked = await updater.checkForUpdates();
+
+      expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(checked.cache?.lifecycle).toMatchObject({
+        lastTrigger: "next-version-ready",
+        platform: "darwin",
+        releases: expect.objectContaining({
+          cleanupRemoved: 1,
+          retained: 1,
+        }),
+      });
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });

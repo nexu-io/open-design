@@ -384,6 +384,23 @@ describe('DesignFilesPanel grouping', () => {
     expect(onOpenFile).not.toHaveBeenCalled();
   });
 
+  it('shows the upload hint in the footer while idle', () => {
+    renderPanel([file({ name: 'page.html', kind: 'html' })]);
+
+    expect(document.querySelector('.df-drop-hint')).toBeTruthy();
+    expect(document.querySelector('.df-useful-info')).toBeNull();
+  });
+
+  it('types out the first useful-info tip in the footer while the agent runs', async () => {
+    renderPanel([file({ name: 'page.html', kind: 'html' })], { running: true });
+
+    expect(document.querySelector('.df-drop-hint')).toBeNull();
+    expect(document.querySelector('.df-useful-info-label')?.textContent).toBe('Useful info');
+    await waitFor(() =>
+      expect(document.querySelector('.df-useful-info-tip')?.textContent).toContain('Double-click'),
+    );
+  });
+
   it('can group files by modified date and collapse a date group', () => {
     const now = new Date(2026, 4, 9, 12).getTime();
     vi.useFakeTimers();

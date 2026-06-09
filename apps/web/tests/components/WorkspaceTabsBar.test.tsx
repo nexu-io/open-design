@@ -27,6 +27,7 @@ vi.mock('../../src/i18n', () => ({
       'entry.navTasks': 'Automations',
       'entry.navPlugins': 'Plugins',
       'entry.navIntegrations': 'Integrations',
+      'settings.welcomeTitle': 'Welcome',
     };
     return labels[key] ?? key;
   },
@@ -157,6 +158,38 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       expect(tabs).toHaveLength(2);
       expect(labels.filter((label) => label.includes('Home'))).toHaveLength(1);
       expect(labels.filter((label) => label.includes('Project Alpha'))).toHaveLength(1);
+    });
+  });
+
+  it('auto-closes the Welcome tab once onboarding completes, even when a project opens', async () => {
+    const { rerender } = render(
+      <WorkspaceTabsBar
+        route={{ kind: 'home', view: 'onboarding' }}
+        projects={[project]}
+        onboardingCompleted={false}
+      />,
+    );
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels.some((label) => label.includes('Welcome'))).toBe(true);
+    });
+
+    // Completing onboarding via the design-system path navigates to a fresh
+    // project while the entry tab is still parked on the Welcome view.
+    rerender(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[project]}
+        onboardingCompleted={true}
+      />,
+    );
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels.some((label) => label.includes('Welcome'))).toBe(false);
+      expect(labels.some((label) => label.includes('Home'))).toBe(true);
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
     });
   });
 

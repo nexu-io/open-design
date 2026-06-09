@@ -22,8 +22,10 @@ import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
+  trackCommunityGalleryClick,
   trackHomeChatComposerClick,
   trackPageView,
+  trackPluginDetailModalSurfaceView,
   trackPluginReplacementModalClick,
   trackPluginReplacementModalSurfaceView,
   trackPluginReplacementResult,
@@ -176,6 +178,7 @@ const AUTHORING_DEFAULT_SCENARIO_INPUTS = {
 
 
 interface Props {
+  isActive?: boolean;
   projects: Project[];
   projectsLoading?: boolean;
   designSystems?: DesignSystemSummary[];
@@ -204,6 +207,7 @@ const EMPTY_CONNECTORS: ConnectorDetail[] = [];
 const EMPTY_PROMPT_TEMPLATES: PromptTemplateSummary[] = [];
 
 export function HomeView({
+  isActive = true,
   projects,
   projectsLoading,
   designSystems = EMPTY_DESIGN_SYSTEMS,
@@ -297,6 +301,45 @@ export function HomeView({
       area: 'plugin_replacement_modal',
     });
   }, [pendingReplacement, analytics.track]);
+  // Community gallery analytics. Opening a tile fires both a ui_click on
+  // the card (the funnel's denominator) and a surface_view on the detail
+  // modal it reveals (the numerator); the ↗ that jumps straight to the
+  // real example page is its own ui_click so "go to the finished thing"
+  // stays distinct from "open the detail modal". plugin_id / plugin_type
+  // mirror PluginsView so the two surfaces join on the same keys.
+  const handleCommunityOpenDetails = useCallback(
+    (record: InstalledPluginRecord) => {
+      const pluginId = record.sourceMarketplaceEntryName ?? record.id;
+      const pluginType = record.marketplaceTrust ?? 'official';
+      trackCommunityGalleryClick(analytics.track, {
+        page_name: 'home',
+        area: 'community_gallery',
+        element: 'card',
+        plugin_id: pluginId,
+        plugin_type: pluginType,
+      });
+      trackPluginDetailModalSurfaceView(analytics.track, {
+        page_name: 'home',
+        area: 'plugin_detail_modal',
+        plugin_id: pluginId,
+        plugin_type: pluginType,
+      });
+      setDetailsRecord(record);
+    },
+    [analytics.track],
+  );
+  const handleCommunityOpenExternal = useCallback(
+    (record: InstalledPluginRecord) => {
+      trackCommunityGalleryClick(analytics.track, {
+        page_name: 'home',
+        area: 'community_gallery',
+        element: 'card_open_external',
+        plugin_id: record.sourceMarketplaceEntryName ?? record.id,
+        plugin_type: record.marketplaceTrust ?? 'official',
+      });
+    },
+    [analytics.track],
+  );
   const inputRef = useRef<HomeHeroHandle | null>(null);
   const homeViewRef = useRef<HTMLDivElement | null>(null);
   const consumedHandoffIdRef = useRef<number | null>(null);
@@ -806,6 +849,14 @@ export function HomeView({
     action: PluginUseAction = 'use',
     inputs?: Record<string, unknown>,
   ) {
+    trackCommunityGalleryClick(analytics.track, {
+      page_name: 'home',
+      area: 'community_gallery',
+      element: 'use_plugin',
+      plugin_id: record.sourceMarketplaceEntryName ?? record.id,
+      plugin_type: record.marketplaceTrust ?? 'official',
+      action: action === 'use-with-query' ? 'use_with_query' : 'use',
+    });
     if (action === 'use-with-query') {
       const renderedQuery = previewPluginReplacement(record, undefined, inputs ? { inputs } : undefined);
       const trimmedQuery = renderedQuery?.trim() ?? '';
@@ -915,10 +966,23 @@ export function HomeView({
     focusPromptAtEnd();
   }
 
-  function useExamplePlugin(_record: InstalledPluginRecord, _chipId: string, promptText: string) {
+  function useExamplePlugin(record: InstalledPluginRecord, chipId: string, promptText: string) {
     setError(null);
-    setPrompt(promptText);
-    setPromptEditedByUser(false);
+    // Picking a preset card *binds* the plugin (not just a textarea fill):
+    // active switches to this exact preset so submit resolves its snapshot and
+    // injects the plugin's SKILL.md + example.html as generation context — the
+    // output faithfully recreates the reference. `promptText` is the short,
+    // editable seed; the full build spec rides along in the plugin context.
+    // deferApply mirrors the chip rail: bind now, resolve the snapshot on
+    // submit (submit() already re-resolves), so a preset click stays instant
+    // and doesn't fire an /apply roundtrip per card. The chip is already
+    // active when preset cards are visible, so reuse its project kind/metadata.
+    void usePlugin(record, promptText, {
+      chipId,
+      projectKind: active?.projectKind ?? undefined,
+      projectMetadata: active?.projectMetadata ?? null,
+      deferApply: true,
+    });
     focusPromptAtEnd();
   }
 
@@ -1403,6 +1467,7 @@ export function HomeView({
     onSubmit({
       prompt: trimmed,
       pluginId: routedPluginId,
+      pluginType: submittedActive?.record.marketplaceTrust ?? (routedPluginId ? 'official' : null),
       skillId: resolvedSkillId,
       appliedPluginSnapshotId: submittedActive?.result?.appliedPlugin?.snapshotId ?? null,
       pluginTitle: submittedActive?.record.title ?? null,
@@ -1435,6 +1500,7 @@ export function HomeView({
     <div className="home-view" data-testid="home-view" ref={homeViewRef}>
       <HomeHero
         ref={inputRef}
+        active={isActive}
         prompt={prompt}
         onPromptChange={handlePromptChange}
         onSubmit={submit}
@@ -1544,10 +1610,12 @@ export function HomeView({
           activePluginId={active?.record.id ?? null}
           pendingApplyId={pendingApplyId}
           onUse={(record, action) => void routePluginUse(record, action)}
-          onOpenDetails={setDetailsRecord}
+          onOpenDetails={handleCommunityOpenDetails}
+          onOpenExternal={handleCommunityOpenExternal}
           onBrowseRegistry={onBrowseRegistry}
           preferDefaultFacet={false}
           presetSelection={presetStartersSelection}
+          cardLayout="gallery"
         />
       </HomeTemplatesReveal>
 

@@ -22,6 +22,7 @@ function fakeConfig(root: string, appVersion = "1.2.3-beta.4"): PackagedConfig {
     posthogKey: null,
     resourceRoot: join(root, "installed", "resources", "open-design"),
     telemetryRelayUrl: null,
+    updateMetadataUrl: null,
     webOutputMode: "server",
     webSidecarEntry: null,
     webStandaloneRoot: null,

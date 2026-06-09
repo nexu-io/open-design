@@ -45,7 +45,6 @@ import {
   type HomeHeroChip,
 } from './home-hero/chips';
 import {
-  filterPluginsBySubChip,
   isSubChipParent,
   subChipsForChip,
   type HomeHeroSubChip,
@@ -63,6 +62,8 @@ import {
 } from '../i18n/content';
 import { PreviewSurface } from './plugins-home/cards/PreviewSurface';
 import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
+import { sortByVisualAppeal } from './plugins-home/visualScore';
+import { applyFacetSelection } from './plugins-home/facets';
 import { inferPluginPreview } from './plugins-home/preview';
 import { SessionModeToggle } from './SessionModeToggle';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
@@ -93,6 +94,7 @@ export interface ExamplePromptInfo {
 }
 
 interface Props {
+  active?: boolean;
   prompt: string;
   onPromptChange: (value: string) => void;
   onSubmit: HomeHeroSubmitHandler;
@@ -161,6 +163,13 @@ interface Props {
 
 type HomeMentionTab = 'all' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors';
 
+// In the combined "All" overview, every surface is capped to a handful of top
+// matches so no single section floods the picker. The dedicated "Design files"
+// tab is exempt: staged files are the user's own finite content, so that tab
+// lists every match (the results panel scrolls) and its count reflects the true
+// total rather than the truncated preview.
+const HOME_MENTION_ALL_TAB_PREVIEW = 6;
+
 interface HomeMentionOption {
   id: string;
   icon: IconName;
@@ -197,6 +206,7 @@ const EMPTY_CONNECTOR_OPTIONS: ConnectorDetail[] = [];
 
 export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   {
+    active = true,
     prompt,
     onPromptChange,
     onSubmit,
@@ -275,6 +285,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   const [mentionTrigger, setMentionTrigger] = useState<{ query: string } | null>(null);
   const [caretRect, setCaretRect] = useState<CaretRect | null>(null);
   const editorRef = useRef<LexicalComposerInputHandle | null>(null);
+  const promptEditorRef = useRef<HTMLDivElement | null>(null);
+  const mentionPickerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const shortcutsMenuRef = useRef<HTMLDivElement>(null);
   const canSubmit = (prompt.trim().length > 0 || stagedFiles.length > 0) && !submitDisabled;
@@ -294,23 +306,22 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         ? stagedFiles
             .map((file, index) => ({ file, index }))
             .filter(({ file }) => fileMatchesQuery(file, mentionQuery))
-            .slice(0, 6)
         : [],
     [mentionActive, mentionQuery, stagedFiles],
   );
   const pluginMatches = useMemo(
     () =>
       mentionActive
-        ? pluginOptions.filter((plugin) => pluginMatchesQuery(plugin, mentionQuery)).slice(0, 6)
+        ? pluginOptions.filter((plugin) => pluginMatchesQuery(plugin, mentionQuery, locale))
         : [],
-    [mentionActive, mentionQuery, pluginOptions],
+    [locale, mentionActive, mentionQuery, pluginOptions],
   );
   const skillMatches = useMemo(
     () =>
       mentionActive
-        ? skillOptions.filter((skill) => skillMatchesQuery(skill, mentionQuery)).slice(0, 6)
+        ? skillOptions.filter((skill) => skillMatchesQuery(skill, mentionQuery, locale))
         : [],
-    [mentionActive, mentionQuery, skillOptions],
+    [locale, mentionActive, mentionQuery, skillOptions],
   );
   const mcpMatches = useMemo(
     () =>
@@ -326,9 +337,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         : [],
     [connectorOptions, mentionActive, mentionQuery],
   );
-  const pickerOpen = mentionActive;
+  const pickerOpen = active && mentionActive;
   const tabs: Array<{ id: HomeMentionTab; label: string; count: number }> = [
-    { id: 'all', label: t('common.all'), count: fileMatches.length + pluginMatches.length + skillMatches.length + mcpMatches.length + connectorMatches.length },
+    // The All overview previews at most HOME_MENTION_ALL_TAB_PREVIEW files, so
+    // its badge counts the previewed slice — not the full staged total — to keep
+    // the count aligned with what that tab actually renders. The dedicated files
+    // tab below lists every match and reports the true total.
+    { id: 'all', label: t('common.all'), count: Math.min(fileMatches.length, HOME_MENTION_ALL_TAB_PREVIEW) + pluginMatches.length + skillMatches.length + mcpMatches.length + connectorMatches.length },
     { id: 'files', label: t('chat.mentionTabFiles'), count: fileMatches.length },
     { id: 'plugins', label: t('entry.navPlugins'), count: pluginMatches.length },
     { id: 'skills', label: t('homeHero.skills'), count: skillMatches.length },
@@ -345,7 +360,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       ? {
           id: 'files',
           label: t('chat.mentionSectionFiles'),
-          options: fileMatches.map(({ file, index }) => ({
+          options: (mentionTab === 'files' ? fileMatches : fileMatches.slice(0, HOME_MENTION_ALL_TAB_PREVIEW)).map(({ file, index }) => ({
             id: `file-${index}-${file.name}`,
             icon: isImageFile(file) ? 'image' : 'file',
             title: file.name,
@@ -472,21 +487,31 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         : [],
     [activeChipId, locale, pluginOptions],
   );
-  // Derive sub-category pills from the SAME list that feeds the preset cards
-  // (`activeExamplePlugins`), not the full install set. This guarantees every
-  // pill maps to at least one visible card, so selecting it always filters to
-  // a non-empty slice — no "looks unfiltered" fallback needed.
+  // Derive sub-category pills from the FULL install set so the rail mirrors the
+  // Community section exactly — same sub-category set and same order. (Earlier
+  // this read only `activeExamplePlugins` to guarantee non-empty slices, but
+  // that left the rail showing fewer types than Community; the empty case is
+  // now handled by the full-catalog fallback in `filteredExamplePlugins`.)
   const activeSubChips = useMemo(
-    () => subChipsForChip(activeChipId, activeExamplePlugins),
-    [activeChipId, activeExamplePlugins],
+    () => subChipsForChip(activeChipId, pluginOptions),
+    [activeChipId, pluginOptions],
   );
-  // When a sub-category pill is active, narrow the example-prompt cards to that
-  // scene. Because the pills are derived from this very list, the slice is
-  // always non-empty for a real selection.
+  // When a sub-category pill is active, show the SAME set the Community section
+  // shows for that sub-category — every matching plugin from the full install
+  // set, in the same visual-appeal order — rather than the small curated
+  // example showcase. This keeps the example-prompt count consistent with the
+  // Community count badge (e.g. Brand / design shows all 16, not just 1).
+  // Atoms are excluded to match Community's `visiblePlugins` derivation, and
+  // `applyFacetSelection` is the exact filter Community uses — it requires the
+  // plugin's primary category to be this chip AND match the sub-category, so a
+  // deck/image plugin that merely carries a "brand" tag is not pulled in.
   const filteredExamplePlugins = useMemo(() => {
     if (!selectedSubcategory || !isSubChipParent(activeChipId)) return activeExamplePlugins;
-    return filterPluginsBySubChip(activeExamplePlugins, activeChipId, selectedSubcategory);
-  }, [activeExamplePlugins, activeChipId, selectedSubcategory]);
+    const pool = pluginOptions.filter((plugin) => plugin.manifest?.od?.kind !== 'atom');
+    return sortByVisualAppeal(
+      applyFacetSelection(pool, { category: activeChipId, subcategory: selectedSubcategory }),
+    );
+  }, [activeExamplePlugins, activeChipId, selectedSubcategory, pluginOptions]);
   const activePromptExamples = useMemo(
     () => activeChipId && activeExamplePlugins.length === 0
       ? homeHeroChipPromptExamples(activeChipId, locale)
@@ -508,6 +533,38 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
 
   useEffect(() => {
     if (!pickerOpen) setHoveredPlugin(null);
+  }, [pickerOpen]);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const isInsideMentionSurface = (target: EventTarget | null) => {
+      if (!(target instanceof Node)) return false;
+      return (
+        promptEditorRef.current?.contains(target) ||
+        mentionPickerRef.current?.contains(target)
+      );
+    };
+    const closePicker = () => {
+      setMentionTrigger(null);
+      setMentionTab('all');
+    };
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!isInsideMentionSurface(event.target)) closePicker();
+    };
+    const closeOnOutsideMouse = (event: MouseEvent) => {
+      if (!isInsideMentionSurface(event.target)) closePicker();
+    };
+    const closeOnOutsideFocus = (event: FocusEvent) => {
+      if (!isInsideMentionSurface(event.target)) closePicker();
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer, true);
+    document.addEventListener('mousedown', closeOnOutsideMouse, true);
+    document.addEventListener('focusin', closeOnOutsideFocus);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer, true);
+      document.removeEventListener('mousedown', closeOnOutsideMouse, true);
+      document.removeEventListener('focusin', closeOnOutsideFocus);
+    };
   }, [pickerOpen]);
 
   useEffect(() => {
@@ -640,6 +697,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     slash: { q: string } | null;
     anchorRect: CaretRect | null;
   }) {
+    if (!active) {
+      setCaretRect(null);
+      setMentionTrigger(null);
+      setMentionTab('all');
+      return;
+    }
     setCaretRect(anchorRect);
     if (nextMention) {
       setMentionTrigger((prev) => {
@@ -658,6 +721,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     setHoveredPlugin(null);
     setSelectedIndex(0);
   }
+
+  useEffect(() => {
+    if (!active) dismissMentionPicker();
+  }, [active]);
 
   // Routes popover navigation keys from the Lexical editor over the visible
   // picker option union. Returns true when consumed so the editor can
@@ -701,6 +768,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   }
 
   function usePromptExample(example: string) {
+    trackHomeChatComposerClick(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      element: 'example_prompt',
+      chip_id: activeChipId ?? 'prototype',
+    });
     setSelectedPromptExample({
       label: promptExampleChipLabel(example),
       promptText: example,
@@ -717,6 +790,14 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   }
 
   function pickExamplePluginPreset(record: InstalledPluginRecord, chipId: string, promptText: string) {
+    trackHomeChatComposerClick(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      element: 'example_prompt',
+      chip_id: chipId,
+      plugin_id: record.sourceMarketplaceEntryName ?? record.id,
+      plugin_type: record.marketplaceTrust ?? 'official',
+    });
     setSelectedPromptExample({
       label: record.title,
       promptText,
@@ -997,7 +1078,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           </div>
         ) : null}
         <div className="home-hero__prompt-surface">
-          <div className="home-hero__prompt-editor home-hero__lexical">
+          <div ref={promptEditorRef} className="home-hero__prompt-editor home-hero__lexical">
             <LexicalComposerInput
               ref={editorRef}
               testId="home-hero-input"
@@ -1037,6 +1118,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         </div>
         <CaretFloatingLayer caret={caretRect} open={pickerOpen}>
           <div
+            ref={mentionPickerRef}
             id="home-hero-context-picker"
             className="home-hero__plugin-picker home-hero__plugin-picker--floating"
             role="listbox"
@@ -1374,10 +1456,26 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           subChips={activeSubChips}
           selectedSlug={selectedSubcategory}
           pluginsLoading={pluginsLoading}
-          onPickSubChip={(sub) =>
-            setSelectedSubcategory((current) => (current === sub.slug ? null : sub.slug))
-          }
-          onSelectAll={() => setSelectedSubcategory(null)}
+          onPickSubChip={(sub) => {
+            trackHomeChatComposerClick(analytics.track, {
+              page_name: 'home',
+              area: 'chat_composer',
+              element: 'subcategory_chip',
+              chip_id: activeChipId ?? undefined,
+              subcategory: sub.slug,
+            });
+            setSelectedSubcategory((current) => (current === sub.slug ? null : sub.slug));
+          }}
+          onSelectAll={() => {
+            trackHomeChatComposerClick(analytics.track, {
+              page_name: 'home',
+              area: 'chat_composer',
+              element: 'subcategory_chip',
+              chip_id: activeChipId ?? undefined,
+              subcategory: 'all',
+            });
+            setSelectedSubcategory(null);
+          }}
         />
       ) : null}
 
@@ -1512,7 +1610,7 @@ function PluginPromptPresetCard({
   record: InstalledPluginRecord;
 }) {
   const preview = useMemo(() => inferPluginPreview(record), [record]);
-  const promptPreview = pluginPresetPromptPreview(record, locale, chipId);
+  const seedPrompt = examplePresetSeedPrompt(record, locale, chipId);
   return (
     <button
       type="button"
@@ -1521,7 +1619,7 @@ function PluginPromptPresetCard({
       data-plugin-id={record.id}
       role="listitem"
       disabled={disabled}
-      onClick={() => onPick(record, chipId, promptPreview)}
+      onClick={() => onPick(record, chipId, seedPrompt)}
     >
       <span className="home-hero__plugin-preset-preview" aria-hidden>
         <PreviewSurface
@@ -2223,14 +2321,16 @@ function fileMatchesQuery(file: File, query: string): boolean {
     .includes(q);
 }
 
-function pluginMatchesQuery(plugin: InstalledPluginRecord, query: string): boolean {
+function pluginMatchesQuery(plugin: InstalledPluginRecord, query: string, locale: Locale): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   return [
     plugin.title,
+    localizePluginTitle(locale, plugin),
     plugin.id,
     plugin.sourceKind,
     plugin.manifest?.description ?? '',
+    localizePluginDescription(locale, plugin),
     ...(plugin.manifest?.tags ?? []),
   ]
     .join(' ')
@@ -2238,13 +2338,15 @@ function pluginMatchesQuery(plugin: InstalledPluginRecord, query: string): boole
     .includes(q);
 }
 
-function skillMatchesQuery(skill: SkillSummary, query: string): boolean {
+function skillMatchesQuery(skill: SkillSummary, query: string, locale: Locale): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   return [
     skill.id,
     skill.name,
+    localizeSkillName(locale, skill),
     skill.description,
+    localizeSkillDescription(locale, skill),
     skill.mode,
     skill.surface ?? '',
     ...skill.triggers,
@@ -2710,6 +2812,43 @@ function pluginPresetPromptPreview(
     ? renderPluginPresetQuery(record, query)
     : localizePluginDescription(locale, record);
   return textPromptForPluginPreset(record, rendered, chipId, locale);
+}
+
+// The seed text dropped into the composer when a preset card is picked.
+// The full build spec now rides along as plugin context (SKILL.md +
+// example.html injected once the plugin is applied), so the textarea only
+// needs a short, human-readable, editable hook — not the verbatim spec.
+function examplePresetSeedPrompt(
+  record: InstalledPluginRecord,
+  locale: Locale,
+  chipId: string,
+): string {
+  const description = localizePluginDescription(locale, record).trim();
+  // zh: the localized useCase.query is a generator-facing meta-instruction
+  // ("follow the en field verbatim; start from example.html"), useless as a
+  // human seed — surface the curated one-line description instead.
+  if (promptLocaleKind(locale) === 'zh' && description) return description;
+  const query = pluginPresetQuery(record, locale);
+  if (query) {
+    const head = firstPromptParagraph(renderPluginPresetQuery(record, query));
+    // Skip meta-instructions that reference fields/assets the model can't see
+    // from the textarea; fall back to the description.
+    if (head && !isMetaInstructionSeed(head)) return head;
+  }
+  if (description) return description;
+  return pluginPresetPromptPreview(record, locale, chipId);
+}
+
+function firstPromptParagraph(value: string): string {
+  const normalized = value.replace(/\r\n/g, '\n').trim();
+  if (!normalized) return '';
+  // First paragraph = text up to the first blank line / markdown rule fence.
+  const [head] = normalized.split(/\n\s*\n/);
+  return (head ?? normalized).trim();
+}
+
+function isMetaInstructionSeed(value: string): boolean {
+  return /逐字注入|以\s*en\s*字段为准|verbatim|example\.html/iu.test(value);
 }
 
 function pluginPresetQuery(record: InstalledPluginRecord, locale: Locale): string | null {

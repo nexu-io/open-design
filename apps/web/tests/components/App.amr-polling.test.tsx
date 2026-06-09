@@ -25,14 +25,22 @@ vi.mock('../../src/router', () => ({
 vi.mock('../../src/components/EntryView', () => ({
   EntryView: ({
     agents,
+    config,
     onOpenSettings,
   }: {
     agents: Array<{ id: string; models?: Array<{ id: string }> }>;
+    config: AppConfig;
     onOpenSettings: () => void;
   }) => (
     <>
       <div data-testid="amr-model">
         {agents.find((agent) => agent.id === 'amr')?.models?.[0]?.id ?? 'none'}
+      </div>
+      <div data-testid="config-amr-model">
+        {config.agentModels?.amr?.model ?? 'none'}
+      </div>
+      <div data-testid="amr-profile">
+        {config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE ?? 'none'}
       </div>
       <button onClick={() => onOpenSettings()}>open settings</button>
     </>
@@ -179,6 +187,16 @@ const baseConfig: AppConfig = {
   agentModels: {},
   agentCliEnv: {},
 };
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
 
 describe('App AMR polling', () => {
   beforeEach(() => {
@@ -404,5 +422,169 @@ describe('App AMR polling', () => {
       expect(screen.getByTestId('amr-model').textContent).toBe('new-probe');
     });
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes renderer config and clears stale AMR models after a desktop app-config change event', async () => {
+    mockedLoadConfig.mockReturnValue({
+      ...baseConfig,
+      agentModels: { amr: { model: 'old-remote', reasoning: 'default' } },
+      agentCliEnv: {
+        amr: { OPEN_DESIGN_AMR_PROFILE: 'prod' },
+      },
+    });
+    mockedFetchAmrModels.mockReset();
+    mockedFetchAmrModels
+      .mockResolvedValueOnce({
+        source: 'remote',
+        refreshing: false,
+        models: [{ id: 'old-remote', label: 'old-remote' }],
+      })
+      .mockResolvedValueOnce({
+        source: 'remote',
+        refreshing: false,
+        models: [{ id: 'local-remote', label: 'local-remote' }],
+      });
+    mockedFetchDaemonConfig
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        agentCliEnv: {
+          amr: { OPEN_DESIGN_AMR_PROFILE: 'local' },
+        },
+      });
+    mockedMergeDaemonConfig.mockImplementation((local, daemon) => ({
+      ...local,
+      agentCliEnv: daemon?.agentCliEnv ?? local.agentCliEnv,
+    }));
+    mockedFetchAgentsStream
+      .mockResolvedValueOnce([
+        {
+          id: 'amr',
+          name: 'AMR',
+          bin: 'vela',
+          available: true,
+          version: '1.0.0',
+          models: [],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'amr',
+          name: 'AMR',
+          bin: 'vela',
+          available: true,
+          version: '1.0.0',
+          models: [{ id: 'local-probe', label: 'local-probe' }],
+        },
+      ]);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('amr-model').textContent).toBe('old-remote');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('config-amr-model').textContent).toBe('old-remote');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('amr-profile').textContent).toBe('prod');
+    });
+
+    fireEvent(window, new CustomEvent('open-design:app-config-changed'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('amr-profile').textContent).toBe('local');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('config-amr-model').textContent).toBe('none');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('amr-model').textContent).toBe('local-remote');
+    });
+    await waitFor(() => {
+      expect(mockedFetchAgentsStream).toHaveBeenCalledTimes(2);
+    });
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores stale in-flight AMR model polls after a desktop app-config change restarts polling', async () => {
+    const oldRemotePoll = deferred<Awaited<ReturnType<typeof fetchAmrModels>>>();
+    const localRemotePoll = deferred<Awaited<ReturnType<typeof fetchAmrModels>>>();
+    mockedLoadConfig.mockReturnValue({
+      ...baseConfig,
+      agentCliEnv: {
+        amr: { OPEN_DESIGN_AMR_PROFILE: 'prod' },
+      },
+    });
+    mockedFetchDaemonConfig
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        agentCliEnv: {
+          amr: { OPEN_DESIGN_AMR_PROFILE: 'local' },
+        },
+      });
+    mockedMergeDaemonConfig.mockImplementation((local, daemon) => ({
+      ...local,
+      agentCliEnv: daemon?.agentCliEnv ?? local.agentCliEnv,
+    }));
+    mockedFetchAmrModels.mockReset();
+    mockedFetchAmrModels
+      .mockReturnValueOnce(oldRemotePoll.promise)
+      .mockReturnValueOnce(localRemotePoll.promise);
+    mockedFetchAgentsStream
+      .mockResolvedValueOnce([
+        {
+          id: 'amr',
+          name: 'AMR',
+          bin: 'vela',
+          available: true,
+          version: '1.0.0',
+          models: [],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'amr',
+          name: 'AMR',
+          bin: 'vela',
+          available: true,
+          version: '1.0.0',
+          models: [{ id: 'local-probe', label: 'local-probe' }],
+        },
+      ]);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent(window, new CustomEvent('open-design:app-config-changed'));
+
+    await waitFor(() => {
+      expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+    });
+
+    localRemotePoll.resolve({
+      source: 'remote',
+      refreshing: false,
+      models: [{ id: 'local-remote', label: 'local-remote' }],
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('amr-profile').textContent).toBe('local');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('amr-model').textContent).toBe('local-remote');
+    });
+
+    oldRemotePoll.resolve({
+      source: 'remote',
+      refreshing: false,
+      models: [{ id: 'old-remote', label: 'old-remote' }],
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('amr-model').textContent).toBe('local-remote');
+    });
   });
 });

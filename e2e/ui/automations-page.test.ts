@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { ensureRailOpen } from '@/playwright/rail';
+import { routeAgents } from '@/playwright/mock-factory';
 import type { Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
@@ -39,22 +40,16 @@ async function seedAutomationsBase(page: Page) {
     });
   });
 
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'codex',
-            name: 'Codex CLI',
-            bin: 'codex',
-            available: true,
-            version: '0.130.0',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeAgents(page, [
+    {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+      version: '0.130.0',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
 
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({

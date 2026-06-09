@@ -650,7 +650,7 @@ export async function buildTraceObjectManifests(
       ...mergeSourceDigest(entry, sources[index]!),
       status: 'unavailable' as const,
       stored_in_open_design: false,
-      reason: entry.reason ?? 'relay_authorization_pending',
+      ...(entry.reason ? { reason: entry.reason } : {}),
     })));
   }
 
