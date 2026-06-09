@@ -1,4 +1,4 @@
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -12,6 +12,8 @@ import {
 } from "../src/launcher-layout.js";
 import { resolveMacPaths } from "../src/mac/paths.js";
 import { resolveWinPaths } from "../src/win/paths.js";
+
+const TEST_WORKSPACE_ROOT = resolve("/work");
 
 function makeConfig(root: string, platform: ToolPackPlatform, namespace: string, appVersion?: string): ToolPackConfig {
   return {
@@ -53,14 +55,14 @@ function makeConfig(root: string, platform: ToolPackPlatform, namespace: string,
 
 describe("tools-pack launcher layout", () => {
   it("derives the update channel from app version before namespace", () => {
-    expect(resolveToolPackLauncherChannel(makeConfig("/work", "mac", "release-beta", "0.8.1-preview.1"))).toBe("preview");
-    expect(resolveToolPackLauncherChannel(makeConfig("/work", "win", "release-beta-win", "0.8.1-beta.2"))).toBe("beta");
-    expect(resolveToolPackLauncherChannel(makeConfig("/work", "mac", "default", "0.8.1"))).toBe("stable");
-    expect(resolveToolPackLauncherChannel(makeConfig("/work", "mac", "release-nightly", undefined))).toBe("nightly");
+    expect(resolveToolPackLauncherChannel(makeConfig(TEST_WORKSPACE_ROOT, "mac", "release-beta", "0.8.1-preview.1"))).toBe("preview");
+    expect(resolveToolPackLauncherChannel(makeConfig(TEST_WORKSPACE_ROOT, "win", "release-beta-win", "0.8.1-beta.2"))).toBe("beta");
+    expect(resolveToolPackLauncherChannel(makeConfig(TEST_WORKSPACE_ROOT, "mac", "default", "0.8.1"))).toBe("stable");
+    expect(resolveToolPackLauncherChannel(makeConfig(TEST_WORKSPACE_ROOT, "mac", "release-nightly", undefined))).toBe("nightly");
   });
 
   it("uses the channel root above namespaces for launcher state", () => {
-    const config = makeConfig("/work", "mac", "release-beta", "0.8.1-beta.2");
+    const config = makeConfig(TEST_WORKSPACE_ROOT, "mac", "release-beta", "0.8.1-beta.2");
     const layout = resolveToolPackLauncherLayout(config);
     const channelRoot = dirname(config.roots.runtime.namespaceBaseRoot);
 
@@ -73,8 +75,8 @@ describe("tools-pack launcher layout", () => {
   });
 
   it("resolves platform payload archive and extraction paths without changing installed app paths", () => {
-    const mac = makeConfig("/work", "mac", "release-beta", "0.8.1-beta.2");
-    const win = makeConfig("/work", "win", "release-beta-win", "0.8.1-beta.2");
+    const mac = makeConfig(TEST_WORKSPACE_ROOT, "mac", "release-beta", "0.8.1-beta.2");
+    const win = makeConfig(TEST_WORKSPACE_ROOT, "win", "release-beta-win", "0.8.1-beta.2");
     const macPayload = resolveToolPackLauncherPayloadLayout(mac, "0.8.1-beta.2");
     const winPayload = resolveToolPackLauncherPayloadLayout(win, "0.8.1-beta.2");
 
@@ -86,7 +88,7 @@ describe("tools-pack launcher layout", () => {
   });
 
   it("exposes a stable mac payload zip path next to existing mac artifacts", () => {
-    const config = makeConfig("/work", "mac", "release-beta", "0.8.1-beta.2");
+    const config = makeConfig(TEST_WORKSPACE_ROOT, "mac", "release-beta", "0.8.1-beta.2");
     const paths = resolveMacPaths(config);
 
     expect(paths.payloadZipPath).toBe(join(config.roots.output.namespaceRoot, "payload", "Open Design-release-beta-payload.zip"));
@@ -95,7 +97,7 @@ describe("tools-pack launcher layout", () => {
   });
 
   it("exposes a stable Windows payload 7z path next to existing Windows artifacts", () => {
-    const config = makeConfig("/work", "win", "release-beta-win", "0.8.1-beta.2");
+    const config = makeConfig(TEST_WORKSPACE_ROOT, "win", "release-beta-win", "0.8.1-beta.2");
     const paths = resolveWinPaths(config);
 
     expect(paths.launcherPayloadPath).toBe(join(config.roots.output.namespaceRoot, "payload", "Open Design-release-beta-win-payload.7z"));
@@ -110,7 +112,7 @@ describe("tools-pack launcher layout", () => {
   });
 
   it("builds the initial runtime descriptor for the first launcher-capable version", () => {
-    const config = makeConfig("/work", "win", "release-beta-win", "0.8.1-beta.2");
+    const config = makeConfig(TEST_WORKSPACE_ROOT, "win", "release-beta-win", "0.8.1-beta.2");
 
     expect(buildInitialLauncherRuntimeDescriptor(config, "0.8.1-beta.2")).toEqual({
       active: { generation: 0, version: "0.8.1-beta.2" },
@@ -122,7 +124,7 @@ describe("tools-pack launcher layout", () => {
   });
 
   it("rejects unsafe payload version segments through launcher-proto", () => {
-    const config = makeConfig("/work", "mac", "release-beta", "0.8.1-beta.2");
+    const config = makeConfig(TEST_WORKSPACE_ROOT, "mac", "release-beta", "0.8.1-beta.2");
     expect(() => resolveToolPackLauncherPayloadLayout(config, "../0.8.1-beta.2")).toThrow(/path separators/);
   });
 });

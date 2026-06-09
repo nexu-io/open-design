@@ -68,6 +68,7 @@ function resolveHeadlessConfig(): PackagedConfig {
     nodeCommand: null,
     resourceRoot,
     telemetryRelayUrl: process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim() || null,
+    updateMetadataUrl: process.env.OD_UPDATE_METADATA_URL?.trim() || null,
     posthogKey: process.env.POSTHOG_KEY?.trim() || null,
     posthogHost: process.env.POSTHOG_HOST?.trim() || null,
     webSidecarEntry: null,

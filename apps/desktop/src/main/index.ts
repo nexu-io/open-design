@@ -690,6 +690,9 @@ export async function runDesktopMain(
           return await activeDesktop.screenshot(request.input as DesktopScreenshotInput);
         case SIDECAR_MESSAGES.CONSOLE:
           return activeDesktop.console();
+        case SIDECAR_MESSAGES.SHOW:
+          activeDesktop.show();
+          return { accepted: true };
         case SIDECAR_MESSAGES.CLICK:
           return await activeDesktop.click(request.input as DesktopClickInput);
         case SIDECAR_MESSAGES.EXPORT_PDF:
