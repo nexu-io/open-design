@@ -2396,7 +2396,7 @@ function SurfacePreviewWorkspace({ entry }: { entry: WorkspaceSurfacePreviewEntr
       <iframe
         title={entry.title}
         src={entry.url}
-        sandbox="allow-scripts allow-forms allow-popups allow-same-origin"
+        sandbox="allow-scripts allow-forms allow-popups"
       />
     </div>
   );

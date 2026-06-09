@@ -298,6 +298,8 @@ describe('FileWorkspace upload input', () => {
     const iframe = preview.querySelector<HTMLIFrameElement>('iframe');
     expect(iframe?.getAttribute('src')).toBe('http://127.0.0.1:43210/');
     expect(iframe?.getAttribute('title')).toBe('Home screen');
+    expect(iframe?.getAttribute('sandbox')).toBe('allow-scripts allow-forms allow-popups');
+    expect(iframe?.getAttribute('sandbox')).not.toContain('allow-same-origin');
     expect(screen.getByRole('tab', { name: /Home screen/i })).toBeTruthy();
     expect(onTabsStateChange).not.toHaveBeenCalled();
 
