@@ -49,6 +49,8 @@ tsconfig.tsbuildinfo
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/od-contribute/
+!.claude/skills/pr-cr-note/
+!.claude/skills/open-design-tracking/
 !.claude/commands/
 .claude/commands/*
 !.claude/commands/od-contribute.md
