@@ -50,6 +50,19 @@ function pluginKindLabel(
   }
 }
 
+// Design-system plugins aren't one of the home Community facets, so
+// `extractCategories` returns nothing for them. Detect them the same way
+// the preview classifier does (mode / tag) so they still get a kind tag.
+function isDesignSystemRecord(record: InstalledPluginRecord): boolean {
+  const od = record.manifest?.od as { mode?: unknown } | undefined;
+  if (typeof od?.mode === 'string' && od.mode.toLowerCase() === 'design-system') {
+    return true;
+  }
+  return (record.manifest?.tags ?? []).some(
+    (tag) => tag.toLowerCase() === 'design-system',
+  );
+}
+
 export function ComposerPluginPreview({
   record,
   locale,
@@ -61,10 +74,11 @@ export function ComposerPluginPreview({
   const preview = useMemo(() => inferPluginPreview(record), [record]);
   const title = localizePluginTitle(locale, record);
   const description = localizePluginDescription(locale, record);
-  const kindLabel = useMemo(
-    () => pluginKindLabel(extractCategories(record)[0], t),
-    [record, t],
-  );
+  const kindLabel = useMemo(() => {
+    const facet = pluginKindLabel(extractCategories(record)[0], t);
+    if (facet) return facet;
+    return isDesignSystemRecord(record) ? t('entry.navDesignSystems') : null;
+  }, [record, t]);
 
   return (
     <div className="plus-menu__preview" data-plugin-id={record.id}>
