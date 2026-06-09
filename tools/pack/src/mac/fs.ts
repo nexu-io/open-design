@@ -61,10 +61,14 @@ export async function sumChildDirectorySizes(path: string, includeChild: (name: 
 }
 
 
-export async function clearQuarantine(path: string): Promise<void> {
-  try {
-    await execFileAsync("xattr", ["-dr", "com.apple.quarantine", path]);
-  } catch {
-    // Ignore when the attribute is absent or unsupported for local unsigned artifacts.
+export const MAC_XATTRS_TO_SCRUB = ["com.apple.quarantine", "com.apple.provenance", "com.apple.macl"] as const;
+
+export async function scrubMacExtendedAttributes(path: string): Promise<void> {
+  for (const attribute of MAC_XATTRS_TO_SCRUB) {
+    try {
+      await execFileAsync("xattr", ["-dr", attribute, path]);
+    } catch {
+      // Ignore when the attribute is absent, protected, or unsupported for local artifacts.
+    }
   }
 }
