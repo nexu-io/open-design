@@ -162,9 +162,8 @@ async function loadMaintainers(): Promise<Set<string>> {
     for (const u of items) out.add(u.login.toLowerCase());
     const link = res.headers.get("link") || "";
     const next = link.split(",").find((s) => s.includes('rel="next"'));
-    pageUrl = next
-      ? next.match(/<([^>]+)>/)![1].replace("https://api.github.com", "")
-      : null;
+    const nextUrl = next?.match(/<([^>]+)>/)?.[1];
+    pageUrl = nextUrl ? nextUrl.replace("https://api.github.com", "") : null;
   }
   return out;
 }
