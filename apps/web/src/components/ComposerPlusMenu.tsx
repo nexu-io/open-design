@@ -15,6 +15,7 @@ import type {
 } from '@open-design/contracts';
 import { useI18n, useT } from '../i18n';
 import { ComposerPluginPreview } from './ComposerPluginPreview';
+import { localizePluginTitle } from './plugins-home/localization';
 import { Icon, type IconName } from './Icon';
 
 const PLUS_MENU_MARGIN = 12;
@@ -141,9 +142,15 @@ export interface ComposerPlusMenuProps {
   onOpen?: () => void;
 }
 
-function pluginMatches(plugin: InstalledPluginRecord, needle: string): boolean {
+function pluginMatches(
+  plugin: InstalledPluginRecord,
+  needle: string,
+  localizedTitle: string,
+): boolean {
   if (!needle) return true;
-  return `${plugin.title} ${plugin.id}`.toLowerCase().includes(needle);
+  // Match the localized title too, so a Chinese search hits a plugin whose
+  // raw `title` is English but whose `title_i18n` is the displayed name.
+  return `${localizedTitle} ${plugin.title} ${plugin.id}`.toLowerCase().includes(needle);
 }
 
 function mcpMatches(server: McpServerConfig, needle: string): boolean {
@@ -317,7 +324,7 @@ export function ComposerPlusMenu({
 
   const needle = query.trim().toLowerCase();
   const filteredPlugins = needle
-    ? plugins.filter((p) => pluginMatches(p, needle))
+    ? plugins.filter((p) => pluginMatches(p, needle, localizePluginTitle(locale, p)))
     : plugins;
   const filteredMcp = needle
     ? mcpServers.filter((s) => mcpMatches(s, needle))
@@ -477,7 +484,7 @@ export function ComposerPlusMenu({
                         }}
                       >
                         <Icon name="sparkles" size={15} className="plus-menu__item-icon" />
-                        <span>{plugin.title}</span>
+                        <span>{localizePluginTitle(locale, plugin)}</span>
                       </button>
                     ))
                   )}
