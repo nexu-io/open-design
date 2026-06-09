@@ -4,7 +4,7 @@ const AGENT_INSTALL_LINKS: Record<
   { installUrl?: string; docsUrl?: string }
 > = {
   amr: {
-    installUrl: 'https://github.com/nexu-io/vela',
+    installUrl: 'https://open-design.ai/amr',
     docsUrl: 'https://github.com/nexu-io/open-design/blob/main/docs/new-agent-runtime-acp.md',
   },
   claude: {
