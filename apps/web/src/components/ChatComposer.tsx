@@ -33,7 +33,7 @@ import type {
   DesignToolboxClickProps,
 } from '@open-design/contracts/analytics';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
-import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir } from "../providers/registry";
+import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir, dirExists } from "../providers/registry";
 import { WorkingDirPicker } from './WorkingDirPicker';
 import { patchProject } from "../state/projects";
 import { fetchMcpServers } from "../state/mcp";
@@ -260,7 +260,6 @@ interface Props {
   onOpenPetSettings?: () => void;
   researchAvailable?: boolean;
   projectMetadata?: ProjectMetadata;
-  missingLinkedDirs?: string[];
   onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
   activeWorkspaceContext?: WorkspaceContextItem | null;
   workspaceContexts?: WorkspaceContextItem[];
@@ -386,7 +385,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onOpenPetSettings,
       researchAvailable = false,
       projectMetadata,
-      missingLinkedDirs,
       onProjectMetadataChange,
       activeWorkspaceContext = null,
       workspaceContexts = [],
@@ -523,6 +521,32 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const persisted = await pushRecentLinkedDir(dir);
       setRecentDirs(persisted);
     }, []);
+    // Live-check whether the selected working directory still exists, so a
+    // folder deleted from disk turns the picker red without a page reload.
+    // Re-checked when the dir changes, when the window/tab regains focus
+    // (e.g. after deleting it in Finder), and when the picker is opened.
+    const [workingDirMissing, setWorkingDirMissing] = useState(false);
+    const checkWorkingDir = useCallback(async () => {
+      if (!workingDir) {
+        setWorkingDirMissing(false);
+        return;
+      }
+      const ok = await dirExists(workingDir);
+      setWorkingDirMissing(!ok);
+    }, [workingDir]);
+    useEffect(() => {
+      void checkWorkingDir();
+      const onFocus = () => void checkWorkingDir();
+      const onVisible = () => {
+        if (document.visibilityState === 'visible') void checkWorkingDir();
+      };
+      window.addEventListener('focus', onFocus);
+      document.addEventListener('visibilitychange', onVisible);
+      return () => {
+        window.removeEventListener('focus', onFocus);
+        document.removeEventListener('visibilitychange', onVisible);
+      };
+    }, [checkWorkingDir]);
     const visibleWorkspaceContext =
       activeWorkspaceContext && activeWorkspaceContext.id !== dismissedWorkspaceContextId
         ? activeWorkspaceContext
@@ -2382,8 +2406,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             <WorkingDirPicker
               placement="up"
               workingDir={workingDir}
-              invalid={workingDir != null && (missingLinkedDirs ?? []).includes(workingDir)}
+              invalid={workingDirMissing}
               recentDirs={recentDirs}
+              onOpen={() => void checkWorkingDir()}
               onPickDirectory={() => void handlePickWorkingDir()}
               onSelectRecent={(dir) => void setWorkingDirFolder(dir)}
             />

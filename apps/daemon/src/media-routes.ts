@@ -366,6 +366,25 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
   });
 
+  // Lightweight existence probe for a single directory, used by the composer
+  // to flag a working directory in red the moment its folder is gone (the
+  // composer re-checks on focus / picker-open, so deletions reflect live).
+  app.post('/api/dir-exists', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const dir = typeof req.body?.path === 'string' ? req.body.path : '';
+    let exists = false;
+    if (dir) {
+      try {
+        exists = fs.statSync(dir).isDirectory();
+      } catch {
+        exists = false;
+      }
+    }
+    res.json({ exists });
+  });
+
   // Recent working directories, pruned to those that still exist on disk. A
   // folder the user deleted (or an external drive that's gone) drops out of
   // the list here and the pruned list is persisted back, so the picker's

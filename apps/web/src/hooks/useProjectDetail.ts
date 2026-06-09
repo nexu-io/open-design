@@ -11,8 +11,6 @@ import type { Project, ProjectDetailResponse } from '@open-design/contracts';
 export interface ProjectDetailState {
   project: Project | null;
   resolvedDir: string | null;
-  /** Linked working dirs that no longer exist on disk (for red flagging). */
-  missingLinkedDirs: string[];
   loading: boolean;
   error: Error | null;
   refresh: () => Promise<void>;
@@ -21,7 +19,6 @@ export interface ProjectDetailState {
 export function useProjectDetail(projectId: string): ProjectDetailState {
   const [project, setProject] = useState<Project | null>(null);
   const [resolvedDir, setResolvedDir] = useState<string | null>(null);
-  const [missingLinkedDirs, setMissingLinkedDirs] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -46,11 +43,6 @@ export function useProjectDetail(projectId: string): ProjectDetailState {
             ? nextProject.metadata.baseDir
             : null;
         setResolvedDir(reported ?? fallback);
-        setMissingLinkedDirs(
-          Array.isArray(body.missingLinkedDirs)
-            ? body.missingLinkedDirs.filter((d): d is string => typeof d === 'string')
-            : [],
-        );
       } catch (err) {
         if (signal?.aborted) return;
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -69,5 +61,5 @@ export function useProjectDetail(projectId: string): ProjectDetailState {
 
   const refresh = useCallback(() => fetchOnce(), [fetchOnce]);
 
-  return { project, resolvedDir, missingLinkedDirs, loading, error, refresh };
+  return { project, resolvedDir, loading, error, refresh };
 }

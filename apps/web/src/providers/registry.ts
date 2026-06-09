@@ -2012,6 +2012,23 @@ export async function openFolderDialog(): Promise<string | null> {
   }
 }
 
+// Probe whether a local directory still exists on disk. Used by the composer
+// to flag a working directory in red the moment its folder is deleted.
+export async function dirExists(path: string): Promise<boolean> {
+  try {
+    const resp = await fetch('/api/dir-exists', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    if (!resp.ok) return true; // can't tell → don't false-flag
+    const data = await resp.json();
+    return data?.exists !== false;
+  } catch {
+    return true; // daemon unreachable → don't false-flag
+  }
+}
+
 // Global most-recently-used working directories (the local folders the user
 // grants the agent read-only awareness of). Persisted in the daemon's
 // app-config so they survive browser resets and are shared across projects

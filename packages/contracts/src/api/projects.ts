@@ -278,11 +278,6 @@ export interface ProjectResponse {
 // `resolveProjectDir(...)` so the web client never reconstructs the path.
 export interface ProjectDetailResponse extends ProjectResponse {
   resolvedDir: string;
-  // Subset of `project.metadata.linkedDirs` whose folders no longer exist on
-  // disk (deleted, unmounted, etc.). The composer flags a missing working
-  // directory in red so the user knows to re-pick it. Omitted/empty when all
-  // linked dirs resolve.
-  missingLinkedDirs?: string[];
 }
 
 export interface CreateProjectResponse extends ProjectResponse {

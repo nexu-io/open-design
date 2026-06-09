@@ -28,6 +28,8 @@ interface Props {
    * the bottom of the viewport, so a downward panel would be clipped.
    */
   placement?: 'down' | 'up';
+  /** Fired when the panel opens, so the host can re-validate freshness. */
+  onOpen?: () => void;
 }
 
 function basename(dir: string): string {
@@ -51,6 +53,7 @@ export function WorkingDirPicker({
   className,
   placement = 'down',
   invalid = false,
+  onOpen,
 }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -90,7 +93,12 @@ export function WorkingDirPicker({
           data-testid="working-dir-trigger"
           aria-expanded={open}
           title={invalid ? t('homeWorkingDir.missing') : (workingDir ?? t('homeWorkingDir.hint'))}
-          onClick={() => setOpen((v) => !v)}
+          onClick={() =>
+            setOpen((v) => {
+              if (!v) onOpen?.();
+              return !v;
+            })
+          }
         >
           <Icon name="folder" size={13} className={styles.triggerIcon} />
           <span className={styles.triggerLabel}>
