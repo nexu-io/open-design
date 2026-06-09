@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { en } from '../../src/i18n/locales/en';
 
 const {
@@ -3254,6 +3254,30 @@ describe('SettingsDialog MCP server interactions', () => {
 });
 
 describe('SettingsDialog language interactions', () => {
+  // vitest 4.1.6's jsdom environment ships `window.localStorage` as an
+  // empty `{}` with no methods, so the production code's `try { ... }`
+  // catch in i18n/index.tsx silently no-ops on setItem/getItem and the
+  // test's afterEach + assertions blow up with `removeItem is not a
+  // function`. Same `// @vitest-environment jsdom` setup as several
+  // other tests in this directory (e.g. AmrGuidance, AssistantMessage);
+  // they all install the same Map-backed stub in beforeAll.
+  beforeAll(() => {
+    const store = new Map<string, string>();
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        clear: () => store.clear(),
+        getItem: (key: string) => store.get(key) ?? null,
+        removeItem: (key: string) => {
+          store.delete(key);
+        },
+        setItem: (key: string, value: string) => {
+          store.set(key, value);
+        },
+      },
+    });
+  });
+
   afterEach(() => {
     cleanup();
     window.localStorage.removeItem('open-design:locale');
