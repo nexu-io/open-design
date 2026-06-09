@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   DESIGN_FILES_TAB,
@@ -133,6 +133,10 @@ beforeAll(() => {
     disconnect() {}
     unobserve() {}
   };
+});
+
+beforeEach(() => {
+  mockedFetchProjectFileText.mockResolvedValue('');
 });
 
 afterEach(() => {
@@ -686,46 +690,25 @@ describe('FileWorkspace launcher tab creation', () => {
     });
   });
 
-  it('appends a new terminal to the latest tab list after parent tabs change', async () => {
-    mockedFetchProjectFileText.mockResolvedValue('');
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () =>
-        new Response(JSON.stringify({ terminal: { id: 'term-1' } }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      ),
-    );
-    const onTabsStateChange = vi.fn();
-    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
-      projectId: 'project-1',
-      projectKind: 'prototype',
-      files: [],
-      liveArtifacts: [],
-      onRefreshFiles: vi.fn(),
-      isDeck: false,
-      tabsState: { tabs: [], active: null },
-      onTabsStateChange,
-    };
-
-    const { rerender } = render(<FileWorkspace {...baseProps} />);
-    rerender(
+  it('hides terminal creation while keeping browser creation available', () => {
+    render(
       <FileWorkspace
-        {...baseProps}
-        tabsState={{ tabs: ['chat:existing'], active: null }}
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
       />,
     );
 
     fireEvent.click(screen.getByTestId('workspace-add-tab'));
-    fireEvent.click(await screen.findByRole('button', { name: /New Terminal/i }));
 
-    await waitFor(() => {
-      expect(onTabsStateChange).toHaveBeenCalledWith({
-        tabs: ['chat:existing', 'terminal:term-1'],
-        active: 'terminal:term-1',
-      });
-    });
+    expect(screen.queryByRole('button', { name: /New Terminal/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /New Browser/i })).toBeTruthy();
+    expect(screen.getByText('Create new')).toBeTruthy();
   });
 
   it('renders terminal and side chat tabs after a Design Files-anchored browser tab', () => {
@@ -807,101 +790,6 @@ describe('FileWorkspace launcher tab creation', () => {
             id: '__browser__:2',
             insertAfter: 'terminal:term-1',
             label: 'Browser 2',
-          },
-        ],
-      });
-    });
-  });
-
-  it('appends a new browser after stale-anchor browser tabs', async () => {
-    const onTabsStateChange = vi.fn();
-    const staleBrowserTab = {
-      id: '__browser__:1',
-      insertAfter: 'deleted.html',
-      label: 'Browser',
-    };
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[workspaceFile('cover.html')]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{
-          tabs: ['cover.html'],
-          active: 'cover.html',
-          browserTabs: [staleBrowserTab],
-        }}
-        onTabsStateChange={onTabsStateChange}
-      />,
-    );
-
-    fireEvent.click(screen.getByTestId('workspace-add-tab'));
-    fireEvent.click(await screen.findByRole('button', { name: /New Browser/i }));
-
-    await waitFor(() => {
-      expect(onTabsStateChange).toHaveBeenCalledWith({
-        tabs: ['cover.html'],
-        active: '__browser__:2',
-        browserTabs: [
-          staleBrowserTab,
-          {
-            id: '__browser__:2',
-            insertAfter: '__browser__:1',
-            label: 'Browser 2',
-          },
-        ],
-      });
-    });
-  });
-
-  it('reanchors stale browser tabs before appending a new terminal', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () =>
-        new Response(JSON.stringify({ terminal: { id: 'term-2' } }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      ),
-    );
-    const onTabsStateChange = vi.fn();
-    const staleBrowserTab = {
-      id: '__browser__:1',
-      insertAfter: 'deleted.html',
-      label: 'Browser',
-    };
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[workspaceFile('cover.html')]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{
-          tabs: ['cover.html'],
-          active: 'cover.html',
-          browserTabs: [staleBrowserTab],
-        }}
-        onTabsStateChange={onTabsStateChange}
-      />,
-    );
-
-    fireEvent.click(screen.getByTestId('workspace-add-tab'));
-    fireEvent.click(await screen.findByRole('button', { name: /New Terminal/i }));
-
-    await waitFor(() => {
-      expect(onTabsStateChange).toHaveBeenCalledWith({
-        tabs: ['cover.html', 'terminal:term-2'],
-        active: 'terminal:term-2',
-        browserTabs: [
-          {
-            ...staleBrowserTab,
-            insertAfter: 'cover.html',
           },
         ],
       });
@@ -1971,7 +1859,7 @@ describe('FileWorkspace sketch save', () => {
 });
 
 describe('FileWorkspace add-module menu', () => {
-  it('opens the add-module menu so the + button reveals the Browser option', () => {
+  it('opens the add-module menu with Browser available and Terminal hidden', () => {
     render(
       <FileWorkspace
         projectId="project-1"
@@ -1996,6 +1884,7 @@ describe('FileWorkspace add-module menu', () => {
     const browserItem = screen.getByRole('button', { name: /New Browser/ });
     const menu = browserItem.closest('[data-testid="tab-launcher-menu"]');
     expect(menu).not.toBeNull();
+    expect(screen.queryByRole('button', { name: /New Terminal/ })).toBeNull();
 
     // The tab strip is a horizontal scroll container that also clips
     // vertically, so the "+" button lives outside it in `.ws-add-tab`
@@ -2174,35 +2063,4 @@ describe('FileWorkspace add-module menu', () => {
     });
   });
 
-  it('appends a new browser tab after existing workspace tabs', () => {
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[workspaceFile('analysis.html'), workspaceFile('notes.html')]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['analysis.html', 'notes.html'], active: null }}
-        onTabsStateChange={vi.fn()}
-      />,
-    );
-
-    const addButton = screen.getByTestId('workspace-add-tab');
-    act(() => {
-      fireEvent.click(addButton);
-    });
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /New Browser/ }));
-    });
-
-    const tabLabels = screen
-      .getAllByRole('tab')
-      .map((tab) => tab.textContent?.trim() ?? '');
-    const fileIndex = tabLabels.findIndex((label) => label.includes('notes.html'));
-    const browserIndex = tabLabels.findIndex((label) => label === 'Browser');
-
-    expect(fileIndex).toBeGreaterThanOrEqual(0);
-    expect(browserIndex).toBe(fileIndex + 1);
-  });
 });

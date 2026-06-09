@@ -56,6 +56,8 @@ export interface LauncherAction {
   run: (ctx: LauncherContext) => void;
 }
 
+const ENABLE_TERMINAL_WORKSPACE_ENTRYPOINT = false;
+
 /**
  * Build the list of "create new" actions for the current context.
  *
@@ -66,7 +68,7 @@ export interface LauncherAction {
  */
 export function buildLauncherActions(ctx: LauncherContext): LauncherAction[] {
   const actions: LauncherAction[] = [];
-  if (ctx.createTerminal) {
+  if (ENABLE_TERMINAL_WORKSPACE_ENTRYPOINT && ctx.createTerminal) {
     actions.push({
       id: 'new-terminal',
       iconName: 'terminal',
