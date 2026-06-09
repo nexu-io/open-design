@@ -13,18 +13,10 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
 import type { ChatMessage } from '../../src/types';
+import { installLocalStorageStub } from '../helpers/localStorage-stub';
 
 beforeAll(() => {
-  const store = new Map<string, string>();
-  Object.defineProperty(window, 'localStorage', {
-    configurable: true,
-    value: {
-      clear: () => store.clear(),
-      getItem: (k: string) => store.get(k) ?? null,
-      removeItem: (k: string) => store.delete(k),
-      setItem: (k: string, v: string) => store.set(k, v),
-    },
-  });
+  installLocalStorageStub();
 });
 
 afterEach(cleanup);

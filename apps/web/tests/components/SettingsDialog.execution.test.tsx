@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { en } from '../../src/i18n/locales/en';
+import { installLocalStorageStub } from '../helpers/localStorage-stub';
 
 const {
   playSoundMock,
@@ -3261,22 +3262,9 @@ describe('SettingsDialog language interactions', () => {
   // function`. Same `// @vitest-environment jsdom` setup as several
   // other tests in this directory (e.g. AmrGuidance, AssistantMessage);
   // they all install the same Map-backed stub in beforeAll.
-  beforeAll(() => {
-    const store = new Map<string, string>();
-    Object.defineProperty(window, 'localStorage', {
-      configurable: true,
-      value: {
-        clear: () => store.clear(),
-        getItem: (key: string) => store.get(key) ?? null,
-        removeItem: (key: string) => {
-          store.delete(key);
-        },
-        setItem: (key: string, value: string) => {
-          store.set(key, value);
-        },
-      },
-    });
-  });
+beforeAll(() => {
+  installLocalStorageStub();
+});
 
   afterEach(() => {
     cleanup();

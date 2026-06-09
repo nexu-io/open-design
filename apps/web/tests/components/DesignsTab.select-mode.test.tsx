@@ -5,6 +5,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { DesignsTab } from '../../src/components/DesignsTab';
 import type { Project } from '../../src/types';
+import { installLocalStorageStub } from '../helpers/localStorage-stub';
 
 vi.mock('../../src/providers/registry', () => ({
   deleteLiveArtifact: vi.fn(),
@@ -28,17 +29,7 @@ const project: Project = {
 
 describe('DesignsTab select mode', () => {
   beforeAll(() => {
-    if (window.localStorage) return;
-    const store = new Map<string, string>();
-    Object.defineProperty(window, 'localStorage', {
-      configurable: true,
-      value: {
-        clear: () => store.clear(),
-        getItem: (key: string) => store.get(key) ?? null,
-        removeItem: (key: string) => store.delete(key),
-        setItem: (key: string, value: string) => store.set(key, value),
-      },
-    });
+    installLocalStorageStub();
   });
 
   beforeEach(() => {
