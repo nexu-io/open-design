@@ -1747,11 +1747,12 @@ async function prepareOpenCodeConnectionTestCwd(tempDir: string): Promise<void> 
     'Open Design OpenCode connection test.\n',
     'utf8',
   );
-  await runQuietCommand('git', ['init'], tempDir);
-  await runQuietCommand('git', ['config', 'user.email', 'opencode-test@example.invalid'], tempDir);
-  await runQuietCommand('git', ['config', 'user.name', 'OpenCode Test'], tempDir);
-  await runQuietCommand('git', ['add', 'README.md'], tempDir);
-  await runQuietCommand('git', ['commit', '-m', 'Initialize connection test workspace'], tempDir);
+  try {
+    await runQuietCommand('git', ['init'], tempDir);
+  } catch {
+    // OpenCode responds more reliably inside a git worktree, but a missing or
+    // misconfigured local git binary must not sink an otherwise healthy CLI.
+  }
 }
 
 async function testAgentConnectionInternal(
