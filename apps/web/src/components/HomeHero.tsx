@@ -2699,12 +2699,22 @@ function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): stri
   }
 }
 
-function homeHeroExamplePluginsForChip(
+// Generic catch-all scenario routers are not real "example" templates: they
+// ship no concrete seed for the gallery and only exist as the silent default
+// binding a media surface carries (see scenario-defaults.ts). Keep them out of
+// the example-prompt presets so e.g. the "Media generation (default scenario)"
+// card never appears under the audio/image/video chips — and, because the
+// example card's selected state is keyed on the active plugin id, never shows
+// up pre-selected when a media mode is entered.
+const EXAMPLE_PRESET_HIDDEN_PLUGIN_IDS = new Set<string>(['od-media-generation']);
+
+export function homeHeroExamplePluginsForChip(
   chipId: string,
   plugins: InstalledPluginRecord[],
   locale: Locale,
 ): InstalledPluginRecord[] {
   const presets = plugins
+    .filter((plugin) => !EXAMPLE_PRESET_HIDDEN_PLUGIN_IDS.has(plugin.id))
     .filter((plugin) => (
       pluginMatchesExampleChip(plugin, chipId) ||
       curatedPluginPriorityForChip(plugin, chipId) !== null
@@ -2752,7 +2762,7 @@ function movePluginPresetToEnd(
   ];
 }
 
-function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: string): boolean {
+export function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: string): boolean {
   const slugs = pluginRecordSlugs(record);
   const has = (...values: string[]) => values.some((value) => slugs.has(value));
   const hasPart = (...values: string[]) => {
@@ -2775,7 +2785,10 @@ function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: string)
     case 'video':
       return (has('video') || hasPart('video-template')) && !hasPart('hyperframes', 'audio');
     case 'audio':
-      return has('audio') || hasPart('audio');
+      // Exclude video / HyperFrames templates that merely carry an
+      // `audio-reactive` tag (substring-matched by hasPart('audio')): their
+      // home is the Video / HyperFrames chips, not the audio gallery.
+      return (has('audio') || hasPart('audio')) && !hasPart('video', 'hyperframes');
     default:
       return false;
   }
