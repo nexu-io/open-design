@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   collectStderrTailSummary,
+  collectStdoutTailSummary,
   summarizeRunDiagnosticsForAnalytics,
 } from '../src/run-diagnostics.js';
 
@@ -37,6 +38,14 @@ describe('run diagnostics', () => {
       diagnostic_source: 'stderr',
       stderr_present: true,
       stderr_line_count_bucket: '1_5',
+      stdout_present: false,
+      stdout_line_count_bucket: 'none',
+      rpc_close_reason: 'exit_nonzero',
+      first_token_seen: false,
+      user_visible_output_seen: false,
+      tool_call_seen: false,
+      artifact_write_seen: false,
+      live_artifact_seen: false,
     });
   });
 
@@ -57,6 +66,14 @@ describe('run diagnostics', () => {
       diagnostic_source: 'stderr',
       stderr_present: true,
       stderr_line_count_bucket: '1_5',
+      stdout_present: false,
+      stdout_line_count_bucket: 'none',
+      rpc_close_reason: 'exit_nonzero',
+      first_token_seen: false,
+      user_visible_output_seen: false,
+      tool_call_seen: false,
+      artifact_write_seen: false,
+      live_artifact_seen: false,
     });
   });
 
@@ -74,6 +91,52 @@ describe('run diagnostics', () => {
       diagnostic_source: 'error_event',
       stderr_present: true,
       stderr_line_count_bucket: '1_5',
+      stdout_present: false,
+      stdout_line_count_bucket: 'none',
+      rpc_close_reason: 'exit_nonzero',
+      first_token_seen: false,
+      user_visible_output_seen: false,
+      tool_call_seen: false,
+      artifact_write_seen: false,
+      live_artifact_seen: false,
+    });
+  });
+
+  it('summarizes stdout into redacted bounded tails for Langfuse', () => {
+    const summary = collectStdoutTailSummary([
+      { event: 'stdout', data: { chunk: 'visible line\nOPENAI_API_KEY=sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' } },
+    ]);
+
+    expect(summary).toBeTruthy();
+    expect(summary?.lineCount).toBe(2);
+    expect(summary?.tail).toContain('visible line');
+    expect(summary?.tail).toContain('[REDACTED:sk_key]');
+    expect(summary?.tail).not.toContain('sk-');
+  });
+
+  it('captures close reason and side-effect flags for aggregation', () => {
+    const result = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        { event: 'stdout', data: { chunk: 'hello\n' } },
+        { event: 'agent', data: { type: 'tool_use', name: 'Read' } },
+        { event: 'agent', data: { type: 'artifact' } },
+      ],
+      exitCode: null,
+      signal: 'SIGTERM',
+      firstTokenSeen: true,
+      liveArtifactSeen: true,
+    });
+
+    expect(result).toMatchObject({
+      diagnostic_source: 'signal',
+      stdout_present: true,
+      stdout_line_count_bucket: '1_5',
+      rpc_close_reason: 'signal',
+      first_token_seen: true,
+      user_visible_output_seen: true,
+      tool_call_seen: true,
+      artifact_write_seen: true,
+      live_artifact_seen: true,
     });
   });
 });

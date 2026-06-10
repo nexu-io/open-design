@@ -30,6 +30,7 @@
   flex-direction: column;
   width: 100%;
   max-width: 100%;
+  height: var(--cfl-max-h, 460px);
   max-height: var(--cfl-max-h, 460px);
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -180,7 +181,7 @@
   width: 24px;
   height: 24px;
   padding: 5px;
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: color-mix(in srgb, var(--bg-subtle) 74%, transparent);
   flex: 0 0 24px;
   color: var(--text-muted);
@@ -245,7 +246,7 @@
   align-items: center;
   height: 16px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 9px;
@@ -329,7 +330,7 @@
   gap: 14px;
   padding: 18px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-elevated);
   color: var(--text);
   box-shadow: var(--shadow-lg);
@@ -357,7 +358,7 @@
   height: 44px;
   display: grid;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: color-mix(in oklab, var(--accent) 12%, var(--bg-subtle));
   color: var(--accent);
 }
@@ -397,7 +398,7 @@
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid var(--border-strong);
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: var(--bg-panel);
   color: var(--text);
   font: inherit;
@@ -434,7 +435,7 @@
 .modal-rename input[type="text"] {
   width: 100%;
   padding: 9px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   border: 1px solid var(--border-strong);
   background: var(--bg-panel);
   color: var(--text-strong);
@@ -447,7 +448,7 @@
 }
 .modal-rename .row button {
   padding: 8px 18px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -486,7 +487,7 @@
 .modal-confirm .row { margin-top: 8px; }
 .modal-confirm .row button {
   padding: 8px 18px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -508,7 +509,7 @@
   align-items: center;
   align-self: flex-start;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 10.5px;
   font-weight: 500;
   line-height: 1.5;
@@ -664,12 +665,12 @@
   width: 28px;
   height: 28px;
   padding: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg-panel) 90%, transparent);
   color: var(--text-muted);
   cursor: pointer;
-  transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease, transform 140ms ease;
+  transition: color 140ms var(--ease-out), border-color 140ms var(--ease-out), background-color 140ms var(--ease-out), transform 140ms var(--ease-out);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
@@ -704,7 +705,7 @@
   gap: 6px;
   min-height: 24px;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 11.5px;
   font-weight: 500;
   letter-spacing: 0.005em;
@@ -713,7 +714,7 @@
   border: 1px solid transparent;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  transition: opacity 160ms ease, color 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+  transition: opacity 160ms var(--ease-out), color 160ms var(--ease-out), background-color 160ms var(--ease-out), border-color 160ms var(--ease-out), transform 160ms var(--ease-out);
   pointer-events: none;
   user-select: none;
   white-space: nowrap;
@@ -851,7 +852,7 @@
   align-items: start;
   gap: 12px;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--red-border);
   background: color-mix(in srgb, var(--red-bg) 78%, transparent);
   color: var(--text);
@@ -873,7 +874,7 @@
 .settings-connectors-clear-confirm-icon {
   width: 24px;
   height: 24px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid color-mix(in srgb, var(--red) 35%, var(--red-border));
   background: var(--bg-panel);
   color: var(--red);
@@ -928,7 +929,7 @@
   align-items: center;
   gap: 4px;
   padding: 7px 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--red-border);
   background: var(--bg-panel);
   color: var(--red);
@@ -960,7 +961,7 @@
   justify-content: center;
   min-width: 200px;
   padding: 8px 14px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--red);
   background: var(--red);
   color: var(--bg-panel);
@@ -1063,7 +1064,7 @@
 .settings-nav-item {
   width: 100%;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: transparent;
   color: var(--text);
   display: grid;
@@ -1237,7 +1238,7 @@
   min-width: 0;
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   padding: 4px 12px;
   font-size: 12px;
   font-weight: 500;
@@ -1246,7 +1247,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  transition: background 120ms var(--ease-out), color 120ms var(--ease-out), border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
 }
 .protocol-chip:hover:not(.active) {
   background: var(--bg-subtle);
@@ -1482,7 +1483,7 @@
 .orbit-hero-mark {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1575,7 +1576,7 @@
   letter-spacing: 0.005em;
   cursor: pointer;
   box-shadow: 0 1px 0 color-mix(in srgb, var(--accent-strong) 22%, transparent) inset, var(--shadow-xs);
-  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+  transition: background 120ms var(--ease-out), border-color 120ms var(--ease-out), transform 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
 }
 .orbit-run-cta:hover:not(:disabled) {
   background: var(--accent-hover);
@@ -1620,7 +1621,7 @@
   background: var(--bg-panel);
   box-shadow: var(--shadow-xs);
   overflow: hidden;
-  transition: border-color 140ms ease, background 140ms ease;
+  transition: border-color 140ms var(--ease-out), background 140ms var(--ease-out);
 }
 .orbit-automation.is-on {
   border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
@@ -1705,7 +1706,7 @@
   text-transform: uppercase;
   color: var(--accent-strong);
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   flex-shrink: 0;
 }
@@ -1767,7 +1768,7 @@
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+  transition: border-color 140ms var(--ease-out), color 140ms var(--ease-out), background 140ms var(--ease-out);
 }
 .orbit-switch:hover { border-color: var(--border-strong); }
 .orbit-switch.is-on {
@@ -1799,9 +1800,9 @@
   position: relative;
   width: 34px;
   height: 20px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--border-strong);
-  transition: background 160ms ease;
+  transition: background 160ms var(--ease-out);
 }
 .orbit-switch-thumb {
   position: absolute;
@@ -1950,7 +1951,7 @@
   border: 1px solid color-mix(in srgb, #c47a2c 32%, var(--border));
   border-radius: var(--radius-pill);
   cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+  transition: border-color 120ms var(--ease-out), color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
 .orbit-automation-sub-action:hover {
   color: #6c3f0f;
@@ -1990,7 +1991,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+  transition: border-color 140ms var(--ease-out), background 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
   text-overflow: ellipsis;
   white-space: nowrap;
   overflow: hidden;
@@ -2133,14 +2134,14 @@
   display: flex;
   width: 100%;
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   overflow: hidden;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
 }
 .orbit-meter-seg {
   height: 100%;
-  transition: width 260ms ease;
+  transition: width 260ms var(--ease-out);
 }
 .orbit-meter-seg.is-succeeded { background: var(--green); }
 .orbit-meter-seg.is-skipped { background: var(--border-strong); }
@@ -2335,9 +2336,9 @@
   color: var(--btn-primary-fg, #fff);
   background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 70%, #000) 100%);
   border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   cursor: pointer;
-  transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+  transition: transform 140ms var(--ease-out), box-shadow 140ms var(--ease-out), filter 140ms var(--ease-out);
   box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 .orbit-config-gate-action:hover {
@@ -2350,7 +2351,7 @@
   outline-offset: 2px;
 }
 .orbit-config-gate-action svg {
-  transition: transform 160ms ease;
+  transition: transform 160ms var(--ease-out);
 }
 .orbit-config-gate-action:hover svg {
   transform: translateX(2px);

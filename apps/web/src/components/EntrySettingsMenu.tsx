@@ -17,6 +17,11 @@ import {
   useT,
   type Locale,
 } from '../i18n';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackSettingsPopoverClick,
+  trackSettingsPopoverSurfaceView,
+} from '../analytics/events';
 import { createSocialSharePayload } from '../providers/registry';
 import type { AppConfig, AppTheme } from '../types';
 import { formatDiscordPresenceCount, useDiscordPresence } from './useDiscordPresence';
@@ -57,20 +62,33 @@ interface Props {
   config: AppConfig;
   onThemeChange: (theme: AppTheme) => void;
   onOpenSettings: (section?: EntrySettingsSection) => void;
+  // Fired when the gear trigger is clicked. Used by the in-project header to
+  // emit the `artifact_header` / `settings` ui_click; the home/entry shell
+  // leaves it undefined so that context is not mislabelled as `artifact`.
+  onTrackTriggerClick?: () => void;
+  // The popover is mounted both on the home header and the in-project
+  // artifact header; defaults to 'home' so existing call sites stay correct.
+  trackingPageName?: 'home' | 'artifact';
 }
 
 export function EntrySettingsMenu({
   config,
   onThemeChange,
   onOpenSettings,
+  onTrackTriggerClick,
+  trackingPageName,
 }: Props) {
+  const pageName = trackingPageName ?? 'home';
+  const analytics = useAnalytics();
   const t = useT();
   const { locale, setLocale } = useI18n();
   const discordPresence = useDiscordPresence();
   const [open, setOpen] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
   const [openDesignShare, setOpenDesignShare] = useState<SocialShareResponse | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const langListRef = useRef<HTMLDivElement | null>(null);
   const activeTheme = config.theme ?? 'system';
   const discordOnlineLabel = discordPresence
     ? t('entry.discordOnlineLabel', {
@@ -96,6 +114,20 @@ export function EntrySettingsMenu({
   );
 
   useEffect(() => {
+    if (!open) setLangOpen(false);
+  }, [open]);
+
+  // Keep the collapsed language list out of the a11y tree and tab order so the
+  // popover stays a single, consistent menu model even though the options stay
+  // mounted for the expand/collapse animation.
+  useEffect(() => {
+    const el = langListRef.current;
+    if (!el) return;
+    if (langOpen) el.removeAttribute('inert');
+    else el.setAttribute('inert', '');
+  }, [langOpen, open]);
+
+  useEffect(() => {
     if (!open) return;
     const onClick = (event: MouseEvent) => {
       if (!wrapRef.current) return;
@@ -114,6 +146,16 @@ export function EntrySettingsMenu({
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
+
+  // surface_view — fire once each time the settings popover opens so the
+  // share / language / appearance funnels have a denominator.
+  useEffect(() => {
+    if (!open) return;
+    trackSettingsPopoverSurfaceView(analytics.track, {
+      page_name: pageName,
+      area: 'settings_popover',
+    });
+  }, [open, analytics.track, pageName]);
 
   useEffect(() => {
     if (!open) return;
@@ -137,7 +179,10 @@ export function EntrySettingsMenu({
         ref={triggerRef}
         type="button"
         className="settings-icon-btn od-tooltip"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          onTrackTriggerClick?.();
+          setOpen((value) => !value);
+        }}
         title={t('entry.openSettingsTitle')}
         data-tooltip={t('entry.openSettingsTitle')}
         data-tooltip-placement="bottom"
@@ -160,28 +205,76 @@ export function EntrySettingsMenu({
               <Icon name="languages" size={13} />
               <span>{t('settings.language')}</span>
             </div>
-            <div className="entry-settings-menu__language-grid">
-              {LOCALES.map((code) => {
-                const active = locale === code;
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={active}
-                    className={`entry-settings-menu__choice${
-                      active ? ' is-active' : ''
-                    }`}
-                    onClick={() => {
-                      setLocale(code as Locale);
-                      setOpen(false);
-                    }}
+            <div className="entry-settings-menu__select">
+              <button
+                type="button"
+                role="menuitem"
+                className="entry-settings-menu__select-trigger"
+                aria-haspopup="menu"
+                aria-expanded={langOpen}
+                onClick={() => setLangOpen((value) => !value)}
+              >
+                <span className="entry-settings-menu__select-value">
+                  {LOCALE_LABEL[locale]}
+                </span>
+                <Icon
+                  name="chevron-down"
+                  size={14}
+                  className="entry-settings-menu__select-caret"
+                />
+              </button>
+              <div
+                ref={langListRef}
+                className={`entry-settings-menu__select-list${
+                  langOpen ? ' is-open' : ''
+                }`}
+              >
+                <div className="entry-settings-menu__select-list-inner">
+                  <div
+                    className="entry-settings-menu__select-panel"
+                    role="menu"
+                    aria-label={t('settings.language')}
                   >
-                    <span>{LOCALE_LABEL[code]}</span>
-                    {active ? <Icon name="check" size={12} /> : null}
-                  </button>
-                );
-              })}
+                    {LOCALES.map((code) => {
+                      const active = locale === code;
+                      return (
+                        <button
+                          key={code}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={active}
+                          className={`entry-settings-menu__option${
+                            active ? ' is-active' : ''
+                          }`}
+                          onClick={() => {
+                            trackSettingsPopoverClick(analytics.track, {
+                              page_name: pageName,
+                              area: 'settings_popover',
+                              element: 'language_select',
+                              // kebab-case locales (zh-CN) → snake_case (zh_cn).
+                              value: code.toLowerCase().replace(/-/g, '_'),
+                            });
+                            setLocale(code as Locale);
+                            setLangOpen(false);
+                            setOpen(false);
+                          }}
+                        >
+                          <span className="entry-settings-menu__option-label">
+                            {LOCALE_LABEL[code]}
+                          </span>
+                          {active ? (
+                            <Icon
+                              name="check"
+                              size={12}
+                              className="entry-settings-menu__option-check"
+                            />
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -203,6 +296,12 @@ export function EntrySettingsMenu({
                       active ? ' is-active' : ''
                     }`}
                     onClick={() => {
+                      trackSettingsPopoverClick(analytics.track, {
+                        page_name: pageName,
+                        area: 'settings_popover',
+                        element: 'appearance',
+                        value: option.value,
+                      });
                       onThemeChange(option.value);
                       setOpen(false);
                     }}
@@ -223,6 +322,14 @@ export function EntrySettingsMenu({
             <SocialShareGrid
               share={openDesignShare ?? fallbackOpenDesignShare}
               className="entry-settings-social-share"
+              onShare={(platform) => {
+                trackSettingsPopoverClick(analytics.track, {
+                  page_name: pageName,
+                  area: 'settings_popover',
+                  element: 'share_channel',
+                  channel: platform,
+                });
+              }}
               onAfterShare={() => setOpen(false)}
             />
           </section>
@@ -235,7 +342,14 @@ export function EntrySettingsMenu({
             target="_blank"
             rel="noreferrer noopener"
             role="menuitem"
-            onClick={() => setOpen(false)}
+            onClick={() => {
+              trackSettingsPopoverClick(analytics.track, {
+                page_name: pageName,
+                area: 'settings_popover',
+                element: 'join_discord',
+              });
+              setOpen(false);
+            }}
           >
             <span className="entry-settings-menu__item-icon" aria-hidden>
               <Icon name="discord" size={14} />
@@ -254,7 +368,14 @@ export function EntrySettingsMenu({
             target="_blank"
             rel="noreferrer noopener"
             role="menuitem"
-            onClick={() => setOpen(false)}
+            onClick={() => {
+              trackSettingsPopoverClick(analytics.track, {
+                page_name: pageName,
+                area: 'settings_popover',
+                element: 'follow_x',
+              });
+              setOpen(false);
+            }}
           >
             <span
               className="entry-settings-menu__item-icon entry-settings-menu__x-mark"
@@ -274,6 +395,11 @@ export function EntrySettingsMenu({
             data-testid="entry-settings-open-details"
             role="menuitem"
             onClick={() => {
+              trackSettingsPopoverClick(analytics.track, {
+                page_name: pageName,
+                area: 'settings_popover',
+                element: 'open_settings',
+              });
               setOpen(false);
               onOpenSettings();
             }}

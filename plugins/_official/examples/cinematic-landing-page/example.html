@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bakery Facilities — The Smart Bakery Solution</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Luxurious+Script&family=Manrope:wght@500&family=Open+Sans:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --background: 0 0% 9%;
+      --foreground: 0 0% 100%;
+      --primary: 0 0% 100%;
+      --primary-foreground: 0 0% 9%;
+      --secondary: 0 0% 97%;
+      --muted: 0 0% 20%;
+      --muted-foreground: 0 0% 75%;
+      --accent: 0 0% 15%;
+      --border: 0 0% 20%;
+      --radius: 2px;
+      --hero-cta-bg: 0 0% 97.3%;
+      --hero-cta-text: 0 0% 9%;
+      --gold: #CB9D06;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: auto; }
+    body {
+      font-family: 'Open Sans', sans-serif;
+      background: hsl(var(--background));
+      color: hsl(var(--foreground));
+      -webkit-font-smoothing: antialiased;
+    }
+    img, svg, video { display: block; }
+    button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+    a { color: inherit; text-decoration: none; }
+
+    .font-body { font-family: 'Open Sans', sans-serif; }
+    .font-accent { font-family: 'Instrument Serif', serif; }
+    .font-manrope { font-family: 'Manrope', sans-serif; font-weight: 500; }
+    .font-luxurious { font-family: 'Luxurious Script', cursive; }
+
+    .split-char {
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+      line-height: 1 !important;
+      display: inline-block;
+      opacity: 0;
+      transform: translateY(40px);
+      transition: opacity 0.8s cubic-bezier(0.215,0.61,0.355,1), transform 0.8s cubic-bezier(0.215,0.61,0.355,1);
+    }
+    .split-char.in { opacity: 1; transform: translateY(0); }
+    .split-space { display: inline-block; width: 0.3em; }
+
+    /* ───────── NAVBAR ───────── */
+    .navbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 16px;
+      background: transparent;
+      transition: all 0.4s cubic-bezier(0.23,1,0.32,1);
+    }
+    .navbar.scrolled {
+      background: rgba(0,0,0,0.9);
+      backdrop-filter: blur(80px);
+      -webkit-backdrop-filter: blur(80px);
+      box-shadow: 0 4px 18px rgba(0,0,0,0.25);
+      padding: 8px 16px;
+    }
+    @media (min-width: 768px) { .navbar { padding-left: 40px; padding-right: 40px; } .navbar.scrolled { padding-left: 40px; padding-right: 40px; } }
+
+    .region-drop { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #fff; position: relative; }
+    .region-drop .menu { left: 0; }
+    .nav-center { display: flex; align-items: center; gap: 28px; }
+    .nav-logo svg { height: 48px; width: auto; transition: height 0.4s cubic-bezier(0.23,1,0.32,1); }
+    .navbar.scrolled .nav-logo svg { height: 32px; }
+    @media (max-width: 767px) { .nav-logo svg { height: 32px; } .navbar.scrolled .nav-logo svg { height: 24px; } }
+
+    .nav-item { position: relative; }
+    .nav-item > button { font-size: 14px; color: #fff; display: inline-flex; align-items: center; gap: 6px; padding: 6px 4px; transition: color 0.25s; white-space: nowrap; }
+    .nav-item > button:hover { color: var(--gold); }
+    .menu {
+      position: absolute; top: 100%; margin-top: 8px;
+      background: #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.18); padding: 8px 0;
+      min-width: 200px; border-radius: 2px;
+      opacity: 0; visibility: hidden; transform: translateY(6px);
+      transition: all 0.25s cubic-bezier(0.23,1,0.32,1); z-index: 30;
+    }
+    .nav-item:hover .menu, .region-drop:hover .menu { opacity: 1; visibility: visible; transform: translateY(0); }
+    .menu a { display: block; padding: 10px 16px; font-size: 13px; color: #1a1a1a; transition: all 0.2s; }
+    .menu a:hover { background: var(--gold); color: #fff; }
+
+    .lang-switch { display: flex; align-items: center; gap: 2px; }
+    .lang-switch button { padding: 6px 12px; font-size: 13px; color: #fff; border-radius: 2px; transition: all 0.25s; }
+    .lang-switch button.active { background: var(--gold); color: #fff; }
+
+    .hamburger { display: none; color: #fff; }
+    @media (max-width: 767px) {
+      .nav-desktop { display: none; }
+      .hamburger { display: inline-flex; }
+    }
+    .nav-desktop { display: flex; align-items: center; gap: 28px; }
+
+    /* mobile overlay */
+    .mobile-menu {
+      position: fixed; inset: 0; z-index: 40;
+      background: rgba(0,0,0,0.95); backdrop-filter: blur(12px);
+      display: none; flex-direction: column; padding: 80px 24px 24px; gap: 4px; overflow-y: auto;
+    }
+    .mobile-menu.open { display: flex; }
+    .mobile-menu .acc-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; font-size: 18px; color: #fff; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .mobile-menu .acc-body { display: none; padding: 4px 0 12px; }
+    .mobile-menu .acc-body.open { display: block; }
+    .mobile-menu .acc-body a { display: block; padding: 8px 12px; font-size: 14px; color: rgba(255,255,255,0.7); }
+    .mobile-close { position: absolute; top: 24px; right: 24px; color: #fff; }
+
+    /* ───────── FLOATING NAV ───────── */
+    .floating-nav {
+      position: fixed; right: 16px; top: 50%; transform: translateY(-50%);
+      z-index: 50; display: flex; flex-direction: column; gap: 16px;
+    }
+    @media (min-width: 768px) { .floating-nav { right: 24px; } }
+    @media (max-width: 767px) { .floating-nav { display: none; } }
+    .fab {
+      height: 48px; display: flex; align-items: center;
+      background: #000; color: #fff; border-radius: 9999px;
+      padding: 0 14px; overflow: hidden;
+      transition: background 0.3s cubic-bezier(0.23,1,0.32,1);
+    }
+    .fab:hover { background: var(--gold); }
+    .fab .ico { width: 20px; height: 20px; flex: 0 0 auto; }
+    .fab .lbl {
+      max-width: 0; opacity: 0; white-space: nowrap; overflow: hidden;
+      font-size: 13px; margin-left: 0;
+      transition: max-width 0.3s ease, opacity 0.3s ease, margin-left 0.3s ease;
+    }
+    .fab:hover .lbl { max-width: 180px; opacity: 1; margin-left: 10px; }
+
+    /* ───────── HERO ───────── */
+    .hero-wrap { height: calc(100vh + 300vh); position: relative; }
+    .hero-sticky { position: sticky; top: 0; width: 100%; height: 100vh; overflow: visible; }
+    .hero-slide {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      clip-path: ellipse(150% 150% at 50% 50%);
+      will-change: clip-path;
+    }
+    .hero-slide video { width: 100%; height: 100%; object-fit: cover; }
+    .hero-slide::after { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,0.25); }
+
+    .hero-h1 {
+      position: absolute; left: 0; right: 0; bottom: -26px;
+      font-family: 'Instrument Serif', serif;
+      font-size: 9.7vw; line-height: 1; white-space: nowrap; letter-spacing: -0.04em;
+      text-align: center; color: #fff; z-index: 4; pointer-events: none;
+    }
+    .hero-sub {
+      position: absolute; left: 0; right: 0; top: 0;
+      padding-top: calc(80px + 60px);
+      font-family: 'Luxurious Script', cursive; font-size: 3vw;
+      text-align: center; color: #fff; z-index: 4; pointer-events: none;
+    }
+    @media (max-width: 767px) {
+      .hero-h1 { font-size: 40px; line-height: 1.1; white-space: normal; bottom: 48px; padding: 0 16px; }
+      .hero-sub { font-size: 12vw; }
+    }
+
+    /* ───────── GALLERY ───────── */
+    .gallery { background: #fff; padding: 32px 0; display: flex; justify-content: center; }
+    @media (min-width: 768px) { .gallery { padding: 64px 0; } }
+    .gallery-inner { width: 90%; }
+    @media (min-width: 768px) { .gallery-inner { width: 65%; } }
+    .gallery-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 40px 4px; }
+    @media (min-width: 1000px) { .gallery-grid { grid-template-columns: repeat(4, 1fr); } }
+    .g-item {
+      padding: 4px; opacity: 0; transform: translateY(120px); filter: blur(10px);
+      transition: opacity 0.8s cubic-bezier(0.215,0.61,0.355,1), transform 0.8s cubic-bezier(0.215,0.61,0.355,1), filter 0.8s cubic-bezier(0.215,0.61,0.355,1);
+    }
+    .g-item.in { opacity: 1; transform: translateY(0); filter: blur(0px); }
+    @media (min-width: 1000px) { .g-item.span2 { grid-column: span 2; } }
+    .g-frame { position: relative; aspect-ratio: 3 / 4; overflow: hidden; border-radius: 2px; }
+    .g-item.span2 .g-frame { aspect-ratio: 3 / 2; }
+    .g-frame .g-img {
+      position: absolute; inset: 0; background-size: cover; background-position: center;
+      transition: transform 6s cubic-bezier(0.22,0.61,0.36,1);
+    }
+    .g-frame:hover .g-img { transform: scale(1.2); }
+    .g-label { text-align: left; color: #000; font-size: 14px; margin-top: 8px; font-family: 'Manrope', sans-serif; font-weight: 500; }
+
+    /* ───────── ABOUT ───────── */
+    .about { background: #fff; padding: 64px 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    @media (min-width: 768px) { .about { padding: 128px 18%; } }
+    .about-title { font-family: 'Luxurious Script', cursive; font-size: 32px; text-align: center; color: #000; margin-bottom: 20px; }
+    .about-body {
+      font-family: 'Instrument Serif', serif; text-transform: uppercase;
+      font-size: 24px; line-height: 36px; text-align: center; color: #000;
+    }
+    @media (min-width: 768px) { .about-body { font-size: 40px; line-height: 56px; } }
+    .about-body .word { display: inline-block; opacity: 0.1; filter: blur(4px); transition: none; margin-right: 0.18em; }
+    .about-btn { margin-top: 36px; padding: 12px 32px; background: #000; color: #fff; font-family: 'Manrope', sans-serif; font-weight: 500; font-size: 14px; letter-spacing: 0.04em; transition: background-color 0.3s; }
+    .about-btn:hover { background: var(--gold); }
+
+    .partners { margin-top: 64px; width: 100%; position: relative; overflow: hidden; }
+    @media (min-width: 768px) { .partners { margin-top: 140px; } }
+    .partners::before, .partners::after { content: ''; position: absolute; top: 0; bottom: 0; width: 80px; z-index: 2; pointer-events: none; }
+    .partners::before { left: 0; background: linear-gradient(to right, #fff, rgba(255,255,255,0)); }
+    .partners::after { right: 0; background: linear-gradient(to left, #fff, rgba(255,255,255,0)); }
+    .marquee { display: flex; width: max-content; animation: marquee 60s linear infinite; }
+    .partners:hover .marquee { animation-play-state: paused; }
+    .marquee .track { display: flex; gap: 48px; padding-right: 48px; }
+    .marquee .pname { font-family: 'Open Sans', sans-serif; font-size: 14px; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(0,0,0,0.4); white-space: nowrap; }
+    @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+    /* ───────── PARTNERING ───────── */
+    .partnering { position: relative; padding: 96px 0; display: flex; flex-direction: column; align-items: center; background:
+        linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)),
+        url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><rect width="1200" height="800" fill="%23161310"/><g fill="%23CB9D06" fill-opacity="0.10"><circle cx="200" cy="180" r="140"/><circle cx="980" cy="620" r="200"/><circle cx="640" cy="120" r="90"/></g></svg>');
+      background-size: cover; background-position: center; overflow: hidden; }
+    .partnering-title {
+      font-family: 'Instrument Serif', serif; text-transform: uppercase;
+      font-size: 28px; line-height: 1.4; color: hsl(var(--primary)); text-align: center; margin-bottom: 40px; padding: 0 16px;
+    }
+    @media (min-width: 768px) { .partnering-title { font-size: 40px; } }
+    .partnering-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; width: 90%; }
+    @media (min-width: 768px) { .partnering-cards { grid-template-columns: repeat(4, 1fr); width: 64%; } }
+    .p-card {
+      background: #000; padding: 24px 16px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px;
+      opacity: 0; transform: translateY(80px); transition: opacity 0.7s cubic-bezier(0.215,0.61,0.355,1), transform 0.7s cubic-bezier(0.215,0.61,0.355,1);
+    }
+    @media (min-width: 768px) { .p-card { padding: 32px 24px; gap: 16px; } }
+    .p-card.in { opacity: 1; transform: translateY(0); }
+    .p-card .p-ico { width: 40px; height: 40px; color: var(--gold); }
+    @media (min-width: 768px) { .p-card .p-ico { width: 48px; height: 48px; } }
+    .p-card .p-lbl { color: hsl(var(--primary)); font-family: 'Open Sans', sans-serif; font-size: 12px; letter-spacing: 0.04em; text-transform: capitalize; }
+    @media (min-width: 768px) { .p-card .p-lbl { font-size: 14px; } }
+    @keyframes lottiepulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+    .p-card .p-ico svg { animation: lottiepulse 2.4s ease-in-out infinite; }
+
+    /* ───────── FOOTER ───────── */
+    .footer { background: #fff; color: #000; width: 100%; }
+    .footer-top { padding: 48px 24px 40px; }
+    @media (min-width: 768px) { .footer-top { padding: 80px 40px 64px; } }
+    @media (min-width: 1024px) { .footer-top { padding: 80px 64px 64px; } }
+    .footer-head { display: grid; grid-template-columns: 1fr; gap: 40px; margin-bottom: 56px; }
+    @media (min-width: 768px) { .footer-head { grid-template-columns: 1fr auto; } }
+    .footer-phone { font-size: 13px; color: rgba(0,0,0,0.4); text-transform: uppercase; letter-spacing: 0.06em; }
+    .footer-email { font-size: 14px; font-weight: 700; margin-top: 8px; transition: color 0.25s; }
+    .footer-email:hover { color: var(--gold); }
+    .footer-cols { display: flex; gap: 64px; }
+    .footer-col h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(0,0,0,0.4); margin-bottom: 16px; }
+    .footer-col a { display: block; font-size: 15px; color: #000; font-weight: 500; margin-bottom: 10px; transition: color 0.25s; }
+    .footer-col a:hover { color: var(--gold); }
+    .offices { display: grid; grid-template-columns: 1fr; gap: 32px; }
+    @media (min-width: 768px) { .offices { grid-template-columns: repeat(4, 1fr); } }
+    .office .o-region { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(0,0,0,0.4); }
+    .office .o-name { font-size: 13px; font-weight: 600; margin: 6px 0; }
+    .office .o-addr { font-size: 12px; color: rgba(0,0,0,0.6); line-height: 1.6; }
+    .office .o-contact { font-size: 12px; color: rgba(0,0,0,0.6); margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .office .o-contact span { display: inline-flex; align-items: center; gap: 6px; }
+    .footer-bottom { background: #000; color: #fff; padding: 16px 24px; display: flex; flex-direction: column; gap: 8px; justify-content: space-between; align-items: center; }
+    @media (min-width: 768px) { .footer-bottom { flex-direction: row; padding: 16px 40px; } }
+    @media (min-width: 1024px) { .footer-bottom { padding: 16px 64px; } }
+    .footer-bottom .cr { font-size: 12px; color: rgba(255,255,255,0.4); }
+    .footer-bottom .legal { display: flex; gap: 24px; }
+    .footer-bottom .legal a { font-size: 12px; color: rgba(255,255,255,0.4); transition: color 0.25s; }
+    .footer-bottom .legal a:hover { color: #fff; }
+  </style>
+</head>
+<body>
+
+  <!-- ───────── NAVBAR ───────── -->
+  <nav class="navbar" id="navbar">
+    <div class="region-drop">
+      <svg class="ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      <span>Hong Kong / Macau</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      <div class="menu">
+        <a href="#">Mainland China</a>
+        <a href="#">Hong Kong / Macau</a>
+        <a href="#">Taiwan</a>
+      </div>
+    </div>
+
+    <div class="nav-desktop">
+      <div class="nav-item">
+        <button>About Us <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+        <div class="menu">
+          <a href="#">Our History</a>
+          <a href="#">Food Service Experts</a>
+          <a href="#">Creating unforgettable culinary experiences</a>
+        </div>
+      </div>
+      <div class="nav-item">
+        <button>Partnering With Us <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+        <div class="menu">
+          <a href="#">Sourcing from trusted suppliers</a>
+          <a href="#">Empowering Customer Operations</a>
+          <a href="#">Our Experts</a>
+        </div>
+      </div>
+
+      <a href="#" class="nav-logo" aria-label="Bakery Facilities">
+        <svg viewBox="0 0 305 304" fill="none">
+          <path d="M157.135 303.572C157.135 222.53 223.131 156.832 304.174 156.832V303.572H157.135Z" fill="white"/>
+          <path d="M147.039 303.572C147.039 222.53 81.0425 156.832 0 156.832V303.572H147.039Z" fill="white"/>
+          <path d="M157.135 0C157.135 81.0426 223.131 146.74 304.174 146.74C304.174 65.698 238.178 0 157.135 0Z" fill="white"/>
+          <path d="M147.039 0C147.039 81.0426 81.0425 146.74 0 146.74C0 65.698 65.9962 0 147.039 0Z" fill="white"/>
+        </svg>
+      </a>
+
+      <div class="nav-item">
+        <button>Our Products <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+        <div class="menu">
+          <a href="#">Viennese Pastry</a>
+          <a href="#">Bread</a>
+          <a href="#">Dessert</a>
+          <a href="#">Savory</a>
+          <a href="#">Speciality Pastry</a>
+          <a href="#">Culinary Aid</a>
+          <a href="#">Ingredient</a>
+        </div>
+      </div>
+      <div class="nav-item">
+        <button>Let's Connect! <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+        <div class="menu">
+          <a href="#">Contact</a>
+          <a href="#">LinkedIn</a>
+          <a href="#">WhatsApp</a>
+          <a href="#">Newsletter</a>
+          <a href="#">Brochure</a>
+          <a href="#">Join Us</a>
+        </div>
+      </div>
+
+      <div class="lang-switch">
+        <button class="active" data-lang="en">EN</button>
+        <button data-lang="zh">繁</button>
+      </div>
+    </div>
+
+    <button class="hamburger" id="hamburger" aria-label="Open menu">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+  </nav>
+
+  <!-- mobile menu overlay -->
+  <div class="mobile-menu" id="mobileMenu">
+    <button class="mobile-close" id="mobileClose" aria-label="Close menu">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="acc">
+      <div class="acc-head" data-acc>About Us <span>+</span></div>
+      <div class="acc-body"><a href="#">Our History</a><a href="#">Food Service Experts</a><a href="#">Creating unforgettable culinary experiences</a></div>
+    </div>
+    <div class="acc">
+      <div class="acc-head" data-acc>Partnering With Us <span>+</span></div>
+      <div class="acc-body"><a href="#">Sourcing from trusted suppliers</a><a href="#">Empowering Customer Operations</a><a href="#">Our Experts</a></div>
+    </div>
+    <div class="acc">
+      <div class="acc-head" data-acc>Our Products <span>+</span></div>
+      <div class="acc-body"><a href="#">Viennese Pastry</a><a href="#">Bread</a><a href="#">Dessert</a><a href="#">Savory</a><a href="#">Speciality Pastry</a><a href="#">Culinary Aid</a><a href="#">Ingredient</a></div>
+    </div>
+    <div class="acc">
+      <div class="acc-head" data-acc>Let's Connect! <span>+</span></div>
+      <div class="acc-body"><a href="#">Contact</a><a href="#">LinkedIn</a><a href="#">WhatsApp</a><a href="#">Newsletter</a><a href="#">Brochure</a><a href="#">Join Us</a></div>
+    </div>
+  </div>
+
+  <!-- ───────── FLOATING NAV ───────── -->
+  <div class="floating-nav">
+    <a href="#" class="fab">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span class="lbl">Download Brochure</span>
+    </a>
+    <a href="#" class="fab">
+      <svg class="ico" viewBox="0 0 32 32" fill="currentColor"><path d="M12.6186 9.69215C12.6186 10.6267 11.8085 11.3843 10.8093 11.3843C9.81004 11.3843 9 10.6267 9 9.69215C9 8.7576 9.81004 8 10.8093 8C11.8085 8 12.6186 8.7576 12.6186 9.69215Z"/><path d="M9.24742 12.6281H12.3402V22H9.24742V12.6281Z"/><path d="M17.3196 12.6281H14.2268V22H17.3196C17.3196 22 17.3196 19.0496 17.3196 17.2049C17.3196 16.0976 17.6977 14.9855 19.2062 14.9855C20.911 14.9855 20.9008 16.4345 20.8928 17.5571C20.8824 19.0244 20.9072 20.5219 20.9072 22H24V17.0537C23.9738 13.8954 23.1508 12.4401 20.4433 12.4401C18.8354 12.4401 17.8387 13.1701 17.3196 13.8305V12.6281Z"/></svg>
+      <span class="lbl">LinkedIn</span>
+    </a>
+    <a href="#" class="fab">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      <span class="lbl">Chat With Us</span>
+    </a>
+  </div>
+
+  <!-- ───────── SECTION 1: HERO ───────── -->
+  <div class="hero-wrap" id="heroWrap">
+    <section class="hero-sticky">
+      <div class="hero-slide" id="slide0" style="z-index:1">
+        <video src="https://plugin-assets.open-design.ai/plugins/cinematic-landing-page/hf_20260515_113235_88e0d62e-8103-40c1-948e-f0a4f886ffd1-e00afb.mp4" autoplay loop muted playsinline></video>
+      </div>
+      <div class="hero-slide" id="slide1" style="z-index:2">
+        <video src="https://plugin-assets.open-design.ai/plugins/cinematic-landing-page/hf_20260515_114315_ee3663e6-bd79-41b4-9e5b-0fae62827eb9-b97001.mp4" autoplay loop muted playsinline></video>
+      </div>
+      <div class="hero-slide" id="slide2" style="z-index:3">
+        <video src="https://plugin-assets.open-design.ai/plugins/cinematic-landing-page/hf_20260515_114559_dca18b14-90f5-47c4-8a84-3cbae9bd8a0c-62cb47.mp4" autoplay loop muted playsinline></video>
+      </div>
+      <div class="hero-sub" id="heroSub" data-split>for Professionals</div>
+      <h1 class="hero-h1" id="heroH1" data-split>THE SMART BAKERY SOLUTION</h1>
+    </section>
+  </div>
+
+  <!-- ───────── SECTION 2: GALLERY ───────── -->
+  <section class="gallery">
+    <div class="gallery-inner">
+      <div class="gallery-grid" id="galleryGrid"></div>
+    </div>
+  </section>
+
+  <!-- ───────── SECTION 3: ABOUT ───────── -->
+  <section class="about" id="about">
+    <div class="about-title">About us</div>
+    <div class="about-body" id="aboutBody">In 1976, Mr Louis Le Duff opened the first French casual food restaurant, planting the seed of a family business that would grow into a global force in bakery craftsmanship — pairing artisanal heritage with the precision of modern food service.</div>
+    <button class="about-btn">Read more</button>
+
+    <div class="partners">
+      <div class="marquee" id="marquee">
+        <div class="track" id="partnerTrack"></div>
+        <div class="track" id="partnerTrack2"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── SECTION 4: PARTNERING ───────── -->
+  <section class="partnering" id="partnering">
+    <h2 class="partnering-title" id="partneringTitle" data-split>Partnering With Us</h2>
+    <div class="partnering-cards" id="partneringCards"></div>
+  </section>
+
+  <!-- ───────── SECTION 5: FOOTER ───────── -->
+  <footer class="footer">
+    <div class="footer-top">
+      <div class="footer-head">
+        <div>
+          <div class="footer-phone">+852 2407 8840</div>
+          <a href="mailto:orders@bakeryfacilities.com" class="footer-email">orders@bakeryfacilities.com</a>
+        </div>
+        <div class="footer-cols">
+          <div class="footer-col">
+            <h4>Navigate</h4>
+            <a href="#">About Us</a>
+            <a href="#">Partnering With Us</a>
+            <a href="#">Our Products</a>
+            <a href="#">Let's Connect!</a>
+          </div>
+          <div class="footer-col">
+            <h4>Social</h4>
+            <a href="#">WhatsApp</a>
+            <a href="#">LinkedIn</a>
+            <a href="#">Newsletter</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="offices">
+        <div class="office">
+          <div class="o-region">Head Office</div>
+          <div class="o-name">Bakery Facilities (Hong Kong)</div>
+          <div class="o-addr">Unit 12, Kwai Chung Industrial Centre, Hong Kong</div>
+          <div class="o-contact"><span>+852 2407 8840</span><span>hk@bakeryfacilities.com</span></div>
+        </div>
+        <div class="office">
+          <div class="o-region">Mainland China</div>
+          <div class="o-name">Bakery Facilities (Shanghai)</div>
+          <div class="o-addr">Building 7, Jing'an Business Park, Shanghai</div>
+          <div class="o-contact"><span>+86 21 5888 1200</span><span>cn@bakeryfacilities.com</span></div>
+        </div>
+        <div class="office">
+          <div class="o-region">Taiwan</div>
+          <div class="o-name">Bakery Facilities (Taiwan)</div>
+          <div class="o-addr">No. 88, Banqiao District, New Taipei City</div>
+          <div class="o-contact"><span>+886 2 2960 7788</span><span>tw@bakeryfacilities.com</span></div>
+        </div>
+        <div class="office">
+          <div class="o-region">Macau</div>
+          <div class="o-name">Bakery Facilities (Macau)</div>
+          <div class="o-addr">Avenida do Comercio, Macau SAR</div>
+          <div class="o-contact"><span>+853 2833 4455</span><span>mo@bakeryfacilities.com</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <div class="cr">© 2026 Bakery Facilities. All rights reserved.</div>
+      <div class="legal">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // ───────── SplitText (whileInView-style char reveal) ─────────
+    function splitChars(el) {
+      var text = el.textContent;
+      el.textContent = '';
+      var chars = [];
+      for (var i = 0; i < text.length; i++) {
+        var c = text[i];
+        if (c === ' ') {
+          var sp = document.createElement('span');
+          sp.className = 'split-space';
+          sp.innerHTML = '&nbsp;';
+          el.appendChild(sp);
+        } else {
+          var s = document.createElement('span');
+          s.className = 'split-char font-accent';
+          s.textContent = c;
+          el.appendChild(s);
+          chars.push(s);
+        }
+      }
+      return chars;
+    }
+    function animateChars(chars) {
+      chars.forEach(function (s, i) {
+        setTimeout(function () { s.classList.add('in'); }, i * 30);
+      });
+    }
+
+    var splitTargets = [].slice.call(document.querySelectorAll('[data-split]')).map(function (el) {
+      return { el: el, chars: splitChars(el), done: false };
+    });
+
+    // Hero h1 + sub fire on load; section-4 title fires on view.
+    var heroH1 = document.getElementById('heroH1');
+    var heroSub = document.getElementById('heroSub');
+    var partneringTitle = document.getElementById('partneringTitle');
+
+    window.addEventListener('load', function () {
+      splitTargets.forEach(function (t) {
+        if (t.el === heroH1) { animateChars(t.chars); t.done = true; }
+      });
+      setTimeout(function () {
+        splitTargets.forEach(function (t) {
+          if (t.el === heroSub) { animateChars(t.chars); t.done = true; }
+        });
+      }, 600);
+    });
+
+    var splitIO = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        splitTargets.forEach(function (t) {
+          if (t.el === e.target && !t.done) { animateChars(t.chars); t.done = true; }
+        });
+      });
+    }, { threshold: 0.3 });
+    splitIO.observe(partneringTitle);
+
+    // ───────── Navbar scroll state ─────────
+    var navbar = document.getElementById('navbar');
+    function onScrollNav() {
+      if (window.scrollY > 50) navbar.classList.add('scrolled');
+      else navbar.classList.remove('scrolled');
+    }
+    window.addEventListener('scroll', onScrollNav, { passive: true });
+    onScrollNav();
+
+    // ───────── Mobile menu ─────────
+    var mobileMenu = document.getElementById('mobileMenu');
+    document.getElementById('hamburger').addEventListener('click', function () { mobileMenu.classList.add('open'); });
+    document.getElementById('mobileClose').addEventListener('click', function () { mobileMenu.classList.remove('open'); });
+    [].slice.call(document.querySelectorAll('[data-acc]')).forEach(function (head) {
+      head.addEventListener('click', function () {
+        var body = head.nextElementSibling;
+        var open = body.classList.toggle('open');
+        head.querySelector('span').textContent = open ? '–' : '+';
+      });
+    });
+
+    // ───────── Language switch ─────────
+    [].slice.call(document.querySelectorAll('.lang-switch button')).forEach(function (b) {
+      b.addEventListener('click', function () {
+        document.querySelectorAll('.lang-switch button').forEach(function (x) { x.classList.remove('active'); });
+        b.classList.add('active');
+      });
+    });
+
+    // ───────── HERO scroll-driven clip-path (useScroll/useTransform port) ─────────
+    var SCROLL_PER_SLIDE_VH = 150;
+    var heroWrap = document.getElementById('heroWrap');
+    var slides = [document.getElementById('slide0'), document.getElementById('slide1'), document.getElementById('slide2')];
+    function easeInOut(p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
+    function updateHero() {
+      var vh = window.innerHeight;
+      var perSlide = (SCROLL_PER_SLIDE_VH / 100) * vh;
+      var top = heroWrap.getBoundingClientRect().top;
+      var scrolled = -top; // px scrolled into the wrapper
+      // Slides 1 and 2 reveal sequentially over their own clip windows.
+      for (var i = 1; i < slides.length; i++) {
+        var start = (i - 1) * perSlide;
+        var local = (scrolled - start) / perSlide;
+        local = Math.max(0, Math.min(1, local));
+        var progress = easeInOut(local);
+        var rx = 5 + progress * 150;
+        var ry = 8 + progress * 150;
+        slides[i].style.clipPath = 'ellipse(' + rx + '% ' + ry + '% at 50% 50%)';
+      }
+    }
+    slides[0].style.clipPath = 'ellipse(150% 150% at 50% 50%)';
+    slides[1].style.clipPath = 'ellipse(5% 8% at 50% 50%)';
+    slides[2].style.clipPath = 'ellipse(5% 8% at 50% 50%)';
+    window.addEventListener('scroll', updateHero, { passive: true });
+    window.addEventListener('resize', updateHero);
+    updateHero();
+
+    // ───────── Gallery (masonry + scroll reveal) ─────────
+    var galleryItems = [
+      { label: 'Viennese Pastry', seed: 'pastry', span: false },
+      { label: 'Bread', seed: 'bread', span: false },
+      { label: 'Dessert', seed: 'dessert', span: false },
+      { label: 'Savory', seed: 'savory', span: false },
+      { label: 'Sweet Treats', seed: 'sweet', span: false },
+      { label: 'Culinary Aid', seed: 'culinary', span: true },
+      { label: 'Ingredient', seed: 'ingredient', span: false }
+    ];
+    var galleryGrid = document.getElementById('galleryGrid');
+    galleryItems.forEach(function (it, i) {
+      var wrap = document.createElement('div');
+      wrap.className = 'g-item' + (it.span ? ' span2' : '');
+      wrap.style.transitionDelay = (i * 0.05) + 's';
+      var frame = document.createElement('div');
+      frame.className = 'g-frame';
+      var img = document.createElement('div');
+      img.className = 'g-img';
+      img.style.backgroundImage = "url('https://picsum.photos/seed/bakery-" + it.seed + "/600/800')";
+      frame.appendChild(img);
+      var lbl = document.createElement('div');
+      lbl.className = 'g-label';
+      lbl.textContent = it.label;
+      wrap.appendChild(frame);
+      wrap.appendChild(lbl);
+      galleryGrid.appendChild(wrap);
+    });
+    var galleryIO = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('in'); galleryIO.unobserve(e.target); }
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -15% 0px' });
+    [].slice.call(document.querySelectorAll('.g-item')).forEach(function (el) { galleryIO.observe(el); });
+
+    // ───────── About scroll-reveal text (scrub port) ─────────
+    var aboutBody = document.getElementById('aboutBody');
+    var aboutWords = aboutBody.textContent.trim().split(/\s+/);
+    aboutBody.textContent = '';
+    var wordEls = aboutWords.map(function (w) {
+      var s = document.createElement('span');
+      s.className = 'word';
+      s.textContent = w;
+      aboutBody.appendChild(s);
+      aboutBody.appendChild(document.createTextNode(' '));
+      return s;
+    });
+    var aboutSection = document.getElementById('about');
+    function updateAbout() {
+      var rect = aboutSection.getBoundingClientRect();
+      var vh = window.innerHeight;
+      // progress: 0 when section top hits viewport bottom, 1 when section bottom hits viewport bottom.
+      var total = rect.height + vh;
+      var prog = (vh - rect.top) / total;
+      prog = Math.max(0, Math.min(1, prog));
+      var n = wordEls.length;
+      wordEls.forEach(function (el, i) {
+        var wStart = i / n;
+        var local = (prog - wStart) * 3;
+        local = Math.max(0, Math.min(1, local));
+        el.style.opacity = (0.1 + 0.9 * local).toFixed(3);
+        el.style.filter = 'blur(' + (4 - 4 * local).toFixed(2) + 'px)';
+      });
+      var rot = 3 - 3 * prog;
+      aboutBody.style.transform = 'rotate(' + rot.toFixed(2) + 'deg)';
+    }
+    window.addEventListener('scroll', updateAbout, { passive: true });
+    window.addEventListener('resize', updateAbout);
+    updateAbout();
+
+    // ───────── Partners marquee ─────────
+    var partners = ['Bridor de France', 'Traiteur de Paris', 'Panidor', 'Boncolac', 'Mademoiselle Desserts', 'Mountry', 'Pfalzgraf', 'Dolceria Alba', 'St Michel', 'Poppies Bakeries', 'Alysse Food', 'Les Delices du Chef'];
+    function fillTrack(track) {
+      partners.forEach(function (p) {
+        var s = document.createElement('span');
+        s.className = 'pname';
+        s.textContent = p;
+        track.appendChild(s);
+      });
+    }
+    fillTrack(document.getElementById('partnerTrack'));
+    fillTrack(document.getElementById('partnerTrack2'));
+
+    // ───────── Partnering cards (Lottie icons + entry) ─────────
+    var pIcons = {
+      sourcing: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>',
+      safety: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>',
+      efficiency: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+      support: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>'
+    };
+    var pCards = [
+      { label: 'Trusted Sourcing', ico: pIcons.sourcing },
+      { label: 'Food Safety Standards', ico: pIcons.safety },
+      { label: 'Operational Efficiency', ico: pIcons.efficiency },
+      { label: 'Expert Support', ico: pIcons.support }
+    ];
+    var partneringCards = document.getElementById('partneringCards');
+    pCards.forEach(function (c) {
+      var card = document.createElement('div');
+      card.className = 'p-card';
+      card.innerHTML = '<div class="p-ico">' + c.ico + '</div><div class="p-lbl">' + c.label + '</div>';
+      partneringCards.appendChild(card);
+    });
+    var pIO = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        var cards = [].slice.call(partneringCards.children);
+        cards.forEach(function (card, i) {
+          setTimeout(function () { card.classList.add('in'); }, i * 150);
+        });
+        pIO.disconnect();
+      });
+    }, { threshold: 0.2, rootMargin: '0px 0px -10% 0px' });
+    pIO.observe(partneringCards);
+  </script>
+</body>
+</html>

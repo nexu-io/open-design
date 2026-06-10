@@ -7,7 +7,6 @@
  */
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { useState } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
@@ -119,36 +118,28 @@ describe('AssistantMessage feedback gate', () => {
     expect(onForkFromMessage).toHaveBeenCalledTimes(1);
   });
 
-  it('disables the Share to Open Design button before a duplicate click can reuse stale props', () => {
+  it('reaches Contribute (share to Open Design) through the More -> Share cascade', () => {
     const onShare = vi.fn();
 
-    function Harness() {
-      const [busy, setBusy] = useState(false);
-      return (
-        <AssistantMessage
-          message={baseMessage()}
-          streaming={false}
-          projectId="proj-1"
-          isLast
-          onFeedback={vi.fn()}
-          onShareToOpenDesign={() => {
-            if (busy) return;
-            onShare();
-            setBusy(true);
-          }}
-          shareToOpenDesignBusy={busy}
-        />
-      );
-    }
+    render(
+      <AssistantMessage
+        message={baseMessage()}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        onFeedback={vi.fn()}
+        onShareToOpenDesign={onShare}
+      />,
+    );
 
-    render(<Harness />);
-
-    fireEvent.click(screen.getByTestId('assistant-share-to-od'));
-    expect(screen.getByTestId<HTMLButtonElement>('assistant-share-to-od').disabled).toBe(true);
-    fireEvent.click(screen.getByTestId('assistant-share-to-od'));
+    // Contribute lives behind the next-step card's More -> Share flyout; the busy
+    // guard in NextStepActions (and the menu closing on click) prevent a second
+    // submit, replacing the old always-visible disabled button.
+    fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
+    fireEvent.mouseEnter(screen.getByTestId('next-step-more-share'));
+    fireEvent.click(screen.getByTestId('next-step-share-contribute'));
 
     expect(onShare).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: 'Sharing…' })).toBeTruthy();
   });
 
   it('does not show the fork action while the assistant is streaming', () => {
@@ -209,7 +200,7 @@ describe('AssistantMessage feedback gate', () => {
     expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
   });
 
-  it('hides the feedback widget when the run failed', () => {
+  it('shows the feedback widget when the run failed', () => {
     render(
       <AssistantMessage
         message={baseMessage({
@@ -221,7 +212,9 @@ describe('AssistantMessage feedback gate', () => {
         onFeedback={vi.fn()}
       />,
     );
-    expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
+    // A failed turn is a settled outcome worth rating — it's exactly the case a
+    // user most wants to thumbs-down, so the feedback row must be present.
+    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
   });
 
   it('hides the feedback widget when the run ended with an empty_response status', () => {
@@ -256,7 +249,7 @@ describe('AssistantMessage re-renders on live tool input changes', () => {
         liveToolInput={{ t1: { name: 'AskUserQuestion', text: '{"questions":[{"question":"Which databa","options":[]}]}', seq: 0 } }}
       />,
     );
-    expect(container.querySelector('.op-ask-question-prompt')?.textContent).toBe('Which databa');
+    expect(container.querySelector('.qf-label')?.textContent).toBe('Which databa');
 
     rerender(
       <AssistantMessage
@@ -267,7 +260,7 @@ describe('AssistantMessage re-renders on live tool input changes', () => {
       />,
     );
     // Re-rendered to the grown prompt rather than frozen at "Which databa".
-    expect(container.querySelector('.op-ask-question-prompt')?.textContent).toBe('Which database?');
+    expect(container.querySelector('.qf-label')?.textContent).toBe('Which database?');
   });
 });
 
@@ -453,7 +446,7 @@ describe('AssistantMessage question forms', () => {
     expect(screen.queryByText('What are we making?')).toBeNull();
   });
 
-  it('keeps answered question forms collapsed in chat', () => {
+  it('renders an answered question banner as a disabled, non-clickable done state', () => {
     const form = [
       '<question-form id="discovery" title="Quick brief — tailored">',
       JSON.stringify({
@@ -481,18 +474,63 @@ describe('AssistantMessage question forms', () => {
         })}
         streaming={false}
         projectId="proj-1"
-        nextUserContent="[form answers for discovery]\n- Who is this for?: Product evaluators"
+        nextUserContent={'[form answers for discovery]\n- Who is this for?: Product evaluators'}
         onOpenQuestions={onOpenQuestions}
       />,
     );
 
-    fireEvent.click(screen.getByTestId('questions-banner'));
-    expect(onOpenQuestions).toHaveBeenCalledWith(expect.objectContaining({
-      form: expect.objectContaining({ id: 'discovery', title: 'Quick brief — tailored' }),
-    }));
+    const banner = screen.getByTestId('questions-banner') as HTMLButtonElement;
+    // Answered: no longer an open affordance — disabled, marked answered, and
+    // clicking it must not re-open the Questions panel.
+    expect(banner.disabled).toBe(true);
+    expect(banner.getAttribute('data-answered')).toBe('true');
+    expect(banner.textContent).toContain('Questions answered');
+    fireEvent.click(banner);
+    expect(onOpenQuestions).not.toHaveBeenCalled();
     expect(screen.queryByText('Quick brief — tailored')).toBeNull();
     expect(screen.queryByText('Who is this for?')).toBeNull();
     expect(screen.queryByText('Product evaluators')).toBeNull();
+  });
+
+  it('keeps an unanswered question banner clickable', () => {
+    const form = [
+      '<question-form id="discovery" title="Quick brief — tailored">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'audience',
+            label: 'Who is this for?',
+            type: 'text',
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+
+    const onOpenQuestions = vi.fn();
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          events: [
+            {
+              kind: 'text',
+              text: form,
+            } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        onOpenQuestions={onOpenQuestions}
+      />,
+    );
+
+    const banner = screen.getByTestId('questions-banner') as HTMLButtonElement;
+    expect(banner.disabled).toBe(false);
+    expect(banner.getAttribute('data-answered')).toBeNull();
+    fireEvent.click(banner);
+    expect(onOpenQuestions).toHaveBeenCalledWith(expect.objectContaining({
+      form: expect.objectContaining({ id: 'discovery', title: 'Quick brief — tailored' }),
+    }));
   });
 });
 
@@ -525,6 +563,7 @@ describe('AssistantMessage recovered produced files', () => {
 
     expect(screen.getByText('iphone-device-reveal.mp4')).toBeTruthy();
   });
+
 
   it('does not infer user sketches as turn output files', () => {
     render(

@@ -15,7 +15,13 @@ import {
   renderTailwindV4Css,
   type DerivedDesignTokenBinding,
 } from "../packages/contracts/src/design-systems/derived-token-outputs.ts";
-import { validateDesignTokensJson, validateManifestSemantics, validateTailwindV4Css } from "./check-design-system-manifests.ts";
+import { extractComponentsManifest } from "../packages/contracts/src/design-systems/components-manifest.ts";
+import {
+  validateComponentsManifestCache,
+  validateDesignTokensJson,
+  validateManifestSemantics,
+  validateTailwindV4Css,
+} from "./check-design-system-manifests.ts";
 
 const REPORT_PATH = "source/token-contract.report.json";
 
@@ -254,6 +260,63 @@ test("design-system design tokens guard rejects stale derived JSON", async () =>
   }
 });
 
+test("design-system design tokens guard rejects stale token source line references", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "od-design-token-source-guard-"));
+  try {
+    writeDerivedTokenFixture(root);
+    const report = JSON.parse(readFileSync(path.join(root, REPORT_PATH), "utf8")) as {
+      generatedAt: string;
+      summary: unknown;
+      tokens: DerivedDesignTokenBinding[];
+    };
+    report.tokens[0] = {
+      ...report.tokens[0]!,
+      sources: ["tokens.css:1"],
+    };
+    writeFileSync(path.join(root, REPORT_PATH), `${JSON.stringify(report, null, 2)}\n`);
+    writeFileSync(path.join(root, "design-tokens.json"), renderDesignTokensJson({
+      bindings: report.tokens,
+      report,
+    }));
+
+    const violations: string[] = [];
+    await validateDesignTokensJson(violations, "design-systems/test/manifest.json", root, "tokens.css", "design-tokens.json", REPORT_PATH);
+    assert.deepEqual(violations, [
+      "design-systems/test/manifest.json: source/token-contract.report.json token --bg source tokens.css:1 must point to tokens.css:2",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("design-system design tokens guard rejects prefix token source line references", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "od-design-tokens-prefix-guard-"));
+  try {
+    writeDerivedTokenFixture(root);
+    const report = JSON.parse(readFileSync(path.join(root, REPORT_PATH), "utf8")) as {
+      generatedAt: string;
+      summary: unknown;
+      tokens: DerivedDesignTokenBinding[];
+    };
+    const fgBinding = report.tokens.find((token) => token.name === "--fg");
+    assert.ok(fgBinding);
+    fgBinding.sources = ["tokens.css:6"];
+    writeFileSync(path.join(root, REPORT_PATH), `${JSON.stringify(report, null, 2)}\n`);
+    writeFileSync(path.join(root, "design-tokens.json"), renderDesignTokensJson({
+      bindings: report.tokens,
+      report,
+    }));
+
+    const violations: string[] = [];
+    await validateDesignTokensJson(violations, "design-systems/test/manifest.json", root, "tokens.css", "design-tokens.json", REPORT_PATH);
+    assert.deepEqual(violations, [
+      "design-systems/test/manifest.json: source/token-contract.report.json token --fg source tokens.css:6 must point to tokens.css:5",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("design-system tailwind v4 guard rejects swapped canonical mappings", async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "od-tailwind-guard-"));
   try {
@@ -272,6 +335,40 @@ test("design-system tailwind v4 guard rejects swapped canonical mappings", async
     assert.deepEqual(violations, [
       "design-systems/test/manifest.json: tailwind-v4.css is stale; regenerate it from tokens.css",
     ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("design-system components manifest guard rejects undeclared token references", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "od-components-manifest-guard-"));
+  try {
+    const fixtureHtml = [
+      "<!doctype html>",
+      "<style>",
+      ".btn { color: var(--accent); border-color: var(--missing-token); }",
+      "</style>",
+      '<button class="btn">Continue</button>',
+    ].join("\n");
+    const tokensCss = ":root {\n  --accent: #111111;\n}\n";
+    writeFileSync(path.join(root, "components.html"), fixtureHtml);
+    writeFileSync(path.join(root, "tokens.css"), tokensCss);
+    writeFileSync(
+      path.join(root, "components.manifest.json"),
+      `${JSON.stringify(extractComponentsManifest({ brandId: "test", fixtureHtml, tokensCss }), null, 2)}\n`,
+    );
+
+    const violations: string[] = [];
+    await validateComponentsManifestCache(
+      violations,
+      "design-systems/test/manifest.json",
+      root,
+      "test",
+      "components.manifest.json",
+    );
+
+    assert.equal(violations.length, 1);
+    assert.match(violations[0]!, /references undeclared component token\(s\): --missing-token$/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

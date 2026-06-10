@@ -60,7 +60,7 @@ jobs:
                   /^apps\/web\/src\/.*(Onboarding|Entry|Home|Starter|Hero)/i,
                   /^e2e\/ui\/(amr-onboarding|entry-chrome-flows|entry-configuration-flows|critical-smoke)\.test\.ts$/,
                 ],
-                command: "pnpm -C e2e exec playwright test -c playwright.config.ts ui/critical-smoke.test.ts ui/entry-chrome-flows.test.ts ui/amr-onboarding.test.ts --grep '\\[P0\\]|\\[P1\\]'",
+                command: "pnpm -C e2e run test:ui:critical",
               },
               {
                 area: 'project workspace',

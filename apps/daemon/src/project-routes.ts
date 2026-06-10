@@ -1084,6 +1084,18 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             'fromTrustedPicker can only be set via POST /api/import/folder',
           );
         }
+        // Reject invalid linked working directories up front (consistent with
+        // PATCH /api/projects/:id) instead of silently dropping them. The
+        // caller promises the agent `--add-dir` access to this folder; if the
+        // path is deleted/inaccessible/a system dir, fail loudly so the client
+        // can surface it rather than creating a project + auto-running a turn
+        // whose linked-dir access never materialises.
+        if (Array.isArray(metadata.linkedDirs)) {
+          const validated = validateLinkedDirs(metadata.linkedDirs);
+          if (validated.error) {
+            return sendApiError(res, 400, 'INVALID_LINKED_DIR', validated.error);
+          }
+        }
       }
       if (customInstructions !== undefined
           && typeof customInstructions !== 'string'
@@ -1920,7 +1932,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     relPath: string,
     metadata?: unknown,
     beforeSend?: (mime: string) => void,
-    transformFile?: (file: { mime: string; buffer: Buffer }) => Buffer | string,
+    transformFile?: (file: { mime: string; buffer: Buffer }) => Buffer | string | Promise<Buffer | string>,
   ) {
     const meta = await resolveProjectFilePath(
       PROJECTS_DIR,
@@ -1975,7 +1987,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
 
     const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, metadata);
-    res.type(file.mime).send(transformFile ? transformFile(file) : file.buffer);
+    res.type(file.mime).send(transformFile ? await transformFile(file) : file.buffer);
   }
 
   function previewFilePathForProject(project: any, queryFile: unknown): string {
@@ -1988,6 +2000,46 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
   function encodeProjectPathForUrl(filePath: string): string {
     return filePath.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+  }
+
+  async function maybeResolveVitePreviewHtml({
+    file,
+    projectId,
+    relPath,
+    metadata,
+    projectsRoot,
+    readProjectFile,
+  }: {
+    file: { mime: string; buffer: Buffer };
+    projectId: string;
+    relPath: string;
+    metadata?: unknown;
+    projectsRoot: string;
+    readProjectFile: (projectsRoot: string, projectId: string, relPath: string, metadata?: unknown) => Promise<{ buffer: Buffer }>;
+  }): Promise<Buffer | string> {
+    if (!/^text\/html(?:;|$)/i.test(file.mime)) return file.buffer;
+    const html = file.buffer.toString('utf8');
+    if (!isViteDevHtmlEntry(html)) return file.buffer;
+
+    const ownerDir = path.posix.dirname(relPath);
+    const distRelPath = ownerDir === '.' ? 'dist/index.html' : `${ownerDir}/dist/index.html`;
+    try {
+      const distFile = await readProjectFile(projectsRoot, projectId, distRelPath, metadata);
+      return rewriteViteDistAssetUrlsForPreview(distFile.buffer.toString('utf8'));
+    } catch {
+      return file.buffer;
+    }
+  }
+
+  function isViteDevHtmlEntry(html: string): boolean {
+    return /<script\b[^>]*\btype\s*=\s*["']module["'][^>]*\bsrc\s*=\s*["']\/src\/[^"']+["'][^>]*>\s*<\/script>/i.test(html);
+  }
+
+  function rewriteViteDistAssetUrlsForPreview(html: string): string {
+    return html.replace(
+      /\b(href|src)\s*=\s*(["'])\/assets\//gi,
+      (_match, attr: string, quote: string) => `${attr}=${quote}dist/assets/`,
+    );
   }
 
   // Project files. Each project owns a flat folder under .od/projects/<id>/
@@ -2177,6 +2229,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         relPath,
         project.metadata,
         () => setProjectPreviewHeaders(res),
+        async (file) => maybeResolveVitePreviewHtml({
+          file,
+          projectId: project.id,
+          relPath,
+          metadata: project.metadata,
+          projectsRoot: PROJECTS_DIR,
+          readProjectFile,
+        }),
       );
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
@@ -2223,14 +2283,22 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         relPath,
         project?.metadata,
         undefined,
-        (file) => {
+        async (file) => {
+          let transformed = await maybeResolveVitePreviewHtml({
+            file,
+            projectId,
+            relPath,
+            metadata: project?.metadata,
+            projectsRoot: PROJECTS_DIR,
+            readProjectFile,
+          });
           if (
             (wantsUrlPreviewScrollBridge(req.query.odPreviewBridge) ||
               wantsUrlPreviewSelectionBridge(req.query.odPreviewBridge) ||
               wantsUrlPreviewSnapshotBridge(req.query.odPreviewBridge)) &&
             /^text\/html(?:;|$)/i.test(file.mime)
           ) {
-            let html = file.buffer.toString('utf8');
+            let html = Buffer.isBuffer(transformed) ? transformed.toString('utf8') : transformed;
             if (wantsUrlPreviewScrollBridge(req.query.odPreviewBridge)) {
               html = injectUrlPreviewBridge(html, 'scroll');
             }
@@ -2240,9 +2308,9 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             if (wantsUrlPreviewSnapshotBridge(req.query.odPreviewBridge)) {
               html = injectUrlPreviewBridge(html, 'snapshot');
             }
-            return html;
+            transformed = html;
           }
-          return file.buffer;
+          return transformed;
         },
       );
     } catch (err: any) {

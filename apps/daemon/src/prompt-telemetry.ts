@@ -7,9 +7,9 @@ export const PROMPT_STACK_REDACTION_VERSION = 'prompt-stack-redaction-v1';
 export const PROMPT_STACK_PATH_MARKER = '[REDACTED:path]';
 
 const KIB = 1024;
-const DAEMON_SYSTEM_PROMPT_MAX_BYTES = 32 * KIB;
-const SECTION_MAX_BYTES = 16 * KIB;
-const TOTAL_REDACTED_CONTENT_MAX_BYTES = 96 * KIB;
+const DAEMON_SYSTEM_PROMPT_MAX_BYTES = 128 * KIB;
+const SECTION_MAX_BYTES = 64 * KIB;
+const TOTAL_REDACTED_CONTENT_MAX_BYTES = 512 * KIB;
 
 export type PromptTelemetrySectionKind =
   | 'formOverride'

@@ -699,6 +699,12 @@ export async function generateMedia(args: {
     if (err instanceof StubProviderDisabledError) {
       throw err;
     }
+    // HyperFrames is a local render, not a remote provider. Falling back
+    // to a stub here hides actionable composition/preflight failures and
+    // can make the agent retry or narrate a fake MP4 as success.
+    if (def.provider === 'hyperframes') {
+      throw err;
+    }
     // A real provider failed (network blip, 4xx, missing key, …). We
     // still want to fall back to a stub so the agent's chat loop
     // doesn't dead-end — but only when stubs are allowed for this
@@ -3600,15 +3606,24 @@ async function renderHyperFramesViaCli(ctx: MediaContext, projectDir: string, on
   if (!compStat.isDirectory()) {
     throw new Error(`compositionDir is not a directory: ${compRel}`);
   }
-  const indexStat = await stat(path.join(compAbs, 'index.html')).catch(
-    () => null,
+  await assertHyperFramesCompositionFile(
+    compAbs,
+    compRel,
+    'hyperframes.json',
+    'Run `npx hyperframes init "$OD_PROJECT_DIR/$COMP_REL" --example blank --skip-skills --non-interactive` before editing the composition.',
   );
-  if (!indexStat || !indexStat.isFile()) {
-    throw new Error(
-      `compositionDir is missing index.html: ${compRel}. The agent must ` +
-        'write index.html (with window.__timelines registration) before dispatch.',
-    );
-  }
+  await assertHyperFramesCompositionFile(
+    compAbs,
+    compRel,
+    'meta.json',
+    'Run `npx hyperframes init` so the renderer has duration/scene metadata before dispatch.',
+  );
+  await assertHyperFramesCompositionFile(
+    compAbs,
+    compRel,
+    'index.html',
+    'The agent must write index.html (with window.__timelines registration) before dispatch.',
+  );
 
   const tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'open-design-hf-'));
   const tmpOutput = path.join(tmpRoot, 'render.mp4');
@@ -3632,6 +3647,20 @@ async function renderHyperFramesViaCli(ctx: MediaContext, projectDir: string, on
     throw new Error(`hyperframes render failed: ${truncate(message, 480)}`);
   } finally {
     await rm(tmpRoot, { recursive: true, force: true });
+  }
+}
+
+async function assertHyperFramesCompositionFile(
+  compAbs: string,
+  compRel: string,
+  fileName: string,
+  guidance: string,
+): Promise<void> {
+  const fileStat = await stat(path.join(compAbs, fileName)).catch(() => null);
+  if (!fileStat || !fileStat.isFile()) {
+    throw new Error(
+      `compositionDir is missing ${fileName}: ${compRel}. ${guidance}`,
+    );
   }
 }
 

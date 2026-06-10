@@ -39,6 +39,81 @@ measure_step() {
   echo "##[endgroup]"
 }
 
+is_transient_notary_output() {
+  local output="$1"
+  case "$output" in
+    *abortedUpload* | *deadlineExceeded* | *ECONNRESET* | *ETIMEDOUT* | *ENOTFOUND* | *EAI_AGAIN* | *"socket hang up"* | *"network connection was lost"*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+notary_auth_args() {
+  if [ -n "${APPLE_NOTARY_KEYCHAIN_PROFILE:-}" ]; then
+    if [ -n "${APPLE_NOTARY_KEYCHAIN:-}" ]; then
+      printf '%s\0' --keychain "$APPLE_NOTARY_KEYCHAIN"
+    fi
+    printf '%s\0' --keychain-profile "$APPLE_NOTARY_KEYCHAIN_PROFILE"
+  else
+    printf '%s\0' --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID"
+  fi
+}
+
+notarize_mac_dmg_once() {
+  local dmg_path="$1"
+  local auth_args=()
+  local s3_arg="--no-s3-acceleration"
+  local status
+  if [ "${OPEN_DESIGN_NOTARIZE_S3_ACCELERATION:-false}" = "true" ]; then
+    s3_arg="--s3-acceleration"
+  fi
+  while IFS= read -r -d '' arg; do
+    auth_args+=("$arg")
+  done < <(notary_auth_args)
+
+  echo "[release notarize] submitting $(basename "$dmg_path") ($(wc -c < "$dmg_path" | tr -d ' ') bytes) with $s3_arg"
+  xcrun notarytool submit "$dmg_path" \
+    "${auth_args[@]}" \
+    --wait \
+    --output-format json \
+    "$s3_arg"
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    return "$status"
+  fi
+  xcrun stapler staple "$dmg_path"
+}
+
+notarize_mac_dmg() {
+  local dmg_path="$1"
+  local attempts="${OPEN_DESIGN_NOTARIZE_ATTEMPTS:-8}"
+  local retry_delay_ms="${OPEN_DESIGN_NOTARIZE_RETRY_DELAY_MS:-15000}"
+  local attempt output status
+  if [ ! -f "$dmg_path" ]; then
+    echo "expected dmg not found for notarization: $dmg_path" >&2
+    return 1
+  fi
+  for ((attempt = 1; attempt <= attempts; attempt += 1)); do
+    set +e
+    output="$(notarize_mac_dmg_once "$dmg_path" 2>&1)"
+    status=$?
+    set -e
+    printf '%s\n' "$output"
+    if [ "$status" -eq 0 ]; then
+      return 0
+    fi
+    if [ "$attempt" -lt "$attempts" ] && is_transient_notary_output "$output"; then
+      echo "[release notarize] transient notarytool failure on attempt $attempt/$attempts; retrying in ${retry_delay_ms}ms" >&2
+      sleep "$(node -e 'process.stdout.write(String(Number(process.argv[1]) / 1000))' "$retry_delay_ms")"
+    else
+      return "$status"
+    fi
+  done
+}
+
 prepare_mac_signing() {
   if [ -n "${CSC_KEYCHAIN:-}" ]; then
     unset CSC_LINK
@@ -98,6 +173,7 @@ const outputs = {
   release_version: process.env.RELEASE_VERSION,
   ...(build.appPath ? { app_path: build.appPath } : {}),
   ...(build.dmgPath ? { dmg_path: build.dmgPath } : {}),
+  ...(build.payloadPath ? { payload_path: build.payloadPath } : {}),
   ...(build.zipPath ? { zip_path: build.zipPath } : {}),
   ...(build.outputRoot ? { output_root: build.outputRoot } : {}),
 };
@@ -165,9 +241,6 @@ case "$RELEASE_TARGET" in
     if [ "$sign_mode" != "no" ]; then
       build_args+=(--signed)
     fi
-    if [ "$sign_mode" = "notarize" ]; then
-      build_args+=(--notarize)
-    fi
     ;;
   linux_x64)
     if [ "$RELEASE_BUILD_TARGET" != "appimage" ]; then
@@ -195,6 +268,15 @@ esac
 
 if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$BUILD_LOG_PATH" >&2))"; then
   printf '%s\n' "$build_output" | tee "$BUILD_JSON_PATH"
+  if [ "${sign_mode:-no}" = "notarize" ]; then
+    dmg_path="$(BUILD_JSON_PATH="$BUILD_JSON_PATH" node --input-type=module <<'NODE'
+import { readFileSync } from "node:fs";
+const build = JSON.parse(readFileSync(process.env.BUILD_JSON_PATH, "utf8"));
+process.stdout.write(build.dmgPath ?? "");
+NODE
+)"
+    measure_step "notarize mac dmg" notarize_mac_dmg "$dmg_path"
+  fi
   BUILD_JSON_PATH="$BUILD_JSON_PATH" RELEASE_TIMINGS_JSON="[$release_timings_json]" node --input-type=module <<'NODE'
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -221,9 +303,41 @@ elif [ "$RELEASE_TARGET" = "linux_x64" ]; then
   pnpm --dir e2e test specs/linux.spec.ts 2>&1 | tee "$RELEASE_REPORT_DIR/vitest.log"
 else
   required RELEASE_REPORT_DIR
+  update_build_json_path=""
+  update_version=""
+  if [ "$RELEASE_SMOKE_MODE" = "full" ] && [ "$RELEASE_TARGET" = "mac_arm64" ] && [ -z "${OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL:-}" ]; then
+    if [[ "$RELEASE_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-beta\.([0-9]+)$ ]]; then
+      update_version="${BASH_REMATCH[1]}-beta.$((BASH_REMATCH[2] + 1))"
+      update_fixture_dir="$RELEASE_WORK_DIR/tools-pack-update-fixture"
+      update_build_json_path="$RELEASE_WORK_DIR/mac-tools-pack-update-build.json"
+      update_args=(
+        exec tools-pack mac build
+        --dir "$update_fixture_dir"
+        --cache-dir "$TOOLS_PACK_CACHE_DIR"
+        --namespace "$RELEASE_NAMESPACE"
+        --portable
+        --app-version "$update_version"
+        --mac-compression "${MAC_COMPRESSION:-normal}"
+        --to dmg
+        --json
+      )
+      build_mac_update_fixture() {
+        local update_output
+        update_output="$(pnpm "${update_args[@]}")"
+        printf '%s\n' "$update_output" > "$update_build_json_path"
+      }
+      measure_step "tools-pack mac build update fixture" build_mac_update_fixture
+    else
+      echo "full mac payload smoke requires beta version x.y.z-beta.N; got $RELEASE_VERSION" >&2
+      exit 1
+    fi
+  fi
   OD_PACKAGED_E2E_BUILD_JSON_PATH="$BUILD_JSON_PATH" \
   OD_PACKAGED_E2E_BUILD_LOG_PATH="$BUILD_LOG_PATH" \
   OD_PACKAGED_E2E_MAC=1 \
+  OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH="$update_build_json_path" \
+  OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL="${OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL:-}" \
+  OD_PACKAGED_E2E_MAC_UPDATE_VERSION="${OD_PACKAGED_E2E_MAC_UPDATE_VERSION:-$update_version}" \
   OD_PACKAGED_E2E_MAC_SMOKE_PROFILE="$RELEASE_SMOKE_MODE" \
   OD_PACKAGED_E2E_NAMESPACE="$RELEASE_NAMESPACE" \
   OD_PACKAGED_E2E_RELEASE_CHANNEL=beta \

@@ -35,6 +35,415 @@ describe('structured agent stream fixtures', () => {
     });
   });
 
+  it('emits TodoWrite snapshots from Claude TaskCreate and TaskUpdate tools', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+    handler.feed(`${JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-1',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu-create-1',
+            name: 'TaskCreate',
+            input: {
+              subject: 'Bind editorial tokens',
+              activeForm: 'Bind tokens',
+            },
+          },
+          {
+            type: 'tool_use',
+            id: 'toolu-create-2',
+            name: 'TaskCreate',
+            input: {
+              subject: 'Write index.html',
+              activeForm: 'Write page',
+            },
+          },
+          {
+            type: 'tool_use',
+            id: 'toolu-update-1',
+            name: 'TaskUpdate',
+            input: {
+              taskId: '1',
+              status: 'completed',
+            },
+          },
+        ],
+      },
+    })}\n`);
+    handler.flush();
+
+    expect(events).toContainEqual({
+      type: 'tool_use',
+      id: 'toolu-update-1:todo-task',
+      name: 'TodoWrite',
+      input: {
+        todos: [
+          { content: 'Bind editorial tokens', status: 'completed', activeForm: 'Bind tokens' },
+          { content: 'Write index.html', status: 'pending', activeForm: 'Write page' },
+        ],
+      },
+    });
+    expect(events).not.toContainEqual(expect.objectContaining({
+      type: 'tool_use',
+      id: 'toolu-create-1',
+      name: 'TaskCreate',
+    }));
+    expect(events).not.toContainEqual(expect.objectContaining({
+      type: 'tool_use',
+      id: 'toolu-create-2',
+      name: 'TaskCreate',
+    }));
+    expect(events).not.toContainEqual(expect.objectContaining({
+      type: 'tool_use',
+      id: 'toolu-update-1',
+      name: 'TaskUpdate',
+    }));
+  });
+
+  it('keeps implicit Claude TaskCreate IDs distinct from explicit task IDs', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+    handler.feed(`${JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-1',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu-create-1',
+            name: 'TaskCreate',
+            input: {
+              taskId: '1',
+              subject: 'Bind editorial tokens',
+            },
+          },
+          {
+            type: 'tool_use',
+            id: 'toolu-create-2',
+            name: 'TaskCreate',
+            input: {
+              subject: 'Write index.html',
+            },
+          },
+          {
+            type: 'tool_use',
+            id: 'toolu-update-2',
+            name: 'TaskUpdate',
+            input: {
+              taskId: '2',
+              status: 'completed',
+            },
+          },
+        ],
+      },
+    })}\n`);
+    handler.flush();
+
+    expect(events).toContainEqual({
+      type: 'tool_use',
+      id: 'toolu-update-2:todo-task',
+      name: 'TodoWrite',
+      input: {
+        todos: [
+          { content: 'Bind editorial tokens', status: 'pending' },
+          { content: 'Write index.html', status: 'completed' },
+        ],
+      },
+    });
+  });
+
+  it('suppresses duplicate Claude artifact text after writing a file', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+    handler.feed(`${JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-1',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu-write-1',
+            name: 'Write',
+            input: {
+              file_path: 'index.html',
+              content: '<!doctype html><html></html>',
+            },
+          },
+          {
+            type: 'text',
+            text: '全部完成。\\n\\n<artifact identifier="page" type="text/html">\\n<!doctype html><html></html>\\n</artifact>',
+          },
+        ],
+      },
+    })}\n`);
+    handler.flush();
+
+    expect(events).toContainEqual({
+      type: 'text_delta',
+      delta: '全部完成。\\n\\n',
+    });
+    expect(events.some((event) => JSON.stringify(event).includes('<!doctype html>'))).toBe(true);
+    expect(events.some((event) => {
+      if (typeof event !== 'object' || event === null) return false;
+      const record = event as { type?: string; delta?: string };
+      return record.type === 'text_delta' && typeof record.delta === 'string' && record.delta.includes('<!doctype html>');
+    })).toBe(false);
+  });
+
+  it('suppresses duplicate Claude artifact text split across chunks', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+    handler.feed(`${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'message_start', message: { id: 'msg-1' } },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'tool_use', id: 'toolu-write-1', name: 'Write' },
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_delta',
+        index: 0,
+        delta: {
+          type: 'input_json_delta',
+          partial_json: '{"file_path":"index.html","content":"<!doctype html><html></html>"}',
+        },
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_stop',
+        index: 0,
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: '全部完成。\\n\\n<' } },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_delta',
+        index: 1,
+        delta: {
+          type: 'text_delta',
+          text: 'artifact identifier="page" type="text/html">\\n<!doctype html><html></html>\\n</artifact>Done',
+        },
+      },
+    })}\n`);
+    handler.flush();
+
+    expect(events).toContainEqual({
+      type: 'text_delta',
+      delta: '全部完成。\\n\\n',
+    });
+    expect(events).toContainEqual({
+      type: 'text_delta',
+      delta: 'Done',
+    });
+    expect(events.some((event) => {
+      if (typeof event !== 'object' || event === null) return false;
+      const record = event as { type?: string; delta?: string };
+      return record.type === 'text_delta' && typeof record.delta === 'string' && record.delta.includes('<!doctype html>');
+    })).toBe(false);
+  });
+
+  it('preserves later Claude artifact text after plain prose clears file-write suppression', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+    handler.feed(`${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'message_start', message: { id: 'msg-1' } },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'tool_use', id: 'toolu-write-1', name: 'Write' },
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_delta',
+        index: 0,
+        delta: {
+          type: 'input_json_delta',
+          partial_json: '{"file_path":"index.html","content":"<!doctype html><html></html>"}',
+        },
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_stop',
+        index: 0,
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: '全部完成。\\n\\n' } },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_delta',
+        index: 1,
+        delta: {
+          type: 'text_delta',
+          text: '<artifact identifier="page" type="text/html">\\n<!doctype html><html></html>\\n</artifact>Done',
+        },
+      },
+    })}\n`);
+    handler.flush();
+
+    expect(events).toContainEqual({
+      type: 'text_delta',
+      delta: '全部完成。\\n\\n',
+    });
+    expect(events).toContainEqual({
+      type: 'text_delta',
+      delta: '<artifact identifier="page" type="text/html">\\n<!doctype html><html></html>\\n</artifact>Done',
+    });
+  });
+
+  it('emits Claude prose immediately after a file write when no artifact follows', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+    handler.feed(`${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'message_start', message: { id: 'msg-1' } },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'tool_use', id: 'toolu-write-1', name: 'Write' },
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_delta',
+        index: 0,
+        delta: {
+          type: 'input_json_delta',
+          partial_json: '{"file_path":"index.html","content":"<!doctype html><html></html>"}',
+        },
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'content_block_stop', index: 0 },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'Done, preview ready.' } },
+    })}\n`);
+
+    expect(events).toContainEqual({
+      type: 'text_delta',
+      delta: 'Done, preview ready.',
+    });
+  });
+
+  it('flushes trailing partial Claude artifact opener as prose', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+    handler.feed(`${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'message_start', message: { id: 'msg-1' } },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'tool_use', id: 'toolu-write-1', name: 'Write' },
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_delta',
+        index: 0,
+        delta: {
+          type: 'input_json_delta',
+          partial_json: '{"file_path":"index.html","content":"<!doctype html><html></html>"}',
+        },
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'content_block_stop', index: 0 },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'Done <art' } },
+    })}\n`);
+    handler.flush();
+
+    expect(events).toContainEqual({
+      type: 'text_delta',
+      delta: 'Done ',
+    });
+    expect(events).toContainEqual({
+      type: 'text_delta',
+      delta: '<art',
+    });
+  });
+
+  it('preserves later Claude artifact text after suppressing immediate file-write echo', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+    handler.feed(`${JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-1',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu-write-1',
+            name: 'Write',
+            input: {
+              file_path: 'helper.html',
+              content: '<!doctype html><html>helper</html>',
+            },
+          },
+          {
+            type: 'text',
+            text: 'Helper written.\\n\\n<artifact identifier="helper" type="text/html">\\n<!doctype html><html>helper</html>\\n</artifact>',
+          },
+          {
+            type: 'text',
+            text: 'Final artifact:\\n\\n<artifact identifier="final" type="text/html">\\n<!doctype html><html>final</html>\\n</artifact>',
+          },
+        ],
+      },
+    })}\n`);
+    handler.flush();
+
+    expect(events).toContainEqual({
+      type: 'text_delta',
+      delta: 'Helper written.\\n\\n',
+    });
+    expect(events).toContainEqual({
+      type: 'text_delta',
+      delta: 'Final artifact:\\n\\n<artifact identifier="final" type="text/html">\\n<!doctype html><html>final</html>\\n</artifact>',
+    });
+    expect(events.some((event) => {
+      if (typeof event !== 'object' || event === null) return false;
+      const record = event as { type?: string; delta?: string };
+      return record.type === 'text_delta' && typeof record.delta === 'string' && record.delta.includes('<html>helper</html>');
+    })).toBe(false);
+  });
+
   it('preserves streamed Claude Code tool input_json_delta payloads', () => {
     const events: unknown[] = [];
     const handler = createClaudeStreamHandler((event: unknown) => events.push(event));

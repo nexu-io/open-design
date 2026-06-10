@@ -1273,6 +1273,81 @@ describe('ProjectView daemon cleanup', () => {
     });
   });
 
+  it('threads the resumable flag from a live daemon failure onto the assistant message', async () => {
+    // Regression: a transient failure that arrives on the live streamViaDaemon
+    // onError path (not just reattach/status-fetch) must carry `resumable` onto
+    // the assistant message, otherwise ChatPane's Continue CTA never appears on
+    // the primary surface until a reload re-fetches run status.
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: { onError: (error: Error) => void };
+    }) => {
+      options.onRunCreated?.('run-resumable-1');
+      const err = new Error('Upstream request failed: stream disconnected.') as Error & {
+        resumable?: boolean;
+      };
+      err.resumable = true;
+      options.handlers.onError(err);
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-resumable', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('do the thing', [], []);
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    // The failed assistant row carries `resumable: true` (persisted + rendered).
+    await waitFor(() => {
+      const resumableFailedSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[2]?.role === 'assistant' &&
+          call[2]?.runStatus === 'failed' &&
+          call[2]?.resumable === true,
+      );
+      expect(resumableFailedSave).toBeTruthy();
+    });
+    // And ChatPane receives that resumable failed message so the CTA can gate on it.
+    const latest = chatPaneSpy.mock.calls.at(-1)?.[0] as {
+      messages?: Array<{ role: string; runStatus?: string; resumable?: boolean }>;
+    };
+    expect(
+      latest?.messages?.some((m) => m.role === 'assistant' && m.runStatus === 'failed' && m.resumable === true),
+    ).toBe(true);
+  });
+
   it('does not replay a terminal succeeded row with empty produced files', async () => {
     const runCreatedAt = Date.now();
     const existingArtifact = {

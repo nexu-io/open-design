@@ -6,7 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { migratePlugins } from '../src/plugins/persistence.js';
-import { listInstalledPlugins } from '../src/plugins/registry.js';
+import { listInstalledPlugins, upsertInstalledPlugin } from '../src/plugins/registry.js';
+import type { InstalledPluginRecord } from '@open-design/contracts';
 import { registerBundledPlugins } from '../src/plugins/bundled.js';
 
 let db: Database.Database;
@@ -129,5 +130,63 @@ describe('registerBundledPlugins', () => {
     await writeFile(path.join(folder, 'README.md'), '# nothing\n');
     const result = await registerBundledPlugins({ db, bundledRoot: tmpRoot });
     expect(result.registered).toEqual([]);
+  });
+
+  it('prunes persisted bundled rows whose bundled folder was removed', async () => {
+    // Upgrade path: a previous daemon image shipped `stale`, the user's DB
+    // registered it, and this image no longer carries the folder. The row
+    // must disappear too — otherwise /api/plugins keeps serving a record
+    // whose backing files are gone.
+    const keepDir = path.join(tmpRoot, 'atoms', 'keep');
+    const staleDir = path.join(tmpRoot, 'atoms', 'stale');
+    for (const [dir, id] of [[keepDir, 'keep'], [staleDir, 'stale']] as const) {
+      await mkdir(dir, { recursive: true });
+      await writeFile(path.join(dir, 'open-design.json'), SAMPLE_MANIFEST(id));
+      await writeFile(path.join(dir, 'SKILL.md'), SAMPLE_SKILL(id));
+    }
+    await registerBundledPlugins({ db, bundledRoot: tmpRoot });
+    expect(listInstalledPlugins(db).length).toBe(2);
+
+    // A user-installed plugin must never be touched by bundled pruning.
+    upsertInstalledPlugin(db, {
+      id: 'user-plugin',
+      title: 'User Plugin',
+      version: '0.1.0',
+      sourceKind: 'project',
+      source: '/tmp/user-plugin',
+      trust: 'trusted',
+      capabilitiesGranted: ['prompt:inject'],
+      manifest: JSON.parse(SAMPLE_MANIFEST('user-plugin')),
+      fsPath: '/tmp/user-plugin',
+      installedAt: 0,
+      updatedAt: 0,
+    } as InstalledPluginRecord);
+
+    await rm(staleDir, { recursive: true, force: true });
+    const result = await registerBundledPlugins({ db, bundledRoot: tmpRoot });
+
+    expect(result.pruned).toEqual(['stale']);
+    expect(listInstalledPlugins(db).map((r) => r.id).sort()).toEqual([
+      'keep',
+      'user-plugin',
+    ]);
+  });
+
+  it('does not prune bundled rows when the bundled root itself is missing', async () => {
+    // A missing bundledRoot means a mispackaged image, not "every bundled
+    // plugin was deliberately removed" — wiping the registry would turn a
+    // packaging bug into data loss.
+    const folder = path.join(tmpRoot, 'atoms', 'sample');
+    await mkdir(folder, { recursive: true });
+    await writeFile(path.join(folder, 'open-design.json'), SAMPLE_MANIFEST('sample'));
+    await writeFile(path.join(folder, 'SKILL.md'), SAMPLE_SKILL('sample'));
+    await registerBundledPlugins({ db, bundledRoot: tmpRoot });
+
+    const result = await registerBundledPlugins({
+      db,
+      bundledRoot: path.join(tmpRoot, 'does-not-exist'),
+    });
+    expect(result.pruned).toEqual([]);
+    expect(listInstalledPlugins(db).map((r) => r.id)).toEqual(['sample']);
   });
 });

@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-dreamcore-landing",
+  "title": "Dreamcore Landing — Parallax Portal Hero",
+  "title_i18n": {
+    "zh-CN": "梦核落地页 — 视差传送门英雄区",
+    "zh-TW": "夢核落地頁 — 視差傳送門英雄區",
+    "ja": "ドリームコア・ランディング — パララックス・ポータルヒーロー",
+    "ko": "드림코어 랜딩 — 패럴랙스 포털 히어로",
+    "de": "Dreamcore Landing — Parallax-Portal-Hero",
+    "fr": "Dreamcore Landing — Hero portail parallaxe",
+    "ru": "Dreamcore Landing — параллакс-портал в hero-секции",
+    "es": "Dreamcore Landing — Hero portal con parallax",
+    "pt-BR": "Dreamcore Landing — Hero de portal com parallax",
+    "it": "Dreamcore Landing — Hero portale parallax",
+    "vi": "Dreamcore Landing — Hero cổng dịch chuyển parallax",
+    "pl": "Dreamcore Landing — Hero z portalem parallax",
+    "id": "Dreamcore Landing — Hero Portal Parallax",
+    "nl": "Dreamcore Landing — Parallax-portaal-hero",
+    "ar": "Dreamcore Landing — قسم رئيسي ببوابة بتأثير parallax",
+    "tr": "Dreamcore Landing — Parallax Portal Hero",
+    "uk": "Dreamcore Landing — параллакс-портал у hero-секції",
+    "en": "Dreamcore Landing — Parallax Portal Hero"
+  },
+  "version": "0.1.0",
+  "description": "Immersive single-page parallax landing: a sticky viewport zooms a portal image toward you on scroll, curtains sweep open on entrance, and a curved arc card slider reveals nine dream-world destinations in scene two.",
+  "description_i18n": {
+    "zh-CN": "沉浸式单页视差落地页：粘性视口随滚动将传送门图像放大推近，入场时帷幕滑开，第二幕以弧形卡片滑块展示九个梦境世界。",
+    "zh-TW": "沉浸式單頁視差落地頁：黏性視口隨捲動將傳送門圖像放大推近，入場時帷幕滑開，第二幕以弧形卡片滑塊展示九個夢境世界。",
+    "ja": "没入感のある単一ページのパララックス・ランディング。スクロールに合わせて固定ビューポートがポータル画像をあなたに向かってズームし、入場時にカーテンが左右に開き、シーン2では弧を描くカードスライダーが9つの夢世界の目的地を見せます。",
+    "ko": "몰입형 단일 페이지 패럴랙스 랜딩: 고정된 뷰포트가 스크롤에 따라 포털 이미지를 사용자 쪽으로 확대하고, 진입 시 커튼이 양옆으로 열리며, 두 번째 장면에서는 곡선형 카드 슬라이더가 아홉 개의 꿈 세계 목적지를 펼쳐 보입니다.",
+    "de": "Immersive Single-Page-Parallax-Landingpage: Ein fixierter Viewport zoomt beim Scrollen ein Portalbild auf dich zu, beim Einstieg öffnen sich Vorhänge, und in Szene zwei enthüllt ein gebogener Karten-Slider neun Traumwelt-Ziele.",
+    "fr": "Landing parallaxe immersive en une seule page : un viewport collant zoome une image de portail vers vous au défilement, des rideaux s'écartent à l'entrée, et un carrousel de cartes en arc révèle neuf destinations oniriques dans la deuxième scène.",
+    "ru": "Иммерсивный одностраничный параллакс-лендинг: закреплённая область просмотра при прокрутке приближает изображение портала к вам, при входе раздвигаются занавесы, а во второй сцене дугообразный слайдер карточек открывает девять направлений мира грёз.",
+    "es": "Landing parallax inmersiva de una sola página: un viewport fijo acerca una imagen de portal hacia ti al desplazarte, las cortinas se abren al entrar y un carrusel de tarjetas en arco revela nueve destinos oníricos en la segunda escena.",
+    "pt-BR": "Landing parallax imersiva de página única: um viewport fixo aproxima uma imagem de portal de você conforme a rolagem, cortinas se abrem na entrada e um carrossel de cartões em arco revela nove destinos oníricos na segunda cena.",
+    "it": "Landing parallax immersiva a pagina singola: un viewport fisso ingrandisce verso di te un'immagine portale durante lo scroll, all'ingresso le tende si aprono e nella seconda scena uno slider di card ad arco svela nove destinazioni da sogno.",
+    "vi": "Trang đích parallax đắm chìm một trang: khung nhìn cố định phóng to hình ảnh cổng dịch chuyển về phía bạn khi cuộn, rèm mở ra khi vào trang, và ở cảnh hai một thanh trượt thẻ hình vòng cung hé lộ chín điểm đến của thế giới mộng mơ.",
+    "pl": "Immersyjny jednostronicowy landing z efektem parallax: przyklejony viewport przybliża obraz portalu w twoją stronę podczas przewijania, kurtyny rozsuwają się przy wejściu, a w drugiej scenie łukowy suwak kart odsłania dziewięć wymarzonych światów.",
+    "id": "Landing parallax imersif satu halaman: viewport lengket memperbesar gambar portal ke arah Anda saat menggulir, tirai membuka saat masuk, dan di adegan kedua slider kartu melengkung menampilkan sembilan destinasi dunia mimpi.",
+    "nl": "Immersieve single-page parallax-landingpagina: een vastgezette viewport zoomt bij het scrollen een portaalafbeelding naar je toe, gordijnen openen bij binnenkomst en een gebogen kaartenslider onthult in scène twee negen droomwereld-bestemmingen.",
+    "ar": "صفحة هبوط غامرة بتأثير parallax من صفحة واحدة: إطار عرض ثابت يقرّب صورة بوابة نحوك أثناء التمرير، وتنفتح الستائر عند الدخول، ويكشف منزلق بطاقات مقوّس عن تسع وجهات في عالم الأحلام في المشهد الثاني.",
+    "tr": "Sürükleyici tek sayfalık parallax açılış sayfası: sabit görünüm alanı kaydırdıkça bir portal görselini size doğru yakınlaştırır, girişte perdeler açılır ve ikinci sahnede yay biçimli bir kart kaydırıcısı dokuz rüya dünyası destinasyonunu açığa çıkarır.",
+    "uk": "Занурювальний односторінковий параллакс-лендинг: закріплена область перегляду під час прокручування наближає зображення порталу до вас, на вході розсуваються завіси, а в другій сцені дугоподібний слайдер карток розкриває дев'ять напрямків світу мрій.",
+    "en": "Immersive single-page parallax landing: a sticky viewport zooms a portal image toward you on scroll, curtains sweep open on entrance, and a curved arc card slider reveals nine dream-world destinations in scene two."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Eli"
+  },
+  "homepage": "https://motionsites.ai/sections",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "landing",
+    "parallax",
+    "cinematic",
+    "immersive"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a single-page immersive parallax landing page in React + TypeScript + Tailwind CSS using Vite. The page has two scroll-driven scenes inside a sticky viewport. Everything lives in a single `src/App.tsx` file. Use Google Fonts: Viaoda Libre (serif headings) and Imprima (sans-serif body). No external UI libraries. Use `lucide-react` only as a dependency (it is not used in this page). Use Tailwind for responsive layout breakpoints only; all other styling is inline React `CSSProperties`.\n\n---\n\n## GLOBAL SETUP\n\n`tailwind.config.js` -- Override the `xl` breakpoint to `1100px`:`screens: { xl: '1100px' }`\n\n`index.css` -- Include Tailwind directives, global reset, dark background `#0a0608`, `font-family: 'Imprima', sans-serif`, `scrollbar-gutter: stable`, and a `@keyframes bobUp` animation that translates Y by `-6px` at 50%.\n\n`index.html` -- Load Google Fonts via `<link>`:`https://fonts.googleapis.com/css2?family=Viaoda+Libre&family=Imprima&display=swap`\nTitle: \"Step Into Wonder\"\n\n---\n\n## IMAGE ASSETS (use these exact URLs)\n\n`PORTAL_BG    = \"https://plugin-assets.open-design.ai/plugins/dreamcore-landing/image_1_vdzwae-464f73.webp\"CURTAIN_LEFT = \"https://plugin-assets.open-design.ai/plugins/dreamcore-landing/curtain_left_znkmva-f9eb4c.webp\"CURTAIN_RIGHT= \"https://plugin-assets.open-design.ai/plugins/dreamcore-landing/curtain_right_paeyym-9fa947.webp\"WORLD_BG     = \"https://plugin-assets.open-design.ai/plugins/dreamcore-landing/image_2_gkcdlx-5f252f.webp\"BOTTOM_CLOUDS= \"https://plugin-assets.open-design.ai/plugins/dreamcore-landing/bottom_clouds_xskut6-c56b42.webp\"CARD_IMAGES[0] = \"https://plugin-assets.open-design.ai/plugins/dreamcore-landing/hf_20260525_160507_2ccbb4eb-1469-484f-af25-59168ad9a233-0c7429.webp&w=1280&q=85\"CARD_IMAGES[1] = \"https://plugin-assets.open-design.ai/plugins/dreamcore-landing/hf_20260525_160644_072a7f68-a101-4ded-a332-7d37707dbdd1-bfae0e.webp&w=1280&q=85\"CARD_IMAGES[2] = \"https://plugin-assets.open-design.ai/plugins/dreamcore-landing/hf_20260525_160706_1c153d04-0dfb-4ac9-a4ef-e74f301c329c-8b9d4e.webp&w=1280&q=85\"`\n\n---\n\n## SCENE 2 CARD DATA (9 cards for the arc slider)\n\n`{ title: 'Hidden Realms',   desc: 'Luminous sanctuaries unseen by wandering eyes',  color: '#f3cdd6' }{ title: 'Wild Solitudes',  desc: 'Dissolve into untamed horizons and deep calm',   color: '#dcedc2' }{ title: 'Silent Havens',   desc: 'Remote escapes far beyond ordinary reach',       color: '#c3e3f4' }{ title: 'Bespoke Quests',  desc: 'Journeys shaped around your vision and soul',    color: '#f0e4c0' }{ title: 'Vivid Drifts',    desc: 'Surreal passages through breathtaking terrain',  color: '#dcd2f2' }{ title: 'Mystic Crests',   desc: 'Timeless ridgelines wrapped in cloud and myth',  color: '#f3cdd6' }{ title: 'Deep Currents',   desc: 'Glowing depths alive with uncharted wonder',     color: '#c3e3f4' }{ title: 'Gilded Dusk',     desc: 'Amber horizons that stretch past all reason',    color: '#f0e4c0' }{ title: 'Glassy Tides',    desc: 'Calm waters holding skies of pure stillness',    color: '#dcedc2' }`\n\n---\n\n## ARCHITECTURE\n\nThe outer container is `height: 480vh; position: relative`. Inside it is a `position: sticky; top: 0; height: 100vh; overflow: hidden; background: #0a0608` viewport. All layers stack via absolute positioning and z-index.\n\nScroll progress = `window.scrollY / (container.scrollHeight - window.innerHeight)`, clamped 0-1.\n\nHelper functions:\n- `easeInOut(t)`: quadratic ease `t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t`\n- `lerp(a, b, t)`: linear interpolation\n- `clamp(val, min, max)`\n\n`useIsMobile()` hook: `matchMedia('(max-width: 767px)')` -- returns boolean.\n\n---\n\n## LAYER STACK (bottom to top by z-index)\n\n## Layer 1: World Background (z-index: auto/0)\n\n- `ref={worldRef}`, absolute inset 0, `transformOrigin: '50% 50%'`\n- `WORLD_BG` image, `object-fit: cover`\n- Parallax: `scale(lerp(1, 1.18, ep))`, mouse offset `MAG.world = 6`\n\n## Layer 2: Bottom Clouds (z-index: 10)\n\n- `ref={cloudsRef}`, absolute bottom:0, left:0, right:0, `transformOrigin: '50% 100%'`\n- `BOTTOM_CLOUDS` image, `width: 100%, height: auto`\n- Parallax: `scale(lerp(1, 1.4, ep))`, mouse offset `MAG.clouds = 9` (Y dampened to `0.4x`)\n- Opacity: fades from 0.7 to 1 in the first 5% of scroll\n\n## Layer 2.5: Arc Card Slider (z-index: 9)\n\n- Absolute, `bottom: 60px (mobile) / 80px (desktop)`, centered horizontally\n- Opacity = `scene2Opacity`\n- Contains `<ArcCardSlider>` component (details below)\n\n## Layer 3: Portal Frame (z-index: 15)\n\n- `ref={portalRef}`, absolute inset 0, `transformOrigin: '52% 38%'`\n- `PORTAL_BG` image, `object-fit: cover`\n- Parallax: `scale(lerp(1, 7.5, ep))`, mouse offset `MAG.portal = 7`\n- Opacity: 1 until scroll 0.65, then fades to 0 by scroll 0.85\n\n## Layer 3.5: Bottom Fade (z-index: 16)\n\n- Absolute bottom, `height: 40%`, `linear-gradient(to top, rgba(0,0,0,0.45) 0%, transparent 100%)`, `pointer-events: none`\n\n## Layer 4L: Curtain Left (z-index: 16)\n\n- `ref={curtainLRef}`, absolute inset 0, `transformOrigin: 'left center'`\n- `CURTAIN_LEFT` image, `object-fit: cover`, `object-position: right center`\n- On mount (after 100ms), shifts left by `translateX(-62%)` with `transition: transform 1.8s cubic-bezier(0.16, 1, 0.3, 1)`\n- On scroll: additional `translateX` via `lerp(0, 150, ep)%`, scale `lerp(1, 1.3, ep)`\n- Mouse offset: `MAG.curtainL = 14` (Y dampened to `0.3x`)\n- After entrance animation (2200ms), transition switches to `none` for responsive parallax\n\n## Layer 4R: Curtain Right (z-index: 16)\n\n- Mirror of Layer 4L but `transformOrigin: 'right center'`, `object-position: left center`\n- Shifts right instead of left, `MAG.curtainR = 14`\n\n## Top Fade Gradient (z-index: 45)\n\n- Absolute top, `height: 42vh`, `linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, transparent 100%)`, `pointer-events: none`\n\n---\n\n## NAVIGATION (z-index: 50)\n\nAbsolute top, full width, `display: flex, justify-content: space-between, align-items: center`.\n\nNav link style: `font-family: 'Imprima', sans-serif`, `font-size: 12px`, `letter-spacing: 0.12em`, `text-transform: uppercase`, `color: #fff`, `opacity: 0.9`, no text decoration.\n\nMobile (`padding: 18px 20px`): Three items -- \"Explore\" (11px) | StarLogo SVG | \"Connect\" (11px)\n\nDesktop (`padding: 22px 48px`): Left group [\"Worlds\", \"Atelier\", \"Immersions\"] with `gap: 36px` | StarLogo SVG center | Right group [\"Craft\", \"Codex\", \"Connect\"] with `gap: 36px`\n\nStarLogo -- inline SVG, 28x28, white star path + 3 small circles:`<path d=\"M14 2l2.09 6.42H23l-5.45 3.96 2.09 6.42L14 14.84l-5.64 4.06 2.09-6.42L4.96 8.42h6.95L14 2z\" fill=\"white\" opacity=\"0.9\" /><circle cx=\"14\" cy=\"24\" r=\"1.5\" fill=\"white\" opacity=\"0.6\" /><circle cx=\"6\" cy=\"6\" r=\"1\" fill=\"white\" opacity=\"0.4\" /><circle cx=\"22\" cy=\"6\" r=\"1\" fill=\"white\" opacity=\"0.4\" />`\n\n---\n\n## SCENE 1 UI (z-index: 20)\n\nOpacity = `clamp(1 - scrollProgress / 0.22, 0, 1)`. Fades out in first ~22% of scroll.\n\nUses three separate Tailwind-responsive layout blocks (not JS branching for layout):\n\n## Mobile layout (`md:hidden`)\n\n- Centered column, `padding: 80px 24px 100px`\n- Fade-in: `opacity 0.9s ease, transform 0.9s ease`, delay `0.3s`, triggers on `uiVisible`\n- Heading (Viaoda Libre): \"FALL > INTO\" line (`clamp(26px, 7vw, 42px)`, `tracking-widest`, color `#3b1a0a`) then \"REVERIE\" (`clamp(52px, 16vw, 80px)`, `tracking-tight`, `leading-none`, color `#3b1a0a`). The \">\" is a `›` character in color `#6b2e0e` at `0.8em`. \"INTO\" is italic.\n- Subtext (Imprima): \"Crafting boundless digital worlds where the edge between AI, vision, and living myth dissolves.\" -- `15px`, `leading-relaxed`, color `#5c2d0e`, `max-width: 280px`\n- Single card: 140x140px, `border-radius: 22px`, `CARD_IMAGES[0]` as background-cover, `box-shadow: 0 8px 32px rgba(0,0,0,0.5)`. Bottom gradient overlay (60% height). Bottom-left overlay: white circle (26px) with play triangle SVG + \"View Reel\" text (13px, white).\n\n## Tablet layout (`hidden md:flex xl:hidden`)\n\n- Centered column, `gap: 28px`, `padding: 80px 32px 96px`\n- Same fade-in animation as mobile\n- Heading: same structure as mobile but dark brown text (`#3b1a0a`), sizes `clamp(28px, 5vw, 44px)` / `clamp(60px, 12vw, 86px)`\n- Subtext: same text, `16px`, color `#5c2d0e`, `max-width: 400px`\n- Three cards in a row (`flex gap-3.5`): each 140x140px, `border-radius: 22px`. Each has:\n- Background gradient overlay (60% height, multi-stop)\n- Backdrop blur layer (44% height, masked gradient)\n- Card 1: play button + \"View Reel\"\n- Card 2: number \"32\" (Viaoda Libre, 28px, white) + \"World Patrons\"\n- Card 3: play button + \"View Reel\"\n\n## Desktop layout (`hidden xl:block` / `hidden xl:flex`)\n\n- Heading block: absolute, `top: 46%`, `left: 60px`, `maxWidth: 440px`, `translateY(-50%)` centered\n- White text with heavy `text-shadow: 0 2px 24px rgba(0,0,0,0.7), 0 1px 4px rgba(0,0,0,0.9)`\n- \"FALL > INTO\": `clamp(32px, 4.5vw, 54px)`, `line-height: 1.1`, `letter-spacing: 0.04em`. The `>` is `rgba(255,220,180,0.7)`.\n- \"REVERIE\": `clamp(50px, 7.5vw, 88px)`, `line-height: 0.9`, `letter-spacing: -0.02em`\n- Subtext: `18px`, `line-height: 1.7`, color `rgba(255,245,235,0.88)`, `max-width: 300px`, `text-shadow: 0 1px 12px rgba(0,0,0,0.8)`\n- Fade-in: opacity+transform, delay `0.3s`\n\n- Cards block: absolute, `right: 40px`, `top: 50%`, `translateY(-50%)`, `flex gap: 12px`\n- Three cards, each 158x158px, `border-radius: 28px`, `box-shadow: 0 8px 32px rgba(0,0,0,0.45)`\n- Each has: gradient overlay, backdrop blur layer (same as tablet), bottom content area at 12px inset\n- Play cards: 30px white circle + 18px \"View Reel\"\n- Number card: \"32\" at 36px Viaoda Libre + 18px \"World Patrons\"\n- Fade-in delay: `0.55s`\n\n## Slider Dots (bottom of Scene 1)\n\n- Absolute, bottom `28px (mobile, centered)` / `40px (desktop, left: 60px)`\n- 4 dots: first is `28px wide`, rest `14px`, all `4px tall`, `border-radius: 2px`\n- Active dot: `rgba(255,255,255,0.9)`, inactive: `rgba(255,255,255,0.35)`\n- Fade-in delay: `0.8s`\n\n## Scroll Cue (desktop only)\n\n- Absolute `bottom: 36px`, centered\n- \"DESCEND\" text: `10px`, `letter-spacing: 0.22em`, uppercase, `rgba(255,255,255,0.6)`\n- Below: `ScrollChevron` -- 34px circle with 1.5px border `rgba(255,255,255,0.5)`, chevron SVG inside, `animation: bobUp 1.8s ease-in-out infinite`\n- Fade-in delay: `0.9s`\n\n---\n\n## SCENE 2 UI (z-index: 46)\n\nOpacity = `clamp((scrollProgress - 0.68) / 0.16, 0, 1)`. Fades in between scroll 68%-84%.\n\n- Centered column\n- Heading (Viaoda Libre): \"FORGE BEYOND THE REAL\" -- `clamp(28px, 8vw, 44px) mobile / clamp(38px, 6.5vw, 78px) desktop`, white, `letter-spacing: 0.03em`, `line-height: 1.05`, `text-shadow: 0 2px 20px rgba(0,0,0,0.4)`\n- Subtext (Imprima): \"Singular voyages to astonishing destinations, shaped for those who seek beauty beyond the ordinary and the known.\" -- `14px mobile / 20px desktop`, `line-height: 1.6`, `letter-spacing: -0.01em`, `max-width: 260px mobile / 480px desktop`, color `rgba(255,255,255,0.82)`\n- Margin-top: `8vh mobile / 12vh desktop`\n\n---\n\n## ARC CARD SLIDER COMPONENT\n\nProps: `cards[]`, `rotationOffset: number`, `isMobile: boolean`\n\nLayout math:\n- `cardSpacingDeg`: 12 (mobile) / 9 (desktop) degrees between cards\n- `centerIndex`: `Math.floor(totalCards / 2)`\n- `arcRadius`: 700 (mobile) / 1100 (desktop) px\n- `cardW`: 160 (mobile) / 220 (desktop) px\n- `cardH`: 175 (mobile) / 230 (desktop) px\n- `sliderH`: 260 (mobile) / 360 (desktop) px\n\n`rotationOffset` is driven by scroll: `lerp(0, arcSweepDeg, clamp((scrollProgress - 0.70) / 0.30, 0, 1))` where `arcSweepDeg = (totalCards - 1) * 10`.\n\nPer card positioning:`baseDeg = (i - centerIndex) * cardSpacingDegdeg     = baseDeg - rotationOffset + (centerIndex * cardSpacingDeg)rad     = deg * PI / 180x       = sin(rad) * arcRadiusy       = arcRadius - cos(rad) * arcRadius`\nEach card is absolutely positioned at `bottom: -y + (140 mobile / 200 desktop)px`, `left: calc(50% + x - halfW)`, `transform: rotate(deg)`, `transformOrigin: halfW arcRadius`.\n\nCard appearance:\n- Rounded rect (`18px mobile / 26px desktop`), background = `card.color` (pastel)\n- `box-shadow: 0 8px 40px rgba(80,40,60,0.18)`\n- Top-right: numbered circle (24px, `1.5px border rgba(80,50,60,0.3)`, text `rgba(80,50,60,0.6)`, 10px Imprima) showing zero-padded index\n- Bottom: card title in Viaoda Libre (`22px mobile / 30px`, color `#3a2530`) + description in Imprima (`12px mobile / 15px`, color `rgba(58,37,48,0.65)`)\n\n---\n\n## ENTRANCE ANIMATION SEQUENCE\n\n- t=100ms: Curtains open -- `curtainsOpenRef` flips to true, causing 62% horizontal shift on each curtain with `1.8s cubic-bezier(0.16, 1, 0.3, 1)` transition\n- t=600ms: `uiVisible` = true -- all Scene 1 UI elements fade/slide in with staggered delays (0.3s heading, 0.55s cards, 0.8s dots, 0.9s scroll cue)\n- t=2200ms: `entranceDone` = true -- curtain CSS transition switches to `none` so parallax is instant\n\n---\n\n## MOUSE PARALLAX (desktop)\n\n`requestAnimationFrame` loop smooths raw mouse position at `speed = 0.07` (lerp). Each layer is offset by its `MAG` value in the reverse direction of the mouse. The transforms combine mouse offset with scroll-driven scale/translate.\n\nMAG values: world=6, clouds=9, portal=7, curtainL=14, curtainR=14\n",
+        "zh-CN": "构建梦核风格的沉浸式视差落地页（详见 en 字段的完整规格说明，以 en 为准）。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Dreamcore Landing — Parallax Portal Hero"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "network"
+    ]
+  }
+}
