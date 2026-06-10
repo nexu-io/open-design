@@ -6842,8 +6842,8 @@ export async function startServer({
   // The vela CLI owns the device-authorization UX (URL + code + browser open);
   // these routes only surface enough state for Open Design's Settings card to
   // show login status and trigger a login from a button.
-  async function resolveAmrModelProbe(req) {
-    const appConfig = await readAppConfig(runtimeDataDirFor(req));
+  async function resolveAmrModelProbeForDataDir(dataDir) {
+    const appConfig = await readAppConfig(dataDir);
     const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
     const def = getAgentDef('amr');
     if (!def) throw new Error('AMR runtime definition is missing');
@@ -6874,6 +6874,10 @@ export async function startServer({
       credentialRevision,
     });
     return { launchPath, env, configuredEnv, cacheKey };
+  }
+
+  async function resolveAmrModelProbe(req) {
+    return resolveAmrModelProbeForDataDir(runtimeDataDirFor(req));
   }
 
   app.get('/api/amr/models', async (req, res) => {
@@ -12408,7 +12412,7 @@ export async function startServer({
       // of fail-closing; vela's own `session/set_model` remains the final gate.
       let liveModels = [];
       try {
-        const probe = await resolveAmrModelProbe();
+        const probe = await resolveAmrModelProbeForDataDir(runtimeDataDir);
         const catalog = await amrModelLoadingCache.get(probe.cacheKey, {
           fetchPreset: () => fetchVelaPresetModels(probe.launchPath, probe.env),
           fetchRemote: () => fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
