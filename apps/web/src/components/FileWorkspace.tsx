@@ -2913,7 +2913,7 @@ function isDesignSystemReviewArtifactFile(
   if (isDesignSystemRawAssetFile(path)) return isDesignSystemReviewableAssetArtifact(path);
   if (path === 'index.html') return true;
   if (path.startsWith('preview/') || path.includes('/preview/')) return true;
-  if (path.startsWith('ui_kits/') || path.includes('/ui_kits/')) return true;
+  if (isDesignSystemUiKitFile(path)) return true;
   return false;
 }
 
@@ -2924,8 +2924,7 @@ function isDesignSystemRawAssetFile(path: string): boolean {
     || path.includes('/assets/')
     || path.includes('/src/assets/')
     || path.includes('/fonts/')
-    || path.includes('/logos/')
-    || DESIGN_SYSTEM_IMAGE_OR_FONT_EXTENSIONS.test(path);
+    || path.includes('/logos/');
 }
 
 function isDesignSystemReviewableAssetArtifact(path: string): boolean {
