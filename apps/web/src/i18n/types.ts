@@ -401,8 +401,6 @@ export interface Dict {
   'settings.privacyMetricsHint': string;
   'settings.privacyContent': string;
   'settings.privacyContentHint': string;
-  'settings.privacyArtifacts': string;
-  'settings.privacyArtifactsHint': string;
   'settings.privacyInstallationId': string;
   'settings.privacyOptedOut': string;
   'settings.privacyDataDeletion': string;

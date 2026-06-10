@@ -643,8 +643,7 @@ export async function buildTraceObjectManifests(
 ): Promise<TraceObjectUploadManifests | undefined> {
   if (
     opts.prefs.metrics !== true ||
-    opts.prefs.content !== true ||
-    opts.prefs.artifactManifest !== true
+    opts.prefs.content !== true
   ) {
     return undefined;
   }

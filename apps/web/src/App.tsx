@@ -2202,7 +2202,7 @@ function AppInner() {
               ...latestPersistedConfigRef.current,
               installationId,
               privacyDecisionAt: Date.now(),
-              telemetry: { metrics: true, content: true, artifactManifest: false },
+              telemetry: { metrics: true, content: true },
             });
           }}
         />

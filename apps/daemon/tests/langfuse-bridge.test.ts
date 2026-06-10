@@ -1451,14 +1451,10 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(generation.model).toBe('default');
   });
 
-  it('omits artifacts when that gate is off', async () => {
+  it('includes artifacts when content telemetry is on', async () => {
     await writeAppCfg({
       installationId: 'install-1',
-      telemetry: {
-        metrics: true,
-        content: true,
-        artifactManifest: false,
-      },
+      telemetry: { metrics: true, content: true },
     });
     const messages: FakeMessage[] = [
       {
@@ -1488,7 +1484,9 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     const trace = JSON.parse(init.body as string).batch[0].body;
     expect(trace.input).toBe('design a coffee landing page');
     expect(trace.output).toBe('sensitive output');
-    expect(trace.metadata.artifacts).toBeUndefined();
+    expect(trace.metadata.artifacts).toEqual([
+      { slug: 'secret.html', type: 'html', sizeBytes: 1 },
+    ]);
     // tokens + eventsSummary are still in metadata since they're metrics
     expect(trace.metadata.tokens).toEqual({
       input: 100,

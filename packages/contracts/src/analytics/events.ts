@@ -2219,11 +2219,9 @@ export interface SettingsPrivacyClickProps {
   element:
     | 'anonymous_metrics'
     | 'conversation_and_tool_content'
-    | 'project_artifacts_manifest'
     | 'delete_my_data';
   anonymous_metrics_status?: 'on' | 'off';
   conversation_and_tool_content_status?: 'on' | 'off';
-  project_artifacts_manifest_status?: 'on' | 'off';
 }
 
 export interface SettingsDesignReviewClickProps {
