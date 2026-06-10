@@ -99,7 +99,12 @@ async function lastSuccessfulRunStart(): Promise<string | null> {
   const repo = process.env.GITHUB_REPOSITORY;
   if (!token || !repo) return null;
   const currentRunId = process.env.GITHUB_RUN_ID;
-  const url = `https://api.github.com/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/runs?status=success&per_page=10`;
+  // Scope to this run's ref so only the canonical digest branch (main, for the
+  // schedule) advances its own watermark. Without this, a successful
+  // workflow_dispatch run on a feature branch could become main's watermark and
+  // permanently skip the range that branch run "covered".
+  const branch = process.env.GITHUB_REF_NAME ?? 'main';
+  const url = `https://api.github.com/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/runs?status=success&branch=${encodeURIComponent(branch)}&per_page=10`;
   const res = await fetch(url, {
     headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json' },
   });
