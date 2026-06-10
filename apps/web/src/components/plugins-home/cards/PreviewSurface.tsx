@@ -24,9 +24,13 @@ interface Props {
 }
 
 export function PreviewSurface({ pluginId, pluginTitle, preview, eager = false }: Props) {
-  // Three nested visibility zones for a baked clip:
+  const usesBakedClipKeepalive =
+    preview.kind === 'media' && preview.mediaType === 'video' && preview.loopHoldMs != null;
+  // Visibility zones:
   //  - `inView` (tight): mount cheap-but-live content — iframes, design surfaces.
   //    Kept tight so a 350-plugin gallery never spins up dozens of live iframes.
+  //  - `mediaReady` (medium): fetch cheap media posters a little earlier than
+  //    live content, without widening iframe/design-system work.
   //  - `keep` (wide): keep the <video> + poster MOUNTED across a few screens, so
   //    scrolling away and back doesn't remount + reload the clip. The bytes are
   //    HTTP-cached (immutable), but a fresh <video> still re-fetches metadata and
@@ -38,6 +42,10 @@ export function PreviewSurface({ pluginId, pluginTitle, preview, eager = false }
     rootMargin: eager ? '480px' : '120px',
     once: false,
   });
+  const { ref: mediaRef, inView: mediaReady } = useInView<HTMLDivElement>({
+    rootMargin: eager ? '720px' : '360px',
+    once: false,
+  });
   const { ref: keepRef, inView: keep } = useInView<HTMLDivElement>({
     rootMargin: eager ? '1800px' : '1500px',
     once: false,
@@ -46,13 +54,17 @@ export function PreviewSurface({ pluginId, pluginTitle, preview, eager = false }
     rootMargin: '0px',
     once: false,
   });
+  // The prefetch zone (warm the full clip a row ahead) lives inside MediaSurface
+  // so only baked-clip cards pay for that observer — html/design/text/plain-video
+  // tiles can never upgrade `preload`, so they must not rerender on its threshold.
   const setRef = useCallback(
     (node: HTMLDivElement | null) => {
       nearRef.current = node;
+      mediaRef.current = node;
       keepRef.current = node;
       visibleRef.current = node;
     },
-    [nearRef, keepRef, visibleRef],
+    [nearRef, mediaRef, keepRef, visibleRef],
   );
 
   return (
@@ -65,7 +77,7 @@ export function PreviewSurface({ pluginId, pluginTitle, preview, eager = false }
         <MediaSurface
           preview={preview}
           pluginTitle={pluginTitle}
-          inView={keep}
+          inView={usesBakedClipKeepalive ? keep : mediaReady}
           visible={visible}
         />
       ) : preview.kind === 'html' ? (
