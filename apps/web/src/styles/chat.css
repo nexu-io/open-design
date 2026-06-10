@@ -757,6 +757,9 @@
   align-items: flex-start;
 }
 .msg.error[data-error-expanded='true'] .chat-error-text {
+  /* The span is already blockified as a flex item of .msg.error; keep the
+     scroll container explicit so the 240px cap survives layout refactors. */
+  display: block;
   max-height: 240px;
   overflow: auto;
   white-space: pre-wrap;
