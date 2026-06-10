@@ -2910,19 +2910,26 @@ function isDesignSystemReviewArtifactFile(
   if (!file || isDesignSystemEvidenceFile(path) || path === 'metadata.json') return false;
   const isRenderable = file.kind === 'html' || file.kind === 'image' || file.kind === 'sketch';
   if (!isRenderable) return false;
+  if (isDesignSystemRawAssetFile(path)) return isDesignSystemReviewableAssetArtifact(path);
   if (path === 'index.html') return true;
   if (path.startsWith('preview/') || path.includes('/preview/')) return true;
   if (path.startsWith('ui_kits/') || path.includes('/ui_kits/')) return true;
-  if (
-    path.startsWith('assets/')
+  return false;
+}
+
+function isDesignSystemRawAssetFile(path: string): boolean {
+  return path.startsWith('assets/')
     || path.startsWith('src/assets/')
     || path.startsWith('public/')
     || path.includes('/assets/')
+    || path.includes('/src/assets/')
+    || path.includes('/fonts/')
     || path.includes('/logos/')
-  ) {
-    return /\b(brand|logo|mark|icon)\b/u.test(path) || DESIGN_SYSTEM_IMAGE_OR_FONT_EXTENSIONS.test(path);
-  }
-  return false;
+    || DESIGN_SYSTEM_IMAGE_OR_FONT_EXTENSIONS.test(path);
+}
+
+function isDesignSystemReviewableAssetArtifact(path: string): boolean {
+  return /\b(brand|logo|logos|mark|wordmark|icon)\b/u.test(path);
 }
 
 function designSystemReviewArtifactSort(first: string, second: string): number {
@@ -2952,7 +2959,7 @@ function inferDesignSystemReviewCategory(name: string, title: string): DesignSys
   if (/\b(type|typography|font|text)\b/u.test(text)) return 'Type';
   if (/\b(color|colors|palette|theme)\b/u.test(text)) return 'Colors';
   if (/\b(space|spacing|radius|layout-grid)\b/u.test(text)) return 'Spacing';
-  if (/\b(brand|logo|logos|mark|wordmark|icon)\b/u.test(text)) return 'Brand';
+  if (/\b(brand|logo|logos|mark|wordmark|icon|favicon)\b/u.test(text)) return 'Brand';
   return 'Components';
 }
 
@@ -2964,6 +2971,7 @@ function designSystemReviewSubtitle(title: string, category: DesignSystemReviewC
   if (text.includes('ui-palette') || text.includes('palette')) return 'Interface color palette';
   if (text.includes('dark')) return 'Dark theme color palette';
   if (text.includes('spacing') || text.includes('radius')) return 'Spacing scale and border radius tokens';
+  if (text.includes('favicon')) return 'Brand app icon and favicon';
   if (text.includes('logo') || text.includes('brand')) return 'Brand logo marks';
   if (text.includes('interface') || text.includes('ui')) return 'Interface and component patterns';
   switch (category) {
@@ -3125,6 +3133,7 @@ function isDesignSystemPreviewFile(name: string): boolean {
 function isDesignSystemUiKitFile(name: string): boolean {
   const path = normalizeDesignSystemPath(name);
   if (isDesignSystemEvidenceFile(path)) return false;
+  if (isDesignSystemRawAssetFile(path)) return false;
   return path.startsWith('ui_kits/')
     || path.startsWith('src/components/')
     || path.startsWith('components/')
