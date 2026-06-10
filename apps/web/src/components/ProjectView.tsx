@@ -5768,6 +5768,7 @@ export function ProjectView({
                 config={config}
                 onThemeChange={handleThemeChange}
                 onOpenSettings={onOpenSettings}
+                trackingPageName="artifact"
                 onTrackTriggerClick={() => {
                   // Spec row 52: the settings gear in the artifact header.
                   // Carry the active artifact so settings slices line up with

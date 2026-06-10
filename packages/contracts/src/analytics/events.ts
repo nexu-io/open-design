@@ -22,6 +22,7 @@ export type AnalyticsEventName =
   // Project lifecycle
   | 'project_create_result'
   | 'plugin_replacement_result'
+  | 'plugin_import_result'
   // Run lifecycle (daemon authoritative)
   | 'run_created'
   | 'run_finished'
@@ -1050,20 +1051,55 @@ export interface ExecutionSettingsPopoverClickProps {
     | 'mode_local_cli'
     | 'mode_byok'
     | 'agent_card'
+    // BYOK provider protocol tab inside the popover (Anthropic / OpenAI /
+    // Azure / Google / AIHubMix). Mirrors Settings'
+    // `byok_provider_option` so mode-switch funnels line up.
+    | 'byok_provider_tab'
     | 'model_dropdown'
     | 'open_execution_settings';
+  // `agent_card`: which CLI agent row was picked, normalized via
+  // `agentIdToTracking` (never the raw kebab-case daemon id).
+  cli_provider_id?: TrackingCliProviderId;
+  // `byok_provider_tab` / BYOK `model_dropdown`: the protocol tab, mapped via
+  // `byokProtocolToTracking`; omitted when the protocol is outside the v2
+  // catalogue (e.g. aihubmix) so an unmapped value never ships.
+  provider_id?: TrackingByokProviderId;
+  // `model_dropdown`: the picked model id (`modelIdForTracking`).
+  model_id?: string;
+  // `model_dropdown`: which mode's dropdown was used.
+  execution_mode?: TrackingExecutionMode;
 }
 
+// Items inside the header gear settings popover (EntrySettingsMenu): the
+// interface-language select, the appearance (system/light/dark) radio row,
+// the "Share Open Design" social grid, the Discord / follow-on-X links and
+// the Settings → details entry. The same popover is mounted both on the home
+// header and the in-project artifact header, hence the two-value page_name.
 export interface SettingsPopoverClickProps {
-  page_name: 'home';
+  page_name: 'home' | 'artifact';
   area: 'settings_popover';
   element:
-    | 'follow_x'
-    | 'join_discord'
-    | 'language'
+    | 'language_select'
     | 'appearance'
-    | 'use_everywhere'
-    | 'settings';
+    | 'share_channel'
+    | 'join_discord'
+    | 'follow_x'
+    | 'open_settings';
+  // element=language_select → snake_cased locale (e.g. en, zh_cn, pt_br);
+  // element=appearance → system | light | dark.
+  value?: string;
+  // element=share_channel only — which social network was clicked.
+  channel?:
+    | 'x'
+    | 'linkedin'
+    | 'facebook'
+    | 'reddit'
+    | 'telegram'
+    | 'whatsapp'
+    | 'weibo'
+    | 'line'
+    | 'instagram'
+    | 'xiaohongshu';
 }
 
 export interface HomeChatComposerClickProps {
@@ -1285,7 +1321,6 @@ export interface PluginsTopClickProps {
   element:
     | 'create_plugin'
     | 'import_plugin'
-    | 'agent_context'
     | 'installed_tab'
     | 'available_tab'
     | 'sources_tab'
@@ -1335,6 +1370,21 @@ export interface PluginsSourcesTabClickProps {
   plugin_type?: string;
 }
 
+// The plugin import modal's three intake paths (the source tabs):
+// github = the "From GitHub" source-string flow, zip / folder = archive or
+// directory upload. ImportKind in PluginsView.tsx uses the same literals.
+export type TrackingPluginImportSource = 'github' | 'zip' | 'folder';
+
+// "Import a plugin" modal opened from the Plugins page header.
+export interface PluginImportModalClickProps {
+  page_name: 'plugins';
+  area: 'import_modal';
+  element: 'source_tab' | 'import' | 'cancel';
+  // For `source_tab` the tab being selected; for `import` the active intake
+  // path the import runs through. Omitted for `cancel`.
+  import_source?: TrackingPluginImportSource;
+}
+
 export interface PluginDetailClickProps {
   page_name: 'plugins';
   area: 'plugin_detail';
@@ -1365,6 +1415,46 @@ export interface CommunityGalleryClickProps {
   plugin_id?: string;
   plugin_type?: string;
   action?: 'use' | 'use_with_query';
+}
+
+// HOME — clicks inside the plugin detail modal opened from the Community
+// gallery (the surface PluginDetailModalSurfaceViewProps measures).
+// `use_plugin` is the primary CTA face (action 'use'); `use_plugin_dropdown`
+// is the split-menu "Replicate this content" variant (action 'use-with-query');
+// `close` covers the close button, Esc and the backdrop. plugin_id /
+// plugin_type mirror CommunityGalleryClickProps so the gallery → modal → use
+// funnel joins on the same keys.
+export interface PluginDetailModalClickProps {
+  page_name: 'home';
+  area: 'plugin_detail_modal';
+  element: 'use_plugin' | 'use_plugin_dropdown' | 'close';
+  plugin_id?: string;
+  plugin_type?: string;
+}
+
+// HOME — the merged Share popover inside the plugin detail modal
+// (PreviewModal chrome). Element values mirror design_systems'
+// templates_modal_share_popover vocabulary: social intents, copy actions,
+// then file exports.
+export interface PluginDetailModalSharePopoverClickProps {
+  page_name: 'home';
+  area: 'plugin_detail_share_popover';
+  element:
+    | 'x'
+    | 'reddit'
+    | 'facebook'
+    | 'linkedin'
+    | 'instagram'
+    | 'xiaohongshu'
+    | 'copy_link'
+    | 'copy_share_text'
+    | 'pdf'
+    | 'zip'
+    | 'html'
+    | 'image'
+    | 'open_in_new_tab';
+  plugin_id?: string;
+  plugin_type?: string;
 }
 
 // DESIGN SYSTEMS
@@ -1407,6 +1497,26 @@ export interface DesignSystemsTemplatesModalSharePopoverClickProps {
   templates_type?: string;
 }
 
+// Form-level intent clicks on the standalone /design-systems/create
+// setup form ("Generate from your material"). The embedded onboarding
+// variant is excluded — EntryShell/onboarding owns its own
+// area=design_system clicks (same gating as the DS create page_view
+// and the DS file_upload_result).
+export interface DesignSystemsCreateClickProps {
+  page_name: 'design_systems';
+  area: 'design_system_create';
+  element:
+    | 'github_repo_add'
+    | 'show_access_methods'
+    | 'browse_folder'
+    | 'upload_fig'
+    | 'add_assets'
+    | 'continue_to_generation'
+    | 'back';
+  // State *after* the toggle; only sent with element=show_access_methods.
+  methods_expanded?: boolean;
+}
+
 // INTEGRATIONS
 export interface IntegrationsTabClickProps {
   page_name: 'integrations';
@@ -1414,10 +1524,24 @@ export interface IntegrationsTabClickProps {
   element: 'mcp' | 'connectors' | 'skills' | 'use_everywhere';
 }
 
+// Shared element vocabulary for the External MCP panel. McpClientSection
+// renders on two surfaces (Settings -> External MCP, Integrations -> MCP
+// tab); both click payloads draw from this enum so funnels line up.
+export type TrackingExternalMcpElement =
+  | 'add_server'
+  | 'pick_template'
+  | 'pick_blank'
+  | 'remove_server'
+  | 'saved';
+
 export interface IntegrationsMcpTabClickProps {
   page_name: 'integrations';
   area: 'mcp_tab';
-  element: 'add_server' | 'saved';
+  element: TrackingExternalMcpElement;
+  // Catalog template id (hyphens mapped to underscores). Set for
+  // `pick_template`, and for `remove_server` when the removed row came
+  // from a template. Omitted for blank/custom rows.
+  template_id?: string;
 }
 
 export interface IntegrationsConnectorsTabClickProps {
@@ -1570,6 +1694,35 @@ export interface NextStepActionClickProps {
   chip_id?: string;
 }
 
+// Studio Questions tab discovery form (the agent-emitted <question-form>
+// rendered in the right-hand panel before generation starts). The form body
+// is model-generated JSON, so chips are question options, not fixed UI:
+//   - `task_type_chip`: a pick on the `taskType` radio (Prototype / Live
+//     artifact / Slide deck / Image / Video / HyperFrames / Audio / Other).
+//   - `brand_bg_chip`: a pick on the `brand` radio (pick_direction /
+//     brand_spec / reference_match).
+//   - `skip`: the Skip button or the auto-continue countdown elapsing
+//     (`skip_source` says which). The countdown honours any picks the user
+//     made, so skip also carries the counts.
+//   - `submit`: the Continue CTA (or the form's own submit).
+// `chip_id` / `form_id` are normalized via `questionsFormTrackingId`
+// ("Live artifact" → "live_artifact"; non-latin localized labels → "unknown").
+export interface QuestionsFormClickProps {
+  page_name: 'chat_panel';
+  area: 'questions_form';
+  element: 'task_type_chip' | 'brand_bg_chip' | 'skip' | 'submit';
+  // task_type_chip / brand_bg_chip only: the picked option value, snake_case.
+  chip_id?: string;
+  // skip only: user pressed the button vs the countdown elapsed.
+  skip_source?: 'button' | 'countdown';
+  // skip / submit: questions carrying a non-empty answer vs left blank.
+  answered_count?: number;
+  skipped_count?: number;
+  // 'task_type' (single-shot default-router brief) | 'discovery' | other.
+  form_id?: string;
+  project_id: string;
+}
+
 // Hosted-AMR nudge shown under a non-AMR agent's model/auth/quota failure.
 // `go_amr` is the link that opens https://open-design.ai/amr.
 export interface RunFailedToastClickProps {
@@ -1626,6 +1779,19 @@ export interface ChatPanelResourcesPopoverClickProps {
     | 'customize_in_settings';
 }
 
+// Actions on the queued-send strip ("N queued · to send") that sits above
+// the chat composer while a run is in flight: re-open a queued prompt in the
+// composer (`edit`), promote it to send immediately (`send_now`), or drop it
+// from the queue (`delete`). `queue_length` is the queue size at click time,
+// before the action applies.
+export interface ChatPanelMessageQueueClickProps {
+  page_name: 'chat_panel';
+  area: 'message_queue';
+  element: 'edit' | 'send_now' | 'delete';
+  project_id: string;
+  queue_length: number;
+}
+
 // FILE MANAGER
 export interface FileManagerClickProps {
   page_name: 'file_manager';
@@ -1660,6 +1826,41 @@ export interface TabLauncherClickProps {
   project_id?: string;
 }
 
+// REFERENCE BOARD — the Design browser's blank-tab start page: a curated
+// catalogue of reference sites with category filter chips, a search box,
+// and per-site Open buttons. `category_id` mirrors `REFERENCE_GROUPS[].id`
+// in DesignBrowserPanel plus the synthetic `all` chip; `site_id` is the
+// site hostname slugged to snake_case with the TLD dropped
+// (`dribbble.com` → `dribbble`, `land-book.com` → `land_book`,
+// `fonts.google.com` → `fonts_google`).
+export type TrackingReferenceBoardCategory =
+  | 'all'
+  | 'inspiration'
+  | 'interfaces'
+  | 'motion'
+  | 'color'
+  | 'type'
+  | 'icons'
+  | 'illustration'
+  | 'photography'
+  | '3d'
+  | 'mockups'
+  | 'systems'
+  | 'components'
+  | 'guidelines'
+  | 'tools';
+
+export interface ReferenceBoardClickProps {
+  page_name: 'file_manager';
+  area: 'reference_board';
+  element: 'category_chip' | 'open_site' | 'search_input';
+  // Sent with element=category_chip.
+  category_id?: TrackingReferenceBoardCategory;
+  // Sent with element=open_site: the hostname slug (see above).
+  site_id?: string;
+  project_id?: string;
+}
+
 // ARTIFACT
 export interface ArtifactToolbarClickProps {
   page_name: 'artifact';
@@ -1677,6 +1878,30 @@ export interface ArtifactToolbarClickProps {
     | 'zoom_out'
     | 'zoom_level_dropdown'
     | 'zoom_in';
+  artifact_id?: string;
+  artifact_kind?: TrackingArtifactKind;
+}
+
+// The Draw (mark-pen) annotation overlay's floating toolbar inside the
+// artifact preview. `rect` / `pen` switch the mark tool (the component's
+// internal MarkTool value 'box' maps to `rect`); `undo` / `redo` cover both
+// the toolbar buttons and the Cmd/Ctrl+Z(+Shift) shortcuts; `attach_image`
+// opens the image picker; `annotation_submit` fires once per submit with
+// `submit_action` distinguishing add-to-input (`draft`) / queue / send —
+// including the Enter key in the note input; `exit` is the toolbar close
+// button.
+export interface DrawToolbarClickProps {
+  page_name: 'artifact';
+  area: 'draw_toolbar';
+  element:
+    | 'rect'
+    | 'pen'
+    | 'undo'
+    | 'redo'
+    | 'attach_image'
+    | 'annotation_submit'
+    | 'exit';
+  submit_action?: 'draft' | 'queue' | 'send';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
 }
@@ -1863,6 +2088,7 @@ export type TrackingSettingsArea =
   | 'memory'
   | 'media_providers'
   | 'skills'
+  | 'design_review'
   | 'external_mcp'
   | 'connectors'
   | 'orbit'
@@ -2000,6 +2226,26 @@ export interface SettingsPrivacyClickProps {
   project_artifacts_manifest_status?: 'on' | 'off';
 }
 
+export interface SettingsDesignReviewClickProps {
+  page_name: TrackingSettingsPage;
+  area: 'design_review';
+  element: 'enable_toggle';
+  status_before: 'on' | 'off';
+  status_after: 'on' | 'off';
+  // True when Settings was opened from /projects/:id so the toggle also
+  // persisted to the project's metadata (the daemon-side rollout gate),
+  // not just localStorage.
+  has_active_project: boolean;
+}
+
+export interface SettingsExternalMcpClickProps {
+  page_name: TrackingSettingsPage;
+  area: 'external_mcp';
+  element: TrackingExternalMcpElement;
+  // Same semantics as IntegrationsMcpTabClickProps.template_id.
+  template_id?: string;
+}
+
 // Discriminated union of every supported ui_click payload.
 export type UiClickProps =
   | HomeNavClickProps
@@ -2025,13 +2271,17 @@ export type UiClickProps =
   | PluginsTemplatesDropdownClickProps
   | PluginsAvailableTabClickProps
   | PluginsSourcesTabClickProps
+  | PluginImportModalClickProps
   | PluginDetailClickProps
   | PluginLoopClickProps
   | CommunityGalleryClickProps
+  | PluginDetailModalClickProps
+  | PluginDetailModalSharePopoverClickProps
   | DesignSystemsTopClickProps
   | DesignSystemsTemplateCardClickProps
   | DesignSystemsTemplatesModalClickProps
   | DesignSystemsTemplatesModalSharePopoverClickProps
+  | DesignSystemsCreateClickProps
   | IntegrationsTabClickProps
   | IntegrationsMcpTabClickProps
   | IntegrationsConnectorsTabClickProps
@@ -2042,12 +2292,16 @@ export type UiClickProps =
   | DesignToolboxClickProps
   | ComposerBarClickProps
   | NextStepActionClickProps
+  | QuestionsFormClickProps
   | RunFailedToastClickProps
   | AmrEntryClickProps
   | ChatPanelResourcesPopoverClickProps
+  | ChatPanelMessageQueueClickProps
   | FileManagerClickProps
   | TabLauncherClickProps
+  | ReferenceBoardClickProps
   | ArtifactToolbarClickProps
+  | DrawToolbarClickProps
   | TweaksPopoverClickProps
   | CommentPopoverClickProps
   | ArtifactHeaderClickProps
@@ -2068,6 +2322,8 @@ export type UiClickProps =
   | SettingsNotificationsClickProps
   | SettingsPetsClickProps
   | SettingsPrivacyClickProps
+  | SettingsDesignReviewClickProps
+  | SettingsExternalMcpClickProps
   | OnboardingClickProps;
 
 // ---- surface_view --------------------------------------------------------
@@ -2075,6 +2331,14 @@ export type UiClickProps =
 export interface HelpPopoverSurfaceViewProps {
   page_name: 'home';
   area: 'help_resources_popover';
+}
+
+// Impression of the header gear settings popover. Mirrors
+// HelpPopoverSurfaceViewProps: fires once each time the popover opens so the
+// share / language / appearance funnels have a denominator.
+export interface SettingsPopoverSurfaceViewProps {
+  page_name: 'home' | 'artifact';
+  area: 'settings_popover';
 }
 
 export interface NewProjectModalSurfaceViewProps {
@@ -2096,6 +2360,14 @@ export interface PluginDetailModalSurfaceViewProps {
   area: 'plugin_detail_modal';
   plugin_id?: string;
   plugin_type?: string;
+}
+
+// Impression of the "Import a plugin" modal on the Plugins page. Fires once
+// per open so the import funnel has a denominator for source_tab / import
+// clicks and plugin_import_result.
+export interface PluginImportModalSurfaceViewProps {
+  page_name: 'plugins';
+  area: 'import_modal';
 }
 
 export interface DesignSystemsTemplatesModalSurfaceViewProps {
@@ -2133,6 +2405,25 @@ export interface AssistantFeedbackReasonPanelSurfaceViewProps {
   rating: 'positive' | 'negative';
 }
 
+// Exposure of the Questions tab discovery form — fires once per form
+// occurrence when a parseable form first becomes visible (the tab is
+// conditionally mounted, so emit sites dedupe by the occurrence key).
+// Denominator for the questions_form click events above.
+export interface QuestionsFormSurfaceViewProps {
+  page_name: 'chat_panel';
+  area: 'questions_form';
+  project_id: string;
+  form_id?: string;
+}
+
+// Impression of the Reference Board: fires once each time a blank Browser
+// tab renders the start page, so chip/site clicks have a denominator.
+export interface ReferenceBoardSurfaceViewProps {
+  page_name: 'file_manager';
+  area: 'reference_board';
+  project_id?: string;
+}
+
 // Packaged updater UI surfaces. The download pipeline is intentionally
 // silent; these fire only when a verified update is installable and when the
 // user opens the final confirmation prompt.
@@ -2153,12 +2444,16 @@ export interface UpdatePromptSurfaceViewProps {
 export type SurfaceViewProps =
   | RunFailedToastSurfaceViewProps
   | HelpPopoverSurfaceViewProps
+  | SettingsPopoverSurfaceViewProps
   | NewProjectModalSurfaceViewProps
   | PluginReplacementModalSurfaceViewProps
   | PluginDetailModalSurfaceViewProps
+  | PluginImportModalSurfaceViewProps
   | DesignSystemsTemplatesModalSurfaceViewProps
   | AssistantFeedbackReasonPanelSurfaceViewProps
+  | QuestionsFormSurfaceViewProps
   | UpdateIndicatorSurfaceViewProps
+  | ReferenceBoardSurfaceViewProps
   | UpdatePromptSurfaceViewProps;
 
 // ---- Result events -------------------------------------------------------
@@ -2193,6 +2488,18 @@ export interface PluginReplacementResultProps {
   area: 'plugin_replacement';
   plugin_before: string;
   plugin_after: string;
+  result: TrackingResult;
+  error_code?: string;
+}
+
+// Outcome of an actual import attempt from the plugin import modal. Fires
+// once per executed import (after the install/upload promise settles), not
+// for clicks that no-op. `error_code` carries the backend failure message —
+// the install pipeline has no structured codes (see PluginInstallOutcome).
+export interface PluginImportResultProps {
+  page_name: 'plugins';
+  area: 'import_modal';
+  import_source: TrackingPluginImportSource;
   result: TrackingResult;
   error_code?: string;
 }
@@ -2626,6 +2933,7 @@ export type AnalyticsEventPayload =
   | { event: 'surface_view'; props: SurfaceViewProps }
   | { event: 'project_create_result'; props: ProjectCreateResultProps }
   | { event: 'plugin_replacement_result'; props: PluginReplacementResultProps }
+  | { event: 'plugin_import_result'; props: PluginImportResultProps }
   | { event: 'run_created'; props: RunCreatedProps }
   | { event: 'run_finished'; props: RunFinishedProps }
   | { event: 'langfuse_report_result'; props: LangfuseReportResultProps }
@@ -2877,6 +3185,7 @@ export function settingsSectionToTracking(
     case 'connectors':
       return 'connectors';
     case 'mcpClient':
+      return 'external_mcp';
     case 'mcp_server':
       return 'mcp_server';
     case 'orbit':
@@ -2885,6 +3194,8 @@ export function settingsSectionToTracking(
       return 'skills';
     case 'designSystems':
       return 'design_systems';
+    case 'critiqueTheater':
+      return 'design_review';
     case 'projectLocations':
       return 'project_locations';
     case 'memory':
@@ -3104,6 +3415,21 @@ export function designSystemModuleSlug(
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '') || 'unknown'
   );
+}
+
+// Normalizes a question-form option value or form id into a snake_case
+// tracking token: "Live artifact" → "live_artifact", "HyperFrames" →
+// "hyperframes", "task-type" → "task_type". Values that slug to nothing
+// (e.g. fully localized non-latin labels) collapse to 'unknown'.
+export function questionsFormTrackingId(
+  raw: string | null | undefined,
+): string {
+  const slug = (raw ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+  return slug || 'unknown';
 }
 
 // Maps a DESIGN.md section slug to one of the six review module

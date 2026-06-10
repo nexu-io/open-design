@@ -113,6 +113,19 @@ type SocialSharePlatform =
   | 'instagram'
   | 'xiaohongshu';
 
+// Every clickable item inside the merged Share popover — social intents,
+// copy actions and file exports. Callers receive these verbatim as
+// analytics `element` values (already snake_case).
+export type PreviewSharePopoverItem =
+  | SocialSharePlatform
+  | 'copy_link'
+  | 'copy_share_text'
+  | 'pdf'
+  | 'zip'
+  | 'html'
+  | 'image'
+  | 'open_in_new_tab';
+
 const SOCIAL_SHARE_PLATFORMS: Array<{
   platform: SocialSharePlatform;
   labelKey:
@@ -220,12 +233,11 @@ interface Props {
   // collapsed info panel via the preview-edge handle instead). Other
   // variants — design-system "DESIGN.md", media, scenario — keep it.
   hideSidebarToggle?: boolean;
-  // Fires when the user picks a share-menu item ("pdf" / "zip" / "html"
-  // / "image" / "open_in_new_tab"). Used by callers that want to track popover-
-  // level clicks separately from the share trigger.
-  onSharePopoverItemClick?: (
-    item: 'pdf' | 'zip' | 'html' | 'image' | 'open_in_new_tab',
-  ) => void;
+  // Fires when the user picks any share-popover item — social platforms,
+  // "copy_link" / "copy_share_text" and the file exports ("pdf" / "zip" /
+  // "html" / "image" / "open_in_new_tab"). Used by callers that want to
+  // track popover-level clicks separately from the share trigger.
+  onSharePopoverItemClick?: (item: PreviewSharePopoverItem) => void;
 }
 
 // A full-screen overlay that renders an iframe of arbitrary HTML, with an
@@ -726,6 +738,7 @@ export function PreviewModal({
                                       event.preventDefault();
                                       return;
                                     }
+                                    onSharePopoverItemClick?.(item.platform);
                                     if (item.mode === 'copy-open') {
                                       event.preventDefault();
                                       const shareWindow = window.open('about:blank', '_blank');
@@ -765,7 +778,10 @@ export function PreviewModal({
                               type="button"
                               className="share-menu-item"
                               role="menuitem"
-                              onClick={() => copyPreviewShare(previewShareUrl, 'link')}
+                              onClick={() => {
+                                onSharePopoverItemClick?.('copy_link');
+                                void copyPreviewShare(previewShareUrl, 'link');
+                              }}
                             >
                               <span className="share-menu-icon">
                                 <Icon
@@ -791,7 +807,10 @@ export function PreviewModal({
                               type="button"
                               className="share-menu-item"
                               role="menuitem"
-                              onClick={() => copyPreviewShare(previewShareCopy, 'text')}
+                              onClick={() => {
+                                onSharePopoverItemClick?.('copy_share_text');
+                                void copyPreviewShare(previewShareCopy, 'text');
+                              }}
                             >
                               <span className="share-menu-icon">
                                 <Icon

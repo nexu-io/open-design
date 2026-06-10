@@ -25,6 +25,8 @@ import {
   trackCommunityGalleryClick,
   trackHomeChatComposerClick,
   trackPageView,
+  trackPluginDetailModalClick,
+  trackPluginDetailModalSharePopoverClick,
   trackPluginDetailModalSurfaceView,
   trackPluginReplacementModalClick,
   trackPluginReplacementModalSurfaceView,
@@ -1674,9 +1676,40 @@ export function HomeView({
         {detailsRecord ? (
           <PluginDetailsModal
             record={detailsRecord}
-            onClose={() => setDetailsRecord(null)}
-            onUse={(record, action) => void routePluginUse(record, action)}
+            onClose={() => {
+              // Covers the close button, Esc and the backdrop — every
+              // variant funnels dismissal through this single onClose.
+              trackPluginDetailModalClick(analytics.track, {
+                page_name: 'home',
+                area: 'plugin_detail_modal',
+                element: 'close',
+                plugin_id: detailsRecord.sourceMarketplaceEntryName ?? detailsRecord.id,
+                plugin_type: detailsRecord.marketplaceTrust ?? 'official',
+              });
+              setDetailsRecord(null);
+            }}
+            onUse={(record, action) => {
+              // Track here (not inside routePluginUse) so the gallery's
+              // own onUse keeps its community_gallery attribution; the
+              // kebab 'use-with-query' action maps to the dropdown face.
+              trackPluginDetailModalClick(analytics.track, {
+                page_name: 'home',
+                area: 'plugin_detail_modal',
+                element: action === 'use-with-query' ? 'use_plugin_dropdown' : 'use_plugin',
+                plugin_id: record.sourceMarketplaceEntryName ?? record.id,
+                plugin_type: record.marketplaceTrust ?? 'official',
+              });
+              void routePluginUse(record, action);
+            }}
             isApplying={pendingApplyId === detailsRecord.id}
+            onSharePopoverItemClick={(item) =>
+              trackPluginDetailModalSharePopoverClick(analytics.track, {
+                page_name: 'home',
+                area: 'plugin_detail_share_popover',
+                element: item,
+                plugin_id: detailsRecord.sourceMarketplaceEntryName ?? detailsRecord.id,
+                plugin_type: detailsRecord.marketplaceTrust ?? 'official',
+              })}
           />
         ) : null}
       </AnimatePresence>

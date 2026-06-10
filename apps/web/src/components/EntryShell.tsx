@@ -644,6 +644,13 @@ export function EntryShell({
       config={config}
       onThemeChange={onThemeChange}
       onOpenSettings={onOpenSettings}
+      onTrackTriggerClick={() => {
+        trackHomeToolbarClick(analytics.track, {
+          page_name: 'home',
+          area: 'toolbar',
+          element: 'settings',
+        });
+      }}
     />
   );
 
