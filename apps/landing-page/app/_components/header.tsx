@@ -439,6 +439,11 @@ export function Header({
                   </a>
                 </li>
                 <li role='none'>
+                  <a role='menuitem' href={href('/compare/')}>
+                    <span className='dropdown-name'>{headerCopy.nav.compare ?? 'Compare'}</span>
+                  </a>
+                </li>
+                <li role='none'>
                   <a role='menuitem' href={href('/download/')}>
                     <span className='dropdown-name'>{headerCopy.download}</span>
                   </a>

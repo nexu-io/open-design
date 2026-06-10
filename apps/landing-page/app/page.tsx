@@ -1490,16 +1490,17 @@ export default function Page({
                       {home.footer.openDesignLinks.agents}
                     </a>
                   </li>
-                  <li>
-                    <a href={href('/compare/')}>
-                      {home.footer.openDesignLinks.compare}
-                    </a>
-                  </li>
-                  <li>
-                    <a href={href('/alternatives/claude-design/')}>
-                      {home.footer.openDesignLinks.alternative}
-                    </a>
-                  </li>
+                </ul>
+              </div>
+              <div className='foot-col'>
+                <h5>{home.footer.openDesignLinks.compare}</h5>
+                <ul>
+                  <li><a href={href('/alternatives/claude-design/')}>Claude Design</a></li>
+                  <li><a href={href('/alternatives/figma/')}>Figma</a></li>
+                  <li><a href={href('/alternatives/lovable/')}>Lovable</a></li>
+                  <li><a href={href('/alternatives/bolt/')}>Bolt</a></li>
+                  <li><a href={href('/alternatives/v0/')}>v0</a></li>
+                  <li><a href={href('/alternatives/framer/')}>Framer</a></li>
                 </ul>
               </div>
             </div>

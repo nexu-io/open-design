@@ -186,6 +186,12 @@ export interface HeaderCopy {
     agent: string;
     /** Top-level dropdown for blog, tutorials, downloads. */
     resources: string;
+    /**
+     * "Compare" entry inside the Resources dropdown → /compare/ hub.
+     * Optional: only en supplies it today; other locales fall back to the
+     * English label in the header until localized.
+     */
+    compare?: string;
     /** Group label inside the Solution dropdown. */
     useCases: string;
     /** Group label inside the Solution dropdown. */
@@ -1124,6 +1130,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Solution',
         agent: 'Agent',
         resources: 'Resources',
+        compare: 'Compare',
         useCases: 'Use cases',
         roles: 'Roles',
       },
@@ -1165,6 +1172,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: '解决方案',
         agent: 'Agent',
         resources: '资源',
+        compare: '比较',
         useCases: '使用场景',
         roles: '角色',
       },
@@ -1206,6 +1214,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: '解決方案',
         agent: 'Agent',
         resources: '資源',
+        compare: '比較',
         useCases: '使用場景',
         roles: '角色',
       },
@@ -1247,6 +1256,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'ソリューション',
         agent: 'エージェント',
         resources: 'リソース',
+        compare: '比較',
         useCases: 'ユースケース',
         roles: 'ロール',
       },
@@ -1288,6 +1298,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: '솔루션',
         agent: '에이전트',
         resources: '리소스',
+        compare: '비교',
         useCases: '활용 사례',
         roles: '역할',
       },
@@ -1329,6 +1340,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Lösungen',
         agent: 'Agent',
         resources: 'Ressourcen',
+        compare: 'Vergleich',
         useCases: 'Anwendungsfälle',
         roles: 'Rollen',
       },
@@ -1370,6 +1382,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Solutions',
         agent: 'Agent',
         resources: 'Ressources',
+        compare: 'Comparaison',
         useCases: 'Cas d’usage',
         roles: 'Rôles',
       },
@@ -1411,6 +1424,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Решения',
         agent: 'Агенты',
         resources: 'Ресурсы',
+        compare: 'Сравнение',
         useCases: 'Сценарии',
         roles: 'Роли',
       },
@@ -1452,6 +1466,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Soluciones',
         agent: 'Agente',
         resources: 'Recursos',
+        compare: 'Comparar',
         useCases: 'Casos de uso',
         roles: 'Roles',
       },
@@ -1493,6 +1508,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Soluções',
         agent: 'Agente',
         resources: 'Recursos',
+        compare: 'Comparar',
         useCases: 'Casos de uso',
         roles: 'Funções',
       },
@@ -1534,6 +1550,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Soluzioni',
         agent: 'Agente',
         resources: 'Risorse',
+        compare: 'Confronta',
         useCases: 'Casi d’uso',
         roles: 'Ruoli',
       },
@@ -1575,6 +1592,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Giải pháp',
         agent: 'Agent',
         resources: 'Tài nguyên',
+        compare: 'So sánh',
         useCases: 'Trường hợp dùng',
         roles: 'Vai trò',
       },
@@ -1616,6 +1634,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Rozwiązania',
         agent: 'Agent',
         resources: 'Zasoby',
+        compare: 'Porównanie',
         useCases: 'Zastosowania',
         roles: 'Role',
       },
@@ -1657,6 +1676,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Solusi',
         agent: 'Agent',
         resources: 'Sumber Daya',
+        compare: 'Bandingkan',
         useCases: 'Kasus Penggunaan',
         roles: 'Peran',
       },
@@ -1698,6 +1718,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Oplossingen',
         agent: 'Agent',
         resources: 'Bronnen',
+        compare: 'Vergelijken',
         useCases: 'Use cases',
         roles: 'Rollen',
       },
@@ -1739,6 +1760,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'الحلول',
         agent: 'الوكلاء',
         resources: 'الموارد',
+        compare: 'مقارنة',
         useCases: 'حالات الاستخدام',
         roles: 'الأدوار',
       },
@@ -1780,6 +1802,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Çözümler',
         agent: 'Agent',
         resources: 'Kaynaklar',
+        compare: 'Karşılaştır',
         useCases: 'Kullanım alanları',
         roles: 'Roller',
       },
@@ -1821,6 +1844,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Рішення',
         agent: 'Агенти',
         resources: 'Ресурси',
+        compare: 'Порівняння',
         useCases: 'Сценарії',
         roles: 'Ролі',
       },
