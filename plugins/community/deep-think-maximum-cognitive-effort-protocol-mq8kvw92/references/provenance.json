@@ -1,0 +1,19 @@
+{
+  "candidateId": "a6f4ae48-146c-4430-8a9e-5ac6d4db9dad",
+  "projectId": "bfc406ad-935f-47b6-97a4-7395ece74a10",
+  "runId": "d46d19c4-72aa-4fc0-b649-561f8d459e5e",
+  "conversationId": "6cc60d54-d220-49aa-8b5a-0fc1bdf386f2",
+  "provenance": {
+    "summary": "Detected from mpj79mp4-deep-think.md after a successful run.",
+    "detectedAt": 1781122148394
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "mpj79mp4-deep-think.md",
+      "label": "mpj79mp4-deep-think.md",
+      "size": 6062,
+      "copied": true
+    }
+  ]
+}
