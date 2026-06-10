@@ -23,6 +23,9 @@ permissions:
   contents: read
   # Read this workflow's own run history to derive a gap-free window start.
   actions: read
+  # Read open tutorial-submission issues and contribution PRs for the digest.
+  issues: read
+  pull-requests: read
 
 concurrency:
   group: tutorials-youtube-sync

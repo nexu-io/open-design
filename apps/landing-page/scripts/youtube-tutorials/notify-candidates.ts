@@ -21,6 +21,12 @@ import { createHmac } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { readExistingVideoIds } from './lib.ts';
 import { fetchCandidates, loadYoutubeKey, type ScoredCandidate } from './youtube.ts';
+import {
+  fetchContributionPRs,
+  fetchSubmissionIssues,
+  type ContributionPR,
+  type SubmissionIssue,
+} from './github-submissions.ts';
 
 function fmtViews(n?: number): string {
   if (!n) return '';
@@ -62,14 +68,22 @@ function buildDigest(candidates: ScoredCandidate[], today: string): string {
 }
 
 /** Build a Feishu interactive card: one section per candidate with a verdict. */
-function buildCard(candidates: ScoredCandidate[], today: string): Record<string, unknown> {
+function buildCard(
+  candidates: ScoredCandidate[],
+  issues: SubmissionIssue[],
+  prs: ContributionPR[],
+  today: string,
+): Record<string, unknown> {
   const recommended = candidates.filter((c) => c.score.recommend).length;
   const elements: Record<string, unknown>[] = [];
   elements.push({
     tag: 'div',
     text: {
       tag: 'lark_md',
-      content: `**共 ${candidates.length} 条待审 · ✅ ${recommended} 条建议收录**（按结论+评分排序）`,
+      content:
+        `**YouTube 候选 ${candidates.length} 条**（✅ ${recommended} 建议收录）` +
+        (issues.length ? ` · **用户投稿 issue ${issues.length}**` : '') +
+        (prs.length ? ` · **待审 PR ${prs.length}**` : ''),
     },
   });
   elements.push({ tag: 'hr' });
@@ -89,13 +103,34 @@ function buildCard(candidates: ScoredCandidate[], today: string): Record<string,
     elements.push({ tag: 'div', text: { tag: 'lark_md', content: parts.join('\n') } });
     elements.push({ tag: 'hr' });
   });
+  if (issues.length) {
+    elements.push({ tag: 'div', text: { tag: 'lark_md', content: '**👤 用户投稿 issue（待你批准后由我生成）**' } });
+    for (const it of issues) {
+      const link = it.videoUrl ? `[视频](${it.videoUrl}) · ` : '⚠️ 未填视频链接 · ';
+      elements.push({
+        tag: 'div',
+        text: { tag: 'lark_md', content: `[#${it.number}](${it.url}) ${it.title}\n${link}@${it.author}` },
+      });
+    }
+    elements.push({ tag: 'hr' });
+  }
+  if (prs.length) {
+    elements.push({ tag: 'div', text: { tag: 'lark_md', content: '**🔀 待审 PR（去 GitHub review/merge）**' } });
+    for (const pr of prs) {
+      elements.push({
+        tag: 'div',
+        text: { tag: 'lark_md', content: `[#${pr.number}](${pr.url}) ${pr.title} · @${pr.author}` },
+      });
+    }
+    elements.push({ tag: 'hr' });
+  }
   elements.push({
     tag: 'note',
     elements: [
       {
         tag: 'lark_md',
         content:
-          '评分 = 完整度×8 + 精准度×8 + 热度×4（满分100，仅供参考）｜回复 Claude：**上架 1 3 5** / **全上** / **全上 除 2 4**',
+          '评分 = 完整度×8 + 精准度×8 + 热度×4（满分100，仅供参考）｜回复 Claude：**上架 1 3 5**（YouTube 候选）/ **收 issue 12**（用户投稿）/ **全上** / **全上 除 2 4**',
       },
     ],
   });
@@ -263,19 +298,40 @@ async function main(): Promise<void> {
 
   console.log(`${candidates.length} candidate(s) after dedupe + relevance gate`);
 
-  // Stamp the date from the publishedAfter window's "now" without Date APIs in
-  // the digest body? We need a date string for the header; derive from newest
-  // candidate or fall back to a generic label.
+  // Also surface user submissions (form issues + contribution PRs) when a GitHub
+  // token is present. If a lookup fails, abort before posting rather than send a
+  // digest that silently omits submissions — the run goes red (observable) and
+  // the next run re-queries (submissions are not windowed, so nothing is lost;
+  // YouTube candidates are re-covered via the unchanged watermark).
+  let issues: SubmissionIssue[] = [];
+  let prs: ContributionPR[] = [];
+  const ghToken = process.env.GITHUB_TOKEN;
+  const repo = process.env.GITHUB_REPOSITORY;
+  if (ghToken && repo) {
+    try {
+      [issues, prs] = await Promise.all([
+        fetchSubmissionIssues(ghToken, repo),
+        fetchContributionPRs(ghToken, repo),
+      ]);
+      console.log(`Submissions: ${issues.length} issue(s), ${prs.length} PR(s)`);
+    } catch (e) {
+      console.error(`Submission lookup failed; aborting before posting so the digest is not silently incomplete: ${(e as Error).message}`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   const today = candidates[0]?.date ?? new Date().toISOString().slice(0, 10);
   const digest = buildDigest(candidates, today);
 
   if (printOnly) {
     console.log('\n' + digest);
+    if (issues.length || prs.length) console.log(`\n(+ ${issues.length} issue / ${prs.length} PR submissions)`);
     return;
   }
 
-  if (candidates.length === 0) {
-    console.log('No new candidates; skipping Feishu post.');
+  if (candidates.length === 0 && issues.length === 0 && prs.length === 0) {
+    console.log('Nothing to review; skipping Feishu post.');
     return;
   }
 
@@ -286,7 +342,7 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  await postToFeishu(webhook, process.env.FEISHU_TUTORIALS_SECRET, buildCard(candidates, today));
+  await postToFeishu(webhook, process.env.FEISHU_TUTORIALS_SECRET, buildCard(candidates, issues, prs, today));
   console.log('Posted candidate digest card to Feishu.');
 }
 
