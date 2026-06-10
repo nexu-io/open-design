@@ -1932,6 +1932,27 @@ function normalizeBrowserWorkspaceTab(value: unknown): ProjectBrowserWorkspaceTa
   if (typeof record.title === 'string' && record.title.trim()) tab.title = record.title;
   if (typeof record.url === 'string' && record.url.trim()) tab.url = record.url;
   if (typeof record.iconUrl === 'string' && record.iconUrl.trim()) tab.iconUrl = record.iconUrl;
+  if (Array.isArray(record.consoleEntries)) {
+    const consoleEntries: NonNullable<ProjectBrowserWorkspaceTab['consoleEntries']> = record.consoleEntries
+      .filter((entry) => Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry))
+      .map((entry) => {
+        const item = entry as Record<string, unknown>;
+        if (typeof item.message !== 'string' || !item.message.trim()) return null;
+        const level: NonNullable<ProjectBrowserWorkspaceTab['consoleEntries']>[number]['level'] =
+          item.level === 'verbose' || item.level === 'info' || item.level === 'warning' || item.level === 'error'
+            ? item.level
+            : undefined;
+        return {
+          message: item.message,
+          ...(level ? { level } : {}),
+          ...(typeof item.line === 'number' && Number.isFinite(item.line) ? { line: item.line } : {}),
+          ...(typeof item.sourceId === 'string' && item.sourceId.trim() ? { sourceId: item.sourceId } : {}),
+          ...(typeof item.timestamp === 'number' && Number.isFinite(item.timestamp) ? { timestamp: item.timestamp } : {}),
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+    if (consoleEntries.length > 0) tab.consoleEntries = consoleEntries;
+  }
   return tab;
 }
 

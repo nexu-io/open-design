@@ -1,5 +1,6 @@
 import type { ChatMessage, ChatRunStatus, ChatSessionMode } from './chat.js';
 import type {
+  BrowserConsoleEntry,
   ProjectContextConnectorRef,
   ProjectContextMcpServerRef,
   ProjectContextPluginRef,
@@ -207,6 +208,7 @@ export interface ProjectBrowserWorkspaceTab {
   title?: string;
   url?: string;
   iconUrl?: string;
+  consoleEntries?: BrowserConsoleEntry[];
 }
 
 export interface ProjectTabsState {

@@ -8,6 +8,7 @@ import type {
   AppVersionInfo,
   AppVersionResponse,
   AudioKind,
+  BrowserConsoleEntry,
   ChatAttachment,
   ChatCommentAttachment,
   ChatCommentSelectionKind,
@@ -481,6 +482,7 @@ export type {
 };
 
 export type {
+  BrowserConsoleEntry,
   ProjectBrowserWorkspaceTab,
 };
 

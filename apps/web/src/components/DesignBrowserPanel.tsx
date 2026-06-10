@@ -25,6 +25,7 @@ import type { Dict } from '../i18n/types';
 import { captureHostRegionSnapshot } from '../runtime/exports';
 import { buildBoardCommentAttachments, commentsToAttachments } from '../comments';
 import type {
+  BrowserConsoleEntry,
   ChatCommentAttachment,
   PreviewAnnotationStyle,
   PreviewComment,
@@ -196,6 +197,13 @@ type WebviewFaviconEvent = Event & {
   favicons?: string[];
 };
 
+type WebviewConsoleMessageEvent = Event & {
+  level?: number;
+  line?: number;
+  message?: string;
+  sourceId?: string;
+};
+
 interface DesignBrowserPanelProps {
   initialIconUrl?: string;
   initialTitle?: string;
@@ -214,6 +222,7 @@ interface DesignBrowserPanelProps {
 }
 
 export interface BrowserPageInfo {
+  consoleEntries?: BrowserConsoleEntry[];
   iconUrl?: string;
   title: string;
   url: string;
@@ -223,6 +232,7 @@ const EMPTY_URL = 'about:blank';
 const DESIGN_BROWSER_PARTITION = 'persist:open-design-design-browser';
 const HISTORY_LIMIT = 80;
 const HISTORY_SUGGESTION_LIMIT = 20;
+const CONSOLE_ENTRY_LIMIT = 40;
 const EMPTY_PREVIEW_COMMENTS: PreviewComment[] = [];
 // Cap the resource-hint (`dns-prefetch`/`preconnect`) links we leave in <head>.
 // Hovering/typing origins used to accumulate them and their Set entries forever.
@@ -231,6 +241,27 @@ const warmedOrigins = new Map<string, HTMLLinkElement[]>();
 
 function browserHomeNavigationEntry(): BrowserNavigationEntry {
   return { title: 'Reference Board', url: EMPTY_URL };
+}
+
+function normalizeBrowserConsoleLevel(level?: number): BrowserConsoleEntry['level'] {
+  if (level === 3) return 'error';
+  if (level === 2) return 'warning';
+  if (level === 1) return 'info';
+  return 'verbose';
+}
+
+function sameConsoleEntries(a: BrowserConsoleEntry[], b: BrowserConsoleEntry[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (
+      a[i]?.message !== b[i]?.message
+      || a[i]?.level !== b[i]?.level
+      || a[i]?.line !== b[i]?.line
+      || a[i]?.sourceId !== b[i]?.sourceId
+      || a[i]?.timestamp !== b[i]?.timestamp
+    ) return false;
+  }
+  return true;
 }
 
 function initialBrowserState(initialUrl?: string, initialTitle?: string): {
@@ -738,6 +769,7 @@ export function DesignBrowserPanel({
   const [captureChromeHidden, setCaptureChromeHidden] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [savingAction, setSavingAction] = useState<'brief' | 'screenshot' | null>(null);
+  const [consoleEntries, setConsoleEntries] = useState<BrowserConsoleEntry[]>([]);
   const addressInputRef = useRef<HTMLInputElement | null>(null);
   const chromeRef = useRef<HTMLDivElement | null>(null);
   const pickerRequestIdRef = useRef(0);
@@ -768,6 +800,7 @@ export function DesignBrowserPanel({
     setAddressEditing(false);
     setNavigationStack(nextInitialState.navigationStack);
     setNavigationIndex(nextInitialState.navigationIndex);
+    setConsoleEntries([]);
     navigationStackRef.current = nextInitialState.navigationStack;
     navigationIndexRef.current = nextInitialState.navigationIndex;
     pendingLoadTargetRef.current = null;
@@ -1025,6 +1058,24 @@ export function DesignBrowserPanel({
       pendingLoadTargetRef.current = null;
       updateLoadingState(node);
     };
+    const onConsoleMessage = (event: Event) => {
+      const consoleEvent = event as WebviewConsoleMessageEvent;
+      const message = consoleEvent.message?.trim();
+      if (!message) return;
+      setConsoleEntries((current) => {
+        const next = [
+          ...current,
+          {
+            message,
+            level: normalizeBrowserConsoleLevel(consoleEvent.level),
+            ...(typeof consoleEvent.line === 'number' && Number.isFinite(consoleEvent.line) ? { line: consoleEvent.line } : {}),
+            ...(typeof consoleEvent.sourceId === 'string' && consoleEvent.sourceId.trim() ? { sourceId: consoleEvent.sourceId } : {}),
+            timestamp: Date.now(),
+          },
+        ].slice(-CONSOLE_ENTRY_LIMIT);
+        return sameConsoleEntries(current, next) ? current : next;
+      });
+    };
 
     node.addEventListener('did-start-loading', onStart);
     node.addEventListener('did-stop-loading', onStop);
@@ -1034,6 +1085,7 @@ export function DesignBrowserPanel({
     node.addEventListener('page-favicon-updated', onFavicon);
     node.addEventListener('did-fail-load', onFail);
     node.addEventListener('dom-ready', onStop);
+    node.addEventListener('console-message', onConsoleMessage);
     updateLoadingState(node);
     return () => {
       node.removeEventListener('did-start-loading', onStart);
@@ -1044,6 +1096,7 @@ export function DesignBrowserPanel({
       node.removeEventListener('page-favicon-updated', onFavicon);
       node.removeEventListener('did-fail-load', onFail);
       node.removeEventListener('dom-ready', onStop);
+      node.removeEventListener('console-message', onConsoleMessage);
     };
   }, [addressEditing, commitHistory, recordNavigation, updateCurrentNavigationTitle, updateLoadingState, webviewNode]);
 
@@ -1190,11 +1243,12 @@ export function DesignBrowserPanel({
 
   useEffect(() => {
     onPageInfoChange?.({
+      ...(consoleEntries.length > 0 ? { consoleEntries } : {}),
       title: isBlank ? 'Browser' : pageTitle,
       url: isBlank ? '' : currentUrl,
       ...(!isBlank && pageIconUrl ? { iconUrl: pageIconUrl } : {}),
     });
-  }, [currentUrl, isBlank, onPageInfoChange, pageIconUrl, pageTitle]);
+  }, [consoleEntries, currentUrl, isBlank, onPageInfoChange, pageIconUrl, pageTitle]);
 
   useEffect(() => {
     pickerRequestIdRef.current += 1;
@@ -1224,6 +1278,22 @@ export function DesignBrowserPanel({
     }
     await copyText(text);
     setStatusMessage('URL copied');
+    setMenuOpen(false);
+  }
+
+  async function copyConsoleLog() {
+    if (consoleEntries.length === 0) {
+      setStatusMessage('No console output yet');
+      return;
+    }
+    const text = consoleEntries.map((entry) => {
+      const parts = [entry.level?.toUpperCase() ?? 'LOG'];
+      if (entry.sourceId) parts.push(entry.sourceId);
+      if (typeof entry.line === 'number') parts.push(`line ${entry.line}`);
+      return `[${parts.join(' | ')}] ${entry.message}`;
+    }).join('\n');
+    await copyText(text);
+    setStatusMessage('Console log copied');
     setMenuOpen(false);
   }
 
@@ -1905,6 +1975,10 @@ export function DesignBrowserPanel({
               <button type="button" role="menuitem" onClick={copyCurrentUrl} disabled={isBlank}>
                 <Icon name="copy" size={14} />
                 Copy URL
+              </button>
+              <button type="button" role="menuitem" onClick={() => { void copyConsoleLog(); }} disabled={consoleEntries.length === 0}>
+                <Icon name="terminal" size={14} />
+                Copy Console Log
               </button>
               <button type="button" role="menuitem" onClick={openCurrentExternally} disabled={isBlank || !isHttpLikeUrl(currentUrl)}>
                 <Icon name="external-link" size={14} />

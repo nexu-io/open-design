@@ -87,7 +87,7 @@ import {
   type SketchItem,
 } from './sketch-model';
 import { AnimatePresence } from 'motion/react';
-import type { ChatMessage } from '../types';
+import type { BrowserConsoleEntry, ChatMessage } from '../types';
 
 interface Props {
   projectId: string;
@@ -305,6 +305,24 @@ function formatBrowserTabUrl(url: string): string {
   } catch {
     return url;
   }
+}
+
+function sameBrowserConsoleEntries(
+  a: BrowserConsoleEntry[] | undefined,
+  b: BrowserConsoleEntry[] | undefined,
+): boolean {
+  if (!a?.length && !b?.length) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (
+      a[i]?.message !== b[i]?.message
+      || a[i]?.level !== b[i]?.level
+      || a[i]?.line !== b[i]?.line
+      || a[i]?.sourceId !== b[i]?.sourceId
+      || a[i]?.timestamp !== b[i]?.timestamp
+    ) return false;
+  }
+  return true;
 }
 
 function joinDisplayPath(root: string, child: string): string {
@@ -650,6 +668,7 @@ export function FileWorkspace({
         tab.title === nextTitle
         && (tab.url ?? '') === normalizedUrl
         && (tab.iconUrl ?? '') === nextIconUrl
+        && sameBrowserConsoleEntries(tab.consoleEntries, info.consoleEntries)
       ) {
         return tab;
       }
@@ -664,6 +683,8 @@ export function FileWorkspace({
       } else {
         delete nextTab.iconUrl;
       }
+      if (info.consoleEntries?.length) nextTab.consoleEntries = info.consoleEntries;
+      else delete nextTab.consoleEntries;
       return nextTab;
     });
     if (!changed) return;
@@ -1477,6 +1498,7 @@ export function FileWorkspace({
         kind: 'browser',
         label,
         tabId: tab.id,
+        ...(tab.consoleEntries?.length ? { browserConsoleEntries: tab.consoleEntries } : {}),
         ...(tab.title ? { title: tab.title } : {}),
         ...(url ? { url } : {}),
       };
@@ -1612,6 +1634,7 @@ export function FileWorkspace({
           kind: 'browser',
           label,
           tabId: tab.id,
+          ...(tab.consoleEntries?.length ? { browserConsoleEntries: tab.consoleEntries } : {}),
           ...(tab.title ? { title: tab.title } : {}),
           ...(url ? { url } : {}),
         });
@@ -3819,6 +3842,18 @@ function browserTabsFromState(value: OpenTabsState['browserTabs']): BrowserWorks
     if (item.title?.trim()) tab.title = item.title.trim();
     if (item.url?.trim()) tab.url = item.url.trim();
     if (item.iconUrl?.trim()) tab.iconUrl = item.iconUrl.trim();
+    if (Array.isArray(item.consoleEntries)) {
+      const consoleEntries = item.consoleEntries
+        .filter((entry): entry is BrowserConsoleEntry => Boolean(entry) && typeof entry.message === 'string' && Boolean(entry.message.trim()))
+        .map((entry: BrowserConsoleEntry) => ({
+          message: entry.message,
+          ...(entry.level ? { level: entry.level } : {}),
+          ...(typeof entry.line === 'number' ? { line: entry.line } : {}),
+          ...(entry.sourceId ? { sourceId: entry.sourceId } : {}),
+          ...(typeof entry.timestamp === 'number' ? { timestamp: entry.timestamp } : {}),
+        }));
+      if (consoleEntries.length > 0) tab.consoleEntries = consoleEntries;
+    }
     seen.add(item.id);
     tabs.push(tab);
   }

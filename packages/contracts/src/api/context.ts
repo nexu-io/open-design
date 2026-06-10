@@ -25,6 +25,15 @@ export interface WorkspaceContextItem {
   absolutePath?: string;
   url?: string;
   title?: string;
+  browserConsoleEntries?: BrowserConsoleEntry[];
+}
+
+export interface BrowserConsoleEntry {
+  message: string;
+  level?: 'verbose' | 'info' | 'warning' | 'error';
+  line?: number;
+  sourceId?: string;
+  timestamp?: number;
 }
 
 export interface ProjectContextPluginRef {

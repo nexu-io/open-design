@@ -2055,6 +2055,16 @@ function formatWorkspaceContextList(items) {
         item.url ? `url: ${item.url}` : null,
         item.title ? `title: ${item.title}` : null,
         item.tabId ? `tab: \`${item.tabId}\`` : null,
+        Array.isArray(item.browserConsoleEntries) && item.browserConsoleEntries.length > 0
+          ? `recent console:\n${item.browserConsoleEntries.slice(-8).map((entry, consoleIndex) => {
+            const tags = [
+              entry.level ? entry.level.toUpperCase() : 'LOG',
+              typeof entry.sourceId === 'string' && entry.sourceId ? entry.sourceId : null,
+              typeof entry.line === 'number' ? `line ${entry.line}` : null,
+            ].filter(Boolean).join(' | ');
+            return `   ${consoleIndex + 1}. [${tags}] ${String(entry.message ?? '').trim()}`;
+          }).join('\n')}`
+          : null,
       ].filter(Boolean).join(' | ');
       return `${index + 1}. ${item.kind}: ${item.label} (\`${item.id}\`)${details ? ` — ${details}` : ''}`;
     })
@@ -2067,7 +2077,7 @@ function renderWorkspaceContextToolHints(items) {
   const hints = [];
   if (kinds.has('browser')) {
     hints.push(
-      '- Browser tabs: use the selected browser tab URL/title as the target for requests about logos, fonts, images, colors, motion code, element/page screenshots, accessibility, OG/meta tags, or page structure. Prefer mounted browser automation / browser-use style tools when available (DOM snapshot, page screenshot, element screenshot, accessibility tree, evaluated JavaScript). If only URL/title context is available and no inspection tool is mounted, say that explicitly and do not invent page internals.',
+      '- Browser tabs: use the selected browser tab URL/title as the target for requests about logos, fonts, images, colors, motion code, element/page screenshots, accessibility, OG/meta tags, page structure, and browser-console rendering failures. Prefer mounted browser automation / browser-use style tools when available (DOM snapshot, page screenshot, element screenshot, accessibility tree, evaluated JavaScript). If recent console lines are included, treat them as high-signal debug evidence. If only URL/title context is available and no inspection tool is mounted, say that explicitly and do not invent page internals.',
     );
   }
   if (kinds.has('terminal')) {
