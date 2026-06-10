@@ -24,6 +24,18 @@ generate-selected.ts  (run by the maintainer / agent)
 The cron **never** generates entries or opens PRs on its own — selection is the
 human review step, done in Feishu before any content is written.
 
+The same daily digest also lists **user submissions** so they enter the same
+review flow:
+
+- **Submission issues** — open issues from the "Submit a tutorial" form (label
+  `tutorials`). When a maintainer approves one, generate its entry from the
+  video link in the issue body and open a PR with `Closes #<issue>` (the issue
+  closes on merge):
+  `tsx scripts/youtube-tutorials/generate-selected.ts <video-url-from-issue>`
+- **Contribution PRs** — open PRs that touch `app/content/tutorials/**`. They
+  are auto-labeled `tutorials` by `.github/workflows/labeler.yml` so the digest
+  can list them; review/merge happens on GitHub as normal.
+
 ## Files
 
 - `lib.ts` — shared core: relevance gate, LLM copy generation, slug rules,

@@ -1,0 +1,61 @@
+import assert from 'node:assert/strict';
+import { afterEach, describe, it } from 'node:test';
+
+import {
+  fetchContributionPRs,
+  fetchSubmissionIssues,
+} from '../scripts/youtube-tutorials/github-submissions.ts';
+
+const realFetch = globalThis.fetch;
+
+function stub(items: unknown[]) {
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify({ items }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })) as typeof fetch;
+}
+
+const ISSUE = {
+  number: 12,
+  title: '[Tutorial]: My OD walkthrough',
+  html_url: 'https://github.com/nexu-io/open-design/issues/12',
+  user: { login: 'alice' },
+  body: 'YouTube video URL\n\nhttps://www.youtube.com/watch?v=dQw4w9WgXcQ\n\nCategory\nTutorial',
+};
+const PR = {
+  number: 34,
+  title: 'content(landing): add my tutorial',
+  html_url: 'https://github.com/nexu-io/open-design/pull/34',
+  user: { login: 'bob' },
+  pull_request: { url: 'x' },
+};
+
+describe('github-submissions', () => {
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it('fetchSubmissionIssues keeps issues only and extracts the video URL', async () => {
+    stub([ISSUE, PR]);
+    const issues = await fetchSubmissionIssues('tok', 'nexu-io/open-design');
+    assert.equal(issues.length, 1);
+    assert.equal(issues[0].number, 12);
+    assert.equal(issues[0].author, 'alice');
+    assert.equal(issues[0].videoUrl, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  });
+
+  it('fetchSubmissionIssues leaves videoUrl undefined when none in body', async () => {
+    stub([{ ...ISSUE, body: 'no link here' }]);
+    const issues = await fetchSubmissionIssues('tok', 'nexu-io/open-design');
+    assert.equal(issues[0].videoUrl, undefined);
+  });
+
+  it('fetchContributionPRs keeps PRs only', async () => {
+    stub([ISSUE, PR]);
+    const prs = await fetchContributionPRs('tok', 'nexu-io/open-design');
+    assert.equal(prs.length, 1);
+    assert.equal(prs[0].number, 34);
+    assert.equal(prs[0].author, 'bob');
+  });
+});

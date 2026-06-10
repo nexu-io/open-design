@@ -1,0 +1,25 @@
+name: labeler
+
+# Auto-applies the `tutorials` label to PRs that touch the tutorials content
+# directory, so the scheduled tutorials-youtube-sync digest can list community
+# tutorial contributions for review. Config: .github/labeler.yml.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: labeler-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/labeler@v5
+        with:
+          sync-labels: false
