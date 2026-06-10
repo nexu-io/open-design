@@ -1347,6 +1347,27 @@ function resolveDaemonResourceDir(resourceRoot, segment, fallback) {
   return resourceRoot ? path.join(resourceRoot, segment) : fallback;
 }
 
+// Where the daemon reads the baked plugin-preview manifest from. In a packaged
+// build the bundled manifest lives under the resource root (OD_RESOURCE_ROOT,
+// Resources/open-design) like every other resource tree — NOT under PROJECT_ROOT,
+// which for the prebundled daemon resolves to Resources/app (two levels up from
+// the sidecar) and has no data/. An explicit OD_PLUGIN_PREVIEWS_DIR override and
+// the dev PROJECT_ROOT layout still win. Exported for regression coverage.
+export function resolveDaemonPluginPreviewsDir({ env = process.env, resourceRoot, projectRoot }) {
+  // Resolve the override from the injected `env` (absolute passthrough, relative
+  // against projectRoot) rather than re-reading process.env, so the helper is
+  // pure and the override path is actually testable.
+  const override = env.OD_PLUGIN_PREVIEWS_DIR;
+  if (override) {
+    return path.isAbsolute(override) ? override : path.resolve(projectRoot, override);
+  }
+  return resolveDaemonResourceDir(
+    resourceRoot,
+    path.join('data', 'plugin-previews'),
+    path.join(projectRoot, 'data', 'plugin-previews'),
+  );
+}
+
 const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot();
 // Built web app lives in `out/` — that's where Next.js writes the static
 // export configured in next.config.ts. The folder name used to be `dist/`
@@ -1356,7 +1377,10 @@ const STATIC_DIR = path.join(PROJECT_ROOT, 'apps', 'web', 'out');
 // Baked plugin preview clips (scripts/bake-plugin-previews.mjs). Served at
 // PLUGIN_PREVIEWS_ROUTE; their manifest rewrites html plugins' previews to a
 // cheap poster + hover-play video in the home gallery.
-const PLUGIN_PREVIEWS_DIR = resolvePluginPreviewsDir(PROJECT_ROOT);
+const PLUGIN_PREVIEWS_DIR = resolveDaemonPluginPreviewsDir({
+  resourceRoot: DAEMON_RESOURCE_ROOT,
+  projectRoot: PROJECT_ROOT,
+});
 const OD_BIN = resolveDaemonCliPath();
 const OD_NODE_BIN = process.execPath;
 const SKILLS_DIR = resolveDaemonResourceDir(
