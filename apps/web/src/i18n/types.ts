@@ -2493,6 +2493,11 @@ export interface Dict {
   'designFiles.usefulInfoTip': string;
   'designFiles.usefulInfoTip2': string;
   'designFiles.usefulInfoTip3': string;
+  'designFiles.usefulInfoTip4': string;
+  'designFiles.usefulInfoTip5': string;
+  'designFiles.usefulInfoTip6': string;
+  'designFiles.usefulInfoTip7': string;
+  'designFiles.usefulInfoTip8': string;
   'quickSwitcher.placeholder': string;
   'quickSwitcher.empty': string;
   'quickSwitcher.noMatches': string;
