@@ -18,6 +18,7 @@
  * reproduce the candidate numbering before generating selected entries).
  */
 import { createHmac } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { readExistingVideoIds, type VideoInput } from './lib.ts';
 import { fetchCandidates, loadYoutubeKey } from './youtube.ts';
 
@@ -94,7 +95,7 @@ function isoDaysAgo(days: number): string {
  * isn't the current run, via the Actions API. Returns null when unavailable
  * (no token, no prior success, or an API error).
  */
-async function lastSuccessfulRunStart(): Promise<string | null> {
+export async function lastSuccessfulRunStart(): Promise<string | null> {
   const token = process.env.GITHUB_TOKEN;
   const repo = process.env.GITHUB_REPOSITORY;
   if (!token || !repo) return null;
@@ -109,10 +110,16 @@ async function lastSuccessfulRunStart(): Promise<string | null> {
     headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json' },
   });
   if (!res.ok) throw new Error(`Actions API HTTP ${res.status}`);
-  const data = (await res.json()) as { workflow_runs?: { id: number; created_at: string }[] };
+  const data = (await res.json()) as {
+    workflow_runs?: { id: number; created_at: string; run_started_at?: string }[];
+  };
+  // Use run_started_at (actual execution start), NOT created_at (queue/creation
+  // time). They differ by the queue wait, which can be 10-15 min; deriving the
+  // watermark from created_at would re-emit candidates published while a run sat
+  // queued. Fall back to created_at only if run_started_at is absent.
   const prior = (data.workflow_runs ?? [])
     .filter((r) => String(r.id) !== currentRunId)
-    .map((r) => r.created_at)
+    .map((r) => r.run_started_at ?? r.created_at)
     .sort();
   return prior.length ? prior[prior.length - 1] : null;
 }
@@ -226,4 +233,7 @@ async function main(): Promise<void> {
   console.log('Posted candidate digest to Feishu.');
 }
 
-void main();
+// Only sweep when run directly; importing (e.g. from tests) must have no effect.
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  void main();
+}
