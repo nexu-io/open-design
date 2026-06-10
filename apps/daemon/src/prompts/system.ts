@@ -800,18 +800,14 @@ export function composeSystemPrompt({
     );
   }
 
-  // Claude only: nudge the model toward the `AskUserQuestion` tool for
-  // mid-conversation clarifications. Without this hint Claude tends to fall
-  // back to a markdown bulleted list of options, which the chat UI cannot
-  // turn into clickable buttons. Discovery (turn 1) is still owned by the
-  // `<question-form>` flow defined in DISCOVERY_AND_PHILOSOPHY; this only
-  // covers follow-ups where the next action depends on a small set of
-  // choices the user can pick quickly.
-  if (agentId === 'claude') {
-    parts.push(
-      "\n\n---\n\n## Clarifying questions\n\nWhen you need a mid-conversation clarification AND the natural answer is one of a small finite set of choices (2-4 options per question), call the `AskUserQuestion` tool instead of writing a bulleted list in markdown. The host chat renders the tool call as inline choice buttons; a markdown list renders as plain text and forces the user to type a reply. Skip the tool when the answer is naturally free-form text, when the answer needs more than ~4 options, or when you only have one yes/no choice to ask. First-turn discovery still uses the `<question-form id=\"discovery\">` workflow described earlier; `AskUserQuestion` is for follow-ups only.\n\n**When you call `AskUserQuestion`, that tool call is the entire response.** Do NOT also write the same questions or options as markdown text alongside it, do NOT add a trailing prose paragraph like \"what sounds right?\", do NOT hedge by listing the options twice. Emit the tool call and stop generating tokens. The host is waiting on the tool's `tool_result` and will resume your turn the moment the user answers. Anything you write before, between, or after the tool call in the same message just duplicates what the card already shows and confuses the user.",
-    );
-  }
+  // Mid-conversation clarification reuses the same `<question-form>` flow as
+  // turn-1 discovery (DISCOVERY_AND_PHILOSOPHY) so the host keeps ONE unified
+  // questions surface: the chat shows a banner, the form renders in the
+  // right-hand Questions tab, and answers return as the next user message.
+  // Applies to every agent — question-form is UI-parsed markup, not a tool.
+  parts.push(
+    "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the natural answer is one of a small finite set of choices (2-4 options per question), emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it as a Questions banner the user opens in the side tab; a markdown list renders as plain text and forces the user to type a reply. Use free-form prose questions only when the answer is naturally open-ended, needs more than ~4 options, or is a single yes/no. Do NOT also duplicate the form's questions as markdown text alongside it.",
+  );
 
   // Pinned LAST so recency bias reinforces the role-marker prohibition.
   // This is the canonical anti-roleplay instruction;
@@ -856,7 +852,7 @@ Every later instruction in this prompt that tells you to "call TodoWrite", "run 
 **Allowed output:**
 - Plain chat prose to the user (in their language). State your plan as prose — a short numbered list in markdown is fine; it just must not be wrapped in \`<todo-list>\` or claim to be a tool call.
 - A final \`<artifact type="text/html">...</artifact>\` block containing a complete \`<!doctype html>\` document when the brief is ready to deliver.
-- \`<question-form>\` blocks for discovery on turn 1, exactly as the rules below describe — question-form is markup the UI parses, not a tool call.
+- \`<question-form>\` blocks for discovery (turn 1) and for mid-conversation clarification, exactly as the rules below describe — question-form is markup the UI parses, not a tool call.
 
 If the rules below tell you to plan with TodoWrite, write the plan as prose instead. If they tell you to read skill side files before writing, describe in one sentence which patterns/conventions you're going to apply and proceed. If they tell you to run brand-spec extraction via Bash + Read + WebFetch, ask the user the missing brand questions in the discovery form instead.`;
 

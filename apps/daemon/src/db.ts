@@ -620,7 +620,13 @@ export function listProjectsAwaitingInput(db: SqliteDb) {
              FROM messages m
              JOIN conversations c ON c.id = m.conversation_id
             WHERE m.role = 'assistant'
-              AND LOWER(m.content) LIKE '%<question-form%'
+              -- ask-question is an accepted alias for question-form (UI parser
+              -- + daemon open-tag matcher), so an alias-form turn must also
+              -- count as awaiting input.
+              AND (
+                LOWER(m.content) LIKE '%<question-form%'
+                OR LOWER(m.content) LIKE '%<ask-question%'
+              )
          ) latest
         WHERE latest.rowNum = 1
           AND NOT EXISTS (

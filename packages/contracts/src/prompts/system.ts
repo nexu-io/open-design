@@ -123,7 +123,7 @@ export function formatElevenLabsVoiceOptionsErrorForPrompt(
 
 export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip discovery form
 
-This project was created through the daemon API with \`skipDiscoveryBrief: true\`. Override the discovery rules below: do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask a first-turn clarification form. Do not call AskUserQuestion, do not emit any question form or choice card, and do not wait for user input. Treat the user's first message and project metadata as the brief, choose reasonable defaults for any missing details, then proceed directly to planning/building under the normal artifact workflow.`;
+This project was created through the daemon API with \`skipDiscoveryBrief: true\`. Override the discovery rules below: do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask a first-turn clarification form. Do not emit any question form or choice card, and do not wait for user input. Treat the user's first message and project metadata as the brief, choose reasonable defaults for any missing details, then proceed directly to planning/building under the normal artifact workflow.`;
 
 export function buildExamplePromptOverride(
   title?: string | null,
@@ -307,6 +307,18 @@ export function composeSystemPrompt({
 
   parts.push('# Identity and workflow charter (background)\n\n', BASE_SYSTEM_PROMPT);
 
+  // Mid-conversation clarification reuses the same `<question-form>` flow as
+  // turn-1 discovery (DISCOVERY_AND_PHILOSOPHY) so the host keeps ONE unified
+  // questions surface: a chat banner, the form in the right-hand Questions
+  // tab, and answers returned as the next user message. Mirrors the
+  // daemon-side composer's "## Clarifying questions mid-conversation" section
+  // in apps/daemon/src/prompts/system.ts — keep both in sync so a daemon chat
+  // and a BYOK/API chat route follow-up choices through the same surface
+  // instead of drifting back to plain markdown option lists.
+  parts.push(
+    "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the natural answer is one of a small finite set of choices (2-4 options per question), emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it as a Questions banner the user opens in the side tab; a markdown list renders as plain text and forces the user to type a reply. Use free-form prose questions only when the answer is naturally open-ended, needs more than ~4 options, or is a single yes/no. Do NOT also duplicate the form's questions as markdown text alongside it.",
+  );
+
   // Mirrors the daemon-side composer in apps/daemon/src/prompts/system.ts —
   // keep both copies of this preamble in sync so a CLI chat and a BYOK
   // chat with the same memory both see the same wording. The "brand
@@ -437,7 +449,7 @@ Every later instruction in this prompt that tells you to "call TodoWrite", "run 
 **Allowed output:**
 - Plain chat prose to the user (in their language). State your plan as prose — a short numbered list in markdown is fine; it just must not be wrapped in \`<todo-list>\` or claim to be a tool call.
 - A final \`<artifact type="text/html">...</artifact>\` block containing a complete \`<!doctype html>\` document when the brief is ready to deliver.
-- \`<question-form>\` blocks for discovery on turn 1, exactly as the rules below describe — question-form is markup the UI parses, not a tool call.
+- \`<question-form>\` blocks for discovery (turn 1) and for mid-conversation clarification, exactly as the rules below describe — question-form is markup the UI parses, not a tool call.
 
 If the rules below tell you to plan with TodoWrite, write the plan as prose instead. If they tell you to read skill side files before writing, describe in one sentence which patterns/conventions you're going to apply and proceed. If they tell you to run brand-spec extraction via Bash + Read + WebFetch, ask the user the missing brand questions in the discovery form instead.`;
 

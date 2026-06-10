@@ -2607,7 +2607,7 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   artifact_write_seen?: boolean;
   live_artifact_seen?: boolean;
   artifact_count: number;
-  // True when the run raised an AskUserQuestion clarification card. Such runs
+  // True when the run raised a `<question-form>` clarification. Such runs
   // are intent-clarification turns (the agent stops to ask the user a question)
   // and therefore inherently produce no artifact, so the dashboard can exclude
   // them from the "run finished -> has artifact" funnel instead of counting
