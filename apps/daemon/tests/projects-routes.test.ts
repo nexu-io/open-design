@@ -329,6 +329,91 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(JSON.stringify(bobTemplateAfterSourceDeleteJson.template.files)).toContain('Bob only');
   });
 
+  it('starts authenticated chats for template projects without prompt owner-scope errors', async () => {
+    const aliceEmail = 'alice-template-run@example.com';
+    const stamp = uniqueId('proj-template-run');
+    const sourceProjectId = `${stamp}-source`;
+    const templateProjectId = `${stamp}-instance`;
+
+    const sourceCreate = await createProjectAs(
+      aliceEmail,
+      sourceProjectId,
+      'Alice template source',
+    );
+    expect(sourceCreate.status).toBe(200);
+    const sourceCreateBody = (await sourceCreate.json()) as { project: { id: string } };
+    const sourceStoredProjectId = sourceCreateBody.project.id;
+
+    const sourceWrite = await fetch(`${baseUrl}/api/projects/${sourceStoredProjectId}/files`, {
+      method: 'POST',
+      headers: userHeaders(aliceEmail),
+      body: JSON.stringify({
+        name: 'index.html',
+        content: '<!doctype html><h1>Alice template</h1>',
+      }),
+    });
+    expect(sourceWrite.status).toBe(200);
+
+    const templateSave = await fetch(`${baseUrl}/api/templates`, {
+      method: 'POST',
+      headers: userHeaders(aliceEmail),
+      body: JSON.stringify({
+        name: `Alice template ${stamp}`,
+        sourceProjectId,
+      }),
+    });
+    expect(templateSave.status).toBe(200);
+    const templateSaveBody = (await templateSave.json()) as {
+      template: { id: string };
+    };
+    const templateId = templateSaveBody.template.id;
+
+    const templateProjectCreate = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: userHeaders(aliceEmail),
+      body: JSON.stringify({
+        id: templateProjectId,
+        name: 'Alice template instance',
+        skillId: null,
+        designSystemId: null,
+        metadata: { kind: 'template', templateId },
+      }),
+    });
+    expect(templateProjectCreate.status).toBe(200);
+    const templateProjectCreateBody = (await templateProjectCreate.json()) as {
+      project: { id: string };
+    };
+    const templateStoredProjectId = templateProjectCreateBody.project.id;
+
+    const originalPath = process.env.PATH;
+    const originalAgentHome = process.env.OD_AGENT_HOME;
+    try {
+      process.env.PATH = '';
+      process.env.OD_AGENT_HOME = makeFolder();
+
+      const chatResponse = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: userHeaders(aliceEmail),
+        body: JSON.stringify({
+          agentId: 'claude',
+          projectId: templateStoredProjectId,
+          message: 'Use the saved template context.',
+        }),
+      });
+      const chatBody = await chatResponse.text();
+
+      expect(chatResponse.ok).toBe(true);
+      expect(chatBody).not.toContain('runProjectOwnerScope');
+      expect(chatBody).not.toContain('ReferenceError');
+      expect(chatBody).toContain('AGENT_UNAVAILABLE');
+    } finally {
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
+      if (originalAgentHome === undefined) delete process.env.OD_AGENT_HOME;
+      else process.env.OD_AGENT_HOME = originalAgentHome;
+    }
+  });
+
   it('rejects re-posting a returned owner-scoped project id as a duplicate', async () => {
     const aliceEmail = 'alice@example.com';
     const bobEmail = 'bob@example.com';

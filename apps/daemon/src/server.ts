@@ -10735,7 +10735,7 @@ export async function startServer({
 
     const template =
       metadata?.kind === 'template' && typeof metadata.templateId === 'string'
-        ? (getTemplate(db, metadata.templateId, runProjectOwnerScope) ?? undefined)
+        ? (getTemplate(db, metadata.templateId, projectOwnerScope) ?? undefined)
         : undefined;
     let audioVoiceOptions = [];
     let audioVoiceOptionsError;
