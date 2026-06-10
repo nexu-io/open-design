@@ -10,7 +10,7 @@ test('live artifact MCP discovery is limited to mature ACP agents', () => {
       continue;
     }
     assert.equal(server.length, 1);
-    const [s] = server;
+    const s = server[0]!;
     assert.equal(s.name, 'open-design-live-artifacts');
     assert.equal(s.command, 'od');
     assert.deepEqual(s.args, ['mcp', 'live-artifacts']);
