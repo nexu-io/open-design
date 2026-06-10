@@ -111,17 +111,18 @@ export interface CandidateResult {
 }
 
 /**
- * Discover Open-Design-relevant tutorial candidates from the last `days`,
- * already filtered against the existing catalogue (caller passes known ids) and
- * the LLM relevance gate. Sorted by date descending so numbering is stable.
+ * Discover Open-Design-relevant tutorial candidates published since
+ * `publishedAfter` (RFC 3339), already filtered against the existing catalogue
+ * (caller passes known ids) and the LLM relevance gate. Sorted by date
+ * descending so numbering is stable. The caller owns the window start so it can
+ * derive a gap-free watermark instead of a fixed wall-clock window.
  */
 export async function fetchCandidates(
   key: string,
-  days: number,
+  publishedAfter: string,
   existingIds: Set<string>,
   queries: string[] = DEFAULT_QUERIES,
 ): Promise<CandidateResult> {
-  const publishedAfter = new Date(Date.now() - days * 86400_000).toISOString();
   const idSet = new Set<string>();
   let searchFailures = 0;
   for (const q of queries) {
@@ -132,6 +133,12 @@ export async function fetchCandidates(
       console.error(`search failed for "${q}": ${(e as Error).message}`);
     }
   }
+  // Any search failure means this sweep is incomplete: the failed query's
+  // results for this window are unknown. Return early (caller aborts) so the
+  // watermark does not advance past an incomplete sweep and skip those
+  // candidates permanently — the next run re-covers the same window.
+  if (searchFailures > 0) return { candidates: [], searchFailures, queryCount: queries.length };
+
   const fresh = [...idSet].filter((id) => !existingIds.has(id));
   if (fresh.length === 0) return { candidates: [], searchFailures, queryCount: queries.length };
 

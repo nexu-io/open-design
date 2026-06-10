@@ -9,17 +9,20 @@ on:
   # opens the PR).
   schedule:
     - cron: '30 2 * * *'
-  # Manual trigger: force a sweep outside the daily schedule, optionally with a
-  # wider lookback window.
+  # Manual trigger: force a sweep outside the daily schedule. Leave days empty to
+  # use the same gap-free watermark (since the last successful run) the schedule
+  # uses; set it to force a fixed N-day catch-up window.
   workflow_dispatch:
     inputs:
       days:
-        description: 'Lookback window in days'
+        description: 'Override lookback window in days (blank = since last successful run)'
         required: false
-        default: '14'
+        default: ''
 
 permissions:
   contents: read
+  # Read this workflow's own run history to derive a gap-free window start.
+  actions: read
 
 concurrency:
   group: tutorials-youtube-sync
@@ -43,12 +46,17 @@ jobs:
       - name: Discover candidates and post Feishu digest
         working-directory: apps/landing-page
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           FEISHU_TUTORIALS_WEBHOOK: ${{ secrets.FEISHU_TUTORIALS_WEBHOOK }}
           FEISHU_TUTORIALS_SECRET: ${{ secrets.FEISHU_TUTORIALS_SECRET }}
+          DAYS_OVERRIDE: ${{ github.event.inputs.days }}
         run: |
-          npx --yes tsx@4.22.3 scripts/youtube-tutorials/notify-candidates.ts \
-            --days "${{ github.event.inputs.days || '14' }}"
+          if [ -n "$DAYS_OVERRIDE" ]; then
+            npx --yes tsx@4.22.3 scripts/youtube-tutorials/notify-candidates.ts --days "$DAYS_OVERRIDE"
+          else
+            npx --yes tsx@4.22.3 scripts/youtube-tutorials/notify-candidates.ts
+          fi
