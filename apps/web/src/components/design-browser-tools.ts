@@ -15,6 +15,12 @@ export interface BrowserElementSnapshot {
   selectionKind?: 'element';
 }
 
+export interface BrowserMeasureTargetRequest {
+  elementId: string;
+  key: string;
+  selector: string;
+}
+
 export interface BrowserViewportPreset {
   id: BrowserViewportId;
   label: string;
@@ -237,6 +243,74 @@ export function browserElementPickerScript(filePath: string): string {
   document.addEventListener('click', onClick, true);
   document.addEventListener('keydown', onKeyDown, true);
 }))()
+`;
+}
+
+export function browserMeasureTargetsScript(
+  filePath: string,
+  targets: BrowserMeasureTargetRequest[],
+): string {
+  return `
+(() => {
+  const filePath = ${JSON.stringify(filePath)};
+  const targets = ${JSON.stringify(targets)};
+  function visibleRect(el) {
+    if (!el || typeof el.getBoundingClientRect !== 'function') return null;
+    const rect = el.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+    return rect;
+  }
+  function styleSnapshot(el) {
+    const s = window.getComputedStyle(el);
+    return {
+      color: s.color,
+      backgroundColor: s.backgroundColor,
+      fontSize: s.fontSize,
+      fontWeight: s.fontWeight,
+      lineHeight: s.lineHeight,
+      textAlign: s.textAlign,
+      fontFamily: s.fontFamily,
+      paddingTop: s.paddingTop,
+      paddingRight: s.paddingRight,
+      paddingBottom: s.paddingBottom,
+      paddingLeft: s.paddingLeft,
+      borderRadius: s.borderRadius
+    };
+  }
+  function snapshotFor(target) {
+    let el = null;
+    try { el = document.querySelector(String(target.selector || '')); } catch (_) { el = null; }
+    const rect = visibleRect(el);
+    if (!el || !rect) return null;
+    const tag = el.tagName ? el.tagName.toLowerCase() : 'element';
+    const cls = typeof el.className === 'string' && el.className.trim()
+      ? '.' + el.className.trim().split(/\\s+/).slice(0, 2).join('.')
+      : '';
+    let htmlHint = '';
+    try {
+      const match = String(el.outerHTML || '').replace(/\\s+/g, ' ').match(/^<[^>]+>/);
+      htmlHint = match ? match[0] : '';
+    } catch (_) {}
+    return {
+      key: String(target.key || ''),
+      filePath,
+      elementId: String(target.elementId || ''),
+      selector: String(target.selector || ''),
+      label: tag + cls,
+      text: String(el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 240),
+      position: {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      },
+      htmlHint: htmlHint.slice(0, 220),
+      style: styleSnapshot(el),
+      selectionKind: 'element'
+    };
+  }
+  return targets.map(snapshotFor).filter(Boolean);
+})()
 `;
 }
 

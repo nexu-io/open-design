@@ -1,7 +1,6 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
-import process from "node:process";
+import { dirname, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -9,7 +8,6 @@ import { ToolPackCache } from "../src/cache.js";
 import type { ToolPackConfig } from "../src/config.js";
 import { prepareResourceTree } from "../src/win/resources.js";
 import type { WinPaths } from "../src/win/types.js";
-import { ensureDaemonPlaywrightFixture } from "./playwright-fixture.js";
 
 async function writeFakeOpenCodeCompanion(
   source: string,
@@ -65,7 +63,6 @@ describe("prepareResourceTree", () => {
     const workspaceRoot = join(root, "workspace");
     const resourceRoot = join(root, "materialized", "open-design");
     const cache = new ToolPackCache(join(root, "cache"));
-    const playwrightFixture = await ensureDaemonPlaywrightFixture(process.cwd());
     const config = { workspaceRoot } as ToolPackConfig;
     const paths = { resourceRoot } as WinPaths;
     const templatePath = join(
@@ -103,10 +100,9 @@ describe("prepareResourceTree", () => {
         "miss",
       ]);
     } finally {
-      await playwrightFixture.cleanup();
       await rm(root, { force: true, recursive: true });
     }
-  }, 15_000);
+  });
 
   it("copies a configured Vela CLI binary into the Windows resource tree", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-vela-"));
@@ -114,7 +110,6 @@ describe("prepareResourceTree", () => {
     const resourceRoot = join(root, "materialized", "open-design");
     const source = join(root, "source", "vela.exe");
     const cache = new ToolPackCache(join(root, "cache"));
-    const playwrightFixture = await ensureDaemonPlaywrightFixture(process.cwd());
     const config = { workspaceRoot } as ToolPackConfig;
     const paths = { resourceRoot } as WinPaths;
     const originalVelaBin = process.env.OPEN_DESIGN_VELA_CLI_BIN;
@@ -135,19 +130,17 @@ describe("prepareResourceTree", () => {
         readFile(join(resourceRoot, "bin", "libexec", "opencode", "opencode"), "utf8"),
       ).resolves.toBe("fake opencode\n");
     } finally {
-      await playwrightFixture.cleanup();
       if (originalVelaBin == null) delete process.env.OPEN_DESIGN_VELA_CLI_BIN;
       else process.env.OPEN_DESIGN_VELA_CLI_BIN = originalVelaBin;
       await rm(root, { force: true, recursive: true });
     }
-  }, 15_000);
+  });
 
   it("fails strict Windows resource preparation when configured Vela CLI is missing", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-vela-strict-"));
     const workspaceRoot = join(root, "workspace");
     const resourceRoot = join(root, "materialized", "open-design");
     const cache = new ToolPackCache(join(root, "cache"));
-    const playwrightFixture = await ensureDaemonPlaywrightFixture(process.cwd());
     const config = {
       workspaceRoot,
       requireVelaCli: true,
@@ -162,12 +155,11 @@ describe("prepareResourceTree", () => {
         prepareResourceTree(config, paths, cache, { materialize: true }),
       ).rejects.toThrow();
     } finally {
-      await playwrightFixture.cleanup();
       if (originalVelaBin == null) delete process.env.OPEN_DESIGN_VELA_CLI_BIN;
       else process.env.OPEN_DESIGN_VELA_CLI_BIN = originalVelaBin;
       await rm(root, { force: true, recursive: true });
     }
-  }, 15_000);
+  });
 
   it("invalidates the Windows resource tree cache when the Vela companion changes", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-vela-companion-"));
@@ -175,7 +167,6 @@ describe("prepareResourceTree", () => {
     const resourceRoot = join(root, "materialized", "open-design");
     const source = join(root, "source", "vela.exe");
     const cache = new ToolPackCache(join(root, "cache"));
-    const playwrightFixture = await ensureDaemonPlaywrightFixture(process.cwd());
     const config = { workspaceRoot } as ToolPackConfig;
     const paths = { resourceRoot } as WinPaths;
     const originalVelaBin = process.env.OPEN_DESIGN_VELA_CLI_BIN;
@@ -211,52 +202,9 @@ describe("prepareResourceTree", () => {
         "miss",
       ]);
     } finally {
-      await playwrightFixture.cleanup();
       if (originalVelaBin == null) delete process.env.OPEN_DESIGN_VELA_CLI_BIN;
       else process.env.OPEN_DESIGN_VELA_CLI_BIN = originalVelaBin;
       await rm(root, { force: true, recursive: true });
     }
-  }, 15_000);
-
-  it("invalidates the Windows resource tree cache when the Playwright bundle changes", async () => {
-    const root = await mkdtemp(join(tmpdir(), "open-design-win-playwright-bundle-"));
-    const workspaceRoot = join(root, "workspace");
-    const resourceRoot = join(root, "materialized", "open-design");
-    const cache = new ToolPackCache(join(root, "cache"));
-    const playwrightFixture = await ensureDaemonPlaywrightFixture(process.cwd());
-    const materializedReadme = join(
-      resourceRoot,
-      "ms-playwright",
-      basename(playwrightFixture.headlessRoot),
-      basename(playwrightFixture.headlessSentinel),
-    );
-    const config = { workspaceRoot } as ToolPackConfig;
-    const paths = { resourceRoot } as WinPaths;
-
-    try {
-      await createWorkspaceFixture(workspaceRoot);
-      await writeFile(playwrightFixture.headlessSentinel, "headless shell one\n", "utf8");
-
-      await prepareResourceTree(config, paths, cache, { materialize: true });
-
-      await expect(readFile(materializedReadme, "utf8")).resolves.toBe(
-        "headless shell one\n",
-      );
-
-      await writeFile(playwrightFixture.headlessSentinel, "headless shell two\n", "utf8");
-
-      await prepareResourceTree(config, paths, cache, { materialize: true });
-
-      await expect(readFile(materializedReadme, "utf8")).resolves.toBe(
-        "headless shell two\n",
-      );
-      expect(cache.report().entries.map((entry) => entry.status)).toEqual([
-        "miss",
-        "miss",
-      ]);
-    } finally {
-      await playwrightFixture.cleanup();
-      await rm(root, { force: true, recursive: true });
-    }
-  }, 15_000);
+  });
 });

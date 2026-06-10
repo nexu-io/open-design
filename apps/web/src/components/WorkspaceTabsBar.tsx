@@ -53,6 +53,11 @@ interface TabDragTarget {
 interface Props {
   route: Route;
   projects: Project[];
+  // Once onboarding is finished (completed or skipped), the permanent entry
+  // tab must never linger on the 'onboarding' (Welcome) view — some completion
+  // paths navigate straight to a new project/design-system and leave the entry
+  // tab showing Welcome in the background. This flips it back to Home.
+  onboardingCompleted?: boolean;
 }
 
 const STORAGE_KEY = 'open-design:workspace-tabs:v1';
@@ -401,7 +406,7 @@ interface HoverPreviewState {
 
 const HOVER_PREVIEW_DELAY_MS = 380;
 
-export function WorkspaceTabsBar({ route, projects }: Props) {
+export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false }: Props) {
   const t = useT();
   const [state, setState] = useState<WorkspaceTabsState>(() => initialTabsState(route));
   const [tabsMenuOpen, setTabsMenuOpen] = useState(false);
@@ -477,6 +482,28 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   useEffect(() => {
     setState((current) => syncStateToRoute(current, route));
   }, [route]);
+
+  // Auto-close the Welcome tab once onboarding ends: rewrite any entry tab
+  // still parked on the 'onboarding' view back to 'home'. This catches every
+  // finish path uniformly — Skip, last-step Continue, and the design-system
+  // Generate route that navigates to a fresh project while leaving the entry
+  // tab on Welcome in the background.
+  useEffect(() => {
+    if (!onboardingCompleted) return;
+    setState((current) => {
+      if (!current.tabs.some((tab) => tab.kind === 'entry' && tab.view === 'onboarding')) {
+        return current;
+      }
+      return normalizeTabsState({
+        ...current,
+        tabs: current.tabs.map((tab) =>
+          tab.kind === 'entry' && tab.view === 'onboarding'
+            ? { ...tab, view: 'home' }
+            : tab,
+        ),
+      });
+    });
+  }, [onboardingCompleted]);
 
   // Scroll the active tab into view when it changes. The strip itself
   // is native-scrollable horizontally (see CSS), so we just nudge the

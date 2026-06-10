@@ -30,6 +30,7 @@ import type {
   RunTimingAnalytics,
 } from './run-analytics-observability.js';
 import type { RunFailureClassification } from './run-failure-classification.js';
+import { readTelemetryEnvironment } from './telemetry-environment.js';
 
 // Langfuse US region: confirmed by an end-to-end smoke on 2026-05-07 — the
 // project's keys authenticate against `us.cloud.langfuse.com` only. EU host
@@ -37,10 +38,10 @@ import type { RunFailureClassification } from './run-failure-classification.js';
 // See specs/change/20260507-langfuse-telemetry/spec.md Q3.
 const DEFAULT_BASE_URL = 'https://us.cloud.langfuse.com';
 
-const INPUT_MAX_BYTES = 8 * 1024;
-const OUTPUT_MAX_BYTES = 16 * 1024;
-const TOOL_INPUT_MAX_BYTES = 4 * 1024;
-const TOOL_OUTPUT_MAX_BYTES = 4 * 1024;
+export const INPUT_MAX_BYTES = 64 * 1024;
+const OUTPUT_MAX_BYTES = 64 * 1024;
+const TOOL_INPUT_MAX_BYTES = 8 * 1024;
+const TOOL_OUTPUT_MAX_BYTES = 8 * 1024;
 const ARTIFACTS_MAX_ITEMS = 50;
 const SESSION_ID_MAX = 200; // Langfuse drops sessionIds longer than this.
 const HARD_BATCH_MAX_BYTES = 1024 * 1024;
@@ -105,6 +106,12 @@ export interface RunSummary {
     lineCount: number;
     truncated: boolean;
   };
+  stdout?: {
+    tail: string;
+    lineCount: number;
+    truncated: boolean;
+  };
+  diagnostics?: unknown;
 }
 
 export interface MessageSummary {
@@ -144,12 +151,13 @@ export type ObjectManifestAccessScope = 'owner' | 'project' | 'workspace' | 'eva
 
 export type ObjectManifestRetentionPolicy =
   | 'ephemeral'
+  | 'observability_90d'
   | 'project_lifetime'
   | 'eval_fixture'
   | 'legal_hold';
 
 export interface TraceSafeObjectManifestBase {
-  object_class: 'attachment' | 'artifact';
+  object_class: 'attachment' | 'artifact' | 'input_text_snapshot';
   storage_ref: string;
   status: ObjectManifestStatus;
   reason?: string;
@@ -166,9 +174,12 @@ export interface TraceSafeObjectManifestBase {
   retention_policy: ObjectManifestRetentionPolicy;
   access_scope: ObjectManifestAccessScope;
   sensitivity: ObjectManifestSensitivity;
-  source: 'user_upload' | 'agent_generated';
+  source: 'user_upload' | 'agent_generated' | 'user_prompt';
   expires_at: string | null;
   approved_by: string | null;
+  open_in_open_design_url?: null;
+  preview_status?: string;
+  access_policy?: 'open_design_auth_required';
 }
 
 export interface AttachmentManifestEntry extends TraceSafeObjectManifestBase {
@@ -184,6 +195,12 @@ export interface ArtifactManifestEntry extends TraceSafeObjectManifestBase {
   build_status?: string;
   preview_status?: string;
   export_status?: string;
+}
+
+export interface InputTextSnapshotManifestEntry extends TraceSafeObjectManifestBase {
+  object_class: 'input_text_snapshot';
+  input_text_snapshot_id: string;
+  type: 'text';
 }
 
 export interface ToolCallSummary {
@@ -253,6 +270,7 @@ export interface ReportContext {
   artifacts: ArtifactSummary[];
   attachmentManifest?: AttachmentManifestEntry[];
   artifactManifest?: ArtifactManifestEntry[];
+  inputTextSnapshotManifest?: InputTextSnapshotManifestEntry[];
   manifestCompleteness?: ObjectManifestCompleteness;
   tools?: ToolCallSummary[];
   agentEvents?: AgentEventSummary[];
@@ -834,12 +852,9 @@ function buildTimingSpanBodies(
             ? 'unmeasured'
             : 'prompt_stack_ready',
         content_policy: opts.promptStack
-          ? 'redacted_prompt_stack_inline_with_object_refs'
+          ? 'redacted_prompt_stack_on_generation_input_with_object_refs'
           : 'metadata_only_or_unavailable',
         ...promptBuildSummary(ctx.promptTelemetry),
-        prompt_stack: opts.promptStack
-          ? structuredPromptStackInput(opts.promptStack)
-          : undefined,
       },
       metadata: { boundary: 'promptBuildStartAt -> promptBuildEndAt' },
     },
@@ -1033,6 +1048,12 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
   const artifactManifestTruncated = wantsArtifacts
     ? manifestTruncated(ctx.artifactManifest)
     : undefined;
+  const inputTextSnapshotManifest = wantsArtifacts && wantsContent
+    ? cappedManifestEntries(ctx.inputTextSnapshotManifest)
+    : undefined;
+  const inputTextSnapshotManifestTruncated = wantsArtifacts && wantsContent
+    ? manifestTruncated(ctx.inputTextSnapshotManifest)
+    : undefined;
 
   const tokens = ctx.message.usage
     ? {
@@ -1089,6 +1110,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
   // keys best). All entries are anonymous — no PII, no credentials.
   const traceMetadata: Record<string, unknown> = {
     success,
+    env: readTelemetryEnvironment(),
     status: ctx.run.status,
     error: ctx.run.error ?? undefined,
     error_code: ctx.run.errorCode,
@@ -1097,6 +1119,8 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     ...(ctx.run.failure ?? {}),
     ...(ctx.run.timings ?? {}),
     stderr: ctx.run.stderr,
+    stdout: ctx.run.stdout,
+    diagnostics: ctx.run.diagnostics,
     eventsSummary: ctx.eventsSummary,
     tokens,
     cost_usd: costBreakdown.cost_usd,
@@ -1112,6 +1136,8 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     attachment_manifest_truncated: attachmentManifestTruncated,
     artifact_manifest: artifactManifest,
     artifact_manifest_truncated: artifactManifestTruncated,
+    input_text_snapshot_manifest: inputTextSnapshotManifest,
+    input_text_snapshot_manifest_truncated: inputTextSnapshotManifestTruncated,
     manifest_completeness: wantsArtifacts
       ? (ctx.manifestCompleteness ?? 'unavailable')
       : undefined,
@@ -1129,7 +1155,6 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     osRelease: ctx.runtime?.osRelease,
     arch: ctx.runtime?.arch,
     clientType: ctx.runtime?.clientType,
-    promptStack,
     ...promptStackFlatMetadata,
   };
 
@@ -1223,7 +1248,6 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
           cost_source: costBreakdown.cost_source,
           cost_breakdown: costBreakdown,
           performance_diagnostics: performanceDiagnostics,
-          promptStack,
           ...promptStackFlatMetadata,
         },
       },
@@ -1252,7 +1276,6 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
           cost_source: costBreakdown.cost_source,
           cost_breakdown: costBreakdown,
           performance_diagnostics: performanceDiagnostics,
-          promptStack,
           ...promptStackFlatMetadata,
           reason: 'no_model_generation',
         },

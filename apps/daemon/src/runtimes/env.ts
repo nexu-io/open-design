@@ -96,6 +96,13 @@ export function spawnEnvForAgent(
   if (agentId === 'amr') {
     Object.assign(env, amrVelaProfileEnv(env));
     Object.assign(env, amrAnalyticsIdentityEnv(env));
+    // Identify Open Design as the host so the vela CLI tags its command +
+    // model_request analytics with source=open_design (revenue attribution).
+    // Not PII (unlike the installation id above), so set it regardless of the
+    // telemetry-consent gate that amrAnalyticsIdentityEnv applies.
+    if (!env.AMR_CLIENT_SOURCE?.trim()) {
+      env.AMR_CLIENT_SOURCE = 'open_design';
+    }
     if (!env.OPENCODE_TEST_HOME?.trim() && env.OD_DATA_DIR?.trim()) {
       env.OPENCODE_TEST_HOME = path.join(
         env.OD_DATA_DIR.trim(),
@@ -123,6 +130,20 @@ export function spawnEnvForAgent(
       'OPENAI_API_KEY',
       'CODEX_API_KEY',
     ]);
+    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+  }
+  if (agentId === 'opencode') {
+    // OpenCode is bun-based and, left to its defaults, walks up from its cwd to
+    // the nearest project root and runs `bun install` there at startup to set up
+    // local plugins. When that root is a pnpm workspace (the daemon's own repo,
+    // or a project nested inside it), the install replaces the pnpm `.pnpm` store
+    // with a bun `node_modules/.bun` + `bun.lock` and breaks the workspace.
+    // Disable project-config discovery (and its install) so OpenCode only honors
+    // the config the daemon injects via OPENCODE_CONFIG_CONTENT — this is exactly
+    // what the AMR path already does for its private OpenCode server.
+    if (!env.OPENCODE_DISABLE_PROJECT_CONFIG?.trim()) {
+      env.OPENCODE_DISABLE_PROJECT_CONFIG = 'true';
+    }
     return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
   return reapplySandboxRuntimeEnv(env, sandboxRuntime);

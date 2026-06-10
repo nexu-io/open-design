@@ -122,7 +122,7 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
   const builtApp = await readBuiltAppManifest(paths);
   await runPhase("payload-artifact", async () => {
     if (builtApp == null) throw new Error("cannot build Windows launcher payload without a built app manifest");
-    segments.push(...await buildWinLauncherPayloadArchive(config, paths, builtApp));
+    segments.push(...await buildWinLauncherPayloadArchive(config, paths, builtApp, cache));
   });
   const sizeReport = await runPhase("size-report", async () => collectWinSizeReport(config, paths, builtApp));
   return {

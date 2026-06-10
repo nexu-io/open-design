@@ -27,7 +27,7 @@ import {
 } from "@open-design/platform";
 
 import type { ToolPackConfig } from "./config.js";
-import { copyBundledPlaywrightChromium, copyBundledResourceTrees, linuxResources } from "./resources.js";
+import { copyBundledResourceTrees, linuxResources } from "./resources.js";
 import { copyOptionalVelaCliBinary } from "./vela-cli.js";
 import { electronBuilderVersionForAppVersion, readRuntimeAppVersion } from "./versions.js";
 import { processWebSourcemaps } from "./web-sourcemaps.js";
@@ -394,6 +394,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@open-design/contracts", "build"]);
   await runPnpm(config, ["--filter", "@open-design/registry-protocol", "build"]);
   await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/launcher-proto", "build"]);
   await runPnpm(config, ["--filter", "@open-design/sidecar", "build"]);
   await runPnpm(config, ["--filter", "@open-design/platform", "build"]);
   await runPnpm(config, ["--filter", "@open-design/host", "build"]);
@@ -455,10 +456,6 @@ async function copyResourceTree(config: ToolPackConfig, paths: LinuxPaths): Prom
   await rm(paths.resourceRoot, { force: true, recursive: true });
   await mkdir(paths.resourceRoot, { recursive: true });
   await copyBundledResourceTrees({
-    workspaceRoot: config.workspaceRoot,
-    resourceRoot: paths.resourceRoot,
-  });
-  await copyBundledPlaywrightChromium({
     workspaceRoot: config.workspaceRoot,
     resourceRoot: paths.resourceRoot,
   });

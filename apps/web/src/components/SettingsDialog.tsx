@@ -40,6 +40,7 @@ import {
   fetchVelaLoginStatus,
   type VelaLoginStatus,
 } from '../providers/daemon';
+import { amrProfileBadgeLabel } from '../runtime/amr-guidance';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
 import {
@@ -81,6 +82,7 @@ import {
 } from '../state/maxTokens';
 import type {
   AgentInfo,
+  AgentModelChoice,
   ApiProtocol,
   ApiProtocolConfig,
   AppConfig,
@@ -839,6 +841,70 @@ export function updateAgentCliEnvValue(
   };
 }
 
+const AMR_PROFILE_AGENT_ID = 'amr';
+const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
+
+function sameAgentModelChoice(
+  left: AgentModelChoice | undefined,
+  right: AgentModelChoice | undefined,
+): boolean {
+  return (left?.model ?? null) === (right?.model ?? null)
+    && (left?.reasoning ?? null) === (right?.reasoning ?? null);
+}
+
+export function reconcileAmrProfileEnv(
+  currentAgentCliEnv: AppConfig['agentCliEnv'] | undefined,
+  nextInitialAgentCliEnv: AppConfig['agentCliEnv'] | undefined,
+): AppConfig['agentCliEnv'] | undefined {
+  const nextAmrProfile = nextInitialAgentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY];
+  const currentAmrProfile = currentAgentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY];
+  if (currentAmrProfile === nextAmrProfile) {
+    return currentAgentCliEnv;
+  }
+
+  const nextAgentCliEnv = { ...(currentAgentCliEnv ?? {}) };
+  const nextAmrEnv = { ...(nextAgentCliEnv[AMR_PROFILE_AGENT_ID] ?? {}) };
+
+  if (typeof nextAmrProfile === 'string' && nextAmrProfile.length > 0) {
+    nextAmrEnv[AMR_PROFILE_ENV_KEY] = nextAmrProfile;
+  } else {
+    delete nextAmrEnv[AMR_PROFILE_ENV_KEY];
+  }
+
+  if (Object.keys(nextAmrEnv).length > 0) {
+    nextAgentCliEnv[AMR_PROFILE_AGENT_ID] = nextAmrEnv;
+  } else {
+    delete nextAgentCliEnv[AMR_PROFILE_AGENT_ID];
+  }
+
+  return Object.keys(nextAgentCliEnv).length > 0 ? nextAgentCliEnv : {};
+}
+
+export function reconcileAmrModelChoice(
+  currentAgentModels: AppConfig['agentModels'] | undefined,
+  previousInitial: AppConfig,
+  nextInitial: AppConfig,
+): AppConfig['agentModels'] | undefined {
+  const previousAmrProfile = previousInitial.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY];
+  const nextAmrProfile = nextInitial.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY];
+  if (previousAmrProfile === nextAmrProfile) return currentAgentModels;
+
+  const previousChoice = previousInitial.agentModels?.[AMR_PROFILE_AGENT_ID];
+  const currentChoice = currentAgentModels?.[AMR_PROFILE_AGENT_ID];
+  if (!sameAgentModelChoice(currentChoice, previousChoice)) {
+    return currentAgentModels;
+  }
+
+  const nextChoice = nextInitial.agentModels?.[AMR_PROFILE_AGENT_ID];
+  const nextAgentModels = { ...(currentAgentModels ?? {}) };
+  if (nextChoice) {
+    nextAgentModels[AMR_PROFILE_AGENT_ID] = nextChoice;
+  } else {
+    delete nextAgentModels[AMR_PROFILE_AGENT_ID];
+  }
+  return Object.keys(nextAgentModels).length > 0 ? nextAgentModels : {};
+}
+
 export function agentRefreshOptionsForConfig(cfg: AppConfig): AgentRefreshOptions {
   return {
     throwOnError: true,
@@ -1015,6 +1081,7 @@ export function SettingsDialog({
   const [pendingMediaProviderEditIds, setPendingMediaProviderEditIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
+  const previousInitialRef = useRef(initial);
   const lastSavedAppearanceRef = useRef({
     theme: initial.theme ?? 'system',
     accentColor: resolveAccentColor(initial.accentColor),
@@ -1032,6 +1099,38 @@ export function SettingsDialog({
       accentColor: resolveAccentColor(initial.accentColor),
     };
   }, [initial.theme, initial.accentColor]);
+
+  useEffect(() => {
+    const previousInitial = previousInitialRef.current;
+    setCfg((current) => {
+      const nextAgentCliEnv = reconcileAmrProfileEnv(current.agentCliEnv, initial.agentCliEnv);
+      const nextAgentModels = reconcileAmrModelChoice(current.agentModels, previousInitial, initial);
+      if (
+        nextAgentCliEnv === current.agentCliEnv
+        && nextAgentModels === current.agentModels
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        agentCliEnv: nextAgentCliEnv,
+        agentModels: nextAgentModels,
+      };
+    });
+    autosaveLastSavedRef.current = {
+      ...autosaveLastSavedRef.current,
+      agentCliEnv: reconcileAmrProfileEnv(
+        autosaveLastSavedRef.current.agentCliEnv,
+        initial.agentCliEnv,
+      ),
+      agentModels: reconcileAmrModelChoice(
+        autosaveLastSavedRef.current.agentModels,
+        previousInitial,
+        initial,
+      ),
+    };
+    previousInitialRef.current = initial;
+  }, [initial]);
 
   // Revert the live theme preview to the most recently persisted appearance.
   // That is the initial appearance until autosave succeeds; after autosave,
@@ -3401,6 +3500,10 @@ export function SettingsDialog({
                             isAmrAgent && active && amrCardStatus?.loggedIn
                               ? amrCardStatus.user?.email || t('settings.amrSignedIn')
                               : '';
+                          const amrCardProfileBadge =
+                            isAmrAgent && active && amrCardStatus?.loggedIn
+                              ? amrProfileBadgeLabel(amrCardStatus.profile)
+                              : null;
                           const amrRevealPendingCancelAction =
                             isAmrAgent &&
                             active &&
@@ -3411,6 +3514,7 @@ export function SettingsDialog({
                             <div
                               key={a.id}
                               ref={isAmrAgent ? amrCardRef : undefined}
+                              data-testid={`settings-agent-card-${a.id}`}
                               className={
                                 'agent-card agent-card-installed' +
                                 (active ? ' active' : '') +
@@ -3429,6 +3533,7 @@ export function SettingsDialog({
                                 <button
                                   type="button"
                                   className="agent-card-select"
+                                  data-testid={`settings-agent-select-${a.id}`}
                                   onClick={() => {
                                     trackSettingsLocalCliClick(analytics.track, {
                                       page_name: 'settings',
@@ -3494,9 +3599,14 @@ export function SettingsDialog({
                                       ) : null}
                                       {amrCardEmail ? (
                                         <div className="agent-card-amr-email">
-                                          <span title={amrCardEmail}>
+                                          <span className="agent-card-amr-email-text" title={amrCardEmail}>
                                             {amrCardEmail}
                                           </span>
+                                          {amrCardProfileBadge ? (
+                                            <span className="agent-card-amr-profile-badge">
+                                              {amrCardProfileBadge}
+                                            </span>
+                                          ) : null}
                                         </div>
                                       ) : null}
                                       {!active && modelSummary ? (

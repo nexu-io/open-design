@@ -25,7 +25,6 @@ const PHASE_4_ATOMS = [
   'direction-picker',
   'todo-write',
   'critique-theater',
-  'visual-validation',
 ];
 
 // Phase 6 (figma-migration native, spec §21.4)

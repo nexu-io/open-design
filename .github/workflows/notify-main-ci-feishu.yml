@@ -131,11 +131,13 @@ jobs:
               return matches;
             }
 
+            const playwrightUiFailureTitlePattern = /(?:\d+\)\s+|\[[^\]]+\]\s+)?(?:\[chromium\]\s+)?[›>]\s+(ui\/[^›]+)\s+›\s+(.+)/;
+
             function extractTopFailures(text) {
               const failures = [];
               for (const line of text.split('\n')) {
                 const clean = line.replace(/\x1b\[[0-9;]*m/g, '').trim();
-                const match = clean.match(/(?:\d+\)\s+|\[[^\]]+\]\s+)?(?:\[chromium\]\s+)?[›>]\s+(ui\/[^›]+)\s+›\s+(.+)/);
+                const match = clean.match(playwrightUiFailureTitlePattern);
                 if (match) {
                   failures.push(`${match[1]} › ${match[2].replace(/\s+/g, ' ')}`);
                 }
@@ -146,10 +148,76 @@ jobs:
               return [...new Set(failures)];
             }
 
+            function extractFailureSignalText(text) {
+              const lines = text.split('\n');
+              const selected = [];
+              let contextUntil = -1;
+              const startPatterns = [
+                playwrightUiFailureTitlePattern,
+                /##\[error\]/,
+                /^\s*Error:/,
+                /Test timeout of \d+ms exceeded/i,
+                /strict mode violation/i,
+                /Process from config\.webServer was not able to start/i,
+                /browserType\.launch|Executable doesn't exist|playwright install/i,
+                /Cannot find module|MODULE_NOT_FOUND/i,
+              ];
+              const contextPatterns = [
+                /Call log:/,
+                /^\s*-\s+(waiting for|locator resolved to|unexpected value|expect\.to)/i,
+                /^\s+at\s+/,
+                /Received:|Expected:/,
+              ];
+
+              lines.forEach((line, index) => {
+                const clean = line.replace(/\x1b\[[0-9;]*m/g, '').trimEnd();
+                if (startPatterns.some((pattern) => pattern.test(clean))) {
+                  selected.push(clean);
+                  contextUntil = Math.max(contextUntil, index + 14);
+                  return;
+                }
+                if (index <= contextUntil || contextPatterns.some((pattern) => pattern.test(clean))) {
+                  selected.push(clean);
+                }
+              });
+
+              return selected.join('\n').slice(0, 120_000);
+            }
+
+            function assertFailureSignalFixtures() {
+              const fixtures = [
+                {
+                  name: 'browser-prefixed Playwright title',
+                  log: [
+                    "1) [chromium] › ui/example-prefixed.test.ts:1:1 › [P0] prefixed failure",
+                    "Error: locator.click: Test timeout of 30000ms exceeded.",
+                  ].join('\n'),
+                  expected: '[P0] prefixed failure',
+                },
+                {
+                  name: 'no-browser Playwright title',
+                  log: [
+                    "1) › ui/example-unprefixed.test.ts:1:1 › [P0] unprefixed failure",
+                    "Error: locator.click: Test timeout of 30000ms exceeded.",
+                  ].join('\n'),
+                  expected: '[P0] unprefixed failure',
+                },
+              ];
+              for (const fixture of fixtures) {
+                const signalText = extractFailureSignalText(fixture.log);
+                if (!signalText.includes(fixture.expected)) {
+                  throw new Error(`Failure signal fixture failed for ${fixture.name}`);
+                }
+              }
+            }
+
+            assertFailureSignalFixtures();
+
             function classifyFailure({ runName, conclusion, problemJobs, logs }) {
               const combined = logs.join('\n').slice(0, 250_000);
               const jobText = problemJobs.map((job) => `${job.name} ${job.conclusion}`).join('\n');
-              const text = `${jobText}\n${combined}`;
+              const failureSignals = extractFailureSignalText(combined);
+              const text = `${jobText}\n${failureSignals || combined}`;
               const stalePatterns = [
                 /strict mode violation/i,
                 /element\(s\) not found/i,
@@ -286,20 +354,64 @@ jobs:
             }
 
             function failureFingerprint({ runName, conclusion, problemJobs, triage }) {
-              const jobs = problemJobs
-                .map((job) => `${normalizeFingerprintPart(job.name)}:${job.conclusion}`)
-                .sort();
               const signals = (triage.failedTests.length ? triage.failedTests : triage.reasons)
                 .map(normalizeFingerprintPart)
                 .sort();
+              const fallbackJobs = triage.failedTests.length
+                ? []
+                : problemJobs
+                    .map((job) => `${normalizeFingerprintPart(job.name)}:${normalizeFingerprintPart(job.conclusion)}`)
+                    .sort();
               return JSON.stringify({
                 workflow: normalizeFingerprintPart(runName),
                 conclusion: conclusion === 'timed_out' ? 'timed_out' : 'failure',
                 category: normalizeFingerprintPart(triage.category),
-                jobs,
+                fallbackJobs,
                 signals,
               });
             }
+
+            function assertFailureFingerprintFixtures() {
+              const baseTriage = {
+                category: '非 UI CI 失败',
+                confidence: '低',
+                reasons: ['未命中明确规则'],
+                failedTests: [],
+                suggestedAction: '查看失败 job 日志定位 build/test/lint 具体阶段。',
+              };
+              const lintFingerprint = failureFingerprint({
+                runName: 'ci',
+                conclusion: 'failure',
+                problemJobs: [{ name: 'lint', conclusion: 'failure' }],
+                triage: baseTriage,
+              });
+              const unitFingerprint = failureFingerprint({
+                runName: 'ci',
+                conclusion: 'failure',
+                problemJobs: [{ name: 'unit tests', conclusion: 'failure' }],
+                triage: baseTriage,
+              });
+              if (lintFingerprint === unitFingerprint) {
+                throw new Error('Non-UI fallback fingerprints must include failed job discriminators');
+              }
+
+              const uiTriage = {
+                ...baseTriage,
+                category: '疑似用例过时/选择器漂移',
+                failedTests: ['ui/example.test.ts:1:1 › [P0] stale selector'],
+              };
+              const uiFingerprint = failureFingerprint({
+                runName: 'ui-extended-main',
+                conclusion: 'failure',
+                problemJobs: [{ name: 'ui shard 1', conclusion: 'failure' }],
+                triage: uiTriage,
+              });
+              if (!JSON.parse(uiFingerprint).fallbackJobs || JSON.parse(uiFingerprint).fallbackJobs.length !== 0) {
+                throw new Error('UI fingerprints with parsed failed tests should not drift by job name');
+              }
+            }
+
+            assertFailureFingerprintFixtures();
 
             async function shouldSkipDuplicateAlert({ currentRun, currentFingerprint }) {
               if (isTest || !currentRun.workflow_id) return false;

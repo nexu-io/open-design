@@ -17,7 +17,7 @@ import {
   shouldInstallInternalPackageForMacPrebundle,
   shouldUseMacStandalonePrebundle,
 } from "../mac-prebundle.js";
-import { copyBundledPlaywrightChromium, copyBundledResourceTrees } from "../resources.js";
+import { copyBundledResourceTrees } from "../resources.js";
 import { copyOptionalVelaCliBinary } from "../vela-cli.js";
 import { electronBuilderVersionForAppVersion } from "../versions.js";
 import { runEsbuild, runNpmInstall, runPnpm } from "./commands.js";
@@ -138,10 +138,6 @@ export async function copyResourceTree(config: ToolPackConfig, paths: MacPaths):
     workspaceRoot: config.workspaceRoot,
     resourceRoot: paths.resourceRoot,
   });
-  await copyBundledPlaywrightChromium({
-    workspaceRoot: config.workspaceRoot,
-    resourceRoot: paths.resourceRoot,
-  });
   await copyOptionalVelaCliBinary({
     platform: "mac",
     requireBundled: config.requireVelaCli,
@@ -164,6 +160,7 @@ export function renderMacPackagedConfig(options: {
         : {}),
       namespace: options.config.namespace,
       ...(options.config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: options.config.telemetryRelayUrl }),
+      ...(options.config.updateMetadataUrl == null ? {} : { updateMetadataUrl: options.config.updateMetadataUrl }),
       ...(options.config.posthogKey == null ? {} : { posthogKey: options.config.posthogKey }),
       ...(options.config.posthogHost == null ? {} : { posthogHost: options.config.posthogHost }),
       ...(options.usePrebundledStandaloneWeb ? { webSidecarEntryRelative: MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH } : {}),

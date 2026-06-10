@@ -1,0 +1,30 @@
+{
+  "id": "video-seedance-desk-hologram-ar-realdesk",
+  "surface": "video",
+  "title": "Video - Desk Hologram AR on Real Workspace (Seedance 2.0)",
+  "summary": "A two-phase Seedance 2.0 workflow for the viral desk-hologram format: first lock a photoreal keyframe on a real developer desk (Open Design UI on the monitor, a cobalt-blue extraterrestrial hunter standing on the keyboard), then animate that still into a ~15s 9:16 image-to-video clip. Tuned for believable AR passthrough — medium-strength VFX, real desk clutter, monitor glow spill on the character, and light physical interactions (open mug, keyboard step, bow draw). Inspired by the desk-hologram Seedance 2.0 trend; no copyrighted character names in the prompt.",
+  "category": "Product",
+  "tags": [
+    "seedance-2.0",
+    "desk-hologram",
+    "ar",
+    "image-to-video",
+    "keyframe",
+    "photoreal",
+    "workspace",
+    "open-design",
+    "short-form",
+    "9:16"
+  ],
+  "model": "seedance-2.0",
+  "aspect": "9:16",
+  "prompt": "Two-phase production workflow for a ~15 second vertical desk-hologram AR clip (9:16, Seedance 2.0). Phase A locks the still; Phase B animates it. Use the same hero design in both phases.\n\n# Phase A — Image keyframe (gpt-image-2, image-to-image)\nUpload or generate a {argument name=\"desk_photo\" default=\"vertical iPhone photo of a lived-in real developer desk at night: floral desk mat, white mechanical keyboard, ASUS monitor with a screen bar, Mac mini, tangled USB-C/HDMI cables, sticky notes, pens, tissues, subtle monitor glow on the desk surface — NOT a clean 3D render\"}.\n\nImage edit prompt (i2i): Keep the real desk, monitor, keyboard, and clutter exactly as photographed. Add a {argument name=\"hero\" default=\"cobalt-blue extraterrestrial hunter with bioluminescent cyan spots, long dark braided hair, pointed ears, amber eyes, lean athletic build, leather loincloth and minimal tribal gear, a long prehensile tail, medium-strength semi-transparent holographic VFX (AR passthrough, not a thick cartoon outline)\"} standing on the keyboard keys in the foreground. The monitor shows {argument name=\"monitor_ui\" default=\"the Open Design app previewing the same character in a video template card — meta narrative: the character exists both on-screen and on the desk\"}. Place an {argument name=\"open_mug\" default=\"open ceramic coffee mug\"} on the desk within reach. Lighting: monitor key light + soft screen-bar rim; shallow depth of field; photoreal iPhone grain.\n\nExport this keyframe as the Seedance reference image.\n\n# Phase B — Video (Seedance 2.0 image-to-video, ~15s, reference = Phase A keyframe)\nA single continuous locked-off smartphone shot of the same real desk. The hero is a medium-strength holographic AR overlay with believable contact shadows and monitor-color spill on skin and tail. No cuts, no whip-pans, no on-screen text or watermarks.\n\n## Hero (locked identity, first frame to last)\n{argument name=\"hero_video\" default=\"cobalt-blue extraterrestrial hunter, bioluminescent cyan spots, braided hair, pointed ears, amber eyes, leather loincloth, long tail, semi-transparent holographic edges with soft cyan bloom\"}\n\n## Action timeline (~15s, one take)\n1. 0.0–3.0s — Idle on keyboard. Hero stands on the white keyboard, weight shifting subtly; tail sways; monitor shows Open Design preview of the same character; desk clutter stays untouched.\n2. 3.0–6.0s — Drink beat. Hero reaches for the {argument name=\"mug_action\" default=\"open ceramic mug\"}, lifts it with both hands, takes a small believable sip, sets it back without knocking it over; liquid level changes slightly.\n3. 6.0–9.0s — Keyboard interaction. Hero steps across keys with deliberate footfalls; keys depress slightly under bare feet; a few keys glow from contact; monitor UI remains stable.\n4. 9.0–15.0s — Archery beat. Hero draws a compact energy bow, aims toward the monitor, eyes track the arrow direction; a faint cyan arrow streak travels toward the screen; hero holds the finish pose as the glow fades.\n\n## Technical direction\n- Camera: fixed smartphone POV, slight natural handheld micro-drift only, no zooms.\n- Framing: hero + keyboard in lower third; monitor UI readable in upper half.\n- VFX: medium AR passthrough — semi-transparent body, soft edge bloom, grounded shadows on desk mat; NOT a solid toy figurine.\n- Lighting: monitor as primary key; preserve real desk reflections and cable clutter.\n- Motion: photoreal weight on feet and tail; bow draw in real time, no slow-motion ramp.\n\n## Negative prompt\nno copyrighted character names, no branded movie references, no anime cel-shading, no thick white sticker outline, no studio-sweep clean desk, no duplicated hero, no warped monitor UI text, no garbled glyphs on screen, no watermark, no on-screen captions, no jump cuts, no explosion, no blood, no extra limbs, no broken keyboard geometry, no weightless bow, no plastic toy look",
+  "previewImageUrl": "https://repo-assets.open-design.ai/resources/images/prompt-templates/video-seedance-desk-hologram-ar-realdesk-poster.jpg",
+  "previewVideoUrl": "https://repo-assets.open-design.ai/resources/videos/prompt-templates/video-seedance-desk-hologram-ar-realdesk.mp4",
+  "source": {
+    "repo": "nexu-io/open-design",
+    "license": "Apache-2.0",
+    "author": "open-design contributors",
+    "url": "https://x.com/VincentLogic/status/2063611686653981013"
+  }
+}

@@ -251,6 +251,9 @@ export class ToolPackCache {
       if (manifest.schemaVersion !== CACHE_SCHEMA_VERSION || manifest.nodeId !== node.id || manifest.key !== alias.key) return false;
       const seedOutputs = manifest.outputs.map(normalizeRelativePath);
       if ((await assertOutputsExist(alias.entryPath, seedOutputs)) != null) return false;
+      for (const target of source.materialize) {
+        if ((await assertOutputsExist(alias.entryPath, [normalizeRelativePath(target.from)])) != null) return false;
+      }
       if ((await node.invalidate({ entryRoot: alias.entryPath, manifest })) != null) return false;
 
       for (const target of source.materialize) {

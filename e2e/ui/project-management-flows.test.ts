@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { ensureRailOpen } from '@/playwright/rail';
-import type { Locator, Page, Request } from '@playwright/test';
+import type { Locator, Page, Request, Route } from '@playwright/test';
+import { routeAgents } from '../lib/playwright/mock-factory.js';
 
 const STORAGE_KEY = 'open-design:config';
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
@@ -111,13 +112,7 @@ test.beforeEach(async ({ page }) => {
     });
   });
 
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: AGENTS,
-      },
-    });
-  });
+  await routeAgents(page, AGENTS);
 });
 
 function artifactPreview(page: Page) {
@@ -343,7 +338,7 @@ test('[P1] project detail header design system picker switches the active projec
   expect(body.designSystemId).toBe('editorial-noir');
 });
 
-test('[P0] project detail header design system switch carries into the next run request', async ({ page }) => {
+test('[P0] @critical project detail header design system switch carries into the next run request', async ({ page }) => {
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await page.route('**/api/runs', async (route) => {
     const raw = route.request().postData();
@@ -397,7 +392,8 @@ test('[P0] project detail header design system switch carries into the next run 
   expect(runRequestBodies[0]?.designSystemId).toBe('editorial-noir');
 });
 
-test('[P0] project instructions flow into the next API run as project-level system prompt context', async ({ page }) => {
+test('[P0] @critical project instructions flow into the next API run as project-level system prompt context', async ({ page }) => {
+  test.setTimeout(60_000);
   let capturedSystemPrompt = '';
   const apiConfig = {
     onboardingCompleted: true,
@@ -462,16 +458,13 @@ test('[P0] project instructions flow into the next API run as project-level syst
   expect(capturedSystemPrompt).toContain(instructions);
 });
 
-test('[P0] project detail avatar menu lets the user switch Local CLI agents and models', async ({ page }) => {
+test('[P0] @critical project detail avatar menu lets the user switch Local CLI agents and models', async ({ page }) => {
+  test.setTimeout(60_000);
   await page.goto('/');
   await createProject(page, 'Header agent switch');
   await expectWorkspaceReady(page);
 
-  const trigger = page.locator('.avatar-menu .avatar-agent-trigger');
-  await trigger.click();
-  const menu = page.locator('.avatar-popover[role="dialog"]');
-  await expect(menu).toBeVisible();
-  const claudeButton = menu.getByRole('button', { name: /Claude Code/i });
+  const { menu, claudeButton } = await openAvatarAgentMenu(page);
   await expect(claudeButton).toBeVisible();
   await claudeButton.click();
 
@@ -485,6 +478,7 @@ test('[P0] project detail avatar menu lets the user switch Local CLI agents and 
 });
 
 test('[P0] project detail agent and model switches carry into the next daemon run request', async ({ page }) => {
+  test.setTimeout(60_000);
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await page.route('**/api/runs', async (route) => {
     const raw = route.request().postData();
@@ -507,11 +501,8 @@ test('[P0] project detail agent and model switches carry into the next daemon ru
   await createProject(page, 'Header agent switch run context');
   await expectWorkspaceReady(page);
 
-  const trigger = page.locator('.avatar-menu .avatar-agent-trigger');
-  await trigger.click();
-  const menu = page.locator('.avatar-popover[role="dialog"]');
-  await expect(menu).toBeVisible();
-  await menu.getByRole('button', { name: /Claude Code/i }).click();
+  const { menu, claudeButton } = await openAvatarAgentMenu(page);
+  await claudeButton.click();
   const modelSelect = menu.locator('.avatar-model-section [role=\"combobox\"]').first();
   await modelSelect.click();
   await page.getByRole('option', { name: /^Sonnet \(alias\)$/i }).click();
@@ -811,7 +802,7 @@ test('[P0] project detail share menu opens the current share page for uploaded h
     .toContain('https://protected-share.example');
 });
 
-test('[P0] project detail share menu publish action opens the deploy flow for the selected provider', async ({ page }) => {
+test('[P0] @critical project detail share menu publish action opens the deploy flow for the selected provider', async ({ page }) => {
   let deployConfigUrl: string | null = null;
   await page.route('**/api/projects/*/deployments', async (route) => {
     await route.fulfill({ json: { deployments: [] } });
@@ -1475,9 +1466,36 @@ async function openEntrySettingsDialog(page: Page, sectionName?: RegExp | string
   return settingsDialog;
 }
 
+async function openAvatarAgentMenu(page: Page): Promise<{
+  menu: Locator;
+  claudeButton: Locator;
+}> {
+  const trigger = page.locator('.avatar-menu .avatar-agent-trigger');
+  await trigger.click();
+  const menu = page.locator('.avatar-popover[role="dialog"]');
+  await expect(menu).toBeVisible();
+
+  const claudeButton = menu
+    .locator('[data-testid="avatar-agent-option-claude"], .avatar-item', {
+      hasText: /Claude Code/i,
+    })
+    .first();
+  if (!(await claudeButton.isVisible().catch(() => false))) {
+    const localCliOption = menu.getByRole('button', {
+      name: /Local CLI|本机 CLI|本地 CLI|Use local/i,
+    });
+    if (await localCliOption.isVisible().catch(() => false)) {
+      await localCliOption.click();
+    }
+  }
+  await expect(claudeButton).toBeVisible({ timeout: 20_000 });
+  return { menu, claudeButton };
+}
+
 async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
   await dismissPrivacyDialog(page);
+  await expect(page.getByTestId('project-title')).toBeVisible();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();

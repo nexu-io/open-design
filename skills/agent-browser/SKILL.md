@@ -115,6 +115,13 @@ screenshots.
 `agent-browser open` before `agent-browser connect`; doing so can make the CLI
 auto-launch Chrome and re-enter the crash path.
 
+Do not run Open Design's own daemon CLI as a browser automation tool. Commands
+such as `od browser snapshot`, `daemon-cli.mjs browser snapshot`, or
+`$OD_NODE_BIN $OD_BIN browser snapshot` are not valid browser tools; they can be
+misinterpreted as daemon startup and open an internal `127.0.0.1:<port>` service
+in the system browser. Use the external `agent-browser` CLI attached to CDP
+instead.
+
 Use this sequence:
 
 ```bash
@@ -164,13 +171,24 @@ export HOME=/tmp/agent-browser-home
 export AGENT_BROWSER_SESSION=od-local-preview
 ```
 
+When you start a temporary Chrome profile for this smoke path, close it before
+finishing the task. Prefer a shell trap around the whole smoke script:
+
+```bash
+CHROME_USER_DATA_DIR=/tmp/od-agent-browser-chrome
+cleanup_agent_browser() {
+  pkill -f -- "--user-data-dir=${CHROME_USER_DATA_DIR}" 2>/dev/null || true
+}
+trap cleanup_agent_browser EXIT INT TERM
+```
+
 With the Open Design preview at `http://127.0.0.1:17573/`, run:
 
 ```bash
 if ! curl -fsS http://127.0.0.1:9223/json/version | rg -q webSocketDebuggerUrl; then
   open -na "Google Chrome" --args \
     --remote-debugging-port=9223 \
-    --user-data-dir=/tmp/od-agent-browser-chrome \
+    --user-data-dir="$CHROME_USER_DATA_DIR" \
     --no-first-run \
     --no-default-browser-check
 

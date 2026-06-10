@@ -35,8 +35,4 @@ artifact lineage chain stays intact across multi-turn tune cycles.
 The handoff stage records `handoffKind: 'patch'` (or
 `'deployable-app'` when the user opted in via
 `od plugin run --target deployable-app` AND `build-test` ran
-successfully somewhere upstream in the project's history). The
-visual-validation atom remains available for explicit pipelines, but
-the default critique loop stays text-only until the daemon can use a
-post-render score to trigger another patch iteration instead of only
-failing after the agent has exited.
+successfully somewhere upstream in the project's history).

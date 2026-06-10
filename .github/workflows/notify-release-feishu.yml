@@ -9,11 +9,33 @@ name: notify-release-feishu
 # during it coalesce into a single trailing build of the latest commit. With
 # cancel-in-progress the previous behavior starved — pushes spaced closer than
 # the build duration kept cancelling each other and no package was ever cut.
+#
+# Also dispatchable by hand (workflow_dispatch) so a nightly + Feishu card can be
+# cut without an actual push. The normal manual path is to dispatch ON a
+# release/vX.Y.Z branch with `ref`/`release_version` empty — release-stable then
+# derives the version from the branch name exactly like the push trigger does.
+# Building from a non-release ref such as main is also possible but requires
+# `release_version` (e.g. 0.10.0, matching apps/packaged/package.json), because
+# the branch name carries no version; the resulting package is labelled
+# X.Y.Z.nightly.N on that same version line. Either way the build's actual commit
+# (not the dispatch ref) anchors the changelog and the card.
 
 on:
   push:
     branches:
       - "release/**"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref (branch/tag/SHA) to build a nightly from. Empty builds the ref this workflow is dispatched on. Dispatch on release/vX.Y.Z and leave empty for the normal path."
+        required: false
+        type: string
+        default: ""
+      release_version:
+        description: "Base version (x.y.z) — ONLY needed to build from a non-release ref such as main, where the branch name carries no version. Must equal apps/packaged/package.json. Leave empty on a release/vX.Y.Z branch."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -36,6 +58,14 @@ jobs:
     secrets: inherit
     with:
       channel: nightly
+      # Empty on push events (inputs context is unset there), so release-stable
+      # falls back to building the pushed commit. On workflow_dispatch this
+      # carries the operator-chosen ref (or empty = the dispatch ref).
+      ref: ${{ inputs.ref }}
+      # Empty on push and on release/vX.Y.Z dispatches (branch name carries the
+      # version). Only set when building from a non-release ref like main, where
+      # release-stable cannot derive the base version from the branch name.
+      release_version: ${{ inputs.release_version }}
 
   notify:
     name: Notify Feishu (release)
@@ -46,7 +76,11 @@ jobs:
       - name: Checkout built ref
         uses: actions/checkout@v6.0.2
         with:
-          ref: ${{ github.sha }}
+          # The commit release-stable actually built, not github.sha. On push
+          # the two coincide, but on workflow_dispatch with an explicit ref they
+          # can differ — anchoring on the built commit keeps the changelog range
+          # (previous_commit..commit) correct for manual nightly runs.
+          ref: ${{ needs.build.outputs.commit }}
           fetch-depth: 0
 
       - name: Compute changelog since last nightly

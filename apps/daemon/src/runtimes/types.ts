@@ -43,6 +43,11 @@ export type RuntimeContext = {
   // ~/.gemini/antigravity-cli/settings.json). Tests pass a temp path
   // so unit assertions against buildArgs do not touch the real home dir.
   antigravitySettingsPath?: string;
+  // Daemon-owned path to a temp file containing the composed prompt.
+  // Adapters with `promptViaFile: true` read this instead of receiving
+  // the prompt via argv or stdin. The daemon creates the file before
+  // buildArgs and removes it after the child exits.
+  promptFilePath?: string;
   // Resume-capable adapters (resumesSessionViaCli) read these to decide
   // whether to continue the CLI's own session. `resumeSessionId` is the
   // stored id for this (conversation, agent) when a prior session exists;
@@ -103,6 +108,11 @@ export type RuntimeAgentDef = {
   versionProbeTimeoutMs?: number;
   helpArgs?: string[];
   capabilityFlags?: Record<string, string>;
+  // Adapter reads the composed prompt from a daemon-created temp file.
+  // This is intentionally opt-in: stdin-capable adapters keep using
+  // `promptViaStdin`, and argv-only adapters keep their argv budget guard
+  // unless their CLI exposes an explicit prompt-file flag.
+  promptViaFile?: boolean;
   promptViaStdin?: boolean;
   // Format for the user prompt fed via stdin. Default is plain text (the
   // entire prompt buffer goes in raw, then stdin is closed). When set to

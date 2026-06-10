@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-orbis-nft",
+  "title": "Orbis NFT — Dark Space Landing",
+  "title_i18n": {
+    "zh-CN": "Orbis NFT — 暗黑太空 NFT 落地页",
+    "zh-TW": "Orbis NFT — 暗黑太空 NFT 落地頁",
+    "ja": "Orbis NFT — ダークスペースのランディング",
+    "ko": "Orbis NFT — 다크 스페이스 랜딩",
+    "de": "Orbis NFT — Dark-Space-Landingpage",
+    "fr": "Orbis NFT — Landing spatiale sombre",
+    "ru": "Orbis NFT — тёмный космический лендинг",
+    "es": "Orbis NFT — Landing espacial oscura",
+    "pt-BR": "Orbis NFT — Landing espacial escura",
+    "it": "Orbis NFT — Landing spaziale dark",
+    "vi": "Orbis NFT — Trang đích không gian tối",
+    "pl": "Orbis NFT — Mroczny kosmiczny landing",
+    "id": "Orbis NFT — Landing antariksa gelap",
+    "nl": "Orbis NFT — Donkere space-landing",
+    "ar": "Orbis NFT — صفحة هبوط فضائية داكنة",
+    "tr": "Orbis NFT — Karanlık uzay açılış sayfası",
+    "uk": "Orbis NFT — темний космічний лендинг",
+    "en": "Orbis NFT — Dark Space Landing"
+  },
+  "version": "0.1.0",
+  "description": "Dark space-themed NFT collection landing page with full-bleed CloudFront video backgrounds, a liquid-glass UI, Anton + Condiment fonts, and a neon-green accent across four sections.",
+  "description_i18n": {
+    "zh-CN": "暗黑太空主题 NFT 收藏落地页：全屏 CloudFront 视频背景、液态玻璃 UI、Anton + Condiment 字体、霓虹绿点缀，四个分区。",
+    "zh-TW": "暗黑太空主題 NFT 收藏落地頁：全螢幕 CloudFront 影片背景、液態玻璃 UI、Anton + Condiment 字體、霓虹綠點綴，四個分區。",
+    "ja": "ダークスペースをテーマにした NFT コレクションのランディングページ。全画面の CloudFront 動画背景、リキッドグラス UI、Anton + Condiment フォント、ネオングリーンのアクセントを4つのセクションで展開。",
+    "ko": "다크 스페이스 테마의 NFT 컬렉션 랜딩 페이지. 풀블리드 CloudFront 영상 배경, 리퀴드 글래스 UI, Anton + Condiment 폰트, 네온 그린 강조를 4개 섹션에 걸쳐 적용.",
+    "de": "Landingpage für eine NFT-Kollektion im düsteren Space-Look mit randlosen CloudFront-Videohintergründen, einer Liquid-Glass-UI, Anton-+-Condiment-Schriften und einem neongrünen Akzent über vier Abschnitte hinweg.",
+    "fr": "Landing page de collection NFT au thème spatial sombre, avec des fonds vidéo CloudFront plein cadre, une UI en liquid glass, les polices Anton + Condiment et une touche vert néon répartie sur quatre sections.",
+    "ru": "Лендинг NFT-коллекции в тёмной космической тематике с полноэкранными видеофонами CloudFront, UI в стиле liquid glass, шрифтами Anton + Condiment и неоново-зелёным акцентом в четырёх секциях.",
+    "es": "Landing page de colección NFT con temática espacial oscura, fondos de vídeo CloudFront a sangre completa, una UI de liquid glass, fuentes Anton + Condiment y un acento verde neón a lo largo de cuatro secciones.",
+    "pt-BR": "Landing page de coleção NFT com tema espacial escuro, fundos de vídeo CloudFront em tela cheia, uma UI de liquid glass, fontes Anton + Condiment e um destaque verde neon distribuído por quatro seções.",
+    "it": "Landing page di una collezione NFT a tema spaziale dark, con sfondi video CloudFront a tutto campo, una UI in liquid glass, font Anton + Condiment e un accento verde neon distribuito su quattro sezioni.",
+    "vi": "Trang đích bộ sưu tập NFT chủ đề không gian tối với nền video CloudFront tràn viền, giao diện liquid glass, font Anton + Condiment và điểm nhấn xanh neon trải khắp bốn phần.",
+    "pl": "Landing page kolekcji NFT w mrocznym kosmicznym klimacie, z pełnoekranowymi tłami wideo CloudFront, interfejsem w stylu liquid glass, fontami Anton + Condiment i neonowozielonym akcentem w czterech sekcjach.",
+    "id": "Landing page koleksi NFT bertema antariksa gelap dengan latar video CloudFront penuh layar, UI liquid glass, font Anton + Condiment, dan aksen hijau neon di empat bagian.",
+    "nl": "Landingspagina voor een NFT-collectie met een donker ruimtethema, schermvullende CloudFront-videoachtergronden, een liquid-glass UI, Anton- + Condiment-lettertypen en een neongroen accent verdeeld over vier secties.",
+    "ar": "صفحة هبوط لمجموعة NFT بطابع فضائي داكن مع خلفيات فيديو CloudFront تملأ الإطار بالكامل، وواجهة بأسلوب liquid glass، وخطوط Anton + Condiment، ولمسة خضراء نيون موزّعة على أربعة أقسام.",
+    "tr": "Karanlık uzay temalı bir NFT koleksiyonu açılış sayfası: tam ekran CloudFront video arka planları, liquid glass arayüz, Anton + Condiment yazı tipleri ve dört bölüme yayılan neon yeşili vurgu.",
+    "uk": "Лендинг NFT-колекції в темній космічній тематиці з повноекранними відеофонами CloudFront, інтерфейсом у стилі liquid glass, шрифтами Anton + Condiment і неоново-зеленим акцентом у чотирьох секціях.",
+    "en": "Dark space-themed NFT collection landing page with full-bleed CloudFront video backgrounds, a liquid-glass UI, Anton + Condiment fonts, and a neon-green accent across four sections."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Eli"
+  },
+  "homepage": "https://motionsites.ai/sections",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "nft",
+    "crypto",
+    "landing",
+    "dark"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create an NFT landing page called \"Orbis.Nft\" with 4 sections, using a dark space theme. The page uses video backgrounds served from CloudFront, a liquid glass UI effect, and a specific color/font system. Recreate it exactly as described below.\n\nFONTS (Google Fonts)\n\nAnton - Used for all headings and navigation text (aliased as font-grotesk in Tailwind)\n\nCondiment - A cursive script used for accent/overlay text (aliased as font-condiment in Tailwind)\n\nSystem monospace font (font-mono) - Used for body/description paragraphs\n\nLoad via Google Fonts in index.html:\n\nhttps://fonts.googleapis.com/css2?family=Anton&family=Condiment&display=swap\n\nCOLOR SYSTEM (Tailwind config)\n\nBackground: #010828 (deep dark navy blue)\n\ncream: #EFF4FF (off-white, used for all text)\n\nneon: #6FFF00 (bright green, used for accent cursive text and underline bars)\n\nLIQUID GLASS CSS EFFECT\n\nApplied via a .liquid-glass class. This is used on the navbar, social icon buttons, NFT cards, and card overlays:\n\n.liquid-glass {\n  background: rgba(255, 255, 255, 0.01);\n  background-blend-mode: luminosity;\n  backdrop-filter: blur(4px);\n  -webkit-backdrop-filter: blur(4px);\n  border: none;\n  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);\n  position: relative;\n  overflow: hidden;\n}\n.liquid-glass::before {\n  content: '';\n  position: absolute;\n  inset: 0;\n  border-radius: inherit;\n  padding: 1.4px;\n  background: linear-gradient(180deg,\n    rgba(255,255,255,0.45) 0%, rgba(255,255,255,0.15) 20%,\n    rgba(255,255,255,0) 40%, rgba(255,255,255,0) 60%,\n    rgba(255,255,255,0.15) 80%, rgba(255,255,255,0.45) 100%);\n  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);\n  -webkit-mask-composite: xor;\n  mask-composite: exclude;\n  pointer-events: none;\n}\n\nTEXTURE OVERLAY\n\nA full-screen fixed texture overlay sits on top of everything (z-50, pointer-events-none). It uses a /texture.png image with mix-blend-mode: lighten at opacity: 0.6, covering the entire viewport with background-size: cover.\n\nSECTION 1: HERO (Full viewport)\n\nBackground: Full-bleed looping muted autoplaying video covering the entire section with object-cover\n\nVideo URL: https://plugin-assets.open-design.ai/plugins/orbis-nft/hf_20260331_045634_e1c98c76-1265-4f5c-882a-4276f2080894-f71ad1.mp4\n\nContainer: max-w-[1831px] centered with responsive horizontal padding\n\nSection has rounded-b-[32px] bottom corners, clipping the video\n\nHeader:\n\nLeft: \"Orbis.Nft\" logo text in Anton, 16px, uppercase\n\nCenter: Navigation bar with liquid-glass effect, rounded-[28px], px-[52px] py-[24px]. Contains 5 links: Homepage, Gallery, Buy NFT, FAQ, Contact. Each link is Anton 13px uppercase. Links have hover:text-neon transition. Nav is hidden on mobile (hidden lg:block).\n\nHero Content:\n\nLarge heading in Anton font, responsive sizing: 40px mobile / 60px sm / 75px md / 90px lg. Uppercase. leading-[1.05] mobile, leading-[1] tablet+. Max width 780px on desktop, offset with lg:ml-32.\n\nText reads:\n\nBeyond earth\nand ( its ) familiar boundaries\n\nOverlaid cursive accent text \"Nft collection\" in Condiment font (24px-48px responsive), positioned absolute to the right side of the heading, slightly rotated (-rotate-1), in neon green (text-neon), with mix-blend-exclusion and opacity-90.\n\nSocial Icons (Desktop):\n\n3 square buttons (56x56px) stacked vertically in top-right corner, each with liquid-glass and rounded-[1rem]. Icons: Mail, Twitter, Github from lucide-react (20x20px). hover:bg-white/10 transition.\n\nSocial Icons (Mobile):\n\nSame 3 buttons but centered horizontally below the heading, shown only below lg breakpoint.\n\nSECTION 2: ABOUT / INTRO (Full viewport)\n\nBackground: Full-bleed looping muted autoplaying video with object-cover\n\nVideo URL: https://plugin-assets.open-design.ai/plugins/orbis-nft/hf_20260331_151551_992053d1-3d3e-4b8c-abac-45f22158f411-2620ce.mp4\n\nContainer: Same max-w-[1831px] centered, with generous vertical padding (64px-96px responsive)\n\nTop Row (flex row on desktop, column on mobile):\n\nLeft: Heading in Anton, responsive 32px-60px, uppercase:\n\nHello!\nI'm orbis\n\nWith an overlaid \"Orbis\" in Condiment cursive, neon green, mix-blend-exclusion, 36px-68px responsive, positioned absolute at bottom-right of heading, slightly rotated.\n\nRight: Short paragraph in monospace 14px-16px, uppercase, cream color, max-width 266px: \"A digital object fixed beyond time and place. An exploration of distance, form, and silence in space\"\n\nBottom Row (flex row, space-between):\n\nTwo columns (left and right), each containing 2 identical paragraphs. Same monospace text as above but at opacity-10 (nearly invisible, decorative). Right column hidden below lg. On mobile, text uses text-[#010828] (dark) so it's effectively invisible against the video.\n\nSECTION 3: NFT COLLECTION GRID\n\nBackground: Solid #010828 (no video)\n\nContainer: Same max-w-[1831px] centered\n\nHeader Row:\n\nLeft: Heading in Anton, 32px-60px responsive, uppercase:\n\nCollection of\n  [indented] Space objects\n\nWhere \"Space\" is in Condiment cursive neon green, and \"objects\" is in Anton. The second line is indented with ml-12 / ml-24 / ml-32 responsive.\n\nRight: A \"SEE ALL CREATORS\" button. \"SEE\" is large (32px-60px), \"ALL\" and \"CREATORS\" are stacked smaller (20px-36px) next to it. Below the text is a neon green bar (bg-neon, height 6px-10px responsive, full width of button).\n\nNFT Card Grid:\n\n3-column grid on desktop (lg:grid-cols-3), 2 on tablet, 1 on mobile. Gap 24px.\n\nEach card: liquid-glass container with rounded-[32px], padding 18px, hover:bg-white/10 transition.\n\nInside each card: a square video container (pb-[100%] aspect ratio trick) with rounded-[24px] overflow hidden.\n\nVideo URLs:\n\nhttps://plugin-assets.open-design.ai/plugins/orbis-nft/hf_20260331_053923_22c0a6a5-313c-474c-85ff-3b50d25e944a-c28f11.mp4 (Score: 8.7/10)\n\nhttps://plugin-assets.open-design.ai/plugins/orbis-nft/hf_20260331_054411_511c1b7a-fb2f-42ef-bf6c-32c0b1a06e79-2909f8.mp4 (Score: 9/10)\n\nhttps://plugin-assets.open-design.ai/plugins/orbis-nft/hf_20260331_055427_ac7035b5-9f3b-4289-86fc-941b2432317d-b38d87.mp4 (Score: 8.2/10)\n\nEach card has an overlay bar at the bottom: a liquid-glass bar with rounded-[20px], px-5 py-4, showing \"RARITY SCORE:\" label (11px, cream/70% opacity) and score value (16px). On the right side of the bar is a circular purple gradient button (48x48px, bg-gradient-to-br from-[#b724ff] to-[#7c3aed]) with a right-arrow chevron SVG inside, with shadow-lg shadow-purple-500/50 and hover:scale-110 transition.\n\nSECTION 4: CTA / FINAL SECTION\n\nBackground: Full-width video (NOT object-cover, instead w-full h-auto block so it displays at native aspect ratio)\n\nVideo URL: https://plugin-assets.open-design.ai/plugins/orbis-nft/hf_20260331_055729_72d66327-b59e-4ae9-bb70-de6ccb5ecdb0-afc7a8.mp4\n\nText Content (positioned absolute over the video):\n\nRight-aligned block, offset with lg:pr-[20%] lg:pl-[15%]\n\nSmall \"Go beyond\" text in Condiment cursive, neon green, mix-blend-exclusion, positioned absolute at top-left of the heading block. Sizes: 17px-68px responsive.\n\nHeading in Anton, responsive 16px-60px, uppercase:\n\nJOIN US.\nREVEAL WHAT'S HIDDEN.\nDEFINE WHAT'S NEXT.\nFOLLOW THE SIGNAL.\n\n\"JOIN US.\" has extra bottom margin (mb-4 to mb-12 responsive) before the remaining lines.\n\nSocial Icons (Bottom-left, absolute positioned):\n\nPositioned at left-[8%], bottom-[12%] to bottom-[20%] with responsive breakpoints.\n\nA vertical liquid-glass container with rounded-[0.5rem] to rounded-[1.25rem] responsive, containing 3 stacked icon buttons (Mail, Twitter, Github).\n\nButtons have responsive widths using viewport units and rem values (e.g., w-[14vw] sm:w-[14.375rem] md:w-[10.78125rem] lg:w-[16.77rem]) and similar responsive heights.\n\nButtons are separated by border-b border-white/10 dividers (except the last one).\n\nKEY TECHNICAL DETAILS\n\nFramework: React + TypeScript + Vite + Tailwind CSS\n\nIcons: lucide-react (Mail, Twitter, Github)\n\nNo additional packages needed beyond what Vite + React + Tailwind provides\n\nAll videos: autoPlay loop muted playsInline attributes\n\nResponsive: Mobile-first with sm:, md:, lg: breakpoints throughout\n\nMax content width: 1831px across all sections\n\nAll text is uppercase except the Condiment cursive accents which are normal-case\n",
+        "zh-CN": "构建 Orbis.Nft 暗黑太空 NFT 落地页（四个分区、CloudFront 视频背景、液态玻璃效果、Anton/Condiment 字体、霓虹绿点缀）。完整规格以 en 字段为准。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Orbis NFT — Dark Space Landing"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "network"
+    ]
+  }
+}

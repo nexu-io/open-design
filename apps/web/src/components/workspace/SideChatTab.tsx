@@ -132,10 +132,10 @@ export function SideChatTab({
       </div>
       <div className={styles.pane}>
         <ChatPane
-	          messages={controlledChat?.messages ?? chat.messages}
-	          streaming={controlledChat?.streaming ?? chat.streaming}
-	          loading={controlledChat?.loading ?? chat.loading}
-	          sendDisabled={controlledChat?.sendDisabled}
+          messages={controlledChat?.messages ?? chat.messages}
+          streaming={controlledChat?.streaming ?? chat.streaming}
+          loading={controlledChat?.loading ?? chat.loading}
+          sendDisabled={controlledChat?.sendDisabled}
           queuedItems={controlledChat?.queuedItems}
           onRemoveQueuedSend={controlledChat?.onRemoveQueuedSend}
           onUpdateQueuedSend={controlledChat?.onUpdateQueuedSend}
@@ -167,6 +167,7 @@ export function SideChatTab({
           onDeleteConversation={onDeleteConversation}
           onNewConversation={onNewConversation}
           researchAvailable={config.mode === 'daemon'}
+          config={config}
         />
       </div>
     </div>
