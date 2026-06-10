@@ -44,7 +44,6 @@ const locale = localeFromPath(Astro.url.pathname);
 const localeDef = getLocaleDefinition(locale);
 const ui = getLandingUiCopy(locale);
 const href = (path: string) => localizedHref(path, locale);
-const sourceUrl = `https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/tutorials/${entry.id}.md`;
 const youtubeUrl = `https://www.youtube.com/watch?v=${entry.data.youtubeId}`;
 const thumbnailUrl =
   entry.data.thumbnail ?? `https://i.ytimg.com/vi/${entry.data.youtubeId}/maxresdefault.jpg`;
@@ -204,14 +203,6 @@ const tutorialCopy =
 
             <div class='tut-foot'>
               <a class='tut-back' href={href('/tutorials/')}>{ui.tutorials.backToTutorials}</a>
-              <a
-                class='tut-source'
-                href={sourceUrl}
-                target='_blank'
-                rel='noreferrer noopener'
-              >
-                {ui.tutorials.viewSource}
-              </a>
             </div>
           </div>
         </article>
@@ -461,17 +452,6 @@ const tutorialCopy =
       }
       .tut-foot .tut-back {
         margin-bottom: 0;
-      }
-      .tut-source {
-        font-family: var(--sans);
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--ink);
-        text-decoration: none;
-        transition: color 160ms ease;
-      }
-      .tut-source:hover {
-        color: var(--coral);
       }
       @media (max-width: 760px) {
         .tut-detail {
