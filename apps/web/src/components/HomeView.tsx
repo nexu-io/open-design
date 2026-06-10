@@ -670,7 +670,10 @@ export function HomeView({
       // plugin. Stored on `active.explicitPick`; gates the chip's clear button.
       explicitPick?: boolean;
     },
-  ) {
+    // Resolves true when the bound plugin left the composer submittable
+    // (inputs valid, apply not failed/superseded) — callers use this to
+    // decide whether the Send cue should fire.
+  ): Promise<boolean> {
     const applyRequestId = activePluginApplyRequestRef.current + 1;
     activePluginApplyRequestRef.current = applyRequestId;
     setActiveSkill(null);
@@ -740,12 +743,14 @@ export function HomeView({
 
     if (!inputsValid) {
       setPendingChipId(null);
-      return;
+      // Required inputs without defaults: the inputs form is the next step,
+      // not Send.
+      return false;
     }
-    if (!shouldResolveImmediately) return;
+    if (!shouldResolveImmediately) return true;
 
     const result = await resolveActivePlugin(record, optimisticInputs, applyRequestId);
-    if (activePluginApplyRequestRef.current !== applyRequestId) return;
+    if (activePluginApplyRequestRef.current !== applyRequestId) return false;
     if (!result) {
       // Roll back the optimistic active so submit can't fire against a
       // plugin that never bound. Only clear when the in-flight apply
@@ -753,7 +758,7 @@ export function HomeView({
       // would otherwise stomp a successful later apply.
       setActive((prev) => (prev?.record.id === record.id ? { ...prev, inputsValid: false } : prev));
       setError(`Failed to apply ${record.title}. Make sure the daemon is reachable.`);
-      return;
+      return false;
     }
     const reconciledInputs: Record<string, unknown> = { ...optimisticInputs };
     for (const field of result.inputs ?? []) {
@@ -761,6 +766,10 @@ export function HomeView({
         reconciledInputs[field.name] = field.default;
       }
     }
+    const reconciledInputsValid = pluginInputsAreValid(
+      options?.preserveInputFields ? inputFields : result.inputs ?? inputFields,
+      reconciledInputs,
+    );
     setActive((prev) =>
       prev && prev.record.id === record.id
         ? {
@@ -768,10 +777,7 @@ export function HomeView({
             result,
             inputs: reconciledInputs,
             inputFields: options?.preserveInputFields ? inputFields : result.inputs ?? inputFields,
-            inputsValid: pluginInputsAreValid(
-              options?.preserveInputFields ? inputFields : result.inputs ?? inputFields,
-              reconciledInputs,
-            ),
+            inputsValid: reconciledInputsValid,
             projectMetadata: homeCreateProjectMetadata(
               prev.projectKind,
               reconciledInputs,
@@ -808,6 +814,7 @@ export function HomeView({
         }
       }
     }
+    return reconciledInputsValid;
   }
 
   async function resolveActivePlugin(
@@ -847,7 +854,7 @@ export function HomeView({
       inputFields: options?.inputFields,
       queryTemplate: options?.queryTemplate,
     });
-    const confirm = () => usePlugin(record, nextPrompt, options);
+    const confirm = async () => { await usePlugin(record, nextPrompt, options); };
     if (options?.replaceWithoutConfirmation) {
       void confirm();
       return;
@@ -916,7 +923,7 @@ export function HomeView({
         ? resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale) || null
         : null;
       const hasTemplate = Boolean(rawQueryTemplate && trimmedSeed);
-      await usePlugin(record, combined, {
+      const submittable = await usePlugin(record, combined, {
         ...(inputs ? { inputs } : {}),
         queryTemplate: hasTemplate ? rawQueryTemplate : null,
         // Allow an arbitrary prefix whenever we track the query template, so the
@@ -928,14 +935,25 @@ export function HomeView({
         explicitPick: true,
       });
       scrollHomeToTop();
+      // Plugins with required inputs and no defaults land on the inputs
+      // form, not Send — only cue Send when submit is actually unlocked.
+      if (submittable) {
+        inputRef.current?.pulseSend();
+      }
       return;
     }
-    await usePlugin(record, undefined, {
+    const submittable = await usePlugin(record, undefined, {
       ...(inputs ? { inputs } : {}),
       suppressPromptUpdate: true,
       explicitPick: true,
     });
     scrollHomeToTop();
+    // Plain Use doesn't seed the composer; with no draft and no staged
+    // files (or with required inputs still missing) the send button stays
+    // disabled, and flashing a disabled button points at a dead end.
+    if (submittable && (prompt.trim().length > 0 || stagedFiles.length > 0)) {
+      inputRef.current?.pulseSend();
+    }
   }
 
   function runWithReplacementConfirmation(
@@ -1025,6 +1043,8 @@ export function HomeView({
       projectMetadata: active?.projectMetadata ?? null,
       deferApply: true,
       explicitPick: true,
+    }).then((submittable) => {
+      if (submittable) inputRef.current?.pulseSend();
     });
     focusPromptAtEnd();
   }
@@ -1546,6 +1566,7 @@ export function HomeView({
       <HomeHero
         ref={inputRef}
         active={isActive}
+        firstRunGuide={projectsLoading ? undefined : projects.length === 0}
         prompt={prompt}
         onPromptChange={handlePromptChange}
         onSubmit={submit}

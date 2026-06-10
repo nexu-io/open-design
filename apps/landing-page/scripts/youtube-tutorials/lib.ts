@@ -205,6 +205,94 @@ export async function isAboutOpenDesign(video: VideoInput): Promise<boolean> {
   }
 }
 
+export interface CandidateScore {
+  isOpenDesign: boolean;
+  /** Suggested 0-100 priority score (completeness 40 + relevance 40 + reach 20). */
+  overall: number;
+  /** Is it a complete, followable tutorial (5) vs a short/teaser/mention (0-1). */
+  completeness: number; // 0-5
+  /** How precisely the video is about Open Design specifically. */
+  relevance: number; // 0-5
+  /** Audience reach tier derived from view count. */
+  reach: number; // 0-5
+  /** Suggested verdict: worth adding to the catalogue or not. */
+  recommend: boolean;
+  /** One short line explaining the score. */
+  reason: string;
+}
+
+/**
+ * Suggested "add it" verdict: a candidate is worth recommending only when it is
+ * an actual (at least partial) tutorial that is squarely about Open Design.
+ * Filters out teasers/Shorts (low completeness) and passing mentions (low
+ * relevance) regardless of view count. Reach never rescues a non-tutorial.
+ */
+export function isRecommended(score: Pick<CandidateScore, 'completeness' | 'relevance'>): boolean {
+  return score.completeness >= 2 && score.relevance >= 3;
+}
+
+/** Map a view count to a 0-5 reach tier (log-ish buckets). */
+export function reachScore(viewCount?: number): number {
+  const v = viewCount ?? 0;
+  if (v >= 50000) return 5;
+  if (v >= 10000) return 4;
+  if (v >= 3000) return 3;
+  if (v >= 800) return 2;
+  if (v >= 100) return 1;
+  return 0;
+}
+
+const clamp05 = (n: unknown): number => {
+  const x = Math.round(Number(n));
+  return Number.isFinite(x) ? Math.min(5, Math.max(0, x)) : 0;
+};
+
+/**
+ * Gate + score a candidate in a single LLM call. The model judges relevance
+ * (is it Open Design) plus two 0-5 axes — completeness (is it a real, followable
+ * tutorial) and relevance precision (how squarely it's about Open Design). The
+ * reach axis is computed from view count, not the model. The 0-100 overall is a
+ * suggestion to help a maintainer prioritise; final say stays human.
+ */
+export async function scoreCandidate(video: VideoInput): Promise<CandidateScore> {
+  const system =
+    'You gate and score a YouTube video for the Open Design tutorials catalogue. ' +
+    'Open Design (github.com/nexu-io/open-design, ~50k stars) is an open-source self-evolving design ' +
+    'agent that runs on coding agents (Claude Code, Codex, etc.), positioned as a free/open-source ' +
+    'alternative to Claude Design. Reject lookalikes that merely sound similar: OpenCode, OpenClaude, a ' +
+    'smaller "Open Codesign" repo, Google Stitch, Figma, or generic AI-agent/AI-coding roundups not ' +
+    'focused on Open Design. Score two axes 0-5: ' +
+    '"completeness" = is this a complete, followable tutorial (5 = full step-by-step setup/walkthrough/demo; ' +
+    '3 = partial or overview; 1 = short/teaser/Shorts/news mention; 0 = not instructional); ' +
+    '"relevance" = how squarely the video is specifically about Open Design (5 = dedicated to it; ' +
+    '3 = significant segment; 1 = passing mention). ' +
+    'Reply with STRICT JSON: {"isOpenDesign": boolean, "completeness": 0-5, "relevance": 0-5, "reason": string (<=120 chars)}.';
+  const user = JSON.stringify({
+    title: video.title,
+    channel: video.author,
+    durationSeconds: video.durationSeconds,
+    description: video.description.slice(0, 1800),
+  });
+  let isOpenDesign = false;
+  let completeness = 0;
+  let relevance = 0;
+  let reason = '';
+  try {
+    const out = extractJson(await callLLM(system, user, 320)) as Partial<CandidateScore>;
+    isOpenDesign = out.isOpenDesign === true;
+    completeness = clamp05(out.completeness);
+    relevance = clamp05(out.relevance);
+    reason = (out.reason ?? '').toString().trim().slice(0, 160);
+  } catch {
+    // On parse/LLM failure, be conservative: exclude and zero the score.
+    return { isOpenDesign: false, overall: 0, completeness: 0, relevance: 0, reach: 0, recommend: false, reason: 'score failed' };
+  }
+  const reach = reachScore(video.viewCount);
+  const overall = completeness * 8 + relevance * 8 + reach * 4; // 0-100
+  const recommend = isRecommended({ completeness, relevance });
+  return { isOpenDesign, overall, completeness, relevance, reach, recommend, reason };
+}
+
 /**
  * Generate the editorial summary, body, category, and slug topic for a video,
  * matching the hand-written voice of the existing 12 entries: a tight summary

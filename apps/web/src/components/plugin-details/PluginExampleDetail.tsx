@@ -17,7 +17,7 @@ import {
 import { PreviewModal, type PreviewSharePopoverItem } from '../PreviewModal';
 import { buildPluginShareUrl } from './PluginShareMenu';
 import { PluginMetaSections } from './PluginMetaSections';
-import { buildPluginUseMenu } from './pluginUseMenu';
+import { buildPluginUseMenu, pluginUsePrimaryAction } from './pluginUseMenu';
 import type { PluginUseAction } from '../plugins-home/useActions';
 
 interface Props {
@@ -149,8 +149,8 @@ export function PluginExampleDetail({
       primaryAction={hideUseAction
         ? undefined
         : {
-            label: t('preview.usePlugin'),
-            onClick: () => onUse(record, 'use'),
+            label: pluginUsePrimaryAction(record, t).label,
+            onClick: () => onUse(record, pluginUsePrimaryAction(record, t).action),
             busy: !!isApplying,
             busyLabel: 'Applying…',
             testId: `plugin-details-use-${record.id}`,

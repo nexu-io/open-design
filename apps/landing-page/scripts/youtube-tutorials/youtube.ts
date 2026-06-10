@@ -5,7 +5,7 @@
 import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { isAboutOpenDesign, iso8601ToSeconds, type VideoInput } from './lib.ts';
+import { iso8601ToSeconds, scoreCandidate, type CandidateScore, type VideoInput } from './lib.ts';
 
 export const DEFAULT_QUERIES = [
   'open design open source claude design alternative',
@@ -104,8 +104,10 @@ async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise
   return out;
 }
 
+export type ScoredCandidate = VideoInput & { score: CandidateScore };
+
 export interface CandidateResult {
-  candidates: VideoInput[];
+  candidates: ScoredCandidate[];
   searchFailures: number;
   queryCount: number;
 }
@@ -113,9 +115,10 @@ export interface CandidateResult {
 /**
  * Discover Open-Design-relevant tutorial candidates published since
  * `publishedAfter` (RFC 3339), already filtered against the existing catalogue
- * (caller passes known ids) and the LLM relevance gate. Sorted by date
- * descending so numbering is stable. The caller owns the window start so it can
- * derive a gap-free watermark instead of a fixed wall-clock window.
+ * (caller passes known ids) and the LLM relevance gate. Each kept candidate is
+ * scored (completeness + relevance + reach) and the list is sorted by that
+ * suggested score descending. The caller owns the window start so it can derive
+ * a gap-free watermark instead of a fixed wall-clock window.
  */
 export async function fetchCandidates(
   key: string,
@@ -143,11 +146,17 @@ export async function fetchCandidates(
   if (fresh.length === 0) return { candidates: [], searchFailures, queryCount: queries.length };
 
   const videos = await fetchVideoDetails(fresh, key);
-  const gated = await mapPool(videos, 4, async (v) => ({ v, ok: await isAboutOpenDesign(v) }));
-  const candidates = gated
-    .filter((r) => r.ok)
-    .map((r) => r.v)
-    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  const scored = await mapPool(videos, 4, async (v) => ({ ...v, score: await scoreCandidate(v) }));
+  const candidates = scored
+    .filter((c) => c.score.isOpenDesign)
+    // Recommended ("worth adding") first, then highest suggested score, then
+    // newest — so the actionable picks cluster at the top of the digest.
+    .sort(
+      (a, b) =>
+        Number(b.score.recommend) - Number(a.score.recommend) ||
+        b.score.overall - a.score.overall ||
+        (a.date < b.date ? 1 : a.date > b.date ? -1 : 0),
+    );
   return { candidates, searchFailures, queryCount: queries.length };
 }
 

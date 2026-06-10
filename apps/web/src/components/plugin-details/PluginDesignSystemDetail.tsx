@@ -30,7 +30,7 @@ import {
 } from '../PreviewModal';
 import { buildPluginShareUrl, PluginShareMenu } from './PluginShareMenu';
 import { PluginMetaSections } from './PluginMetaSections';
-import { buildPluginUseMenu } from './pluginUseMenu';
+import { buildPluginUseMenu, pluginUsePrimaryAction } from './pluginUseMenu';
 import type { PluginUseAction } from '../plugins-home/useActions';
 
 interface Props {
@@ -185,8 +185,8 @@ export function PluginDesignSystemDetail({
       primaryAction={hideUseAction
         ? undefined
         : {
-            label: t('preview.usePlugin'),
-            onClick: () => onUse(record, 'use'),
+            label: pluginUsePrimaryAction(record, t).label,
+            onClick: () => onUse(record, pluginUsePrimaryAction(record, t).action),
             busy: !!isApplying,
             busyLabel: 'Applying…',
             testId: `plugin-details-use-${record.id}`,

@@ -1797,6 +1797,64 @@
   box-shadow: var(--shadow-xs);
   color: var(--accent);
 }
+/* Attention sheen — a soft light sweep crossing the element twice. Shared
+   by the guidance trail: the first-run prototype chip, the first
+   example-prompt card after a chip pick, and the send button after a
+   plugin Use / example pick. No ring, no scale: a glint reads as an
+   invitation, not an alarm. The 0.25s delay lets scroll-back/seed motion
+   settle so the sweep lands on a resting element. */
+@keyframes home-hero-attention-sheen {
+  0% {
+    transform: translateX(-130%) skewX(-18deg);
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(230%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+.home-hero__attention-sheen {
+  position: relative;
+  overflow: hidden;
+}
+.home-hero__attention-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 45%;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(
+    105deg,
+    transparent,
+    rgba(255, 255, 255, 0.5),
+    transparent
+  );
+  animation: home-hero-attention-sheen 0.9s cubic-bezier(0.23, 1, 0.32, 1) 0.25s 2 both;
+}
+/* Light surfaces (chips, preset cards) need a tinted glint to be visible. */
+.home-hero__type-tab.home-hero__attention-sheen::after,
+.home-hero__rail-chip.home-hero__attention-sheen::after,
+.home-hero__plugin-preset.home-hero__attention-sheen::after {
+  background: linear-gradient(
+    105deg,
+    transparent,
+    color-mix(in srgb, var(--accent) 28%, white),
+    transparent
+  );
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-hero__attention-sheen::after {
+    animation: none;
+    content: none;
+  }
+}
 .home-hero__submit {
   appearance: none;
   display: inline-flex;
