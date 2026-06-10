@@ -302,10 +302,11 @@ export function Header({
               </ul>
             </li>
             {/*
-              Agent — for now this dropdown lists only AMR (the design Agent).
-              The 17 first-party coding-agent adapters and their per-agent
-              /agents/ hub anchors are intentionally held back for a later
-              pass; the trigger already links to the /agents/ hub.
+              Agent — AMR (the design Agent) heads the dropdown, followed by the
+              coding agents that have a dedicated long-form design page. Brand
+              names are locale-invariant, so they are listed here directly; the
+              routes stay in lockstep with DETAIL_ROUTES on the /agents/ hub. The
+              trigger still links to the /agents/ hub.
             */}
             <li className='has-dropdown'>
               <a
@@ -324,6 +325,18 @@ export function Header({
                     <span className='dropdown-blurb'>{productMenuCopy.amrBlurb}</span>
                   </a>
                 </li>
+                {[
+                  { route: 'codex-design', name: 'Codex' },
+                  { route: 'cursor-design', name: 'Cursor' },
+                  { route: 'claude-code-design', name: 'Claude Code' },
+                  { route: 'opencode-design', name: 'OpenCode' },
+                ].map((agentItem) => (
+                  <li role='none' key={agentItem.route}>
+                    <a role='menuitem' href={href(`/agents/${agentItem.route}/`)}>
+                      <span className='dropdown-name'>{agentItem.name}</span>
+                    </a>
+                  </li>
+                ))}
               </ul>
             </li>
             {/*
