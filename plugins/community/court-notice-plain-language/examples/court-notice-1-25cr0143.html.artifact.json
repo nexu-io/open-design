@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "generated-plugin/examples/court-notice-1-25cr0143.html",
+  "entry": "generated-plugin/examples/court-notice-1-25cr0143.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-06-10T11:29:23.798Z",
+  "updatedAt": "2026-06-10T11:29:23.798Z",
+  "metadata": {
+    "inferred": true,
+    "reconciled": true
+  }
+}

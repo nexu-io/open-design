@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Court Notice — Case 1:25CR0143</title>
+<style>
+  @page { size: A4 portrait; margin: 0; }
+
+  :root {
+    --yellow: #F2C211;
+    --ink:    #1A1A1A;
+    --red:    #C8181C;
+    /* THREE SIZES ONLY: */
+    --size-date: 108pt;  /* deadline number — single largest element */
+    --size-head:  64pt;  /* headline */
+    --size-body:  15pt;  /* everything else */
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: #2a2a2a;
+    font-family: 'Barlow Condensed', 'Oswald', 'Roboto Condensed',
+                 'Arial Narrow', 'Helvetica Neue', Helvetica, Arial,
+                 sans-serif;
+    font-stretch: condensed;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 24px; padding: 24px 0;
+  }
+
+  /* ---------- the page ---------- */
+  .page {
+    width: 210mm; height: 297mm;
+    background: var(--yellow); color: var(--ink);
+    position: relative; overflow: hidden;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+    display: grid;
+    grid-template-rows: auto auto auto 1fr auto auto;
+  }
+
+  /* ---------- banner ---------- */
+  .banner {
+    background: var(--ink); color: #fff;
+    padding: 14mm 12mm 12mm; text-align: center;
+  }
+  .banner h1 {
+    font-weight: 900; font-size: var(--size-head);
+    line-height: 0.9; letter-spacing: 0.005em;
+    text-transform: uppercase; text-wrap: balance;
+  }
+
+  /* ---------- lede ---------- */
+  .lede {
+    padding: 6mm 12mm 4mm;
+    font-weight: 800; font-size: var(--size-body); line-height: 1.2;
+    text-align: center; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+
+  /* ---------- red deadline block ---------- */
+  .deadline {
+    margin: 0 12mm; background: var(--red); color: #fff;
+    padding: 6mm 6mm 7mm; text-align: center;
+  }
+  .deadline .label {
+    font-weight: 800; font-size: var(--size-body); line-height: 1;
+    text-transform: uppercase; letter-spacing: 0.22em; margin-bottom: 3mm;
+  }
+  .deadline .date {
+    font-weight: 900; font-size: var(--size-date); line-height: 0.88;
+    letter-spacing: -0.01em; text-transform: uppercase; white-space: nowrap;
+  }
+  .deadline .meta {
+    font-weight: 900; font-size: var(--size-body); line-height: 1;
+    letter-spacing: 0.18em; margin-top: 4mm; text-transform: uppercase;
+  }
+  .deadline .conseq {
+    font-weight: 800; font-size: var(--size-body); line-height: 1.2;
+    margin-top: 5mm; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+
+  /* ---------- actions ---------- */
+  .actions {
+    padding: 7mm 12mm 4mm;
+    display: grid; gap: 4mm; align-content: start;
+  }
+  .action {
+    display: grid; grid-template-columns: 14mm 8mm 1fr;
+    align-items: center; column-gap: 4mm;
+  }
+  .action .ico { width: 14mm; height: 14mm; display: grid; place-items: center; }
+  .action .ico svg { width: 100%; height: 100%; display: block; }
+  .action .num {
+    font-weight: 900; font-size: var(--size-body); line-height: 1;
+    background: var(--ink); color: #fff;
+    width: 8mm; height: 8mm; border-radius: 50%;
+    display: grid; place-items: center; justify-self: center;
+  }
+  .action .copy .verb {
+    font-weight: 900; font-size: var(--size-body); line-height: 1.1;
+    text-transform: uppercase; letter-spacing: 0.04em; display: block;
+  }
+  .action .copy .detail {
+    font-weight: 600; font-size: var(--size-body); line-height: 1.22;
+    margin-top: 1mm;
+  }
+  .action .copy .detail u { text-decoration: underline; text-underline-offset: 2px; }
+
+  /* ---------- verified line ---------- */
+  .verified {
+    padding: 2mm 12mm 3mm;
+    font-weight: 700; font-size: var(--size-body); line-height: 1.25;
+    letter-spacing: 0.02em; text-transform: uppercase; text-align: left;
+    font-stretch: 75%;
+  }
+  .verified u { text-decoration: underline; text-underline-offset: 2px; }
+
+  /* ---------- footer ---------- */
+  .footer {
+    background: var(--ink); color: #fff; text-align: center;
+    padding: 5mm 10mm;
+    font-weight: 800; font-size: var(--size-body); line-height: 1.2;
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+
+  @media print {
+    body { background: #fff; padding: 0; gap: 0; display: block; }
+    .page { box-shadow: none; page-break-after: always; break-after: page; }
+    .page:last-child { page-break-after: auto; break-after: auto; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     PAGE 1 — ENGLISH
+     ============================================================ -->
+<section class="page" lang="en">
+  <header class="banner"><h1>You must<br>go to court</h1></header>
+
+  <p class="lede">A U.S. court has ordered you to appear.<br>You must testify as a witness at a trial.</p>
+
+  <div class="deadline">
+    <div class="label">Be there by</div>
+    <div class="date"><u>April&nbsp;20</u></div>
+    <div class="meta"><u>2026</u> &nbsp;·&nbsp; <u>9:00 A.M.</u></div>
+    <div class="conseq">If you do not go,<br>the court can arrest you.</div>
+  </div>
+
+  <div class="actions">
+
+    <div class="action">
+      <div class="ico"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="6,38 50,12 94,38" fill="#1A1A1A"/>
+        <rect x="8" y="38" width="84" height="6" fill="#1A1A1A"/>
+        <rect x="14" y="46" width="8" height="34" fill="#1A1A1A"/>
+        <rect x="30" y="46" width="8" height="34" fill="#1A1A1A"/>
+        <rect x="46" y="46" width="8" height="34" fill="#1A1A1A"/>
+        <rect x="62" y="46" width="8" height="34" fill="#1A1A1A"/>
+        <rect x="78" y="46" width="8" height="34" fill="#1A1A1A"/>
+        <rect x="6" y="82" width="88" height="4" fill="#1A1A1A"/>
+        <rect x="2" y="88" width="96" height="6" fill="#1A1A1A"/>
+      </svg></div>
+      <div class="num">1</div>
+      <div class="copy">
+        <span class="verb">Go to the courthouse</span>
+        <span class="detail"><u>Albert V. Bryan U.S. Courthouse</u>, <u>401 Courthouse Square, Alexandria, VA 22314</u>. Courtroom <u>CR 900</u>. Bring this paper and a photo ID.</span>
+      </div>
+    </div>
+
+    <div class="action">
+      <div class="ico"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <path d="M18 8 H66 L86 28 V92 H18 Z" fill="#1A1A1A"/>
+        <polygon points="66,8 66,28 86,28" fill="#F2C211"/>
+        <rect x="28" y="42" width="44" height="4" fill="#F2C211"/>
+        <rect x="28" y="52" width="44" height="4" fill="#F2C211"/>
+        <rect x="28" y="62" width="30" height="4" fill="#F2C211"/>
+        <circle cx="68" cy="74" r="11" fill="#F2C211"/>
+        <polyline points="62,74 67,79 75,69" fill="none" stroke="#1A1A1A" stroke-width="3.5" stroke-linecap="square"/>
+      </svg></div>
+      <div class="num">2</div>
+      <div class="copy">
+        <span class="verb">Stay until the judge lets you leave</span>
+        <span class="detail">Do not leave early. A judge or court officer must give you permission first.</span>
+      </div>
+    </div>
+
+    <div class="action">
+      <div class="ico"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <path d="M22 14 C18 14 14 18 14 22 L14 38 C14 60 40 86 62 86 L78 86 C82 86 86 82 86 78 L86 64 C86 60 82 58 79 59 L65 63 C62 64 60 63 58 61 L39 42 C37 40 36 38 37 35 L41 21 C42 18 40 14 36 14 Z" fill="#1A1A1A"/>
+      </svg></div>
+      <div class="num">3</div>
+      <div class="copy">
+        <span class="verb">Call a lawyer for free help</span>
+        <span class="detail">Federal Public Defender, Alexandria — <u>(703) 600-0800</u>. Open Mon–Fri, business hours. No cost to you.</span>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="verified">Verified from source, p. 1–2 · Case No. <u>1:25CR0143</u> · <u>United States of America v. Mohammad Sharifullah</u> · Hon. <u>Anthony J. Trenga</u>, U.S. District Judge · U.S. District Court, Eastern District of Virginia</p>
+
+  <footer class="footer">This is a simplified notice. Read the attached official document. This is not legal advice.</footer>
+</section>
+
+
+<!-- ============================================================
+     PAGE 2 — SPANISH
+     ============================================================ -->
+<section class="page" lang="es">
+  <header class="banner"><h1>Debe ir<br>al tribunal</h1></header>
+
+  <p class="lede">Un tribunal de EE. UU. le ordena presentarse.<br>Debe testificar como testigo en un juicio.</p>
+
+  <div class="deadline">
+    <div class="label">Preséntese el</div>
+    <div class="date"><u>20&nbsp;ABRIL</u></div>
+    <div class="meta"><u>2026</u> &nbsp;·&nbsp; <u>9:00 A.M.</u></div>
+    <div class="conseq">Si no va,<br>el tribunal puede arrestarlo.</div>
+  </div>
+
+  <div class="actions">
+
+    <div class="action">
+      <div class="ico"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="6,38 50,12 94,38" fill="#1A1A1A"/>
+        <rect x="8" y="38" width="84" height="6" fill="#1A1A1A"/>
+        <rect x="14" y="46" width="8" height="34" fill="#1A1A1A"/>
+        <rect x="30" y="46" width="8" height="34" fill="#1A1A1A"/>
+        <rect x="46" y="46" width="8" height="34" fill="#1A1A1A"/>
+        <rect x="62" y="46" width="8" height="34" fill="#1A1A1A"/>
+        <rect x="78" y="46" width="8" height="34" fill="#1A1A1A"/>
+        <rect x="6" y="82" width="88" height="4" fill="#1A1A1A"/>
+        <rect x="2" y="88" width="96" height="6" fill="#1A1A1A"/>
+      </svg></div>
+      <div class="num">1</div>
+      <div class="copy">
+        <span class="verb">Vaya al tribunal</span>
+        <span class="detail"><u>Albert V. Bryan U.S. Courthouse</u>, <u>401 Courthouse Square, Alexandria, VA 22314</u>. Sala <u>CR 900</u>. Traiga este papel y una identificación con foto.</span>
+      </div>
+    </div>
+
+    <div class="action">
+      <div class="ico"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <path d="M18 8 H66 L86 28 V92 H18 Z" fill="#1A1A1A"/>
+        <polygon points="66,8 66,28 86,28" fill="#F2C211"/>
+        <rect x="28" y="42" width="44" height="4" fill="#F2C211"/>
+        <rect x="28" y="52" width="44" height="4" fill="#F2C211"/>
+        <rect x="28" y="62" width="30" height="4" fill="#F2C211"/>
+        <circle cx="68" cy="74" r="11" fill="#F2C211"/>
+        <polyline points="62,74 67,79 75,69" fill="none" stroke="#1A1A1A" stroke-width="3.5" stroke-linecap="square"/>
+      </svg></div>
+      <div class="num">2</div>
+      <div class="copy">
+        <span class="verb">Quédese hasta que el juez le permita salir</span>
+        <span class="detail">No se vaya antes. Un juez u oficial del tribunal debe darle permiso primero.</span>
+      </div>
+    </div>
+
+    <div class="action">
+      <div class="ico"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <path d="M22 14 C18 14 14 18 14 22 L14 38 C14 60 40 86 62 86 L78 86 C82 86 86 82 86 78 L86 64 C86 60 82 58 79 59 L65 63 C62 64 60 63 58 61 L39 42 C37 40 36 38 37 35 L41 21 C42 18 40 14 36 14 Z" fill="#1A1A1A"/>
+      </svg></div>
+      <div class="num">3</div>
+      <div class="copy">
+        <span class="verb">Llame a un abogado gratis</span>
+        <span class="detail">Defensor Público Federal, Alexandria — <u>(703) 600-0800</u>. Lun–Vie, horario de oficina. Sin costo para usted.</span>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="verified">Verificado del documento original, p. 1–2 · Caso N.º <u>1:25CR0143</u> · <u>Estados Unidos de América c. Mohammad Sharifullah</u> · Hon. <u>Anthony J. Trenga</u>, Juez del Tribunal de Distrito · Tribunal del Distrito Este de Virginia</p>
+
+  <footer class="footer">Este es un aviso simplificado. Lea el documento oficial adjunto. No es asesoría legal.</footer>
+</section>
+
+</body>
+</html>

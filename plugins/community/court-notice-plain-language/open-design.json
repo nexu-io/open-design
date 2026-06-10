@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "court-notice-plain-language",
+  "title": "Court notice → plain-language public notice",
+  "title_i18n": {
+    "en": "Court notice → plain-language public notice",
+    "zh-CN": "法院文书 → 通俗易懂的公告"
+  },
+  "version": "0.1.0",
+  "description": "Transform a court document — eviction summons, restraining order, subpoena — into a one-page bilingual (English + Spanish) plain-language public notice in the road-work warning-sign visual language. Extracts every date, case number, party name, and address character-for-character from the source PDF, then renders an A4 print-ready page a panicking reader can act on in 30 seconds.",
+  "description_i18n": {
+    "en": "Transform a court document — eviction summons, restraining order, subpoena — into a one-page bilingual (English + Spanish) plain-language public notice in the road-work warning-sign visual language. Extracts every date, case number, party name, and address character-for-character from the source PDF, then renders an A4 print-ready page a panicking reader can act on in 30 seconds.",
+    "zh-CN": "把法院文书（驱逐通知、限制令、传票等）转换成一页双语（英文 + 西班牙文）的通俗易懂公告，采用施工警示牌视觉语言。日期、案号、当事人姓名、地址一律按原文字字逐字提取，输出可直接打印为 A4 PDF。"
+  },
+  "license": "MIT",
+  "plugin": {
+    "repo": "https://github.com/kokisanai/court-notice-plain-language"
+  },
+  "author": {
+    "name": "kokisanai",
+    "url": "https://github.com/kokisanai"
+  },
+  "homepage": "https://github.com/kokisanai/court-notice-plain-language",
+  "tags": [
+    "civic",
+    "legal",
+    "public-notice",
+    "bilingual",
+    "warning-sign",
+    "a4-print",
+    "accessibility",
+    "live-artifact"
+  ],
+  "compat": {
+    "agentSkills": [
+      { "path": "./SKILL.md" }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "scenario",
+    "context": {
+      "skills": [
+        { "path": "./SKILL.md" }
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "extract",
+          "atoms": [
+            "file-read"
+          ]
+        },
+        {
+          "id": "plan",
+          "atoms": [
+            "todo-write"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        },
+        {
+          "id": "critique",
+          "atoms": [
+            "critique-theater"
+          ],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=2"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:read",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "I'm attaching a court document. Transform it into a one-page plain-language public notice (English + Spanish) in the road-work warning-sign style — saturated yellow, three inks, heavy condensed signage type, the date as the largest element, three numbered action steps with black pictograms, and a verbatim zone listing case number / dates / court / parties exactly as they appear in the source.",
+        "zh-CN": "我附了一份法院文书。请把它转换成一页通俗易懂的公告（英文 + 西班牙文），采用施工警示牌风格——饱和黄底、三种墨色、重磅 condensed 标牌字体、日期作为页面上最大元素、三个带黑色象形图的编号步骤，并在底部列出原文逐字提取的案号、日期、法院、当事人。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "examples/court-notice-1-25cr0143.html",
+          "kind": "html",
+          "title": "Plain-language Court Notice — Case 1:25CR0143 (EN/ES)"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "courtDocument",
+        "type": "file",
+        "required": true,
+        "label": "Court document",
+        "placeholder": "Attach the eviction summons, restraining order, subpoena, or other court paper (PDF / DOCX / image)."
+      },
+      {
+        "name": "audienceNotes",
+        "type": "text",
+        "required": false,
+        "label": "Audience notes",
+        "placeholder": "Optional: limited-English readers, panicking parent, posting at apartment door, etc."
+      },
+      {
+        "name": "secondLanguage",
+        "type": "text",
+        "required": false,
+        "label": "Second language",
+        "placeholder": "Defaults to Spanish. Override with the language code (es, vi, zh, etc.) of the second page."
+      }
+    ]
+  }
+}
