@@ -26,4 +26,7 @@ jobs:
     steps:
       - uses: actions/labeler@v5
         with:
-          sync-labels: false
+          # Keep the `tutorials` label in sync with the live diff: remove it if a
+          # PR no longer touches the tutorials content dir, so the digest's
+          # `is:pr label:tutorials` query never lists stale, non-tutorial PRs.
+          sync-labels: true

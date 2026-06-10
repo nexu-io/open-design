@@ -79,6 +79,21 @@ describe('github-submissions', () => {
     await assert.rejects(() => fetchSubmissionIssues('tok', 'nexu-io/open-design'), /HTTP 403/);
   });
 
+  it('paginates: full first page then a partial page (no silent truncation)', async () => {
+    const issue = (n: number) => ({ ...ISSUE, number: n, body: 'no link' });
+    globalThis.fetch = (async (input: string | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const page = Number(new URL(url).searchParams.get('page'));
+      const items = page === 1 ? Array.from({ length: 100 }, (_, i) => issue(i + 1)) : [issue(101)];
+      return new Response(JSON.stringify({ items }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+    const issues = await fetchSubmissionIssues('tok', 'nexu-io/open-design');
+    assert.equal(issues.length, 101);
+  });
+
   it('fetchContributionPRs keeps PRs only', async () => {
     stub([ISSUE, PR]);
     const prs = await fetchContributionPRs('tok', 'nexu-io/open-design');
