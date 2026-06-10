@@ -93,7 +93,7 @@
       ],
       "assets": [
         "./template.json",
-        "./source/index.html"
+        "./source"
       ]
     },
     "pipeline": {

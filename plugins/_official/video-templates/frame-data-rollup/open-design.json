@@ -98,7 +98,7 @@
       ],
       "assets": [
         "./template.json",
-        "./source/entry.ts"
+        "./source"
       ]
     },
     "pipeline": {
