@@ -384,6 +384,82 @@ describe('DesignFilesPanel grouping', () => {
     expect(onOpenFile).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { status: 'needs-setup', message: 'Install dependencies before previewing.' },
+    { status: 'failed', message: 'Dev server crashed.' },
+    { status: 'unsupported', message: 'No app runtime was found.' },
+  ])('shows a retryable rendered-preview error when UI preview returns $status', async ({ status, message }) => {
+    const onOpenRenderedPreview = vi.fn();
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/ui-surfaces')) {
+        return json({
+          surfaces: [
+            {
+              id: 'src-main-tsx',
+              label: 'Home screen',
+              route: '/',
+              kind: 'react-app',
+              confidence: 'medium',
+              framework: 'Vite',
+              entryFile: 'src/main.tsx',
+              previewFile: 'index.html',
+              previewRuntimeRoot: '',
+              previewPath: '/',
+              previewStatus: 'source-mapped',
+              sourceFiles: ['index.html', 'src/main.tsx', 'src/App.tsx'],
+              styleFiles: ['src/index.css'],
+              scriptFiles: [],
+              assetFiles: [],
+              fontFiles: [],
+              externalDependencies: [
+                { packageName: 'react', importPath: 'react', kind: 'runtime' },
+              ],
+              reasons: ['React app entry and HTML shell detected'],
+              mtime: 20,
+            },
+          ],
+          generatedAt: '2026-06-02T00:00:00.000Z',
+        });
+      }
+      if (url.includes('/ui-preview')) {
+        expect(init).toEqual(expect.objectContaining({ method: 'POST' }));
+        return json({
+          status,
+          runtimeRoot: '',
+          baseUrl: null,
+          url: null,
+          route: '/',
+          error: message,
+        });
+      }
+      return new Response('<div>raw preview</div>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      });
+    });
+    const { onOpenFile } = renderPanel(
+      [
+        file({ name: 'index.html', kind: 'html', mime: 'text/html', mtime: 20 }),
+        file({ name: 'src/main.tsx', kind: 'code', mime: 'text/typescript', mtime: 19 }),
+      ],
+      { onOpenRenderedPreview },
+    );
+
+    fireEvent.click(within(screen.getByTestId('design-file-row-index.html')).getByRole('button', { name: /index\.html/i }));
+    const error = await screen.findByRole('alert');
+    expect(within(error).getByText('Preview unavailable')).toBeTruthy();
+    expect(within(error).getByText(message)).toBeTruthy();
+
+    fireEvent.click(within(screen.getByTestId('design-file-preview')).getByRole('button', { name: 'Open' }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.filter(([request]) => String(request).includes('/ui-preview')).length).toBe(2);
+    });
+    expect(onOpenRenderedPreview).not.toHaveBeenCalled();
+    expect(onOpenFile).not.toHaveBeenCalled();
+  });
+
   it('shows the upload hint in the footer while idle', () => {
     renderPanel([file({ name: 'page.html', kind: 'html' })]);
 

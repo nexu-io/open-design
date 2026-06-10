@@ -108,6 +108,10 @@ type RenderedPreviewState =
   | { status: 'unavailable' }
   | { status: 'error'; message: string };
 
+type RenderedPreviewResolution =
+  | { kind: 'source-file' }
+  | { kind: 'preview'; state: Exclude<RenderedPreviewState, { status: 'loading' }> };
+
 type DesignFilesGroupMode = 'kind' | 'modified';
 type ModifiedSection = 'today' | 'yesterday' | 'previous7Days' | 'previous30Days' | 'older';
 type SortKey = 'name' | 'kind' | 'mtime';
@@ -731,18 +735,20 @@ export function DesignFilesPanel({
       [previewFile.name]: { status: 'loading' },
     }));
     let cancelled = false;
-    void renderedPreviewUrlForFile({
+    void resolveRenderedPreviewForFile({
       projectId,
       file: previewFile,
       loadUiSurfaces,
     })
-      .then((url) => {
+      .then((resolution) => {
         if (cancelled) return;
+        const state =
+          resolution.kind === 'source-file'
+            ? { status: 'unavailable' as const }
+            : resolution.state;
         setRenderedPreviewStates((current) => ({
           ...current,
-          [previewFile.name]: url
-            ? { status: 'ready', url }
-            : { status: 'unavailable' },
+          [previewFile.name]: state,
         }));
       })
       .catch((err: unknown) => {
@@ -962,7 +968,7 @@ export function DesignFilesPanel({
       return;
     }
     let renderedPreviewFailed = false;
-    const renderedUrl = await renderedPreviewUrlForFile({
+    const resolution = await resolveRenderedPreviewForFile({
       projectId,
       file,
       loadUiSurfaces,
@@ -979,12 +985,14 @@ export function DesignFilesPanel({
       return null;
     });
     if (renderedPreviewFailed) return;
-    if (renderedUrl) {
+    if (resolution?.kind === 'preview') {
       setRenderedPreviewStates((current) => ({
         ...current,
-        [file.name]: { status: 'ready', url: renderedUrl },
+        [file.name]: resolution.state,
       }));
-      openRenderedPreviewInWorkspace(file, renderedUrl);
+      if (resolution.state.status === 'ready') {
+        openRenderedPreviewInWorkspace(file, resolution.state.url);
+      }
       return;
     }
     onOpenFile(file.name);
@@ -1986,7 +1994,7 @@ export function DesignFilesPanel({
   );
 }
 
-async function renderedPreviewUrlForFile({
+async function resolveRenderedPreviewForFile({
   projectId,
   file,
   loadUiSurfaces,
@@ -1994,31 +2002,48 @@ async function renderedPreviewUrlForFile({
   projectId: string;
   file: ProjectFile;
   loadUiSurfaces: () => Promise<ProjectUiSurface[]>;
-}): Promise<string | null> {
+}): Promise<RenderedPreviewResolution> {
   const surfaces = await loadUiSurfaces();
   const surface = surfaces.find((candidate) => candidate.previewFile === file.name);
-  if (!surface || surface.kind === 'static-html') return null;
-  if (surface.previewUrl) return surface.previewUrl;
+  if (!surface || surface.kind === 'static-html') return { kind: 'source-file' };
+  if (surface.previewUrl) return { kind: 'preview', state: { status: 'ready', url: surface.previewUrl } };
   if (surface.previewRuntimeRoot === null || surface.previewRuntimeRoot === undefined || !surface.previewPath) {
-    return null;
+    return {
+      kind: 'preview',
+      state: { status: 'error', message: 'No app runtime was found for this preview.' },
+    };
   }
   const response = await startProjectUiPreview(projectId, {
     surfaceId: surface.id,
     entryFile: surface.entryFile,
   });
-  return previewRuntimeUrlForSurface(surface, response);
+  return { kind: 'preview', state: previewRuntimeStateForSurface(surface, response) };
 }
 
-function previewRuntimeUrlForSurface(
+function previewRuntimeStateForSurface(
   surface: ProjectUiSurface,
   response: ProjectUiPreviewRuntimeResponse | null,
-): string | null {
-  if (response?.status !== 'ready') return null;
-  if (response.url && (response.route === surface.previewPath || response.route === surface.route)) {
-    return response.url;
+): Exclude<RenderedPreviewState, { status: 'loading' }> {
+  if (!response) return { status: 'error', message: 'Preview runtime request failed.' };
+  if (response.status === 'failed') {
+    return { status: 'error', message: response.error ?? 'Could not start the app runtime.' };
   }
-  if (!response.baseUrl) return null;
-  return joinPreviewRuntimeUrl(response.baseUrl, surface.previewPath ?? surface.route ?? '/');
+  if (response.status === 'needs-setup') {
+    return { status: 'error', message: response.error ?? 'Install dependencies before previewing.' };
+  }
+  if (response.status === 'unsupported') {
+    return { status: 'error', message: response.error ?? 'No app runtime was found.' };
+  }
+  if (response.status === 'starting') {
+    return { status: 'error', message: response.error ?? 'Preview is still starting. Try again in a moment.' };
+  }
+  if (response.url && (response.route === surface.previewPath || response.route === surface.route)) {
+    return { status: 'ready', url: response.url };
+  }
+  if (!response.baseUrl) {
+    return { status: 'error', message: response.error ?? 'Preview runtime did not return a usable URL.' };
+  }
+  return { status: 'ready', url: joinPreviewRuntimeUrl(response.baseUrl, surface.previewPath ?? surface.route ?? '/') };
 }
 
 function joinPreviewRuntimeUrl(baseUrl: string, route: string | null): string {
