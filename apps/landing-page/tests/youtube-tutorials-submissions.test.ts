@@ -61,6 +61,12 @@ describe('github-submissions', () => {
     assert.equal(issues.find((i) => i.number === 2)?.videoUrl, 'https://youtu.be/abcdef12345');
   });
 
+  it('ignores a non-YouTube URL that merely carries ?v=', async () => {
+    stub([{ ...ISSUE, body: 'link: https://example.com/watch?v=dQw4w9WgXcQ' }]);
+    const issues = await fetchSubmissionIssues('tok', 'nexu-io/open-design');
+    assert.equal(issues[0].videoUrl, undefined);
+  });
+
   it('propagates (does not swallow) a failed search so the caller can abort', async () => {
     globalThis.fetch = (async () =>
       new Response('rate limited', { status: 403 })) as typeof fetch;

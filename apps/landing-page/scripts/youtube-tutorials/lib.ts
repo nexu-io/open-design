@@ -300,7 +300,11 @@ export async function scoreCandidate(video: VideoInput): Promise<CandidateScore>
  * both accept the same URL shapes. Returns null if none found.
  */
 export function extractYouTubeId(text: string): string | null {
-  const m = text.match(/(?:[?&]v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{11})/);
+  // Host-anchored: only accept a real YouTube host, so a non-YouTube link that
+  // merely carries `?v=<11 chars>` is not mistaken for a video.
+  const m = text.match(
+    /(?:youtu\.be\/|(?:www\.|m\.|music\.)?youtube\.com\/(?:[^\s"'<>]*?[?&]v=|(?:shorts|embed|live)\/))([\w-]{11})/i,
+  );
   return m ? m[1] : null;
 }
 
