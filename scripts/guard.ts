@@ -832,10 +832,15 @@ function isPathOrDescendant(repositoryPath: string, root: string): boolean {
   return repositoryPath === root || repositoryPath.startsWith(`${root}/`);
 }
 
-function resolveRelativeImportRepositoryPath(fromRepositoryPath: string, specifier: string): string | null {
-  if (!specifier.startsWith(".")) return null;
+function resolveWebImportRepositoryPath(fromRepositoryPath: string, specifier: string): string | null {
   const pathOnly = specifier.split(/[?#]/, 1)[0];
   if (!pathOnly) return null;
+
+  if (pathOnly.startsWith("@/")) {
+    return path.posix.normalize(path.posix.join("apps/web", pathOnly.slice("@/".length)));
+  }
+
+  if (!pathOnly.startsWith(".")) return null;
   return path.posix.normalize(path.posix.join(path.posix.dirname(fromRepositoryPath), pathOnly));
 }
 
@@ -844,7 +849,7 @@ function webImportIsolationViolationReason(fromRepositoryPath: string, specifier
     return "apps/web must not import sidecar or platform control-plane packages directly";
   }
 
-  const resolvedPath = resolveRelativeImportRepositoryPath(fromRepositoryPath, specifier);
+  const resolvedPath = resolveWebImportRepositoryPath(fromRepositoryPath, specifier);
   if (!resolvedPath) return null;
 
   if (webImportIsolationForbiddenDaemonRoots.some((root) => isPathOrDescendant(resolvedPath, root))) {
