@@ -164,6 +164,12 @@ async function main(): Promise<void> {
   const printOnly = args.includes('--print');
   const daysIdx = args.indexOf('--days');
   const explicitDays = daysIdx !== -1 ? Number(args[daysIdx + 1]) : null;
+  // The --days operator escape hatch must fail fast on bad input rather than
+  // crash (NaN -> RangeError) or silently no-op (negative -> future window).
+  if (explicitDays != null && !(Number.isInteger(explicitDays) && explicitDays > 0)) {
+    console.error(`Invalid --days value "${args[daysIdx + 1]}"; expected a positive integer.`);
+    process.exit(1);
+  }
 
   const key = await loadYoutubeKey();
   const existing = await readExistingVideoIds();
