@@ -69,9 +69,7 @@
         "label": "Aspect ratio",
         "type": "select",
         "options": [
-          "16:9",
-          "9:16",
-          "1:1"
+          "16:9"
         ],
         "default": "16:9"
       },

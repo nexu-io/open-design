@@ -5,20 +5,20 @@
     data-height="1080"
     data-duration="14.72"
   >
-    <!-- A-Roll Video -->
-    <video
+    <!-- A-Roll layer — kept as an empty, self-contained layer. The timeline
+         sets #a-roll-video to opacity:0 at t=0 and never reveals it, so the
+         original external A-roll clip was never visible; vendoring its 9 MB
+         source is unnecessary and would exceed the repo blob limit. -->
+    <div
       id="a-roll-video"
-      src="https://gen-os-static.s3.us-east-2.amazonaws.com/astral_assets/uploaded_assets/67cf5a05_e134ec83a57042b38776c952da595870.mp4"
       style="
         position: absolute;
         width: 100%;
         height: 100%;
-        object-fit: cover;
-        opacity: 1;
+        opacity: 0;
         z-index: 0;
       "
-      crossorigin="anonymous"
-    ></video>
+    ></div>
 
     <!-- Scene 1: Hook -->
     <div
