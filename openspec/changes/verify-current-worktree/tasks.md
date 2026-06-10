@@ -1,0 +1,22 @@
+# Tasks: Verify current worktree readiness
+
+- [x] Resolve SDD status and active-change readiness.
+- [x] Inspect git status for dirty tracked and untracked files.
+- [x] Search changed tracked files for merge-conflict markers.
+- [x] Run focused web typecheck and capture the initial conflict failure.
+- [x] Back up conflicted files under `.tmp/sdd-conflict-backup-20260610-111331/`.
+- [x] Resolve merge-conflict markers in `.gitignore`, `apps/web/src/App.tsx`, and `apps/web/tests/components/App.connectors.test.tsx` by restoring tracked files to `HEAD`.
+- [x] Refresh workspace install with `corepack pnpm install` after missing workspace/dependency links blocked type resolution.
+- [x] Re-run `corepack pnpm --filter @open-design/web typecheck` after conflicts are resolved.
+- [x] Run targeted web tests: `corepack pnpm --filter @open-design/web test -- apps/web/tests/components/App.connectors.test.tsx`.
+- [x] Run repository guard: `corepack pnpm guard`.
+- [x] Run repository typecheck through a local pnpm shim because global Corepack shims cannot be enabled on the read-only filesystem.
+- [x] Re-check LSP diagnostics for the previously conflicted web files.
+- [x] Remove transient local artifacts (`.atl/`, `.pi/`, `.pi-lens/`, `.orig`, and `sdd/`).
+- [x] Move the root `context.md` analysis into this OpenSpec change as `devtools-context.md`, then remove the root copy.
+- [x] Verify Docker image workflow trigger semantics.
+- [x] Fix Docker image workflow so pushes to `main` publish branch-ref/`edge`/`sha-*` images and pull requests smoke-build without pushing.
+- [x] Include all known Dockerfile/workflow inputs in the pull-request smoke-build path filter, including `scripts/**` and `e2e/**`.
+- [x] Run build steps used by `deploy/Dockerfile` outside Docker because Docker is unavailable in this environment.
+- [x] Revert production `next build` churn in `apps/web/next-env.d.ts` before commit because repository tooling expects the development route-types reference.
+- [ ] If the intended scope is still the DevTools console-error fix from `devtools-context.md`, create a dedicated SDD change for those root-cause files and implement it separately.

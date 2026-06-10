@@ -3,11 +3,32 @@ name: Docker image
 # Phase 5 / spec §15.5 — multi-arch image builds.
 #
 # Pushes to ghcr.io on:
-#   - tag (v*.*.*)    → ghcr.io/<owner>/od:<tag> + :latest
+#   - main            → ghcr.io/<owner>/od:main-<timestamp> + :edge + :sha-<short>
+#   - tag (v*.*.*)    → ghcr.io/<owner>/od:<tag> + :latest + :sha-<short>
+# Pull requests build without pushing so Dockerfile drift is caught before merge.
 
 on:
   push:
+    branches: [main]
     tags: ['v*.*.*']
+  pull_request:
+    paths:
+      - '.github/workflows/docker-image.yml'
+      - 'deploy/**'
+      - 'apps/**'
+      - 'packages/**'
+      - 'tools/**'
+      - 'scripts/**'
+      - 'e2e/**'
+      - 'skills/**'
+      - 'design-systems/**'
+      - 'craft/**'
+      - 'prompt-templates/**'
+      - 'assets/**'
+      - 'plugins/_official/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
 
 jobs:
   build-and-push:

@@ -1,0 +1,184 @@
+strict_tdd: true
+context: |
+  @open-design/e2e is a Node.js/TypeScript ESM, React, Next.js, Python project.
+  Detected markers: package.json, pnpm package manager, e2e/package.json, e2e/tsconfig.json, e2e/npm package manager, apps/daemon/package.json, apps/daemon/tsconfig.json, apps/daemon/npm package manager, apps/desktop/package.json, apps/desktop/tsconfig.json, apps/desktop/npm package manager, apps/landing-page/package.json, apps/landing-page/tsconfig.json, apps/landing-page/npm package manager, apps/packaged/package.json, apps/packaged/tsconfig.json, apps/packaged/npm package manager, apps/telemetry-worker/package.json, apps/telemetry-worker/tsconfig.json, apps/telemetry-worker/npm package manager, apps/web/package.json, apps/web/tsconfig.json, apps/web/npm package manager, packages/agui-adapter/package.json, packages/agui-adapter/tsconfig.json, packages/agui-adapter/npm package manager, packages/contracts/package.json, packages/contracts/tsconfig.json, packages/contracts/npm package manager, packages/diagnostics/package.json, packages/diagnostics/tsconfig.json, packages/diagnostics/npm package manager, packages/download/package.json, packages/download/tsconfig.json, packages/download/npm package manager, packages/host/package.json, packages/host/tsconfig.json, packages/host/npm package manager, packages/platform/package.json, packages/platform/tsconfig.json, packages/platform/npm package manager, packages/plugin-runtime/package.json, packages/plugin-runtime/tsconfig.json, packages/plugin-runtime/npm package manager, packages/registry-protocol/package.json, packages/registry-protocol/tsconfig.json, packages/registry-protocol/npm package manager, packages/sidecar/package.json, packages/sidecar/tsconfig.json, packages/sidecar/npm package manager, packages/sidecar-proto/package.json, packages/sidecar-proto/tsconfig.json, packages/sidecar-proto/npm package manager, tools/dev/package.json, tools/dev/tsconfig.json, tools/dev/npm package manager, tools/pack/package.json, tools/pack/tsconfig.json, tools/pack/npm package manager, tools/serve/package.json, tools/serve/tsconfig.json, tools/serve/npm package manager, GitHub Actions.
+  Package managers: pnpm, npm.
+  Additional evidence: Test-like files detected (718); examples: apps/daemon/src/plugins/atoms/build-test.ts, apps/daemon/tests/acp-timeout-env.test.ts, apps/daemon/tests/acp.test.ts, apps/daemon/tests/active-context-routes.test.ts, apps/daemon/tests/agent-runtime-env.test.ts.
+  Primary test command: pnpm run vitest.
+  Unit tests: Vitest (pnpm run vitest); Vitest (cd e2e && npm test); Vitest (cd apps/daemon && npm test); Vitest (cd apps/desktop && npm test); Vitest (cd apps/packaged && npm test); Vitest (cd apps/telemetry-worker && npm test); Vitest (cd apps/web && npm test); Vitest (cd packages/agui-adapter && npm test); Vitest (cd packages/contracts && npm test); Vitest (cd packages/diagnostics && npm test); Vitest (cd packages/download && npm test); Vitest (cd packages/host && npm test); Vitest (cd packages/platform && npm test); Vitest (cd packages/plugin-runtime && npm test); Vitest (cd packages/registry-protocol && npm test); Vitest (cd packages/sidecar && npm test); Vitest (cd packages/sidecar-proto && npm test); package script (cd tools/dev && npm test); Vitest (cd tools/pack && npm test); Vitest (cd tools/serve && npm test).
+  Integration tests: Testing Library (cd apps/web && npm test).
+  E2E tests: Playwright (npx playwright test); Playwright (cd e2e && npx playwright test); Playwright (cd apps/landing-page && npx playwright test).
+rules:
+  proposal:
+    require_problem_statement: true
+  spec:
+    require_acceptance_criteria: true
+  design:
+    require_tradeoffs: true
+  tasks:
+    protect_review_workload: true
+  apply:
+    test_command: "pnpm run vitest"
+  verify:
+    test_command: "pnpm run vitest"
+testing:
+  detected: "2026-05-27"
+  runner:
+    command: "pnpm run vitest"
+    framework: "Vitest"
+  layers:
+    unit: "Vitest, Vitest, Vitest, Vitest, Vitest, Vitest, Vitest, Vitest, Vitest, Vitest, Vitest, Vitest, Vitest, Vitest, Vitest, Vitest, Vitest, package script, Vitest, Vitest"
+    integration: "Testing Library"
+    e2e: "Playwright, Playwright, Playwright"
+  commands:
+    unit:
+      - scope: "."
+        command: "pnpm run vitest"
+        framework: "Vitest"
+      - scope: "e2e"
+        command: "cd e2e && npm test"
+        framework: "Vitest"
+      - scope: "apps/daemon"
+        command: "cd apps/daemon && npm test"
+        framework: "Vitest"
+      - scope: "apps/desktop"
+        command: "cd apps/desktop && npm test"
+        framework: "Vitest"
+      - scope: "apps/packaged"
+        command: "cd apps/packaged && npm test"
+        framework: "Vitest"
+      - scope: "apps/telemetry-worker"
+        command: "cd apps/telemetry-worker && npm test"
+        framework: "Vitest"
+      - scope: "apps/web"
+        command: "cd apps/web && npm test"
+        framework: "Vitest"
+      - scope: "packages/agui-adapter"
+        command: "cd packages/agui-adapter && npm test"
+        framework: "Vitest"
+      - scope: "packages/contracts"
+        command: "cd packages/contracts && npm test"
+        framework: "Vitest"
+      - scope: "packages/diagnostics"
+        command: "cd packages/diagnostics && npm test"
+        framework: "Vitest"
+      - scope: "packages/download"
+        command: "cd packages/download && npm test"
+        framework: "Vitest"
+      - scope: "packages/host"
+        command: "cd packages/host && npm test"
+        framework: "Vitest"
+      - scope: "packages/platform"
+        command: "cd packages/platform && npm test"
+        framework: "Vitest"
+      - scope: "packages/plugin-runtime"
+        command: "cd packages/plugin-runtime && npm test"
+        framework: "Vitest"
+      - scope: "packages/registry-protocol"
+        command: "cd packages/registry-protocol && npm test"
+        framework: "Vitest"
+      - scope: "packages/sidecar"
+        command: "cd packages/sidecar && npm test"
+        framework: "Vitest"
+      - scope: "packages/sidecar-proto"
+        command: "cd packages/sidecar-proto && npm test"
+        framework: "Vitest"
+      - scope: "tools/dev"
+        command: "cd tools/dev && npm test"
+        framework: "package script"
+      - scope: "tools/pack"
+        command: "cd tools/pack && npm test"
+        framework: "Vitest"
+      - scope: "tools/serve"
+        command: "cd tools/serve && npm test"
+        framework: "Vitest"
+    integration:
+      - scope: "apps/web"
+        command: "cd apps/web && npm test"
+        framework: "Testing Library"
+    e2e:
+      - scope: "."
+        command: "npx playwright test"
+        framework: "Playwright"
+      - scope: "e2e"
+        command: "cd e2e && npx playwright test"
+        framework: "Playwright"
+      - scope: "apps/landing-page"
+        command: "cd apps/landing-page && npx playwright test"
+        framework: "Playwright"
+  coverage:
+    command: ""
+    commands:
+      []
+quality:
+  lint: ""
+  lint_commands:
+    []
+  typecheck: "pnpm run typecheck"
+  typecheck_commands:
+    - scope: "."
+      command: "pnpm run typecheck"
+      framework: "type checker"
+    - scope: "e2e"
+      command: "cd e2e && npm run typecheck"
+      framework: "type checker"
+    - scope: "apps/daemon"
+      command: "cd apps/daemon && npm run typecheck"
+      framework: "type checker"
+    - scope: "apps/desktop"
+      command: "cd apps/desktop && npm run typecheck"
+      framework: "type checker"
+    - scope: "apps/landing-page"
+      command: "cd apps/landing-page && npm run typecheck"
+      framework: "type checker"
+    - scope: "apps/packaged"
+      command: "cd apps/packaged && npm run typecheck"
+      framework: "type checker"
+    - scope: "apps/telemetry-worker"
+      command: "cd apps/telemetry-worker && npm run typecheck"
+      framework: "type checker"
+    - scope: "apps/web"
+      command: "cd apps/web && npm run typecheck"
+      framework: "type checker"
+    - scope: "packages/agui-adapter"
+      command: "cd packages/agui-adapter && npm run typecheck"
+      framework: "type checker"
+    - scope: "packages/contracts"
+      command: "cd packages/contracts && npm run typecheck"
+      framework: "type checker"
+    - scope: "packages/diagnostics"
+      command: "cd packages/diagnostics && npm run typecheck"
+      framework: "type checker"
+    - scope: "packages/download"
+      command: "cd packages/download && npm run typecheck"
+      framework: "type checker"
+    - scope: "packages/host"
+      command: "cd packages/host && npm run typecheck"
+      framework: "type checker"
+    - scope: "packages/platform"
+      command: "cd packages/platform && npm run typecheck"
+      framework: "type checker"
+    - scope: "packages/plugin-runtime"
+      command: "cd packages/plugin-runtime && npm run typecheck"
+      framework: "type checker"
+    - scope: "packages/registry-protocol"
+      command: "cd packages/registry-protocol && npm run typecheck"
+      framework: "type checker"
+    - scope: "packages/sidecar"
+      command: "cd packages/sidecar && npm run typecheck"
+      framework: "type checker"
+    - scope: "packages/sidecar-proto"
+      command: "cd packages/sidecar-proto && npm run typecheck"
+      framework: "type checker"
+    - scope: "tools/dev"
+      command: "cd tools/dev && npm run typecheck"
+      framework: "type checker"
+    - scope: "tools/pack"
+      command: "cd tools/pack && npm run typecheck"
+      framework: "type checker"
+    - scope: "tools/serve"
+      command: "cd tools/serve && npm run typecheck"
+      framework: "type checker"
+  format: ""
+  format_commands:
+    []
