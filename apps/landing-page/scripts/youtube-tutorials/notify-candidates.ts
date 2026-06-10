@@ -299,7 +299,10 @@ async function main(): Promise<void> {
   console.log(`${candidates.length} candidate(s) after dedupe + relevance gate`);
 
   // Also surface user submissions (form issues + contribution PRs) when a GitHub
-  // token is present. Non-fatal: the YouTube candidates are the primary payload.
+  // token is present. If a lookup fails, abort before posting rather than send a
+  // digest that silently omits submissions — the run goes red (observable) and
+  // the next run re-queries (submissions are not windowed, so nothing is lost;
+  // YouTube candidates are re-covered via the unchanged watermark).
   let issues: SubmissionIssue[] = [];
   let prs: ContributionPR[] = [];
   const ghToken = process.env.GITHUB_TOKEN;
@@ -312,7 +315,9 @@ async function main(): Promise<void> {
       ]);
       console.log(`Submissions: ${issues.length} issue(s), ${prs.length} PR(s)`);
     } catch (e) {
-      console.error(`submission lookup failed (non-fatal): ${(e as Error).message}`);
+      console.error(`Submission lookup failed; aborting before posting so the digest is not silently incomplete: ${(e as Error).message}`);
+      process.exitCode = 1;
+      return;
     }
   }
 

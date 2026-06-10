@@ -5,6 +5,8 @@
  * so a maintainer reviews them alongside the auto-discovered YouTube candidates.
  */
 
+import { extractYouTubeId } from './lib.ts';
+
 export interface SubmissionIssue {
   number: number;
   title: string;
@@ -30,8 +32,6 @@ interface SearchItem {
   pull_request?: unknown;
 }
 
-const YT_URL = /(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?[^\s)]*v=[\w-]{11}|youtu\.be\/[\w-]{11})[^\s)]*)/i;
-
 async function searchIssues(token: string, repo: string, qualifiers: string): Promise<SearchItem[]> {
   const q = encodeURIComponent(`repo:${repo} is:open ${qualifiers}`);
   const url = `https://api.github.com/search/issues?q=${q}&per_page=50&sort=created&order=desc`;
@@ -53,7 +53,7 @@ export async function fetchSubmissionIssues(token: string, repo: string): Promis
       title: it.title.trim(),
       author: it.user?.login ?? 'unknown',
       url: it.html_url,
-      videoUrl: it.body?.match(YT_URL)?.[1],
+      videoUrl: ((id) => (id ? `https://youtu.be/${id}` : undefined))(extractYouTubeId(it.body ?? '')),
     }));
 }
 

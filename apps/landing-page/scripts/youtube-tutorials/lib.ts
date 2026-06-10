@@ -294,6 +294,17 @@ export async function scoreCandidate(video: VideoInput): Promise<CandidateScore>
 }
 
 /**
+ * Extract an 11-char YouTube id from text containing a YouTube URL of any common
+ * shape — watch (`v=`, incl. m.youtube), `youtu.be/`, `embed/`, `shorts/`,
+ * `live/`. Shared by the submission-issue parser and the manual generator so
+ * both accept the same URL shapes. Returns null if none found.
+ */
+export function extractYouTubeId(text: string): string | null {
+  const m = text.match(/(?:[?&]v=|youtu\.be\/|\/embed\/|\/shorts\/|\/live\/)([\w-]{11})/);
+  return m ? m[1] : null;
+}
+
+/**
  * Generate the editorial summary, body, category, and slug topic for a video,
  * matching the hand-written voice of the existing 12 entries: a tight summary
  * plus a short bulleted body, written in the video's own language.

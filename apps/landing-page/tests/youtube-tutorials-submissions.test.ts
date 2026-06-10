@@ -42,13 +42,29 @@ describe('github-submissions', () => {
     assert.equal(issues.length, 1);
     assert.equal(issues[0].number, 12);
     assert.equal(issues[0].author, 'alice');
-    assert.equal(issues[0].videoUrl, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    assert.equal(issues[0].videoUrl, 'https://youtu.be/dQw4w9WgXcQ');
   });
 
   it('fetchSubmissionIssues leaves videoUrl undefined when none in body', async () => {
     stub([{ ...ISSUE, body: 'no link here' }]);
     const issues = await fetchSubmissionIssues('tok', 'nexu-io/open-design');
     assert.equal(issues[0].videoUrl, undefined);
+  });
+
+  it('extracts shorts and mobile-watch URLs (canonicalized to youtu.be)', async () => {
+    stub([
+      { ...ISSUE, number: 1, body: 'link: https://www.youtube.com/shorts/dQw4w9WgXcQ' },
+      { ...ISSUE, number: 2, body: 'link: https://m.youtube.com/watch?v=abcdef12345' },
+    ]);
+    const issues = await fetchSubmissionIssues('tok', 'nexu-io/open-design');
+    assert.equal(issues.find((i) => i.number === 1)?.videoUrl, 'https://youtu.be/dQw4w9WgXcQ');
+    assert.equal(issues.find((i) => i.number === 2)?.videoUrl, 'https://youtu.be/abcdef12345');
+  });
+
+  it('propagates (does not swallow) a failed search so the caller can abort', async () => {
+    globalThis.fetch = (async () =>
+      new Response('rate limited', { status: 403 })) as typeof fetch;
+    await assert.rejects(() => fetchSubmissionIssues('tok', 'nexu-io/open-design'), /HTTP 403/);
   });
 
   it('fetchContributionPRs keeps PRs only', async () => {
