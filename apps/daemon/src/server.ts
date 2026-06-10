@@ -4500,7 +4500,15 @@ export function classifyChatRunCloseStatus(params: {
   if (params.cancelRequested) return 'canceled';
   if (params.code === 0) return 'succeeded';
   const acpForcedShutdown =
-    params.code === null && params.signal === 'SIGTERM' && params.acpCleanCompletion;
+    params.acpCleanCompletion &&
+    (
+      (params.code === null && params.signal === 'SIGTERM') ||
+      // Vela's ACP bridge can surface the daemon-triggered post-completion
+      // teardown as a normal exit code 130 instead of a SIGTERM signal. Once
+      // the ACP prompt already resolved cleanly, that is shutdown noise rather
+      // than an agent execution failure.
+      (params.code === 130 && params.signal === null)
+    );
   if (acpForcedShutdown) return 'succeeded';
   const artifactQuietShutdown =
     params.artifactQuietShutdownRequested &&
