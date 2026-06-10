@@ -81,7 +81,6 @@ import { PluginDetailsModal } from './PluginDetailsModal';
 import { HomeTemplatesReveal } from './HomeTemplatesReveal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
-import type { FacetSelection } from './plugins-home/facets';
 import { localizePluginTitle } from './plugins-home/localization';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { examplePresetSeedPrompt } from './plugins-home/presetSeedPrompt';
@@ -576,20 +575,6 @@ export function HomeView({
     selectedPluginContexts,
     stagedFiles.length,
   ]);
-
-  // The Home chip rail and the Community grid share a mental
-  // model — "Prototype" up top is the same artifact intent as the
-  // `prototype` slice down below. When the user picks a chip,
-  // we drive the starters' FacetSelection from it so they get a
-  // pre-filtered shelf of templates for the same intent without having
-  // to scroll and re-pick. `pendingChipId` (set on click, before apply
-  // resolves) is preferred over `active?.chipId` so the filter snaps on
-  // the same frame as the click.
-  const presetStartersSelection = useMemo<FacetSelection | null>(() => {
-    const chipId = pendingChipId ?? active?.chipId ?? null;
-    if (!chipId) return null;
-    return facetSelectionForChip(chipId);
-  }, [pendingChipId, active?.chipId]);
 
   // When the active plugin was bound through a chip, the badge shows
   // the chip label (e.g. "Prototype") instead of the underlying plugin
@@ -1681,7 +1666,6 @@ export function HomeView({
           onOpenExternal={handleCommunityOpenExternal}
           onBrowseRegistry={onBrowseRegistry}
           preferDefaultFacet={false}
-          presetSelection={presetStartersSelection}
           cardLayout="gallery"
         />
       </HomeTemplatesReveal>
@@ -1810,27 +1794,6 @@ export function shouldShowActivePluginChip(active: ActivePlugin | null): boolean
   // Otherwise a type chip whose default plugin IS this record stands in for the
   // task chip and suppresses a separate plugin chip.
   return active.record.id !== defaultPluginIdForChip(active.chipId);
-}
-
-// Maps a Home hero chip id to the Community facet slice the
-// user most likely wants to browse next. The chip rail is intent
-// ("I want to design a slide deck"); the starters grid is the catalog
-// for that intent, so pinning the same `deck` slice lets the
-// user keep scanning examples without re-picking the same artifact
-// kind in a different control. The list mirrors the `apply-scenario`
-// and `apply-figma-migration` chip ids in `home-hero/chips.ts`; any
-// new chip there should add a row here too.
-function facetSelectionForChip(chipId: string): FacetSelection | null {
-  switch (chipId) {
-    case 'prototype': return { category: 'prototype', subcategory: null };
-    case 'live-artifact': return { category: 'live-artifact', subcategory: null };
-    case 'deck': return { category: 'deck', subcategory: null };
-    case 'image': return { category: 'image', subcategory: null };
-    case 'video': return { category: 'video', subcategory: null };
-    case 'hyperframes': return { category: 'hyperframes', subcategory: null };
-    case 'audio': return { category: 'audio', subcategory: null };
-    default: return null;
-  }
 }
 
 function homeHeroChipLabelForId(chipId: string, t: ReturnType<typeof useI18n>['t']): string {
