@@ -2031,6 +2031,7 @@ export interface Dict {
   'chat.annotationSendDisabledReason': string;
   'chat.annotationPreviewMissing': string;
   'chat.annotationPreviewMissingInk': string;
+  'chat.annotationSentWithoutScreenshot': string;
   'chat.annotationTimeout': string;
   'chat.annotationFailed': string;
   'chat.annotationProjectCreateFailed': string;
