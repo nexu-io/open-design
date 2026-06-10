@@ -67,6 +67,18 @@ function createEnv(kv: TestKv) {
 }
 
 describe("newsletter subscribe welcome email", () => {
+  it("allows packaged desktop app requests from the od protocol", () => {
+    const headers = __newsletterSubscribeTest.corsHeaders("od://app");
+
+    assert.equal(headers["Access-Control-Allow-Origin"], "od://app");
+  });
+
+  it("allows localhost web runtime requests", () => {
+    const headers = __newsletterSubscribeTest.corsHeaders("http://127.0.0.1:58100");
+
+    assert.equal(headers["Access-Control-Allow-Origin"], "http://127.0.0.1:58100");
+  });
+
   it("sends and records a welcome email for a new subscriber", async () => {
     const kv = new MemoryKv();
     const { calls, fetcher } = createFetchRecorder();

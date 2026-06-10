@@ -141,19 +141,24 @@ function scopeHistoryToAgent(history: ChatMessage[], targetAgentId?: string): Ch
 
 // Strip OD-specific markup that the agent emitted on a prior turn but
 // that the model would otherwise pattern-match as a template to echo.
-// Today this is `<question-form>` blocks and the ```json fenced schemas
+// Today this is `<question-form>` blocks (and the `<ask-question>` alias the
+// UI parser and the daemon open-tag matcher both accept) and the ```json
+// fenced schemas
 // some models (GPT-OSS-120B Medium, Gemini 3.5 Flash) emit alongside
 // them — leaving those literal in the transcript causes weak/medium
 // plain-stream models to re-emit an identical form on the user's
 // follow-up turn, looking like the discovery form loop never breaks
-// (see PR #3157 form-loop investigation).
+// (see PR #3157 form-loop investigation). If we only scrubbed the canonical
+// tag, an alias-form turn would replay verbatim and re-trigger that loop.
 //
 // User content is preserved verbatim — a user message that legitimately
 // quotes `<question-form>` (e.g. discussing the markup with the agent)
 // must not be mangled.
 export function sanitizePriorAssistantTurnForTranscript(content: string): string {
   let sanitized = content.replace(
-    /<question-form\b[^>]*>[\s\S]*?<\/question-form>/g,
+    // `\1` backreference keeps the open/close tag names matched so we never
+    // splice across a `<question-form>…</ask-question>` mismatch.
+    /<(question-form|ask-question)\b[^>]*>[\s\S]*?<\/\1>/g,
     '[question-form was emitted here on a prior turn; the user already answered, see their reply below.]',
   );
   // Strip ```json (or plain ```) fenced blocks whose body matches the
@@ -640,30 +645,6 @@ export async function fetchChatRunStatus(runId: string): Promise<ChatRunStatusRe
     return (await resp.json()) as ChatRunStatusResponse;
   } catch {
     return null;
-  }
-}
-
-// Push a `tool_result` content block back into a running stream-json child.
-// Used to answer Claude's `AskUserQuestion` tool: the host card collects the
-// user's pick, formats it as one text string, and we route it through the
-// daemon's POST /api/runs/:id/tool-result. The daemon writes it as a JSONL
-// line on the still-open stdin so claude-code can resume mid-call instead
-// of auto-erroring the tool in headless mode.
-export async function submitChatRunToolResult(
-  runId: string,
-  toolUseId: string,
-  content: string,
-  options: { isError?: boolean } = {},
-): Promise<{ ok: boolean; status?: number }> {
-  try {
-    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}/tool-result`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ toolUseId, content, isError: !!options.isError }),
-    });
-    return { ok: resp.ok, status: resp.status };
-  } catch {
-    return { ok: false };
   }
 }
 

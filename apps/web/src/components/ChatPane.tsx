@@ -978,9 +978,6 @@ interface Props {
   // time before the full `tool_use` arrives. Never persisted.
   liveToolInput?: Record<string, { name: string; text: string; seq?: number }>;
   initialDraft?: string;
-  // Question-form submissions become a normal user message; the parent
-  // routes that text through onSend (no attachments).
-  onSubmitForm?: (text: string) => void;
   // Focus the right-hand Questions tab from the chat banner.
   onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
@@ -1181,7 +1178,6 @@ export function ChatPane({
   forceStreamingMessageIds,
   liveToolInput,
   initialDraft,
-  onSubmitForm,
   onOpenQuestions,
   onContinueRemainingTasks,
   onAssistantFeedback,
@@ -1281,7 +1277,6 @@ export function ChatPane({
   // message). Route them through this ref so a memoized message still calls the
   // LATEST handler. See areAssistantMessagePropsEqual in AssistantMessage.tsx.
   const assistantCallbacksRef = useRef({
-    onSubmitForm,
     onContinueRemainingTasks,
     onAssistantFeedback,
     onArtifactShare,
@@ -1289,7 +1284,6 @@ export function ChatPane({
     onShareToOpenDesign,
   });
   assistantCallbacksRef.current = {
-    onSubmitForm,
     onContinueRemainingTasks,
     onAssistantFeedback,
     onArtifactShare,
@@ -2621,10 +2615,6 @@ export function ChatPane({
                 onAssistantFeedback={onAssistantFeedback}
                 forkingMessageId={forkingMessageId}
                 t={t}
-                onAssistantFormSubmitStart={() => {
-                  pinnedToBottomRef.current = true;
-                  scrolledToFormRef.current = new Set();
-                }}
                 onOpenQuestions={onOpenQuestions}
                 scrollContainerRef={logRef}
               />
@@ -2848,7 +2838,6 @@ export function ChatPane({
 }
 
 interface AssistantCallbacks {
-  onSubmitForm: ((text: string) => void) | undefined;
   onContinueRemainingTasks:
     | ((assistantMessage: ChatMessage, todos: TodoItem[]) => void)
     | undefined;
@@ -2922,7 +2911,6 @@ function ChatRows({
   onAssistantFeedback,
   forkingMessageId,
   t,
-  onAssistantFormSubmitStart,
   onOpenQuestions,
   scrollContainerRef,
 }: {
@@ -2963,7 +2951,6 @@ function ChatRows({
   onAssistantFeedback?: (message: ChatMessage, change: ChatMessageFeedbackChange) => void;
   forkingMessageId?: string | null;
   t: TranslateFn;
-  onAssistantFormSubmitStart: () => void;
   onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   scrollContainerRef: MutableRefObject<HTMLDivElement | null>;
 }) {
@@ -3054,10 +3041,6 @@ function ChatRows({
         nextUserContent={nextUserContentByAssistantId.get(m.id)}
         suppressDirectionForms={hasActiveDesignSystem}
         hasDesignSystemContext={hasActiveDesignSystem || !!activeDesignSystem}
-        onSubmitForm={(text) => {
-          onAssistantFormSubmitStart();
-          assistantCallbacksRef.current.onSubmitForm?.(text);
-        }}
         onOpenQuestions={onOpenQuestions}
         onContinueRemainingTasks={
           m.id === lastAssistantId && onContinueRemainingTasks

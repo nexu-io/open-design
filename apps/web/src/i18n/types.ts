@@ -2870,10 +2870,6 @@ export interface Dict {
   'tool.openInTab': string;
   'tool.open': string;
   'tool.todos': string;
-  'tool.askQuestion': string;
-  'tool.askQuestionSubmit': string;
-  'tool.askQuestionPending': string;
-  'tool.askQuestionAnswered': string;
   'tool.todosExpand': string;
   'tool.todosCollapse': string;
   'tool.todosDone': string;

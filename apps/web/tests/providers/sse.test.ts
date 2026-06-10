@@ -423,6 +423,28 @@ describe('streamViaDaemon', () => {
     expect(transcript).not.toContain('<question-form id="discovery" title="Brief">');
   });
 
+  it('scrubs the <ask-question> alias from a prior assistant turn so it does not replay into the next send', () => {
+    // `<ask-question>` is an accepted alias for `<question-form>`. If the
+    // sanitizer only matched the canonical tag, an alias-form turn would
+    // replay verbatim on the follow-up send and re-trigger the form loop
+    // sanitizePriorAssistantTurnForTranscript() exists to break.
+    const transcript = buildDaemonTranscript([
+      {
+        id: '1',
+        role: 'assistant',
+        content: [
+          '<ask-question id="discovery" title="Brief">',
+          '{ "questions": [] }',
+          '</ask-question>',
+        ].join('\n'),
+      },
+      { id: '2', role: 'user', content: 'react native' },
+    ]);
+
+    expect(transcript).toContain('question-form was emitted here on a prior turn');
+    expect(transcript).not.toContain('<ask-question id="discovery" title="Brief">');
+  });
+
   it('escapes role delimiter lines in prior message content', () => {
     const transcript = buildDaemonTranscript([
       {

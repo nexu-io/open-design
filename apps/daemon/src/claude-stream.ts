@@ -350,11 +350,10 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
       // Per-turn `stop_reason` is emitted as `turn_end` AFTER the content
       // blocks have been processed (see below). When `--include-partial-
       // messages` is unsupported, tool_use events surface only from the
-      // assistant wrapper here — emitting `turn_end` before that loop
-      // would let the daemon's stdin-close handler see an empty
-      // `pendingHostAnswers` set and close stdin before the
-      // AskUserQuestion tool_use was registered, which made the round
-      // trip silently fail. Read the stop_reason now, emit after.
+      // assistant wrapper here — emitting `turn_end` before that loop would
+      // let the daemon's stdin-close handler act on the turn before its
+      // tool_use blocks were seen, closing stdin mid-tool. Read the
+      // stop_reason now, emit after.
       const stopReason = typeof obj.message.stop_reason === 'string'
         ? obj.message.stop_reason
         : null;
@@ -384,8 +383,8 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
       }
       // Surface the turn_end signal now that every tool_use in this
       // assistant message has been emitted, so the daemon's stdin-close
-      // handler has the up-to-date `pendingHostAnswers` set before
-      // deciding whether to close stream-json input stdin.
+      // handler sees the final `stop_reason` before deciding whether to
+      // close stream-json input stdin.
       if (stopReason) {
         onEvent({ type: 'turn_end', stopReason });
       }

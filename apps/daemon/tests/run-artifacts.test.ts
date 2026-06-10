@@ -290,9 +290,7 @@ describe('countDesignSystemPreviewModules', () => {
   });
 });
 
-// Helper: emit a bare tool_use (no result) for a named tool. Clarification
-// detection only needs the tool_use to appear; AskUserQuestion is answered
-// out-of-band via POST /api/runs/:id/tool-result, not a stream tool_result.
+// Helper: emit a bare tool_use (no result) for a named tool.
 function toolUse(name: string, id = freshId()) {
   return [
     {
@@ -302,17 +300,66 @@ function toolUse(name: string, id = freshId()) {
   ];
 }
 
+// A renderable question-form body — JSON with a non-empty `questions` array.
+// `runAskedUserQuestion` requires a *closed, renderable* block, not a bare tag.
+const RENDERABLE_BODY = '{"questions":[{"question":"Which framework?"}]}';
+
+// Helper: emit assistant streamed text as a `text_delta` agent event. Note the
+// real persisted shape carries the chunk on `delta` (not `text`) — see
+// packages/contracts/src/sse/chat.ts. Building the wrong field here is exactly
+// what made the old tests pass while production runs detected nothing.
+function questionFormText(text = `Quick brief <question-form id="q">${RENDERABLE_BODY}</question-form>`) {
+  return [{ event: 'agent', data: { type: 'text_delta', delta: text } }];
+}
+
 describe('runAskedUserQuestion', () => {
   it('returns false for an empty event list', () => {
     expect(runAskedUserQuestion([])).toBe(false);
   });
 
-  it('returns true when the run raised an AskUserQuestion card', () => {
-    expect(runAskedUserQuestion(toolUse('AskUserQuestion'))).toBe(true);
+  it('returns true when the run emitted a renderable <question-form> clarification', () => {
+    expect(runAskedUserQuestion(questionFormText())).toBe(true);
   });
 
-  it('matches the snake_case ask_user_question proxy shape', () => {
-    expect(runAskedUserQuestion(toolUse('ask_user_question'))).toBe(true);
+  it('reads the `delta` field of text_delta events (the real persisted shape)', () => {
+    // Guards the production bug where the helper read `text` and so appended
+    // nothing for real runs, leaving run_finished.asked_user_question false.
+    expect(
+      runAskedUserQuestion([
+        { event: 'agent', data: { type: 'text_delta', delta: `<question-form id="q">${RENDERABLE_BODY}</question-form>` } },
+      ]),
+    ).toBe(true);
+  });
+
+  it('reassembles a marker split across text_delta chunks', () => {
+    expect(
+      runAskedUserQuestion([
+        { event: 'agent', data: { type: 'text_delta', delta: 'ask a <question-form id="q">{"questions":[' } },
+        { event: 'agent', data: { type: 'text_delta', delta: '{"question":"X"}]}</question-form>' } },
+      ]),
+    ).toBe(true);
+  });
+
+  // `<ask-question>` is an accepted alias for `<question-form>` (whitelisted by
+  // the UI parser and the daemon open-tag matcher). A model that drifts to the
+  // alias still renders the clarification banner, so the analytics signal must
+  // recognize it too — otherwise the run gets misclassified in the funnel.
+  it('returns true for the renderable <ask-question> alias', () => {
+    expect(
+      runAskedUserQuestion([
+        { event: 'agent', data: { type: 'text_delta', delta: `one quick check <ask-question id="q">${RENDERABLE_BODY}</ask-question>` } },
+      ]),
+    ).toBe(true);
+  });
+
+  it('returns false when the tag is only shown as literal markup (no renderable body)', () => {
+    // A doc/code sample that mentions the markup must NOT be misclassified as a
+    // clarification turn and excluded from the artifact funnel.
+    expect(
+      runAskedUserQuestion([
+        { event: 'agent', data: { type: 'text_delta', delta: 'Use a `<question-form id="x">` block like this in your skill.' } },
+      ]),
+    ).toBe(false);
   });
 
   it('returns false for a run that only wrote artifacts', () => {
@@ -324,11 +371,11 @@ describe('runAskedUserQuestion', () => {
     ).toBe(false);
   });
 
-  it('detects the card even when mixed with other tool calls', () => {
+  it('detects the form even when mixed with other tool calls', () => {
     expect(
       runAskedUserQuestion([
         ...pair('Write', '/proj/index.html'),
-        ...toolUse('AskUserQuestion'),
+        ...questionFormText(),
       ]),
     ).toBe(true);
   });

@@ -483,10 +483,9 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
 });
 
 describe('applyClaudeStreamJsonRunBookkeeping', () => {
-  it('records clean completion when the host-answer path already closed stdin', () => {
+  it('records clean completion without re-ending an already-closed stdin', () => {
     const run = {
       stdinOpen: false,
-      pendingHostAnswers: new Set<string>(),
       turnCompletedCleanly: false,
       child: {
         stdin: {
@@ -505,10 +504,9 @@ describe('applyClaudeStreamJsonRunBookkeeping', () => {
     expect(run.child.stdin.end).not.toHaveBeenCalled();
   });
 
-  it('keeps waiting when a terminal event arrives with host answers still pending', () => {
+  it('closes stdin and records clean completion on a non-tool_use terminal turn', () => {
     const run = {
       stdinOpen: true,
-      pendingHostAnswers: new Set(['toolu_1']),
       turnCompletedCleanly: false,
       child: {
         stdin: {
@@ -521,6 +519,28 @@ describe('applyClaudeStreamJsonRunBookkeeping', () => {
     applyClaudeStreamJsonRunBookkeeping(run, {
       type: 'turn_end',
       stopReason: 'end_turn',
+    });
+
+    expect(run.turnCompletedCleanly).toBe(true);
+    expect(run.stdinOpen).toBe(false);
+    expect(run.child.stdin.end).toHaveBeenCalled();
+  });
+
+  it('keeps stdin open when the turn ended on a tool_use stop reason', () => {
+    const run = {
+      stdinOpen: true,
+      turnCompletedCleanly: false,
+      child: {
+        stdin: {
+          destroyed: false,
+          end: vi.fn(),
+        },
+      },
+    };
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'turn_end',
+      stopReason: 'tool_use',
     });
 
     expect(run.turnCompletedCleanly).toBe(false);

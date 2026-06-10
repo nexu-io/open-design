@@ -1454,7 +1454,7 @@ export function HomeView({
     const submittedApplyInputs = submittedActive ? submittedActive.inputs : defaultInputs;
     // Inputs forwarded to the run AND used to build the run-facing snapshot:
     // drop every now-hidden footer/media setting so the first-turn
-    // AskUserQuestion flow collects them instead of inheriting a baked-in
+    // question-form flow collects them instead of inheriting a baked-in
     // default (`ratio: 16:9`, `duration: 5`, `audioType: speech`, …). The
     // snapshot is resolved from these stripped inputs too — the daemon renders
     // `## Plugin inputs` from `snapshot.inputs` and tells the agent not to
@@ -1872,7 +1872,7 @@ function homeHeroChipLabelForId(chipId: string, t: ReturnType<typeof useI18n>['t
 // the design-system picker. Media surfaces (image/video/audio/hyperframes)
 // now defer the same way: image/video keep only the design-system picker and
 // audio/hyperframes keep nothing, with model / ratio / resolution / duration /
-// audio type collected by the agent via AskUserQuestion during the run instead
+// audio type collected by the agent via question-form during the run instead
 // of inline pre-flight controls.
 const ARTIFACT_FOOTER_FIELD_NAMES = new Set([
   'fidelity',
@@ -1882,7 +1882,7 @@ const ARTIFACT_FOOTER_FIELD_NAMES = new Set([
   // were dropped from the footer but `buildHomeMediaComposer` still seeds them
   // (`model: gpt-image-2`, `ratio: 16:9`, `duration: 5`, `audioType: speech`,
   // …) so they must be stripped before submission — otherwise the run arrives
-  // with baked-in defaults and the first-turn AskUserQuestion flow has nothing
+  // with baked-in defaults and the first-turn question-form flow has nothing
   // left to ask. `subject` / `style` / `aspect` / `mediaKind` are intentionally
   // NOT listed: the od-media-generation apply still validates against them.
   'model',
@@ -1915,7 +1915,7 @@ function footerInputNamesForChip(chipId: string | null): string[] {
   if (chipId === 'prototype' || chipId === 'deck') return ['designSystem'];
   if (chipId === 'image' || chipId === 'video') return ['designSystem'];
   // hyperframes / audio surface no pre-flight settings — the agent asks for
-  // ratio / duration / model / audio kind via AskUserQuestion during the run.
+  // ratio / duration / model / audio kind via question-form during the run.
   return [];
 }
 
@@ -1929,7 +1929,7 @@ function homeCreateProjectMetadata(
 
   // Artifact-specific settings (fidelity, speaker notes, slide count, …) are no
   // longer collected in the home composer; the agent asks for them via
-  // AskUserQuestion, so we only seed `kind` here and let those fields stay
+  // question-form, so we only seed `kind` here and let those fields stay
   // unset (the system prompt then marks them "unknown — ask").
   const next: ProjectMetadata = {
     ...(existing ?? {}),
