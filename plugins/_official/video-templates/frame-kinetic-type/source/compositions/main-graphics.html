@@ -1,0 +1,589 @@
+<template id="main-graphics-template">
+  <div
+    data-composition-id="main-graphics"
+    data-width="1920"
+    data-height="1080"
+    data-duration="14.72"
+  >
+    <!-- A-Roll Video -->
+    <video
+      id="a-roll-video"
+      src="https://gen-os-static.s3.us-east-2.amazonaws.com/astral_assets/uploaded_assets/67cf5a05_e134ec83a57042b38776c952da595870.mp4"
+      style="
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 1;
+        z-index: 0;
+      "
+      crossorigin="anonymous"
+    ></video>
+
+    <!-- Scene 1: Hook -->
+    <div
+      id="white-wipe"
+      style="
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: white;
+        z-index: 15;
+      "
+    ></div>
+    <div id="scene-1" class="scene">
+      <div class="hook-container">
+        <div class="hook-what-if">What if</div>
+        <div class="hook-motion-graphics">motion graphics</div>
+        <div class="hook-wrote-themselves">wrote themselves?</div>
+      </div>
+    </div>
+
+    <!-- Scene 2: Swiss Style -->
+    <div id="scene-2" class="scene">
+      <div class="swiss-panel">
+        <div class="swiss-grid">
+          <div class="grid-line horizontal" style="top: 25%"></div>
+          <div class="grid-line horizontal" style="top: 50%"></div>
+          <div class="grid-line horizontal" style="top: 75%"></div>
+          <div class="grid-line vertical" style="left: 25%"></div>
+          <div class="grid-line vertical" style="left: 50%"></div>
+          <div class="grid-line vertical" style="left: 75%"></div>
+          <div class="swiss-circle"></div>
+          <div class="swiss-square"></div>
+        </div>
+        <div class="swiss-content">
+          <div class="swiss-title">HyperFrames</div>
+          <div class="swiss-subtitle">turns code into</div>
+          <div class="swiss-main-text">
+            <span class="word">production-ready</span>
+            <span class="word">video</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 3: Figma Config Style -->
+    <div id="scene-3" class="scene">
+      <div class="dark-overlay"></div>
+      <div class="figma-container">
+        <div class="figma-item" id="figma-animations">
+          <div class="glyph-container">
+            <div class="glyph-ring ring-unified"></div>
+            <div class="glyph-diamond"></div>
+          </div>
+          <div class="figma-label">animations</div>
+        </div>
+        <div class="figma-item" id="figma-transitions">
+          <div class="glyph-container">
+            <div class="glyph-rect rect-unified"></div>
+            <div class="glyph-wipe"></div>
+          </div>
+          <div class="figma-label">transitions</div>
+        </div>
+        <div class="figma-item" id="figma-typography">
+          <div class="glyph-container">
+            <div class="glyph-tri tri-unified"></div>
+            <div class="glyph-lines">
+              <div class="line"></div>
+              <div class="line"></div>
+              <div class="line"></div>
+            </div>
+          </div>
+          <div class="figma-label">typography</div>
+        </div>
+        <div class="figma-footer">all generated from a single prompt</div>
+      </div>
+    </div>
+
+    <!-- Scene 4: David Carson Style -->
+    <div id="scene-4" class="scene">
+      <div class="carson-overlay"></div>
+      <div class="carson-container">
+        <div class="carson-line-1">No timeline<span class="red-dot">.</span></div>
+        <div class="carson-line-2">no After Effects.</div>
+      </div>
+    </div>
+
+    <!-- Scene 5: Wes Anderson -->
+    <div id="scene-5" class="scene">
+      <div class="wes-bg"></div>
+      <div class="wes-container">
+        <div class="wes-text-top">Just describe the motion</div>
+        <div class="wes-rule"></div>
+        <div class="wes-text-bottom">and render.</div>
+      </div>
+    </div>
+
+    <!-- Scene 6: Vignelli Style -->
+    <div id="scene-6" class="scene">
+      <div
+        id="scene-6-overlay"
+        style="
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background-color: black;
+          z-index: -1;
+        "
+      ></div>
+      <div class="vignelli-container">
+        <div class="vignelli-title">HyperFrames</div>
+        <div class="vignelli-subtitle">is here.</div>
+        <div class="vignelli-rule"></div>
+      </div>
+    </div>
+
+    <!-- Black Out -->
+    <div
+      id="black-out"
+      style="
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: black;
+        z-index: 100;
+        opacity: 0;
+        pointer-events: none;
+      "
+    ></div>
+
+    <style>
+      [data-composition-id="main-graphics"] {
+        background: black;
+        font-family: "Inter", sans-serif;
+        color: white;
+        overflow: hidden;
+      }
+
+      .scene {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        opacity: 0;
+        z-index: 1;
+      }
+
+      /* Scene 1: Hook */
+      #scene-1 {
+        background-color: #0a0a0f;
+        z-index: 10;
+        opacity: 1;
+      }
+      .hook-container {
+        text-align: center;
+      }
+      .hook-what-if {
+        font-size: 32px;
+        font-weight: 400;
+        opacity: 0;
+      }
+      .hook-motion-graphics {
+        font-size: 120px;
+        font-weight: 900;
+        text-transform: uppercase;
+        margin-top: 10px;
+        transform: scale(0);
+      }
+      .hook-wrote-themselves {
+        font-size: 48px;
+        font-style: italic;
+        color: #00e5ff;
+        margin-top: 10px;
+        opacity: 0;
+      }
+
+      /* Scene 2: Swiss Style */
+      .swiss-panel {
+        position: absolute;
+        right: 100px;
+        width: 800px;
+        height: 400px;
+        background: #ffffff;
+        border-radius: 4px;
+        display: flex;
+        padding: 40px;
+        color: black;
+        z-index: 2;
+      }
+      .swiss-grid {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      .grid-line {
+        position: absolute;
+        background: #e53935;
+      }
+      .grid-line.horizontal {
+        width: 100%;
+        height: 2px;
+      }
+      .grid-line.vertical {
+        height: 100%;
+        width: 2px;
+      }
+
+      .swiss-circle {
+        position: absolute;
+        width: 60px;
+        height: 60px;
+        background: #e53935;
+        border-radius: 50%;
+        top: 20%;
+        left: 10%;
+        opacity: 0;
+      }
+      .swiss-square {
+        position: absolute;
+        width: 50px;
+        height: 50px;
+        background: black;
+        bottom: 15%;
+        right: 15%;
+        opacity: 0;
+      }
+
+      .swiss-content {
+        position: relative;
+        z-index: 3;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .swiss-title {
+        font-family: "Inter", sans-serif;
+        font-size: 64px;
+        font-weight: 900;
+        opacity: 0;
+      }
+      .swiss-subtitle {
+        font-size: 24px;
+        color: #666;
+        margin-top: 10px;
+        opacity: 0;
+      }
+      .swiss-main-text {
+        font-size: 48px;
+        font-weight: 900;
+        margin-top: 20px;
+        display: flex;
+        gap: 15px;
+      }
+      .swiss-main-text .word {
+        opacity: 0;
+      }
+
+      /* Scene 3: Figma Config Style */
+      .dark-overlay {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.55);
+        z-index: 1;
+      }
+      .figma-container {
+        position: relative;
+        z-index: 2;
+        width: 1200px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .figma-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+        opacity: 0;
+      }
+      .glyph-container {
+        position: relative;
+        width: 120px;
+        height: 120px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .glyph-ring {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        border: 8px solid transparent;
+      }
+      .ring-unified {
+        background:
+          linear-gradient(black, black) padding-box,
+          linear-gradient(to right, #f24e1e, #a259ff) border-box;
+      }
+      .glyph-diamond {
+        width: 40px;
+        height: 40px;
+        background: white;
+        transform: rotate(45deg);
+      }
+      .glyph-rect {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border-radius: 8px;
+        background: linear-gradient(to bottom right, #f24e1e, #a259ff);
+      }
+      .glyph-wipe {
+        position: absolute;
+        width: 0%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.3);
+        left: 0;
+      }
+      .glyph-tri {
+        width: 100px;
+        height: 100px;
+        background: linear-gradient(to bottom right, #f24e1e, #a259ff);
+        clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+      }
+      .glyph-lines {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: 60px;
+      }
+      .glyph-lines .line {
+        height: 4px;
+        background: white;
+        width: 0;
+      }
+      .figma-label {
+        font-size: 40px;
+        font-weight: bold;
+      }
+      .figma-footer {
+        width: 100%;
+        text-align: center;
+        font-size: 22px;
+        margin-top: 60px;
+        opacity: 0;
+      }
+
+      /* Scene 4: David Carson Style */
+      .carson-overlay {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 1;
+      }
+      .carson-container {
+        position: relative;
+        z-index: 2;
+        width: 100%;
+        height: 100%;
+      }
+      .carson-line-1 {
+        position: absolute;
+        top: 20%;
+        left: 10%;
+        font-size: 140px;
+        font-weight: 900;
+        transform: translateY(200px);
+        z-index: 2;
+      }
+      .carson-line-1 .red-dot {
+        color: #ff0000;
+        font-size: 240px;
+        position: absolute;
+        top: -40px;
+        left: 80%;
+        z-index: 1;
+        opacity: 0.8;
+      }
+      .carson-line-2 {
+        position: absolute;
+        bottom: 30%;
+        right: 10%;
+        font-size: 80px;
+        font-weight: 400;
+        opacity: 0;
+        z-index: 3;
+        transform: rotate(-5deg);
+      }
+
+      /* Scene 5: Wes Anderson */
+      .wes-bg {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        background: #f5f0e8;
+        z-index: -1;
+      }
+      .wes-bg::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0.05;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+      }
+      .wes-container {
+        text-align: center;
+        color: #2c1e16;
+        overflow: hidden;
+      }
+      .wes-text-top {
+        font-family: "Libre Baskerville", serif;
+        font-size: 44px;
+        font-style: italic;
+        transform: translateY(-100px);
+      }
+      .wes-rule {
+        width: 0;
+        height: 1px;
+        background: #2c1e16;
+        margin: 20px auto;
+      }
+      .wes-text-bottom {
+        font-family: "Libre Baskerville", serif;
+        font-size: 44px;
+        transform: translateY(100px);
+      }
+
+      /* Scene 6: Vignelli Style */
+      .vignelli-container {
+        text-align: center;
+      }
+      .vignelli-title {
+        font-family: "Inter", sans-serif;
+        font-size: 120px;
+        font-weight: 900;
+        letter-spacing: -0.02em;
+        opacity: 0;
+      }
+      .vignelli-subtitle {
+        font-family: "Inter", sans-serif;
+        font-size: 32px;
+        color: #00e5ff;
+        margin-top: 20px;
+        opacity: 0;
+      }
+      .vignelli-rule {
+        width: 0;
+        height: 2px;
+        background: white;
+        margin: 30px auto 0;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      const tl = gsap.timeline({ paused: true });
+
+      const video = document.getElementById("a-roll-video");
+
+      // --- Initial Setup ---
+      tl.set(
+        video,
+        { width: "100%", height: "100%", left: 0, top: 0, borderRadius: 0, scale: 1, opacity: 0 },
+        0,
+      );
+      tl.set("#white-wipe", { xPercent: -100 }, 0);
+
+      // --- Scene 1: Hook (0s - 2.0s) ---
+      tl.set("#scene-1", { opacity: 1, clipPath: "none" }, 0);
+      tl.to(".hook-what-if", { opacity: 1, y: -30, duration: 0.8, ease: "power3.out" }, 0.2);
+      tl.to(".hook-motion-graphics", { scale: 1, duration: 0.8, ease: "back.out(1.7)" }, 0.5);
+      tl.fromTo(
+        ".hook-wrote-themselves",
+        { x: 100, opacity: 0 },
+        { x: 0, opacity: 1, duration: 0.6, ease: "power2.out" },
+        0.9,
+      );
+
+      // --- Transition to Scene 2 (2.0s - 2.4s) ---
+      tl.to("#white-wipe", { xPercent: 0, duration: 0.2, ease: "power2.in" }, 2.0);
+      tl.set("#scene-1", { opacity: 0 }, 2.2);
+      tl.set(video, { opacity: 1 }, 2.2);
+      tl.to("#white-wipe", { xPercent: 100, duration: 0.2, ease: "power2.out" }, 2.2);
+
+      // --- Scene 2: Swiss Style (2.0s - 5.0s) ---
+      gsap.set(".swiss-panel", { xPercent: 100 });
+      tl.to("#scene-2", { opacity: 1, duration: 0.1 }, 2.2);
+      tl.to(".swiss-panel", { xPercent: 0, duration: 0.8, ease: "expo.out" }, 2.3);
+      tl.to(".swiss-title", { opacity: 1, duration: 0.1 }, 2.5);
+      tl.to(".swiss-subtitle", { opacity: 1, y: 0, duration: 0.4 }, 2.7);
+      tl.to(
+        ".swiss-main-text .word",
+        { opacity: 1, y: 0, stagger: 0.15, duration: 0.5, ease: "power2.out" },
+        3.0,
+      );
+      tl.to(".swiss-circle", { opacity: 1, scale: 1.2, duration: 0.6, ease: "back.out" }, 3.2);
+      tl.to(".swiss-square", { opacity: 1, rotation: 45, duration: 0.6, ease: "back.out" }, 3.4);
+      tl.to(".swiss-panel", { xPercent: 120, duration: 0.7, ease: "expo.in" }, 4.7);
+      tl.to("#scene-2", { opacity: 0, duration: 0.1 }, 5.0);
+
+      // --- Scene 3: Figma Config Style (5.3s - 9.6s) ---
+      tl.to("#scene-3", { opacity: 1, duration: 0.3 }, 5.3);
+      tl.to("#figma-animations", { opacity: 1, y: 0, duration: 0.6 }, 5.5);
+      tl.to(".glyph-diamond", { rotation: 225, duration: 2, repeat: 1, ease: "power2.inOut" }, 5.5);
+
+      tl.to("#figma-transitions", { opacity: 1, y: 0, duration: 0.6 }, 6.2);
+      tl.to(".glyph-wipe", { width: "100%", duration: 1, ease: "power2.inOut" }, 6.2);
+
+      tl.to("#figma-typography", { opacity: 1, y: 0, duration: 0.6 }, 6.9);
+      tl.to(".glyph-lines .line", { width: "100%", stagger: 0.2, duration: 0.5 }, 7.1);
+
+      tl.to(".figma-footer", { opacity: 1, y: -20, duration: 0.8 }, 7.8);
+      tl.to("#scene-3", { opacity: 0, duration: 0.5 }, 9.1);
+
+      // --- Scene 4: David Carson Style (9.6s - 11.7s) ---
+      tl.to("#scene-4", { opacity: 1, duration: 0.1 }, 9.6);
+      tl.to(".carson-line-1", { y: 0, duration: 0.6, ease: "expo.out" }, 9.7);
+      tl.to(".carson-line-2", { opacity: 1, x: -50, duration: 0.5, ease: "back.out" }, 10.2);
+      tl.to(".carson-container", { y: 300, duration: 0.6, ease: "expo.in" }, 11.4);
+      tl.to("#scene-4", { opacity: 0, duration: 0.1 }, 11.7);
+
+      // --- Scene 5: Wes Anderson (11.7s - 13.5s) ---
+      tl.to(video, { opacity: 0, duration: 0.4 }, 11.7);
+      tl.to("#scene-5", { opacity: 1, duration: 0.1 }, 11.7);
+      tl.to(".wes-text-top", { y: 0, duration: 0.6, ease: "back.out(1.2)" }, 12.0);
+      tl.to(".wes-rule", { width: 400, duration: 0.6 }, 12.3);
+      tl.to(".wes-text-bottom", { y: 0, duration: 0.6, ease: "back.out(1.2)" }, 12.6);
+      tl.to("#scene-5", { opacity: 0, duration: 0.5 }, 13.0);
+
+      // --- Scene 6: Vignelli Style (13.5s - 14.72s) ---
+      tl.set(video, { opacity: 1 }, 13.5);
+      tl.set("#scene-6", { opacity: 1 }, 13.5);
+      tl.set("#scene-6-overlay", { opacity: 1 }, 13.5);
+
+      tl.to("#scene-6-overlay", { opacity: 0.6, duration: 0.4 }, 13.5);
+
+      tl.to(".vignelli-title", { opacity: 1, duration: 0.5 }, 13.8);
+      tl.to(".vignelli-subtitle", { opacity: 1, duration: 0.5 }, 14.0);
+      tl.to(".vignelli-rule", { width: 300, duration: 0.4 }, 14.2);
+
+      tl.to("#scene-6-overlay", { opacity: 0, duration: 0.3 }, 14.4);
+
+      tl.set("#black-out", { opacity: 1 }, 14.7);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main-graphics"] = tl;
+    </script>
+  </div>
+</template>

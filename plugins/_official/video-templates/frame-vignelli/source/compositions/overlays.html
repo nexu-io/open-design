@@ -1,0 +1,324 @@
+<template id="overlays-template">
+  <div data-composition-id="overlays" data-width="1080" data-height="1920" data-duration="16.88">
+    <!-- 6-Column Grid Overlay (for visual reference during development, hidden by default) -->
+    <div class="vignelli-grid">
+      <div class="col"></div>
+      <div class="col"></div>
+      <div class="col"></div>
+      <div class="col"></div>
+      <div class="col"></div>
+      <div class="col"></div>
+    </div>
+
+    <!-- 1. 47% Motion Graphics -->
+    <div class="overlay-item motion-graphics-stat" id="stat-47">
+      <div class="red-bar"></div>
+      <div class="stat-content">
+        <div class="number">47%</div>
+        <div class="label">Motion Graphics</div>
+      </div>
+    </div>
+
+    <!-- 2. 62% Static Content (Full Canvas) -->
+    <div class="overlay-item static-content-stat" id="stat-62">
+      <div class="bg-charcoal"></div>
+      <div class="full-content">
+        <div class="large-number">62%</div>
+        <div class="large-label">Static Content</div>
+        <div class="red-accent"></div>
+      </div>
+    </div>
+
+    <!-- 3. 3 out of 4 lack editing skills -->
+    <div class="overlay-item editing-skills-stat" id="stat-3-4">
+      <div class="text-block">
+        <span class="highlight">3 out of 4</span>
+        <br />lack editing skills
+      </div>
+      <div class="side-bar"></div>
+    </div>
+
+    <!-- 4. Hyperframes Branding -->
+    <div class="overlay-item branding-reveal" id="branding">
+      <div class="logo-container">
+        <div class="logo-text"><span class="heavy">HYPERFRAMES</span></div>
+        <div class="logo-underline"></div>
+      </div>
+    </div>
+
+    <style>
+      [data-composition-id="overlays"] {
+        position: relative;
+        width: 1080px;
+        height: 1920px;
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        color: #000000;
+        overflow: hidden;
+        pointer-events: none;
+      }
+
+      /* Grid System */
+      [data-composition-id="overlays"] .vignelli-grid {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        pointer-events: none;
+        z-index: 100;
+        opacity: 0; /* Hidden */
+      }
+      [data-composition-id="overlays"] .vignelli-grid .col {
+        border-right: 1px solid rgba(204, 0, 0, 0.1);
+      }
+
+      [data-composition-id="overlays"] .overlay-item {
+        position: absolute;
+        opacity: 0;
+        display: flex;
+        z-index: 10;
+      }
+
+      /* 1. 47% Stat Styles */
+      [data-composition-id="overlays"] #stat-47 {
+        bottom: 200px;
+        left: 0;
+        width: 540px; /* 3 columns */
+        height: 240px;
+        background: #ffffff;
+        flex-direction: row;
+        align-items: stretch;
+      }
+      [data-composition-id="overlays"] #stat-47 .red-bar {
+        width: 20px;
+        background: #cc0000;
+      }
+      [data-composition-id="overlays"] #stat-47 .stat-content {
+        padding: 40px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      [data-composition-id="overlays"] #stat-47 .number {
+        font-size: 120px;
+        font-weight: 900;
+        line-height: 1;
+        letter-spacing: -2px;
+      }
+      [data-composition-id="overlays"] #stat-47 .label {
+        font-size: 32px;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-top: 10px;
+      }
+
+      /* 2. 62% Stat Styles (Full Canvas) */
+      [data-composition-id="overlays"] #stat-62 {
+        top: 0;
+        left: 0;
+        width: 1080px;
+        height: 1920px;
+        z-index: 50;
+      }
+      [data-composition-id="overlays"] #stat-62 .bg-charcoal {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #1a1a1a;
+      }
+      [data-composition-id="overlays"] #stat-62 .full-content {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 0 90px; /* Align with grid */
+      }
+      [data-composition-id="overlays"] #stat-62 .large-number {
+        font-size: 400px;
+        font-weight: 900;
+        color: #ffffff;
+        line-height: 0.8;
+        letter-spacing: -10px;
+      }
+      [data-composition-id="overlays"] #stat-62 .large-label {
+        font-size: 80px;
+        font-weight: 700;
+        color: #ffffff;
+        text-transform: uppercase;
+        margin-top: 20px;
+        max-width: 600px;
+      }
+      [data-composition-id="overlays"] #stat-62 .red-accent {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 180px; /* 1 column */
+        height: 100%;
+        background: #cc0000;
+      }
+
+      /* 3. 3 out of 4 Stat Styles */
+      [data-composition-id="overlays"] #stat-3-4 {
+        top: 400px;
+        right: 0;
+        width: 360px; /* 2 columns */
+        background: #ffffff;
+        padding: 40px;
+        flex-direction: row-reverse;
+      }
+      [data-composition-id="overlays"] #stat-3-4 .text-block {
+        font-size: 48px;
+        font-weight: 700;
+        line-height: 1.1;
+        text-align: right;
+      }
+      [data-composition-id="overlays"] #stat-3-4 .highlight {
+        color: #cc0000;
+        font-size: 64px;
+        font-weight: 900;
+      }
+      [data-composition-id="overlays"] #stat-3-4 .side-bar {
+        width: 10px;
+        background: #000000;
+        margin-left: 20px;
+      }
+
+      /* 4. Branding Styles */
+      [data-composition-id="overlays"] #branding {
+        bottom: 100px;
+        left: 90px;
+        width: 900px;
+        justify-content: center;
+        z-index: 60;
+      }
+      [data-composition-id="overlays"] #branding .logo-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      [data-composition-id="overlays"] #branding .logo-text {
+        font-size: 64px;
+        letter-spacing: 10px;
+        color: #000000;
+      }
+      [data-composition-id="overlays"] #branding .logo-text .heavy {
+        font-weight: 900;
+      }
+      [data-composition-id="overlays"] #branding .logo-text .light {
+        font-weight: 300;
+      }
+      [data-composition-id="overlays"] #branding .logo-underline {
+        width: 100%;
+        height: 8px;
+        background: #cc0000;
+        margin-top: 10px;
+        transform-origin: left;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const TRANSCRIPT = [
+        { text: "We", start: 0.14, end: 0.239 },
+        { text: "asked", start: 0.28, end: 0.459 },
+        { text: "what", start: 0.5, end: 0.619 },
+        { text: "you", start: 0.659, end: 0.779 },
+        { text: "needed.", start: 0.8, end: 1.179 },
+        { text: "Forty-seven", start: 1.199, end: 1.619 },
+        { text: "percent", start: 1.699, end: 1.96 },
+        { text: "of", start: 1.979, end: 2.059 },
+        { text: "you", start: 2.099, end: 2.299 },
+        { text: "said", start: 2.319, end: 2.499 },
+        { text: "motion", start: 2.559, end: 2.839 },
+        { text: "graphics,", start: 2.899, end: 3.759 },
+        { text: "sixty-two", start: 3.799, end: 4.159 },
+        { text: "percent", start: 4.239, end: 4.559 },
+        { text: "said", start: 4.639, end: 4.799 },
+        { text: "static", start: 4.859, end: 5.199 },
+        { text: "content", start: 5.239, end: 5.639 },
+        { text: "was", start: 5.679, end: 5.779 },
+        { text: "costing", start: 5.859, end: 6.219 },
+        { text: "you", start: 6.259, end: 6.339 },
+        { text: "attention,", start: 6.379, end: 7.299 },
+        { text: "and", start: 7.319, end: 7.439 },
+        { text: "three", start: 7.48, end: 7.599 },
+        { text: "out", start: 7.679, end: 7.779 },
+        { text: "of", start: 7.799, end: 7.879 },
+        { text: "four", start: 7.94, end: 8.139 },
+        { text: "said", start: 8.279, end: 8.46 },
+        { text: "you", start: 8.519, end: 8.6 },
+        { text: "know", start: 8.619, end: 8.739 },
+        { text: "the", start: 8.8, end: 8.88 },
+        { text: "look", start: 8.92, end: 9.079 },
+        { text: "you", start: 9.119, end: 9.259 },
+        { text: "want", start: 9.279, end: 9.619 },
+        { text: "but", start: 9.779, end: 9.88 },
+        { text: "don't", start: 9.92, end: 10.1 },
+        { text: "have", start: 10.159, end: 10.3 },
+        { text: "the", start: 10.3, end: 10.42 },
+        { text: "editing", start: 10.5, end: 10.779 },
+        { text: "skills", start: 10.86, end: 11.139 },
+        { text: "to", start: 11.159, end: 11.239 },
+        { text: "get", start: 11.279, end: 11.439 },
+        { text: "there.", start: 11.46, end: 12.239 },
+        { text: "So", start: 12.3, end: 12.38 },
+        { text: "we", start: 12.399, end: 12.519 },
+        { text: "built", start: 12.539, end: 12.759 },
+        { text: "Hyperframes", start: 12.84, end: 13.119 },
+      ];
+
+      // Requirement 1: "47% Motion Graphics" (Start: 1.199, End: 3.759)
+      // Positioned in bottom half, columns 1-3.
+      tl.fromTo(
+        "#stat-47",
+        { x: -540, opacity: 1 },
+        { x: 0, duration: 0.8, ease: "expo.out" },
+        1.199,
+      );
+      tl.to("#stat-47", { x: -540, duration: 0.6, ease: "expo.in" }, 3.759 - 0.6);
+
+      // Requirement 2: "62% Static Content" (Start: 3.799, End: 7.299)
+      // Full canvas moment. Large bold typography across columns.
+      tl.set("#stat-62", { opacity: 1 }, 3.799);
+      tl.from("#stat-62 .bg-charcoal", { x: "100%", duration: 0.8, ease: "expo.out" }, 3.799);
+      tl.from("#stat-62 .red-accent", { x: "100%", duration: 0.8, ease: "expo.out" }, 3.899);
+      tl.from(
+        "#stat-62 .large-number",
+        { y: 100, opacity: 0, duration: 1, ease: "expo.out" },
+        4.099,
+      );
+      tl.from("#stat-62 .large-label", { y: 50, opacity: 0, duration: 1, ease: "expo.out" }, 4.299);
+
+      tl.to("#stat-62", { x: "-100%", duration: 0.8, ease: "expo.in" }, 7.299 - 0.8);
+
+      // Requirement 3: "3 out of 4 lack editing skills" (Start: 7.319, End: 12.239)
+      // Positioned in columns 5-6 (right side) to avoid face (x: 300-776)
+      tl.fromTo(
+        "#stat-3-4",
+        { x: 360, opacity: 1 },
+        { x: 0, duration: 0.8, ease: "expo.out" },
+        7.319,
+      );
+      tl.to("#stat-3-4", { x: 360, duration: 0.6, ease: "expo.in" }, 12.239 - 0.6);
+
+      // Requirement 4: "Hyperframes" (Start: 12.84, End: 13.84)
+      tl.set("#branding", { opacity: 1 }, 12.84);
+      tl.from(
+        "#branding .logo-text",
+        { y: 20, opacity: 0, duration: 0.6, ease: "expo.out" },
+        12.84,
+      );
+      tl.from("#branding .logo-underline", { scaleX: 0, duration: 0.8, ease: "expo.out" }, 13.04);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["overlays"] = tl;
+    </script>
+  </div>
+</template>

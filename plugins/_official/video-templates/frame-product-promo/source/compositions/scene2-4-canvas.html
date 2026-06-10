@@ -1,0 +1,574 @@
+<template id="scene2-4-canvas-template">
+  <div
+    data-composition-id="scene2-4-canvas"
+    data-width="1920"
+    data-height="1080"
+    data-duration="12.5"
+  >
+    <div class="canvas">
+      <div class="dot-grid"></div>
+
+      <!-- Web Frame -->
+      <div class="web-frame">
+        <div class="ui-content">
+          <div class="nav-bar">
+            <div class="nav-logo"></div>
+            <div class="nav-links">
+              <div class="nav-link"></div>
+              <div class="nav-link"></div>
+              <div class="nav-link"></div>
+            </div>
+          </div>
+          <div class="hero-section">
+            <h1 class="hero-heading">Design without limits</h1>
+            <div class="subtitle-lines">
+              <div class="subtitle-line"></div>
+              <div class="subtitle-line"></div>
+            </div>
+            <div class="cta-button">Get Started</div>
+          </div>
+        </div>
+        <!-- Dimension Labels -->
+        <div class="dimension-label width-label">1440</div>
+        <div class="dimension-label height-label">900</div>
+        <!-- Selection Handles (Engineer) -->
+        <div class="selection-handles">
+          <div class="handle tl"></div>
+          <div class="handle tr"></div>
+          <div class="handle bl"></div>
+          <div class="handle br"></div>
+        </div>
+      </div>
+
+      <!-- Assets Panel -->
+      <div class="assets-panel">
+        <div class="panel-header">Assets</div>
+        <div class="asset-list">
+          <div class="asset-item">
+            <span class="asset-icon">◆</span>
+            <span class="asset-text">Button/Primary</span>
+          </div>
+          <div class="asset-item">
+            <span class="asset-icon">◆</span>
+            <span class="asset-text">Card/Product</span>
+          </div>
+          <div class="asset-item">
+            <span class="asset-icon">◆</span>
+            <span class="asset-text">Nav/Header</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Draggable Component (Scene 4) -->
+      <div class="dragged-card">
+        <div class="card-content"></div>
+      </div>
+
+      <!-- Stamped Cards (Scene 4) -->
+      <div class="stamped-cards">
+        <div class="stamped-card card-1"></div>
+        <div class="stamped-card card-2"></div>
+        <div class="stamped-card card-3"></div>
+      </div>
+
+      <!-- Comment Pin & Bubble -->
+      <div class="comment-container">
+        <div class="comment-pin">
+          <div class="checkmark">✓</div>
+        </div>
+        <div class="comment-bubble">
+          <div class="comment-text"></div>
+        </div>
+      </div>
+
+      <!-- Cursors -->
+      <div class="cursor designer-cursor">
+        <svg width="24" height="24" viewBox="0 0 24 24">
+          <path d="M0 0 L 16 16 L 9.5 16 L 6.5 23 L 6.5 16 L 0 16 Z" fill="white" stroke="black" />
+        </svg>
+        <div class="cursor-label">Designer</div>
+      </div>
+      <div class="cursor engineer-cursor">
+        <svg width="24" height="24" viewBox="0 0 24 24">
+          <path d="M0 0 L 16 16 L 9.5 16 L 6.5 23 L 6.5 16 L 0 16 Z" fill="white" stroke="black" />
+        </svg>
+        <div class="cursor-label">Engineer</div>
+      </div>
+      <div class="cursor pm-cursor">
+        <svg width="24" height="24" viewBox="0 0 24 24">
+          <path d="M0 0 L 16 16 L 9.5 16 L 6.5 23 L 6.5 16 L 0 16 Z" fill="white" stroke="black" />
+        </svg>
+        <div class="cursor-label">PM</div>
+      </div>
+    </div>
+
+    <style>
+      [data-composition-id="scene2-4-canvas"] {
+        background-color: #1e1e1e;
+        font-family: "Inter", sans-serif;
+        color: white;
+        overflow: hidden;
+      }
+
+      .canvas {
+        width: 100%;
+        height: 100%;
+        position: relative;
+      }
+
+      .dot-grid {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: radial-gradient(#2c2c2c 1px, transparent 1px);
+        background-size: 24px 24px;
+      }
+
+      .web-frame {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 1440px;
+        height: 900px;
+        background: white;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+        opacity: 0;
+      }
+
+      .ui-content {
+        width: 100%;
+        height: 100%;
+        background: white;
+        display: flex;
+        flex-direction: column;
+        opacity: 0;
+      }
+
+      .nav-bar {
+        height: 80px;
+        padding: 0 60px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #e6e6e6;
+      }
+
+      .nav-logo {
+        width: 40px;
+        height: 40px;
+        background: #a259ff;
+        border-radius: 8px;
+        opacity: 0.8;
+      }
+
+      .nav-links {
+        display: flex;
+        gap: 32px;
+      }
+
+      .nav-link {
+        width: 80px;
+        height: 12px;
+        background: #cccccc;
+        border-radius: 6px;
+      }
+
+      .hero-section {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding-bottom: 100px;
+        transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      .hero-heading {
+        font-size: 84px;
+        font-weight: 800;
+        color: #1e1e1e;
+        margin-bottom: 24px;
+        opacity: 0;
+        letter-spacing: -0.02em;
+        transform-origin: center;
+      }
+
+      .subtitle-lines {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 48px;
+        transform-origin: center;
+      }
+
+      .subtitle-line {
+        width: 400px;
+        height: 16px;
+        background: #e6e6e6;
+        border-radius: 8px;
+        opacity: 0;
+      }
+
+      .cta-button {
+        padding: 20px 48px;
+        background: #0acf83;
+        color: white;
+        font-size: 24px;
+        font-weight: 600;
+        border-radius: 12px;
+        opacity: 0;
+        position: relative;
+        transform-origin: center;
+      }
+
+      .dimension-label {
+        position: absolute;
+        background: #1abcfe;
+        color: white;
+        padding: 4px 8px;
+        font-size: 14px;
+        font-weight: 600;
+        border-radius: 4px;
+      }
+
+      .width-label {
+        top: -30px;
+        left: 50%;
+      }
+
+      .height-label {
+        right: -45px;
+        top: 50%;
+      }
+
+      .selection-handles {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        opacity: 0;
+      }
+
+      .handle {
+        position: absolute;
+        width: 12px;
+        height: 12px;
+        background: white;
+        border: 2px solid #1abcfe;
+        border-radius: 2px;
+      }
+
+      .handle.tl {
+        top: -6px;
+        left: -6px;
+      }
+      .handle.tr {
+        top: -6px;
+        right: -6px;
+      }
+      .handle.bl {
+        bottom: -6px;
+        left: -6px;
+      }
+      .handle.br {
+        bottom: -6px;
+        right: -6px;
+      }
+
+      .assets-panel {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 320px;
+        height: 100%;
+        background: rgba(44, 44, 44, 0.9);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 24px;
+        z-index: 10;
+        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.2);
+      }
+
+      .panel-header {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 32px;
+        color: #aaa;
+      }
+
+      .asset-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .asset-icon {
+        color: #a259ff;
+        font-size: 18px;
+      }
+
+      .asset-text {
+        font-size: 14px;
+        color: #eee;
+      }
+
+      .dragged-card {
+        position: absolute;
+        width: 300px;
+        height: 200px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        opacity: 0;
+        transform: scale(0.9);
+        z-index: 20;
+        pointer-events: none;
+      }
+
+      .card-content {
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(45deg, #f0f0f0, #fff);
+        border-radius: 12px;
+      }
+
+      .stamped-cards {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 1440px;
+        height: 900px;
+        pointer-events: none;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 40px;
+      }
+
+      .stamped-card {
+        position: relative;
+        width: 300px;
+        height: 200px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        opacity: 0;
+        transform: translateY(50px);
+      }
+
+      .card-1,
+      .card-2,
+      .card-3 {
+        top: auto;
+        left: auto;
+      }
+
+      .comment-container {
+        position: absolute;
+        top: 420px;
+        left: 960px;
+        z-index: 30;
+        opacity: 0;
+      }
+
+      .comment-pin {
+        width: 32px;
+        height: 32px;
+        background: #f24e1e;
+        border-radius: 16px 16px 16px 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        transform-origin: bottom left;
+      }
+
+      .checkmark {
+        color: white;
+        font-size: 18px;
+        font-weight: bold;
+        transform: scale(0);
+      }
+
+      .comment-bubble {
+        position: absolute;
+        left: 40px;
+        top: -20px;
+        background: white;
+        padding: 12px 16px;
+        border-radius: 12px;
+        color: #1e1e1e;
+        font-size: 14px;
+        font-weight: 500;
+        white-space: nowrap;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        opacity: 0;
+      }
+
+      .cursor {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        z-index: 100;
+        pointer-events: none;
+      }
+
+      .cursor-label {
+        padding: 4px 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: white;
+        border-radius: 0 4px 4px 4px;
+        margin-top: -4px;
+        margin-left: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      }
+
+      .designer-cursor .cursor-label {
+        background: #a259ff;
+      }
+      .engineer-cursor .cursor-label {
+        background: #1abcfe;
+      }
+      .pm-cursor .cursor-label {
+        background: #f24e1e;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        const tl = gsap.timeline({ paused: true });
+
+        // Organic Cursor Ease
+        const cursorEase = "back.out(1.2)";
+
+        gsap.set(".web-frame", { xPercent: -50, yPercent: -50, scale: 0 });
+        gsap.set(".width-label", { xPercent: -50, scale: 0 });
+        gsap.set(".height-label", { yPercent: -50, rotation: 90, scale: 0 });
+        gsap.set(".comment-bubble", { x: -10 });
+        gsap.set(".assets-panel", { x: -320 });
+        gsap.set(".designer-cursor", { x: 200, y: 200 });
+        gsap.set(".engineer-cursor", { x: -100, y: 500 });
+        gsap.set(".pm-cursor", { x: 2000, y: 1100 });
+
+        // Designer enters
+        tl.to(".designer-cursor", { x: 960, y: 540, duration: 1.0, ease: cursorEase }, 0);
+
+        // Frame appears
+        tl.to(".web-frame", { opacity: 1, scale: 1, duration: 0.6, ease: "back.out(1.4)" }, 0.5);
+
+        // UI Stagger
+        tl.to(".ui-content", { opacity: 1, duration: 0.4 }, 1.0);
+        tl.to(".hero-heading", { opacity: 1, y: 0, duration: 0.7, ease: "back.out(1.2)" }, 1.2);
+        tl.to(
+          ".subtitle-line",
+          { opacity: 1, y: 0, duration: 0.5, stagger: 0.08, ease: "power2.out" },
+          1.4,
+        );
+        tl.to(".cta-button", { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.7)" }, 1.7);
+
+        // Labels
+        tl.to(".width-label", { scale: 1, duration: 0.4, ease: "back.out(2)" }, 1.9);
+        tl.to(".height-label", { scale: 1, rotation: 90, duration: 0.4, ease: "back.out(2)" }, 2.0);
+
+        // Collaboration
+        tl.to(".engineer-cursor", { x: 400, y: 400, duration: 1.2, ease: cursorEase }, 3.5);
+        tl.to(".pm-cursor", { x: 1500, y: 800, duration: 1.5, ease: cursorEase }, 3.7);
+        tl.to(
+          ".engineer-cursor",
+          { x: 960, y: 680, duration: 0.9, ease: cursorEase, overwrite: "auto" },
+          4.5,
+        );
+        tl.to(".selection-handles", { opacity: 1, duration: 0.2 }, 5.3);
+        tl.to(".cta-button", { outline: "2px solid #1ABCFE", duration: 0.1 }, 5.3);
+
+        tl.to(".pm-cursor", { x: 960, y: 420, duration: 1.1, ease: cursorEase }, 5.5);
+        tl.to(".comment-container", { opacity: 1, duration: 0.1 }, 6.5);
+        tl.from(".comment-pin", { scale: 0, duration: 0.5, ease: "back.out(1.2)" }, 6.5);
+        tl.to(".comment-bubble", { opacity: 1, x: 0, duration: 0.4, ease: "back.out(1.5)" }, 6.9);
+
+        const commentText = "Let's use the product shot here";
+        const textObj = { val: 0 };
+        tl.to(
+          textObj,
+          {
+            val: commentText.length,
+            duration: commentText.length / 30,
+            ease: "none",
+            onUpdate: () => {
+              const el = document.querySelector(
+                '[data-composition-id="scene2-4-canvas"] .comment-text',
+              );
+              if (el) el.innerText = commentText.substring(0, Math.ceil(textObj.val));
+            },
+          },
+          7.1,
+        );
+
+        // Assets Panel
+        tl.to(".assets-panel", { x: 0, duration: 0.4, ease: "power3.out" }, 8.0);
+        tl.to(".engineer-cursor", { x: 160, y: 150, duration: 0.7, ease: cursorEase }, 8.3);
+        tl.to(".dragged-card", { opacity: 1, scale: 1, x: 160, y: 150, duration: 0.2 }, 8.9);
+        tl.to(
+          [".engineer-cursor", ".dragged-card"],
+          { x: 960, y: 700, duration: 0.9, ease: cursorEase },
+          9.1,
+        );
+
+        // Reformat UI as card is dragged in
+        tl.to(".hero-section", { y: -150, duration: 0.8, ease: "power3.inOut" }, 9.1);
+        tl.to(".hero-heading", { scale: 0.8, duration: 0.8, ease: "power3.inOut" }, 9.1);
+        tl.to(".subtitle-lines", { scale: 0.8, duration: 0.8, ease: "power3.inOut" }, 9.1);
+        tl.to(".cta-button", { scale: 0.8, duration: 0.8, ease: "power3.inOut" }, 9.1);
+
+        // Stamping into Grid/Row
+        tl.to(".stamped-cards", { y: 200, duration: 0.1 }, 9.1); // Position the container
+        tl.to(".card-1", { opacity: 1, y: 0, duration: 0.6, ease: "back.out(1.5)" }, 9.9);
+        tl.to(".card-2", { opacity: 1, y: 0, duration: 0.6, ease: "back.out(1.5)" }, 10.1);
+        tl.to(".card-3", { opacity: 1, y: 0, duration: 0.6, ease: "back.out(1.5)" }, 10.3);
+
+        tl.to(".dragged-card", { opacity: 0, scale: 0.8, duration: 0.2 }, 10.5);
+        tl.to(".checkmark", { scale: 1, duration: 0.4, ease: "back.out(1.8)" }, 10.7);
+        tl.to(".comment-pin", { backgroundColor: "#0ACF83", duration: 0.3 }, 10.7);
+        tl.to(".assets-panel", { x: -320, duration: 0.4, ease: "power3.in" }, 11.5);
+
+        // Scene 5 Transition: Wipe everything to the left
+        tl.to(
+          [
+            ".web-frame",
+            ".cursor",
+            ".dragged-card",
+            ".stamped-cards",
+            ".comment-container",
+            ".assets-panel",
+          ],
+          {
+            x: -2000,
+            duration: 0.5,
+            ease: "expo.in",
+            stagger: 0.02,
+          },
+          12.0,
+        );
+
+        window.__timelines = window.__timelines || {};
+        window.__timelines["scene2-4-canvas"] = tl;
+      })();
+    </script>
+  </div>
+</template>

@@ -1,0 +1,434 @@
+<template id="decision-tree-template">
+  <div data-composition-id="decision-tree" data-width="1920" data-height="1080" data-duration="12">
+    <div class="canvas">
+      <svg class="connectors" width="1920" height="1080" viewBox="0 0 1920 1080">
+        <!-- Level 1 to 2 -->
+        <path
+          id="path-1-L"
+          class="connector"
+          d="M 960 130 L 960 200 L 600 200 L 600 270"
+          fill="none"
+          stroke="#333"
+          stroke-width="4"
+        />
+        <path
+          id="path-1-R"
+          class="connector"
+          d="M 960 130 L 960 200 L 1320 200 L 1320 270"
+          fill="none"
+          stroke="#333"
+          stroke-width="4"
+        />
+
+        <!-- Level 2 to 3 (Left side) -->
+        <path
+          id="path-2-LL"
+          class="connector"
+          d="M 600 330 L 600 400 L 400 400 L 400 470"
+          fill="none"
+          stroke="#333"
+          stroke-width="4"
+        />
+        <path
+          id="path-2-LR"
+          class="connector"
+          d="M 600 330 L 600 400 L 800 400 L 800 470"
+          fill="none"
+          stroke="#333"
+          stroke-width="4"
+        />
+
+        <!-- Level 2 to 3 (Right side) -->
+        <path
+          id="path-2-RL"
+          class="connector"
+          d="M 1320 330 L 1320 400 L 1120 400 L 1120 470"
+          fill="none"
+          stroke="#333"
+          stroke-width="4"
+        />
+        <path
+          id="path-2-RR"
+          class="connector"
+          d="M 1320 330 L 1320 400 L 1520 400 L 1520 470"
+          fill="none"
+          stroke="#333"
+          stroke-width="4"
+        />
+      </svg>
+
+      <div id="label-yes" class="connector-label">Yes</div>
+      <div id="label-not-sure" class="connector-label">Not sure</div>
+
+      <!-- Level 1 -->
+      <div id="node-root" class="node sticky yellow" style="left: 960px; top: 100px">
+        Should I learn to code?
+      </div>
+
+      <!-- Level 2 -->
+      <div id="node-yes" class="node sticky green" style="left: 600px; top: 300px">Yes</div>
+      <div id="node-not-sure" class="node sticky peach" style="left: 1320px; top: 300px">
+        Not sure
+      </div>
+
+      <!-- Level 3 -->
+      <div id="node-python" class="node sticky lavender" style="left: 400px; top: 500px">
+        <div style="position: relative; display: inline-block">
+          <span id="python-text">Start with Pythom</span>
+          <svg class="squiggle-container" width="64" height="6" viewBox="0 0 64 6">
+            <path
+              id="squiggle"
+              d="M 0 3 Q 2 0 4 3 T 8 3 T 12 3 T 16 3 T 20 3 T 24 3 T 28 3 T 32 3 T 36 3 T 40 3 T 44 3 T 48 3 T 52 3 T 56 3 T 60 3 T 64 3"
+              fill="none"
+              stroke="#E53935"
+              stroke-width="2"
+            />
+          </svg>
+        </div>
+      </div>
+      <div id="node-nocode" class="node sticky blue" style="left: 800px; top: 500px">
+        Try no-code first
+      </div>
+      <div id="node-website" class="node sticky pink" style="left: 1120px; top: 500px">
+        Build a personal website
+      </div>
+      <div id="node-course" class="node sticky yellow" style="left: 1520px; top: 500px">
+        Take a free intro course
+      </div>
+
+      <!-- Cursor -->
+      <div id="cursor" class="cursor-container">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M5.65376 12.3673H5.46026L5.31717 12.4976L0.500002 16.8829L0.500002 1.19841L11.7841 12.3673H5.65376Z"
+            fill="white"
+            stroke="black"
+          />
+        </svg>
+        <div class="cursor-tag">You</div>
+      </div>
+
+      <!-- Emoji -->
+      <div id="emoji-thumb" class="emoji">👍</div>
+
+      <!-- Overlay -->
+      <div id="fade-overlay"></div>
+    </div>
+
+    <style>
+      [data-composition-id="decision-tree"] {
+        width: 1920px;
+        height: 1080px;
+        background-color: #ffffff;
+        background-image: radial-gradient(#e5e5e5 1px, transparent 1px);
+        background-size: 20px 20px;
+        position: absolute;
+        overflow: hidden;
+        font-family: "Inter", sans-serif;
+      }
+
+      [data-composition-id="decision-tree"] .canvas {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        transform: scale(1.2);
+        transform-origin: 960px 300px;
+      }
+
+      [data-composition-id="decision-tree"] .node {
+        position: absolute;
+        transform: translate(-50%, -50%) scale(0);
+        padding: 16px 24px;
+        border-radius: 12px;
+        font-size: 18px;
+        font-weight: 500;
+        color: #333;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        white-space: nowrap;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+      }
+
+      [data-composition-id="decision-tree"] .node.yellow {
+        background-color: #e8d44d;
+      }
+      [data-composition-id="decision-tree"] .node.green {
+        background-color: #c2e8a0;
+      }
+      [data-composition-id="decision-tree"] .node.peach {
+        background-color: #f5c5a3;
+      }
+      [data-composition-id="decision-tree"] .node.lavender {
+        background-color: #d4c5f9;
+      }
+      [data-composition-id="decision-tree"] .node.blue {
+        background-color: #a8d8f0;
+      }
+      [data-composition-id="decision-tree"] .node.pink {
+        background-color: #f8b4c8;
+      }
+
+      [data-composition-id="decision-tree"] .connectors {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 5;
+        pointer-events: none;
+      }
+
+      [data-composition-id="decision-tree"] .connector {
+        stroke-dasharray: 1000;
+        stroke-dashoffset: 1000;
+      }
+
+      [data-composition-id="decision-tree"] .connector-label {
+        position: absolute;
+        font-size: 14px;
+        font-weight: 600;
+        color: #333;
+        background: white;
+        padding: 2px 6px;
+        border-radius: 4px;
+        opacity: 0;
+        z-index: 6;
+        transform: translate(-50%, -50%);
+      }
+
+      #label-yes {
+        left: 780px;
+        top: 230px;
+      }
+      #label-not-sure {
+        left: 1140px;
+        top: 230px;
+      }
+
+      [data-composition-id="decision-tree"] .cursor-container {
+        position: absolute;
+        left: 1920px;
+        top: 1080px;
+        z-index: 100;
+        pointer-events: none;
+        display: flex;
+        align-items: flex-start;
+      }
+
+      [data-composition-id="decision-tree"] .cursor-tag {
+        background-color: #9747ff;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-left: 4px;
+        margin-top: 12px;
+      }
+
+      [data-composition-id="decision-tree"] .squiggle-container {
+        position: absolute;
+        right: 0;
+        bottom: -4px;
+        opacity: 0;
+      }
+
+      [data-composition-id="decision-tree"] .emoji {
+        position: absolute;
+        font-size: 32px;
+        left: 510px;
+        top: 500px;
+        transform: translate(-50%, -50%) scale(0);
+        z-index: 20;
+      }
+
+      [data-composition-id="decision-tree"] #fade-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: white;
+        opacity: 0;
+        z-index: 1000;
+        pointer-events: none;
+      }
+
+      .selection-border {
+        position: absolute;
+        top: -4px;
+        left: -4px;
+        right: -4px;
+        bottom: -4px;
+        border: 2px solid #0b84f3;
+        border-radius: 16px;
+        pointer-events: none;
+        opacity: 0;
+      }
+
+      .text-highlight {
+        background-color: #d0e4ff;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        const tl = gsap.timeline({ paused: true });
+
+        // 1. Root node scales from 0→100% over 0.4s
+        tl.to("#node-root", { scale: 1, duration: 0.4, ease: "power2.out" });
+
+        // 2. Hold 0.6s
+        tl.addLabel("hold1", "+=0.6");
+
+        // 3. Two elbow connectors draw downward-left and downward-right simultaneously (0.5s)
+        tl.to(
+          ".connector#path-1-L, .connector#path-1-R",
+          {
+            strokeDashoffset: 0,
+            duration: 0.5,
+            ease: "none",
+          },
+          "hold1",
+        );
+
+        // Labels fade in at midpoint
+        tl.to(
+          "#label-yes, #label-not-sure",
+          {
+            opacity: 1,
+            duration: 0.2,
+          },
+          "hold1+=0.25",
+        );
+
+        // 4. Level 2 nodes scale in at endpoints with 0.2s stagger
+        tl.to("#node-yes", { scale: 1, duration: 0.4, ease: "back.out(1.7)" }, "hold1+=0.4");
+        tl.to("#node-not-sure", { scale: 1, duration: 0.4, ease: "back.out(1.7)" }, "hold1+=0.6");
+
+        // 5. Hold 0.5s
+        tl.addLabel("hold2", "+=0.5");
+
+        // 6. Four connectors draw down from level 2 (0.4s)
+        tl.to(
+          ".connector#path-2-LL, .connector#path-2-LR, .connector#path-2-RL, .connector#path-2-RR",
+          {
+            strokeDashoffset: 0,
+            duration: 0.4,
+            ease: "none",
+          },
+          "hold2",
+        );
+
+        // 7. Four leaf nodes scale in with 0.15s stagger
+        const leafNodes = ["#node-python", "#node-nocode", "#node-website", "#node-course"];
+        leafNodes.forEach((id, i) => {
+          tl.to(id, { scale: 1, duration: 0.4, ease: "back.out(1.7)" }, `hold2+=${0.3 + i * 0.15}`);
+        });
+
+        // Red wavy underline appears with text
+        tl.to(".squiggle-container", { opacity: 1, duration: 0.1 }, "hold2+=0.3");
+
+        // 8. Hold 0.8s
+        tl.addLabel("hold3", "+=0.8");
+
+        // 9. Cursor drifts in from bottom-right (1s) to lavender sticky
+        tl.to(
+          "#cursor",
+          {
+            left: 450,
+            top: 540,
+            duration: 1,
+            ease: "power1.inOut",
+          },
+          "hold3",
+        );
+
+        // 10. Cursor clicks. Selection border appears.
+        tl.add(() => {
+          const node = document.querySelector("#node-python");
+          if (!node) return;
+          if (!node.querySelector(".selection-border")) {
+            const border = document.createElement("div");
+            border.className = "selection-border";
+            node.appendChild(border);
+          }
+          gsap.set(".selection-border", { opacity: 1 });
+        }, "hold3+=1");
+
+        // Visual click feedback
+        tl.to(
+          "#cursor",
+          { scale: 0.8, duration: 0.05, yoyo: true, repeat: 1, overwrite: "auto" },
+          "hold3+=1",
+        );
+
+        // 11. Hold 0.3s
+        tl.addLabel("hold4", "+=0.3");
+
+        // 12. Cursor double-clicks "Pythom" — highlight in blue
+        tl.to(
+          "#cursor",
+          { scale: 0.8, duration: 0.05, yoyo: true, repeat: 3, overwrite: "auto" },
+          "hold4",
+        );
+        tl.add(() => {
+          const textEl = document.querySelector("#python-text");
+          if (!textEl) return;
+          textEl.innerHTML = 'Start with <span class="text-highlight">Pythom</span>';
+        }, "hold4+=0.1");
+
+        // 13. Hold 0.2s
+        tl.addLabel("hold5", "+=0.2");
+
+        // 14. Highlighted text deletes and "Python" types in (fast)
+        // Squiggle disappears when last char lands
+        const typingStart = tl.labels["hold5"];
+        const words = ["P", "Py", "Pyt", "Pyth", "Pytho", "Python"];
+        words.forEach((word, i) => {
+          tl.add(
+            () => {
+              const el = document.querySelector("#python-text");
+              if (el) el.innerHTML = `Start with <span class="text-highlight">${word}</span>`;
+            },
+            typingStart + i * 0.05,
+          );
+        });
+
+        // Remove highlight and squiggle at the end of typing
+        const typingEnd = typingStart + words.length * 0.05;
+        tl.add(() => {
+          const pyEl = document.querySelector("#python-text");
+          if (pyEl) pyEl.innerHTML = "Start with Python";
+          gsap.set(".squiggle-container", { opacity: 0 });
+        }, typingEnd);
+
+        // 15. Hold 0.5s
+        tl.addLabel("hold6", typingEnd + 0.5);
+
+        // 16. Cursor moves slightly and clicks away to deselect
+        tl.to("#cursor", { left: 500, top: 580, duration: 0.3, overwrite: "auto" }, "hold6");
+        tl.to(
+          "#cursor",
+          { scale: 0.8, duration: 0.05, yoyo: true, repeat: 1, overwrite: "auto" },
+          "hold6+=0.3",
+        );
+        tl.to(".selection-border", { opacity: 0, duration: 0.1 }, "hold6+=0.3");
+
+        // 17. 👍 emoji pops in
+        tl.to("#emoji-thumb", { scale: 1, duration: 0.15, ease: "back.out(2)" }, "hold6+=0.4");
+
+        // 18. Hold 2s
+        tl.addLabel("hold7", "+=2");
+
+        // 19. Fade entire screen to white over 0.5s
+        tl.to("#fade-overlay", { opacity: 1, duration: 0.5 }, "hold7");
+
+        window.__timelines = window.__timelines || {};
+        window.__timelines["decision-tree"] = tl;
+      })();
+    </script>
+  </div>
+</template>

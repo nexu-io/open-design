@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Pentagram Stat · Swiss Grid Data Anchor</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&display=swap" rel="stylesheet" />
+<style>
+  /*
+   * frame-pentagram-stat — Swiss-grid statistic anchor.
+   * Visual style distilled from huashu-design "Pentagram" philosophy (MIT, © alchaincyf).
+   * Rebuilt as a self-contained CSS @keyframes timeline for html-video / Hyperframes.
+   * Timeline (4s @ 60fps): grid rules sweep in -> giant number rises -> bars grow -> bottom bar slides up.
+   */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1920px; height: 1080px; overflow: hidden;
+    background: #ffffff; color: #000;
+    font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+    position: relative;
+  }
+
+  /* --- Swiss grid structure (sweeps in) --- */
+  .rule-h, .rule-v { position: absolute; background: #000; }
+  .rule-h { left: 96px; right: 96px; height: 1px; opacity: 0; transform-origin: left center;
+            animation: ruleH 0.7s cubic-bezier(0.16,1,0.3,1) forwards; }
+  .rule-v { top: 0; bottom: 0; width: 1px; opacity: 0; transform-origin: top center;
+            animation: ruleV 0.7s cubic-bezier(0.16,1,0.3,1) forwards; }
+  @keyframes ruleH { 0%{opacity:0;transform:scaleX(0)} 100%{opacity:0.06;transform:scaleX(1)} }
+  @keyframes ruleV { 0%{opacity:0;transform:scaleY(0)} 100%{opacity:0.04;transform:scaleY(1)} }
+
+  /* --- Giant typographic anchor (the stat), bleeds off right edge --- */
+  .type-anchor {
+    position: absolute; right: -90px; top: 50%;
+    font-weight: 900; font-size: 1020px; line-height: 0.82;
+    color: #000; opacity: 0; z-index: 0; user-select: none; letter-spacing: -30px;
+    transform: translateY(-46%);
+    animation: anchorRise 1.1s cubic-bezier(0.16,1,0.3,1) 0.5s forwards;
+  }
+  @keyframes anchorRise {
+    0%   { opacity: 0; transform: translateY(-38%); }
+    100% { opacity: 0.07; transform: translateY(-50%); }
+  }
+
+  /* --- Content block (left, on the grid) --- */
+  .content { position: absolute; left: 96px; top: 110px; z-index: 2; }
+  .label {
+    font-size: 18px; font-weight: 700; letter-spacing: 6px; text-transform: uppercase;
+    color: #E63946; margin-bottom: 28px; opacity: 0;
+    animation: fadeUp 0.6s ease-out 0.7s forwards;
+  }
+  .headline {
+    font-weight: 900; font-size: 200px; line-height: 0.9; letter-spacing: -8px; color: #000;
+    opacity: 0; animation: fadeUp 0.8s cubic-bezier(0.16,1,0.3,1) 0.85s forwards;
+  }
+  .headline .accent { color: #E63946; }
+  .subtitle {
+    font-size: 24px; font-weight: 500; color: #999; letter-spacing: 0.5px; margin-top: 36px; max-width: 720px;
+    opacity: 0; animation: fadeUp 0.7s ease-out 1.15s forwards;
+  }
+  @keyframes fadeUp { 0%{opacity:0;transform:translateY(24px)} 100%{opacity:1;transform:translateY(0)} }
+
+  /* --- Red center rule --- */
+  .center-rule {
+    position: absolute; left: 96px; top: 560px; width: 0; height: 5px; background: #E63946; z-index: 2;
+    animation: ruleGrow 0.8s cubic-bezier(0.16,1,0.3,1) 1.3s forwards;
+  }
+  @keyframes ruleGrow { 0%{width:0} 100%{width:400px} }
+
+  /* --- Bar chart (grows up) --- */
+  .bars { position: absolute; left: 96px; bottom: 150px; display: flex; gap: 22px; align-items: flex-end; height: 280px; z-index: 2; }
+  .bar { width: 64px; background: #000; opacity: 0.12; transform: scaleY(0); transform-origin: bottom;
+         animation: barGrow 0.7s cubic-bezier(0.16,1,0.3,1) forwards; }
+  .bar.red { background: #E63946; opacity: 0.85; }
+  @keyframes barGrow { 0%{transform:scaleY(0)} 100%{transform:scaleY(1)} }
+
+  /* --- Black bottom data bar (slides up) --- */
+  .bottom-bar {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 80px; background: #000; z-index: 3;
+    display: flex; align-items: center; justify-content: space-between; padding: 0 96px;
+    transform: translateY(100%); animation: barUp 0.6s cubic-bezier(0.16,1,0.3,1) 1.5s forwards;
+  }
+  @keyframes barUp { 0%{transform:translateY(100%)} 100%{transform:translateY(0)} }
+  .bottom-left { display: flex; align-items: center; gap: 48px; }
+  .stat { font-size: 16px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #fff; opacity: 0.6; }
+  .stat strong { color: #E63946; opacity: 1; font-size: 26px; margin-right: 10px; }
+  .bottom-right { font-size: 14px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #fff; opacity: 0.4; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; }
+    .rule-h{opacity:0.06}.rule-v{opacity:0.04}.type-anchor{opacity:0.07}
+    .label,.headline,.subtitle{opacity:1}.center-rule{width:400px}
+    .bar{transform:scaleY(1)}.bottom-bar{transform:translateY(0)}
+  }
+</style>
+</head>
+<body>
+  <!-- Grid -->
+  <div class="rule-h" style="top:110px"></div>
+  <div class="rule-h" style="top:560px;animation-delay:.1s"></div>
+  <div class="rule-v" style="left:96px"></div>
+  <div class="rule-v" style="left:960px;animation-delay:.1s"></div>
+  <div class="rule-v" style="right:96px;animation-delay:.15s"></div>
+
+  <!-- Giant stat anchor (bleeds off right) -->
+  <div class="type-anchor">95</div>
+
+  <!-- Content -->
+  <div class="content">
+    <div class="label">Benchmark · Coding</div>
+    <div class="headline">95.7<span class="accent">.</span></div>
+    <div class="subtitle">AIME score — a new state of the art for open coding models.</div>
+  </div>
+
+  <div class="center-rule"></div>
+
+  <!-- Bars -->
+  <div class="bars">
+    <div class="bar"      style="height:55%;animation-delay:1.35s"></div>
+    <div class="bar"      style="height:70%;animation-delay:1.42s"></div>
+    <div class="bar red"  style="height:100%;animation-delay:1.5s"></div>
+    <div class="bar"      style="height:48%;animation-delay:1.58s"></div>
+    <div class="bar"      style="height:62%;animation-delay:1.66s"></div>
+  </div>
+
+  <!-- Bottom data bar -->
+  <div class="bottom-bar">
+    <div class="bottom-left">
+      <div class="stat"><strong>95.7</strong>AIME</div>
+      <div class="stat"><strong>73.8</strong>SWE-bench</div>
+      <div class="stat"><strong>87.4</strong>τ²-Bench</div>
+    </div>
+    <div class="bottom-right">Swiss Grid · Pentagram</div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>BRANDNAME — 30s Promo</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #000;
+        color: #fff;
+      }
+      .beat-layer {
+        position: absolute;
+        top: 0; left: 0;
+        width: 1920px;
+        height: 1080px;
+      }
+      .cap {
+        position: absolute;
+        bottom: 72px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 12px 22px;
+        border-radius: 14px;
+        background: rgba(10, 8, 5, 0.55);
+        backdrop-filter: blur(8px);
+        font: 500 24px/1.3 "Geist", "Inter", sans-serif;
+        color: #fff;
+        z-index: 50;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="linear-promo-30s"
+      data-start="0"
+      data-duration="30"
+      data-width="1920"
+      data-height="1080"
+    >
+      <!-- Beat 01 — Problem kinetic type (0–4s) -->
+      <div class="beat-layer"
+        data-composition-id="01-problem-type"
+        data-composition-src="compositions/01-problem-type.html"
+        data-start="0" data-duration="4" data-track-index="0"
+        data-width="1920" data-height="1080"></div>
+
+      <!-- Beat 02 — Red card → L-bracket morph (4–8s) -->
+      <div class="beat-layer"
+        data-composition-id="02-card-to-logo"
+        data-composition-src="compositions/02-card-to-logo.html"
+        data-start="4" data-duration="4" data-track-index="0"
+        data-width="1920" data-height="1080"></div>
+
+      <!-- Beat 03 — Brand reveal (8–10s) -->
+      <div class="beat-layer"
+        data-composition-id="03-brand-reveal"
+        data-composition-src="compositions/03-brand-reveal.html"
+        data-start="8" data-duration="2" data-track-index="0"
+        data-width="1920" data-height="1080"></div>
+
+      <!-- Beat 04 — Benefits flowchart recolor (10–14.8s) -->
+      <div class="beat-layer"
+        data-composition-id="04-benefits-flowchart"
+        data-composition-src="compositions/04-benefits-flowchart.html"
+        data-start="10" data-duration="4.8" data-track-index="0"
+        data-width="1920" data-height="1080"></div>
+
+      <!-- Beat 05 — Plan/Build/Monitor surfaces (14.8–19.5s) -->
+      <div class="beat-layer"
+        data-composition-id="05-product-surfaces"
+        data-composition-src="compositions/05-product-surfaces.html"
+        data-start="14.8" data-duration="4.7" data-track-index="0"
+        data-width="1920" data-height="1080"></div>
+
+      <!-- Beat 06 — Chrome wheel + side-panels (19.5–22s) -->
+      <div class="beat-layer"
+        data-composition-id="06-wheel-pillars"
+        data-composition-src="compositions/06-wheel-pillars.html"
+        data-start="19.5" data-duration="2.5" data-track-index="0"
+        data-width="1920" data-height="1080"></div>
+
+      <!-- Beat 07 — Foundation callback + cluster (22–25s) -->
+      <div class="beat-layer"
+        data-composition-id="07-foundation"
+        data-composition-src="compositions/07-foundation.html"
+        data-start="22" data-duration="3" data-track-index="0"
+        data-width="1920" data-height="1080"></div>
+
+      <!-- Beat 08 — CTA outro (25–30s) -->
+      <div class="beat-layer"
+        data-composition-id="08-cta-outro"
+        data-composition-src="compositions/08-cta-outro.html"
+        data-start="25" data-duration="5" data-track-index="0"
+        data-width="1920" data-height="1080"></div>
+
+      <!-- Audio: warm ambient pad (full piece) -->
+      <audio id="warm-pad"
+        data-start="0" data-duration="30" data-track-index="1" data-volume="0.15"
+        src="assets/warm-pad.mp3"></audio>
+
+      <!-- SFX: whoosh at 3.8s (whip transition in beat 01) -->
+      <audio id="sfx-whoosh-1"
+        data-start="3.8" data-duration="0.4" data-track-index="2" data-volume="0.20"
+        src="assets/sfx-whoosh-1.mp3"></audio>
+
+      <!-- SFX: whoosh at 6.0s (morph transition in beat 02) -->
+      <audio id="sfx-whoosh-2"
+        data-start="6.0" data-duration="0.5" data-track-index="3" data-volume="0.20"
+        src="assets/sfx-whoosh-2.mp3"></audio>
+
+      <!-- SFX: twinkle at 8.3s (brand reveal in beat 03) -->
+      <audio id="sfx-twinkle"
+        data-start="8.3" data-duration="0.5" data-track-index="4" data-volume="0.20"
+        src="assets/sfx-twinkle.mp3"></audio>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      // Root anchor — 30s slot. Sub-composition timelines auto-link.
+      tl.to({}, { duration: 30 }, 0);
+      window.__timelines["linear-promo-30s"] = tl;
+    </script>
+  </body>
+</html>

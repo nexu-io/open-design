@@ -1,0 +1,388 @@
+<template id="stats-template">
+  <div
+    data-composition-id="stats"
+    data-width="1920"
+    data-height="1080"
+    data-duration="__VIDEO_DURATION__"
+  >
+    <div id="stats-container">
+      <!-- Moment 1: 47% NEED MOTION GRAPHICS -->
+      <div id="moment-1" class="moment" style="opacity: 0; transform: scale(0) rotate(8deg)">
+        <div class="sticker-stack">
+          <div class="sticker-bg blue-bg"></div>
+          <div class="sticker-content white-bg blue-border">
+            <div class="stat-number blue-text">47%</div>
+            <div class="stat-label blue-text">NEED MOTION GRAPHICS</div>
+          </div>
+        </div>
+        <!-- Decorative shapes -->
+        <div
+          class="shape circle pink-bg"
+          style="top: -40px; left: -40px; width: 80px; height: 80px"
+        ></div>
+        <div
+          class="shape pill lime-bg"
+          style="bottom: -30px; right: -50px; width: 120px; height: 40px; transform: rotate(-15deg)"
+        ></div>
+      </div>
+
+      <!-- Moment 2: 62% STRUGGLE WITH STATIC CONTENT -->
+      <div id="moment-2" class="moment" style="opacity: 0; transform: scale(0) rotate(-5deg)">
+        <div class="sticker-stack">
+          <div class="sticker-bg white-bg"></div>
+          <div class="sticker-content blue-bg white-border">
+            <div class="stat-number white-text">62%</div>
+            <div class="stat-label white-text">STRUGGLE WITH STATIC CONTENT</div>
+          </div>
+        </div>
+        <!-- Decorative shapes -->
+        <div
+          class="shape blob yellow-bg"
+          style="
+            top: -50px;
+            right: -30px;
+            width: 100px;
+            height: 100px;
+            border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+          "
+        ></div>
+        <div
+          class="shape circle pink-bg"
+          style="bottom: -20px; left: -40px; width: 60px; height: 60px"
+        ></div>
+      </div>
+
+      <!-- Moment 3: 75% LACK EDITING SKILLS -->
+      <div id="moment-3" class="moment" style="opacity: 0; transform: scale(0) rotate(3deg)">
+        <div class="sticker-stack">
+          <div class="sticker-bg pink-bg"></div>
+          <div class="sticker-content white-bg pink-border">
+            <div class="stat-number pink-text">75%</div>
+            <div class="stat-label pink-text">LACK EDITING SKILLS</div>
+          </div>
+        </div>
+        <!-- Decorative shapes -->
+        <div
+          class="shape pill blue-bg"
+          style="
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%) rotate(5deg);
+            width: 150px;
+            height: 45px;
+          "
+        ></div>
+        <div
+          class="shape circle yellow-bg"
+          style="bottom: -40px; right: -20px; width: 90px; height: 90px"
+        ></div>
+      </div>
+    </div>
+
+    <style>
+      [data-composition-id="stats"] {
+        width: 1920px;
+        height: 1080px;
+        position: relative;
+        font-family: "Nunito", sans-serif;
+        overflow: hidden;
+      }
+
+      [data-composition-id="stats"] #stats-container {
+        width: 100%;
+        height: 100%;
+        position: relative;
+      }
+
+      [data-composition-id="stats"] .moment {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 40px;
+        z-index: 100;
+      }
+
+      /* Layout Positions */
+      [data-composition-id="stats"] #moment-1 {
+        top: 200px;
+        right: 150px; /* Right side when A-roll is Left */
+        width: 600px;
+      }
+
+      [data-composition-id="stats"] #moment-2 {
+        top: 250px;
+        left: 100px; /* Left side when A-roll is Right */
+        width: 700px;
+      }
+
+      [data-composition-id="stats"] #moment-3 {
+        bottom: 100px; /* Below A-roll when centered */
+        left: 50%;
+        transform: translateX(-50%);
+        width: 800px;
+      }
+
+      /* Sticker Stack Effect */
+      [data-composition-id="stats"] .sticker-stack {
+        position: relative;
+        width: 100%;
+        padding: 40px;
+        filter: drop-shadow(0 15px 0 rgba(0, 87, 255, 0.2));
+      }
+
+      [data-composition-id="stats"] .sticker-bg {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: 40px;
+        z-index: -1;
+        transform: rotate(-2deg);
+      }
+
+      [data-composition-id="stats"] .sticker-content {
+        position: relative;
+        padding: 40px;
+        border-radius: 35px;
+        border: 8px solid currentColor;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+
+      /* Colors */
+      [data-composition-id="stats"] .blue-bg {
+        background-color: #0057ff;
+      }
+      [data-composition-id="stats"] .pink-bg {
+        background-color: #ff2d8a;
+      }
+      [data-composition-id="stats"] .lime-bg {
+        background-color: #7fff00;
+      }
+      [data-composition-id="stats"] .yellow-bg {
+        background-color: #ffe500;
+      }
+      [data-composition-id="stats"] .white-bg {
+        background-color: #ffffff;
+      }
+
+      [data-composition-id="stats"] .blue-text {
+        color: #0057ff;
+      }
+      [data-composition-id="stats"] .white-text {
+        color: #ffffff;
+      }
+      [data-composition-id="stats"] .pink-text {
+        color: #ff2d8a;
+      }
+
+      [data-composition-id="stats"] .blue-border {
+        border-color: #0057ff;
+      }
+      [data-composition-id="stats"] .white-border {
+        border-color: #ffffff;
+      }
+      [data-composition-id="stats"] .pink-border {
+        border-color: #ff2d8a;
+      }
+
+      /* Typography */
+      [data-composition-id="stats"] .stat-number {
+        font-size: 180px;
+        font-weight: 900;
+        line-height: 1;
+        margin-bottom: 10px;
+      }
+
+      [data-composition-id="stats"] .stat-label {
+        font-size: 48px;
+        font-weight: 900;
+        line-height: 1.1;
+        max-width: 500px;
+      }
+
+      /* Shapes */
+      [data-composition-id="stats"] .shape {
+        position: absolute;
+        z-index: -2;
+        border-radius: 50%;
+      }
+      [data-composition-id="stats"] .pill {
+        border-radius: 100px;
+      }
+    </style>
+
+    <script>
+      (function () {
+        const TRANSCRIPT = [
+          { text: "We", start: 0.119, end: 0.259 },
+          { text: "asked", start: 0.319, end: 0.479 },
+          { text: "what", start: 0.519, end: 0.659 },
+          { text: "you", start: 0.699, end: 0.819 },
+          { text: "needed.", start: 0.859, end: 1.819 },
+          { text: "Forty-seven", start: 1.839, end: 2.299 },
+          { text: "percent", start: 2.399, end: 2.679 },
+          { text: "of", start: 2.7, end: 2.799 },
+          { text: "you", start: 2.839, end: 2.939 },
+          { text: "said", start: 3.039, end: 3.179 },
+          { text: "motion", start: 3.24, end: 3.559 },
+          { text: "graphics.", start: 3.579, end: 4.639 },
+          { text: "Sixty-two", start: 4.659, end: 5.179 },
+          { text: "percent", start: 5.299, end: 5.759 },
+          { text: "said", start: 5.859, end: 5.98 },
+          { text: "static", start: 6.099, end: 6.399 },
+          { text: "content", start: 6.46, end: 6.879 },
+          { text: "was", start: 6.92, end: 7.079 },
+          { text: "costing", start: 7.099, end: 7.48 },
+          { text: "you", start: 7.5, end: 7.579 },
+          { text: "attention,", start: 7.679, end: 8.659 },
+          { text: "and", start: 8.699, end: 8.86 },
+          { text: "three", start: 8.88, end: 9.06 },
+          { text: "out", start: 9.079, end: 9.18 },
+          { text: "of", start: 9.199, end: 9.34 },
+          { text: "four", start: 9.38, end: 9.799 },
+          { text: "said", start: 9.84, end: 10.0 },
+          { text: "you", start: 10.019, end: 10.159 },
+          { text: "know", start: 10.179, end: 10.36 },
+          { text: "the", start: 10.38, end: 10.479 },
+          { text: "look", start: 10.52, end: 10.699 },
+          { text: "you", start: 10.739, end: 10.859 },
+          { text: "want", start: 10.98, end: 11.34 },
+          { text: "but", start: 11.359, end: 11.52 },
+          { text: "don't", start: 11.56, end: 11.779 },
+          { text: "have", start: 11.819, end: 11.94 },
+          { text: "the", start: 11.96, end: 12.06 },
+          { text: "editing", start: 12.079, end: 12.4 },
+          { text: "skills", start: 12.52, end: 12.86 },
+          { text: "to", start: 12.88, end: 13.0 },
+          { text: "get", start: 13.019, end: 13.18 },
+          { text: "there.", start: 13.22, end: 14.22 },
+          { text: "So", start: 14.239, end: 14.399 },
+          { text: "we", start: 14.42, end: 14.52 },
+          { text: "built", start: 14.619, end: 14.88 },
+          { text: "Hyperframes", start: 15.079, end: 15.42 },
+        ];
+        const tl = gsap.timeline({ paused: true });
+
+        // Helper to find word timing
+        function getWordTime(wordText) {
+          const word = TRANSCRIPT.find((w) =>
+            w.text
+              .toLowerCase()
+              .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "")
+              .startsWith(wordText.toLowerCase()),
+          );
+          return word ? word.start : null;
+        }
+
+        // Timings from transcript
+        const t1 = getWordTime("Forty-seven") || 1.839;
+        const t2 = getWordTime("Sixty-two") || 4.659;
+        const t3 = getWordTime("three") || 8.88;
+
+        // Moment 1 Animation (approx 5s)
+        tl.to(
+          "#moment-1",
+          {
+            opacity: 1,
+            scale: 1,
+            duration: 0.8,
+            ease: "elastic.out(1, 0.6)",
+            onStart: () => gsap.set("#moment-1", { transformOrigin: "center center" }),
+          },
+          t1,
+        );
+
+        // Moment 1 Exit (before Moment 2)
+        tl.to(
+          "#moment-1",
+          {
+            opacity: 0,
+            scale: 0.5,
+            duration: 0.3,
+            ease: "back.in(1.7)",
+          },
+          t2 - 0.4,
+        );
+
+        // Moment 2 Animation (approx 9s)
+        tl.to(
+          "#moment-2",
+          {
+            opacity: 1,
+            scale: 1,
+            duration: 0.8,
+            ease: "elastic.out(1, 0.6)",
+            onStart: () => gsap.set("#moment-2", { transformOrigin: "center center" }),
+          },
+          t2,
+        );
+
+        // Moment 2 Exit (before Moment 3)
+        tl.to(
+          "#moment-2",
+          {
+            opacity: 0,
+            scale: 0.5,
+            duration: 0.3,
+            ease: "back.in(1.7)",
+          },
+          t3 - 0.4,
+        );
+
+        // Moment 3 Animation (approx 13s)
+        tl.to(
+          "#moment-3",
+          {
+            opacity: 1,
+            scale: 1,
+            duration: 0.8,
+            ease: "elastic.out(1, 0.6)",
+            onStart: () => gsap.set("#moment-3", { transformOrigin: "center center" }),
+          },
+          t3,
+        );
+
+        // Moment 3 Exit: 3 words before 'Hyperframes'
+        // 'Editor' is at 15.079. 3 words before is 'So' at 14.239.
+        tl.to(
+          "#moment-3",
+          {
+            opacity: 0,
+            scale: 0.5,
+            duration: 0.3,
+            ease: "back.in(1.7)",
+          },
+          14.239,
+        );
+
+        // Ambient Motion (Finite)
+        const totalDuration = 16.04;
+        gsap.utils.toArray(".shape").forEach((shape, i) => {
+          const stepDuration = 2 + i * 0.2;
+          const steps = Math.ceil(totalDuration / stepDuration);
+          for (let s = 0; s < steps; s++) {
+            tl.to(
+              shape,
+              {
+                y: s % 2 === 0 ? 15 : -15,
+                rotation: s % 2 === 0 ? 5 : -5,
+                duration: stepDuration,
+                ease: "sine.inOut",
+              },
+              s * stepDuration,
+            );
+          }
+        });
+
+        window.__timelines = window.__timelines || {};
+        window.__timelines["stats"] = tl;
+      })();
+    </script>
+  </div>
+</template>

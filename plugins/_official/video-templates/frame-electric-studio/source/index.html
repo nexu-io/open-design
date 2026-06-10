@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Electric Studio · Split Panel Quote</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
+<style>
+  /*
+   * frame-electric-studio — two-panel vertical split, quote as hero.
+   * Visual style distilled from the frontend-slides "Electric Studio" preset (MIT, © Zara Zhang).
+   * Rebuilt as a self-contained CSS @keyframes timeline for html-video / Hyperframes.
+   * Timeline (4.5s @ 60fps): panels split open (white down, blue up) -> accent bar grows
+   * -> quote reveals line by line -> attribution fades -> corner brand marks fade.
+   */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1920px; height: 1080px; overflow: hidden;
+    background: #ffffff; color: #0a0a0a;
+    font-family: 'Manrope', sans-serif; position: relative;
+  }
+
+  /* white top panel, blue bottom panel — split open from center */
+  .panel-top { position: absolute; left: 0; right: 0; top: 0; height: 540px; background: #ffffff;
+    transform: translateY(-100%); animation: openTop 0.9s cubic-bezier(0.16,1,0.3,1) 0.1s forwards; }
+  .panel-bot { position: absolute; left: 0; right: 0; bottom: 0; height: 540px; background: #4361ee;
+    transform: translateY(100%); animation: openBot 0.9s cubic-bezier(0.16,1,0.3,1) 0.1s forwards; }
+  @keyframes openTop { to { transform: translateY(0); } }
+  @keyframes openBot { to { transform: translateY(0); } }
+
+  /* accent bar on the seam */
+  .seam { position: absolute; left: 96px; top: 540px; width: 0; height: 8px; background: #0a0a0a;
+    z-index: 5; transform: translateY(-50%); animation: seamGrow 0.8s cubic-bezier(0.16,1,0.3,1) 0.9s forwards; }
+  @keyframes seamGrow { to { width: 320px; } }
+
+  /* quote hero, straddling the seam (last line(s) land on the blue panel, >540px) */
+  .quote { position: absolute; left: 96px; top: 318px; right: 200px; z-index: 6;
+    font-weight: 800; font-size: 104px; line-height: 1.12; letter-spacing: -2px; color: #0a0a0a; }
+  .quote .ln { display: block; opacity: 0; transform: translateY(26px);
+    animation: lnUp 0.7s cubic-bezier(0.16,1,0.3,1) forwards; }
+  .quote .ln.on-blue { color: #ffffff; }
+  @keyframes lnUp { to { opacity: 1; transform: translateY(0); } }
+
+  /* attribution, bottom panel */
+  .attr { position: absolute; left: 96px; bottom: 110px; z-index: 6; color: #fff; opacity: 0;
+    animation: fade 0.7s ease-out 2.2s forwards; }
+  .attr .name { font-weight: 700; font-size: 28px; letter-spacing: 0.5px; }
+  .attr .role { font-weight: 500; font-size: 18px; letter-spacing: 2px; text-transform: uppercase;
+    opacity: 0.7; margin-top: 8px; }
+  @keyframes fade { to { opacity: 1; } }
+
+  /* corner brand marks */
+  .brand { position: absolute; font-weight: 800; font-size: 20px; letter-spacing: 3px;
+    text-transform: uppercase; z-index: 6; opacity: 0; animation: fade 0.6s ease-out 2.5s forwards; }
+  .brand-tr { top: 64px; right: 96px; color: #0a0a0a; }
+  .brand-br { bottom: 64px; right: 96px; color: #fff; opacity: 0; }
+  .brand-br { animation: fadeDim 0.6s ease-out 2.6s forwards; }
+  @keyframes fadeDim { to { opacity: 0.6; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; }
+    .panel-top,.panel-bot{transform:translateY(0)}.seam{width:320px}
+    .quote .ln{opacity:1;transform:none}.attr,.brand-tr{opacity:1}.brand-br{opacity:0.6}
+  }
+</style>
+</head>
+<body>
+  <div class="panel-top"></div>
+  <div class="panel-bot"></div>
+  <div class="seam"></div>
+
+  <div class="quote">
+    <span class="ln" style="animation-delay:1.0s">One agent.</span>
+    <span class="ln" style="animation-delay:1.15s">Every HTML</span>
+    <span class="ln on-blue" style="animation-delay:1.3s">video engine.</span>
+  </div>
+
+  <div class="attr">
+    <div class="name">html-video</div>
+    <div class="role">Meta-layer for coding agents</div>
+  </div>
+
+  <div class="brand brand-tr">nexu.io</div>
+  <div class="brand brand-br">Electric Studio</div>
+</body>
+</html>

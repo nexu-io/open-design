@@ -1,0 +1,151 @@
+<template id="captions-template">
+  <div
+    data-composition-id="captions"
+    data-width="1920"
+    data-height="1080"
+    data-duration="__VIDEO_DURATION__"
+  >
+    <div id="caption-container"></div>
+
+    <style>
+      [data-composition-id="captions"] {
+        width: 1920px;
+        height: 1080px;
+        position: relative;
+        font-family: "Helvetica", "Arial", sans-serif;
+        font-weight: bold;
+        overflow: hidden;
+      }
+
+      [data-composition-id="captions"] #caption-container {
+        position: absolute;
+        bottom: 120px; /* Consistent bottom positioning */
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+      }
+
+      [data-composition-id="captions"] .caption-box {
+        background-color: #0a1e3d; /* Solid navy */
+        padding: 20px 40px;
+        display: none; /* Hidden by default, shown via GSAP */
+        justify-content: center;
+        align-items: center;
+        /* Swiss Grid: sharp corners, solid block */
+      }
+
+      [data-composition-id="captions"] .caption-text {
+        color: #f2f2f2; /* Off-white */
+        font-size: 72px;
+        text-transform: uppercase; /* Swiss style often uses uppercase for impact */
+        letter-spacing: -2px;
+        line-height: 1;
+        white-space: nowrap;
+        text-align: center;
+        max-width: 1600px;
+        overflow: hidden;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        const TRANSCRIPT = [
+          { text: "We", start: 0.119, end: 0.259 },
+          { text: "asked", start: 0.319, end: 0.479 },
+          { text: "what", start: 0.519, end: 0.659 },
+          { text: "you", start: 0.699, end: 0.819 },
+          { text: "needed.", start: 0.859, end: 1.819 },
+          { text: "Forty-seven", start: 1.86, end: 2.299 },
+          { text: "percent", start: 2.399, end: 2.679 },
+          { text: "of", start: 2.7, end: 2.799 },
+          { text: "you", start: 2.839, end: 2.939 },
+          { text: "said", start: 3.039, end: 3.179 },
+          { text: "motion", start: 3.24, end: 3.559 },
+          { text: "graphics,", start: 3.579, end: 4.599 },
+          { text: "sixty-two", start: 4.679, end: 5.179 },
+          { text: "percent", start: 5.299, end: 5.759 },
+          { text: "said", start: 5.859, end: 5.98 },
+          { text: "static", start: 6.079, end: 6.399 },
+          { text: "content", start: 6.46, end: 6.879 },
+          { text: "was", start: 6.92, end: 7.079 },
+          { text: "costing", start: 7.099, end: 7.48 },
+          { text: "you", start: 7.5, end: 7.579 },
+          { text: "attention,", start: 7.679, end: 8.659 },
+          { text: "and", start: 8.699, end: 8.86 },
+          { text: "three", start: 8.88, end: 9.06 },
+          { text: "out", start: 9.079, end: 9.18 },
+          { text: "of", start: 9.199, end: 9.34 },
+          { text: "four", start: 9.38, end: 9.799 },
+          { text: "said", start: 9.84, end: 10.0 },
+          { text: "you", start: 10.019, end: 10.159 },
+          { text: "know", start: 10.179, end: 10.36 },
+          { text: "the", start: 10.38, end: 10.42 },
+          { text: "look", start: 10.519, end: 10.699 },
+          { text: "you", start: 10.739, end: 10.859 },
+          { text: "want", start: 10.98, end: 11.34 },
+          { text: "but", start: 11.359, end: 11.52 },
+          { text: "don't", start: 11.56, end: 11.779 },
+          { text: "have", start: 11.819, end: 11.94 },
+          { text: "the", start: 11.96, end: 12.06 },
+          { text: "editing", start: 12.079, end: 12.4 },
+          { text: "skills", start: 12.52, end: 12.86 },
+          { text: "to", start: 12.88, end: 13.0 },
+          { text: "get", start: 13.019, end: 13.18 },
+          { text: "there.", start: 13.22, end: 14.22 },
+          { text: "So", start: 14.239, end: 14.399 },
+          { text: "we", start: 14.42, end: 14.52 },
+          { text: "built", start: 14.619, end: 14.88 },
+          { text: "Hyperframes", start: 15.079, end: 15.42 },
+        ];
+        const container = document.getElementById("caption-container");
+        const tl = gsap.timeline({ paused: true });
+
+        if (!TRANSCRIPT || TRANSCRIPT.length === 0) {
+          window.__timelines = window.__timelines || {};
+          window.__timelines["captions"] = tl;
+          return;
+        }
+
+        // Group transcript into max 5 words per group
+        const groups = [];
+        let currentGroup = [];
+
+        TRANSCRIPT.forEach((word, index) => {
+          currentGroup.push(word);
+          // Group by 5 words OR if it's the last word
+          if (currentGroup.length === 5 || index === TRANSCRIPT.length - 1) {
+            groups.push([...currentGroup]);
+            currentGroup = [];
+          }
+        });
+
+        // Create DOM elements and timeline for each group
+        groups.forEach((group, i) => {
+          const box = document.createElement("div");
+          box.className = "caption-box";
+          box.id = `group-${i}`;
+
+          const text = document.createElement("div");
+          text.className = "caption-text";
+          text.textContent = group.map((w) => w.text).join(" ");
+
+          box.appendChild(text);
+          container.appendChild(box);
+
+          const startTime = group[0].start;
+          const endTime = group[group.length - 1].end;
+
+          // Hard cut animation (no fades) as requested
+          tl.set(box, { display: "flex" }, startTime);
+          tl.set(box, { display: "none" }, endTime);
+        });
+
+        window.__timelines["captions"] = tl;
+      })();
+    </script>
+  </div>
+</template>

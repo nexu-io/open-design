@@ -1,0 +1,182 @@
+<template id="06-wheel-pillars-template">
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@500;700&family=JetBrains+Mono:wght@400;500&display=block" rel="stylesheet" />
+
+  <div
+    data-composition-id="06-wheel-pillars"
+    data-start="0"
+    data-duration="2.5"
+    data-width="1920"
+    data-height="1080"
+  >
+    <div class="stage-06">
+      <div class="grid-floor"></div>
+
+      <div class="wheel-wrap">
+        <div class="wheel">
+          <div class="wheel-inner"></div>
+          <div class="wheel-tick t0"></div>
+          <div class="wheel-tick t1"></div>
+          <div class="wheel-tick t2"></div>
+          <div class="wheel-tick t3"></div>
+          <div class="wheel-tick t4"></div>
+          <div class="wheel-tick t5"></div>
+          <div class="wheel-tick t6"></div>
+          <div class="wheel-tick t7"></div>
+        </div>
+      </div>
+
+      <div class="panel p-left">
+        <div class="pname">Plan</div>
+        <div class="pdesc">Roadmaps, cycles, and projects</div>
+      </div>
+      <div class="panel p-right">
+        <div class="pname">Build</div>
+        <div class="pdesc">Issues, editor, and agents</div>
+      </div>
+      <div class="panel p-third">
+        <div class="pname">Monitor</div>
+        <div class="pdesc">Insights and analytics</div>
+      </div>
+
+      <div class="vignette"></div>
+      <div class="grain"></div>
+    </div>
+
+    <style>
+      [data-composition-id="06-wheel-pillars"] {
+        position: absolute; inset: 0; overflow: hidden; background: #000;
+      }
+      [data-composition-id="06-wheel-pillars"] .stage-06 { position: absolute; inset: 0; }
+      [data-composition-id="06-wheel-pillars"] .grid-floor {
+        position: absolute; inset: 0;
+        transform: perspective(900px) rotateX(60deg) translateY(25%);
+        background:
+          repeating-linear-gradient(0deg,  rgba(255,255,255,0.04) 0 1px, transparent 1px 80px),
+          repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 80px);
+        background-color: #000;
+      }
+      [data-composition-id="06-wheel-pillars"] .wheel-wrap {
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 520px; height: 520px;
+        filter: drop-shadow(0 0 80px rgba(169,176,240,0.4));
+      }
+      [data-composition-id="06-wheel-pillars"] .wheel {
+        position: relative;
+        width: 100%; height: 100%;
+        border-radius: 50%;
+        background:
+          conic-gradient(from 0deg,
+            #5E6AD2 0deg,
+            #A155FF 72deg,
+            #5db4ff 144deg,
+            #FFD84A 216deg,
+            #A9B0F0 288deg,
+            #5E6AD2 360deg);
+        opacity: 0;
+      }
+      [data-composition-id="06-wheel-pillars"] .wheel-inner {
+        position: absolute;
+        top: 10%; left: 10%;
+        width: 80%; height: 80%;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle at 35% 30%, rgba(255,255,255,0.15) 0%, transparent 40%),
+          linear-gradient(145deg, #0d0d18 0%, #1a1a28 50%, #0a0a14 100%);
+        border: 2px solid rgba(169,176,240,0.3);
+        box-shadow: inset 0 0 60px rgba(94,106,210,0.3);
+      }
+      [data-composition-id="06-wheel-pillars"] .wheel-tick {
+        position: absolute;
+        top: 50%; left: 50%;
+        width: 4px; height: 24px;
+        background: rgba(255,255,255,0.4);
+        transform-origin: 50% 240px;
+      }
+      [data-composition-id="06-wheel-pillars"] .t0 { transform: translate(-50%, -50%) rotate(0deg)   translateY(-240px); }
+      [data-composition-id="06-wheel-pillars"] .t1 { transform: translate(-50%, -50%) rotate(45deg)  translateY(-240px); }
+      [data-composition-id="06-wheel-pillars"] .t2 { transform: translate(-50%, -50%) rotate(90deg)  translateY(-240px); }
+      [data-composition-id="06-wheel-pillars"] .t3 { transform: translate(-50%, -50%) rotate(135deg) translateY(-240px); }
+      [data-composition-id="06-wheel-pillars"] .t4 { transform: translate(-50%, -50%) rotate(180deg) translateY(-240px); }
+      [data-composition-id="06-wheel-pillars"] .t5 { transform: translate(-50%, -50%) rotate(225deg) translateY(-240px); }
+      [data-composition-id="06-wheel-pillars"] .t6 { transform: translate(-50%, -50%) rotate(270deg) translateY(-240px); }
+      [data-composition-id="06-wheel-pillars"] .t7 { transform: translate(-50%, -50%) rotate(315deg) translateY(-240px); }
+
+      [data-composition-id="06-wheel-pillars"] .panel {
+        position: absolute;
+        width: 380px;
+        padding: 24px 28px;
+        background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 16px;
+        backdrop-filter: blur(14px);
+        opacity: 0;
+      }
+      [data-composition-id="06-wheel-pillars"] .p-left { top: 50%; left: 120px; transform: translateY(-50%); }
+      [data-composition-id="06-wheel-pillars"] .p-right { top: 50%; right: 120px; transform: translateY(-50%); }
+      [data-composition-id="06-wheel-pillars"] .p-third { bottom: 120px; left: 50%; transform: translateX(-50%); }
+      [data-composition-id="06-wheel-pillars"] .pname {
+        font-family: "Geist", sans-serif;
+        font-weight: 700;
+        font-size: 56px;
+        letter-spacing: -0.02em;
+        color: #fff;
+        text-shadow: 0 0 30px rgba(169,176,240,0.5);
+      }
+      [data-composition-id="06-wheel-pillars"] .pdesc {
+        margin-top: 8px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 18px;
+        color: rgba(255,255,255,0.7);
+        letter-spacing: 0.02em;
+      }
+      [data-composition-id="06-wheel-pillars"] .vignette {
+        position: absolute; inset: 0; pointer-events: none;
+        background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.95) 95%);
+        opacity: 0.7;
+      }
+      [data-composition-id="06-wheel-pillars"] .grain {
+        position: absolute; inset: 0; pointer-events: none;
+        opacity: 0.08;
+        background-image:
+          radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+          radial-gradient(rgba(255,255,255,0.02) 1px, transparent 1px);
+        background-size: 3px 3px, 5px 5px;
+      }
+    </style>
+
+    <script>
+      (() => {
+        const SLOT = 2.5;
+        const tl = gsap.timeline({ paused: true });
+        const sel = (q) => `[data-composition-id="06-wheel-pillars"] ${q}`;
+
+        tl.to(sel('.wheel'), { opacity: 1, duration: 0.35, ease: 'power2.out' }, 0);
+        tl.fromTo(sel('.wheel'),
+          { rotate: -30 },
+          { rotate: 360, duration: SLOT, ease: 'none' }, 0);
+
+        tl.fromTo(sel('.p-left'),
+          { x: -100, opacity: 0 },
+          { x: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }, 0.4);
+
+        tl.fromTo(sel('.p-right'),
+          { x: 100, opacity: 0 },
+          { x: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }, 1.0);
+
+        tl.fromTo(sel('.p-third'),
+          { y: 100, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }, 1.6);
+
+        tl.to(sel('.panel'), { opacity: 0, scale: 0.9, duration: 0.25, ease: 'power2.in' }, 2.25);
+        tl.to(sel('.wheel'), { opacity: 0, scale: 0.7, duration: 0.25, ease: 'power2.in' }, 2.25);
+
+        tl.to({}, { duration: SLOT }, 0);
+        window.__timelines = window.__timelines || {};
+        window.__timelines['06-wheel-pillars'] = tl;
+      })();
+    </script>
+  </div>
+</template>

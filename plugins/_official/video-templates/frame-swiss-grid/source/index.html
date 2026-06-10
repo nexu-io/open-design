@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Swiss Grid - Hyperframes</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        width: 1920px;
+        height: 1080px;
+        background-color: #f2f2f2;
+        overflow: hidden;
+        font-family: "Helvetica", Arial, sans-serif;
+      }
+
+      #master-root {
+        width: 1920px;
+        height: 1080px;
+        position: relative;
+      }
+
+      .background-grid {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+      }
+
+      /* A-roll styling */
+      #short_mag_cut_frame {
+        position: absolute;
+        border-radius: 8px; /* Required */
+        z-index: 1;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+        background: #000;
+      }
+
+      #short_mag_cut,
+      #short_mag_cut_frame > img.__render_frame__,
+      #short_mag_cut_frame > img.__preview_render_frame__ {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center;
+        display: block;
+      }
+
+      /* Overlay layers */
+      .overlay-layer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      #intro-comp {
+        z-index: 2;
+      }
+      #graphics-comp {
+        z-index: 3;
+      }
+      #captions-comp {
+        z-index: 4;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="master-root"
+      data-composition-id="master"
+      data-width="1920"
+      data-height="1080"
+      data-start="0"
+      data-duration="__VIDEO_DURATION__"
+    >
+      <!-- Background Grid -->
+      <img id="bg-grid" class="background-grid" src="assets/swiss-grid.svg" alt="Grid" />
+
+      <!-- Intro Sub-composition -->
+      <div
+        id="intro-comp"
+        class="overlay-layer"
+        data-composition-id="intro"
+        data-composition-src="compositions/intro.html"
+        data-start="0"
+        data-duration="1.86"
+        data-track-index="2"
+      ></div>
+
+      <!-- Graphics Sub-composition -->
+      <div
+        id="graphics-comp"
+        class="overlay-layer"
+        data-composition-id="graphics"
+        data-composition-src="compositions/graphics.html"
+        data-start="0"
+        data-duration="__VIDEO_DURATION__"
+        data-track-index="3"
+      ></div>
+
+      <!-- Captions Sub-composition -->
+      <div
+        id="captions-comp"
+        class="overlay-layer"
+        data-composition-id="captions"
+        data-composition-src="compositions/captions.html"
+        data-start="0"
+        data-duration="__VIDEO_DURATION__"
+        data-track-index="4"
+      ></div>
+
+      <script>
+        window.__timelines = window.__timelines || {};
+
+        const masterTL = gsap.timeline({ paused: true });
+        const v = document.getElementById("short_mag_cut_frame");
+
+        // --- A-ROLL MOVEMENT (Structured Swiss Layout) ---
+
+        // 1. Entrance (0-1.86s): Slide in from left, settle centered for Intro
+        masterTL.fromTo(
+          v,
+          { x: -1000, y: 120, width: 960, height: 840 },
+          { x: 480, y: 120, width: 960, height: 840, duration: 0.8, ease: "power2.out" },
+          0,
+        );
+
+        // 2. Stat 1 (1.86s - 4.68s): Move to right side (Graphic is on left)
+        masterTL.to(
+          v,
+          {
+            x: 1080,
+            y: 120,
+            width: 720,
+            height: 720,
+            duration: 0.25,
+            ease: "expo.out",
+          },
+          1.86,
+        );
+
+        // 3. Stat 2 (4.68s - 8.88s): Stay right, zoom in slightly
+        masterTL.to(
+          v,
+          {
+            x: 1080,
+            y: 60,
+            width: 780,
+            height: 780,
+            duration: 0.25,
+            ease: "expo.out",
+          },
+          4.68,
+        );
+
+        // 4. Stat 3 (8.88s - 14.2s): Move to left side (Graphic is on right)
+        masterTL.to(
+          v,
+          {
+            x: 120,
+            y: 120,
+            width: 720,
+            height: 720,
+            duration: 0.25,
+            ease: "expo.out",
+          },
+          8.88,
+        );
+
+        // 5. Conclusion (14.2s - 16.04s): Center large
+        masterTL.to(
+          v,
+          {
+            x: 240,
+            y: 60,
+            width: 1440,
+            height: 810,
+            duration: 0.5,
+            ease: "expo.out",
+          },
+          14.2,
+        );
+
+        window.__timelines["master"] = masterTL;
+      </script>
+    </div>
+
+    <!-- A-roll Video (direct child of body to avoid video_nested_in_timed_element) -->
+    <div id="short_mag_cut_frame">
+      <video
+        id="short_mag_cut"
+        src="__VIDEO_SRC__"
+        muted
+        playsinline
+        data-start="0"
+        data-duration="__VIDEO_DURATION__"
+        data-track-index="1"
+      ></video>
+    </div>
+    <audio
+      id="a-roll-audio"
+      src="__VIDEO_SRC__"
+      data-start="0"
+      data-duration="__VIDEO_DURATION__"
+      data-track-index="5"
+      data-volume="1"
+    ></audio>
+  </body>
+</html>

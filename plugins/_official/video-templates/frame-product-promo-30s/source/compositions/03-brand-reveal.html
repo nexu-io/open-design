@@ -1,0 +1,128 @@
+<template id="03-brand-reveal-template">
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=block" rel="stylesheet" />
+
+  <div
+    data-composition-id="03-brand-reveal"
+    data-start="0"
+    data-duration="2"
+    data-width="1920"
+    data-height="1080"
+  >
+    <div class="stage-03">
+      <div class="grid-floor"></div>
+
+      <div class="lockup">
+        <div class="symbol-slot">
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="grad-03" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#5E6AD2"/>
+                <stop offset="100%" stop-color="#A9B0F0"/>
+              </linearGradient>
+            </defs>
+            <path d="M 25 18 L 75 18 L 75 34 L 41 34 L 41 82 L 25 82 Z" fill="url(#grad-03)" />
+          </svg>
+        </div>
+        <div class="wordmark">BRANDNAME</div>
+        <div class="shimmer"></div>
+      </div>
+
+      <div class="vignette"></div>
+      <div class="grain"></div>
+    </div>
+
+    <style>
+      [data-composition-id="03-brand-reveal"] {
+        position: absolute; inset: 0; overflow: hidden; background: #000;
+      }
+      [data-composition-id="03-brand-reveal"] .stage-03 { position: absolute; inset: 0; }
+      [data-composition-id="03-brand-reveal"] .grid-floor {
+        position: absolute; inset: 0;
+        transform: perspective(900px) rotateX(60deg) translateY(25%);
+        background:
+          repeating-linear-gradient(0deg,  rgba(255,255,255,0.04) 0 1px, transparent 1px 80px),
+          repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 80px);
+        background-color: #000;
+      }
+      [data-composition-id="03-brand-reveal"] .lockup {
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        display: flex;
+        align-items: center;
+        gap: 32px;
+      }
+      [data-composition-id="03-brand-reveal"] .symbol-slot {
+        width: 120px; height: 120px;
+        filter: drop-shadow(0 0 40px rgba(169,176,240,0.6));
+      }
+      [data-composition-id="03-brand-reveal"] .symbol-slot svg { width: 100%; height: 100%; }
+      [data-composition-id="03-brand-reveal"] .wordmark {
+        font-family: "Inter", sans-serif;
+        font-weight: 600;
+        font-size: 180px;
+        letter-spacing: -0.04em;
+        background: linear-gradient(180deg, #ffffff 0%, #cccccc 60%, #888888 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        color: transparent;
+        text-shadow: 0 0 60px rgba(255,255,255,0.3);
+        opacity: 0;
+        transform: translateY(40px);
+        will-change: opacity, transform;
+      }
+      [data-composition-id="03-brand-reveal"] .shimmer {
+        position: absolute;
+        top: 0; left: 0;
+        width: 200px; height: 100%;
+        background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.45) 50%, transparent 100%);
+        filter: blur(4px);
+        transform: translateX(-200%);
+        opacity: 0;
+        mix-blend-mode: screen;
+        pointer-events: none;
+      }
+      [data-composition-id="03-brand-reveal"] .vignette {
+        position: absolute; inset: 0; pointer-events: none;
+        background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.95) 95%);
+        opacity: 0.75;
+      }
+      [data-composition-id="03-brand-reveal"] .grain {
+        position: absolute; inset: 0; pointer-events: none;
+        opacity: 0.08;
+        background-image:
+          radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+          radial-gradient(rgba(255,255,255,0.02) 1px, transparent 1px);
+        background-size: 3px 3px, 5px 5px;
+      }
+    </style>
+
+    <script>
+      (() => {
+        const SLOT = 2;
+        const tl = gsap.timeline({ paused: true });
+        const sel = (q) => `[data-composition-id="03-brand-reveal"] ${q}`;
+
+        tl.to(sel('.wordmark'),
+          { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }, 0.15);
+
+        tl.fromTo(sel('.symbol-slot'),
+          { scale: 2.2, opacity: 0 },
+          { scale: 1, opacity: 1, duration: 0.6, ease: 'power3.out' }, 0.05);
+
+        tl.to(sel('.shimmer'),
+          { opacity: 1, duration: 0.1 }, 1.2);
+        tl.to(sel('.shimmer'),
+          { xPercent: 500, duration: 0.7, ease: 'power2.inOut' }, 1.2);
+        tl.to(sel('.shimmer'),
+          { opacity: 0, duration: 0.1 }, 1.85);
+
+        tl.to({}, { duration: SLOT }, 0);
+        window.__timelines = window.__timelines || {};
+        window.__timelines['03-brand-reveal'] = tl;
+      })();
+    </script>
+  </div>
+</template>

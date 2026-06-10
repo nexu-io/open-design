@@ -1,0 +1,132 @@
+<template id="intro-template">
+  <div data-composition-id="intro" data-width="1920" data-height="1080" data-duration="1.86">
+    <div class="container">
+      <div class="grid-line"></div>
+      <div class="text-wrapper">
+        <h1 class="title">HYPERFRAMES</h1>
+        <h2 class="subtitle">THE SURVEY FINDINGS</h2>
+      </div>
+    </div>
+
+    <style>
+      [data-composition-id="intro"] {
+        background-color: #f5f5f5; /* Off-white */
+        width: 1920px;
+        height: 1080px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        overflow: hidden;
+      }
+
+      [data-composition-id="intro"] .container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding-left: 160px; /* Swiss grid alignment */
+      }
+
+      [data-composition-id="intro"] .grid-line {
+        position: absolute;
+        left: 160px;
+        top: 50%;
+        width: 0px;
+        height: 12px;
+        background-color: #0a1e3d; /* Navy */
+        transform: translateY(-180px); /* Positioned above the text */
+      }
+
+      [data-composition-id="intro"] .text-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        overflow: hidden;
+      }
+
+      [data-composition-id="intro"] .title {
+        color: #0a1e3d;
+        font-size: 180px;
+        font-weight: 900; /* Black weight */
+        line-height: 0.9;
+        margin: 0;
+        letter-spacing: -0.04em;
+        text-transform: uppercase;
+        transform: translateX(-100%); /* Start off-screen left */
+      }
+
+      [data-composition-id="intro"] .subtitle {
+        color: #0a1e3d;
+        font-size: 64px;
+        font-weight: 300; /* Lighter weight for contrast */
+        line-height: 1.2;
+        margin: 0;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        transform: translateX(-100%); /* Start off-screen left */
+        margin-top: 20px;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        const tl = gsap.timeline({ paused: true });
+
+        // Mechanical timing: 200ms (0.2s)
+        const MECHANICAL_DURATION = 0.2;
+        const STAGGER = 0.1;
+
+        // 1. Animate the grid line first
+        tl.to(
+          ".grid-line",
+          {
+            width: "1200px",
+            duration: 0.4,
+            ease: "power4.out",
+          },
+          0.2,
+        );
+
+        // 2. Slide in the title
+        tl.to(
+          ".title",
+          {
+            x: 0,
+            duration: MECHANICAL_DURATION,
+            ease: "power2.inOut",
+          },
+          0.5,
+        );
+
+        // 3. Slide in the subtitle with a slight stagger
+        tl.to(
+          ".subtitle",
+          {
+            x: 0,
+            duration: MECHANICAL_DURATION,
+            ease: "power2.inOut",
+          },
+          0.5 + STAGGER,
+        );
+
+        // 4. Subtle ambient motion (slow drift) to keep it alive
+        tl.to(
+          ".text-wrapper",
+          {
+            x: 30,
+            duration: 1.16, // Adjusted to fit 1.86s total
+            ease: "none",
+          },
+          0.7,
+        );
+
+        window.__timelines = window.__timelines || {};
+        window.__timelines["intro"] = tl;
+      })();
+    </script>
+  </div>
+</template>

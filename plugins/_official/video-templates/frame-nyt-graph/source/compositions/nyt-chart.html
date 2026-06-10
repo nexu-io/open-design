@@ -1,0 +1,451 @@
+<template id="nyt-chart-template">
+  <div data-composition-id="nyt-chart" data-width="1920" data-height="1080" data-duration="15">
+    <!-- Google Fonts Import -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Libre+Franklin:wght@300;400;600&display=block"
+      rel="stylesheet"
+    />
+
+    <div class="chart-container">
+      <!-- Header Section -->
+      <div class="header">
+        <h1 class="headline">Monthly Revenue vs. Conversion Rate</h1>
+        <p class="subtitle">Jan–Jun 2024, in thousands</p>
+        <div class="key">
+          <div class="key-item">
+            <div class="key-box revenue-box"></div>
+            <span class="key-text">Revenue</span>
+          </div>
+          <div class="key-item">
+            <div class="key-line conversion-line"></div>
+            <span class="key-text">Conversion Rate</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- SVG Chart Area -->
+      <svg class="chart-svg" viewBox="0 0 1600 700" preserveAspectRatio="xMidYMid meet">
+        <!-- Gridlines Group -->
+        <g class="gridlines"></g>
+
+        <!-- X-Axis Labels -->
+        <g class="x-axis-labels"></g>
+
+        <!-- Bars Group (Revenue) -->
+        <g class="bars-group"></g>
+
+        <!-- Bar Labels Group -->
+        <g class="bar-labels-group"></g>
+
+        <!-- Line Group (Conversion Rate) -->
+        <g class="line-group">
+          <path class="conversion-path" fill="none" stroke="#326FA8" stroke-width="1.5" />
+          <circle class="line-dot" r="5" fill="#326FA8" style="opacity: 0" />
+        </g>
+
+        <!-- Line Labels Group -->
+        <g class="line-labels-group"></g>
+
+        <!-- Baseline -->
+        <line x1="100" y1="600" x2="1500" y2="600" stroke="black" stroke-width="1" />
+      </svg>
+
+      <!-- Source Line -->
+      <div class="source">Source: Internal analytics</div>
+    </div>
+
+    <style>
+      [data-composition-id="nyt-chart"] {
+        width: 1920px;
+        height: 1080px;
+        background-color: #faf9f6;
+        font-family: "Libre Franklin", sans-serif;
+        color: #333;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        overflow: hidden;
+      }
+
+      [data-composition-id="nyt-chart"] .chart-container {
+        width: 1600px;
+        height: 900px;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        transform: scale(1.15);
+        transform-origin: center center;
+      }
+
+      [data-composition-id="nyt-chart"] .header {
+        margin-bottom: 40px;
+        text-align: left;
+      }
+
+      [data-composition-id="nyt-chart"] .headline {
+        font-family: "Libre Baskerville", serif;
+        font-size: 42px;
+        margin: 0;
+        padding: 0;
+        clip-path: inset(0 100% 0 0);
+        white-space: nowrap;
+      }
+
+      [data-composition-id="nyt-chart"] .subtitle {
+        font-size: 16px;
+        color: #d4d4d4;
+        margin: 8px 0 16px 0;
+        clip-path: inset(0 100% 0 0);
+        white-space: nowrap;
+      }
+
+      [data-composition-id="nyt-chart"] .key {
+        display: flex;
+        gap: 24px;
+        opacity: 0;
+      }
+
+      [data-composition-id="nyt-chart"] .key-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      [data-composition-id="nyt-chart"] .key-box {
+        width: 10px;
+        height: 10px;
+        background-color: #5c5c5c;
+      }
+
+      [data-composition-id="nyt-chart"] .key-line {
+        width: 16px;
+        height: 1.5px;
+        background-color: #326fa8;
+      }
+
+      [data-composition-id="nyt-chart"] .key-text {
+        font-size: 13px;
+        color: #666;
+      }
+
+      [data-composition-id="nyt-chart"] .chart-svg {
+        width: 100%;
+        height: 600px;
+        overflow: visible;
+      }
+
+      [data-composition-id="nyt-chart"] .source {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        font-size: 11px;
+        color: #999;
+        opacity: 0;
+      }
+
+      [data-composition-id="nyt-chart"] .grid-line {
+        stroke: #e8e8e8;
+        stroke-width: 0.5px;
+        opacity: 0;
+      }
+
+      [data-composition-id="nyt-chart"] .axis-label {
+        font-size: 14px;
+        fill: #666;
+        text-anchor: middle;
+      }
+
+      [data-composition-id="nyt-chart"] .bar {
+        fill: #5c5c5c;
+      }
+
+      [data-composition-id="nyt-chart"] .bar-label {
+        font-size: 14px;
+        fill: #333;
+        text-anchor: middle;
+        opacity: 0;
+      }
+
+      [data-composition-id="nyt-chart"] .line-label {
+        font-size: 14px;
+        fill: #326fa8;
+        font-weight: 600;
+        text-anchor: middle;
+        opacity: 0;
+      }
+    </style>
+
+    <script>
+      (function initChart() {
+        // Wait for DOM — the runtime may not have cloned the template content yet
+        const svg = document.querySelector(`[data-composition-id="nyt-chart"] .chart-svg`);
+        if (!svg) {
+          setTimeout(initChart, 50);
+          return;
+        }
+        const tl = gsap.timeline({ paused: true });
+
+        // Data
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+        const revenueData = [8, 12, 15, 11, 18, 22]; // in thousands
+        const conversionData = [2.1, 2.8, 3.2, 2.9, 3.8, 4.2]; // in percentage
+
+        // Chart Dimensions
+        const chartWidth = 1400;
+        const chartHeight = 500;
+        const startX = 100;
+        const startY = 600;
+        const barWidth = 80;
+        const spacing = (chartWidth - barWidth * months.length) / (months.length + 1);
+
+        // Scales
+        const maxRevenue = 25;
+        const maxConversion = 5;
+
+        const getBarY = (val) => startY - (val / maxRevenue) * chartHeight;
+        const getLineY = (val) => startY - (val / maxConversion) * chartHeight;
+        const getX = (i) => startX + spacing + i * (barWidth + spacing) + barWidth / 2;
+
+        // 1. Setup Elements (svg already found above)
+        const gridGroup = svg.querySelector(".gridlines");
+        const xAxisGroup = svg.querySelector(".x-axis-labels");
+        const barsGroup = svg.querySelector(".bars-group");
+        const barLabelsGroup = svg.querySelector(".bar-labels-group");
+        const lineLabelsGroup = svg.querySelector(".line-labels-group");
+        const conversionPath = svg.querySelector(".conversion-path");
+        const lineDot = svg.querySelector(".line-dot");
+
+        // Create Gridlines (5 lines)
+        for (let i = 1; i <= 5; i++) {
+          const y = startY - i * (chartHeight / 5);
+          const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          line.setAttribute("x1", startX);
+          line.setAttribute("y1", y);
+          line.setAttribute("x2", startX + chartWidth);
+          line.setAttribute("y2", y);
+          line.setAttribute("class", "grid-line");
+          gridGroup.appendChild(line);
+        }
+
+        // Create X-Axis Labels & Bars & Bar Labels
+        const linePoints = [];
+        months.forEach((month, i) => {
+          const x = getX(i);
+
+          // X-Axis Label
+          const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          label.setAttribute("x", x);
+          label.setAttribute("y", startY + 30);
+          label.setAttribute("class", "axis-label");
+          label.textContent = month;
+          xAxisGroup.appendChild(label);
+
+          // Bar
+          const barHeight = (revenueData[i] / maxRevenue) * chartHeight;
+          const bar = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          bar.setAttribute("x", x - barWidth / 2);
+          bar.setAttribute("y", startY);
+          bar.setAttribute("width", barWidth);
+          bar.setAttribute("height", 0);
+          bar.setAttribute("class", "bar");
+          barsGroup.appendChild(bar);
+
+          // Bar Label
+          const barLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          barLabel.setAttribute("x", x);
+          barLabel.setAttribute("y", getBarY(revenueData[i]) - 10);
+          barLabel.setAttribute("class", "bar-label");
+          barLabel.textContent = `$${revenueData[i]}K`;
+          barLabelsGroup.appendChild(barLabel);
+
+          // Line Point
+          linePoints.push(`${x},${getLineY(conversionData[i])}`);
+
+          // Line Label
+          const lineLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          lineLabel.setAttribute("x", x);
+          lineLabel.setAttribute("y", getLineY(conversionData[i]) - 15);
+          lineLabel.setAttribute("class", "line-label");
+          lineLabel.textContent = `${conversionData[i]}%`;
+          lineLabelsGroup.appendChild(lineLabel);
+        });
+
+        // Set Path Data
+        conversionPath.setAttribute("d", `M ${linePoints.join(" L ")}`);
+        const pathLength = conversionPath.getTotalLength();
+        conversionPath.style.strokeDasharray = pathLength;
+        conversionPath.style.strokeDashoffset = pathLength;
+
+        // --- ANIMATION TIMELINE ---
+
+        // 2. Headline & Subtitle (Draw on left-to-right)
+        tl.to(
+          `[data-composition-id="nyt-chart"] .headline`,
+          {
+            clipPath: "inset(0 0% 0 0)",
+            duration: 1.2,
+            ease: "power1.inOut",
+          },
+          0,
+        );
+
+        tl.to(
+          `[data-composition-id="nyt-chart"] .subtitle`,
+          {
+            clipPath: "inset(0 0% 0 0)",
+            duration: 1.2,
+            ease: "power1.inOut",
+          },
+          0.2,
+        );
+
+        // 3. Inline Key
+        tl.to(
+          `[data-composition-id="nyt-chart"] .key`,
+          {
+            opacity: 1,
+            duration: 0.4,
+            ease: "power2.out",
+          },
+          1.0,
+        );
+
+        // 4. Gridlines (Stagger bottom to top)
+        tl.to(
+          `[data-composition-id="nyt-chart"] .grid-line`,
+          {
+            opacity: 1,
+            duration: 0.5,
+            stagger: 0.25,
+            ease: "power2.out",
+          },
+          0.5,
+        );
+
+        // 5. Bars (Revenue)
+        const bars = barsGroup.querySelectorAll(".bar");
+        const barLabels = barLabelsGroup.querySelectorAll(".bar-label");
+
+        bars.forEach((bar, i) => {
+          const barHeight = (revenueData[i] / maxRevenue) * chartHeight;
+          const startTime = 1.5 + i * 0.5; // 0.8s duration, 0.3s overlap (0.8 - 0.3 = 0.5 step)
+
+          tl.to(
+            bar,
+            {
+              attr: {
+                height: barHeight,
+                y: startY - barHeight,
+              },
+              duration: 0.8,
+              ease: "power2.out",
+            },
+            startTime,
+          );
+
+          // 6. Bar Labels
+          tl.to(
+            barLabels[i],
+            {
+              opacity: 1,
+              duration: 0.3,
+              ease: "power2.out",
+            },
+            startTime + 0.8,
+          );
+        });
+
+        // 7. Line (Conversion Rate)
+        // Starts 0.5s after the last bar begins
+        const lastBarStartTime = 1.5 + (months.length - 1) * 0.5;
+        const lineStartTime = lastBarStartTime + 0.5;
+
+        tl.to(
+          conversionPath,
+          {
+            strokeDashoffset: 0,
+            duration: 3,
+            ease: "none",
+          },
+          lineStartTime,
+        );
+
+        // 8. Line Dot & 9. Line Labels
+        // We need to sync the dot and labels with the path drawing
+        tl.set(
+          lineDot,
+          { opacity: 1, attr: { cx: getX(0), cy: getLineY(conversionData[0]) } },
+          lineStartTime,
+        );
+
+        const lineLabels = lineLabelsGroup.querySelectorAll(".line-label");
+        months.forEach((_, i) => {
+          if (i > 0) {
+            const x = getX(i);
+            const y = getLineY(conversionData[i]);
+            tl.to(
+              lineDot,
+              {
+                attr: {
+                  cx: x,
+                  cy: y,
+                },
+                duration: 3 / (months.length - 1),
+                ease: "none",
+              },
+              lineStartTime + ((i - 1) / (months.length - 1)) * 3,
+            );
+          }
+
+          const labelTime = lineStartTime + (i / (months.length - 1)) * 3 + 0.2;
+
+          // Set initial text to 0.0%
+          lineLabels[i].textContent = "0.0%";
+
+          // Fade in
+          tl.to(
+            lineLabels[i],
+            {
+              opacity: 1,
+              duration: 0.1,
+              ease: "power2.out",
+            },
+            labelTime,
+          );
+
+          // Animate value
+          const dummy = { val: 0 };
+          tl.to(
+            dummy,
+            {
+              val: conversionData[i],
+              duration: 0.8,
+              ease: "power2.out",
+              onUpdate: () => {
+                lineLabels[i].textContent = dummy.val.toFixed(1) + "%";
+              },
+            },
+            labelTime,
+          );
+        });
+
+        // 11. Source Line
+        tl.to(
+          `[data-composition-id="nyt-chart"] .source`,
+          {
+            opacity: 1,
+            duration: 0.5,
+            ease: "power2.out",
+          },
+          ">+0.5",
+        );
+
+        // Register timeline
+        window.__timelines = window.__timelines || {};
+        window.__timelines["nyt-chart"] = tl;
+      })();
+    </script>
+  </div>
+</template>

@@ -1,0 +1,207 @@
+<template id="graphics-template">
+  <div data-composition-id="graphics" data-width="1920" data-height="1080" data-duration="15">
+    <div class="grid-container">
+      <!-- Stat 1: 47% -->
+      <div id="stat1" class="stat-group">
+        <div class="stat-value">47%</div>
+        <div class="stat-label">NEED MOTION GRAPHICS</div>
+      </div>
+
+      <!-- Stat 2: 62% -->
+      <div id="stat2" class="stat-group">
+        <div class="stat-value">62%</div>
+        <div class="stat-label">LOSING ATTENTION</div>
+        <div class="progress-container">
+          <div class="progress-bar"></div>
+        </div>
+      </div>
+
+      <!-- Stat 3: 3 OF 4 -->
+      <div id="stat3" class="stat-group">
+        <div class="stat-value">3 OF 4</div>
+        <div class="stat-label">LACK EDITING SKILLS</div>
+        <div class="grid-blocks">
+          <div class="block gold"></div>
+          <div class="block gold"></div>
+          <div class="block gold"></div>
+          <div class="block navy"></div>
+        </div>
+      </div>
+    </div>
+
+    <style>
+      [data-composition-id="graphics"] {
+        font-family: "Helvetica", Arial, sans-serif;
+        color: #0a1e3d;
+        background: transparent;
+        width: 1920px;
+        height: 1080px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      [data-composition-id="graphics"] .grid-container {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        grid-template-rows: repeat(12, 1fr);
+        width: 100%;
+        height: 100%;
+        padding: 80px;
+        gap: 20px;
+      }
+
+      [data-composition-id="graphics"] .stat-group {
+        opacity: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: flex-start;
+        background: #f2f2f2;
+        padding: 40px;
+        border-left: 10px solid #d4a017;
+        box-shadow: 20px 20px 0px rgba(10, 30, 61, 0.1);
+      }
+
+      /* Positioning Stats on Grid - Adjusted for A-roll structure */
+      [data-composition-id="graphics"] #stat1 {
+        grid-column: 2 / 6;
+        grid-row: 3 / 7;
+      }
+
+      [data-composition-id="graphics"] #stat2 {
+        grid-column: 2 / 6;
+        grid-row: 3 / 7;
+      }
+
+      [data-composition-id="graphics"] #stat3 {
+        grid-column: 7 / 12;
+        grid-row: 3 / 7;
+      }
+
+      [data-composition-id="graphics"] .stat-value {
+        font-size: 140px;
+        font-weight: 900;
+        color: #d4a017;
+        line-height: 0.8;
+        margin-bottom: 15px;
+      }
+
+      [data-composition-id="graphics"] .stat-label {
+        font-size: 24px;
+        font-weight: 300; /* Lighter weight */
+        color: #0a1e3d;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+      }
+
+      /* Progress Bar for Stat 2 */
+      [data-composition-id="graphics"] .progress-container {
+        width: 100%;
+        height: 24px;
+        background: #e0e0e0;
+        margin-top: 30px;
+        border: 2px solid #0a1e3d;
+        position: relative;
+      }
+
+      [data-composition-id="graphics"] .progress-bar {
+        width: 0%;
+        height: 100%;
+        background: #d4a017;
+      }
+
+      /* Grid Blocks for Stat 3 */
+      [data-composition-id="graphics"] .grid-blocks {
+        display: flex;
+        gap: 20px;
+        margin-top: 30px;
+      }
+
+      [data-composition-id="graphics"] .block {
+        width: 80px;
+        height: 80px;
+        border: 3px solid #0a1e3d;
+      }
+
+      [data-composition-id="graphics"] .block.gold {
+        background: #d4a017;
+      }
+
+      [data-composition-id="graphics"] .block.navy {
+        background: #0a1e3d;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        const tl = gsap.timeline({ paused: true });
+
+        // Timing Constants
+        const S1_START = 1.86;
+        const S1_END = 4.5;
+        const S2_START = 4.68;
+        const S2_END = 8.6;
+        const S3_START = 8.88;
+        const S3_END = 14.2;
+
+        const SLIDE_DUR = 0.25; // 250ms
+        const SHARP_EASE = "power2.out";
+
+        // Stat 1 Animation
+        tl.fromTo(
+          "#stat1",
+          { x: -200, opacity: 0 },
+          { x: 0, opacity: 1, duration: SLIDE_DUR, ease: SHARP_EASE },
+          S1_START,
+        );
+        tl.to(
+          "#stat1",
+          { x: 200, opacity: 0, duration: SLIDE_DUR, ease: "power2.in" },
+          S1_END - SLIDE_DUR,
+        );
+
+        // Stat 2 Animation
+        tl.fromTo(
+          "#stat2",
+          { y: 200, opacity: 0 },
+          { y: 0, opacity: 1, duration: SLIDE_DUR, ease: SHARP_EASE },
+          S2_START,
+        );
+        // Progress bar fill
+        tl.to(
+          "#stat2 .progress-bar",
+          { width: "62%", duration: S2_END - S2_START - SLIDE_DUR * 2, ease: "none" },
+          S2_START + SLIDE_DUR,
+        );
+        tl.to(
+          "#stat2",
+          { y: -200, opacity: 0, duration: SLIDE_DUR, ease: "power2.in" },
+          S2_END - SLIDE_DUR,
+        );
+
+        // Stat 3 Animation
+        tl.fromTo(
+          "#stat3",
+          { x: 200, opacity: 0 },
+          { x: 0, opacity: 1, duration: SLIDE_DUR, ease: SHARP_EASE },
+          S3_START,
+        );
+        // Stagger blocks
+        tl.from(
+          "#stat3 .block",
+          { scale: 0, duration: 0.3, stagger: 0.1, ease: "back.out(1.7)" },
+          S3_START + SLIDE_DUR,
+        );
+        tl.to(
+          "#stat3",
+          { x: -200, opacity: 0, duration: SLIDE_DUR, ease: "power2.in" },
+          S3_END - SLIDE_DUR,
+        );
+
+        window.__timelines = window.__timelines || {};
+        window.__timelines["graphics"] = tl;
+      })();
+    </script>
+  </div>
+</template>

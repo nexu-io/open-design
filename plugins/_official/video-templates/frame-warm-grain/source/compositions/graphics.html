@@ -1,0 +1,165 @@
+<template id="graphics-template">
+  <div data-composition-id="graphics" data-width="1920" data-height="1080" data-duration="14">
+    <!-- Moment 1: 47% Stat (1.8s - 4.5s) -->
+    <div id="moment-1" class="moment circle-stat">
+      <div class="stat-content">
+        <div class="stat-text">47%</div>
+        <div class="stat-desc">Need Motion Graphics</div>
+      </div>
+    </div>
+
+    <!-- Moment 2: 62% Stat (4.6s - 8.6s) -->
+    <div id="moment-2" class="moment pill-stat">
+      <div class="stat-text">62%</div>
+    </div>
+
+    <!-- Moment 3: Editing Skills (8.8s - 14s) -->
+    <div id="moment-3" class="moment rect-stat">
+      <div class="icon-shape">
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M20,20 Q50,0 80,20 Q100,50 80,80 Q50,100 20,80 Q0,50 20,20"
+            fill="currentColor"
+          />
+        </svg>
+      </div>
+      <div class="stat-text">Editing Skills</div>
+    </div>
+
+    <style>
+      [data-composition-id="graphics"] {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        font-family: "Outfit", sans-serif;
+        color: white;
+        overflow: hidden;
+      }
+
+      [data-composition-id="graphics"] .moment {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        /* We'll use GSAP to handle the centering and drift */
+      }
+
+      /* Moment 1: Forest Green Circle */
+      [data-composition-id="graphics"] #moment-1 {
+        width: 500px;
+        height: 500px;
+        background-color: #3b5e3a;
+        border-radius: 50%;
+        left: 1400px;
+        top: 540px;
+        transform: translate(-50%, -50%);
+      }
+
+      [data-composition-id="graphics"] .stat-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+
+      [data-composition-id="graphics"] .stat-desc {
+        font-size: 36px;
+        font-weight: 400;
+        margin-top: 10px;
+        max-width: 300px;
+        line-height: 1.2;
+      }
+
+      /* Moment 2: Ochre Pill */
+      [data-composition-id="graphics"] #moment-2 {
+        width: 500px;
+        height: 220px;
+        background-color: #cc8832;
+        border-radius: 110px;
+        left: 960px;
+        top: 200px;
+        transform: translate(-50%, -50%);
+      }
+
+      /* Moment 3: Terracotta Rounded Rect */
+      [data-composition-id="graphics"] #moment-3 {
+        width: 550px;
+        height: 180px;
+        background-color: #c45d3e;
+        border-radius: 40px;
+        left: 400px;
+        top: 540px;
+        transform: translate(-50%, -50%);
+        padding: 0 40px;
+        justify-content: center;
+        gap: 30px;
+      }
+
+      [data-composition-id="graphics"] .stat-text {
+        font-size: 80px;
+        font-weight: 700;
+        letter-spacing: -2px;
+      }
+
+      [data-composition-id="graphics"] #moment-3 .stat-text {
+        font-size: 54px;
+        letter-spacing: -1px;
+      }
+
+      [data-composition-id="graphics"] .icon-shape {
+        width: 80px;
+        height: 80px;
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      [data-composition-id="graphics"] .icon-shape svg {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        const tl = gsap.timeline({ paused: true });
+
+        // Moment 1: 1.8s - 4.5s
+        // Gentle drift into place and settle
+        tl.fromTo(
+          "#moment-1",
+          { opacity: 0, x: "+=40", y: "+=15", scale: 0.8 },
+          { opacity: 1, x: 0, y: 0, scale: 1, duration: 1.2, ease: "back.out(1.7)" },
+          1.8,
+        );
+        // Hold until 4.5s, then fade out
+        tl.to("#moment-1", { opacity: 0, scale: 0.8, duration: 0.3, ease: "power2.in" }, 4.2);
+
+        // Moment 2: 4.6s - 8.6s
+        // Gentle drift into place and settle
+        tl.fromTo(
+          "#moment-2",
+          { opacity: 0, y: "-=40", x: "+=10", scale: 0.8 },
+          { opacity: 1, y: 0, x: 0, scale: 1, duration: 1.2, ease: "back.out(1.7)" },
+          4.6,
+        );
+        // Hold until 8.6s, then fade out
+        tl.to("#moment-2", { opacity: 0, scale: 0.8, duration: 0.3, ease: "power2.in" }, 8.3);
+
+        // Moment 3: 8.8s - 14s
+        // Gentle drift into place and settle
+        tl.fromTo(
+          "#moment-3",
+          { opacity: 0, x: "-=40", y: "-=10", scale: 0.8 },
+          { opacity: 1, x: 0, y: 0, scale: 1, duration: 1.2, ease: "back.out(1.7)" },
+          8.8,
+        );
+        // Hold until end (14s)
+        tl.to("#moment-3", { opacity: 0, duration: 0.5, ease: "power2.in" }, 13.5);
+
+        window.__timelines = window.__timelines || {};
+        window.__timelines["graphics"] = tl;
+      })();
+    </script>
+  </div>
+</template>

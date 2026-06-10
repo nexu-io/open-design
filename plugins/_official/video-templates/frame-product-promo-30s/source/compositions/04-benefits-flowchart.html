@@ -1,0 +1,165 @@
+<template id="04-benefits-flowchart-template">
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@500;700&display=block" rel="stylesheet" />
+
+  <div
+    data-composition-id="04-benefits-flowchart"
+    data-start="0"
+    data-duration="4.8"
+    data-width="1920"
+    data-height="1080"
+  >
+    <div class="stage-04" style="--edge: #A155FF; --node-glow: rgba(161,85,255,0.7); --energy: #A155FF;">
+      <div class="grid-floor"></div>
+
+      <div class="benefit-stack">
+        <div class="benefit b-fast">Fast</div>
+        <div class="benefit b-focused">Focused</div>
+        <div class="benefit b-ai">AI-native</div>
+      </div>
+
+      <svg class="flow" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+        <g class="edges" stroke="var(--edge)" stroke-width="2" fill="none" stroke-linecap="round">
+          <line class="edge e1" x1="480" y1="540" x2="720" y2="380" />
+          <line class="edge e2" x1="480" y1="540" x2="720" y2="540" />
+          <line class="edge e3" x1="480" y1="540" x2="720" y2="700" />
+          <line class="edge e4" x1="800" y1="380" x2="1040" y2="300" />
+          <line class="edge e5" x1="800" y1="540" x2="1040" y2="540" />
+          <line class="edge e6" x1="800" y1="700" x2="1040" y2="780" />
+          <line class="edge e7" x1="1120" y1="300" x2="1360" y2="420" />
+          <line class="edge e8" x1="1120" y1="540" x2="1360" y2="540" />
+          <line class="edge e9" x1="1120" y1="780" x2="1360" y2="660" />
+        </g>
+
+        <g class="nodes">
+          <circle class="node n1" cx="440" cy="540" r="32" fill="#0a0a0a" stroke="var(--edge)" stroke-width="2" />
+          <circle class="node n2" cx="760" cy="380" r="32" fill="#0a0a0a" stroke="var(--edge)" stroke-width="2" />
+          <circle class="node n3" cx="760" cy="540" r="32" fill="#0a0a0a" stroke="var(--edge)" stroke-width="2" />
+          <circle class="node n4" cx="760" cy="700" r="32" fill="#0a0a0a" stroke="var(--edge)" stroke-width="2" />
+          <circle class="node n5" cx="1080" cy="300" r="32" fill="#0a0a0a" stroke="var(--edge)" stroke-width="2" />
+          <circle class="node n6" cx="1080" cy="540" r="32" fill="#0a0a0a" stroke="var(--edge)" stroke-width="2" />
+          <circle class="node n7" cx="1080" cy="780" r="32" fill="#0a0a0a" stroke="var(--edge)" stroke-width="2" />
+          <circle class="node n8" cx="1400" cy="420" r="32" fill="#0a0a0a" stroke="var(--edge)" stroke-width="2" />
+          <circle class="node n9" cx="1400" cy="540" r="32" fill="#0a0a0a" stroke="var(--edge)" stroke-width="2" />
+          <circle class="node n10" cx="1400" cy="660" r="32" fill="#0a0a0a" stroke="var(--edge)" stroke-width="2" />
+        </g>
+      </svg>
+
+      <div class="comet"></div>
+      <div class="vignette"></div>
+      <div class="grain"></div>
+    </div>
+
+    <style>
+      [data-composition-id="04-benefits-flowchart"] {
+        position: absolute; inset: 0; overflow: hidden; background: #000;
+      }
+      [data-composition-id="04-benefits-flowchart"] .stage-04 { position: absolute; inset: 0; }
+      [data-composition-id="04-benefits-flowchart"] .grid-floor {
+        position: absolute; inset: 0;
+        transform: perspective(900px) rotateX(60deg) translateY(25%);
+        background:
+          repeating-linear-gradient(0deg,  rgba(255,255,255,0.04) 0 1px, transparent 1px 80px),
+          repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 80px);
+        background-color: #000;
+      }
+      [data-composition-id="04-benefits-flowchart"] .benefit-stack {
+        position: absolute;
+        top: 80px; right: 120px;
+        text-align: right;
+        font-family: "Azeret Mono", monospace;
+        font-weight: 700;
+      }
+      [data-composition-id="04-benefits-flowchart"] .benefit {
+        font-size: 96px;
+        letter-spacing: -0.02em;
+        line-height: 1.1;
+        background: linear-gradient(180deg, #ffffff 0%, #bbbbbb 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        color: transparent;
+        text-shadow: 0 0 40px var(--node-glow);
+        opacity: 0;
+        transform: translateX(60px);
+        will-change: opacity, transform;
+      }
+      [data-composition-id="04-benefits-flowchart"] .flow {
+        position: absolute; inset: 0;
+        width: 100%; height: 100%;
+        opacity: 0;
+      }
+      [data-composition-id="04-benefits-flowchart"] .edge {
+        stroke-dasharray: 240;
+        stroke-dashoffset: 240;
+        filter: drop-shadow(0 0 6px var(--energy));
+      }
+      [data-composition-id="04-benefits-flowchart"] .node {
+        filter: drop-shadow(0 0 12px var(--node-glow));
+      }
+      [data-composition-id="04-benefits-flowchart"] .comet {
+        position: absolute;
+        top: 42%; left: 0;
+        width: 70%; height: 14px;
+        background: linear-gradient(90deg, transparent 0%, rgba(161,85,255,0.95) 40%, #ffffff 55%, transparent 100%);
+        filter: blur(10px);
+        transform: translate(-150%, 0);
+        opacity: 0;
+      }
+      [data-composition-id="04-benefits-flowchart"] .vignette {
+        position: absolute; inset: 0; pointer-events: none;
+        background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.95) 95%);
+        opacity: 0.7;
+      }
+      [data-composition-id="04-benefits-flowchart"] .grain {
+        position: absolute; inset: 0; pointer-events: none;
+        opacity: 0.08;
+        background-image:
+          radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+          radial-gradient(rgba(255,255,255,0.02) 1px, transparent 1px);
+        background-size: 3px 3px, 5px 5px;
+      }
+    </style>
+
+    <script>
+      (() => {
+        const SLOT = 4.8;
+        const tl = gsap.timeline({ paused: true });
+        const sel = (q) => `[data-composition-id="04-benefits-flowchart"] ${q}`;
+
+        tl.set(sel('.comet'), { opacity: 1 }, 0);
+        tl.fromTo(sel('.comet'),
+          { xPercent: -150 }, { xPercent: 250, duration: 0.4, ease: 'power3.in' }, 0);
+        tl.to(sel('.comet'), { opacity: 0, duration: 0.2 }, 0.4);
+
+        tl.to(sel('.b-fast'),
+          { opacity: 1, x: 0, duration: 0.35, ease: 'expo.out' }, 0.25);
+
+        tl.to(sel('.flow'), { opacity: 1, duration: 0.4, ease: 'power2.out' }, 1.2);
+
+        tl.to(sel('.edges .edge'),
+          { strokeDashoffset: 0, duration: 0.6, stagger: 0.05, ease: 'power2.out' }, 1.2);
+
+        tl.to(sel('.b-focused'),
+          { opacity: 1, x: 0, duration: 0.35, ease: 'expo.out' }, 2.3);
+        tl.to(sel('.stage-04'),
+          { '--edge': '#5db4ff', '--node-glow': 'rgba(91,180,255,0.7)', '--energy': '#5db4ff',
+            duration: 0.5, ease: 'power2.inOut' }, 2.3);
+
+        tl.to(sel('.b-ai'),
+          { opacity: 1, x: 0, duration: 0.4, ease: 'expo.out' }, 3.3);
+        tl.to(sel('.stage-04'),
+          { '--edge': '#FFD84A', '--node-glow': 'rgba(255,148,48,0.7)', '--energy': '#FFD84A',
+            duration: 0.6, ease: 'power2.inOut' }, 3.3);
+
+        tl.to(sel('.b-ai'),
+          { textShadow: '0 0 80px rgba(255,216,74,0.8), 0 0 40px rgba(255,148,48,0.6)',
+            duration: 0.4, ease: 'power2.out' }, 3.5);
+
+        tl.to({}, { duration: SLOT }, 0);
+        window.__timelines = window.__timelines || {};
+        window.__timelines['04-benefits-flowchart'] = tl;
+      })();
+    </script>
+  </div>
+</template>

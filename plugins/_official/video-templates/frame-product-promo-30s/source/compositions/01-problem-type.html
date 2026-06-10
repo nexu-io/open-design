@@ -1,0 +1,185 @@
+<template id="01-problem-type-template">
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Instrument+Serif:ital@0;1&display=block" rel="stylesheet" />
+
+  <div
+    data-composition-id="01-problem-type"
+    data-start="0"
+    data-duration="4"
+    data-width="1920"
+    data-height="1080"
+  >
+    <div class="stage-01">
+      <div class="grid-floor"></div>
+
+      <div class="crosshair" style="top: 20%; left: 20%;">+</div>
+      <div class="crosshair" style="top: 20%; left: 80%;">+</div>
+      <div class="crosshair" style="top: 80%; left: 20%;">+</div>
+      <div class="crosshair" style="top: 80%; left: 80%;">+</div>
+
+      <div class="type-stage">
+        <div class="line-1">
+          <span class="word w1">Product</span>
+          <span class="word w2">management</span>
+        </div>
+        <div class="line-2">
+          <span class="word w3">is</span>
+          <span class="hero w4">broken</span>
+        </div>
+      </div>
+
+      <div class="whip-streak"></div>
+      <div class="vignette"></div>
+      <div class="grain"></div>
+    </div>
+
+    <style>
+      [data-composition-id="01-problem-type"] {
+        position: absolute; inset: 0; overflow: hidden;
+        background: #000;
+      }
+      [data-composition-id="01-problem-type"] .stage-01 {
+        position: absolute; inset: 0;
+      }
+      [data-composition-id="01-problem-type"] .grid-floor {
+        position: absolute; inset: 0;
+        transform: perspective(900px) rotateX(60deg) translateY(25%);
+        transform-origin: 50% 50%;
+        background:
+          repeating-linear-gradient(0deg,  rgba(255,255,255,0.045) 0 1px, transparent 1px 80px),
+          repeating-linear-gradient(90deg, rgba(255,255,255,0.045) 0 1px, transparent 1px 80px);
+        background-color: #000;
+        will-change: background-position, transform;
+      }
+      [data-composition-id="01-problem-type"] .crosshair {
+        position: absolute;
+        transform: translate(-50%, -50%);
+        font: 400 28px/1 monospace;
+        color: rgba(255,255,255,0.25);
+        pointer-events: none;
+      }
+      [data-composition-id="01-problem-type"] .type-stage {
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        width: 100%;
+      }
+      [data-composition-id="01-problem-type"] .line-1,
+      [data-composition-id="01-problem-type"] .line-2 {
+        display: flex;
+        justify-content: center;
+        gap: 28px;
+        align-items: baseline;
+        white-space: nowrap;
+      }
+      [data-composition-id="01-problem-type"] .line-1 { margin-bottom: 24px; }
+      [data-composition-id="01-problem-type"] .word {
+        display: inline-block;
+        font-family: "Space Grotesk", sans-serif;
+        font-weight: 500;
+        font-size: 120px;
+        letter-spacing: -0.02em;
+        background: linear-gradient(180deg, #ffffff 0%, #cccccc 60%, #999999 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        color: transparent;
+        text-shadow: 0 0 40px rgba(255,255,255,0.15);
+        opacity: 0;
+        transform: translateX(0px);
+        will-change: opacity, transform;
+      }
+      [data-composition-id="01-problem-type"] .hero {
+        display: inline-block;
+        font-family: "Space Grotesk", sans-serif;
+        font-weight: 700;
+        font-size: 200px;
+        letter-spacing: -0.04em;
+        background: linear-gradient(180deg, #ffffff 0%, #dddddd 60%, #888888 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        color: transparent;
+        text-shadow: 0 0 60px rgba(255,255,255,0.35), 0 0 100px rgba(255,255,255,0.2);
+        opacity: 0;
+        transform: scale(1);
+        will-change: opacity, transform;
+      }
+      [data-composition-id="01-problem-type"] .vignette {
+        position: absolute; inset: 0; pointer-events: none;
+        background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.95) 95%);
+        opacity: 0.7;
+      }
+      [data-composition-id="01-problem-type"] .grain {
+        position: absolute; inset: 0; pointer-events: none;
+        opacity: 0.08;
+        background-image:
+          radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+          radial-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+          radial-gradient(rgba(255,255,255,0.015) 1px, transparent 1px);
+        background-size: 3px 3px, 5px 5px, 7px 7px;
+        background-position: 0 0, 1px 2px, 2px 1px;
+      }
+      [data-composition-id="01-problem-type"] .whip-streak {
+        position: absolute;
+        top: 50%; left: 0;
+        width: 60%; height: 10px;
+        background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.95) 50%, transparent 100%);
+        filter: blur(8px);
+        transform: translate(-150%, -50%);
+        opacity: 0;
+        pointer-events: none;
+        z-index: 30;
+      }
+    </style>
+
+    <script>
+      (() => {
+        const SLOT = 4;
+        const tl = gsap.timeline({ paused: true });
+        const sel = (q) => `[data-composition-id="01-problem-type"] ${q}`;
+
+        tl.to(sel('.grid-floor'),
+          { backgroundPositionY: '-120px', duration: SLOT, ease: 'none' }, 0);
+
+        tl.to(sel('.vignette'),
+          { opacity: 0.9, duration: 2, yoyo: true, repeat: 1, ease: 'sine.inOut' }, 0);
+
+        tl.fromTo(sel('.w1'),
+          { x: 360, opacity: 0 },
+          { x: 0, opacity: 1, duration: 0.33, ease: 'expo.out' }, 0.8);
+
+        tl.fromTo(sel('.w2'),
+          { x: 120, opacity: 0 },
+          { x: 0, opacity: 1, duration: 0.30, ease: 'expo.out' }, 1.2);
+
+        tl.fromTo(sel('.w3'),
+          { x: 25, opacity: 0 },
+          { x: 0, opacity: 1, duration: 0.25, ease: 'expo.out' }, 1.7);
+
+        tl.fromTo(sel('.w4'),
+          { scale: 0.85, opacity: 0 },
+          { scale: 1, opacity: 1, duration: 0.4, ease: 'back.out(1.4)' }, 1.95);
+
+        tl.to(sel('.w4'),
+          { scale: 5, opacity: 0, duration: 1.2, ease: 'power2.in' }, 2.4);
+
+        tl.to(sel('.w1') + ', ' + sel('.w2') + ', ' + sel('.w3'),
+          { opacity: 0, duration: 0.5, ease: 'power2.in' }, 2.5);
+
+        tl.to(sel('.grid-floor'),
+          { rotate: 5, duration: 1.0, ease: 'power2.in' }, 2.6);
+
+        tl.set(sel('.whip-streak'), { opacity: 1 }, 3.6);
+        tl.fromTo(sel('.whip-streak'),
+          { xPercent: -150, scaleX: 0.5 },
+          { xPercent: 250, scaleX: 1.5, duration: 0.4, ease: 'power3.in' }, 3.6);
+
+        tl.to({}, { duration: SLOT }, 0);
+        window.__timelines = window.__timelines || {};
+        window.__timelines['01-problem-type'] = tl;
+      })();
+    </script>
+  </div>
+</template>

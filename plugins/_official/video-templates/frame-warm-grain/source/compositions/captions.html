@@ -1,0 +1,154 @@
+<template id="captions-template">
+  <div
+    data-composition-id="captions"
+    data-width="1920"
+    data-height="1080"
+    data-duration="__VIDEO_DURATION__"
+  >
+    <div class="captions-container">
+      <div id="caption-box" class="caption-box">
+        <span id="caption-text" class="caption-text"></span>
+      </div>
+    </div>
+
+    <style>
+      [data-composition-id="captions"] .captions-container {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: flex-end;
+        padding-bottom: 230px; /* Position at y: 850 (1080 - 230 = 850) */
+        pointer-events: none;
+      }
+
+      [data-composition-id="captions"] .caption-box {
+        background-color: #7a6248;
+        padding: 12px 32px;
+        border-radius: 24px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-width: 100px;
+        max-width: 80%;
+        opacity: 0;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      }
+
+      [data-composition-id="captions"] .caption-text {
+        color: #f5f0e0;
+        font-family: "Outfit", sans-serif;
+        font-size: 48px;
+        font-weight: 700;
+        text-align: center;
+        line-height: 1.2;
+        white-space: nowrap;
+        max-width: 1600px;
+        overflow: hidden;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        const script = [
+          { text: "We", start: 0.119, end: 0.259 },
+          { text: "asked", start: 0.319, end: 0.479 },
+          { text: "what", start: 0.519, end: 0.659 },
+          { text: "you", start: 0.699, end: 0.819 },
+          { text: "needed.", start: 0.859, end: 1.819 },
+          { text: "Forty-seven", start: 1.86, end: 2.299 },
+          { text: "percent", start: 2.399, end: 2.679 },
+          { text: "of", start: 2.7, end: 2.799 },
+          { text: "you", start: 2.839, end: 2.939 },
+          { text: "said", start: 3.039, end: 3.179 },
+          { text: "motion", start: 3.24, end: 3.559 },
+          { text: "graphics,", start: 3.579, end: 4.599 },
+          { text: "sixty-two", start: 4.679, end: 5.179 },
+          { text: "percent", start: 5.299, end: 5.759 },
+          { text: "said", start: 5.859, end: 5.98 },
+          { text: "static", start: 6.079, end: 6.399 },
+          { text: "content", start: 6.46, end: 6.879 },
+          { text: "was", start: 6.92, end: 7.079 },
+          { text: "costing", start: 7.099, end: 7.48 },
+          { text: "you", start: 7.5, end: 7.579 },
+          { text: "attention,", start: 7.679, end: 8.659 },
+          { text: "and", start: 8.699, end: 8.86 },
+          { text: "three", start: 8.88, end: 9.06 },
+          { text: "out", start: 9.079, end: 9.18 },
+          { text: "of", start: 9.199, end: 9.34 },
+          { text: "four", start: 9.38, end: 9.799 },
+          { text: "said", start: 9.84, end: 10.0 },
+          { text: "you", start: 10.019, end: 10.159 },
+          { text: "know", start: 10.179, end: 10.36 },
+          { text: "the", start: 10.38, end: 10.42 },
+          { text: "look", start: 10.519, end: 10.699 },
+          { text: "you", start: 10.739, end: 10.859 },
+          { text: "want", start: 10.98, end: 11.34 },
+          { text: "but", start: 11.359, end: 11.52 },
+          { text: "don't", start: 11.56, end: 11.779 },
+          { text: "have", start: 11.819, end: 11.94 },
+          { text: "the", start: 11.96, end: 12.06 },
+          { text: "editing", start: 12.079, end: 12.4 },
+          { text: "skills", start: 12.52, end: 12.86 },
+          { text: "to", start: 12.88, end: 13.0 },
+          { text: "get", start: 13.019, end: 13.18 },
+          { text: "there.", start: 13.22, end: 14.22 },
+          { text: "So", start: 14.239, end: 14.399 },
+          { text: "we", start: 14.42, end: 14.52 },
+          { text: "built", start: 14.619, end: 14.88 },
+          { text: "Hyperframes.", start: 15.079, end: 16.02 },
+        ];
+
+        // Group words into lines (max 5 words per line)
+        const lines = [];
+        for (let i = 0; i < script.length; i += 5) {
+          const lineWords = script.slice(i, i + 5);
+          lines.push({
+            text: lineWords.map((w) => w.text).join(" "),
+            start: lineWords[0].start,
+            end: lineWords[lineWords.length - 1].end,
+          });
+        }
+
+        const tl = gsap.timeline({ paused: true });
+        const box = document.querySelector('[data-composition-id="captions"] #caption-box');
+        const textEl = document.querySelector('[data-composition-id="captions"] #caption-text');
+
+        lines.forEach((line, index) => {
+          // Fade in and set text
+          tl.set(box, { visibility: "visible" }, line.start);
+          tl.to(
+            box,
+            {
+              opacity: 1,
+              duration: 0.1,
+              ease: "power2.out",
+              onStart: () => {
+                textEl.textContent = line.text;
+              },
+            },
+            line.start,
+          );
+
+          // Fade out at the end of the line
+          tl.to(
+            box,
+            {
+              opacity: 0,
+              duration: 0.1,
+              ease: "power2.in",
+            },
+            line.end,
+          );
+
+          // Hard kill to ensure caption is hidden
+          tl.set(box, { opacity: 0, visibility: "hidden" }, line.end + 0.1);
+        });
+
+        window.__timelines = window.__timelines || {};
+        window.__timelines["captions"] = tl;
+      })();
+    </script>
+  </div>
+</template>

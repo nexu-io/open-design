@@ -1,0 +1,164 @@
+<template id="02-card-to-logo-template">
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+
+  <div
+    data-composition-id="02-card-to-logo"
+    data-start="0"
+    data-duration="4"
+    data-width="1920"
+    data-height="1080"
+  >
+    <div class="stage-02">
+      <div class="grid-floor"></div>
+
+      <div class="red-card">
+        <div class="card-gloss"></div>
+        <div class="card-label">JIRA-2847</div>
+      </div>
+
+      <div class="linear-symbol">
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="grad-02" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#5E6AD2"/>
+              <stop offset="100%" stop-color="#A9B0F0"/>
+            </linearGradient>
+          </defs>
+          <path d="M 25 18 L 75 18 L 75 34 L 41 34 L 41 82 L 25 82 Z" fill="url(#grad-02)" />
+        </svg>
+      </div>
+
+      <div class="light-pillar"></div>
+      <div class="morph-streak"></div>
+      <div class="vignette"></div>
+      <div class="grain"></div>
+    </div>
+
+    <style>
+      [data-composition-id="02-card-to-logo"] {
+        position: absolute; inset: 0; overflow: hidden; background: #000;
+      }
+      [data-composition-id="02-card-to-logo"] .stage-02 { position: absolute; inset: 0; }
+      [data-composition-id="02-card-to-logo"] .grid-floor {
+        position: absolute; inset: 0;
+        transform: perspective(900px) rotateX(60deg) translateY(25%);
+        background:
+          repeating-linear-gradient(0deg,  rgba(255,255,255,0.045) 0 1px, transparent 1px 80px),
+          repeating-linear-gradient(90deg, rgba(255,255,255,0.045) 0 1px, transparent 1px 80px);
+        background-color: #000;
+      }
+      [data-composition-id="02-card-to-logo"] .red-card {
+        position: absolute;
+        top: 50%; left: 50%;
+        width: 420px; height: 260px;
+        border-radius: 24px;
+        background:
+          linear-gradient(135deg, #e10b1f 0%, #a8081a 60%, #6a050f 100%);
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,0.35),
+          0 30px 80px rgba(225,11,31,0.35);
+        transform: translate(-50%, -50%) perspective(900px) rotateX(10deg) rotateY(-6deg);
+        transform-origin: center center;
+        filter: blur(0px);
+        will-change: transform, opacity, filter;
+      }
+      [data-composition-id="02-card-to-logo"] .card-gloss {
+        position: absolute; inset: 0;
+        background: linear-gradient(120deg, rgba(255,255,255,0.25) 0%, transparent 45%);
+        border-radius: 24px;
+        pointer-events: none;
+      }
+      [data-composition-id="02-card-to-logo"] .card-label {
+        position: absolute;
+        top: 28px; left: 32px;
+        font: 700 22px/1 "SF Mono", ui-monospace, monospace;
+        letter-spacing: 0.15em;
+        color: rgba(255,255,255,0.85);
+      }
+      [data-composition-id="02-card-to-logo"] .linear-symbol {
+        position: absolute;
+        top: 50%; left: 50%;
+        width: 300px; height: 300px;
+        transform: translate(-50%, -50%) scale(0.6);
+        opacity: 0;
+        filter: drop-shadow(0 0 40px rgba(94,106,210,0.6));
+        will-change: transform, opacity;
+      }
+      [data-composition-id="02-card-to-logo"] .linear-symbol svg { width: 100%; height: 100%; }
+      [data-composition-id="02-card-to-logo"] .light-pillar {
+        position: absolute;
+        top: 10%; left: 50%;
+        width: 6px; height: 80%;
+        transform: translateX(-50%) scaleY(0);
+        transform-origin: center bottom;
+        background: linear-gradient(180deg, transparent 0%, rgba(169,176,240,0.5) 50%, transparent 100%);
+        filter: blur(4px);
+        opacity: 0;
+      }
+      [data-composition-id="02-card-to-logo"] .morph-streak {
+        position: absolute;
+        top: 50%; left: 0;
+        width: 80%; height: 14px;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.95), rgba(169,176,240,0.7), transparent);
+        filter: blur(10px);
+        transform: translate(-150%, -50%);
+        opacity: 0;
+        z-index: 20;
+      }
+      [data-composition-id="02-card-to-logo"] .vignette {
+        position: absolute; inset: 0; pointer-events: none;
+        background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.95) 95%);
+        opacity: 0.75;
+      }
+      [data-composition-id="02-card-to-logo"] .grain {
+        position: absolute; inset: 0; pointer-events: none;
+        opacity: 0.08;
+        background-image:
+          radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+          radial-gradient(rgba(255,255,255,0.02) 1px, transparent 1px);
+        background-size: 3px 3px, 5px 5px;
+      }
+    </style>
+
+    <script>
+      (() => {
+        const SLOT = 4;
+        const tl = gsap.timeline({ paused: true });
+        const sel = (q) => `[data-composition-id="02-card-to-logo"] ${q}`;
+
+        tl.fromTo(sel('.red-card'),
+          { x: '-50%', y: '-150%', opacity: 0, filter: 'blur(20px)' },
+          { y: '-50%', opacity: 1, filter: 'blur(0px)', duration: 0.8, ease: 'power3.out' }, 0.1);
+
+        tl.to(sel('.red-card'),
+          { rotate: 3, duration: 1.5, ease: 'sine.inOut' }, 0.9);
+
+        tl.set(sel('.morph-streak'), { opacity: 1 }, 1.9);
+        tl.fromTo(sel('.morph-streak'),
+          { xPercent: -150, scaleX: 0.5 },
+          { xPercent: 250, scaleX: 1.8, duration: 0.5, ease: 'power3.in' }, 1.9);
+
+        tl.to(sel('.red-card'),
+          { x: '30%', scale: 0.4, opacity: 0, filter: 'blur(30px)', duration: 0.5, ease: 'power3.in' }, 2.0);
+
+        tl.fromTo(sel('.linear-symbol'),
+          { x: '-80%', scale: 0.4, opacity: 0, filter: 'blur(30px)' },
+          { x: '-50%', scale: 1, opacity: 1, filter: 'blur(0px)', duration: 0.6, ease: 'power3.out' }, 2.15);
+
+        tl.to(sel('.light-pillar'),
+          { opacity: 1, scaleY: 1, duration: 0.4, ease: 'power2.out' }, 2.9);
+
+        tl.fromTo(sel('.linear-symbol'),
+          { rotateY: 0 },
+          { rotateY: 360, duration: 1.0, ease: 'power2.inOut' }, 3.0);
+
+        tl.to(sel('.linear-symbol'),
+          { filter: 'drop-shadow(0 0 70px rgba(169,176,240,0.85))', duration: 0.5, yoyo: true, repeat: 1, ease: 'sine.inOut' }, 3.0);
+
+        tl.to({}, { duration: SLOT }, 0);
+        window.__timelines = window.__timelines || {};
+        window.__timelines['02-card-to-logo'] = tl;
+      })();
+    </script>
+  </div>
+</template>

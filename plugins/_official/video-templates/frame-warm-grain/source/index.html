@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Warm Grain - Hyperframes</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background-color: #f5f0e0; /* Cream background */
+        font-family: "Outfit", "Lexend", sans-serif;
+      }
+
+      #main-composition {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+      }
+
+      /* Paper texture and Grain overlay */
+      #grain-overlay-comp {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 100;
+      }
+
+      /* Grain animation */
+      @keyframes grain-noise {
+        0%,
+        100% {
+          transform: translate(0, 0);
+        }
+        10% {
+          transform: translate(-5%, -5%);
+        }
+        20% {
+          transform: translate(-10%, 5%);
+        }
+        30% {
+          transform: translate(5%, -10%);
+        }
+        40% {
+          transform: translate(-5%, 15%);
+        }
+        50% {
+          transform: translate(-10%, 5%);
+        }
+        60% {
+          transform: translate(15%, 0);
+        }
+        70% {
+          transform: translate(0, 10%);
+        }
+        80% {
+          transform: translate(-15%, 0);
+        }
+        90% {
+          transform: translate(10%, 5%);
+        }
+      }
+
+      .grain-texture {
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: url("https://www.transparenttextures.com/patterns/natural-paper.png");
+        opacity: 0.15;
+        animation: grain-noise 0.5s steps(1) infinite;
+      }
+
+      #a-roll {
+        position: absolute;
+        border-radius: 16px;
+        object-fit: cover;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      }
+
+      .comp-layer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="main-composition"
+      data-composition-id="main-video"
+      data-width="1920"
+      data-height="1080"
+      data-start="0"
+      data-duration="__VIDEO_DURATION__"
+    >
+      <!-- Background Layer -->
+      <div
+        id="grain-overlay-comp"
+        data-composition-id="grain-overlay"
+        data-width="1920"
+        data-height="1080"
+        data-start="0"
+        data-duration="__VIDEO_DURATION__"
+        data-track-index="100"
+      >
+        <div class="grain-texture"></div>
+        <script>
+          const grainTl = gsap.timeline({ paused: true });
+          window.__timelines = window.__timelines || {};
+          window.__timelines["grain-overlay"] = grainTl;
+        </script>
+      </div>
+
+      <!-- A-Roll Video (muted — audio is separate) -->
+      <video
+        id="a-roll"
+        src="__VIDEO_SRC__"
+        muted
+        playsinline
+        data-start="0"
+        data-duration="__VIDEO_DURATION__"
+        data-track-index="0"
+      ></video>
+      <audio
+        id="a-roll-audio"
+        src="__VIDEO_SRC__"
+        data-start="0"
+        data-duration="__VIDEO_DURATION__"
+        data-track-index="5"
+        data-volume="1"
+      ></audio>
+
+      <!-- Compositions -->
+      <div
+        id="intro-layer"
+        class="comp-layer"
+        data-composition-id="intro"
+        data-composition-src="compositions/intro.html"
+        data-start="0"
+        data-duration="2.5"
+        data-track-index="1"
+      ></div>
+
+      <div
+        id="graphics-layer"
+        class="comp-layer"
+        data-composition-id="graphics"
+        data-composition-src="compositions/graphics.html"
+        data-start="0"
+        data-duration="__VIDEO_DURATION__"
+        data-track-index="2"
+      ></div>
+
+      <div
+        id="captions-layer"
+        class="comp-layer"
+        data-composition-id="captions"
+        data-composition-src="compositions/captions.html"
+        data-start="0"
+        data-duration="__VIDEO_DURATION__"
+        data-track-index="3"
+      ></div>
+
+      <script>
+        const tl = gsap.timeline({ paused: true });
+
+        // A-Roll Framing Strategy
+        // 1. 0s-1.8s: Intro scale up from small (60%) to medium (80%) - Shifted right slightly to clear speaker card
+        // 2. 1.8s-4.6s: Grid view / Shift Left (x: 600, scale: 70%) for 47% graphic
+        // 3. 4.6s-8.8s: Shift Center-Bottom (y: 800, scale: 70%) for 62% graphic (top)
+        // 4. 8.8s-14s: Shift Right (x: 1320, scale: 75%) for Editing Skills graphic (left)
+        // 5. 14s-17s: Final Reveal (Center, scale: 100%)
+
+        // Initial state
+        gsap.set("#a-roll", {
+          x: 1100,
+          y: 540,
+          xPercent: -50,
+          yPercent: -50,
+          width: 1920 * 0.6,
+          height: 1080 * 0.6,
+        });
+
+        // 1. Intro Scale Up (0s - 1.8s)
+        tl.to(
+          "#a-roll",
+          {
+            x: 1200,
+            width: 1920 * 0.8,
+            height: 1080 * 0.8,
+            duration: 1.8,
+            ease: "power2.inOut",
+          },
+          0,
+        );
+
+        // 2. Moment 1: 47% Graphic Trigger (1.8s) - Shift Left
+        tl.to(
+          "#a-roll",
+          {
+            x: 600,
+            y: 540,
+            width: 1920 * 0.7,
+            height: 1080 * 0.7,
+            duration: 0.5,
+            ease: "power2.inOut",
+          },
+          1.8,
+        );
+
+        // 3. Moment 2: 62% Graphic Trigger (4.6s) - Shift Center-Bottom
+        tl.to(
+          "#a-roll",
+          {
+            x: 960,
+            y: 750,
+            width: 1920 * 0.7,
+            height: 1080 * 0.7,
+            duration: 0.5,
+            ease: "power2.inOut",
+          },
+          4.6,
+        );
+
+        // 4. Moment 3: Editing Skills Trigger (8.8s) - Shift Right
+        tl.to(
+          "#a-roll",
+          {
+            x: 1320,
+            y: 540,
+            width: 1920 * 0.75,
+            height: 1080 * 0.75,
+            duration: 0.5,
+            ease: "power2.inOut",
+          },
+          8.8,
+        );
+
+        // 5. Final Reveal (14s - 17s)
+        tl.to(
+          "#a-roll",
+          {
+            x: 960,
+            y: 540,
+            width: 1920 * 1.0,
+            height: 1080 * 1.0,
+            duration: 1.0,
+            ease: "power2.inOut",
+          },
+          14,
+        );
+
+        window.__timelines["main-video"] = tl;
+      </script>
+    </div>
+  </body>
+</html>

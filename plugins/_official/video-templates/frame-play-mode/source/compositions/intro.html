@@ -1,0 +1,108 @@
+<template id="intro-template">
+  <div
+    id="intro-comp"
+    data-composition-id="intro"
+    data-start="0"
+    data-duration="__VIDEO_DURATION__"
+    data-width="1920"
+    data-height="1080"
+  >
+    <div class="intro-container">
+      <h1 class="title">HYPERFRAMES</h1>
+    </div>
+
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Nunito:wght@900&display=swap");
+
+      [data-composition-id="intro"] .intro-container {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        pointer-events: none;
+      }
+
+      [data-composition-id="intro"] .title {
+        font-family: "Nunito", sans-serif;
+        font-weight: 900;
+        font-size: 180px;
+        color: #ff2d8a; /* Hot Pink */
+        text-transform: uppercase;
+        transform: rotate(-5deg); /* Tilted 5 degrees */
+        margin: 0;
+        padding: 20px;
+        /* Layered offset shadow for depth without suffocating letterforms */
+        filter: drop-shadow(8px 8px 0 #ffffff) drop-shadow(15px 15px 0 rgba(0, 0, 0, 0.1));
+        opacity: 0;
+        scale: 0;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      (function () {
+        const tl = gsap.timeline({ paused: true });
+
+        // --- INTRO SEQUENCE ---
+        // Animation: Scale-up bounce (0% to 110% to 100%) with elastic overshoot
+        // Starts at 0.5s, lasts until 3s
+        tl.to('[data-composition-id="intro"] .title', {
+          opacity: 1,
+          scale: 1.1,
+          duration: 0.6,
+          ease: "back.out(1.7)",
+          delay: 0.5,
+        })
+          .to('[data-composition-id="intro"] .title', {
+            scale: 1,
+            duration: 0.4,
+            ease: "elastic.out(1, 0.3)",
+          })
+          // Ambient motion
+          .to(
+            '[data-composition-id="intro"] .title',
+            {
+              rotation: "-3deg",
+              duration: 1,
+              repeat: 1,
+              yoyo: true,
+              ease: "sine.inOut",
+            },
+            "-=0.5",
+          )
+          // Exit intro
+          .to(
+            '[data-composition-id="intro"] .title',
+            {
+              opacity: 0,
+              scale: 0.5,
+              duration: 0.3,
+              ease: "power2.in",
+            },
+            1.4,
+          );
+
+        // --- END CARD SEQUENCE ---
+        // Appears at 14.619s (after Moment 3 finishes exiting at 14.239 + 0.3)
+        tl.to(
+          '[data-composition-id="intro"] .title',
+          {
+            opacity: 1,
+            scale: 1.1,
+            duration: 0.6,
+            ease: "back.out(1.7)",
+          },
+          14.619,
+        ).to('[data-composition-id="intro"] .title', {
+          scale: 1,
+          duration: 0.4,
+          ease: "elastic.out(1, 0.3)",
+        });
+
+        window.__timelines = window.__timelines || {};
+        window.__timelines["intro"] = tl;
+      })();
+    </script>
+  </div>
+</template>

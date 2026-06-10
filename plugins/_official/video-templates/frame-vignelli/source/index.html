@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Massimo Vignelli Video</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        background: #ffffff;
+        overflow: hidden;
+        width: 1080px;
+        height: 1920px;
+        font-family: "Helvetica", Arial, sans-serif;
+      }
+
+      /* 6-Column Grid System */
+      .grid-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 1080px;
+        height: 1920px;
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        pointer-events: none;
+        z-index: 1000;
+        opacity: 0; /* Keep grid invisible but present for layout references */
+      }
+
+      .grid-column {
+        border-right: 1px solid rgba(204, 0, 0, 0.2); /* Vignelli Red accent */
+      }
+
+      #main-composition {
+        position: relative;
+        width: 1080px;
+        height: 1920px;
+        background: #ffffff;
+        overflow: hidden;
+      }
+
+      /* Layer Hosts */
+      #a-roll-wrapper {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 10;
+        overflow: hidden;
+      }
+
+      #a-roll,
+      #a-roll-wrapper img.__render_frame__,
+      #a-roll-wrapper img.__preview_render_frame__ {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      #overlays-comp,
+      #captions-comp {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 1080px;
+        height: 1920px;
+        pointer-events: none;
+      }
+
+      #overlays-comp {
+        z-index: 20;
+      }
+
+      #captions-comp {
+        z-index: 30;
+      }
+
+      /* Curtain Transition Layer */
+      .curtain {
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: #1a1a1a;
+        z-index: 25;
+        pointer-events: none;
+      }
+
+      .curtain.red {
+        background: #cc0000;
+        z-index: 26;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="main-composition"
+      data-composition-id="main-comp"
+      data-width="1080"
+      data-height="1920"
+      data-start="0"
+      data-duration="__VIDEO_DURATION__"
+    >
+      <!-- Transitions -->
+      <div id="curtain-black" class="curtain"></div>
+      <div id="curtain-red" class="curtain red"></div>
+
+      <!-- Overlays Composition -->
+      <div
+        id="overlays-comp"
+        data-composition-id="overlays"
+        data-composition-src="compositions/overlays.html"
+        data-start="0"
+        data-duration="__VIDEO_DURATION__"
+        data-track-index="2"
+      ></div>
+
+      <!-- Captions Composition -->
+      <div
+        id="captions-comp"
+        data-composition-id="captions"
+        data-composition-src="compositions/captions.html"
+        data-start="0"
+        data-duration="__VIDEO_DURATION__"
+        data-track-index="3"
+      ></div>
+
+      <!-- Grid Visualization -->
+      <div class="grid-container">
+        <div class="grid-column"></div>
+        <div class="grid-column"></div>
+        <div class="grid-column"></div>
+        <div class="grid-column"></div>
+        <div class="grid-column"></div>
+        <div class="grid-column"></div>
+      </div>
+
+      <script>
+        const tl = gsap.timeline({ paused: true });
+
+        // Transition: Curtain Pull logic
+        // A-roll leaves the screen at least once.
+        // Timing: Let's do a curtain pull at 3.7s (transitioning to the 62% stat)
+        // and return at 7.3s (end of attention stat).
+
+        // Curtain Out (A-roll hidden)
+        tl.to("#curtain-black", { left: "0%", duration: 0.2, ease: "power2.inOut" }, 3.5);
+        tl.to("#a-roll-wrapper", { opacity: 0, duration: 0 }, 3.7);
+        tl.to("#curtain-black", { left: "100%", duration: 0.4, ease: "power2.inOut" }, 3.7);
+
+        // Curtain In (A-roll return)
+        tl.set("#curtain-red", { left: "-100%" }, 7.1);
+        tl.to("#curtain-red", { left: "0%", duration: 0.2, ease: "power2.inOut" }, 7.1);
+        tl.to("#a-roll-wrapper", { opacity: 1, duration: 0 }, 7.3);
+        tl.to("#curtain-red", { left: "100%", duration: 0.4, ease: "power2.inOut" }, 7.3);
+
+        window.__timelines = window.__timelines || {};
+        window.__timelines["main-comp"] = tl;
+      </script>
+    </div>
+
+    <!-- A-Roll (direct child of body to avoid video_nested_in_timed_element) -->
+    <div id="a-roll-wrapper">
+      <video
+        id="a-roll"
+        src="__VIDEO_SRC__"
+        muted
+        playsinline
+        data-start="0"
+        data-duration="__VIDEO_DURATION__"
+        data-track-index="0"
+      ></video>
+    </div>
+    <audio
+      id="a-roll-audio"
+      src="__VIDEO_SRC__"
+      data-start="0"
+      data-duration="__VIDEO_DURATION__"
+      data-track-index="5"
+      data-volume="1"
+    ></audio>
+  </body>
+</html>

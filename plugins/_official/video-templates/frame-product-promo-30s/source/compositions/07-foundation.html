@@ -1,0 +1,205 @@
+<template id="07-foundation-template">
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,400;1,500&display=block" rel="stylesheet" />
+
+  <div
+    data-composition-id="07-foundation"
+    data-start="0"
+    data-duration="3"
+    data-width="1920"
+    data-height="1080"
+  >
+    <div class="stage-07">
+      <div class="grid-floor"></div>
+      <div class="light-cone"></div>
+
+      <div class="callback-symbol">
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="grad-07-0" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#5E6AD2"/>
+              <stop offset="100%" stop-color="#A9B0F0"/>
+            </linearGradient>
+          </defs>
+          <path d="M 25 18 L 75 18 L 75 34 L 41 34 L 41 82 L 25 82 Z" fill="url(#grad-07-0)" />
+        </svg>
+      </div>
+
+      <div class="cluster">
+        <div class="c-sym cs1">
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <defs><linearGradient id="grad-07-1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5E6AD2"/><stop offset="100%" stop-color="#A9B0F0"/></linearGradient></defs>
+            <path d="M 25 18 L 75 18 L 75 34 L 41 34 L 41 82 L 25 82 Z" fill="url(#grad-07-1)" />
+          </svg>
+        </div>
+        <div class="c-sym cs2">
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <defs><linearGradient id="grad-07-2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5E6AD2"/><stop offset="100%" stop-color="#A9B0F0"/></linearGradient></defs>
+            <path d="M 25 18 L 75 18 L 75 34 L 41 34 L 41 82 L 25 82 Z" fill="url(#grad-07-2)" />
+          </svg>
+        </div>
+        <div class="c-sym cs3">
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <defs><linearGradient id="grad-07-3" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5E6AD2"/><stop offset="100%" stop-color="#A9B0F0"/></linearGradient></defs>
+            <path d="M 25 18 L 75 18 L 75 34 L 41 34 L 41 82 L 25 82 Z" fill="url(#grad-07-3)" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="foundation-head">For teams and agents</div>
+
+      <div class="sparkles">
+        <span class="sp sp1">+</span>
+        <span class="sp sp2">+</span>
+        <span class="sp sp3">+</span>
+        <span class="sp sp4">+</span>
+        <span class="sp sp5">+</span>
+        <span class="sp sp6">+</span>
+      </div>
+
+      <div class="vignette"></div>
+      <div class="grain"></div>
+    </div>
+
+    <style>
+      [data-composition-id="07-foundation"] {
+        position: absolute; inset: 0; overflow: hidden; background: #000;
+      }
+      [data-composition-id="07-foundation"] .stage-07 { position: absolute; inset: 0; }
+      [data-composition-id="07-foundation"] .grid-floor {
+        position: absolute; inset: 0;
+        transform: perspective(900px) rotateX(60deg) translateY(25%);
+        background:
+          repeating-linear-gradient(0deg,  rgba(255,255,255,0.04) 0 1px, transparent 1px 80px),
+          repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 80px);
+        background-color: #000;
+      }
+      [data-composition-id="07-foundation"] .light-cone {
+        position: absolute;
+        top: -5%; left: 50%;
+        width: 900px; height: 900px;
+        transform: translateX(-50%);
+        background: conic-gradient(from 180deg at 50% 0%, transparent 0deg, rgba(169,176,240,0.2) 10deg, rgba(94,106,210,0.1) 25deg, transparent 40deg, transparent 320deg, rgba(94,106,210,0.1) 335deg, rgba(169,176,240,0.2) 350deg, transparent 360deg);
+        filter: blur(40px);
+        opacity: 0;
+      }
+      [data-composition-id="07-foundation"] .callback-symbol {
+        position: absolute;
+        top: 40%; left: 50%;
+        width: 260px; height: 260px;
+        transform: translate(-50%, -50%);
+        filter: drop-shadow(0 0 60px rgba(169,176,240,0.7));
+        opacity: 0;
+      }
+      [data-composition-id="07-foundation"] .callback-symbol svg { width: 100%; height: 100%; }
+      [data-composition-id="07-foundation"] .cluster {
+        position: absolute;
+        top: 38%; left: 50%;
+        width: 700px; height: 260px;
+        transform: translate(-50%, -50%);
+        opacity: 0;
+      }
+      [data-composition-id="07-foundation"] .c-sym {
+        position: absolute;
+        width: 160px; height: 160px;
+        filter: drop-shadow(0 0 40px rgba(169,176,240,0.6));
+      }
+      [data-composition-id="07-foundation"] .c-sym svg { width: 100%; height: 100%; }
+      [data-composition-id="07-foundation"] .cs1 { top: 30px; left: 60px; transform: rotate(-6deg); }
+      [data-composition-id="07-foundation"] .cs2 { top: 0; left: 270px; transform: rotate(2deg); }
+      [data-composition-id="07-foundation"] .cs3 { top: 50px; left: 480px; transform: rotate(-3deg); }
+
+      [data-composition-id="07-foundation"] .foundation-head {
+        position: absolute;
+        top: 75%; left: 50%;
+        transform: translate(-50%, -50%);
+        font-family: "Cormorant Garamond", serif;
+        font-style: italic;
+        font-weight: 500;
+        font-size: 96px;
+        letter-spacing: -0.01em;
+        background: linear-gradient(180deg, #ffffff 0%, #cccccc 60%, #888888 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        color: transparent;
+        text-shadow: 0 0 60px rgba(255,255,255,0.3);
+        opacity: 0;
+        white-space: nowrap;
+      }
+      [data-composition-id="07-foundation"] .sparkles {
+        position: absolute; inset: 0;
+        pointer-events: none;
+      }
+      [data-composition-id="07-foundation"] .sp {
+        position: absolute;
+        font: 400 18px/1 monospace;
+        color: rgba(169,176,240,0.7);
+        text-shadow: 0 0 12px rgba(169,176,240,0.8);
+        opacity: 0;
+      }
+      [data-composition-id="07-foundation"] .sp1 { top: 25%; left: 30%; }
+      [data-composition-id="07-foundation"] .sp2 { top: 32%; left: 70%; }
+      [data-composition-id="07-foundation"] .sp3 { top: 55%; left: 25%; }
+      [data-composition-id="07-foundation"] .sp4 { top: 48%; left: 75%; }
+      [data-composition-id="07-foundation"] .sp5 { top: 60%; left: 50%; }
+      [data-composition-id="07-foundation"] .sp6 { top: 38%; left: 52%; }
+
+      [data-composition-id="07-foundation"] .vignette {
+        position: absolute; inset: 0; pointer-events: none;
+        background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.95) 95%);
+        opacity: 0.7;
+      }
+      [data-composition-id="07-foundation"] .grain {
+        position: absolute; inset: 0; pointer-events: none;
+        opacity: 0.08;
+        background-image:
+          radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+          radial-gradient(rgba(255,255,255,0.02) 1px, transparent 1px);
+        background-size: 3px 3px, 5px 5px;
+      }
+    </style>
+
+    <script>
+      (() => {
+        const SLOT = 3;
+        const tl = gsap.timeline({ paused: true });
+        const sel = (q) => `[data-composition-id="07-foundation"] ${q}`;
+
+        tl.fromTo(sel('.callback-symbol'),
+          { opacity: 0, scale: 0.4, rotateY: 0 },
+          { opacity: 1, scale: 1, rotateY: 540, duration: 1.0, ease: 'power2.out' }, 0);
+        tl.to(sel('.callback-symbol'),
+          { opacity: 0, scale: 0.6, duration: 0.3, ease: 'power2.in' }, 0.9);
+
+        tl.to(sel('.light-cone'),
+          { opacity: 1, duration: 0.5, ease: 'power2.out' }, 0.7);
+        tl.to(sel('.light-cone'),
+          { scale: 1.05, duration: 2, yoyo: true, repeat: 1, ease: 'sine.inOut' }, 1.0);
+
+        tl.to(sel('.cluster'),
+          { opacity: 1, duration: 0.5, ease: 'power2.out' }, 1.0);
+
+        tl.to(sel('.cs1'), { y: -12, duration: 1.0, yoyo: true, repeat: 1, ease: 'sine.inOut' }, 1.0);
+        tl.to(sel('.cs2'), { y: 10,  duration: 0.95, yoyo: true, repeat: 1, ease: 'sine.inOut' }, 1.1);
+        tl.to(sel('.cs3'), { y: -8,  duration: 0.9, yoyo: true, repeat: 1, ease: 'sine.inOut' }, 1.2);
+
+        tl.fromTo(sel('.foundation-head'),
+          { opacity: 0, y: 30 },
+          { opacity: 1, y: 0, duration: 0.7, ease: 'power3.out' }, 1.3);
+
+        tl.to(sel('.sp'),
+          { opacity: 0.9, duration: 0.4, stagger: { each: 0.1, from: 'random' }, ease: 'sine.out' }, 1.1);
+        tl.to(sel('.sp'),
+          { opacity: 0.3, duration: 0.75, yoyo: true, repeat: 1, ease: 'sine.inOut' }, 1.5);
+
+        tl.to(sel('.cluster') + ', ' + sel('.foundation-head') + ', ' + sel('.light-cone'),
+          { opacity: 0, duration: 0.4, ease: 'power2.in' }, 2.7);
+
+        tl.to({}, { duration: SLOT }, 0);
+        window.__timelines = window.__timelines || {};
+        window.__timelines['07-foundation'] = tl;
+      })();
+    </script>
+  </div>
+</template>

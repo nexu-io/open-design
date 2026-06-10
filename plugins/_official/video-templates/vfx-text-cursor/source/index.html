@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>VFX Text Cursor · Opening</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;700;800;900&family=Noto+Sans+SC:wght@400;700;900&family=JetBrains+Mono&display=swap" rel="stylesheet" />
+<style>
+  body { font-family:'Inter Tight','Noto Sans SC',system-ui,sans-serif; background:#06070a; color:#f5f5f7; margin:0; min-height:100vh; overflow:hidden; position:relative; }
+  .vignette { position:absolute; inset:0; background: radial-gradient(circle at center, transparent 50%, rgba(0,0,0,0.8) 100%); z-index:1; }
+  .grain { position:absolute; inset:0; opacity:0.06; mix-blend-mode:overlay; pointer-events:none; z-index:2;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E"); }
+  .mono { font-family:'JetBrains Mono',ui-monospace,monospace; }
+  .chip { font-size:11px; letter-spacing:0.18em; text-transform:uppercase; }
+  @keyframes blink { 0%, 50% { opacity:1 } 51%, 100% { opacity:0 } }
+  .cursor { display:inline-block; width:18px; height:1.05em; background:#ff3b6f; margin-left:6px; vertical-align:text-bottom; animation: blink 1s steps(1) infinite;
+    box-shadow: 0 0 24px #ff3b6f, 0 0 8px #ff3b6f, 60px 0 80px rgba(255,59,111,0.6); }
+  .chroma {
+    text-shadow:
+      3px 0 #00d4ff,
+      -3px 0 #ff3b6f,
+      0 0 40px rgba(255,59,111,0.3);
+  }
+  .text-line { position:relative; }
+  /* directional light leaks */
+  .ray { position:absolute; mix-blend-mode:screen; pointer-events:none; z-index:1; }
+  .ray-1 { top:30%; left:-10%; width:60%; height:6px; transform:rotate(-12deg); background:linear-gradient(90deg, transparent, rgba(255,59,111,0.6), transparent); filter: blur(8px); }
+  .ray-2 { top:55%; right:-10%; width:50%; height:4px; transform:rotate(15deg); background:linear-gradient(90deg, transparent, rgba(0,212,255,0.5), transparent); filter: blur(6px); }
+  .ray-3 { top:70%; left:10%; width:40%; height:3px; transform:rotate(-8deg); background:linear-gradient(90deg, transparent, rgba(255,181,71,0.5), transparent); filter: blur(5px); }
+</style>
+</head>
+<body class="flex flex-col items-center justify-center relative">
+
+  <header class="absolute top-12 left-12 right-12 flex items-baseline justify-between chip opacity-50 z-10 mono">
+    <span>FRAME 01 · OPENING</span>
+    <span>VFX · TEXT CURSOR</span>
+    <span>00:03:21</span>
+  </header>
+
+  <!-- light rays -->
+  <div class="ray ray-1"></div>
+  <div class="ray ray-2"></div>
+  <div class="ray ray-3"></div>
+
+  <main class="relative z-10 text-center max-w-[1280px] px-12">
+    <h1 class="chroma font-black leading-[1.05] tracking-[-0.02em]" style="font-size:clamp(48px,7vw,108px)">
+      Markdown 是给作者的<br/>
+      中间过程, <span style="color:#ff3b6f">HTML</span> 才是<br/>
+      给读者的最终形态<span class="cursor"></span>
+    </h1>
+    <p class="mt-10 text-[22px] opacity-60 font-medium">
+      — Claude Code 团队, 2026
+    </p>
+  </main>
+
+  <div class="vignette"></div>
+  <div class="grain"></div>
+
+  <footer class="absolute bottom-12 left-12 right-12 flex items-baseline justify-between chip opacity-40 z-10 mono">
+    <span>HTML-ANYTHING · VFX-TEXT-CURSOR</span>
+    <span>HOT PINK × CYAN CHROMATIC</span>
+    <span>REC ●</span>
+  </footer>
+</body>
+</html>

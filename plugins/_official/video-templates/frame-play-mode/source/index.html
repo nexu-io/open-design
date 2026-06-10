@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hyperframes - Play Mode</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background-color: #ffffff;
+        font-family: "Nunito", sans-serif;
+      }
+
+      #main-composition {
+        width: 1920px;
+        height: 1080px;
+        position: relative;
+      }
+
+      #bg-comp,
+      #aroll-comp,
+      #intro-comp,
+      #stats-comp,
+      #captions-comp {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      #bg-comp {
+        z-index: 1;
+      }
+
+      #aroll-comp {
+        z-index: 10;
+      }
+
+      #intro-comp {
+        z-index: 100;
+      }
+
+      #stats-comp {
+        z-index: 150;
+      }
+
+      #captions-comp {
+        z-index: 200;
+      }
+
+      #aroll-container {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 0;
+      }
+
+      #short_mag_cut {
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+        border: 8px solid #ffffff;
+      }
+
+      #background-layer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: #ffffff;
+        z-index: 0;
+      }
+    </style>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:wght@900&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div
+      id="main-composition"
+      data-composition-id="main-video"
+      data-start="0"
+      data-duration="__VIDEO_DURATION__"
+      data-width="1920"
+      data-height="1080"
+    >
+      <!-- Background Layer Composition -->
+      <div
+        id="bg-comp"
+        data-composition-id="background"
+        data-start="0"
+        data-duration="__VIDEO_DURATION__"
+        data-width="1920"
+        data-height="1080"
+        data-track-index="1"
+      >
+        <div id="background-layer"></div>
+        <style>
+          #background-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #ffffff;
+          }
+        </style>
+        <script>
+          (function () {
+            const tl = gsap.timeline({ paused: true });
+            const bg = document.getElementById("background-layer");
+            // Sync with A-roll framing 3 (4.659s)
+            tl.to(bg, { backgroundColor: "#0057FF", duration: 0.5 }, 4.659);
+            // Sync with A-roll framing 4 (8.88s)
+            tl.to(bg, { backgroundColor: "#FFFFFF", duration: 0.5 }, 8.88);
+            window.__timelines["background"] = tl;
+          })();
+        </script>
+      </div>
+
+      <!-- A-roll Layer Composition -->
+      <div
+        id="aroll-comp"
+        data-composition-id="aroll-layer"
+        data-duration="__VIDEO_DURATION__"
+        data-width="1920"
+        data-height="1080"
+        data-track-index="10"
+      >
+        <div id="aroll-container">
+          <video
+            id="short_mag_cut"
+            src="__VIDEO_SRC__"
+            muted
+            playsinline
+            data-start="0"
+            data-duration="__VIDEO_DURATION__"
+            data-track-index="1"
+            style="width: 100%; height: auto"
+          ></video>
+        </div>
+        <audio
+          id="a-roll-audio"
+          src="__VIDEO_SRC__"
+          data-start="0"
+          data-duration="__VIDEO_DURATION__"
+          data-track-index="5"
+          data-volume="1"
+        ></audio>
+        <style>
+          #aroll-container {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+          }
+          #short_mag_cut {
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            border: 8px solid #ffffff;
+          }
+        </style>
+        <script>
+          (function () {
+            const tl = gsap.timeline({ paused: true });
+            const container = document.getElementById("aroll-container");
+            gsap.set(container, { y: -1100, scale: 0.8 });
+            tl.to(container, { y: 0, duration: 1.2, ease: "elastic.out(1, 0.6)" }, 0);
+            tl.to(container, { scale: 1.4, x: -300, duration: 1, ease: "back.out(1.7)" }, 1.839);
+            tl.to(container, { scale: 0.7, x: 400, duration: 1, ease: "back.out(1.7)" }, 4.659);
+            tl.to(container, { scale: 0.9, x: 0, duration: 1, ease: "back.out(1.7)" }, 8.88);
+            window.__timelines["aroll-layer"] = tl;
+          })();
+        </script>
+      </div>
+
+      <!-- Compositions -->
+      <div
+        id="intro-comp"
+        data-composition-id="intro"
+        data-composition-src="compositions/intro.html"
+        data-start="0"
+        data-duration="__VIDEO_DURATION__"
+        data-width="1920"
+        data-height="1080"
+        data-track-index="100"
+      ></div>
+      <div
+        id="captions-comp"
+        data-composition-id="captions"
+        data-composition-src="compositions/captions.html"
+        data-start="0"
+        data-duration="__VIDEO_DURATION__"
+        data-width="1920"
+        data-height="1080"
+        data-track-index="200"
+      ></div>
+      <div
+        id="stats-comp"
+        data-composition-id="stats"
+        data-composition-src="compositions/stats.html"
+        data-start="0"
+        data-duration="__VIDEO_DURATION__"
+        data-width="1920"
+        data-height="1080"
+        data-track-index="150"
+      ></div>
+
+      <script>
+        window.__timelines = window.__timelines || {};
+        const tl = gsap.timeline({ paused: true });
+        window.__timelines["main-video"] = tl;
+      </script>
+    </div>
+  </body>
+</html>

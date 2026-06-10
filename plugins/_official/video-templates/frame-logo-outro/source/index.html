@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>Logo Outro · HTML Anything</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;700;800;900&family=Inter:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  body {
+    font-family:'Inter Tight','Noto Sans SC',system-ui,sans-serif;
+    background: radial-gradient(circle at 50% 45%, #1a1535 0%, #08090c 70%);
+    color:#f5f5f7;
+    margin:0;
+    min-height:100vh;
+    overflow:hidden;
+  }
+  .accent { color:#7c5cff; }
+  .ribbon { background:#7c5cff; }
+  @keyframes pieceIn { 0% { opacity:0; transform: scale(1.4) translate(var(--dx, 0), var(--dy, 0)) } 100% { opacity:1; transform: scale(1) translate(0,0) } }
+  @keyframes glow { from { filter: drop-shadow(0 0 0 transparent) } to { filter: drop-shadow(0 0 32px rgba(124,92,255,0.6)) } }
+  .piece { animation: pieceIn 1s cubic-bezier(.34,1.56,.64,1) both; }
+  .piece:nth-child(1){--dx:-80px;--dy:-40px;animation-delay:0s}
+  .piece:nth-child(2){--dx:60px;--dy:-50px;animation-delay:.08s}
+  .piece:nth-child(3){--dx:-40px;--dy:50px;animation-delay:.16s}
+  .piece:nth-child(4){--dx:70px;--dy:40px;animation-delay:.24s}
+  .piece:nth-child(5){--dx:0;--dy:-70px;animation-delay:.32s}
+  .logo-wrap { animation: glow .8s ease-out 1.1s both; }
+  @keyframes fadeUp { from { opacity:0; transform: translateY(20px) } to { opacity:1; transform: translateY(0) } }
+  .brand { animation: fadeUp .8s ease-out 1.4s both; }
+  .tagline { animation: fadeUp .8s ease-out 1.7s both; }
+  .meta { animation: fadeUp .6s ease-out 2.1s both; }
+  /* shimmer */
+  @keyframes shimmer { 0% { background-position:-200% 0 } 100% { background-position:200% 0 } }
+  .shimmer {
+    background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.4) 50%, transparent 70%);
+    background-size: 200% 100%;
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation: shimmer 1.8s ease-out 1.9s 1 both;
+  }
+</style>
+</head>
+<body class="flex flex-col items-center justify-center relative">
+  <div class="ribbon absolute top-0 left-0 right-0" style="height:4px"></div>
+
+  <!-- logo -->
+  <div class="logo-wrap relative" style="width:140px;height:140px">
+    <svg viewBox="0 0 140 140" class="absolute inset-0">
+      <!-- 5 geometric pieces forming an "H" -->
+      <rect class="piece" x="20" y="20" width="20" height="100" fill="#7c5cff"/>
+      <rect class="piece" x="100" y="20" width="20" height="100" fill="#7c5cff"/>
+      <rect class="piece" x="40" y="60" width="60" height="20" fill="#f5f5f7"/>
+      <circle class="piece" cx="30" cy="20" r="10" fill="#7c5cff"/>
+      <circle class="piece" cx="110" cy="120" r="10" fill="#f5f5f7"/>
+    </svg>
+  </div>
+
+  <!-- brand -->
+  <h1 class="brand mt-10 font-black tracking-[-0.02em] leading-[0.95]" style="font-size:84px">
+    <span class="shimmer">HTML Anything</span>
+  </h1>
+
+  <!-- tagline -->
+  <p class="tagline mt-4 text-[24px] opacity-70 font-medium">
+    Anything → <em class="not-italic accent">beautiful HTML</em>
+  </p>
+
+  <!-- CTA / meta -->
+  <div class="meta mt-12 flex items-center gap-6 text-[11px] uppercase tracking-[0.18em] opacity-50">
+    <span>htmlanything.dev</span>
+    <span class="opacity-40">·</span>
+    <span>@htmlanything</span>
+    <span class="opacity-40">·</span>
+    <span>2026</span>
+  </div>
+
+  <!-- corner timecode -->
+  <div class="absolute bottom-8 right-12 text-[10px] font-mono opacity-30 uppercase tracking-[0.18em]">END · 00:03:21</div>
+  <div class="absolute bottom-8 left-12 text-[10px] font-mono opacity-30 uppercase tracking-[0.18em]">FRAME · LOGO-OUTRO</div>
+</body>
+</html>
