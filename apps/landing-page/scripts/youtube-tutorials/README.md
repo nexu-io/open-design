@@ -8,7 +8,7 @@ tutorials about Open Design, with a human in the loop.
 ```
 daily cron (GitHub Actions)
   notify-candidates.ts
-    → YouTube Data API search (last N days)
+    → YouTube Data API search (default: videos published in the last day)
     → drop already-catalogued videos
     → LLM relevance gate (reject lookalikes / roundups)
     → post a numbered digest to Feishu
@@ -56,7 +56,8 @@ before it ever reaches the digest.
 ## Manual runs
 
 ```bash
-# Reproduce the candidate digest locally (no Feishu post)
+# Reproduce the candidate digest locally (no Feishu post). Default window is
+# 1 day (same-day); pass --days N for a wider catch-up sweep.
 npx tsx scripts/youtube-tutorials/notify-candidates.ts --days 14 --print
 
 # Generate approved entries (ids or URLs), then open a PR with the new files

@@ -81,8 +81,12 @@ async function postToFeishu(webhook: string, secret: string | undefined, text: s
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const printOnly = args.includes('--print');
+  // Default to a 1-day window so the daily digest only surfaces videos
+  // published since the previous run. Consecutive daily runs tile the timeline
+  // back-to-back, so nothing is missed; already-catalogued videos are filtered
+  // regardless. Widen with --days only for manual catch-up sweeps.
   const daysIdx = args.indexOf('--days');
-  const days = daysIdx !== -1 ? Number(args[daysIdx + 1]) : 14;
+  const days = daysIdx !== -1 ? Number(args[daysIdx + 1]) : 1;
 
   const key = await loadYoutubeKey();
   const existing = await readExistingVideoIds();
