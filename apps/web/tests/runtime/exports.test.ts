@@ -611,6 +611,37 @@ describe('sandboxed preview Blob exports', () => {
     expect(htmlArg).not.toContain('window.print()');
   });
 
+  it('reports the artifact content size through the handshake so the desktop page is sized to the content, not the wrapper viewport (issue #4067)', async () => {
+    const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
+    const restoreHost = installMockOpenDesignHost({
+      host: { pdf: { print: printPdfMock } },
+    });
+
+    try {
+      await exportAsPdf('<div style="height:4000px">tall artifact</div>', 'Tall PDF');
+    } finally {
+      restoreHost();
+    }
+
+    const htmlArg = printPdfMock.mock.calls[0]![0];
+    // The in-iframe handshake measures the artifact's own document dimensions.
+    // The parent wrapper cannot do this itself: the sandboxed preview iframe is
+    // `allow-scripts` with no `allow-same-origin`, so iframe.contentDocument is
+    // null. Measuring from inside is the only way to learn the real size.
+    expect(htmlArg).toContain('document.documentElement');
+    expect(htmlArg).toContain('scrollHeight');
+    expect(htmlArg).toContain('offsetHeight');
+    // ...and it ships the size alongside the readiness signal.
+    expect(htmlArg).toContain('width:w');
+    expect(htmlArg).toContain('height:h');
+    // The parent wrapper caches the reported size for inferPageSize() to read,
+    // validating it as a positive finite number so a malformed/oversized message
+    // cannot poison the page size.
+    expect(htmlArg).toContain('window.__odPrintSize');
+    expect(htmlArg).toContain('e.data.width');
+    expect(htmlArg).toContain('e.data.height');
+  });
+
   it('injects the readiness cache for non-sandboxed desktop exports too', async () => {
     const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
     const restoreHost = installMockOpenDesignHost({
