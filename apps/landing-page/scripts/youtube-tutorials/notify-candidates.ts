@@ -138,9 +138,11 @@ async function resolveWindowStart(explicitDays: number | null): Promise<WindowRe
       return { fail: `watermark lookup failed: ${(e as Error).message}` };
     }
     if (watermark) {
-      // Small overlap for clock skew between schedule fire and publish time.
-      const since = new Date(Date.parse(watermark) - 60 * 60 * 1000).toISOString();
-      return { since, reason: `since last successful run ${watermark} (−1h overlap)` };
+      // Use the prior run's start as the exact lower bound — no overlap.
+      // Consecutive windows are contiguous ([T_prev, now] then [T_this, now]),
+      // so delayed/skipped runs stay gap-free while nothing is re-emitted, which
+      // avoids duplicate digests without needing an "already notified" store.
+      return { since: watermark, reason: `since last successful run ${watermark}` };
     }
     return { since: isoDaysAgo(FALLBACK_DAYS), reason: `no prior successful run; ${FALLBACK_DAYS}-day window` };
   }
