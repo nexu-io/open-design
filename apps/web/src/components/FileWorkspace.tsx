@@ -901,6 +901,10 @@ export function FileWorkspace({
       setActiveTab(tabId);
       return;
     }
+    if (surfacePreviewTabs[tabId]) {
+      setActiveTab(tabId);
+      return;
+    }
     openFile(tabId);
   }
 
@@ -947,6 +951,10 @@ export function FileWorkspace({
     }
     if (isBrowserTabId(activeTab)) {
       closeBrowserTab(activeTab);
+      return;
+    }
+    if (surfacePreviewTabs[activeTab]) {
+      closeSurfacePreviewTab(activeTab);
       return;
     }
     closeTab(activeTab);

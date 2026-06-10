@@ -311,6 +311,62 @@ describe('FileWorkspace upload input', () => {
     expect(screen.getByTestId('design-files-tab').getAttribute('aria-selected')).toBe('true');
   });
 
+  it('keeps rendered preview tabs transient through keyboard activation and close', async () => {
+    const onTabsStateChange = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('index.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['index.html'], active: 'index.html' }}
+        onTabsStateChange={onTabsStateChange}
+        surfacePreviewOpenRequest={{
+          tabId: 'surface-preview:home',
+          title: 'Home screen',
+          url: 'http://127.0.0.1:43210/',
+          sourceFile: 'index.html',
+          nonce: 1,
+        }}
+      />,
+    );
+
+    await screen.findByTestId('surface-preview-workspace');
+    expect(screen.getByRole('tab', { name: /Home screen/i }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+
+    fireEvent.keyDown(window, { key: '2', ctrlKey: true });
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /index\.html/i }).getAttribute('aria-selected')).toBe(
+        'true',
+      );
+    });
+    onTabsStateChange.mockClear();
+
+    const previewShortcutAllowedDefault = fireEvent.keyDown(window, { key: '3', ctrlKey: true });
+
+    expect(previewShortcutAllowedDefault).toBe(false);
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /Home screen/i }).getAttribute('aria-selected')).toBe(
+        'true',
+      );
+    });
+    expect(onTabsStateChange).not.toHaveBeenCalled();
+
+    const closeShortcutAllowedDefault = fireEvent.keyDown(window, { key: 'w', ctrlKey: true });
+
+    expect(closeShortcutAllowedDefault).toBe(false);
+    await waitFor(() => {
+      expect(screen.queryByRole('tab', { name: /Home screen/i })).toBeNull();
+    });
+    expect(screen.getByTestId('design-files-tab').getAttribute('aria-selected')).toBe('true');
+    expect(onTabsStateChange).not.toHaveBeenCalled();
+  });
+
   it('hides upload failure details during in-panel preview and restores them after closing preview', async () => {
     mockedUploadProjectFiles.mockRejectedValueOnce(new Error('storage offline'));
 
