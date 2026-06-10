@@ -1,0 +1,74 @@
+# 团队配置示例 - 串行管线模式
+# 阶段间有依赖关系，上一阶段输出是下一阶段输入
+version: "1.0"
+
+team:
+  name: "design-pipeline"
+  description: "串行设计管线：需求分析 → 线框图 → 视觉设计 → 代码生成"
+  mode: serial
+  max_retries: 1
+  timeout: "60m"
+  agents:
+    - id: analyzer
+      name: "需求分析师"
+      role: "理解需求并输出设计简报"
+      type: claude-code
+      skills:
+        - discovery-form
+      designs: []
+
+    - id: wireframer
+      name: "线框设计师"
+      role: "根据设计简报产出线框图"
+      type: codex
+      skills:
+        - wireframe
+      designs:
+        - minimal-light
+
+    - id: visual-designer
+      name: "视觉设计师"
+      role: "将线框图细化为高保真设计稿"
+      type: claude-code
+      skills:
+        - hero-section
+        - pricing-table
+        - dashboard-shell
+      designs:
+        - minimal-light
+
+    - id: coder
+      name: "前端工程师"
+      role: "将设计稿转为可运行的前端代码"
+      type: cursor
+      skills:
+        - html-export
+        - component-build
+      designs:
+        - minimal-light
+
+pipeline:
+  stages:
+    - name: analyze
+      agent: analyzer
+      depends_on: []
+      input_from: ""
+      output_as: design-brief
+
+    - name: wireframe
+      agent: wireframer
+      depends_on: [analyze]
+      input_from: analyze
+      output_as: wireframe
+
+    - name: visual
+      agent: visual-designer
+      depends_on: [wireframe]
+      input_from: wireframe
+      output_as: design-mockup
+
+    - name: code
+      agent: coder
+      depends_on: [visual]
+      input_from: visual
+      output_as: frontend-code

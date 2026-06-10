@@ -1,0 +1,69 @@
+# 团队配置示例 - 继承链模式
+# 父 Agent 产出作为子 Agent 的输入，形成继承关系
+version: "1.0"
+
+team:
+  name: "design-inheritance"
+  description: "继承链设计：总监产出方向 → 设计师细化 → 前端实现"
+  mode: inheritance
+  max_retries: 1
+  timeout: "60m"
+  agents:
+    - id: director
+      name: "设计总监"
+      role: "产出整体设计方向和风格指导"
+      type: claude-code
+      skills:
+        - discovery-form
+      designs:
+        - minimal-light
+
+    - id: senior-designer
+      name: "高级设计师"
+      role: "基于设计方向产出高保真设计稿"
+      type: claude-code
+      skills:
+        - hero-section
+        - pricing-table
+        - dashboard-shell
+      designs:
+        - minimal-light
+      inherits: director
+
+    - id: junior-designer
+      name: "初级设计师"
+      role: "基于设计稿产出补充页面和组件"
+      type: codex
+      skills:
+        - blog-layout
+        - newsletter-template
+      designs:
+        - minimal-light
+      inherits: senior-designer
+
+    - id: frontend-dev
+      name: "前端开发"
+      role: "将所有设计稿转为可运行代码"
+      type: cursor
+      skills:
+        - html-export
+        - component-build
+      designs:
+        - minimal-light
+      inherits: junior-designer
+
+inheritance:
+  enabled: true
+  tree:
+    agent_id: director
+    children:
+      - agent_id: senior-designer
+        children:
+          - agent_id: junior-designer
+            children:
+              - agent_id: frontend-dev
+  share_scope:
+    - skill
+    - design
+    - context
+    - artifact

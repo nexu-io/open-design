@@ -1,0 +1,46 @@
+# 团队配置示例 - 并行模式
+# 所有 Agent 同时处理同一任务的不同角色维度
+version: "1.0"
+
+team:
+  name: "design-parallel"
+  description: "并行设计团队：多个 Agent 从不同角色维度同时产出设计方案"
+  mode: parallel
+  max_retries: 2
+  timeout: "30m"
+  agents:
+    - id: ui-designer
+      name: "UI 设计师"
+      role: "界面视觉设计，专注布局、色彩、组件"
+      type: claude-code
+      skills:
+        - hero-section
+        - pricing-table
+        - dashboard-shell
+      designs:
+        - minimal-light
+      config:
+        model: "claude-sonnet-4-20250514"
+
+    - id: ux-writer
+      name: "UX 文案师"
+      role: "用户体验文案，专注文案、交互提示、微文案"
+      type: codex
+      skills:
+        - copywriting
+        - microcopy
+      designs:
+        - minimal-light
+      config:
+        model: "gpt-4o"
+
+    - id: brand-checker
+      name: "品牌一致性检查"
+      role: "品牌规范检查，确保视觉和语言符合品牌调性"
+      type: cursor
+      skills:
+        - brand-audit
+      designs:
+        - minimal-light
+      config:
+        model: "claude-sonnet-4-20250514"

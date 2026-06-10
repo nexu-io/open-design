@@ -1,0 +1,82 @@
+# 团队配置示例 - 混合模式
+# 串行管线为主干，每个阶段内可并行多 Agent
+version: "1.0"
+
+team:
+  name: "design-hybrid"
+  description: "混合团队：串行管线 + 阶段内并行，适合完整的从调研到交付的设计流程"
+  mode: hybrid
+  max_retries: 2
+  timeout: "60m"
+  agents:
+    - id: researcher
+      name: "调研分析师"
+      role: "用户研究和竞品分析"
+      type: claude-code
+      skills:
+        - research
+        - competitive-analysis
+      designs:
+        - minimal-light
+
+    - id: ui-designer
+      name: "UI 设计师"
+      role: "界面视觉设计"
+      type: claude-code
+      skills:
+        - hero-section
+        - pricing-table
+      designs:
+        - minimal-light
+
+    - id: ux-writer
+      name: "UX 文案师"
+      role: "用户体验文案"
+      type: codex
+      skills:
+        - copywriting
+        - microcopy
+      designs:
+        - minimal-light
+
+    - id: developer
+      name: "前端开发者"
+      role: "代码实现"
+      type: cursor
+      skills:
+        - react-component
+      designs:
+        - minimal-light
+
+  inheritance:
+    enabled: true
+    tree:
+      agent_id: researcher
+      children:
+        - agent_id: ui-designer
+          children:
+            - agent_id: ux-writer
+        - agent_id: developer
+
+pipeline:
+  stages:
+    - name: research
+      agent: researcher
+      depends_on: []
+      input_from: ""
+      output_as: "调研报告"
+    - name: design
+      agent: ui-designer
+      depends_on: ["research"]
+      input_from: "research"
+      output_as: "设计稿"
+    - name: copywriting
+      agent: ux-writer
+      depends_on: ["design"]
+      input_from: "design"
+      output_as: "文案"
+    - name: development
+      agent: developer
+      depends_on: ["design", "copywriting"]
+      input_from: "design,copywriting"
+      output_as: "代码"

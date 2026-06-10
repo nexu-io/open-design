@@ -1,0 +1,43 @@
+# 团队配置示例 - 遗传进化模式
+# 多代演化，保留最优设计变体
+version: "1.0"
+
+team:
+  name: "design-genetic"
+  description: "遗传进化设计：通过多代演化找到最优设计方案"
+  mode: genetic
+  max_retries: 0
+  timeout: "120m"
+  agents:
+    - id: designer-v1
+      name: "设计师 A"
+      role: "设计变体生成"
+      type: claude-code
+      skills:
+        - hero-section
+        - pricing-table
+      designs:
+        - minimal-light
+        - warm-gradient
+
+    - id: designer-v2
+      name: "设计师 B"
+      role: "设计变体生成"
+      type: codex
+      skills:
+        - hero-section
+        - dashboard-shell
+      designs:
+        - dark-mode
+        - glassmorphism
+
+genetic:
+  population_size: 4
+  generations: 5
+  mutation_rate: 0.3
+  crossover_rate: 0.7
+  elitism: 1
+  selection_mode: tournament
+  fitness_func: visual-coherence
+  stop_early: 2
+  parallel_eval: true
