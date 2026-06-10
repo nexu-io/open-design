@@ -10,7 +10,8 @@ test('live artifact MCP discovery is limited to mature ACP agents', () => {
       continue;
     }
     assert.equal(server.length, 1);
-    const s = server[0]!;
+    const s = server[0];
+    if (!s) throw new Error('unreachable: server length verified as 1 above');
     assert.equal(s.name, 'open-design-live-artifacts');
     assert.equal(s.command, 'od');
     assert.deepEqual(s.args, ['mcp', 'live-artifacts']);
