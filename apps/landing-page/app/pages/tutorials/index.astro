@@ -114,6 +114,36 @@ const ytThumb = (id: string) => `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
 const featuredTutorial = tutorials[0];
 const cardTutorials = tutorials.slice(1);
 const featuredCopy = featuredTutorial ? localizedTutorial(featuredTutorial) : undefined;
+
+// Contribute flow. Primary path is a friendly GitHub issue form (just paste a
+// video link — no markdown). A secondary link opens GitHub's create-file UI
+// prefilled with a frontmatter template for contributors who prefer a PR.
+const submitIssueUrl =
+  'https://github.com/nexu-io/open-design/issues/new?template=tutorial-submission.yml';
+const contributeTemplate = `---
+title: 'Your video title'
+youtubeId: XXXXXXXXXXX
+summary: 'One sentence describing what the video covers.'
+date: 2026-01-01
+category: Tutorial
+durationSeconds: 600
+author: 'Your channel name'
+official: false
+---
+
+A short paragraph or a few bullet points about the tutorial.
+
+<!--
+  category must be one of: Getting started | Tutorial | Demo | Review | Community
+  youtubeId is the 11-character id from the video URL (youtube.com/watch?v=THIS)
+  durationSeconds is the video length in seconds
+  Rename this file to something descriptive, e.g. open-design-quickstart-yourname.md
+-->
+`;
+const contributePrUrl =
+  'https://github.com/nexu-io/open-design/new/main' +
+  '?filename=apps/landing-page/app/content/tutorials/my-open-design-tutorial.md' +
+  `&value=${encodeURIComponent(contributeTemplate)}`;
 ---
 
 <!doctype html>
@@ -143,6 +173,35 @@ const featuredCopy = featuredTutorial ? localizedTutorial(featuredTutorial) : un
             <p class='tut-sub'>
               {ui.tutorials.description}
             </p>
+          </div>
+        </section>
+
+        <section class='tut-contribute'>
+          <div class='container'>
+            <div class='tut-contribute-bar'>
+              <div class='tut-contribute-copy'>
+                <span class='tut-contribute-title'>{ui.tutorials.contributeTitle}</span>
+                <span class='tut-contribute-body'>{ui.tutorials.contributeBody}</span>
+              </div>
+              <div class='tut-contribute-actions'>
+                <a
+                  class='tut-contribute-cta'
+                  href={submitIssueUrl}
+                  target='_blank'
+                  rel='noreferrer noopener'
+                >
+                  {ui.tutorials.contributeCta}
+                </a>
+                <a
+                  class='tut-contribute-suggest'
+                  href={contributePrUrl}
+                  target='_blank'
+                  rel='noreferrer noopener'
+                >
+                  {ui.tutorials.contributeSuggest}
+                </a>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -613,6 +672,83 @@ const featuredCopy = featuredTutorial ? localizedTutorial(featuredTutorial) : un
       }
       .tut-empty.is-filter-empty {
         border-top: 1px solid var(--line);
+      }
+      .tut-contribute {
+        padding: 14px 0 2px;
+      }
+      .tut-contribute-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px 28px;
+        padding: 16px 22px;
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--coral);
+        background: rgba(247, 241, 222, 0.6);
+      }
+      .tut-contribute-copy {
+        min-width: 0;
+        flex: 1 1 380px;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .tut-contribute-title {
+        font-family: var(--sans);
+        font-weight: 700;
+        font-size: 16px;
+        letter-spacing: -0.01em;
+        color: var(--ink);
+      }
+      .tut-contribute-body {
+        font-family: var(--body);
+        font-size: 13.5px;
+        line-height: 1.45;
+        color: var(--ink-mute);
+        max-width: 72ch;
+      }
+      .tut-contribute-actions {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .tut-contribute-cta {
+        display: inline-flex;
+        align-items: center;
+        min-height: 40px;
+        padding: 9px 20px;
+        border: 1px solid var(--ink);
+        background: var(--ink);
+        color: var(--paper);
+        font-family: var(--sans);
+        font-size: 13.5px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        text-decoration: none;
+        white-space: nowrap;
+        transition: background 160ms ease, border-color 160ms ease;
+      }
+      .tut-contribute-cta:hover {
+        background: var(--coral);
+        border-color: var(--coral);
+      }
+      .tut-contribute-suggest {
+        font-family: var(--sans);
+        font-size: 12.5px;
+        color: var(--ink-mute);
+        text-decoration: none;
+        white-space: nowrap;
+        transition: color 160ms ease;
+      }
+      .tut-contribute-suggest:hover {
+        color: var(--coral);
+      }
+      @media (max-width: 600px) {
+        .tut-contribute-actions {
+          width: 100%;
+          justify-content: space-between;
+        }
       }
       @media (max-width: 980px) {
         .tut-feature-card {

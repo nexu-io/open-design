@@ -9,6 +9,7 @@
 // the same person. (v2: renamed from `anonymous_id`.)
 
 import crypto from 'node:crypto';
+import os from 'node:os';
 import { PostHog } from 'posthog-node';
 import type { Request } from 'express';
 import {
@@ -23,8 +24,27 @@ import {
   EVENT_SCHEMA_VERSION,
 } from '@open-design/contracts/analytics';
 import { readAppConfig } from './app-config.js';
+import { readTelemetryEnvironment } from './telemetry-environment.js';
 
 const DEFAULT_HOST = 'https://us.i.posthog.com';
+
+// The daemon runs on the user's own machine, so `process.platform` IS the
+// user's OS. posthog-node — unlike posthog-js, which parses `$os` from the
+// User-Agent — does NOT auto-enrich device properties, so every
+// daemon-emitted event (all `result` / backend events: run_created,
+// run_finished, project_create_result, file_upload_result, …) would land in
+// the null/unknown bucket on any OS breakdown. Stamp the canonical PostHog
+// `$os` values here so daemon events merge into the same OS segmentation as
+// the web client's posthog-js events instead of fragmenting the dashboard.
+const DAEMON_OS_NAME =
+  process.platform === 'darwin'
+    ? 'Mac OS X'
+    : process.platform === 'win32'
+      ? 'Windows'
+      : process.platform === 'linux'
+        ? 'Linux'
+        : process.platform;
+const DAEMON_OS_VERSION = os.release();
 
 export interface AnalyticsContext {
   deviceId: string;
@@ -60,6 +80,7 @@ function headerString(req: Request, name: string): string | null {
 export interface PosthogConfig {
   key: string;
   host: string;
+  env: string;
 }
 
 export function readPosthogConfig(
@@ -68,7 +89,7 @@ export function readPosthogConfig(
   const key = env.POSTHOG_KEY?.trim();
   if (!key) return null;
   const host = (env.POSTHOG_HOST?.trim() || DEFAULT_HOST).replace(/\/+$/, '');
-  return { key, host };
+  return { key, host, env: readTelemetryEnvironment(env) };
 }
 
 // Baseline wire response for GET /api/analytics/config — checks only the
@@ -78,8 +99,9 @@ export function readPublicConfigResponse(
   env: NodeJS.ProcessEnv = process.env,
 ): AnalyticsConfigResponse {
   const cfg = readPosthogConfig(env);
-  if (!cfg) return { enabled: false, key: null, host: null };
-  return { enabled: true, key: cfg.key, host: cfg.host };
+  const telemetryEnv = cfg?.env ?? readTelemetryEnvironment(env);
+  if (!cfg) return { enabled: false, env: telemetryEnv, key: null, host: null };
+  return { enabled: true, env: cfg.env, key: cfg.key, host: cfg.host };
 }
 
 export interface AnalyticsService {
@@ -170,6 +192,7 @@ export function createAnalyticsService(args: {
               ...properties,
               event_id: insertId,
               event_schema_version: EVENT_SCHEMA_VERSION,
+              env: cfg.env,
               ui_version: appVersion,
               app_version: appVersion,
               session_id: context.sessionId,
@@ -177,6 +200,10 @@ export function createAnalyticsService(args: {
               device_id: context.deviceId,
               client_type: context.clientType,
               locale: context.locale,
+              // Canonical PostHog OS props so backend events join the same
+              // OS breakdown as posthog-js (which the daemon can't auto-fill).
+              $os: DAEMON_OS_NAME,
+              $os_version: DAEMON_OS_VERSION,
               ...(context.requestId ? { request_id: context.requestId } : {}),
               // $insert_id is PostHog's dedup key — passing the same id
               // from web and daemon prevents the mirrored result event
@@ -214,11 +241,14 @@ export function createAnalyticsService(args: {
             ...properties,
             event_id: resolvedInsertId,
             event_schema_version: EVENT_SCHEMA_VERSION,
+            env: cfg.env,
             ui_version: appVersion,
             app_version: appVersion,
             device_id: resolvedDistinctId,
             client_type: 'daemon',
             capture_source: 'daemon/safety',
+            $os: DAEMON_OS_NAME,
+            $os_version: DAEMON_OS_VERSION,
             $insert_id: resolvedInsertId,
           },
         });

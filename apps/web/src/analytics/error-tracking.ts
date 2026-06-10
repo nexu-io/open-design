@@ -41,6 +41,7 @@ interface ExceptionTrackingContext {
   distinctId: string;
   appVersion?: string;
   sessionId?: string;
+  telemetryEnv?: string;
 }
 
 interface BufferedSafetyEvent {
@@ -177,6 +178,7 @@ function dispatch(item: BufferedSafetyEvent): void {
     properties: {
       ...item.body.properties,
       $lib: 'web/error-tracking',
+      ...(context.telemetryEnv ? { env: context.telemetryEnv } : {}),
       ...(context.appVersion ? { app_version: context.appVersion, ui_version: context.appVersion } : {}),
       ...(context.sessionId ? { session_id: context.sessionId } : {}),
     },

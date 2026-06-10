@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ComponentProps } from 'react';
+import { createRef, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ChatComposer } from '../../src/components/ChatComposer';
+import { ChatComposer, type ChatComposerHandle } from '../../src/components/ChatComposer';
+import { CONNECTORS_CHANGED_EVENT } from '../../src/components/connectors-events';
 import { composerText, flushMounts } from '../helpers/lexical-composer';
 
 const DESIGN_TASTE_SKILL = {
@@ -97,13 +98,29 @@ const FIGMA_CONNECTOR = {
   toolCount: 1,
 };
 
+const GMAIL_CONNECTOR = {
+  ...FIGMA_CONNECTOR,
+  id: 'gmail',
+  name: 'Gmail',
+  category: 'email',
+  description: 'Reads Gmail messages.',
+  accountLabel: 'Inbox',
+  allowedToolNames: ['GMAIL_FETCH_EMAILS'],
+  curatedToolNames: ['GMAIL_FETCH_EMAILS'],
+};
+
 let fetchMock: ReturnType<typeof vi.fn>;
 
+// The design toolbox left the "+" menu; it now opens as a standalone popover
+// driven by the composer's imperative handle (the assistant "next step" card
+// calls this in the real app). Tests open it the same way.
 function renderComposer(
   overrides: Partial<ComponentProps<typeof ChatComposer>> = {},
 ) {
-  return render(
+  const ref = createRef<ChatComposerHandle>();
+  const result = render(
     <ChatComposer
+      ref={ref}
       projectId="project-1"
       projectFiles={[
         {
@@ -140,6 +157,13 @@ function renderComposer(
       {...overrides}
     />,
   );
+  return { ...result, ref };
+}
+
+function openToolbox(ref: { current: ChatComposerHandle | null }) {
+  act(() => {
+    ref.current?.openDesignToolbox();
+  });
 }
 
 beforeEach(() => {
@@ -173,6 +197,18 @@ beforeEach(() => {
         headers: { 'content-type': 'application/json' },
       });
     }
+    if (url === '/api/connectors/status') {
+      return new Response(JSON.stringify({ statuses: { figma: { status: 'connected' } } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url === '/api/connectors/discovery?refresh=true') {
+      return new Response(JSON.stringify({ connectors: [FIGMA_CONNECTOR, GMAIL_CONNECTOR] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
     throw new Error(`unexpected fetch ${url}`);
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -186,13 +222,12 @@ afterEach(() => {
 describe('ChatComposer design toolbox', () => {
   it('stages a one-turn follow-up skill without patching the project skill', async () => {
     const onSend = vi.fn();
-    renderComposer({ onSend });
+    const { ref } = renderComposer({ onSend });
     await flushMounts();
 
-    const trigger = screen.getByLabelText('Open design toolbox');
-    fireEvent.click(trigger);
+    openToolbox(ref);
 
-    await waitFor(() => expect(screen.getByText('Design toolbox')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Remove AI feel')).toBeTruthy());
     fireEvent.click(screen.getByText('Remove AI feel'));
 
     await waitFor(() => {
@@ -215,7 +250,7 @@ describe('ChatComposer design toolbox', () => {
   });
 
   it('gives creative director a searchable index across all resource types', async () => {
-    renderComposer({
+    const { ref } = renderComposer({
       skills: [
         DESIGN_TASTE_SKILL,
         GSAP_SKILL,
@@ -225,7 +260,7 @@ describe('ChatComposer design toolbox', () => {
     });
     await flushMounts();
 
-    fireEvent.click(screen.getByLabelText('Open design toolbox'));
+    openToolbox(ref);
 
     const search = screen.getByLabelText('Search design toolbox resources');
     fireEvent.change(search, { target: { value: 'research' } });
@@ -246,6 +281,25 @@ describe('ChatComposer design toolbox', () => {
       expect(composerText()).toContain('Figma');
       expect(composerText()).toContain('data/proof.csv');
       expect(composerText()).toContain('Do not only use design toolbox recommendations');
+    });
+  });
+
+  it('refreshes connected connectors when connector auth changes in another surface', async () => {
+    const { ref } = renderComposer();
+    await flushMounts();
+
+    openToolbox(ref);
+    await waitFor(() => {
+      expect(screen.getByText('Figma')).toBeTruthy();
+    });
+
+    window.dispatchEvent(new Event(CONNECTORS_CHANGED_EVENT));
+
+    const search = screen.getByLabelText('Search design toolbox resources');
+    fireEvent.change(search, { target: { value: 'gmail' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Gmail')).toBeTruthy();
     });
   });
 });

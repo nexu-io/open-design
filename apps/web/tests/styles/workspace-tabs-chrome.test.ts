@@ -37,18 +37,19 @@ describe('workspace tabs chrome styles', () => {
 
     expect(ruleValue(chrome, 'padding')).toBe('0 8px 0 6px');
     expect(ruleValue(traffic, 'margin-right')).toBe('var(--app-chrome-traffic-margin)');
-    expect(ruleValue(projectChrome, 'padding')).toBe('0 10px 0 6px');
-    expect(ruleValue(projectStrip, 'align-items')).toBe('flex-end');
+    expect(ruleValue(projectChrome, 'padding')).toBe('0 8px 0 0');
+    expect(ruleValue(projectStrip, 'align-items')).toBe('center');
   });
 
   it('keeps the project composer input inset and focus ring polished', () => {
     const composerShell = cssDeclarations(routinesCss, '.app .composer-shell');
     const focusedComposerShell = cssDeclarations(routinesCss, '.app .composer-shell:focus-within');
 
-    expect(ruleValue(composerShell, 'padding')).toBe('8px');
+    expect(ruleValue(composerShell, 'padding')).toBe('7px');
     expect(ruleValue(composerShell, 'border-color')).toBe('color-mix(in srgb, var(--border) 84%, var(--border-strong))');
     expect(ruleValue(composerShell, 'box-shadow')).toBe('var(--shadow-sm)');
-    expect(ruleValue(focusedComposerShell, 'box-shadow')).toBe('var(--shadow-sm), 0 0 0 3px var(--accent-soft)');
+    expect(ruleValue(focusedComposerShell, 'border-color')).toBe('color-mix(in srgb, var(--accent) 34%, var(--border-strong))');
+    expect(ruleValue(focusedComposerShell, 'box-shadow')).toContain('0 0 0 1px');
   });
 
   it('uses hairline dividers for the tab chrome and entry rail', () => {
@@ -73,7 +74,7 @@ describe('workspace tabs chrome styles', () => {
     expect(ruleValue(railDivider, 'transform')).toBe('scaleX(0.5)');
   });
 
-  it('connects the active workspace tab to the top chrome surface', () => {
+  it('keeps workspace tabs compact and centered in the top chrome', () => {
     const projectTab = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab');
     const activeProjectTab = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab.is-active');
     const tabSeparator = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab + .workspace-tab::before');
@@ -86,14 +87,16 @@ describe('workspace tabs chrome styles', () => {
     const projectStrip = cssDeclarations(routinesCss, '.workspace-shell .workspace-tabs-strip');
     const sharedStrip = cssDeclarations(shellCss, '.workspace-tabs-strip');
 
-    expect(ruleValue(projectTab, 'height')).toBe('32px');
-    expect(ruleValue(projectTab, 'align-self')).toBe('flex-end');
-    expect(ruleValue(projectTab, 'border-radius')).toBe('10px 10px 0 0');
-    expect(ruleValue(projectTab, 'border-bottom')).toBe('0');
-    expect(ruleValue(activeProjectTab, 'background')).toBe('var(--bg-panel)');
+    expect(ruleValue(projectTab, 'height')).toBe('26px');
+    expect(ruleValue(projectTab, 'align-self')).toBe('center');
+    expect(ruleValue(projectTab, 'border-radius')).toBe('7px');
+    // Tabs auto-shrink: flex-grow 0 (never balloon), flex-shrink 1 (squeeze to
+    // fit) down to --workspace-tab-min-width before the strip scrolls.
+    expect(ruleValue(projectTab, 'flex')).toBe('0 1 156px');
+    expect(ruleValue(projectTab, 'min-width')).toBe('var(--workspace-tab-min-width, 56px)');
+    expect(ruleValue(activeProjectTab, 'background')).toBe('color-mix(in srgb, var(--bg-panel) 94%, var(--bg-subtle))');
     expect(ruleValue(activeProjectTab, 'border-color')).toBe('var(--workspace-active-tab-border)');
-    expect(ruleValue(activeProjectTab, 'border-bottom-color')).toBe('transparent');
-    expect(ruleValue(activeProjectTab, 'box-shadow')).toContain('0 1px 0 var(--bg-panel)');
+    expect(ruleValue(activeProjectTab, 'box-shadow')).toContain('0 1px 2px');
     expect(ruleValue(activeProjectTab, 'box-shadow')).toContain('inset');
     expect(projectChrome).not.toContain('overflow:');
     expect(projectStrip).not.toContain('overflow:');
@@ -107,10 +110,26 @@ describe('workspace tabs chrome styles', () => {
     expect(routinesCss).not.toContain('.workspace-shell .workspace-tab.is-active::after');
   });
 
+  it('pins the Home tab fixed and stuck to the left edge', () => {
+    const pinnedShared = cssDeclarations(shellCss, '.workspace-tab.is-pinned');
+    const pinnedProject = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab.is-pinned');
+
+    // Home never shrinks (flex-shrink 0) in either chrome…
+    expect(ruleValue(pinnedShared, 'flex')).toBe('0 0 96px');
+    expect(ruleValue(pinnedProject, 'flex')).toBe('0 0 104px');
+    // …and stays stuck to the left edge with an opaque background so scrolled
+    // project tabs pass behind it instead of squeezing it.
+    expect(ruleValue(pinnedShared, 'position')).toBe('sticky');
+    expect(ruleValue(pinnedShared, 'left')).toBe('0');
+    expect(ruleValue(pinnedProject, 'position')).toBe('sticky');
+    expect(ruleValue(pinnedProject, 'left')).toBe('0');
+    expect(ruleValue(pinnedProject, 'background')).toBe('var(--workspace-tab-bar-bg)');
+  });
+
   it('uses a rounded highlight for inactive workspace tab hover', () => {
     const hoverTab = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab:not(.is-active):hover');
 
-    expect(ruleValue(hoverTab, 'border-radius')).toBe('10px');
+    expect(ruleValue(hoverTab, 'border-radius')).toBe('7px');
     expect(ruleValue(hoverTab, 'background')).toContain('calc(100% - 2px)');
     expect(ruleValue(hoverTab, 'border-color')).toBe('transparent');
     expect(ruleValue(hoverTab, 'box-shadow')).toContain('inset 0 0 0 1px');

@@ -57,6 +57,7 @@ import { aihubmixHeaders } from './aihubmix.js';
 import type { AgentCliEnvPrefs } from './app-config.js';
 import type { RuntimeAgentDef } from './runtimes/types.js';
 import { resolveModelForAgent } from './runtimes/models.js';
+import { preparePromptFileForAgent, type PreparedPromptFile } from './runtimes/prompt-file.js';
 import {
   isBlockedExternalApiHostname,
   isLoopbackApiHost,
@@ -72,6 +73,7 @@ import {
   type ProviderTestRequest,
 } from '@open-design/contracts/api/connectionTest';
 import { googleGenerateContentUrl } from './google-models.js';
+import { resolveAmrProfile } from './integrations/vela.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -1605,6 +1607,8 @@ function attachAgentStreamHandlers(
   prompt: string,
   cwd: string,
   model: string | undefined,
+  modelEnv: Record<string, string | undefined>,
+  liveModelScope: string | null,
   send: (event: string, payload: unknown) => void,
   appendRawStdout?: (chunk: string) => void,
 ): AgentSpawnHandle {
@@ -1645,7 +1649,7 @@ function attachAgentStreamHandlers(
       // concrete fallback id here too, otherwise Test connection deadlocks
       // on the same `session/set_model must be called before session/prompt`
       // error the chat-run path already handles.
-      model: resolveModelForAgent(def as never, model ?? null),
+      model: resolveModelForAgent(def as never, model ?? null, modelEnv, liveModelScope),
       mcpServers: [],
       send,
     });
@@ -1728,6 +1732,7 @@ async function testAgentConnectionInternal(
   let child: AgentChild | null = null;
   let childExit: Promise<AgentChildExit> | null = null;
   let childClosed = false;
+  let promptFile: PreparedPromptFile | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let abortHandler: (() => void) | null = null;
   const sink = createAgentSink();
@@ -1877,12 +1882,16 @@ async function testAgentConnectionInternal(
   try {
     let args: string[];
     try {
+      promptFile = await preparePromptFileForAgent(def, SMOKE_PROMPT, 'connection-test');
       args = def.buildArgs(
         SMOKE_PROMPT,
         [],
         [],
         { model: input.model ?? null, reasoning: input.reasoning ?? null },
-        { cwd: tempDir },
+        {
+          cwd: tempDir,
+          ...(promptFile ? { promptFilePath: promptFile.path } : {}),
+        },
       );
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
@@ -1912,6 +1921,7 @@ async function testAgentConnectionInternal(
       undefined,
       { resolvedBin: executableResolution.selectedPath },
     );
+    const liveModelScope = input.agentId === 'amr' ? resolveAmrProfile(baseEnv) : null;
     const mmdRouteLaunchEnv = input.agentId === 'claude'
       ? await loadMmdRouteLaunchEnv(
           {
@@ -1984,6 +1994,8 @@ async function testAgentConnectionInternal(
       SMOKE_PROMPT,
       tempDir,
       input.model,
+      env,
+      liveModelScope,
       sink.send,
       sink.appendRawStdout,
     );
@@ -2021,26 +2033,28 @@ async function testAgentConnectionInternal(
 
       const latencyMs = Date.now() - start;
       const buffered = sink.getText().trim();
-      // ACP agents that don't shut down on stdin.end() (e.g. Devin for
-      // Terminal) are now SIGTERM'd from attachAcpSession after a clean
-      // prompt completion, which sets `winner.signal === 'SIGTERM'`. For
-      // that exact forced-shutdown shape we trust the ACP-level success
-      // signal so connection tests don't report `agent_spawn_failed`
-      // despite a healthy assistant response (see #1265 / #1286).
+      // ACP agents that don't shut down on stdin.end() are terminated after a
+      // clean prompt completion. Depending on the ACP bridge, this can surface
+      // either as SIGTERM or as a normal code 130 teardown. For those exact
+      // forced-shutdown shapes we trust the ACP-level success signal so
+      // connection tests don't report `agent_spawn_failed` despite a healthy
+      // assistant response (see #1265 / #1286).
       //
-      // Scope the override narrowly: only `code === null` AND
-      // `signal === 'SIGTERM'` AND `acpCleanCompletion` count as a clean
-      // forced shutdown. Any other post-response process failure (non-zero
-      // exit code, SIGKILL, SIGSEGV, etc.) still falls through to
-      // `agent_spawn_failed`, preserving the existing connection-test
-      // failure behavior for genuine post-response problems.
+      // Scope the override narrowly: only the known daemon-triggered ACP
+      // teardown shapes plus `acpCleanCompletion` count as a clean forced
+      // shutdown. Any other post-response process failure (code 1, SIGKILL,
+      // SIGSEGV, etc.) still falls through to `agent_spawn_failed`, preserving
+      // the existing connection-test failure behavior for genuine
+      // post-response problems.
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
       const acpForcedShutdown =
-        winner.code === null &&
-        winner.signal === 'SIGTERM' &&
-        acpCleanCompletion;
+        acpCleanCompletion &&
+        (
+          (winner.code === null && winner.signal === 'SIGTERM') ||
+          (winner.code === 130 && winner.signal === null)
+        );
       const exitedCleanly =
         (winner.code === 0 && !winner.signal) || acpForcedShutdown;
       if (buffered) {
@@ -2241,6 +2255,9 @@ async function testAgentConnectionInternal(
       .catch(() => {
         // Best-effort cleanup; the OS reaps /tmp eventually.
       });
+    await promptFile?.cleanup().catch(() => {
+      // Best-effort cleanup; the OS reaps /tmp eventually.
+    });
   }
 }
 

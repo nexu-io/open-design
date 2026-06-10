@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -13,6 +13,7 @@ const PACKAGE_DIRS = [
   "packages/contracts",
   "packages/registry-protocol",
   "packages/sidecar-proto",
+  "packages/launcher-proto",
   "packages/sidecar",
   "packages/platform",
   "packages/download",
@@ -35,6 +36,8 @@ const OUTPUT_FILES = [
   "packages/registry-protocol/dist/index.d.ts",
   "packages/sidecar-proto/dist/index.mjs",
   "packages/sidecar-proto/dist/index.d.ts",
+  "packages/launcher-proto/dist/index.mjs",
+  "packages/launcher-proto/dist/index.d.ts",
   "packages/sidecar/dist/index.mjs",
   "packages/sidecar/dist/index.d.ts",
   "packages/platform/dist/index.mjs",
@@ -141,6 +144,43 @@ describe("ensureWorkspaceBuildArtifacts", () => {
         "win.workspace-build",
       ]);
       expect(await readFile(join(root, "apps/packaged/dist/index.mjs"), "utf8")).toBe("build-1\n");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("writes a Windows version-family alias after a successful build", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-alias-"));
+    const cache = new ToolPackCache(join(root, ".cache"));
+    const config: ToolPackConfig = { ...createConfig(root, cache.root), appVersion: "0.9.1-beta.1" };
+
+    try {
+      await writeWorkspace(root);
+      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
+        await writeOutputs(root, "build");
+      });
+
+      const aliasesRoot = join(cache.root, "aliases", "win.workspace-build");
+      const aliasBuckets = await readdir(aliasesRoot);
+      expect(aliasBuckets).toHaveLength(1);
+      expect(await readFile(join(aliasesRoot, aliasBuckets[0]!, "alias.json"), "utf8")).toContain("win.workspace-build");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("does not write a version-family alias for mac workspace builds", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-mac-alias-"));
+    const cache = new ToolPackCache(join(root, ".cache"));
+    const config: ToolPackConfig = { ...createConfig(root, cache.root), appVersion: "0.9.1-beta.1", platform: "mac" };
+
+    try {
+      await writeWorkspace(root);
+      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
+        await writeOutputs(root, "build");
+      });
+
+      await expect(readdir(join(cache.root, "aliases", "mac.workspace-build"))).rejects.toThrow();
     } finally {
       await rm(root, { force: true, recursive: true });
     }

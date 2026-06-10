@@ -309,9 +309,16 @@ export function parsePartialQuestionForm(input: string): QuestionForm | null {
     parsed && typeof parsed === 'object' && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : {};
-  const topId = typeof top.id === 'string' && top.id.trim().length > 0 ? top.id.trim() : undefined;
+  // `id` keys the live (still-editable) Questions panel, so it must be stable
+  // for the whole stream. Don't adopt the *streaming* body `id`: it arrives
+  // char-by-char and `parsePartialJson` repairs the open string, so it would
+  // churn (`"d"` → `"di"` → …) and remount the panel. Adopt the body id only
+  // once its string literal is fully terminated — then it equals the id the
+  // final parse (`tryParseForm`) assigns, so there's also no preview→final
+  // remount. The open-tag attr (complete the instant the tag streams) wins,
+  // and a stable default covers the gap before any id is known.
   const topTitle = typeof top.title === 'string' && top.title.trim().length > 0 ? top.title : undefined;
-  const id = attrs.id ?? topId ?? 'discovery';
+  const id = attrs.id ?? completeTopLevelString(body, 'id') ?? 'discovery';
   const title = attrs.title ?? topTitle ?? 'A few quick questions';
   const description = typeof top.description === 'string' ? top.description : undefined;
   // Carry submitLabel through the preview too — `tryParseForm` reads it for the
@@ -366,6 +373,72 @@ function endsInsideJsonString(s: string): boolean {
 // streaming, matching the AskUserQuestion card. The trailing in-flight object
 // with no label yet is held back (no "q1" placeholder flicker); it appears
 // once its label lands.
+// Return a top-level (depth-1) string field's value ONLY if its string literal
+// is fully terminated in the (possibly partial) body. Used to adopt the form
+// `id` from a streaming body without churn: while the value is still arriving
+// it returns undefined (caller keeps the stable default); once the closing
+// quote lands it returns the final value. Depth-aware so a nested question
+// `id` can't be mistaken for the form's own.
+function completeTopLevelString(body: string, field: string): string | undefined {
+  const marker = `"${field}"`;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '{' || c === '[') {
+      depth++;
+      continue;
+    }
+    if (c === '}' || c === ']') {
+      depth--;
+      continue;
+    }
+    if (c === '"') {
+      if (depth === 1 && body.startsWith(marker, i)) {
+        let j = i + marker.length;
+        while (j < body.length && /\s/.test(body[j] as string)) j++;
+        if (body[j] !== ':') {
+          inStr = true; // it's a value string, not our key — skip it
+          continue;
+        }
+        j++;
+        while (j < body.length && /\s/.test(body[j] as string)) j++;
+        if (body[j] !== '"') return undefined; // value not a (started) string
+        let value = '';
+        let vesc = false;
+        for (let k = j + 1; k < body.length; k++) {
+          const vc = body[k] as string;
+          if (vesc) {
+            value += vc;
+            vesc = false;
+          } else if (vc === '\\') {
+            value += vc;
+            vesc = true;
+          } else if (vc === '"') {
+            try {
+              return JSON.parse(`"${value}"`) as string;
+            } catch {
+              return value;
+            }
+          } else {
+            value += vc;
+          }
+        }
+        return undefined; // closing quote hasn't streamed yet
+      }
+      inStr = true;
+    }
+  }
+  return undefined;
+}
+
 function shapeStreamingQuestions(rawQuestions: unknown, closedCount: number): FormQuestion[] {
   if (!Array.isArray(rawQuestions)) return [];
   const out: FormQuestion[] = [];

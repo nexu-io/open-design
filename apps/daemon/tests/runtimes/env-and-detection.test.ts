@@ -8,6 +8,7 @@ import {
   assert, chmodSync, detectAgents, inspectAgentExecutableResolution, join, minimalAgentDef, mkdirSync, mkdtempSync, opencode, resolveAgentExecutable, rmSync, spawnEnvForAgent, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 import { isCursorAuthFailureText } from '../../src/runtimes/auth.js';
+import { getRememberedLiveModels } from '../../src/runtimes/models.js';
 
 const fsTest = process.platform === 'win32' ? test.skip : test;
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
@@ -483,6 +484,7 @@ fsTest('detectAgents marks Codex available when nvm exposes a node shim but laun
       const wrapperPkgDir = join(home, '.nvm', 'versions', 'node', '24.14.1', 'lib', 'node_modules', '@openai', 'codex');
       const wrapperRealPath = join(wrapperPkgDir, 'bin', 'codex.js');
       const wrapperLinkPath = join(wrapperBinDir, 'codex');
+      const pathBin = join(home, 'path-bin');
       const nativePkgDir = join(
         wrapperPkgDir,
         'node_modules',
@@ -495,6 +497,7 @@ fsTest('detectAgents marks Codex available when nvm exposes a node shim but laun
 
       mkdirSync(join(wrapperPkgDir, 'bin'), { recursive: true });
       mkdirSync(wrapperBinDir, { recursive: true });
+      mkdirSync(pathBin, { recursive: true });
       mkdirSync(join(nativePkgDir, 'vendor', nativeTargetTriple, 'codex'), { recursive: true });
       mkdirSync(nativePathDir, { recursive: true });
       writeFileSync(
@@ -507,7 +510,7 @@ fsTest('detectAgents marks Codex available when nvm exposes a node shim but laun
       symlinkSync(wrapperRealPath, wrapperLinkPath);
 
       process.env.HOME = home;
-      process.env.PATH = '/usr/bin:/bin';
+      process.env.PATH = pathBin;
       process.env.OD_AGENT_HOME = home;
 
       const agents = await detectAgents();
@@ -636,6 +639,71 @@ exit 0
       ]);
       assert.equal(amrAgent.models.some((model) => model.id === 'default'), false);
       assert.equal(amrAgent.models.some((model) => model.id === 'gpt-5.4-mini'), false);
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+fsTest('detectAgents preserves the scoped AMR cache when a later probe returns no models', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'od-detect-amr-empty-models-'));
+  try {
+    return await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'OD_RESOURCE_ROOT', 'VELA_OPENCODE_BIN'], async () => {
+      const fakeVela = join(root, 'vela');
+      const fakeOpenCode = join(root, 'opencode');
+      const modeFile = join(root, 'models-mode');
+      writeFileSync(modeFile, 'warm');
+      writeFileSync(
+        fakeVela,
+        `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "vela scoped-cache"; exit 0; fi
+if [ "$1" = "model" ] && [ "$2" = "list" ]; then
+  if [ "$(cat "${modeFile}")" = "empty" ]; then
+    echo '{"source":"remote","data":[]}'
+  else
+    echo '{"source":"remote","data":[{"id":"deepseek-v4-flash"}]}'
+  fi
+  exit 0
+fi
+exit 0
+`,
+      );
+      writeFileSync(fakeOpenCode, '#!/bin/sh\nexit 0\n');
+      chmodSync(fakeVela, 0o755);
+      chmodSync(fakeOpenCode, 0o755);
+      process.env.PATH = '';
+      process.env.OD_AGENT_HOME = join(root, 'empty-home');
+      delete process.env.OD_RESOURCE_ROOT;
+      delete process.env.VELA_OPENCODE_BIN;
+
+      await detectAgents({
+        amr: {
+          VELA_BIN: fakeVela,
+          VELA_OPENCODE_BIN: fakeOpenCode,
+          OPEN_DESIGN_AMR_PROFILE: 'prod',
+        },
+      });
+      assert.deepEqual(getRememberedLiveModels('amr', 'prod'), [
+        { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+      ]);
+
+      writeFileSync(modeFile, 'empty');
+      const agents = await detectAgents({
+        amr: {
+          VELA_BIN: fakeVela,
+          VELA_OPENCODE_BIN: fakeOpenCode,
+          OPEN_DESIGN_AMR_PROFILE: 'prod',
+        },
+      });
+      const amrAgent = agents.find((agent) => agent.id === 'amr');
+
+      assert.ok(amrAgent);
+      assert.deepEqual(amrAgent.models, [
+        { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+      ]);
+      assert.deepEqual(getRememberedLiveModels('amr', 'prod'), [
+        { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+      ]);
     });
   } finally {
     rmSync(root, { recursive: true, force: true });

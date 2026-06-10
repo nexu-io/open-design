@@ -620,7 +620,10 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     chooseDropdownOption('Organization size', /Growth company/i);
     chooseDropdownOption('Use case', /Product design/i);
     chooseDropdownOption('Where did you hear about us?', /Search/i);
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
 
     expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
 
@@ -642,6 +645,8 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       ]),
     );
 
+    // The About-you survey snapshot fires from the final step and carries
+    // the user's role/org/use-case/source picks.
     expect(findTrackedEvent('ui_click', (payload) => payload.element === 'about_you_submit')).toMatchObject({
       page_name: 'onboarding',
       area: 'about_you',
@@ -666,6 +671,87 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       use_cases: ['product'],
       discovery_source: 'search',
     });
+  });
+
+  it('submits the optional newsletter email when finishing the About-you step', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      if (url.endsWith('/subscribe')) {
+        return jsonResponse({ ok: true });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding();
+
+    // Connect -> About you
+    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
+    });
+
+    const emailInput = document.querySelector('.onboarding-view__email-input');
+    expect(emailInput).toBeInstanceOf(HTMLInputElement);
+    expect((emailInput as HTMLInputElement).placeholder).toBe('you@studio.com');
+
+    fireEvent.change(emailInput as HTMLInputElement, {
+      target: { value: '  Tester@Studio.com  ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
+
+    const subscribeCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/subscribe'));
+    expect(subscribeCall).toBeTruthy();
+    expect(JSON.parse(String(subscribeCall?.[1]?.body))).toEqual({
+      email: 'tester@studio.com',
+      source: 'client',
+    });
+
+    expect(findTrackedEvent('ui_click', (payload) => payload.element === 'newsletter_email')).toMatchObject({
+      page_name: 'onboarding',
+      element: 'newsletter_email',
+      action: 'subscribe',
+      newsletter_opt_in: true,
+    });
+  });
+
+  it('skips the newsletter request when the email field is left blank', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
+
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/subscribe'))).toBe(false);
   });
 
   it('persists the BYOK config before finishing onboarding', async () => {
@@ -715,7 +801,10 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
     });
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
 
     expect(props.onModeChange).toHaveBeenCalledWith('api');
     expect(props.onApiModelChange).toHaveBeenCalledWith('claude-opus-4-8');

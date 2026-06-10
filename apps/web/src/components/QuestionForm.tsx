@@ -16,7 +16,12 @@ interface Props {
   // When the form lives in the Questions tab the Continue button owns the
   // submit, so hide the form's own footer button and report ready-state out.
   hideInternalSubmit?: boolean;
+  draftAnswers?: Record<string, string | string[]>;
   onReadyChange?: (ready: boolean) => void;
+  onDraftChange?: (answers: Record<string, string | string[]>) => void;
+  // Fires on each real user interaction with a single question (locked forms
+  // never reach it). Lets the Questions tab host track chip picks.
+  onAnswerChange?: (questionId: string, value: string | string[]) => void;
   onSubmit?: (text: string, answers: Record<string, string | string[]>) => void;
 }
 
@@ -29,11 +34,24 @@ export interface QuestionFormHandle {
 }
 
 export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function QuestionFormView(
-  { form, interactive, submittedAnswers, hideInternalSubmit = false, onReadyChange, onSubmit },
+  {
+    form,
+    interactive,
+    submittedAnswers,
+    hideInternalSubmit = false,
+    draftAnswers,
+    onReadyChange,
+    onDraftChange,
+    onAnswerChange,
+    onSubmit,
+  },
   ref,
 ) {
   const t = useT();
-  const initial = useMemo(() => buildInitialState(form, submittedAnswers), [form, submittedAnswers]);
+  const initial = useMemo(
+    () => buildInitialState(form, submittedAnswers ?? draftAnswers),
+    [form, submittedAnswers, draftAnswers],
+  );
   const [answers, setAnswers] = useState<Record<string, string | string[]>>(initial);
   const locked = !interactive || !onSubmit || submittedAnswers !== undefined;
   const currentAnswers = submittedAnswers ?? answers;
@@ -61,20 +79,21 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
 
   function update(id: string, value: string | string[]) {
     if (locked) return;
-    setAnswers((prev) => ({ ...prev, [id]: value }));
+    const next = { ...answers, [id]: value };
+    setAnswers(next);
+    onDraftChange?.(next);
+    onAnswerChange?.(id, value);
   }
 
   function toggleCheckbox(id: string, option: string, maxSelections?: number) {
     if (locked) return;
-    setAnswers((prev) => {
-      const current = Array.isArray(prev[id]) ? (prev[id] as string[]) : [];
-      const has = current.includes(option);
-      if (!has && maxSelections !== undefined && current.length >= maxSelections) {
-        return prev;
-      }
-      const next = has ? current.filter((v) => v !== option) : [...current, option];
-      return { ...prev, [id]: next };
-    });
+    const current = Array.isArray(answers[id]) ? (answers[id] as string[]) : [];
+    const has = current.includes(option);
+    if (!has && maxSelections !== undefined && current.length >= maxSelections) return;
+    const next = has ? current.filter((v) => v !== option) : [...current, option];
+    const nextAnswers = { ...answers, [id]: next };
+    setAnswers(nextAnswers);
+    onDraftChange?.(nextAnswers);
   }
 
   function handleSubmit() {

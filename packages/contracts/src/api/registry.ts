@@ -298,6 +298,8 @@ export interface DesignSystemPackageInfo {
     files?: {
       design?: string;
       tokens?: string;
+      designTokens?: string;
+      tailwind?: string;
       components?: string;
     };
     usage?: string;
@@ -317,6 +319,7 @@ export interface DesignSystemPackageInfo {
       scanned?: string;
       evidence?: string;
       tokens?: string;
+      report?: string;
       snippets?: string;
     };
     assetsDir?: string;
@@ -327,6 +330,16 @@ export interface DesignSystemPackageInfo {
     snippetCount?: number;
     confidence?: Record<string, string | number>;
     evidenceExcerpt?: string;
+    tokenContract?: {
+      contract?: string;
+      grade?: DesignSystemTokenContractGrade;
+      score?: number;
+      recommendRebuild?: boolean;
+      sourceBackedA1?: number;
+      requiredA1?: number;
+      fallbackTokens?: number;
+      selfCheckOk?: boolean;
+    };
   };
 }
 
@@ -395,6 +408,13 @@ export interface DesignSystemRevision {
   updatedAt: string;
   sectionTitle?: string;
   jobId?: string;
+  fileChanges?: DesignSystemRevisionFileChange[];
+}
+
+export interface DesignSystemRevisionFileChange {
+  path: string;
+  baseContent: string;
+  proposedContent: string;
 }
 
 export interface DesignSystemRevisionsResponse {
@@ -428,7 +448,7 @@ export interface DesignSystemGenerationStep {
 
 export interface DesignSystemGenerationJob {
   id: string;
-  kind?: 'generation' | 'revision';
+  kind?: 'generation' | 'revision' | 'token-contract-rebuild';
   status: DesignSystemGenerationJobStatus;
   progress: number;
   steps: DesignSystemGenerationStep[];
@@ -472,6 +492,44 @@ export interface DesignSystemRevisionJobRequest {
   body?: string;
 }
 
+export type DesignSystemTokenContractGrade =
+  | 'excellent'
+  | 'usable'
+  | 'needs-review'
+  | 'needs-rebuild';
+
+export interface DesignSystemTokenContractRebuildDecision {
+  designSystemId: string;
+  available: boolean;
+  recommended: boolean;
+  forced: boolean;
+  reason: string;
+  triggers: string[];
+  reportPath?: string;
+  grade?: DesignSystemTokenContractGrade;
+  score?: number;
+  sourceBackedA1?: number;
+  requiredA1?: number;
+  fallbackTokens?: number;
+  selfCheckOk?: boolean;
+  weakTokens?: Array<{
+    name: string;
+    layer?: string;
+    confidence: string;
+    reason: string;
+    sources: string[];
+  }>;
+}
+
+export interface DesignSystemTokenContractRebuildJobRequest {
+  force?: boolean;
+}
+
+export interface DesignSystemTokenContractRebuildJobResponse {
+  decision: DesignSystemTokenContractRebuildDecision;
+  job?: DesignSystemGenerationJob;
+}
+
 export interface ImportLocalDesignSystemRequest {
   /** Absolute local project directory selected by the user. */
   baseDir: string;
@@ -485,6 +543,7 @@ export interface ImportLocalDesignSystemRequest {
 
 export interface ImportLocalDesignSystemResponse {
   designSystem: DesignSystemSummary;
+  tokenContractRebuild?: DesignSystemTokenContractRebuildJobResponse;
 }
 
 export interface ImportGitHubDesignSystemRequest {
@@ -502,6 +561,7 @@ export interface ImportGitHubDesignSystemRequest {
 
 export interface ImportGitHubDesignSystemResponse {
   designSystem: DesignSystemSummary;
+  tokenContractRebuild?: DesignSystemTokenContractRebuildJobResponse;
 }
 
 export interface ImportShadcnDesignSystemRequest {
@@ -525,6 +585,7 @@ export interface ImportShadcnDesignSystemRequest {
 
 export interface ImportShadcnDesignSystemResponse {
   designSystem: DesignSystemSummary;
+  tokenContractRebuild?: DesignSystemTokenContractRebuildJobResponse;
 }
 
 export interface HealthResponse {

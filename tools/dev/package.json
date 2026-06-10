@@ -1,13 +1,13 @@
 {
   "name": "@open-design/tools-dev",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "bin": {
     "tools-dev": "./bin/tools-dev.mjs"
   },
   "scripts": {
-    "build": "node ./esbuild.config.mjs",
+    "build": "node ./esbuild.config.mjs && node --experimental-strip-types ../../packages/metatool/src/cli.ts write .",
     "dev": "tsx ./src/index.ts",
     "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"

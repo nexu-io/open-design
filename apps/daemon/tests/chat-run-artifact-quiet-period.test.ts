@@ -241,6 +241,7 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
     acpCleanCompletion: false,
     artifactQuietShutdownRequested: false,
     turnCompletedCleanly: false,
+    artifactProducedThisRun: false,
   };
 
   it('returns canceled when cancelRequested wins regardless of other signals', () => {
@@ -271,6 +272,28 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
         acpCleanCompletion: true,
       }),
     ).toBe('succeeded');
+  });
+
+  it('returns succeeded on Vela ACP code 130 after clean ACP completion', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 130,
+        signal: null,
+        acpCleanCompletion: true,
+      }),
+    ).toBe('succeeded');
+  });
+
+  it('returns failed on Vela ACP code 130 before clean ACP completion', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 130,
+        signal: null,
+        acpCleanCompletion: false,
+      }),
+    ).toBe('failed');
   });
 
   it('returns failed when ACP shutdown was via SIGKILL (not the narrow override)', () => {
@@ -406,6 +429,56 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
         turnCompletedCleanly: true,
       }),
     ).toBe('canceled');
+  });
+
+  it('returns succeeded on a non-zero NORMAL exit that produced an artifact this run', () => {
+    // Reproduction of the project-card bug (project c92897e1): the CLI
+    // exited 1 during teardown AFTER the HTML artifact was written with a
+    // successful tool_result. The deliverable exists on disk, so the run
+    // must report succeeded — not a red `failed` card — even though the
+    // turn-completed signal was not captured for that run.
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 1,
+        signal: null,
+        artifactProducedThisRun: true,
+      }),
+    ).toBe('succeeded');
+  });
+
+  it('returns failed on a non-zero NORMAL exit with no artifact produced', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 1,
+        signal: null,
+        artifactProducedThisRun: false,
+      }),
+    ).toBe('failed');
+  });
+
+  it('returns failed on a signal kill even when an artifact was produced (no signal override)', () => {
+    // CRITICAL regression guard. The artifact carve-out is exit-code-only.
+    // An external kill / OOM / container shutdown after an artifact write
+    // (code === null, SIGKILL/SIGTERM, no daemon quiet-period flag) must
+    // stay failed — an artifact must NOT flip a signal kill to succeeded.
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: null,
+        signal: 'SIGKILL',
+        artifactProducedThisRun: true,
+      }),
+    ).toBe('failed');
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: null,
+        signal: 'SIGTERM',
+        artifactProducedThisRun: true,
+      }),
+    ).toBe('failed');
   });
 });
 

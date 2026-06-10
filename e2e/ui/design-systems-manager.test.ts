@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { ensureRailOpen } from '@/playwright/rail';
 import type { Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
@@ -56,7 +57,7 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible().catch(() => false)) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();
 }
@@ -242,6 +243,7 @@ test('[P1] publishing a user design system promotes it to the default system in 
   const { persistedConfigs } = await routeDesignSystemsManager(page, systems);
 
   await gotoEntryHome(page);
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-design-systems').click();
   await expect(page).toHaveURL(/\/design-systems$/);
   await page.getByRole('tab', { name: 'Your systems' }).click();
@@ -285,6 +287,7 @@ test('[P1] filters user design systems by draft and published status in the mana
   await routeDesignSystemsManager(page, systems);
 
   await gotoEntryHome(page);
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-design-systems').click();
   await expect(page).toHaveURL(/\/design-systems$/);
   await page.getByRole('tab', { name: 'Your systems' }).click();
@@ -330,6 +333,7 @@ test('[P1] deleting the active design system falls back to another user system',
   });
 
   await gotoEntryHome(page);
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-design-systems').click();
   await expect(page).toHaveURL(/\/design-systems$/);
   await page.getByRole('tab', { name: 'Your systems' }).click();

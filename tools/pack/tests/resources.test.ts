@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import process from "node:process";
 
 import { copyBundledResourceTrees } from "../src/resources.js";
 import { copyOptionalVelaCliBinary, resolveOptionalVelaCliBinary } from "../src/vela-cli.js";
@@ -86,7 +87,15 @@ describe("copyBundledResourceTrees", () => {
       await mkdir(join(workspaceRoot, "prompt-templates", "image"), {
         recursive: true,
       });
+      await mkdir(join(workspaceRoot, "data", "plugin-previews"), {
+        recursive: true,
+      });
       await writeFile(promptTemplatePath, "{\"id\":\"sample\"}\n", "utf8");
+      await writeFile(
+        join(workspaceRoot, "data", "plugin-previews", "manifest.json"),
+        "{\"previews\":{}}\n",
+        "utf8",
+      );
       await writeFile(designTemplatePath, "# Orbit General\n", "utf8");
       await writeFile(communityPetPath, "{\"name\":\"sample\"}\n", "utf8");
       await writeFile(
@@ -104,6 +113,15 @@ describe("copyBundledResourceTrees", () => {
           "utf8",
         ),
       ).resolves.toBe("{\"id\":\"sample\"}\n");
+      // The baked plugin-preview manifest must land under data/plugin-previews so
+      // the packaged daemon can map plugins to their R2 clips; without it the
+      // gallery silently falls back to live iframes.
+      await expect(
+        readFile(
+          join(resourceRoot, "data", "plugin-previews", "manifest.json"),
+          "utf8",
+        ),
+      ).resolves.toBe("{\"previews\":{}}\n");
       await expect(
         readFile(
           join(resourceRoot, "design-templates", "orbit-general", "SKILL.md"),
@@ -141,6 +159,28 @@ describe("copyBundledResourceTrees", () => {
 });
 
 describe("copyOptionalVelaCliBinary", () => {
+  it("copies the installed Vela CLI through the default npm resolver", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-installed-"));
+    const resourceRoot = join(root, "resources", "open-design");
+    const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux";
+
+    try {
+      const copied = await copyOptionalVelaCliBinary({
+        env: {},
+        platform,
+        requireBundled: true,
+        resourceRoot,
+      });
+
+      const target = join(resourceRoot, "bin", process.platform === "win32" ? "vela.exe" : "vela");
+      expect(copied?.target).toBe(target);
+      await expect(access(target)).resolves.toBeUndefined();
+      await expect(access(join(resourceRoot, "bin", "libexec", "opencode", "opencode"))).resolves.toBeUndefined();
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("copies a configured Vela CLI binary into the POSIX resource bin", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-"));
     const source = join(root, "source", "vela");
@@ -167,8 +207,10 @@ describe("copyOptionalVelaCliBinary", () => {
       await expect(access(target, constants.X_OK)).resolves.toBeUndefined();
       await expect(access(companionTarget, constants.X_OK)).resolves.toBeUndefined();
       expect(copied).toEqual({ source, target });
-      expect((await stat(target)).mode & 0o111).not.toBe(0);
-      expect((await stat(companionTarget)).mode & 0o111).not.toBe(0);
+      if (process.platform !== "win32") {
+        expect((await stat(target)).mode & 0o111).not.toBe(0);
+        expect((await stat(companionTarget)).mode & 0o111).not.toBe(0);
+      }
     } finally {
       await rm(root, { force: true, recursive: true });
     }

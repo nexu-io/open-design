@@ -44,7 +44,7 @@ function makePlugin(
   title = id === 'official-plugin' ? 'Official Plugin' : 'User Plugin',
   description = `${id} description`,
 ): InstalledPluginRecord {
-  return {
+  const record: InstalledPluginRecord = {
     id,
     title,
     version: '1.0.0',
@@ -66,6 +66,13 @@ function makePlugin(
     installedAt: 0,
     updatedAt: 0,
   };
+  if (sourceKind === 'bundled') {
+    record.sourceMarketplaceId = 'official';
+    record.sourceMarketplaceEntryName = `open-design/${id}`;
+    record.sourceMarketplaceEntryVersion = record.version;
+    record.marketplaceTrust = 'official';
+  }
+  return record;
 }
 
 const mockedListPlugins = vi.mocked(listPlugins);
@@ -92,14 +99,26 @@ beforeEach(() => {
       manifest: {
         name: 'Example Catalog',
         version: '1.0.0',
-        plugins: [{
-          name: 'remote-plugin',
-          title: 'Remote Plugin',
-          source: 'github:owner/repo',
-          version: '1.2.0',
-          description: 'Remote catalog plugin.',
-          tags: ['deck'],
-        }],
+        plugins: [
+          {
+            name: 'remote-plugin',
+            title: 'Remote Plugin',
+            source: 'github:owner/repo',
+            version: '1.2.0',
+            description: 'Remote catalog plugin.',
+            tags: ['deck'],
+          },
+          {
+            name: 'open-design/official-plugin',
+            title: 'Official Plugin',
+            title_i18n: { 'zh-CN': '官方看板' },
+            source: 'github:nexu-io/open-design@main/plugins/_official/examples/official-plugin',
+            version: '1.0.0',
+            description: 'Bundled official plugin.',
+            description_i18n: { 'zh-CN': '内置官方插件。' },
+            tags: ['prototype', 'kanban'],
+          },
+        ],
       },
     },
   ]);
@@ -201,6 +220,91 @@ describe('PluginsView', () => {
     fireEvent.click(availableTab);
     expect(await screen.findByText('Remote Plugin')).toBeTruthy();
     expect(screen.getAllByText('Example Catalog').length).toBeGreaterThan(0);
+  });
+
+  it('keeps bundled official catalog entries available and uses the installed record', async () => {
+    const onUsePlugin = vi.fn();
+    mockedListMarketplaces.mockResolvedValue([
+      {
+        id: 'official',
+        url: 'https://open-design.ai/marketplace/open-design-marketplace.json',
+        trust: 'official',
+        manifest: {
+          name: 'Open Design Official',
+          version: '1.0.0',
+          plugins: [
+            {
+              name: 'open-design/official-plugin',
+              title: 'Official Plugin',
+              title_i18n: { 'zh-CN': '官方看板' },
+              source: 'github:nexu-io/open-design@main/plugins/_official/examples/official-plugin',
+              version: '1.0.0',
+              description: 'Bundled official plugin.',
+              description_i18n: { 'zh-CN': '内置官方插件。' },
+              tags: ['prototype', 'kanban'],
+            },
+          ],
+        },
+      },
+    ]);
+    render(<PluginsView onUsePlugin={onUsePlugin} />);
+
+    fireEvent.click(await screen.findByTestId('plugins-tab-available'));
+    expect(await screen.findByText('官方看板')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Search available plugins'), {
+      target: { value: '官方看板' },
+    });
+
+    expect(await screen.findByText('官方看板')).toBeTruthy();
+    expect(screen.queryByText('Remote Plugin')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('plugins-available-install-open-design/official-plugin'));
+
+    expect(onUsePlugin).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'official-plugin',
+      sourceKind: 'bundled',
+    }), 'use');
+    expect(mockedInstallPluginSource).not.toHaveBeenCalled();
+  });
+
+  it('installs restricted catalog entries that collide with bundled official plugin names', async () => {
+    const onUsePlugin = vi.fn();
+    mockedListMarketplaces.mockResolvedValue([
+      {
+        id: 'team-catalog',
+        url: 'https://team.example.com/open-design-marketplace.json',
+        trust: 'restricted',
+        manifest: {
+          name: 'Team Catalog',
+          version: '1.0.0',
+          plugins: [
+            {
+              name: 'open-design/official-plugin',
+              title: 'Team Official Plugin',
+              source: 'github:team/official-plugin',
+              version: '2.0.0',
+              description: 'Team-scoped plugin that intentionally shares the official entry name.',
+              tags: ['team'],
+            },
+          ],
+        },
+      },
+    ]);
+
+    render(<PluginsView onUsePlugin={onUsePlugin} />);
+
+    fireEvent.click(await screen.findByTestId('plugins-tab-available'));
+    expect(await screen.findByText('Team Official Plugin')).toBeTruthy();
+
+    const install = screen.getByTestId('plugins-available-install-open-design/official-plugin');
+    expect(install.textContent).toBe('Install');
+    fireEvent.click(install);
+
+    await waitFor(() =>
+      expect(mockedInstallPluginSource).toHaveBeenCalledWith('open-design/official-plugin'),
+    );
+    expect(onUsePlugin).not.toHaveBeenCalled();
   });
 
   it('shows all installed plugins by default on the Plugins page', async () => {
@@ -507,15 +611,20 @@ describe('PluginsView', () => {
     expect(screen.queryByText('Figma Importer')).toBeNull();
   });
 
-  it('keeps installed registry entries out of Available', async () => {
-    const official = makePlugin('official-plugin', 'bundled', 'bundled', 'Official Plugin');
-    official.sourceMarketplaceId = 'official';
-    official.sourceMarketplaceEntryName = 'open-design/official-plugin';
-    official.sourceMarketplaceEntryVersion = '1.0.0';
-    official.marketplaceTrust = 'official';
-    official.manifest.od = { ...official.manifest.od, hidden: true };
+  it('keeps non-bundled installed registry entries out of Available', async () => {
+    const marketplacePlugin = makePlugin(
+      'marketplace-plugin',
+      'marketplace',
+      'restricted',
+      'Marketplace Plugin',
+    );
+    marketplacePlugin.sourceMarketplaceId = 'official';
+    marketplacePlugin.sourceMarketplaceEntryName = 'open-design/official-plugin';
+    marketplacePlugin.sourceMarketplaceEntryVersion = '1.0.0';
+    marketplacePlugin.marketplaceTrust = 'official';
+    marketplacePlugin.manifest.od = { ...marketplacePlugin.manifest.od, hidden: true };
     mockedListPlugins.mockImplementation(async (options?: { includeHidden?: boolean }) =>
-      options?.includeHidden ? [official] : [],
+      options?.includeHidden ? [marketplacePlugin] : [],
     );
     mockedListMarketplaces.mockResolvedValue([
       {

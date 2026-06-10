@@ -18,8 +18,18 @@ import {
   type SetStateAction,
 } from 'react';
 import { useT } from '../i18n';
+import {
+  agentIdToTracking,
+  byokProtocolToTracking,
+  modelIdForTracking,
+} from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import { recordAmrEntry, type AmrEntryAttribution } from '../analytics/amr-attribution';
+import { trackExecutionSettingsPopoverClick } from '../analytics/events';
+import {
+  beginAmrAuthTracking,
+  resolveAmrAuthTracking,
+} from '../analytics/amr-auth';
 import { KNOWN_PROVIDERS } from '../state/config';
 import { fetchProviderModels } from '../providers/provider-models';
 import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
@@ -53,6 +63,7 @@ interface Props {
   config: AppConfig;
   agents: AgentInfo[];
   providerModelsCache?: ProviderModelsCache;
+  compact?: boolean;
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
   onAgentChange: (id: string) => void;
@@ -126,6 +137,7 @@ export function InlineModelSwitcher({
   config,
   agents,
   providerModelsCache,
+  compact = false,
   daemonLive,
   onModeChange,
   onAgentChange,
@@ -183,6 +195,10 @@ export function InlineModelSwitcher({
       const next = await refreshAmrStatus();
       const outcome = amrLoginPollOutcome(next, startedAt);
       if (outcome === 'signed-in') {
+        resolveAmrAuthTracking(analytics.track, 'success', undefined, {
+          signedInUserId: next?.user?.id ?? null,
+        });
+        notifyAmrLoginStatusChanged();
         stopAmrPolling();
         amrLoginStartedAtRef.current = null;
         setAmrLoginPending(false);
@@ -191,9 +207,12 @@ export function InlineModelSwitcher({
       if (outcome === 'stopped' || outcome === 'timed-out') {
         stopAmrPolling();
         if (outcome === 'timed-out') {
+          resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout');
           void cancelVelaLogin().then(() =>
             notifyAmrLoginStatusChanged('login-canceled'),
           );
+        } else {
+          resolveAmrAuthTracking(analytics.track, 'failed', 'login_stopped');
         }
         amrLoginStartedAtRef.current = null;
         setAmrLoginPending(false);
@@ -203,7 +222,7 @@ export function InlineModelSwitcher({
     amrPollRef.current = window.setInterval(() => {
       void tick();
     }, AMR_LOGIN_POLL_INTERVAL_MS);
-  }, [refreshAmrStatus, stopAmrPolling, t]);
+  }, [analytics.track, refreshAmrStatus, stopAmrPolling, t]);
 
   const handleAmrSignIn = useCallback(async (
     attribution?: AmrEntryAttribution | null,
@@ -212,8 +231,10 @@ export function InlineModelSwitcher({
     amrLoginStartedAtRef.current = startedAt;
     setAmrLoginError(null);
     setAmrLoginPending(true);
+    beginAmrAuthTracking(attribution, startedAt);
     const result = await startVelaLogin(attribution);
     if (!result.ok && !result.alreadyRunning) {
+      resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed');
       amrLoginStartedAtRef.current = null;
       setAmrLoginPending(false);
       setAmrLoginError(result.error || t('settings.amrLoginErrorCompact'));
@@ -221,9 +242,10 @@ export function InlineModelSwitcher({
     }
     notifyAmrLoginStatusChanged('login-started');
     startAmrPolling(startedAt);
-  }, [startAmrPolling, t]);
+  }, [analytics.track, startAmrPolling, t]);
 
   const handleAmrCancelLogin = useCallback(async () => {
+    resolveAmrAuthTracking(analytics.track, 'cancelled');
     stopAmrPolling();
     amrLoginStartedAtRef.current = null;
     setAmrLoginError(null);
@@ -231,10 +253,16 @@ export function InlineModelSwitcher({
     await cancelVelaLogin();
     notifyAmrLoginStatusChanged('login-canceled');
     await refreshAmrStatus();
-  }, [refreshAmrStatus, stopAmrPolling]);
+  }, [analytics.track, refreshAmrStatus, stopAmrPolling]);
 
   const handleAgentButtonClick = useCallback(
     async (agentId: string) => {
+      trackExecutionSettingsPopoverClick(analytics.track, {
+        page_name: 'home',
+        area: 'execution_settings_popover',
+        element: 'agent_card',
+        cli_provider_id: agentIdToTracking(agentId),
+      });
       onAgentChange?.(agentId);
       if (agentId !== 'amr') return;
       if (amrLoginPending) {
@@ -533,7 +561,7 @@ export function InlineModelSwitcher({
 
   return (
     <div
-      className="inline-switcher"
+      className={`inline-switcher${compact ? ' inline-switcher--compact' : ''}`}
       ref={wrapRef}
       data-testid="inline-model-switcher"
     >
@@ -547,7 +575,9 @@ export function InlineModelSwitcher({
         onClick={handleChipClick}
         aria-haspopup="menu"
         aria-expanded={open}
-        title={t('inlineSwitcher.chipTitle')}
+        aria-label={`${chipMode} · ${chipPrimary} · ${chipModel}`}
+        title={`${chipMode} · ${chipPrimary} · ${chipModel}`}
+        data-tooltip={`${chipMode} · ${chipPrimary} · ${chipModel}`}
       >
         {showAmrReminder ? (
           <span
@@ -605,6 +635,11 @@ export function InlineModelSwitcher({
                 data-testid="inline-model-switcher-mode-daemon"
                 disabled={!daemonLive && config.mode !== 'daemon'}
                 onClick={() => {
+                  trackExecutionSettingsPopoverClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'execution_settings_popover',
+                    element: 'mode_local_cli',
+                  });
                   // Optional-call so a transient Fast Refresh state where a
                   // parent has not yet re-rendered with the new prop signature
                   // does not crash the entire entry view. The same defensive
@@ -632,7 +667,14 @@ export function InlineModelSwitcher({
                   (config.mode === 'api' ? ' is-active' : '')
                 }
                 data-testid="inline-model-switcher-mode-api"
-                onClick={() => onModeChange?.('api')}
+                onClick={() => {
+                  trackExecutionSettingsPopoverClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'execution_settings_popover',
+                    element: 'mode_byok',
+                  });
+                  onModeChange?.('api');
+                }}
                 title={t('inlineSwitcher.useByok')}
               >
                 {t('inlineSwitcher.chipByok')}
@@ -760,11 +802,18 @@ export function InlineModelSwitcher({
                     aria-label={t('inlineSwitcher.modelLabel')}
                     models={currentAgent.models}
                     value={currentModelId ?? ''}
-                    onChange={(nextValue) =>
+                    onChange={(nextValue) => {
+                      trackExecutionSettingsPopoverClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'execution_settings_popover',
+                        element: 'model_dropdown',
+                        execution_mode: 'local_cli',
+                        model_id: modelIdForTracking(nextValue),
+                      });
                       onAgentModelChange?.(currentAgent.id, {
                         model: nextValue,
-                      })
-                    }
+                      });
+                    }}
                     additionalOptions={
                       currentAgent.id !== 'amr' &&
                       currentModelId &&
@@ -801,7 +850,19 @@ export function InlineModelSwitcher({
                           (active ? ' is-active' : '')
                         }
                         data-testid={`inline-model-switcher-provider-${tab.id}`}
-                        onClick={() => onApiProtocolChange?.(tab.id)}
+                        onClick={() => {
+                          // Unlike Settings (which skips unmapped protocols),
+                          // report the click even when the protocol has no v2
+                          // provider_id (e.g. aihubmix) — just omit the field.
+                          trackExecutionSettingsPopoverClick(analytics.track, {
+                            page_name: 'home',
+                            area: 'execution_settings_popover',
+                            element: 'byok_provider_tab',
+                            provider_id:
+                              byokProtocolToTracking(tab.id) ?? undefined,
+                          });
+                          onApiProtocolChange?.(tab.id);
+                        }}
                       >
                         {tab.title}
                       </button>
@@ -824,7 +885,18 @@ export function InlineModelSwitcher({
                     aria-label={t('inlineSwitcher.modelLabel')}
                     models={apiModelChoices}
                     value={config.model}
-                    onChange={(nextValue) => onApiModelChange?.(nextValue)}
+                    onChange={(nextValue) => {
+                      trackExecutionSettingsPopoverClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'execution_settings_popover',
+                        element: 'model_dropdown',
+                        execution_mode: 'byok',
+                        provider_id:
+                          byokProtocolToTracking(apiProtocol) ?? undefined,
+                        model_id: modelIdForTracking(nextValue),
+                      });
+                      onApiModelChange?.(nextValue);
+                    }}
                     additionalOptions={
                       config.model && !apiModelIds.includes(config.model)
                         ? [
@@ -856,6 +928,11 @@ export function InlineModelSwitcher({
             className="inline-switcher__more"
             data-testid="inline-model-switcher-open-settings"
             onClick={() => {
+              trackExecutionSettingsPopoverClick(analytics.track, {
+                page_name: 'home',
+                area: 'execution_settings_popover',
+                element: 'open_execution_settings',
+              });
               setOpen(false);
               onOpenSettings?.('execution');
             }}

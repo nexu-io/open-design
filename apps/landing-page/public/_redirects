@@ -162,3 +162,17 @@
 /ko/skills/*     /ko/plugins/skills/     301
 /ko/systems/*    /ko/plugins/systems/    301
 /ko/templates/*  /ko/plugins/templates/  301
+
+# Agent detail route migration: the per-agent pages moved from
+# `/agents/<slug>/` to `/agents/<slug>-design/` (design keyword in the URL) and
+# the old Astro generators were removed. These 301s preserve any inbound links
+# / SEO equity for the old paths, at the root and under every locale prefix.
+# trailingSlash:'always', so every source and target ends in '/'.
+/agents/codex/        /agents/codex-design/        301
+/agents/cursor/       /agents/cursor-design/       301
+/agents/claude-code/  /agents/claude-code-design/  301
+/agents/opencode/     /agents/opencode-design/     301
+/:locale/agents/codex/        /:locale/agents/codex-design/        301
+/:locale/agents/cursor/       /:locale/agents/cursor-design/       301
+/:locale/agents/claude-code/  /:locale/agents/claude-code-design/  301
+/:locale/agents/opencode/     /:locale/agents/opencode-design/     301

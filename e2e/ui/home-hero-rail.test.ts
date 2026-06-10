@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { routeAgents } from '@/playwright/mock-factory';
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -279,7 +280,7 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible().catch(() => false)) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
   await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
 }
@@ -299,31 +300,25 @@ test.beforeEach(async ({ page }) => {
     });
   });
 
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'codex',
-            name: 'Codex CLI',
-            bin: 'codex',
-            available: true,
-            version: '0.80.0',
-            path: '/usr/local/bin/codex',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeAgents(page, [
+    {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+      version: '0.80.0',
+      path: '/usr/local/bin/codex',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+    {
+      id: 'mock',
+      name: 'Mock Agent',
+      bin: 'mock-agent',
+      available: true,
+      version: 'test',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
 
   await page.route('**/api/app-config', async (route) => {
     if (route.request().method() !== 'GET') {
@@ -522,7 +517,7 @@ test('[P1] after clearing one mode, selecting another example updates the compos
   await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
 });
 
-test('[P2] closing the selected example chip clears the example state while preserving the current mode chip', async ({ page }) => {
+test('[P1] selecting another example updates the composer input', async ({ page }) => {
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-input');
@@ -532,42 +527,11 @@ test('[P2] closing the selected example chip clears the example state while pres
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="image-template-notion-team-dashboard-live-artifact"]')
     .click();
-
-  const exampleChip = page.getByTestId('home-hero-active-example');
-  await expect(exampleChip).toBeVisible();
-  await expect(exampleChip).toContainText(/示例提示词|Example prompts/i);
   await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
-  await expect(page.getByTestId('home-hero-active-type-chip')).toContainText(/实时制品|Live artifact/i);
-
-  await exampleChip.getByRole('button', { name: /关闭|close/i }).click();
-
-  await expect(page.getByTestId('home-hero-active-example')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-active-type-chip')).toBeVisible();
-  await expect(page.getByTestId('home-hero-active-type-chip')).toContainText(/实时制品|Live artifact/i);
-  await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
-  await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
-});
-
-test('[P1] after closing one example chip, selecting another example updates the composer input', async ({ page }) => {
-  await gotoEntryHome(page);
-
-  const input = page.getByTestId('home-hero-input');
-
-  await page.getByTestId('home-hero-rail-live-artifact').click();
-  await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
-  await page
-    .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="image-template-notion-team-dashboard-live-artifact"]')
-    .click();
-
-  const exampleChip = page.getByTestId('home-hero-active-example');
-  await expect(exampleChip).toBeVisible();
-  await exampleChip.getByRole('button', { name: /关闭|close/i }).click();
-  await expect(page.getByTestId('home-hero-active-example')).toHaveCount(0);
 
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-live-artifact"]')
     .click();
-  await expect(page.getByTestId('home-hero-active-example')).toBeVisible();
   await expect(input).toHaveText('Create refreshable, auditable Open Design artifacts backed by connector or local data.');
 });
 

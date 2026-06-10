@@ -125,6 +125,31 @@ export function commentVisibleOnDeckSlide(
   return comment.slideIndex === activeSlideIndex;
 }
 
+// When a queued chat send starts processing, the deck preview should flip to
+// the slide its marked element lives on so the user watches the edit land in
+// context instead of staring at slide 1. The mark's `slideIndex` is captured
+// at queue time and carried on each comment attachment. Return the first
+// attachment that names a deck file and a concrete slide; null means there is
+// nothing slide-scoped to navigate to (plain prompt, free pin, missing index).
+export function queuedSlideNavTarget(
+  commentAttachments: readonly ChatCommentAttachment[] | null | undefined,
+): { filePath: string; slideIndex: number } | null {
+  if (!commentAttachments) return null;
+  for (const attachment of commentAttachments) {
+    const filePath = attachment.filePath?.trim();
+    const slideIndex = attachment.slideIndex;
+    if (
+      filePath &&
+      typeof slideIndex === 'number' &&
+      Number.isFinite(slideIndex) &&
+      slideIndex >= 0
+    ) {
+      return { filePath, slideIndex: Math.floor(slideIndex) };
+    }
+  }
+  return null;
+}
+
 export function commentSnapshotOverlayEqual(
   a: PreviewCommentSnapshot,
   b: PreviewCommentSnapshot,
@@ -242,6 +267,7 @@ export function commentToAttachment(
               : 0)
         : undefined,
     podMembers: podMembers.length > 0 ? podMembers : undefined,
+    ...(typeof comment.slideIndex === 'number' ? { slideIndex: comment.slideIndex } : {}),
     imageAttachments: imageAttachments.length > 0 ? imageAttachments : undefined,
     source: 'saved-comment',
   };
@@ -292,6 +318,7 @@ export function buildBoardCommentAttachments(input: {
       selectionKind,
       memberCount,
       podMembers: podMembers.length > 0 ? podMembers : undefined,
+      ...(typeof input.target.slideIndex === 'number' ? { slideIndex: input.target.slideIndex } : {}),
       source: 'board-batch',
     }));
 }

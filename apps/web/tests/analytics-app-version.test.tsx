@@ -15,16 +15,22 @@
 // This test goes red on the `useRef` version and green on the `useState`
 // version: after the mocked /api/version resolves, the hook must return
 // the fetched value, not the boot placeholder.
+//
+// The `useState` fix alone still left a race: high-frequency early events
+// (page_view) fired before the version-resolving effect re-ran and
+// re-registered the PostHog super-property, so they shipped with '0.0.0'.
+// resolveAppVersionForCapture() closes that race by awaiting the shared
+// /api/version fetch before any capture. The module-scoped cache it uses is
+// why each test re-imports the module after vi.resetModules().
 
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { useAppVersion } from '../src/analytics/provider';
 
 describe('useAppVersion', () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
+    vi.resetModules();
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       if (url.endsWith('/api/version')) {
@@ -50,12 +56,18 @@ describe('useAppVersion', () => {
     vi.restoreAllMocks();
   });
 
-  it('boots to the 0.0.0 placeholder before the fetch resolves', () => {
+  async function loadProvider() {
+    return import('../src/analytics/provider');
+  }
+
+  it('boots to the 0.0.0 placeholder before the fetch resolves', async () => {
+    const { useAppVersion } = await loadProvider();
     const { result } = renderHook(() => useAppVersion());
     expect(result.current).toBe('0.0.0');
   });
 
   it('updates to the fetched version once /api/version resolves', async () => {
+    const { useAppVersion } = await loadProvider();
     const { result } = renderHook(() => useAppVersion());
     await waitFor(() => {
       expect(result.current).toBe('1.2.3');
@@ -64,6 +76,7 @@ describe('useAppVersion', () => {
 
   it('keeps the 0.0.0 placeholder when the fetch fails', async () => {
     globalThis.fetch = vi.fn(async () => new Response('boom', { status: 500 })) as unknown as typeof fetch;
+    const { useAppVersion } = await loadProvider();
     const { result } = renderHook(() => useAppVersion());
     // Let any pending microtasks settle so a buggy implementation has the
     // same opportunity to "succeed" with stale data as the happy path.
@@ -71,5 +84,16 @@ describe('useAppVersion', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(result.current).toBe('0.0.0');
+  });
+
+  it('resolves the real version before early capture events use the placeholder', async () => {
+    const { resolveAppVersionForCapture } = await loadProvider();
+    await expect(resolveAppVersionForCapture('0.0.0')).resolves.toBe('1.2.3');
+  });
+
+  it('does not refetch when capture already has a real version', async () => {
+    const { resolveAppVersionForCapture } = await loadProvider();
+    await expect(resolveAppVersionForCapture('9.9.9')).resolves.toBe('9.9.9');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 });

@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button } from '@open-design/components';
 import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl, projectRawUrl } from '../providers/registry';
 import { buildSrcdoc } from '../runtime/srcdoc';
-import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind } from '../types';
+import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind, ProjectFolder } from '../types';
 import {
   createFileSystemReadError,
   FILE_SYSTEM_READ_ERROR_MESSAGE,
   isFileSystemReadError,
 } from '../utils/fileSystemErrors';
+import { selectInitialDesignPreviewFile } from './design-files/designArtifacts';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { getPluginFolderCandidates } from './design-files/pluginFolders';
 import { Icon } from './Icon';
@@ -36,7 +36,15 @@ interface Props {
   // True while the host is reindexing a freshly replaced working dir. Drives
   // a loading overlay so the panel doesn't sit silently on the stale tree.
   reloading?: boolean;
+  // True while the chat agent is generating. The footer swaps its idle
+  // drop/upload hint for the typewriter "tip" line while a run is in flight.
+  running?: boolean;
   files: ProjectFile[];
+  // Persisted folders from `/api/projects/:id/folders`, including empty ones
+  // that no file lives under. Without these, a folder only appears once a file
+  // with a matching path prefix exists, so empty (user-created or imported)
+  // folders would vanish from the tree.
+  folders?: ProjectFolder[];
   liveArtifacts: LiveArtifactWorkspaceEntry[];
   onRefreshFiles: () => Promise<void> | void;
   onOpenFile: (name: string) => void;
@@ -54,6 +62,8 @@ interface Props {
   onCurrentDirChange?: (dir: string) => void;
   uploadError?: string | null;
   onClearUploadError?: () => void;
+  preferredPreviewFile?: string | null;
+  autoPreviewDesignArtifacts?: boolean;
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
@@ -144,6 +154,103 @@ function ActionNoticeView({ notice }: { notice: ActionNotice | null }) {
   );
 }
 
+// Useful-info tips that rotate one at a time in the panel footer, ordered as
+// a loose journey: file basics → feeding context → generating → iterating →
+// exporting/sharing → community. A tip with a `url` renders its typed line as
+// a link to that destination.
+const USEFUL_TIPS: ReadonlyArray<{ key: keyof Dict; url?: string }> = [
+  { key: 'designFiles.usefulInfoTip' },
+  { key: 'designFiles.usefulInfoTip2' },
+  { key: 'designFiles.usefulInfoTip9' },
+  { key: 'designFiles.usefulInfoTip10' },
+  { key: 'designFiles.usefulInfoTip4' },
+  { key: 'designFiles.usefulInfoTip11' },
+  { key: 'designFiles.usefulInfoTip12' },
+  { key: 'designFiles.usefulInfoTip13' },
+  { key: 'designFiles.usefulInfoTip14' },
+  { key: 'designFiles.usefulInfoTip15' },
+  { key: 'designFiles.usefulInfoTip5' },
+  { key: 'designFiles.usefulInfoTip6', url: 'https://discord.gg/mHAjSMV6gz' },
+  { key: 'designFiles.usefulInfoTip7', url: 'https://github.com/nexu-io/open-design' },
+  { key: 'designFiles.usefulInfoTip8', url: 'https://x.com/nexudotio' },
+];
+const TIP_TYPE_MS = 32; // per-character typing speed
+const TIP_HOLD_MS = 3800; // pause on a fully-typed tip before advancing
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
+// Footer "tip" line that types out one tip at a time (typewriter), holds, then
+// advances to the next — mirroring Claude Design's empty-state hint. Under
+// prefers-reduced-motion the full tip is shown immediately and just cycles.
+function RotatingTip() {
+  const t = useT();
+  const [index, setIndex] = useState(0);
+  const [typed, setTyped] = useState('');
+  // Resolve tips each render but read them through a ref so the typing effect
+  // depends only on `index` — depending on the (re-created) array would reset
+  // the typewriter on every render and never advance.
+  const tipsRef = useRef<string[]>([]);
+  tipsRef.current = USEFUL_TIPS.map(({ key }) => t(key));
+
+  useEffect(() => {
+    const tips = tipsRef.current;
+    const full = tips[index] ?? '';
+    if (prefersReducedMotion()) {
+      setTyped(full);
+      if (tips.length < 2) return;
+      const hold = window.setTimeout(
+        () => setIndex((i) => (i + 1) % tips.length),
+        TIP_HOLD_MS,
+      );
+      return () => window.clearTimeout(hold);
+    }
+    setTyped('');
+    let i = 0;
+    let holdTimer = 0;
+    const typeTimer = window.setInterval(() => {
+      i += 1;
+      setTyped(full.slice(0, i));
+      if (i >= full.length) {
+        window.clearInterval(typeTimer);
+        if (tips.length < 2) return;
+        holdTimer = window.setTimeout(
+          () => setIndex((p) => (p + 1) % tips.length),
+          TIP_HOLD_MS,
+        );
+      }
+    }, TIP_TYPE_MS);
+    return () => {
+      window.clearInterval(typeTimer);
+      window.clearTimeout(holdTimer);
+    };
+  }, [index]);
+
+  return (
+    <div className="df-useful-info">
+      <div className="df-useful-info-head">
+        <Icon name="sparkles" size={12} />
+        <span className="df-useful-info-label">{t('designFiles.usefulInfoLabel')}</span>
+      </div>
+      <span className="df-useful-info-tip">
+        {USEFUL_TIPS[index]?.url ? (
+          <a className="df-tip-link" href={USEFUL_TIPS[index].url} target="_blank" rel="noreferrer">
+            {typed}
+          </a>
+        ) : (
+          typed
+        )}
+        <span className="df-tip-caret" aria-hidden />
+      </span>
+    </div>
+  );
+}
+
 /**
  * Full-panel browser for a project's `.od/projects/<id>/` folder. Mirrors
  * Claude Design's "Design Files" surface: a single-line toolbar (up / refresh
@@ -156,7 +263,9 @@ export function DesignFilesPanel({
   projectId,
   rootDirName,
   reloading,
+  running = false,
   files,
+  folders,
   liveArtifacts,
   onOpenFile,
   onOpenLiveArtifact,
@@ -169,6 +278,8 @@ export function DesignFilesPanel({
   onNewSketch,
   uploadError = null,
   onClearUploadError,
+  preferredPreviewFile = null,
+  autoPreviewDesignArtifacts = false,
   onCurrentDirChange,
   onPluginFolderAgentAction,
   activePluginActionPaths = new Set(),
@@ -186,6 +297,7 @@ export function DesignFilesPanel({
   const MENU_ESTIMATED_HEIGHT = 145;
   const MENU_SAFE_PADDING = 8;
   const [preview, setPreview] = useState<string | null>(null);
+  const autoPreviewAppliedRef = useRef(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const lastKeyPress = useRef<Map<string, number>>(new Map());
   const [deleting, setDeleting] = useState(false);
@@ -229,11 +341,20 @@ export function DesignFilesPanel({
         if (currentDir === '') localFiles.push(f);
       }
     }
+    // Also surface persisted folders (including empty ones with no files under
+    // them) as immediate children of the current directory.
+    for (const folder of folders ?? []) {
+      if (!folder.path.startsWith(prefix)) continue;
+      const remainder = folder.path.slice(prefix.length);
+      if (!remainder) continue; // the current directory itself
+      const slashIdx = remainder.indexOf('/');
+      dirs.add(slashIdx === -1 ? remainder : remainder.slice(0, slashIdx));
+    }
     return {
       dirsAtCurrentDir: [...dirs].sort((a, b) => a.localeCompare(b)),
       filesAtCurrentDir: localFiles,
     };
-  }, [files, currentDir]);
+  }, [files, folders, currentDir]);
 
   // Group files at the current level into semantic sections, ordered by
   // SECTION_ORDER. Files within a section sort most-recently-modified first.
@@ -260,22 +381,27 @@ export function DesignFilesPanel({
     setRenaming(null);
   }, [currentDir]);
 
-  // Navigate up to the nearest ancestor that still exists when files under
-  // currentDir disappear (e.g. after deleting the last file in a subfolder).
+  // Navigate up to the nearest ancestor that still exists when the current
+  // directory disappears (e.g. after deleting the last file in a subfolder).
+  // A directory "exists" if it has files under it OR is a persisted folder
+  // (possibly empty) — otherwise navigating into an empty folder would bounce
+  // straight back to the root.
   useEffect(() => {
     if (currentDir === '') return;
-    const prefix = `${currentDir}/`;
-    if (files.some((f) => f.name.startsWith(prefix))) return;
+    const dirExists = (dir: string) =>
+      files.some((f) => f.name.startsWith(`${dir}/`)) ||
+      (folders ?? []).some((fo) => fo.path === dir || fo.path.startsWith(`${dir}/`));
+    if (dirExists(currentDir)) return;
     const parts = currentDir.split('/');
     for (let i = parts.length - 1; i > 0; i--) {
       const ancestor = parts.slice(0, i).join('/');
-      if (files.some((f) => f.name.startsWith(`${ancestor}/`))) {
+      if (dirExists(ancestor)) {
         setCurrentDir(ancestor);
         return;
       }
     }
     setCurrentDir('');
-  }, [files, currentDir]);
+  }, [files, folders, currentDir]);
 
   const pluginFolders = useMemo(() => getPluginFolderCandidates(files), [files]);
 
@@ -303,6 +429,27 @@ export function DesignFilesPanel({
     () => files.find((f) => f.name === preview) ?? null,
     [preview, files],
   );
+
+  const initialPreviewFile = useMemo(
+    () =>
+      autoPreviewDesignArtifacts
+        ? selectInitialDesignPreviewFile(files, preferredPreviewFile)
+        : null,
+    [autoPreviewDesignArtifacts, files, preferredPreviewFile],
+  );
+
+  useEffect(() => {
+    if (autoPreviewAppliedRef.current) return;
+    if (!initialPreviewFile) return;
+    autoPreviewAppliedRef.current = true;
+    setPreview(initialPreviewFile.name);
+  }, [initialPreviewFile]);
+
+  useEffect(() => {
+    if (!preview) return;
+    if (files.some((f) => f.name === preview)) return;
+    setPreview(null);
+  }, [files, preview]);
 
   useEffect(() => {
     if (!menuPos) return;
@@ -726,7 +873,28 @@ export function DesignFilesPanel({
           <div className="df-topbar-left">{breadcrumbs}</div>
           <div className="df-topbar-right">{fileActions}</div>
         </div>
-        <div className="df-body">
+        <div
+          className="df-body"
+          onDragEnter={(ev) => {
+            ev.preventDefault();
+            dragDepthRef.current += 1;
+            setDraggingFiles(true);
+          }}
+          onDragOver={(ev) => {
+            ev.preventDefault();
+            ev.dataTransfer.dropEffect = 'copy';
+          }}
+          onDragLeave={(ev) => {
+            if (!ev.currentTarget.contains(ev.relatedTarget as Node | null)) {
+              dragDepthRef.current = 0;
+              setDraggingFiles(false);
+              return;
+            }
+            dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+            if (dragDepthRef.current === 0) setDraggingFiles(false);
+          }}
+          onDrop={handleDrop}
+        >
           {visibleUploadError && !preview ? (
             <div className="df-upload-banner" data-testid="upload-error-banner">
               <span>{visibleUploadError}</span>
@@ -781,7 +949,7 @@ export function DesignFilesPanel({
               </div>
             </div>
           ) : null}
-          {files.length === 0 && liveArtifacts.length === 0 ? (
+          {files.length === 0 && liveArtifacts.length === 0 && (folders?.length ?? 0) === 0 ? (
             <div className="df-empty" data-testid="design-files-empty">
               <div className="df-empty-pill">
                 <span className="df-empty-title">
@@ -932,36 +1100,29 @@ export function DesignFilesPanel({
               ))}
             </>
           )}
-          <div className="df-useful-info">
-            <span className="df-useful-info-label">{t('designFiles.usefulInfoLabel')}</span>
-            <span className="df-useful-info-tip">{t('designFiles.usefulInfoTip')}</span>
-          </div>
-          <div
-            className={`df-drop ${draggingFiles ? 'dragging' : ''}`}
-            onDragEnter={(ev) => {
-              ev.preventDefault();
-              dragDepthRef.current += 1;
-              setDraggingFiles(true);
-            }}
-            onDragOver={(ev) => {
-              ev.preventDefault();
-              ev.dataTransfer.dropEffect = 'copy';
-            }}
-            onDragLeave={(ev) => {
-              if (!ev.currentTarget.contains(ev.relatedTarget as Node | null)) {
-                dragDepthRef.current = 0;
-                setDraggingFiles(false);
-                return;
-              }
-              dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-              if (dragDepthRef.current === 0) setDraggingFiles(false);
-            }}
-            onDrop={handleDrop}
-          >
-            <span className="label">{t('designFiles.dropTitle')}</span>
-            <span className="desc">{t('designFiles.dropDesc')}</span>
+          <div className="df-footer-info">
+            {running ? (
+              <RotatingTip />
+            ) : (
+              <div className="df-drop-hint">
+                <span className="df-drop-hint-label">
+                  <Icon name="upload" size={12} />
+                  {t('designFiles.dropLabel')}
+                </span>
+                <span className="df-drop-hint-desc">{t('designFiles.dropDesc')}</span>
+              </div>
+            )}
           </div>
         </div>
+        {draggingFiles ? (
+          <div className="df-drop-overlay" aria-hidden>
+            <div className="df-drop-overlay-card">
+              <Icon name="upload" size={22} />
+              <span className="label">{t('designFiles.dropTitle')}</span>
+              <span className="desc">{t('designFiles.dropDesc')}</span>
+            </div>
+          </div>
+        ) : null}
       </div>
       {preview && previewFile ? (
         // Key on the file name so React unmounts the previous DfPreview

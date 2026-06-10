@@ -91,23 +91,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     },
   },
   {
-    id: 'live-artifact',
-    label: 'Live artifact',
-    icon: 'refresh',
-    group: 'create',
-    hint: 'Build a refreshable artifact backed by connector or local data.',
-    action: {
-      kind: 'apply-scenario',
-      pluginId: 'example-live-artifact',
-      projectKind: 'prototype',
-      projectMetadata: {
-        kind: 'prototype',
-        intent: 'live-artifact',
-        fidelity: 'high-fidelity',
-      },
-    },
-  },
-  {
     id: 'deck',
     label: 'Slide deck',
     icon: 'present',
@@ -126,6 +109,35 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       kind: 'apply-scenario',
       pluginId: 'example-simple-deck',
       projectKind: 'deck',
+    },
+  },
+  {
+    id: 'hyperframes',
+    label: 'HyperFrames',
+    icon: 'orbit',
+    group: 'create',
+    hint: 'Author HTML-based motion: captions, audio-reactive visuals, scene transitions.',
+    // HyperFrames is its own bundled scenario (motion-graphics
+    // specialisation of Video). It surfaces in PluginsHomeSection's
+    // primary category list, so the rail picks it up too rather than
+    // hiding the specialised bucket behind the generic Video chip.
+    action: { kind: 'apply-scenario', pluginId: 'example-hyperframes', projectKind: 'video' },
+  },
+  {
+    id: 'live-artifact',
+    label: 'Live artifact',
+    icon: 'refresh',
+    group: 'create',
+    hint: 'Build a refreshable artifact backed by connector or local data.',
+    action: {
+      kind: 'apply-scenario',
+      pluginId: 'example-live-artifact',
+      projectKind: 'prototype',
+      projectMetadata: {
+        kind: 'prototype',
+        intent: 'live-artifact',
+        fidelity: 'high-fidelity',
+      },
     },
   },
   {
@@ -161,18 +173,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
         aspect: '16:9',
       },
     },
-  },
-  {
-    id: 'hyperframes',
-    label: 'HyperFrames',
-    icon: 'orbit',
-    group: 'create',
-    hint: 'Author HTML-based motion: captions, audio-reactive visuals, scene transitions.',
-    // HyperFrames is its own bundled scenario (motion-graphics
-    // specialisation of Video). It surfaces in PluginsHomeSection's
-    // primary category list, so the rail picks it up too rather than
-    // hiding the specialised bucket behind the generic Video chip.
-    action: { kind: 'apply-scenario', pluginId: 'example-hyperframes', projectKind: 'video' },
   },
   {
     id: 'audio',

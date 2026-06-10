@@ -1,0 +1,162 @@
+name: ci-gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner_run_id:
+        description: ci-runner workflow run id to accept as the common path
+        required: false
+        type: string
+      hosted_run_id:
+        description: ci-hosted workflow run id to accept as the backup path
+        required: false
+        type: string
+      policy:
+        description: Gate policy for provided run ids
+        required: true
+        type: choice
+        default: any-success
+        options:
+          - any-success
+          - both-success
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  gate:
+    name: CI gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Evaluate CI run ids
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          HOSTED_RUN_ID: ${{ inputs.hosted_run_id }}
+          POLICY: ${{ inputs.policy }}
+          RUNNER_RUN_ID: ${{ inputs.runner_run_id }}
+        run: |
+          set -euo pipefail
+
+          require_numeric_id() {
+            local label="$1"
+            local value="$2"
+            if [ -z "$value" ]; then
+              return 0
+            fi
+            if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+              echo "$label must be a numeric GitHub Actions run id: $value" >&2
+              exit 2
+            fi
+          }
+
+          fetch_run() {
+            local label="$1"
+            local id="$2"
+            local out="$RUNNER_TEMP/$label.json"
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id" > "$out"
+            jq -r --arg label "$label" '{
+              label: $label,
+              id: .id,
+              name: .name,
+              event: .event,
+              headBranch: .head_branch,
+              headSha: .head_sha,
+              status: .status,
+              conclusion: .conclusion,
+              url: .html_url
+            }' "$out"
+          }
+
+          require_numeric_id runner_run_id "$RUNNER_RUN_ID"
+          require_numeric_id hosted_run_id "$HOSTED_RUN_ID"
+
+          if [ -z "$RUNNER_RUN_ID" ] && [ -z "$HOSTED_RUN_ID" ]; then
+            echo "Provide at least one of runner_run_id or hosted_run_id." >&2
+            exit 2
+          fi
+
+          results="$RUNNER_TEMP/ci-gate-results.jsonl"
+          : > "$results"
+
+          if [ -n "$RUNNER_RUN_ID" ]; then
+            fetch_run runner "$RUNNER_RUN_ID" >> "$results"
+          fi
+          if [ -n "$HOSTED_RUN_ID" ]; then
+            fetch_run hosted "$HOSTED_RUN_ID" >> "$results"
+          fi
+
+          jq -s . "$results"
+
+          unexpected_workflows="$(jq -r '
+            select((.label == "runner" and .name != "ci-runner") or (.label == "hosted" and .name != "ci-hosted"))
+            | "\(.label) run \(.id) is workflow \(.name // "<missing>")"
+          ' "$results")"
+          if [ -n "$unexpected_workflows" ]; then
+            echo "CI run id(s) do not match the expected workflow:"
+            echo "$unexpected_workflows"
+            exit 1
+          fi
+
+          missing_identity="$(jq -r '
+            select((.headSha == null or .headSha == "") or (.headBranch == null or .headBranch == "") or (.event == null or .event == ""))
+            | "\(.label) run \(.id) is missing headSha/headBranch/event"
+          ' "$results")"
+          if [ -n "$missing_identity" ]; then
+            echo "CI run id(s) are missing required identity fields:"
+            echo "$missing_identity"
+            exit 1
+          fi
+
+          mismatched_identity="$(jq -s -r '
+            def unique_values($key): [.[] | .[$key] | select(. != null and . != "")] | unique;
+            [
+              if (unique_values("headSha") | length) == 1 then empty else "headSha" end,
+              if (unique_values("headBranch") | length) == 1 then empty else "headBranch" end,
+              if (unique_values("event") | length) == 1 then empty else "event" end
+            ] | .[]
+          ' "$results")"
+          if [ -n "$mismatched_identity" ]; then
+            echo "CI run id(s) do not share the same identity field(s):"
+            echo "$mismatched_identity"
+            exit 1
+          fi
+
+          unfinished="$(jq -r 'select(.status != "completed") | "\(.label)=\(.status)"' "$results")"
+          if [ -n "$unfinished" ]; then
+            echo "CI run(s) are not completed:"
+            echo "$unfinished"
+            exit 1
+          fi
+
+          success_count="$(jq -s '[.[] | select(.conclusion == "success")] | length' "$results")"
+          provided_count="$(jq -s 'length' "$results")"
+
+          if [ "$POLICY" = "any-success" ]; then
+            echo "OD_CI_GATE_RESULT policy=$POLICY provided=$provided_count success=$success_count"
+            if [ "$success_count" -ge 1 ]; then
+              echo "CI gate accepted: at least one provided path succeeded."
+              exit 0
+            fi
+            echo "CI gate rejected: no provided path succeeded." >&2
+            exit 1
+          fi
+
+          if [ "$POLICY" = "both-success" ]; then
+            echo "OD_CI_GATE_RESULT policy=$POLICY provided=$provided_count success=$success_count"
+            if [ -z "$RUNNER_RUN_ID" ] || [ -z "$HOSTED_RUN_ID" ]; then
+              echo "CI gate rejected: policy=both-success requires both runner_run_id and hosted_run_id." >&2
+              exit 2
+            fi
+            if [ "$success_count" -eq "$provided_count" ]; then
+              echo "CI gate accepted: all provided paths succeeded."
+              exit 0
+            fi
+            echo "CI gate rejected: at least one provided path did not succeed." >&2
+            exit 1
+          fi
+
+          echo "Unknown policy: $POLICY" >&2
+          exit 2

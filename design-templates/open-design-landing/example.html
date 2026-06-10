@@ -208,6 +208,52 @@ body::before {
   justify-content: space-between;
   gap: 24px;
 }
+@media (min-width: 1081px) {
+  /* Header spans the full viewport width (overriding the shared .container
+   * max-width) so the brand sits near the left edge and the side actions
+   * near the right edge, rather than aligned to the 1360px content column. */
+  .nav .nav-inner {
+    max-width: none;
+    /* Clear the fixed 46px decorative side-rails (plus breathing room) so
+     * the brand and side actions never collide with the edge lines. */
+    padding-left: 60px;
+    padding-right: 60px;
+  }
+  /* Three-zone header: the brand and side clusters take equal flexible
+   * width on either side, so the centered nav sits on (or very near) the
+   * bar's midline regardless of how wide the action cluster is — without the
+   * overlap an absolutely-centered nav causes at mid widths. The brand stays
+   * left-aligned in its column and the side actions stay right-aligned in
+   * theirs. */
+  .nav-inner > .brand {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+  .nav-inner > .nav-side {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+  .nav-inner > nav[data-nav-primary] {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: center;
+  }
+
+  /* Scale the header chrome up a step so the bar reads as substantial across
+   * the now-full-width layout, rather than small elements floating in extra
+   * whitespace. Desktop-only; sizes return to base below 1081px. Selectors
+   * are deliberately one level more specific than the base rules below
+   * (which appear later in source) so these win without !important. */
+  .nav .nav-inner .brand-logo { height: 44px; }
+  .nav-inner .nav-links { gap: 44px; }
+  .nav-inner .nav-links a { font-size: 16px; }
+  .nav-inner .nav-side { gap: 14px; }
+  .nav-inner .nav-side .nav-cta.ghost { font-size: 13px; }
+  .nav-inner .nav-side .locale-trigger { font-size: 13px; }
+  .nav-inner .nav-side .nav-amr img { width: 68px; height: auto; }
+}
 .brand {
   display: inline-flex;
   align-items: center;
@@ -218,6 +264,16 @@ body::before {
   color: var(--ink);
   text-decoration: none;
   font-size: 18px;
+  /*
+   * Pin the brand so it never participates in flex-shrink. `.nav-inner` is a
+   * `justify-content: space-between` flex row; in locales whose nav labels are
+   * longer (de/ru/pt-BR…) the link list widens the row past the container and
+   * the browser shrinks every shrinkable child proportionally — including the
+   * logo, which is why the wordmark looked smaller in some languages. The nav
+   * links absorb the squeeze instead (they already tighten/collapse to the
+   * hamburger at the 1180/1080 breakpoints below).
+   */
+  flex-shrink: 0;
 }
 .brand-mark {
   width: 36px; height: 36px;
@@ -1534,6 +1590,127 @@ section.tight { padding: 90px 0; }
 }
 .testimonial-art img { width: 100%; height: 100%; object-fit: contain; }
 
+/* ---------- AMR band ---------- */
+.amr-band {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+}
+.amr-band-inner {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 18px 0 0;
+  text-align: center;
+}
+.amr-band-kicker {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.amr-band-title {
+  font-family: var(--sans);
+  font-size: clamp(30px, 5vw, 52px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  margin: 16px auto 0;
+  max-width: 720px;
+  color: var(--ink);
+}
+.amr-band-lead {
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-mute);
+  margin: 16px auto 0;
+  max-width: 620px;
+}
+.amr-band-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  list-style: none;
+  margin: 24px 0 0;
+  padding: 0;
+}
+.amr-band-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--paper) 60%, transparent);
+}
+.amr-band-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent, var(--ink-soft));
+  flex: none;
+}
+.amr-band-logos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  list-style: none;
+  margin: 30px 0 0;
+  padding: 0;
+}
+.amr-band-logos li {
+  display: inline-flex;
+  align-items: center;
+}
+.amr-band-logo {
+  /* <img>-loaded SVGs can't inherit page color; they paint in their own
+     default ink (near-black). Opacity softens the row. */
+  width: 26px;
+  height: 26px;
+  display: block;
+  opacity: 0.74;
+  transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.amr-band-logos li:hover .amr-band-logo {
+  opacity: 1;
+}
+.amr-band-more {
+  font-family: var(--sans);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+  transform: translateY(-4px);
+}
+.amr-band-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 30px;
+}
+.amr-band-cta {
+  /* Reuse the dark .nav-cta pill; add the trailing arrow the nav CTAs use. */
+  padding: 11px 22px;
+  font-size: 14px;
+}
+.amr-band-cta::after {
+  content: '→';
+  color: var(--paper);
+  font-size: 13px;
+  margin-left: 7px;
+}
+
 /* ---------- CTA ---------- */
 .cta-grid {
   display: grid;
@@ -1818,7 +1995,10 @@ footer {
 /* nav: between 1080 and 1180 the brand tail + 5 nav links + 2 CTAs + dot
  * crowd the row. Drop the brand sub-meta first, then tighten link spacing,
  * so the Star CTA never has to compress. */
-@media (max-width: 1180px) {
+/* nav: tighten the simplified static nav (this template has no hamburger /
+ * dropdown machinery — the app Header carries that). Matches the app's
+ * desktop-tighten band that ends at the ≤1280px hamburger breakpoint. */
+@media (max-width: 1280px) {
   .nav-inner { gap: 18px; }
   .brand-meta { display: none; }
   .nav-links { gap: 28px; }
@@ -1875,6 +2055,136 @@ footer {
   border-radius: 4px;
 }
 .code-inline.sm { font-size: 12px; padding: 0 4px; }
+
+/* ====== NEWSLETTER ====== */
+.newsletter {
+  padding: 80px 0;
+  border-top: 1px solid var(--ink);
+}
+.newsletter-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 48px;
+  align-items: center;
+}
+.newsletter-title {
+  font-family: var(--serif);
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1.05;
+  margin: 12px 0 14px;
+  color: var(--ink);
+}
+.newsletter-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.newsletter-input {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 14px 16px;
+  font-family: var(--body);
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--paper-warm);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+}
+.newsletter-input:focus-visible {
+  outline: 2px solid var(--coral);
+  outline-offset: 1px;
+}
+.newsletter-submit {
+  flex: 0 0 auto;
+}
+.newsletter-submit:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+.newsletter-msg {
+  flex: 1 0 100%;
+  margin: 4px 0 0;
+  min-height: 1.2em;
+  font-size: 13px;
+  color: var(--ink-mute);
+}
+.newsletter-form.is-success .newsletter-input,
+.newsletter-form.is-success .newsletter-submit {
+  display: none;
+}
+.newsletter-form.is-success .newsletter-msg {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Bottom-right popup */
+.newsletter-popup {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 90;
+  width: min(360px, calc(100vw - 48px));
+  padding: 22px 22px 20px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  box-shadow: 0 18px 48px rgba(21, 20, 15, 0.22);
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.28s ease, transform 0.28s ease;
+}
+.newsletter-popup.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.newsletter-popup__title {
+  font-family: var(--serif);
+  font-size: 22px;
+  line-height: 1.1;
+  margin: 10px 0 8px;
+  color: var(--ink);
+}
+.newsletter-popup__lead {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-mute);
+  margin: 0 0 14px;
+}
+.newsletter-popup__close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--ink-faint);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.newsletter-popup__close:hover {
+  color: var(--ink);
+}
+.newsletter-popup .newsletter-input {
+  flex: 1 1 100%;
+}
+.newsletter-popup .newsletter-submit {
+  flex: 1 1 100%;
+  justify-content: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .newsletter-popup {
+    transition: none;
+  }
+}
+@media (max-width: 860px) {
+  .newsletter-card {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
 </style>
 </head>
 <body>
@@ -2452,10 +2762,44 @@ footer {
     <small>Frames</small>
   </a>
         </div>
-        <a class='read-more' href='https://github.com/nexu-io/open-design' target='_blank' rel='noreferrer noopener'>Read more stories</a>
+        <a class='read-more' href='/solutions/'>Read more stories</a>
       </div>
       <div class='testimonial-art' data-reveal='right'>
         <img src='./assets/testimonial.png' alt='' />
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- AMR band: Open Design AMR ships SOTA frontier models out of the box.
+     Static monochrome vendor-logo row + ellipsis, sits under the testimonial. -->
+<section class='amr-band' data-od-id='amr-band' data-reveal>
+  <div class='container'>
+    <div class='amr-band-inner'>
+      <span class='amr-band-kicker'>Open Design AMR · Design Agent</span>
+      <h2 class='amr-band-title'>The world&rsquo;s top Agents and LLMs, powering Open Design</h2>
+      <p class='amr-band-lead'>Top up once and reach GPT, Claude, Gemini, DeepSeek and more. AMR auto-routes each step to the right frontier model — billed by real token usage, with your wallet balance and request log in one console.</p>
+      <ul class='amr-band-chips' aria-label='Open Design AMR · Design Agent'>
+        <li class='amr-band-chip'><span class='amr-band-chip-dot' aria-hidden='true'></span>20+ flagship models</li>
+        <li class='amr-band-chip'><span class='amr-band-chip-dot' aria-hidden='true'></span>Zero setup</li>
+        <li class='amr-band-chip'><span class='amr-band-chip-dot' aria-hidden='true'></span>SOTA Harness For Design</li>
+        <li class='amr-band-chip'><span class='amr-band-chip-dot' aria-hidden='true'></span>Real token-based billing</li>
+      </ul>
+      <ul class='amr-band-logos' aria-label='Built-in frontier models'>
+        <li><img class='amr-band-logo' src='./assets/agents/openai.svg' alt='OpenAI' title='OpenAI' width='26' height='26' loading='lazy' /></li>
+        <li><img class='amr-band-logo' src='./assets/agents/anthropic.svg' alt='Anthropic' title='Anthropic' width='26' height='26' loading='lazy' /></li>
+        <li><img class='amr-band-logo' src='./assets/agents/gemini.svg' alt='Google Gemini' title='Google Gemini' width='26' height='26' loading='lazy' /></li>
+        <li><img class='amr-band-logo' src='./assets/agents/deepseek.svg' alt='DeepSeek' title='DeepSeek' width='26' height='26' loading='lazy' /></li>
+        <li><img class='amr-band-logo' src='./assets/agents/zhipu.svg' alt='Zhipu GLM' title='Zhipu GLM' width='26' height='26' loading='lazy' /></li>
+        <li><img class='amr-band-logo' src='./assets/agents/moonshot.svg' alt='Moonshot Kimi' title='Moonshot Kimi' width='26' height='26' loading='lazy' /></li>
+        <li><img class='amr-band-logo' src='./assets/agents/qwen.svg' alt='Qwen' title='Qwen' width='26' height='26' loading='lazy' /></li>
+        <li><img class='amr-band-logo' src='./assets/agents/minimax.svg' alt='MiniMax' title='MiniMax' width='26' height='26' loading='lazy' /></li>
+        <li><img class='amr-band-logo' src='./assets/agents/xiaomi.svg' alt='Xiaomi MiMo' title='Xiaomi MiMo' width='26' height='26' loading='lazy' /></li>
+        <li><img class='amr-band-logo' src='./assets/agents/xai.svg' alt='xAI' title='xAI' width='26' height='26' loading='lazy' /></li>
+        <li class='amr-band-more' aria-label='and more'>&hellip;</li>
+      </ul>
+      <div class='amr-band-actions'>
+        <a class='nav-cta amr-band-cta' href='https://open-design.ai/amr/'>Explore AMR</a>
       </div>
     </div>
   </div>
@@ -2501,6 +2845,37 @@ footer {
     </div>
   </div>
 </section>
+
+<!-- ====== NEWSLETTER ====== -->
+<section class='newsletter' id='newsletter' data-od-id='newsletter'>
+  <div class='container'>
+    <div class='newsletter-card' data-reveal>
+      <div class='newsletter-copy'>
+        <span class='label'>Stay updated</span>
+        <h2 class='newsletter-title'>The Open Design newsletter</h2>
+        <p class='lead'>New templates, design-system drops, ambassador work, and product updates — straight to your inbox.</p>
+      </div>
+      <form class='newsletter-form' data-newsletter-form data-source='landing' data-success='You’re in. Watch your inbox.' data-error='Something went wrong. Try again.'>
+        <input class='newsletter-input' type='email' name='email' required autocomplete='email' placeholder='you@studio.com' aria-label='you@studio.com' data-newsletter-email />
+        <button class='btn btn-primary newsletter-submit' type='submit'>Subscribe</button>
+        <p class='newsletter-msg' data-newsletter-msg aria-live='polite'></p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ====== NEWSLETTER POPUP (hidden until JS shows it) ====== -->
+<aside class='newsletter-popup' data-newsletter-popup hidden role='dialog' aria-label='The Open Design newsletter'>
+  <button class='newsletter-popup__close' type='button' data-newsletter-dismiss aria-label='Close'>×</button>
+  <span class='label'>Stay updated</span>
+  <h3 class='newsletter-popup__title'>The Open Design newsletter</h3>
+  <p class='newsletter-popup__lead'>New templates, design-system drops, ambassador work, and product updates — straight to your inbox.</p>
+  <form class='newsletter-form' data-newsletter-form data-source='landing' data-success='You’re in. Watch your inbox.' data-error='Something went wrong. Try again.'>
+    <input class='newsletter-input' type='email' name='email' required autocomplete='email' placeholder='you@studio.com' aria-label='you@studio.com' data-newsletter-email />
+    <button class='btn btn-primary newsletter-submit' type='submit'>Subscribe</button>
+    <p class='newsletter-msg' data-newsletter-msg aria-live='polite'></p>
+  </form>
+</aside>
 
 <footer data-od-id='footer'>
   <div class='container'>
@@ -2639,6 +3014,108 @@ footer {
         cta.setAttribute('aria-label', 'Star on GitHub — ' + format(data.stargazers_count) + ' stars');
       })
       .catch(function () { /* leave placeholder on failure */ });
+  })();
+</script>
+
+<script>
+  /*
+   * Newsletter signup — mirrors the inline script in
+   * apps/landing-page/app/pages/index.astro. Wires both the in-page
+   * section form and the bottom-right popup to POST /subscribe, and
+   * reveals the popup after 50% scroll or a 10s fallback (whichever is
+   * first), suppressed once dismissed or subscribed.
+   */
+  (function () {
+    var STORAGE_KEY = 'od-newsletter-dismissed';
+    var locale = (document.documentElement.getAttribute('lang') || 'en').toLowerCase();
+    function track(area, result) {
+      if (window.__odTrack)
+        window.__odTrack('newsletter_signup', { page_name: 'landing_home', area: area, result: result, locale: locale });
+    }
+    function dismissed() {
+      try {
+        return window.localStorage.getItem(STORAGE_KEY) === '1';
+      } catch (e) {
+        return false;
+      }
+    }
+    function setDismissed() {
+      try {
+        window.localStorage.setItem(STORAGE_KEY, '1');
+      } catch (e) {
+        /* private mode — popup will just reappear next visit */
+      }
+    }
+    function wireForm(form, area) {
+      var input = form.querySelector('[data-newsletter-email]');
+      var msg = form.querySelector('[data-newsletter-msg]');
+      var submit = form.querySelector('.newsletter-submit');
+      var successText = form.getAttribute('data-success') || '';
+      var errorText = form.getAttribute('data-error') || '';
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var email = (input && input.value ? input.value : '').trim();
+        if (!email) return;
+        if (submit) submit.disabled = true;
+        if (msg) msg.textContent = '';
+        fetch('/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email, source: form.getAttribute('data-source') || 'landing' })
+        })
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('http error')); })
+          .then(function (data) {
+            if (!data || data.ok !== true) throw new Error('rejected');
+            form.classList.add('is-success');
+            if (msg) msg.textContent = successText;
+            if (input) input.value = '';
+            setDismissed();
+            track(area, 'success');
+          })
+          .catch(function () {
+            if (msg) msg.textContent = errorText;
+            if (submit) submit.disabled = false;
+            track(area, 'error');
+          });
+      });
+    }
+    var forms = document.querySelectorAll('[data-newsletter-form]');
+    for (var i = 0; i < forms.length; i++) {
+      var popupParent = forms[i].closest('[data-newsletter-popup]');
+      wireForm(forms[i], popupParent ? 'popup' : 'section');
+    }
+    var popup = document.querySelector('[data-newsletter-popup]');
+    if (popup && !dismissed()) {
+      var close = function () {
+        popup.hidden = true;
+        setDismissed();
+      };
+      var dismissBtns = popup.querySelectorAll('[data-newsletter-dismiss]');
+      for (var j = 0; j < dismissBtns.length; j++) dismissBtns[j].addEventListener('click', close);
+      document.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape' && !popup.hidden) close();
+      });
+      var reveal = function () {
+        if (dismissed()) return;
+        popup.hidden = false;
+        popup.classList.add('is-visible');
+        track('popup', 'view');
+      };
+      var shown = false;
+      var showOnce = function () {
+        if (shown) return;
+        shown = true;
+        reveal();
+      };
+      var onScroll = function () {
+        if (window.scrollY > window.innerHeight * 0.5) {
+          window.removeEventListener('scroll', onScroll);
+          showOnce();
+        }
+      };
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.setTimeout(showOnce, 10000);
+    }
   })();
 </script>
 </body>

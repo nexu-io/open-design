@@ -1,0 +1,349 @@
+{
+  "schemaVersion": 1,
+  "sourceScope": "open-design-bundled-fixture",
+  "brandId": "posthog",
+  "files": [
+    "DESIGN.md",
+    "tokens.css",
+    "components.html"
+  ],
+  "generatedAt": "2026-06-06T00:00:00.000Z",
+  "tokens": [
+    {
+      "name": "--bg",
+      "value": "#fdfdf8",
+      "layer": "A1-identity",
+      "source": "tokens.css:111"
+    },
+    {
+      "name": "--surface",
+      "value": "#eeefe9",
+      "layer": "A1-identity",
+      "source": "tokens.css:112"
+    },
+    {
+      "name": "--surface-warm",
+      "value": "#e5e7e0",
+      "layer": "B-slot",
+      "source": "tokens.css:113"
+    },
+    {
+      "name": "--fg",
+      "value": "#4d4f46",
+      "layer": "A1-identity",
+      "source": "tokens.css:123"
+    },
+    {
+      "name": "--fg-2",
+      "value": "#23251d",
+      "layer": "B-slot",
+      "source": "tokens.css:124"
+    },
+    {
+      "name": "--muted",
+      "value": "#65675e",
+      "layer": "A1-identity",
+      "source": "tokens.css:125"
+    },
+    {
+      "name": "--meta",
+      "value": "#9ea096",
+      "layer": "B-slot",
+      "source": "tokens.css:126"
+    },
+    {
+      "name": "--border",
+      "value": "#bfc1b7",
+      "layer": "A1-identity",
+      "source": "tokens.css:135"
+    },
+    {
+      "name": "--border-soft",
+      "value": "color-mix(in oklab, var(--border), var(--bg) 50%)",
+      "layer": "B-slot",
+      "source": "tokens.css:136"
+    },
+    {
+      "name": "--accent",
+      "value": "#F54E00",
+      "layer": "A1-identity",
+      "source": "tokens.css:146"
+    },
+    {
+      "name": "--accent-on",
+      "value": "#ffffff",
+      "layer": "A2",
+      "source": "tokens.css:147"
+    },
+    {
+      "name": "--accent-hover",
+      "value": "color-mix(in oklab, var(--accent), black 8%)",
+      "layer": "A2",
+      "source": "tokens.css:148"
+    },
+    {
+      "name": "--accent-active",
+      "value": "color-mix(in oklab, var(--accent), black 14%)",
+      "layer": "A2",
+      "source": "tokens.css:149"
+    },
+    {
+      "name": "--success",
+      "value": "#16a34a",
+      "layer": "A2",
+      "source": "tokens.css:158"
+    },
+    {
+      "name": "--warn",
+      "value": "#F7A501",
+      "layer": "A2",
+      "source": "tokens.css:159"
+    },
+    {
+      "name": "--danger",
+      "value": "#dc2626",
+      "layer": "A2",
+      "source": "tokens.css:160"
+    },
+    {
+      "name": "--font-display",
+      "value": "\"IBM Plex Sans Variable\", \"IBM Plex Sans\", -apple-system, system-ui, \"Avenir Next\", Avenir, \"Segoe UI\", \"Helvetica Neue\", Helvetica, Ubuntu, Roboto, Noto, Arial, sans-serif",
+      "layer": "A1-identity",
+      "source": "tokens.css:169"
+    },
+    {
+      "name": "--font-body",
+      "value": "\"IBM Plex Sans Variable\", \"IBM Plex Sans\", -apple-system, system-ui, \"Avenir Next\", Avenir, \"Segoe UI\", \"Helvetica Neue\", Helvetica, Ubuntu, Roboto, Noto, Arial, sans-serif",
+      "layer": "A1-identity",
+      "source": "tokens.css:170"
+    },
+    {
+      "name": "--font-mono",
+      "value": "\"Source Code Pro\", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace",
+      "layer": "A2",
+      "source": "tokens.css:171"
+    },
+    {
+      "name": "--text-xs",
+      "value": "12px",
+      "layer": "A1-structure",
+      "source": "tokens.css:180"
+    },
+    {
+      "name": "--text-sm",
+      "value": "14px",
+      "layer": "A1-structure",
+      "source": "tokens.css:181"
+    },
+    {
+      "name": "--text-base",
+      "value": "16px",
+      "layer": "A1-structure",
+      "source": "tokens.css:182"
+    },
+    {
+      "name": "--text-lg",
+      "value": "20px",
+      "layer": "A1-structure",
+      "source": "tokens.css:183"
+    },
+    {
+      "name": "--text-xl",
+      "value": "24px",
+      "layer": "A1-structure",
+      "source": "tokens.css:184"
+    },
+    {
+      "name": "--text-2xl",
+      "value": "30px",
+      "layer": "A1-structure",
+      "source": "tokens.css:185"
+    },
+    {
+      "name": "--text-3xl",
+      "value": "36px",
+      "layer": "A1-structure",
+      "source": "tokens.css:186"
+    },
+    {
+      "name": "--text-4xl",
+      "value": "44px",
+      "layer": "A1-structure",
+      "source": "tokens.css:187"
+    },
+    {
+      "name": "--leading-body",
+      "value": "1.5",
+      "layer": "A1-structure",
+      "source": "tokens.css:195"
+    },
+    {
+      "name": "--leading-tight",
+      "value": "1.2",
+      "layer": "A1-structure",
+      "source": "tokens.css:196"
+    },
+    {
+      "name": "--tracking-display",
+      "value": "-0.025em",
+      "layer": "A1-structure",
+      "source": "tokens.css:197"
+    },
+    {
+      "name": "--space-1",
+      "value": "4px",
+      "layer": "A2",
+      "source": "tokens.css:205"
+    },
+    {
+      "name": "--space-2",
+      "value": "8px",
+      "layer": "A2",
+      "source": "tokens.css:206"
+    },
+    {
+      "name": "--space-3",
+      "value": "12px",
+      "layer": "A2",
+      "source": "tokens.css:207"
+    },
+    {
+      "name": "--space-4",
+      "value": "16px",
+      "layer": "A2",
+      "source": "tokens.css:208"
+    },
+    {
+      "name": "--space-5",
+      "value": "20px",
+      "layer": "A2",
+      "source": "tokens.css:209"
+    },
+    {
+      "name": "--space-6",
+      "value": "24px",
+      "layer": "A2",
+      "source": "tokens.css:210"
+    },
+    {
+      "name": "--space-8",
+      "value": "32px",
+      "layer": "A2",
+      "source": "tokens.css:211"
+    },
+    {
+      "name": "--space-12",
+      "value": "48px",
+      "layer": "A2",
+      "source": "tokens.css:212"
+    },
+    {
+      "name": "--section-y-desktop",
+      "value": "48px",
+      "layer": "A1-structure",
+      "source": "tokens.css:219"
+    },
+    {
+      "name": "--section-y-tablet",
+      "value": "32px",
+      "layer": "A1-structure",
+      "source": "tokens.css:220"
+    },
+    {
+      "name": "--section-y-phone",
+      "value": "24px",
+      "layer": "A1-structure",
+      "source": "tokens.css:221"
+    },
+    {
+      "name": "--radius-sm",
+      "value": "4px",
+      "layer": "A2",
+      "source": "tokens.css:229"
+    },
+    {
+      "name": "--radius-md",
+      "value": "6px",
+      "layer": "A2",
+      "source": "tokens.css:230"
+    },
+    {
+      "name": "--radius-lg",
+      "value": "8px",
+      "layer": "A2",
+      "source": "tokens.css:231"
+    },
+    {
+      "name": "--radius-pill",
+      "value": "9999px",
+      "layer": "A2",
+      "source": "tokens.css:232"
+    },
+    {
+      "name": "--elev-flat",
+      "value": "none",
+      "layer": "A2",
+      "source": "tokens.css:241"
+    },
+    {
+      "name": "--elev-ring",
+      "value": "0 0 0 1px var(--border)",
+      "layer": "A2",
+      "source": "tokens.css:242"
+    },
+    {
+      "name": "--elev-raised",
+      "value": "0px 25px 50px -12px rgba(0, 0, 0, 0.25)",
+      "layer": "A2",
+      "source": "tokens.css:243"
+    },
+    {
+      "name": "--focus-ring",
+      "value": "0 0 0 3px rgba(59, 130, 246, 0.5)",
+      "layer": "A2",
+      "source": "tokens.css:251"
+    },
+    {
+      "name": "--motion-fast",
+      "value": "150ms",
+      "layer": "A2",
+      "source": "tokens.css:259"
+    },
+    {
+      "name": "--motion-base",
+      "value": "200ms",
+      "layer": "A2",
+      "source": "tokens.css:260"
+    },
+    {
+      "name": "--ease-standard",
+      "value": "cubic-bezier(0.2, 0, 0, 1)",
+      "layer": "A2",
+      "source": "tokens.css:261"
+    },
+    {
+      "name": "--container-max",
+      "value": "1280px",
+      "layer": "A1-structure",
+      "source": "tokens.css:268"
+    },
+    {
+      "name": "--container-gutter-desktop",
+      "value": "24px",
+      "layer": "A1-structure",
+      "source": "tokens.css:269"
+    },
+    {
+      "name": "--container-gutter-tablet",
+      "value": "16px",
+      "layer": "A1-structure",
+      "source": "tokens.css:270"
+    },
+    {
+      "name": "--container-gutter-phone",
+      "value": "12px",
+      "layer": "A1-structure",
+      "source": "tokens.css:271"
+    }
+  ]
+}

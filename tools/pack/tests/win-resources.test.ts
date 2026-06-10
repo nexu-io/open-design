@@ -52,6 +52,14 @@ async function createWorkspaceFixture(workspaceRoot: string): Promise<void> {
   await mkdir(join(workspaceRoot, "prompt-templates", "image"), {
     recursive: true,
   });
+  await mkdir(join(workspaceRoot, "data", "plugin-previews"), {
+    recursive: true,
+  });
+  await writeFile(
+    join(workspaceRoot, "data", "plugin-previews", "manifest.json"),
+    "{\"previews\":{}}\n",
+    "utf8",
+  );
   await mkdir(join(workspaceRoot, "plugins", "registry", "official"), {
     recursive: true,
   });
@@ -94,6 +102,52 @@ describe("prepareResourceTree", () => {
 
       await expect(readFile(materializedTemplatePath, "utf8")).resolves.toBe(
         "version two\n",
+      );
+      expect(cache.report().entries.map((entry) => entry.status)).toEqual([
+        "miss",
+        "miss",
+      ]);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("invalidates the Windows resource tree cache when the plugin-preview manifest changes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-previews-"));
+    const workspaceRoot = join(root, "workspace");
+    const resourceRoot = join(root, "materialized", "open-design");
+    const cache = new ToolPackCache(join(root, "cache"));
+    const config = { workspaceRoot } as ToolPackConfig;
+    const paths = { resourceRoot } as WinPaths;
+    const manifestPath = join(
+      workspaceRoot,
+      "data",
+      "plugin-previews",
+      "manifest.json",
+    );
+    const materializedManifestPath = join(
+      resourceRoot,
+      "data",
+      "plugin-previews",
+      "manifest.json",
+    );
+
+    try {
+      await createWorkspaceFixture(workspaceRoot);
+      await writeFile(manifestPath, "{\"previews\":{\"a\":1}}\n", "utf8");
+
+      await prepareResourceTree(config, paths, cache, { materialize: true });
+
+      await expect(readFile(materializedManifestPath, "utf8")).resolves.toBe(
+        "{\"previews\":{\"a\":1}}\n",
+      );
+
+      await writeFile(manifestPath, "{\"previews\":{\"a\":2}}\n", "utf8");
+
+      await prepareResourceTree(config, paths, cache, { materialize: true });
+
+      await expect(readFile(materializedManifestPath, "utf8")).resolves.toBe(
+        "{\"previews\":{\"a\":2}}\n",
       );
       expect(cache.report().entries.map((entry) => entry.status)).toEqual([
         "miss",

@@ -138,3 +138,9 @@ The shape system is uniformly soft: 8px–12px radii, 9999px pills for tags and 
 - **Duration**: 150–220ms for hover; 280–360ms for layout transitions.
 - **Easing**: `cubic-bezier(0.16, 1, 0.3, 1)` (smooth out) for entrances.
 - **Restraint**: no parallax, no scroll-jacking. Subtle fade and translate only.
+
+## 7. Usage Guardrails
+
+- Preserve the neutral editorial restraint, soft radius, and sparse accent usage together; green accents alone do not create an OpenAI-like surface.
+- Use Signifier-style display moments only for editorial or announcement hierarchy, keeping product controls in the sans system.
+- Avoid ornamental motion, heavy shadows, and oversized decorative cards; the system should feel calm, readable, and deliberate.

@@ -132,10 +132,10 @@ export function SideChatTab({
       </div>
       <div className={styles.pane}>
         <ChatPane
-	          messages={controlledChat?.messages ?? chat.messages}
-	          streaming={controlledChat?.streaming ?? chat.streaming}
-	          loading={controlledChat?.loading ?? chat.loading}
-	          sendDisabled={controlledChat?.sendDisabled}
+          messages={controlledChat?.messages ?? chat.messages}
+          streaming={controlledChat?.streaming ?? chat.streaming}
+          loading={controlledChat?.loading ?? chat.loading}
+          sendDisabled={controlledChat?.sendDisabled}
           queuedItems={controlledChat?.queuedItems}
           onRemoveQueuedSend={controlledChat?.onRemoveQueuedSend}
           onUpdateQueuedSend={controlledChat?.onUpdateQueuedSend}
@@ -159,10 +159,15 @@ export function SideChatTab({
           onRequestOpenFile={onRequestOpenFile}
           conversations={conversations}
           activeConversationId={conversationId}
+          // Intentionally omit `messagesConversationId`: `useConversationChat`
+          // resets `messages` to [] while a conversation loads, so trusting the
+          // live length here would flash a phantom "0 msg". Falling back to the
+          // persisted `conversation.messageCount` keeps the list count stable.
           onSelectConversation={onSelectConversation}
           onDeleteConversation={onDeleteConversation}
           onNewConversation={onNewConversation}
           researchAvailable={config.mode === 'daemon'}
+          config={config}
         />
       </div>
     </div>

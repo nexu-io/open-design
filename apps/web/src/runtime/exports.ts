@@ -56,6 +56,29 @@ export function exportAsHtml(html: string, title: string): void {
   triggerDownload(blob, `${safeFilename(title, 'artifact')}.html`);
 }
 
+export async function exportProjectAsHtml(opts: {
+  projectId: string;
+  filePath: string;
+  fallbackHtml: string;
+  fallbackTitle: string;
+}): Promise<void> {
+  const segments = opts.filePath
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+  const url = `/api/projects/${encodeURIComponent(opts.projectId)}/export/${segments}?inline=1`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`html export request failed (${resp.status})`);
+    const blob = await resp.blob();
+    triggerDownload(blob, `${safeFilename(opts.fallbackTitle, 'artifact')}.html`);
+  } catch (err) {
+    console.warn('[exportProjectAsHtml] falling back to source HTML export:', err);
+    exportAsHtml(opts.fallbackHtml, opts.fallbackTitle);
+  }
+}
+
 // A file is treated as a preview-chrome wrapper only when it lives inside
 // a frames/ or device-frames/ directory, or its filename is an unambiguous
 // wrapper template (browser-chrome.html, device-frame.html).  Filenames
@@ -876,12 +899,39 @@ export function buildSandboxedPreviewDocument(
 </html>`;
 }
 
+function currentOriginBaseHref(): string | undefined {
+  if (typeof window !== 'undefined' && typeof window.location?.origin === 'string') {
+    return `${window.location.origin.replace(/\/+$/, '')}/`;
+  }
+  const base =
+    typeof document !== 'undefined' && typeof document.baseURI === 'string'
+      ? document.baseURI
+      : typeof window !== 'undefined' && typeof window.location?.href === 'string'
+        ? window.location.href
+        : undefined;
+  if (!base) return undefined;
+  try {
+    return new URL('/', base).href;
+  } catch {
+    return undefined;
+  }
+}
+
+function buildBlobSafeSrcdoc(html: string, options?: SrcdocOptions): string {
+  const baseHref =
+    typeof options?.baseHref === 'string' ? options.baseHref : currentOriginBaseHref();
+  return buildSrcdoc(html, {
+    ...options,
+    ...(baseHref ? { baseHref } : {}),
+  });
+}
+
 export function openSandboxedPreviewInNewTab(
   html: string,
   title: string,
   srcdocOptions?: SrcdocOptions,
 ): void {
-  const doc = buildSandboxedPreviewDocument(buildSrcdoc(html, srcdocOptions), title);
+  const doc = buildSandboxedPreviewDocument(buildBlobSafeSrcdoc(html, srcdocOptions), title);
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank', 'noopener,noreferrer');
@@ -912,7 +962,7 @@ export async function exportAsPdf(
   // Generate a per-export nonce so the print-ready handshake is resistant to
   // spoofing by untrusted scripts inside the exported artifact.
   const nonce = randomUUID();
-  let doc = buildSrcdoc(html, opts);
+  let doc = buildBlobSafeSrcdoc(html, opts);
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
   doc = injectPrintReadyHandshake(doc, nonce);
 

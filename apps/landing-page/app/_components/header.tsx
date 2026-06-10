@@ -30,7 +30,10 @@ import {
 const REPO = 'https://github.com/nexu-io/open-design';
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
 const X_TWITTER = 'https://x.com/nexudotio';
-const AMR_URL = 'https://open-design.ai/amr/';
+// Canonical AMR destination. Exported so the homepage AMR band CTA
+// (app/page.tsx) links to the same URL the nav uses, without a second
+// hand-maintained copy of the literal.
+export const AMR_URL = 'https://open-design.ai/amr/';
 
 const ext = {
   target: '_blank',
@@ -62,15 +65,17 @@ const SOLUTION_USE_CASES: ReadonlyArray<{
   { key: 'designSystem', href: '/solutions/design-system/' },
 ];
 
-// Solution → Roles. Hidden until the Role pages ship (next PR). Kept here so
-// re-enabling the group in the Solution dropdown is a one-line change.
-// const SOLUTION_ROLES: ReadonlyArray<{ name: string; href: string }> = [
-//   { name: 'Solo Builder', href: '/for/solo-builder/' },
-//   { name: 'Designer', href: '/for/designer/' },
-//   { name: 'Engineering', href: '/for/engineering/' },
-//   { name: 'Product Managers', href: '/for/product-managers/' },
-//   { name: 'Marketing', href: '/for/marketing/' },
-// ];
+// Solution → Roles. Same `key`→localized-breadcrumb pattern as use cases.
+const SOLUTION_ROLES: ReadonlyArray<{
+  key: SolutionPageKey;
+  href: string;
+}> = [
+  { key: 'roleSoloBuilder', href: '/solutions/solo-builder/' },
+  { key: 'roleDesigner', href: '/solutions/designer/' },
+  { key: 'roleEngineering', href: '/solutions/engineering/' },
+  { key: 'roleProductManagers', href: '/solutions/product-managers/' },
+  { key: 'roleMarketing', href: '/solutions/marketing/' },
+];
 
 
 export interface HeaderProps {
@@ -79,6 +84,7 @@ export interface HeaderProps {
     | 'home'
     | 'product'
     | 'html-anything'
+    | 'html-video'
     | 'plugins'
     /*
      * `library` is kept as an alias for the dropdown trigger so older
@@ -116,7 +122,7 @@ export interface HeaderProps {
   locale?: LandingLocaleCode;
   /** Optional override for callers that already resolved localized chrome. */
   copy?: HeaderCopy;
-  /** Brand link target — `#top` on the homepage, `/` on sub-pages. */
+  /** Brand link target — `/` (home) everywhere; callers may override. */
   brandHref?: string;
   /**
    * Current request pathname (e.g. `/zh/blog/x/`). Used to build the
@@ -136,7 +142,7 @@ export function Header({
   github,
   locale = DEFAULT_LOCALE,
   copy,
-  brandHref = '#top',
+  brandHref = '/',
   currentPath = '/',
 }: HeaderProps) {
   const linkClass = (key: NonNullable<HeaderProps['active']>) =>
@@ -197,7 +203,8 @@ export function Header({
                 className={
                   active === 'product' ||
                   active === 'home' ||
-                  active === 'html-anything'
+                  active === 'html-anything' ||
+                  active === 'html-video'
                     ? 'is-active'
                     : undefined
                 }
@@ -236,6 +243,18 @@ export function Header({
                     </span>
                   </a>
                 </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/html-video/')}
+                    className={linkClass('html-video')}
+                  >
+                    <span className='dropdown-name'>{productMenuCopy.htmlVideoName}</span>
+                    <span className='dropdown-blurb'>
+                      {productMenuCopy.htmlVideoBlurb}
+                    </span>
+                  </a>
+                </li>
                 {/* AMR is no longer listed here — per the Header spec it now
                   heads the Agent dropdown (the design Agent above the coding
                   agents). Listing it in both places would be redundant. */}
@@ -251,7 +270,7 @@ export function Header({
             */}
             <li className='has-dropdown'>
               <a
-                href={href('/compare/')}
+                href={href('/solutions/')}
                 className={active === 'solution' ? 'is-active' : undefined}
                 aria-haspopup='true'
                 aria-expanded='false'
@@ -270,19 +289,24 @@ export function Header({
                     </a>
                   </li>
                 ))}
-                {/*
-                  Roles group (Solo Builder / Designer / Engineering / Product
-                  Managers / Marketing) is hidden for now — those pages have no
-                  content yet. Re-add the SOLUTION_ROLES block here, plus the
-                  nav.roles group label, when the Role pages ship (next PR).
-                */}
+                <li role='none' className='nav-dropdown-group'>
+                  <span className='nav-dropdown-group-label'>{headerCopy.nav.roles}</span>
+                </li>
+                {SOLUTION_ROLES.map((item) => (
+                  <li role='none' key={`role-${item.key}`}>
+                    <a role='menuitem' href={href(item.href)}>
+                      <span className='dropdown-name'>{getSolutionPageCopy(locale, item.key).breadcrumb}</span>
+                    </a>
+                  </li>
+                ))}
               </ul>
             </li>
             {/*
-              Agent — for now this dropdown lists only AMR (the design Agent).
-              The 17 first-party coding-agent adapters and their per-agent
-              /agents/ hub anchors are intentionally held back for a later
-              pass; the trigger already links to the /agents/ hub.
+              Agent — AMR (the design Agent) heads the dropdown, followed by the
+              coding agents that have a dedicated long-form design page. Brand
+              names are locale-invariant, so they are listed here directly; the
+              routes stay in lockstep with DETAIL_ROUTES on the /agents/ hub. The
+              trigger still links to the /agents/ hub.
             */}
             <li className='has-dropdown'>
               <a
@@ -301,6 +325,18 @@ export function Header({
                     <span className='dropdown-blurb'>{productMenuCopy.amrBlurb}</span>
                   </a>
                 </li>
+                {[
+                  { route: 'codex-design', name: 'Codex' },
+                  { route: 'cursor-design', name: 'Cursor' },
+                  { route: 'claude-code-design', name: 'Claude Code' },
+                  { route: 'opencode-design', name: 'OpenCode' },
+                ].map((agentItem) => (
+                  <li role='none' key={agentItem.route}>
+                    <a role='menuitem' href={href(`/agents/${agentItem.route}/`)}>
+                      <span className='dropdown-name'>{agentItem.name}</span>
+                    </a>
+                  </li>
+                ))}
               </ul>
             </li>
             {/*
@@ -400,6 +436,11 @@ export function Header({
                     className={linkClass('tutorials')}
                   >
                     <span className='dropdown-name'>{headerCopy.nav.tutorials}</span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a role='menuitem' href={href('/compare/')}>
+                    <span className='dropdown-name'>{headerCopy.nav.compare ?? 'Compare'}</span>
                   </a>
                 </li>
                 <li role='none'>
@@ -523,8 +564,14 @@ export function Header({
             data-download-cta
             data-download-page
           >
+            {/*
+              The CPU-arch chip (（Apple Silicon）/（Apple Intel）) is
+              intentionally NOT rendered in the nav CTA — at mid widths it
+              pushed the row over the available space and crowded the bar.
+              The arch suffix still appears on the homepage hero download
+              button (page.tsx) and the /download/ page, where there is room.
+            */}
             {headerCopy.download}
-            <span className='download-arch' data-download-arch hidden />
           </a>
           <details className='locale-switch nav-locale' data-locale-switch>
             <summary
