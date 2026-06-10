@@ -55,6 +55,7 @@ import type {
   DesignToolboxClickProps,
   NextStepActionClickProps,
   RunFailedToastClickProps,
+  AmrAuthResultProps,
   AmrEntryClickProps,
   RunFailedToastSurfaceViewProps,
   ChatPanelResourcesPopoverClickProps,
@@ -198,6 +199,17 @@ export function trackAmrEntryClick(
   props: AmrEntryClickProps,
 ): void {
   send(track, 'ui_click', props);
+}
+
+// Fired exactly once per AMR sign-in attempt when the login poll settles.
+// Call sites go through analytics/amr-auth.ts, which owns the
+// begin/resolve dedupe — do not call this wrapper directly from
+// components, or concurrent pollers will double-report one attempt.
+export function trackAmrAuthResult(
+  track: Track,
+  props: AmrAuthResultProps,
+): void {
+  send(track, 'amr_auth_result', props);
 }
 
 // ---- ui_click (home) -----------------------------------------------------

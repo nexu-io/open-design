@@ -1589,6 +1589,27 @@ export interface AmrEntryClickProps {
   entry_occurred_at: string;
 }
 
+// Terminal outcome of one AMR (vela) sign-in attempt, fired exactly once
+// per attempt when the login poll loop settles. This is the main-app-side
+// completion signal that pairs with the amr_entry click: dashboards count
+// AMR-authorized users from this event without joining the separate AMR
+// PostHog project. `result` semantics:
+//   success   — poll observed loggedIn=true within the budget
+//   failed    — `vela login` failed to spawn or exited before sign-in
+//   cancelled — the user clicked Cancel (or backed out mid-start)
+//   timeout   — the 5-minute poll budget elapsed
+export interface AmrAuthResultProps {
+  page_name: TrackingPageName;
+  area: 'amr_auth';
+  result: 'success' | 'failed' | 'cancelled' | 'timeout';
+  error_code?: string;
+  duration_ms: number;
+  // Attribution carried over from the amr_entry click that started this
+  // attempt; absent when login was started without a recorded entry.
+  entry_id?: string;
+  source_detail?: TrackingAmrEntrySource;
+}
+
 export interface ChatPanelResourcesPopoverClickProps {
   page_name: 'chat_panel';
   area: 'resources_popover';
@@ -2636,6 +2657,7 @@ export type AnalyticsEventPayload =
       props: SettingsByokModelsFetchResultProps;
     }
   | { event: 'settings_connector_auth_result'; props: SettingsConnectorAuthResultProps }
+  | { event: 'amr_auth_result'; props: AmrAuthResultProps }
   | { event: 'onboarding_runtime_scan_result'; props: OnboardingRuntimeScanResultProps }
   | { event: 'onboarding_complete_result'; props: OnboardingCompleteResultProps }
   | {
@@ -2949,6 +2971,9 @@ export interface DeriveConfigureGlobalsInput {
   // Whether a BYOK key/url has been saved (web client only — daemon
   // can leave this undefined).
   byokConfigured?: boolean;
+  // Whether the user has completed AMR (vela) sign-in. AMR ships with the
+  // app, so authorization — not installation — is its "configured" signal.
+  amrAuthorized?: boolean;
 }
 
 export function deriveConfigureGlobals(
@@ -2959,24 +2984,34 @@ export function deriveConfigureGlobals(
   configure_availability: TrackingConfigureAvailability;
 } {
   const agents = input.agents ?? [];
-  const hasAvailableCli = agents.some((a) => a.available === true);
+  // The AMR runtime is bundled with the app, so its agent row must not
+  // count as a user-configured local CLI: with it included every install
+  // reports 'local_cli' and the 'amr'/'none' buckets can never appear.
+  // AMR's configured signal is `amrAuthorized` (sign-in), not detection.
+  const cliAgents = agents.filter((a) => a.id !== 'amr');
+  const hasAvailableCli = cliAgents.some((a) => a.available === true);
   const selectedAgent = input.agentId
     ? agents.find((a) => a.id === input.agentId)
     : undefined;
   const selectedAgentAvailable = selectedAgent?.available === true;
   const byokConfigured = input.byokConfigured === true;
+  const amrAuthorized = input.amrAuthorized === true;
 
+  // 'api' mode means BYOK is the active execution path, so treat it as a
+  // configured BYOK signal even when the caller cannot see the saved key
+  // (the daemon never can). 'daemon' mode used to hardcode 'local_cli',
+  // which made 'none' unreachable on desktop; the type now follows what
+  // is actually configured, with mode only steering availability below.
+  const byokSignal = byokConfigured || input.mode === 'api';
   let configureType: TrackingConfigureType;
-  if (input.mode === 'daemon') {
-    configureType = byokConfigured ? 'both' : 'local_cli';
-  } else if (input.mode === 'api') {
-    configureType = hasAvailableCli ? 'both' : 'byok';
-  } else if (hasAvailableCli && byokConfigured) {
+  if (hasAvailableCli && byokSignal) {
     configureType = 'both';
   } else if (hasAvailableCli) {
     configureType = 'local_cli';
-  } else if (byokConfigured) {
+  } else if (byokSignal) {
     configureType = 'byok';
+  } else if (amrAuthorized) {
+    configureType = 'amr';
   } else {
     configureType = 'none';
   }
@@ -2988,7 +3023,7 @@ export function deriveConfigureGlobals(
       : 'unavailable';
   } else if (input.mode === 'api') {
     configureAvailability = byokConfigured ? 'available' : 'unavailable';
-  } else if (hasAvailableCli || byokConfigured) {
+  } else if (hasAvailableCli || byokConfigured || amrAuthorized) {
     configureAvailability = 'available';
   } else {
     configureAvailability = 'unknown';
