@@ -5,13 +5,16 @@
 // without a circular dependency.
 
 // AMR model-gateway console wallet (account, balance, recharge).
-export const AMR_CONSOLE_URL = 'https://open-design.ai/amr/wallet';
+// `source=open_design` tags the landing page_view so vela analytics can
+// attribute the visit to Open Design (per-product revenue/traffic attribution).
+export const AMR_CONSOLE_URL =
+  'https://open-design.ai/amr/wallet?source=open_design';
 export const AMR_RECHARGE_URL = AMR_CONSOLE_URL;
 
 const AMR_CONSOLE_URL_BY_PROFILE: Record<string, string> = {
   prod: AMR_CONSOLE_URL,
-  test: 'https://vela.powerformer.net/wallet',
-  local: 'http://localhost:5173/wallet',
+  test: 'https://vela.powerformer.net/wallet?source=open_design',
+  local: 'http://localhost:5173/wallet?source=open_design',
 };
 
 export function amrConsoleUrlForProfile(profile: string | null | undefined): string {

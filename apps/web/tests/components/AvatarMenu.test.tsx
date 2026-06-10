@@ -237,6 +237,6 @@ describe('AvatarMenu', () => {
       screen
         .getByRole('link', { name: 'avatar.amrConsoleavatar.amrConsoleMeta' })
         .getAttribute('href'),
-    ).toBe('https://vela.powerformer.net/wallet');
+    ).toBe('https://vela.powerformer.net/wallet?source=open_design');
   });
 });

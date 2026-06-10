@@ -96,6 +96,13 @@ export function spawnEnvForAgent(
   if (agentId === 'amr') {
     Object.assign(env, amrVelaProfileEnv(env));
     Object.assign(env, amrAnalyticsIdentityEnv(env));
+    // Identify Open Design as the host so the vela CLI tags its command +
+    // model_request analytics with source=open_design (revenue attribution).
+    // Not PII (unlike the installation id above), so set it regardless of the
+    // telemetry-consent gate that amrAnalyticsIdentityEnv applies.
+    if (!env.AMR_CLIENT_SOURCE?.trim()) {
+      env.AMR_CLIENT_SOURCE = 'open_design';
+    }
     if (!env.OPENCODE_TEST_HOME?.trim() && env.OD_DATA_DIR?.trim()) {
       env.OPENCODE_TEST_HOME = path.join(
         env.OD_DATA_DIR.trim(),
