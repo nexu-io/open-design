@@ -95,11 +95,17 @@ export function effectivePeerFromReq(req: { socket?: { remoteAddress?: string | 
  * safe for granting access to management-only endpoints.
  *
  * 1. TCP peer must be loopback (direct local or same-host proxy).
- * 2. If proxy trust is enabled AND the TCP peer is loopback (indicating
- *    a same-host reverse proxy), the X-Forwarded-For header is checked:
- *    the real client behind the proxy must also be loopback.
- *    Otherwise a remote browser reaching the daemon through Caddy/nginx
- *    on the same host would appear as "local" and bypass management guards.
+ * 2. If proxy trust is NOT enabled: trust the loopback peer directly.
+ * 3. If proxy trust IS enabled AND the TCP peer is loopback:
+ *    a. XFF present → use it: the real client behind the proxy must be loopback.
+ *    b. XFF absent → disambiguate via Host/Origin headers:
+ *       - Host/Origin are loopback → direct localhost browser → allow.
+ *       - Host/Origin are non-loopback → proxy forwarded a remote client → deny.
+ *       - Host/Origin absent → fail closed (deny).
+ *
+ * This prevents a same-host proxy that omits XFF from making a remote browser
+ * look local, while preserving direct-localhost admin access when proxy trust
+ * is enabled (e.g. an operator with OD_TRUST_PROXY=1 managing via 127.0.0.1).
  */
 export function isLocalManagementRequest(req: {
   socket?: { remoteAddress?: string | undefined };
@@ -109,14 +115,53 @@ export function isLocalManagementRequest(req: {
   if (!isLoopbackAddress(tcpPeer)) return false;
   if (!isProxyTrusted()) return true;
   const xff = req.headers['x-forwarded-for'];
-  // No XFF header — when proxy trust is enabled and the TCP peer is loopback,
-  // a missing XFF is ambiguous. It could be a direct localhost connection, or
-  // a same-host proxy that omits the header. Fail closed to prevent a remote
-  // client from reaching management endpoints through a misconfigured proxy.
-  // Direct-localhost admin access still works without OD_TRUST_PROXY set.
-  if (xff === undefined) return false;
-  // XFF present — verify the real client behind the proxy is also loopback.
-  const first = String(xff).split(',')[0]?.trim();
-  if (!first) return false;
-  return isLoopbackAddress(first);
+  if (xff !== undefined) {
+    // XFF present — verify the real client behind the proxy is also loopback.
+    const first = String(xff).split(',')[0]?.trim();
+    if (!first) return false;
+    return isLoopbackAddress(first);
+  }
+  // No XFF under proxy trust — disambiguate via Host/Origin.
+  // A direct localhost browser sends Host: 127.0.0.1:port or
+  // Host: localhost:port, and Origin: http://127.0.0.1:port.
+  // A proxied remote client sends Host: public-domain:port.
+  const origin = typeof req.headers['origin'] === 'string'
+    ? req.headers['origin'] : undefined;
+  if (origin) return isLoopbackOrigin(origin);
+  const host = typeof req.headers['host'] === 'string'
+    ? req.headers['host'] : undefined;
+  if (host) return isLoopbackHost(host);
+  // Neither Origin nor Host — fail closed.
+  return false;
+}
+
+/**
+ * Returns true when a Host header value (e.g. "127.0.0.1:7456",
+ * "localhost:3000", "[::1]:7456") resolves to a loopback address.
+ */
+export function isLoopbackHost(host: string): boolean {
+  // Strip port — handle IPv6 bracket notation.
+  let hostname = host;
+  if (hostname.startsWith('[')) {
+    const close = hostname.indexOf(']');
+    if (close >= 0) hostname = hostname.slice(1, close);
+  } else {
+    const colon = hostname.lastIndexOf(':');
+    if (colon >= 0) hostname = hostname.slice(0, colon);
+  }
+  if (hostname === 'localhost') return true;
+  return isLoopbackAddress(hostname);
+}
+
+/**
+ * Returns true when an Origin header value (e.g. "http://127.0.0.1:7456",
+ * "https://localhost:3000") resolves to a loopback host.
+ */
+export function isLoopbackOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    return isLoopbackHost(url.host);
+  } catch {
+    return false;
+  }
 }

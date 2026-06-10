@@ -118,7 +118,8 @@ describe('ip-allowlist', () => {
     it('allows direct localhost when OD_TRUST_PROXY=1 and no XFF (loopback fallback)', async () => {
       process.env.OD_TRUST_PROXY = '1';
       const middleware = createIpAllowlistMiddleware(['192.168.1.5']);
-      const req = mockReq('127.0.0.1');
+      // Direct localhost browser sends loopback Host header.
+      const req = mockReq('127.0.0.1', { host: '127.0.0.1:7456' });
       const res = mockRes();
       let called = false;
       await middleware(req, res, () => { called = true; });
@@ -129,6 +130,26 @@ describe('ip-allowlist', () => {
       process.env.OD_TRUST_PROXY = '1';
       const middleware = createIpAllowlistMiddleware(['192.168.1.5']);
       const req = mockReq('10.0.0.99');
+      const res = mockRes();
+      await middleware(req, res, () => {});
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('blocks loopback peer with non-loopback Host when OD_TRUST_PROXY=1 and no XFF', async () => {
+      process.env.OD_TRUST_PROXY = '1';
+      const middleware = createIpAllowlistMiddleware(['192.168.1.5']);
+      // Loopback TCP peer but Host is public — proxied remote client.
+      const req = mockReq('127.0.0.1', { host: 'myapp.example.com:443' });
+      const res = mockRes();
+      await middleware(req, res, () => {});
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('blocks loopback peer with no Host/Origin when OD_TRUST_PROXY=1 and no XFF', async () => {
+      process.env.OD_TRUST_PROXY = '1';
+      const middleware = createIpAllowlistMiddleware(['192.168.1.5']);
+      // Loopback TCP peer, no XFF, no Host — fail closed.
+      const req = mockReq('127.0.0.1');
       const res = mockRes();
       await middleware(req, res, () => {});
       expect(res.statusCode).toBe(403);

@@ -9,6 +9,7 @@ import { isNetworkExposed } from './network-config.js';
 import { MCP_TEMPLATES, readMcpConfig, writeMcpConfig } from './mcp-config.js';
 import { beginAuth, exchangeCodeForToken } from './mcp-oauth.js';
 import { clearToken, getToken, setToken } from './mcp-tokens.js';
+import { isLocalManagementRequest as isLoopbackManagementRequest } from './proxy-trust.js';
 import type { RouteDeps } from './server-context.js';
 
 export interface RegisterMcpRoutesDeps extends RouteDeps<'http' | 'paths' | 'mcp'> {}
@@ -111,15 +112,16 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     }
     const payload = await computeInstallPayload();
     installInfoCache = { t: now, payload };
-    // Decrypt the API key on every request (not cached) to avoid keeping
-    // plaintext secrets in memory longer than necessary.
-    let apiKey: string | undefined;
-    const mcpKeys = await listMcpKeys(RUNTIME_DATA_DIR);
-    if (mcpKeys.length > 0 && mcpKeys[0]) {
-      const revealed = await revealMcpKey(RUNTIME_DATA_DIR, mcpKeys[0].id);
-      if (revealed) apiKey = revealed.key;
+    // Only include plaintext key fields for loopback callers.
+    // Non-loopback same-origin callers (e.g. authenticated remote
+    // browsers) should use the dedicated localhost-only
+    // /api/mcp-keys/:id endpoint to reveal keys.
+    const isLoopbackCaller = isLoopbackManagementRequest(req);
+    if (!isLoopbackCaller) {
+      const { apiKey: _ak, mcpKey: _mk, ...safePayload } = payload as any;
+      return res.json(safePayload);
     }
-    res.json({ ...payload, ...(apiKey ? { apiKey, mcpKey: apiKey, remoteMcpKey: apiKey } : {}) });
+    res.json(payload);
   });
 
   // Codex one-click install. Codex CLI exposes `codex mcp add/remove/get`,

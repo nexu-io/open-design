@@ -174,14 +174,65 @@ describe('isLocalManagementRequest', () => {
     })).toBe(false);
   });
 
-  it('fails closed when proxy trusted but XFF absent (ambiguous peer)', () => {
+  it('allows direct localhost when proxy trusted but XFF absent and Host is loopback', () => {
     process.env.OD_TRUST_PROXY = 'nginx';
-    // XFF absent under proxy trust is ambiguous: could be direct localhost
-    // or a misconfigured proxy that omits the header. Fail closed.
+    // XFF absent under proxy trust — but Host is loopback, so this is
+    // a direct localhost browser, not a proxied remote client.
+    expect(isLocalManagementRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: { host: '127.0.0.1:7456' },
+    })).toBe(true);
+  });
+
+  it('allows direct localhost when proxy trusted but XFF absent and Origin is loopback', () => {
+    process.env.OD_TRUST_PROXY = '1';
+    expect(isLocalManagementRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: { origin: 'http://127.0.0.1:7456' },
+    })).toBe(true);
+  });
+
+  it('fails closed when proxy trusted, XFF absent, and Host is non-loopback', () => {
+    process.env.OD_TRUST_PROXY = 'nginx';
+    // XFF absent, Host is public — likely a proxied remote client.
+    expect(isLocalManagementRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: { host: 'myapp.example.com:443' },
+    })).toBe(false);
+  });
+
+  it('fails closed when proxy trusted, XFF absent, and Origin is non-loopback', () => {
+    process.env.OD_TRUST_PROXY = '1';
+    expect(isLocalManagementRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: { origin: 'https://myapp.example.com' },
+    })).toBe(false);
+  });
+
+  it('fails closed when proxy trusted, XFF absent, and no Host or Origin', () => {
+    process.env.OD_TRUST_PROXY = 'caddy';
+    // Neither Origin nor Host — fail closed.
     expect(isLocalManagementRequest({
       socket: { remoteAddress: '127.0.0.1' },
       headers: {},
     })).toBe(false);
+  });
+
+  it('prefers Origin over Host when both present', () => {
+    process.env.OD_TRUST_PROXY = '1';
+    // Origin is remote but Host is loopback — Origin wins.
+    expect(isLocalManagementRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: { host: '127.0.0.1:7456', origin: 'https://evil.com' },
+    })).toBe(false);
+  });
+
+  it('recognizes localhost hostname as loopback', () => {
+    process.env.OD_TRUST_PROXY = '1';
+    expect(isLocalManagementRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: { host: 'localhost:7456' },
+    })).toBe(true);
   });
 
   it('fails closed when proxy trusted but XFF is empty string', () => {

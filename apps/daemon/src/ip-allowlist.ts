@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { effectivePeerFromReq, isLoopbackAddress } from "./proxy-trust.js";
+import { effectivePeerFromReq, isLoopbackAddress, isLoopbackHost, isLoopbackOrigin } from "./proxy-trust.js";
 
 /**
  * Creates an IP allowlist middleware. When `allowedHosts` is non-empty and
@@ -27,8 +27,20 @@ export function createIpAllowlistMiddleware(allowedHosts: string[]) {
     const clientIp = effectivePeerFromReq(req);
 
     // When OD_TRUST_PROXY is on and no XFF is present, effectivePeerFromReq
-    // returns ''. A direct localhost connection still has a loopback TCP peer.
-    if (clientIp === '' && isLoopbackAddress(req.socket?.remoteAddress)) return next();
+    // returns ''. Disambiguate via Host/Origin: a direct localhost browser
+    // sends loopback Host/Origin, while a proxied remote client does not.
+    if (clientIp === '' && isLoopbackAddress(req.socket?.remoteAddress)) {
+      const origin = typeof req.headers['origin'] === 'string' ? req.headers['origin'] : undefined;
+      const host = typeof req.headers['host'] === 'string' ? req.headers['host'] : undefined;
+      if ((origin && isLoopbackOrigin(origin)) || (!origin && host && isLoopbackHost(host))) {
+        return next();
+      }
+      // Non-loopback Host/Origin with loopback peer + no XFF — fail closed.
+      const normalized = (host ?? 'unknown').startsWith("::ffff:") ? (host ?? 'unknown').slice(7) : (host ?? 'unknown');
+      console.warn(`[od] ip-allowlist: blocked ambiguous loopback peer with non-loopback host ${normalized}`);
+      res.status(403).json({ error: "FORBIDDEN", reason: "IP not in allowlist" });
+      return;
+    }
     if (isLoopbackAddress(clientIp)) return next();
 
     const allowed = entries.some((entry) => entry.matches(clientIp));
