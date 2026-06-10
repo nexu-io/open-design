@@ -138,14 +138,25 @@ async function main(): Promise<void> {
   const publishedAfter = new Date(Date.now() - days * 86400_000).toISOString();
 
   const idSet = new Set<string>();
+  let searchFailures = 0;
   for (const q of queries) {
     try {
       for (const id of await searchVideoIds(q, publishedAfter, key)) idSet.add(id);
     } catch (e) {
+      searchFailures++;
       console.error(`search failed for "${q}": ${(e as Error).message}`);
     }
   }
   console.log(`Found ${idSet.size} unique video ids across ${queries.length} queries (last ${days}d)`);
+
+  // Fail loud instead of drifting silently: if every query errored (e.g. an API
+  // outage or bad key), an empty result set is indistinguishable from "nothing
+  // new". Exit non-zero so the scheduled run is observably red, not falsely green.
+  if (searchFailures === queries.length) {
+    console.error(`All ${queries.length} search queries failed; aborting without writing.`);
+    process.exitCode = 1;
+    return;
+  }
 
   const existingIds = await readExistingVideoIds();
   const candidateIds = [...idSet].filter((id) => !existingIds.has(id));
@@ -170,16 +181,23 @@ async function main(): Promise<void> {
 
   const takenSlugs = await readExistingSlugs();
   let ok = 0;
+  let failed = 0;
   await mapPool(kept, 4, async (v) => {
     try {
       const slug = await writeTutorial(v, takenSlugs);
       ok++;
       console.log(`  + ${slug} <- ${v.videoId} (${v.author})`);
     } catch (e) {
+      failed++;
       console.error(`  ! failed ${v.videoId}: ${(e as Error).message}`);
     }
   });
-  console.log(`Done: ${ok}/${kept.length} new tutorials written`);
+  console.log(`Done: ${ok}/${kept.length} new tutorials written, ${failed} failed`);
+
+  // A kept (relevant) video that cannot be written would otherwise vanish: the
+  // git-status PR step only sees the files that did land. Exit non-zero so a
+  // partial sync surfaces, mirroring the backfill script's exit 2.
+  if (failed > 0) process.exitCode = 2;
 }
 
 void main();
