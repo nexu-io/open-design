@@ -1,4 +1,5 @@
 ---
+name: deep-think-maximum-cognitive-effort-protocol-mq8kvw92
 description: Comprehensive deep-thinking process. Activates maximum reasoning, skill retrieval, verification, and step-by-step execution.
 ---
 
@@ -29,12 +30,12 @@ Before starting, classify the task:
 
 Load ALL available context before forming any opinion.
 
-1. Read `MEMORY.md` — current global state
-2. Read `knowledge/gotchas.md` — known pitfalls for this domain
-3. Read the most relevant local knowledge or chunk files
-4. Search Honcho when recent continuity matters
-5. Check conversation history for prior work on this topic
-6. Identify which projects/systems are involved
+1. Read project memory if available (e.g., `MEMORY.md`, `SESSION.md`, or status logs)
+2. Read known pitfalls and gotchas for the target domain (e.g., `knowledge/gotchas.md` if present)
+3. Read the most relevant local knowledge, READMEs, or chunk files
+4. Query any active workspace memory system (e.g., Honcho or agentmemory) when recent session continuity is needed
+5. Check conversation logs or history for prior attempts or context on this topic
+6. Identify which projects, modules, or systems are involved
 
 **If any tool fails:** Note "degraded mode" and continue with available sources. Do NOT stall.
 
@@ -44,7 +45,7 @@ Load ALL available context before forming any opinion.
 
 Before solving, challenge the problem statement itself.
 
-1. Use **sequential-thinking MCP** (`mcp_sequential-thinking_sequentialthinking`) to decompose the problem into component parts
+1. Use a sequential thinking or reasoning tool (such as sequential-thinking MCP, if available) to decompose the problem into component parts
 2. Ask explicitly:
    - "Is this the right question? Is there a better framing?"
    - "What assumptions are embedded in this request?"
@@ -58,11 +59,11 @@ Before solving, challenge the problem statement itself.
 
 Gather evidence from multiple sources. Do NOT rely on training data alone.
 
-1. **Web search** for current best practices, official docs, known issues
-2. **Context7 MCP** for any referenced libraries, frameworks, or APIs
-3. **Skills:** Check `.agent/skills/` and `.agent/skills/` for relevant procedures
-4. **Domain chunks:** Load relevant `.context/taza-context/` chunks via WORKSPACE-AUTOMAP routing
-5. **knowledge/conventions.md** for established patterns
+1. Run web searches for current best practices, official documentation, and known issues
+2. Use available documentation search tools (such as Context7 MCP, if available) for any referenced libraries, frameworks, or APIs
+3. Check repository skills and custom workspace procedures (e.g., under `.agent/skills/` or similar locations)
+4. Load domain-specific context or chunk files using workspace routing maps (e.g., `WORKSPACE-AUTOMAP.md` or equivalent)
+5. Review workspace-specific conventions and code style files (e.g., `knowledge/conventions.md` or local READMEs) for established patterns
 
 **Rule:** Every factual claim must trace to a retrieved source, not memory.
 
@@ -86,7 +87,7 @@ Evaluate the problem from multiple expert perspectives.
 
 1. **Council of Experts** — consider the problem as:
    - A **Lead Developer**: Is this technically sound? What are the edge cases?
-   - A **Business Strategist**: Does this serve Taza's business outcomes?
+   - A **Business/Product Strategist**: Does this serve the core project objectives and business outcomes?
    - A **UX/Ops Pro**: Is this maintainable? Will it create friction?
 2. **Reconcile conflicts** between perspectives and sources
 3. **Produce a structured recommendation** with:
@@ -120,7 +121,7 @@ Execute the plan one step at a time.
 1. **One step at a time.** Verify output after each step before proceeding.
 2. **Work → Verify → Self-Correct loop.** Do not assume success.
 3. **Anti-Bulk Enforcement:** Use the most surgical edit mechanism available. Never rewrite files unless creating from scratch.
-4. **80% Confidence Threshold:** If confidence drops below 80% on a high-stakes decision, STOP and ask Taza for input.
+4. **80% Confidence Threshold:** If confidence drops below 80% on a high-stakes decision, STOP and ask the user/product owner for input.
 5. Follow **Karpathy Doctrine**: surgical, minimal, explicit.
 
 ---
@@ -134,10 +135,10 @@ After producing the result, attack it.
 3. **Would you stake your reputation on this?** If not, what needs to change?
 4. **Edge cases:** What happens under unusual conditions? Empty inputs? Scale? Concurrent use?
 5. **Save key learnings** to the appropriate memory layer:
-   - Debugging insights → `knowledge/gotchas.md`
-   - New patterns → `knowledge/conventions.md`
-   - Decisions made → `knowledge/decisions.md`
-   - Recent continuity worth reusing soon → one concise Honcho conclusion
+   - Debugging insights → update known gotchas (e.g., `knowledge/gotchas.md`)
+   - New patterns → update conventions/standards (e.g., `knowledge/conventions.md`)
+   - Decisions made → update decisions log (e.g., `knowledge/decisions.md`)
+   - Recent continuity worth reusing soon → write a milestone/handoff breadcrumb to the workspace memory system (e.g., Honcho or agentmemory)
 
 ---
 
@@ -146,6 +147,15 @@ After producing the result, attack it.
 - It does NOT replace `/reason` for quick analysis — use /reason for fast reasoning engine activation.
 - It does NOT save session state — that's `/wrap`.
 - It does NOT consolidate memory — that's `/dream`.
+
+## Workspace-Specific Customizations
+
+If this workspace provides specific integrations, you can substitute the generic steps as follows:
+- **Taza Workspace (mallettile.ca / 3dmodeling.ca):**
+  - Read `MEMORY.md`, `knowledge/gotchas.md`, and relevant `.context/taza-context/` chunks via `WORKSPACE-AUTOMAP.md` routing.
+  - Review business outcomes with respect to Taza's requirements, and check the pricing formula: `(Labour + Materials) * 1.40`.
+  - Save key learnings/decisions to `knowledge/gotchas.md` / `knowledge/conventions.md` / `knowledge/decisions.md` and Honcho workspace `taza-ai-workspace`.
+  - Ask Taza for input if confidence falls below 80%.
 
 ## Provenance
 
