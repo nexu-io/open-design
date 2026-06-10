@@ -294,6 +294,36 @@ export async function scoreCandidate(video: VideoInput): Promise<CandidateScore>
 }
 
 /**
+ * Extract an 11-char YouTube id from text containing a YouTube URL of any common
+ * shape — watch (`v=`, incl. m.youtube), `youtu.be/`, `embed/`, `shorts/`,
+ * `live/`. Shared by the submission-issue parser and the manual generator so
+ * both accept the same URL shapes. Returns null if none found.
+ */
+const YT_HOSTS = new Set(['youtu.be', 'youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com']);
+
+export function extractYouTubeId(text: string): string | null {
+  // Parse candidate URLs and validate the real hostname (not a substring), so
+  // lookalikes like notyoutube.com / evil-youtube.com are rejected. Scans free
+  // text (e.g. an issue body) for YouTube-ish URL tokens, with or without scheme.
+  const tokens = text.match(/(?:https?:\/\/)?[\w.-]*(?:youtube\.com|youtu\.be)\/[^\s"'<>)]+/gi) ?? [];
+  for (const tok of tokens) {
+    let u: URL;
+    try {
+      u = new URL(tok.startsWith('http') ? tok : `https://${tok}`);
+    } catch {
+      continue;
+    }
+    if (!YT_HOSTS.has(u.hostname.toLowerCase())) continue;
+    const id =
+      u.hostname.toLowerCase() === 'youtu.be'
+        ? u.pathname.match(/^\/([\w-]{11})/)?.[1]
+        : (u.searchParams.get('v') ?? u.pathname.match(/\/(?:shorts|embed|live|v)\/([\w-]{11})/)?.[1] ?? undefined);
+    if (id && /^[\w-]{11}$/.test(id)) return id;
+  }
+  return null;
+}
+
+/**
  * Generate the editorial summary, body, category, and slug topic for a video,
  * matching the hand-written voice of the existing 12 entries: a tight summary
  * plus a short bulleted body, written in the video's own language.

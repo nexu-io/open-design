@@ -11,6 +11,7 @@
  * human review step. Requires YOUTUBE_API_KEY + ANTHROPIC_* (copy generation).
  */
 import {
+  extractYouTubeId,
   readExistingSlugs,
   readExistingVideoIds,
   writeTutorial,
@@ -20,8 +21,7 @@ import { fetchByIds, loadYoutubeKey } from './youtube.ts';
 function extractId(arg: string): string | null {
   const trimmed = arg.trim();
   if (/^[\w-]{11}$/.test(trimmed)) return trimmed;
-  const m = trimmed.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([\w-]{11})/);
-  return m ? m[1] : null;
+  return extractYouTubeId(trimmed);
 }
 
 async function main(): Promise<void> {
