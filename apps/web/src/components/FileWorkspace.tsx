@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Button } from '@open-design/components';
+import type { BrowserConsoleEntry } from '@open-design/contracts';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
@@ -87,7 +88,7 @@ import {
   type SketchItem,
 } from './sketch-model';
 import { AnimatePresence } from 'motion/react';
-import type { BrowserConsoleEntry, ChatMessage } from '../types';
+import type { ChatMessage } from '../types';
 
 interface Props {
   projectId: string;
@@ -243,6 +244,7 @@ const BROWSER_KEEPALIVE_CAP = 3;
 const EMPTY_PROJECT_FOLDERS: ProjectFolder[] = [];
 type TabDropEdge = 'before' | 'after';
 type BrowserWorkspaceTab = ProjectBrowserWorkspaceTab;
+type BrowserConsoleEntriesByTab = Record<string, BrowserConsoleEntry[]>;
 type WorkspaceOrderedTab =
   | { id: string; kind: 'browser'; browserTab: BrowserWorkspaceTab }
   | { id: string; kind: 'file'; name: string };
@@ -496,6 +498,7 @@ export function FileWorkspace({
   const [browserTabs, setBrowserTabs] = useState<BrowserWorkspaceTab[]>(
     () => browserTabsFromState(tabsState.browserTabs),
   );
+  const [browserConsoleEntriesByTab, setBrowserConsoleEntriesByTab] = useState<BrowserConsoleEntriesByTab>({});
   // "+" launcher (file search + registry-driven create-new actions:
   // Side Chat, Terminal, Browser).
   const [launcherOpen, setLauncherOpen] = useState(false);
@@ -589,6 +592,7 @@ export function FileWorkspace({
 
   useEffect(() => {
     setBrowserTabs([]);
+    setBrowserConsoleEntriesByTab({});
     browserTabSequenceRef.current = 0;
     setLauncherOpen(false);
   }, [projectId]);
@@ -642,6 +646,12 @@ export function FileWorkspace({
     const closingIndex = browserTabs.findIndex((tab) => tab.id === tabId);
     const nextTabs = browserTabs.filter((tab) => tab.id !== tabId);
     setBrowserTabs(nextTabs);
+    setBrowserConsoleEntriesByTab((current) => {
+      if (!(tabId in current)) return current;
+      const next = { ...current };
+      delete next[tabId];
+      return next;
+    });
     const nextActive =
       activeTab === tabId
         ? nextTabs[Math.min(Math.max(closingIndex, 0), nextTabs.length - 1)]?.id ?? DESIGN_FILES_TAB
@@ -668,7 +678,6 @@ export function FileWorkspace({
         tab.title === nextTitle
         && (tab.url ?? '') === normalizedUrl
         && (tab.iconUrl ?? '') === nextIconUrl
-        && sameBrowserConsoleEntries(tab.consoleEntries, info.consoleEntries)
       ) {
         return tab;
       }
@@ -683,14 +692,22 @@ export function FileWorkspace({
       } else {
         delete nextTab.iconUrl;
       }
-      if (info.consoleEntries?.length) nextTab.consoleEntries = info.consoleEntries;
-      else delete nextTab.consoleEntries;
       return nextTab;
     });
+    const nextConsoleEntries = info.consoleEntries ?? [];
+    const previousConsoleEntries = browserConsoleEntriesByTab[tabId];
+    if (!changed && sameBrowserConsoleEntries(previousConsoleEntries, nextConsoleEntries)) return;
+    if (changed) setBrowserTabs(nextTabs);
+    setBrowserConsoleEntriesByTab((current) => {
+      if (sameBrowserConsoleEntries(current[tabId], nextConsoleEntries)) return current;
+      const next = { ...current };
+      if (nextConsoleEntries.length > 0) next[tabId] = nextConsoleEntries;
+      else delete next[tabId];
+      return next;
+    });
     if (!changed) return;
-    setBrowserTabs(nextTabs);
     onTabsStateChange(workspaceTabsState(persistedTabs, activeTab, nextTabs));
-  }, [activeTab, browserTabs, onTabsStateChange, persistedTabs]);
+  }, [activeTab, browserConsoleEntriesByTab, browserTabs, onTabsStateChange, persistedTabs]);
 
   function activatePending(name: string) {
     // Pending sketches are not in tabsState.tabs — flip the local
@@ -1498,7 +1515,7 @@ export function FileWorkspace({
         kind: 'browser',
         label,
         tabId: tab.id,
-        ...(tab.consoleEntries?.length ? { browserConsoleEntries: tab.consoleEntries } : {}),
+        ...(browserConsoleEntriesByTab[tab.id]?.length ? { browserConsoleEntries: browserConsoleEntriesByTab[tab.id] } : {}),
         ...(tab.title ? { title: tab.title } : {}),
         ...(url ? { url } : {}),
       };
@@ -1547,6 +1564,7 @@ export function FileWorkspace({
     activeFile,
     activeLiveArtifact,
     activeTab,
+    browserConsoleEntriesByTab,
     browserTabs,
     conversations,
     designFilesTabIsEmpty,
@@ -1634,7 +1652,7 @@ export function FileWorkspace({
           kind: 'browser',
           label,
           tabId: tab.id,
-          ...(tab.consoleEntries?.length ? { browserConsoleEntries: tab.consoleEntries } : {}),
+          ...(browserConsoleEntriesByTab[tab.id]?.length ? { browserConsoleEntries: browserConsoleEntriesByTab[tab.id] } : {}),
           ...(tab.title ? { title: tab.title } : {}),
           ...(url ? { url } : {}),
         });
@@ -3842,18 +3860,6 @@ function browserTabsFromState(value: OpenTabsState['browserTabs']): BrowserWorks
     if (item.title?.trim()) tab.title = item.title.trim();
     if (item.url?.trim()) tab.url = item.url.trim();
     if (item.iconUrl?.trim()) tab.iconUrl = item.iconUrl.trim();
-    if (Array.isArray(item.consoleEntries)) {
-      const consoleEntries = item.consoleEntries
-        .filter((entry): entry is BrowserConsoleEntry => Boolean(entry) && typeof entry.message === 'string' && Boolean(entry.message.trim()))
-        .map((entry: BrowserConsoleEntry) => ({
-          message: entry.message,
-          ...(entry.level ? { level: entry.level } : {}),
-          ...(typeof entry.line === 'number' ? { line: entry.line } : {}),
-          ...(entry.sourceId ? { sourceId: entry.sourceId } : {}),
-          ...(typeof entry.timestamp === 'number' ? { timestamp: entry.timestamp } : {}),
-        }));
-      if (consoleEntries.length > 0) tab.consoleEntries = consoleEntries;
-    }
     seen.add(item.id);
     tabs.push(tab);
   }

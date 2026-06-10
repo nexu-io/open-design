@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal, flushSync } from 'react-dom';
+import type { BrowserConsoleEntry } from '@open-design/contracts';
 import {
   clearHostBrowserData,
   isOpenDesignHostAvailable,
@@ -25,7 +26,6 @@ import type { Dict } from '../i18n/types';
 import { captureHostRegionSnapshot } from '../runtime/exports';
 import { buildBoardCommentAttachments, commentsToAttachments } from '../comments';
 import type {
-  BrowserConsoleEntry,
   ChatCommentAttachment,
   PreviewAnnotationStyle,
   PreviewComment,
@@ -780,6 +780,9 @@ export function DesignBrowserPanel({
   const pendingLoadTargetRef = useRef<string | null>(null);
   const canGoBack = navigationIndex > 0;
   const canGoForward = navigationIndex >= 0 && navigationIndex < navigationStack.length - 1;
+  const clearConsoleEntries = useCallback(() => {
+    setConsoleEntries((current) => (current.length > 0 ? [] : current));
+  }, []);
   const assignWebviewNode = useCallback((node: HTMLWebViewElement | null) => {
     // Set `allowpopups` imperatively rather than as a JSX prop. React's DOM
     // renderer does not treat `allowpopups` as a known boolean attribute, so
@@ -966,6 +969,7 @@ export function DesignBrowserPanel({
     const nextUrl = normalizeBrowserAddress(rawAddress);
     warmBrowserOrigin(nextUrl);
     pendingLoadTargetRef.current = isHistoryUrl(nextUrl) ? nextUrl : null;
+    clearConsoleEntries();
     setCurrentUrl(nextUrl);
     setAddressValue(nextUrl === EMPTY_URL ? '' : nextUrl);
     setAddressEditing(false);
@@ -980,7 +984,7 @@ export function DesignBrowserPanel({
       recordNavigation(nextUrl);
     }
     if (nextUrl !== EMPTY_URL) loadWebviewUrl(nextUrl);
-  }, [commitHistory, loadWebviewUrl, recordNavigation]);
+  }, [clearConsoleEntries, commitHistory, loadWebviewUrl, recordNavigation]);
 
   const updateLoadingState = useCallback((node: WebviewElement | null = webviewNode) => {
     if (!node) {
@@ -1036,6 +1040,7 @@ export function DesignBrowserPanel({
     const onNavigate = (event: Event) => {
       const navigationEvent = event as WebviewNavigationEvent;
       if (navigationEvent.isMainFrame === false) return;
+      clearConsoleEntries();
       const pendingTarget = pendingLoadTargetRef.current;
       const nextUrl = navigationEvent.url || safeGetWebviewUrl(node);
       const isPendingCommit = Boolean(pendingTarget && nextUrl && sameUrl(pendingTarget, nextUrl));
@@ -1054,6 +1059,7 @@ export function DesignBrowserPanel({
     const onFail = (event: Event) => {
       const navigationEvent = event as WebviewNavigationEvent;
       if (navigationEvent.isMainFrame === false) return;
+      clearConsoleEntries();
       setIsLoading(false);
       pendingLoadTargetRef.current = null;
       updateLoadingState(node);
@@ -1098,7 +1104,7 @@ export function DesignBrowserPanel({
       node.removeEventListener('dom-ready', onStop);
       node.removeEventListener('console-message', onConsoleMessage);
     };
-  }, [addressEditing, commitHistory, recordNavigation, updateCurrentNavigationTitle, updateLoadingState, webviewNode]);
+  }, [addressEditing, clearConsoleEntries, commitHistory, recordNavigation, updateCurrentNavigationTitle, updateLoadingState, webviewNode]);
 
   const suggestions = useMemo(() => {
     const query = addressValue.trim().toLocaleLowerCase();
