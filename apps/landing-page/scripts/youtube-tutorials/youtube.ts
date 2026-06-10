@@ -1,39 +1,20 @@
 /*
- * fetch-youtube-tutorials — daily cron entry. Queries the YouTube Data API v3
- * for recent community tutorials about Open Design, filters out videos already
- * in the catalogue and lookalike products, then writes new `*.md` entries using
- * the shared LLM copy generator.
- *
- * Usage:
- *   tsx scripts/youtube-tutorials/fetch-youtube-tutorials.ts [--days 14] [--dry-run]
- *
- * Env:
- *   YOUTUBE_API_KEY     required (or ~/.youtube/.env)
- *   ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY + ANTHROPIC_BASE_URL   for copy gen
- *   TUTORIALS_QUERIES   optional, '||'-separated search queries (override default)
- *
- * The GitHub Actions workflow runs this, then opens a PR if new files appear.
+ * youtube-tutorials/youtube — YouTube Data API v3 client shared by the daily
+ * notifier (candidate discovery) and the selected-entry generator.
  */
 import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {
-  isAboutOpenDesign,
-  iso8601ToSeconds,
-  readExistingSlugs,
-  readExistingVideoIds,
-  writeTutorial,
-  type VideoInput,
-} from './lib.ts';
+import { isAboutOpenDesign, iso8601ToSeconds, type VideoInput } from './lib.ts';
 
-const DEFAULT_QUERIES = [
+export const DEFAULT_QUERIES = [
   'open design open source claude design alternative',
   'open design ai design agent github',
   'open design nexu io design agent',
   'open design 开源 设计 agent claude',
 ];
 
-async function loadYoutubeKey(): Promise<string> {
+export async function loadYoutubeKey(): Promise<string> {
   if (process.env.YOUTUBE_API_KEY) return process.env.YOUTUBE_API_KEY;
   try {
     const raw = await readFile(path.join(os.homedir(), '.youtube', '.env'), 'utf8');
@@ -82,8 +63,8 @@ async function searchVideoIds(query: string, publishedAfter: string, key: string
   return data.items.map((i) => i.id?.videoId).filter((v): v is string => Boolean(v));
 }
 
-async function fetchVideoDetails(ids: string[], key: string): Promise<VideoItem[]> {
-  const out: VideoItem[] = [];
+export async function fetchVideoDetails(ids: string[], key: string): Promise<VideoInput[]> {
+  const out: VideoInput[] = [];
   for (let i = 0; i < ids.length; i += 50) {
     const batch = ids.slice(i, i + 50);
     const data = await ytGet<{ items: VideoItem[] }>(
@@ -91,7 +72,7 @@ async function fetchVideoDetails(ids: string[], key: string): Promise<VideoItem[
       { part: 'snippet,contentDetails,statistics', id: batch.join(',') },
       key,
     );
-    out.push(...data.items);
+    out.push(...data.items.map(toVideoInput));
   }
   return out;
 }
@@ -123,20 +104,24 @@ async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise
   return out;
 }
 
-async function main(): Promise<void> {
-  const args = process.argv.slice(2);
-  const dryRun = args.includes('--dry-run');
-  const daysIdx = args.indexOf('--days');
-  const days = daysIdx !== -1 ? Number(args[daysIdx + 1]) : 14;
+export interface CandidateResult {
+  candidates: VideoInput[];
+  searchFailures: number;
+  queryCount: number;
+}
 
-  const key = await loadYoutubeKey();
-  const queries = process.env.TUTORIALS_QUERIES
-    ? process.env.TUTORIALS_QUERIES.split('||').map((q) => q.trim()).filter(Boolean)
-    : DEFAULT_QUERIES;
-
-  // publishedAfter window. Date.now is acceptable here (no resume semantics).
+/**
+ * Discover Open-Design-relevant tutorial candidates from the last `days`,
+ * already filtered against the existing catalogue (caller passes known ids) and
+ * the LLM relevance gate. Sorted by date descending so numbering is stable.
+ */
+export async function fetchCandidates(
+  key: string,
+  days: number,
+  existingIds: Set<string>,
+  queries: string[] = DEFAULT_QUERIES,
+): Promise<CandidateResult> {
   const publishedAfter = new Date(Date.now() - days * 86400_000).toISOString();
-
   const idSet = new Set<string>();
   let searchFailures = 0;
   for (const q of queries) {
@@ -147,57 +132,20 @@ async function main(): Promise<void> {
       console.error(`search failed for "${q}": ${(e as Error).message}`);
     }
   }
-  console.log(`Found ${idSet.size} unique video ids across ${queries.length} queries (last ${days}d)`);
+  const fresh = [...idSet].filter((id) => !existingIds.has(id));
+  if (fresh.length === 0) return { candidates: [], searchFailures, queryCount: queries.length };
 
-  // Fail loud instead of drifting silently: if every query errored (e.g. an API
-  // outage or bad key), an empty result set is indistinguishable from "nothing
-  // new". Exit non-zero so the scheduled run is observably red, not falsely green.
-  if (searchFailures === queries.length) {
-    console.error(`All ${queries.length} search queries failed; aborting without writing.`);
-    process.exitCode = 1;
-    return;
-  }
-
-  const existingIds = await readExistingVideoIds();
-  const candidateIds = [...idSet].filter((id) => !existingIds.has(id));
-  console.log(`${candidateIds.length} not yet in catalogue`);
-  if (candidateIds.length === 0) return;
-
-  const details = await fetchVideoDetails(candidateIds, key);
-  const videos = details.map(toVideoInput);
-
-  // Relevance gate, then generate.
+  const videos = await fetchVideoDetails(fresh, key);
   const gated = await mapPool(videos, 4, async (v) => ({ v, ok: await isAboutOpenDesign(v) }));
-  const kept = gated.filter((r) => r.ok).map((r) => r.v);
-  for (const r of gated.filter((r) => !r.ok)) {
-    console.log(`  - rejected (not Open Design): ${r.v.videoId} | ${r.v.author} | ${r.v.title}`);
-  }
-  console.log(`Gate: ${kept.length} relevant, ${gated.length - kept.length} rejected`);
-
-  if (dryRun) {
-    for (const v of kept) console.log(`  would add: ${v.videoId} | ${v.date} | ${v.author} | ${v.title}`);
-    return;
-  }
-
-  const takenSlugs = await readExistingSlugs();
-  let ok = 0;
-  let failed = 0;
-  await mapPool(kept, 4, async (v) => {
-    try {
-      const slug = await writeTutorial(v, takenSlugs);
-      ok++;
-      console.log(`  + ${slug} <- ${v.videoId} (${v.author})`);
-    } catch (e) {
-      failed++;
-      console.error(`  ! failed ${v.videoId}: ${(e as Error).message}`);
-    }
-  });
-  console.log(`Done: ${ok}/${kept.length} new tutorials written, ${failed} failed`);
-
-  // A kept (relevant) video that cannot be written would otherwise vanish: the
-  // git-status PR step only sees the files that did land. Exit non-zero so a
-  // partial sync surfaces, mirroring the backfill script's exit 2.
-  if (failed > 0) process.exitCode = 2;
+  const candidates = gated
+    .filter((r) => r.ok)
+    .map((r) => r.v)
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  return { candidates, searchFailures, queryCount: queries.length };
 }
 
-void main();
+/** Fetch specific videos by id (for generating maintainer-approved entries). */
+export async function fetchByIds(key: string, ids: string[]): Promise<VideoInput[]> {
+  if (ids.length === 0) return [];
+  return fetchVideoDetails(ids, key);
+}

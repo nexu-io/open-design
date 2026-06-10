@@ -1,46 +1,68 @@
 # youtube-tutorials
 
 Keeps `app/content/tutorials/*.md` in sync with the latest community YouTube
-tutorials about Open Design.
+tutorials about Open Design, with a human in the loop.
+
+## Flow
+
+```
+daily cron (GitHub Actions)
+  notify-candidates.ts
+    → YouTube Data API search (last N days)
+    → drop already-catalogued videos
+    → LLM relevance gate (reject lookalikes / roundups)
+    → post a numbered digest to Feishu
+
+maintainer reviews the digest in Feishu and replies which numbers to publish
+
+generate-selected.ts  (run by the maintainer / agent)
+    → fetch the approved video ids
+    → LLM-generate summary + body + category in each video's language
+    → write *.md  → open a pull request
+```
+
+The cron **never** generates entries or opens PRs on its own — selection is the
+human review step, done in Feishu before any content is written.
 
 ## Files
 
 - `lib.ts` — shared core: relevance gate, LLM copy generation, slug rules,
   markdown writer, existing-id/slug readers.
-- `fetch-youtube-tutorials.ts` — daily cron entry. Queries the YouTube Data API
-  v3, filters out videos already in the catalogue and lookalike products, and
-  writes new entries. Run by `.github/workflows/tutorials-youtube-sync.yml`.
+- `youtube.ts` — YouTube Data API v3 client: key loading, candidate discovery
+  (`fetchCandidates`), and id lookup (`fetchByIds`).
+- `notify-candidates.ts` — daily cron entry; posts the candidate digest to
+  Feishu. Run by `.github/workflows/tutorials-youtube-sync.yml`.
+- `generate-selected.ts` — turns approved video ids/URLs into entries.
 - `backfill-tutorials.ts` — one-off importer that reads pre-fetched `yt-dlp -j`
-  JSON lines instead of the API (used for the initial backfill).
+  JSON lines (used for the initial backfill).
 
-## How it stays accurate
+## Why the relevance gate
 
 A YouTube search for "open design" surfaces many lookalikes (OpenCode,
 OpenClaude, a separate small "Open Codesign" repo, generic AI-agent roundups,
-and unrelated tools whose title merely mentions "Claude Design"). Titles alone
-are not enough, so every candidate passes an **LLM relevance gate**
-(`isAboutOpenDesign`) that confirms the video is specifically about nexu-io's
-Open Design before any entry is generated. The same model then writes the
-summary, body, and category in the video's own language.
+and videos that only mention "Claude Design" in passing). Titles alone are not
+enough, so every candidate passes an LLM relevance gate (`isAboutOpenDesign`)
+before it ever reaches the digest.
 
 ## Secrets / env
 
 | Var | Where | Purpose |
 | --- | --- | --- |
-| `YOUTUBE_API_KEY` | repo secret + `~/.youtube/.env` locally | YouTube Data API v3 search/videos |
-| `ANTHROPIC_AUTH_TOKEN` (or `ANTHROPIC_API_KEY`) + `ANTHROPIC_BASE_URL` | repo secret + local env | LLM relevance gate + copy generation (Claude Haiku) |
-| `BOT_APP_ID` + `BOT_APP_PRIVATE_KEY` | existing repo secrets | open-design-bot token used to open the PR |
-
-The workflow opens a pull request for maintainer review; it never pushes to
-`main`.
+| `YOUTUBE_API_KEY` | repo secret + `~/.youtube/.env` | YouTube Data API v3 |
+| `ANTHROPIC_AUTH_TOKEN` (or `ANTHROPIC_API_KEY`) + `ANTHROPIC_BASE_URL` | repo secret + local env | relevance gate + copy generation (Claude Haiku) |
+| `FEISHU_TUTORIALS_WEBHOOK` | repo secret | Feishu custom-bot incoming webhook for the digest |
+| `FEISHU_TUTORIALS_SECRET` | repo secret (optional) | only if the Feishu bot has signature verification on |
 
 ## Manual runs
 
 ```bash
-# Daily-style sweep via the API (needs YOUTUBE_API_KEY + ANTHROPIC_*)
-npx tsx scripts/youtube-tutorials/fetch-youtube-tutorials.ts --days 14 [--dry-run]
+# Reproduce the candidate digest locally (no Feishu post)
+npx tsx scripts/youtube-tutorials/notify-candidates.ts --days 14 --print
 
-# Backfill from a yt-dlp dump (needs ANTHROPIC_* only)
+# Generate approved entries (ids or URLs), then open a PR with the new files
+npx tsx scripts/youtube-tutorials/generate-selected.ts dQw4w9WgXcQ https://youtu.be/XXXXXXXXXXX
+
+# Backfill from a yt-dlp dump
 yt-dlp -a urls.txt --skip-download --cookies-from-browser chrome -j > videos.jsonl
 npx tsx scripts/youtube-tutorials/backfill-tutorials.ts videos.jsonl [--dry-run] [--no-gate]
 ```
