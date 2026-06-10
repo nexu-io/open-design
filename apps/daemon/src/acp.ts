@@ -104,10 +104,30 @@ export function buildAcpSessionNewParams(cwd: string, { mcpServers, envFormat = 
     // auto-install or mutate user/global MCP config; callers must pass an
     // explicit per-session MCP descriptor when a compatible agent supports it.
     mcpServers: servers.map((s) => {
-      const envArr = Array.isArray(s?.env) ? s.env : [];
+      const rawEnv = s?.env;
+      // Already a plain object — pass through in map mode, convert to
+      // array in array mode (e.g. live-artifacts MCP from
+      // buildLiveArtifactsMcpServersForAgent which already respects
+      // acpMcpEnvFormat).
+      const isPlainObject =
+        rawEnv && typeof rawEnv === 'object' && !Array.isArray(rawEnv);
+      if (wantsMap && isPlainObject) {
+        return {
+          type: typeof s?.type === 'string' ? s.type : 'stdio',
+          name: typeof s?.name === 'string' ? s.name : '',
+          command: typeof s?.command === 'string' ? s.command : '',
+          args: Array.isArray(s?.args) ? s.args : [],
+          env: rawEnv,
+        };
+      }
+      const envArr = Array.isArray(rawEnv) ? rawEnv : [];
       const env = wantsMap
         ? Object.fromEntries(envArr.map((e: any) => [e?.name ?? '', e?.value ?? '']))
-        : envArr;
+        : isPlainObject
+          ? Object.entries(rawEnv as Record<string, string>).map(
+              ([name, value]) => ({ name, value }),
+            )
+          : envArr;
       return {
         type: typeof s?.type === 'string' ? s.type : 'stdio',
         name: typeof s?.name === 'string' ? s.name : '',
