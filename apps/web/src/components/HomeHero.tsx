@@ -73,6 +73,7 @@ import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
 import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { applyFacetSelection } from './plugins-home/facets';
 import { inferPluginPreview } from './plugins-home/preview';
+import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
 import { SessionModeToggle } from './SessionModeToggle';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
 import { WorkingDirPicker } from './WorkingDirPicker';
@@ -2651,7 +2652,9 @@ function SubTypeRow({
             aria-selected={isActive}
           >
             <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
-            <span className="home-hero__subtype-chip-label">{sub.label}</span>
+            <span className="home-hero__subtype-chip-label">
+              {pluginSubfacetLabel(sub.slug, sub.label, t)}
+            </span>
           </button>
         );
       })}
