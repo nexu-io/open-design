@@ -73,6 +73,7 @@ import { useAnalytics } from '../analytics/provider';
 import {
   trackDesignSystemCreateResult,
   trackDesignSystemReviewResult,
+  trackDesignSystemsCreateClick,
   trackDesignSystemSourceIngestResult,
   trackDesignSystemStatusResult,
   trackFileUploadResult,
@@ -92,6 +93,7 @@ import {
   designSystemTotalSizeBucket,
 } from '@open-design/contracts/analytics';
 import type {
+  DesignSystemsCreateClickProps,
   TrackingDesignSystemCreateEntryFrom,
   TrackingDesignSystemIngestMethod,
   TrackingDesignSystemIngestSourceType,
@@ -366,6 +368,23 @@ export function DesignSystemCreationFlow({
     });
   }
 
+  // Form-level intent clicks on the standalone create form. The embedded
+  // onboarding variant is excluded — EntryShell owns its own
+  // area=design_system clicks (same gating as the DS create page_view
+  // and emitDsFileUpload above).
+  function emitCreateFormClick(
+    element: DesignSystemsCreateClickProps['element'],
+    methodsExpanded?: boolean,
+  ) {
+    if (embedded) return;
+    trackDesignSystemsCreateClick(analytics.track, {
+      page_name: 'design_systems',
+      area: 'design_system_create',
+      element,
+      ...(methodsExpanded === undefined ? {} : { methods_expanded: methodsExpanded }),
+    });
+  }
+
   const refreshGithubConnector = useCallback(async () => {
     if (!composioConfigured) {
       githubConnectorRefreshId.current += 1;
@@ -494,6 +513,7 @@ export function DesignSystemCreationFlow({
   function handleAddGithubUrl() {
     const nextUrl = normalizeGithubUrl(state.githubUrl);
     if (!nextUrl) return;
+    emitCreateFormClick('github_repo_add');
     setState((curr) => ({
       ...curr,
       githubUrl: '',
@@ -519,6 +539,7 @@ export function DesignSystemCreationFlow({
   }
 
   async function handlePickCodeFolder() {
+    emitCreateFormClick('browse_folder');
     const selected = await openFolderDialog();
     if (!selected) return;
     setState((curr) => ({
@@ -711,7 +732,13 @@ export function DesignSystemCreationFlow({
       ) : null}
       {embedded ? null : (
         <header className="ds-setup-topbar">
-          <Button variant="ghost" onClick={onBack}>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              emitCreateFormClick('back');
+              onBack();
+            }}
+          >
             <Icon name="arrow-left" />
             Back
           </Button>
@@ -722,6 +749,7 @@ export function DesignSystemCreationFlow({
             variant="primary"
             disabled={!state.company.trim()}
             onClick={() => {
+              emitCreateFormClick('continue_to_generation');
               if (!state.company.trim()) {
                 setError('Tell Open Design about the company or design system first.');
                 return;
@@ -796,6 +824,7 @@ export function DesignSystemCreationFlow({
                 authorizationUrl={githubAuthorizationUrl}
                 error={githubConnectorError}
                 onOpenConnectorsTab={onOpenConnectorsTab}
+                onToggleMethods={(expanded) => emitCreateFormClick('show_access_methods', expanded)}
                 onConnect={() => void handleConnectGithub()}
                 onOpenAuthorization={() => openConnectorAuthorizationUrl(githubAuthorizationUrl)}
                 onDisconnect={() => void handleDisconnectGithub()}
@@ -807,6 +836,7 @@ export function DesignSystemCreationFlow({
               prompt="Drag a folder here or browse"
               names={localCodeSourceLabels(state)}
               directory
+              onZoneClick={() => emitCreateFormClick('browse_folder')}
               onBrowseFolder={() => void handlePickCodeFolder()}
               onRemoveName={handleRemoveCodeFolder}
               onError={setError}
@@ -828,6 +858,7 @@ export function DesignSystemCreationFlow({
               prompt="Drop .fig here or browse"
               accept=".fig"
               names={state.figFiles}
+              onZoneClick={() => emitCreateFormClick('upload_fig')}
               onError={setError}
               onProcessingStart={beginSourceProcessing}
               onFiles={(_names, files) => {
@@ -845,6 +876,7 @@ export function DesignSystemCreationFlow({
               label="Add assets"
               prompt="Drag files here or browse"
               names={state.assetFiles}
+              onZoneClick={() => emitCreateFormClick('add_assets')}
               onRemoveName={handleRemoveAssetFile}
               onError={setError}
               onProcessingStart={beginSourceProcessing}
@@ -876,7 +908,13 @@ export function DesignSystemCreationFlow({
         {error ? <div className="ds-editor-error">{error}</div> : null}
         {embedded ? (
           <div className="ds-setup-actions ds-setup-actions--embedded">
-            <Button variant="ghost" onClick={onBack}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                emitCreateFormClick('back');
+                onBack();
+              }}
+            >
               <Icon name="arrow-left" />
               Back
             </Button>
@@ -884,6 +922,7 @@ export function DesignSystemCreationFlow({
               variant="primary"
               disabled={!state.company.trim()}
               onClick={() => {
+                emitCreateFormClick('continue_to_generation');
                 if (!state.company.trim()) {
                   setError('Tell Open Design about the company or design system first.');
                   return;
@@ -2546,6 +2585,10 @@ interface DropZoneProps {
   accept?: string;
   names: string[];
   directory?: boolean;
+  // Fired when the user clicks the zone to open the file dialog;
+  // drag-and-drop does not trigger it (drops are covered by
+  // file_upload_result instead).
+  onZoneClick?: () => void;
   onBrowseFolder?: () => void;
   onRemoveName?: (name: string) => void;
   onError?: (message: string | null) => void;
@@ -2716,6 +2759,7 @@ function DropZone({
   accept,
   names,
   directory,
+  onZoneClick,
   onBrowseFolder,
   onRemoveName,
   onError,
@@ -2865,7 +2909,10 @@ function DropZone({
             type="file"
             multiple
             accept={accept}
-            onClick={prepareFileDialogTracking}
+            onClick={() => {
+              onZoneClick?.();
+              prepareFileDialogTracking();
+            }}
             onChange={readFiles}
             {...directoryProps}
           />
@@ -3006,6 +3053,7 @@ function GitHubRepositoryAccessPanel({
   authorizationUrl,
   error,
   onOpenConnectorsTab,
+  onToggleMethods,
   onConnect,
   onOpenAuthorization,
   onDisconnect,
@@ -3018,6 +3066,8 @@ function GitHubRepositoryAccessPanel({
   authorizationUrl: string | null;
   error: string | null;
   onOpenConnectorsTab?: () => void;
+  // Reports the post-toggle expanded state so the parent can track it.
+  onToggleMethods?: (expanded: boolean) => void;
   onConnect: () => void;
   onOpenAuthorization: () => void;
   onDisconnect: () => void;
@@ -3127,7 +3177,11 @@ function GitHubRepositoryAccessPanel({
           className="ghost ds-github-access-toggle"
           aria-expanded={methodsExpanded}
           aria-controls="ds-github-access-methods"
-          onClick={() => setMethodsExpanded((current) => !current)}
+          onClick={() => {
+            const next = !methodsExpanded;
+            onToggleMethods?.(next);
+            setMethodsExpanded(next);
+          }}
         >
           <Icon name={methodsExpanded ? 'chevron-down' : 'chevron-right'} />
           {methodsExpanded ? 'Hide access methods' : 'Show access methods'}

@@ -15,7 +15,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useAnalytics } from '../analytics/provider';
-import { trackChatPanelClick, trackRunFailedToastSurfaceView } from '../analytics/events';
+import { trackChatPanelClick, trackMessageQueueClick, trackRunFailedToastSurfaceView } from '../analytics/events';
 import { attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
 import { useT } from '../i18n';
 import {
@@ -2119,10 +2119,41 @@ export function ChatPane({
             containerRef={queuedSendStripRef}
             items={queuedItems}
             editingId={editingQueuedSendId}
-            onEdit={restoreQueuedSendToComposer}
-            onRemove={onRemoveQueuedSend}
+            onEdit={(item) => {
+              trackMessageQueueClick(analytics.track, {
+                page_name: 'chat_panel',
+                area: 'message_queue',
+                element: 'edit',
+                project_id: projectId ?? '',
+                queue_length: queuedItems.length,
+              });
+              restoreQueuedSendToComposer(item);
+            }}
+            onRemove={onRemoveQueuedSend
+              ? (id) => {
+                  trackMessageQueueClick(analytics.track, {
+                    page_name: 'chat_panel',
+                    area: 'message_queue',
+                    element: 'delete',
+                    project_id: projectId ?? '',
+                    queue_length: queuedItems.length,
+                  });
+                  onRemoveQueuedSend(id);
+                }
+              : undefined}
             onReorder={onReorderQueuedSends}
-            onSendNow={onSendQueuedNow}
+            onSendNow={onSendQueuedNow
+              ? (id) => {
+                  trackMessageQueueClick(analytics.track, {
+                    page_name: 'chat_panel',
+                    area: 'message_queue',
+                    element: 'send_now',
+                    project_id: projectId ?? '',
+                    queue_length: queuedItems.length,
+                  });
+                  onSendQueuedNow(id);
+                }
+              : undefined}
           />
           <div
             className="chat-composer-slot"

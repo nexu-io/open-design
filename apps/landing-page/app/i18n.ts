@@ -186,6 +186,12 @@ export interface HeaderCopy {
     agent: string;
     /** Top-level dropdown for blog, tutorials, downloads. */
     resources: string;
+    /**
+     * "Compare" entry inside the Resources dropdown → /compare/ hub.
+     * Optional: only en supplies it today; other locales fall back to the
+     * English label in the header until localized.
+     */
+    compare?: string;
     /** Group label inside the Solution dropdown. */
     useCases: string;
     /** Group label inside the Solution dropdown. */
@@ -914,6 +920,10 @@ export interface LandingUiCopy {
     noEntries: string;
     suggestVideo: string;
     noCategory: string;
+    contributeTitle: string;
+    contributeBody: string;
+    contributeCta: string;
+    contributeSuggest: string;
     thumbnailAlt: (title: string) => string;
     detailTitle: (title: string) => string;
     localizedTitle: (title: string, author: string) => string;
@@ -1120,6 +1130,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Solution',
         agent: 'Agent',
         resources: 'Resources',
+        compare: 'Compare',
         useCases: 'Use cases',
         roles: 'Roles',
       },
@@ -1161,6 +1172,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: '解决方案',
         agent: 'Agent',
         resources: '资源',
+        compare: '比较',
         useCases: '使用场景',
         roles: '角色',
       },
@@ -1202,6 +1214,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: '解決方案',
         agent: 'Agent',
         resources: '資源',
+        compare: '比較',
         useCases: '使用場景',
         roles: '角色',
       },
@@ -1243,6 +1256,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'ソリューション',
         agent: 'エージェント',
         resources: 'リソース',
+        compare: '比較',
         useCases: 'ユースケース',
         roles: 'ロール',
       },
@@ -1284,6 +1298,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: '솔루션',
         agent: '에이전트',
         resources: '리소스',
+        compare: '비교',
         useCases: '활용 사례',
         roles: '역할',
       },
@@ -1325,6 +1340,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Lösungen',
         agent: 'Agent',
         resources: 'Ressourcen',
+        compare: 'Vergleich',
         useCases: 'Anwendungsfälle',
         roles: 'Rollen',
       },
@@ -1366,6 +1382,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Solutions',
         agent: 'Agent',
         resources: 'Ressources',
+        compare: 'Comparaison',
         useCases: 'Cas d’usage',
         roles: 'Rôles',
       },
@@ -1407,6 +1424,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Решения',
         agent: 'Агенты',
         resources: 'Ресурсы',
+        compare: 'Сравнение',
         useCases: 'Сценарии',
         roles: 'Роли',
       },
@@ -1448,6 +1466,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Soluciones',
         agent: 'Agente',
         resources: 'Recursos',
+        compare: 'Comparar',
         useCases: 'Casos de uso',
         roles: 'Roles',
       },
@@ -1489,6 +1508,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Soluções',
         agent: 'Agente',
         resources: 'Recursos',
+        compare: 'Comparar',
         useCases: 'Casos de uso',
         roles: 'Funções',
       },
@@ -1530,6 +1550,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Soluzioni',
         agent: 'Agente',
         resources: 'Risorse',
+        compare: 'Confronta',
         useCases: 'Casi d’uso',
         roles: 'Ruoli',
       },
@@ -1571,6 +1592,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Giải pháp',
         agent: 'Agent',
         resources: 'Tài nguyên',
+        compare: 'So sánh',
         useCases: 'Trường hợp dùng',
         roles: 'Vai trò',
       },
@@ -1612,6 +1634,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Rozwiązania',
         agent: 'Agent',
         resources: 'Zasoby',
+        compare: 'Porównanie',
         useCases: 'Zastosowania',
         roles: 'Role',
       },
@@ -1653,6 +1676,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Solusi',
         agent: 'Agent',
         resources: 'Sumber Daya',
+        compare: 'Bandingkan',
         useCases: 'Kasus Penggunaan',
         roles: 'Peran',
       },
@@ -1694,6 +1718,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Oplossingen',
         agent: 'Agent',
         resources: 'Bronnen',
+        compare: 'Vergelijken',
         useCases: 'Use cases',
         roles: 'Rollen',
       },
@@ -1735,6 +1760,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'الحلول',
         agent: 'الوكلاء',
         resources: 'الموارد',
+        compare: 'مقارنة',
         useCases: 'حالات الاستخدام',
         roles: 'الأدوار',
       },
@@ -1776,6 +1802,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Çözümler',
         agent: 'Agent',
         resources: 'Kaynaklar',
+        compare: 'Karşılaştır',
         useCases: 'Kullanım alanları',
         roles: 'Roller',
       },
@@ -1817,6 +1844,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
         solution: 'Рішення',
         agent: 'Агенти',
         resources: 'Ресурси',
+        compare: 'Порівняння',
         useCases: 'Сценарії',
         roles: 'Ролі',
       },
@@ -3433,6 +3461,11 @@ const LANDING_UI_COPY: LandingUiCopy = {
     noEntries: "No tutorials yet. We're curating the first batch — check back soon, or",
     suggestVideo: 'suggest a video',
     noCategory: 'No tutorials in this category yet. More are on the way.',
+    contributeTitle: 'Made an Open Design tutorial?',
+    contributeBody:
+      'Share your video — just paste a link in a quick form and a maintainer will add it to this page.',
+    contributeCta: 'Submit a tutorial ↗',
+    contributeSuggest: 'Prefer a pull request? ↗',
     thumbnailAlt: (title) => `Thumbnail for ${title}`,
     detailTitle: (title) => `${title} — Open Design Tutorials`,
     localizedTitle: (title) => title,
@@ -3719,6 +3752,11 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       noEntries: '暂时还没有教程。我们正在整理第一批视频，请稍后再来，或者',
       suggestVideo: '推荐一个视频',
       noCategory: '这个分类还没有教程，更多内容正在整理。',
+      contributeTitle: '做过 Open Design 的教程？',
+      contributeBody:
+        '把你的视频分享给社区——在简单的表单里贴个链接就行，维护者会把它加到这个页面。',
+      contributeCta: '提交一个教程 ↗',
+      contributeSuggest: '想直接提 PR？↗',
       thumbnailAlt: (title) => `${title} 的视频封面`,
       detailTitle: (title) => `${title} — Open Design 教程`,
       localizedTitle: (_title, author) => `Open Design 教程：${author}`,
@@ -3987,6 +4025,11 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       noEntries: '暫時還沒有教學。我們正在整理第一批影片，請稍後再來，或者',
       suggestVideo: '推薦一支影片',
       noCategory: '這個分類還沒有教學，更多內容正在整理。',
+      contributeTitle: '做過 Open Design 的教學？',
+      contributeBody:
+        '把你的影片分享給社群——在簡單的表單裡貼個連結就行，維護者會把它加到這個頁面。',
+      contributeCta: '提交一個教學 ↗',
+      contributeSuggest: '想直接提 PR？↗',
       thumbnailAlt: (title) => `${title} 的影片封面`,
       detailTitle: (title) => `${title} — Open Design 教學`,
       localizedTitle: (_title, author) => `Open Design 教學：${author}`,

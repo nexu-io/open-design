@@ -2076,6 +2076,7 @@ export function FileWorkspace({
         {activeTab === QUESTIONS_TAB ? (
           <QuestionsPanel
             key={questionFormKey ?? undefined}
+            projectId={projectId}
             formKey={questionFormKey}
             form={questionForm ?? questionFormPreview}
             interactive={questionFormInteractive}

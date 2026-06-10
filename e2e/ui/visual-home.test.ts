@@ -71,8 +71,12 @@ test('[P2] captures the onboarding runtime selection surface', async ({ page }) 
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: /Welcome|欢迎/i })).toBeVisible();
   await expect(page.getByText(/Open Design AMR/i)).toBeVisible();
-  await expect(page.locator('.onboarding-view__amr-cloud-card .onboarding-view__model-picker select')).toHaveValue(
-    'deepseek-v4-flash',
+  await expect(
+    page
+      .locator('.onboarding-view__amr-cloud-card .onboarding-view__model-picker')
+      .getByRole('button'),
+  ).toContainText(
+    'DeepSeek V4 Flash',
   );
   await waitForVisualFonts(page);
 
@@ -198,9 +202,15 @@ test('[P2] captures the home plugin use with query surface', async ({ page }) =>
   await home.getByTestId('plugins-home-pill-category-deck').click();
   const card = home.locator('article.plugins-home__card[data-plugin-id="visual-deck-writer"]');
   await expect(card).toBeVisible();
-  await card.hover();
-  await home.getByTestId('plugins-home-use-menu-visual-deck-writer').click({ force: true });
-  await home.getByTestId('plugins-home-use-with-query-visual-deck-writer').click();
+  // Community gallery tiles carry no inline Use actions — use-with-query
+  // lives behind the detail modal's split Use button.
+  await home.getByTestId('plugins-home-details-visual-deck-writer').click({ force: true });
+  // Deck Writer ships a previewEntry, so its detail surface is the
+  // PreviewModal (aria-label "Deck Writer preview"), not the scenario
+  // detail's "... details" dialog. Match on the plugin name only.
+  await expect(page.getByRole('dialog', { name: /Deck Writer/i })).toBeVisible();
+  await page.getByTestId('plugin-details-use-visual-deck-writer-menu').click();
+  await page.getByTestId('plugin-details-use-with-query-visual-deck-writer').click();
   // use-with-query now seeds the rendered preset text (placeholders filled in),
   // not the raw `{{...}}` query — matching the example-prompt card path.
   await expect(page.getByTestId('home-hero-input')).toContainText('Draft a topic deck.');

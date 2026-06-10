@@ -256,7 +256,8 @@ Rules of authorship:
       "entry":  "./preview/index.html",
       "poster": "./preview/poster.png",
       "video":  "./preview/demo.mp4",
-      "gif":    "./preview/demo.gif"
+      "gif":    "./preview/demo.gif",
+      "motion": "scroll"
     },
 
     "useCase": {
@@ -357,7 +358,7 @@ Rules of authorship:
 - `title_i18n` / `description_i18n` — optional localized display metadata. Keep `title` and `description` as English fallbacks; UI surfaces resolve requested locale, base language, English, then the first available value.
 - `od.kind` — registry classification (`skill` / `scenario` / `atom` / `bundle`).
 - `od.taskKind` — one of the four product scenarios (`new-generation` / `code-migration` / `figma-migration` / `tune-collab`, see §1 "Four product scenarios"). Drives marketplace filters, default input templates, and the recommended pipeline starting point.
-- `od.preview` — drives the marketplace card and detail page. `entry` is served sandboxed via the daemon (the existing `/api/skills/:id/example` plumbing extended to plugins).
+- `od.preview` — drives the marketplace card and detail page. `entry` is served sandboxed via the daemon (the existing `/api/skills/:id/example` plumbing extended to plugins). `motion` (`scroll` | `deck` | `static`, optional) tells the gallery how to bake the card's hover clip from your `entry` HTML: `scroll` = a vertical-scroll landing page (pan top→bottom — also the right choice for scroll-hijack pages a programmatic scroll can't drive), `deck` = a horizontal slideshow (walk slides via arrow/wheel), `static` = a single fixed screen (hold its in-place animation). Omit it to auto-detect from the page's scroll height; set it when auto-detect guesses wrong (e.g. a vertical page that carries a horizontal marquee).
 - `od.useCase.query` — the exact text that lands in the brief field on click-to-use. It may be a legacy string or a locale map keyed by BCP-47-style locale tags (for example `{ "en": "...", "zh-CN": "..." }`). Apply-time resolution tries the requested locale, base language, `en`, then the first available value. `{{var}}` placeholders bind to `od.inputs`.
 - `od.context.*` — typed chips that hydrate the `ContextChipStrip` above the input. Each entry compiles to a `ContextItem` (§5.2).
 - `od.context.atoms` — **unordered set** declaring the atoms a plugin needs. The daemon uses them in default order; intended for simple plugins that don't customize flow.

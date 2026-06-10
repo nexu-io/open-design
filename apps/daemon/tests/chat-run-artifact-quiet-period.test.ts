@@ -274,6 +274,28 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
     ).toBe('succeeded');
   });
 
+  it('returns succeeded on Vela ACP code 130 after clean ACP completion', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 130,
+        signal: null,
+        acpCleanCompletion: true,
+      }),
+    ).toBe('succeeded');
+  });
+
+  it('returns failed on Vela ACP code 130 before clean ACP completion', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 130,
+        signal: null,
+        acpCleanCompletion: false,
+      }),
+    ).toBe('failed');
+  });
+
   it('returns failed when ACP shutdown was via SIGKILL (not the narrow override)', () => {
     expect(
       classifyChatRunCloseStatus({

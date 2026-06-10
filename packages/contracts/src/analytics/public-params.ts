@@ -36,6 +36,10 @@ export type TrackingConfigureType =
   | 'local_cli'
   | 'byok'
   | 'both'
+  // AMR sign-in is the user's only configured generation path — no local
+  // CLI detected and no BYOK key saved. Counts toward the "configured"
+  // funnel stage alongside local_cli/byok/both.
+  | 'amr'
   | 'none'
   | 'unknown';
 

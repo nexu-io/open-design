@@ -18,7 +18,7 @@ import { TrustBadge } from '../TrustBadge';
 import { PluginPreviewHero } from './PluginPreviewHero';
 import { PluginMetaSections } from './PluginMetaSections';
 import { PluginShareMenu } from './PluginShareMenu';
-import { buildPluginUseMenu } from './pluginUseMenu';
+import { buildPluginUseMenu, pluginUsePrimaryAction } from './pluginUseMenu';
 import type { PluginUseAction } from '../plugins-home/useActions';
 
 interface Props {
@@ -160,12 +160,12 @@ export function PluginScenarioDetail({
               <button
                 type="button"
                 className="plugin-details-modal__primary plugin-details-modal__use-main"
-                onClick={() => onUse(record, 'use')}
+                onClick={() => onUse(record, pluginUsePrimaryAction(record, t).action)}
                 disabled={isApplying}
                 aria-busy={isApplying ? 'true' : undefined}
                 data-testid={`plugin-details-use-${record.id}`}
               >
-                {isApplying ? 'Applying…' : t('preview.usePlugin')}
+                {isApplying ? 'Applying…' : pluginUsePrimaryAction(record, t).label}
               </button>
               <button
                 type="button"
@@ -174,7 +174,7 @@ export function PluginScenarioDetail({
                 disabled={isApplying}
                 aria-haspopup="menu"
                 aria-expanded={useMenuOpen}
-                aria-label={`More ways to ${t('preview.usePlugin')}`}
+                aria-label={`More ways to ${pluginUsePrimaryAction(record, t).label}`}
                 data-testid={`plugin-details-use-${record.id}-menu`}
               >
                 <Icon name="chevron-down" size={12} />

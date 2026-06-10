@@ -34,6 +34,14 @@ const ENTRY_PAGE_BY_SOURCE: Record<TrackingAmrEntrySource, TrackingPageName> = {
 
 export type { AmrEntryAttribution, TrackingAmrEntrySource };
 
+// Where an amr_entry source surfaces in the product. amr-auth.ts reuses
+// this to stamp `page_name` on amr_auth_result from the attribution alone.
+export function amrEntryPageForSource(
+  source: TrackingAmrEntrySource,
+): TrackingPageName {
+  return ENTRY_PAGE_BY_SOURCE[source];
+}
+
 export function recordAmrEntry(
   track: Track,
   sourceDetail: TrackingAmrEntrySource,

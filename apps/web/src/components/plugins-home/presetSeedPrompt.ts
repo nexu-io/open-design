@@ -99,6 +99,18 @@ export function isMetaInstructionSeed(value: string): boolean {
   return /逐字注入|以\s*en\s*字段为准|verbatim|example\.html/iu.test(value);
 }
 
+// Non-global twin of INPUT_PLACEHOLDER_PATTERN — `.test()` on a /g/ regex is
+// stateful (lastIndex), so probing uses this one.
+const HAS_INPUT_PLACEHOLDER_PATTERN = /\{\{\s*[a-zA-Z_][\w-]*\s*\}\}/;
+
+function usableQueryHead(record: InstalledPluginRecord, query: string): string | null {
+  const head = firstPromptParagraph(renderPluginPresetQuery(record, query));
+  // Skip meta-instructions that reference fields/assets the model can't see
+  // from the textarea.
+  if (head && !isMetaInstructionSeed(head)) return head;
+  return null;
+}
+
 export interface PresetSeed {
   text: string;
   // True when `text` is the rendered plugin query itself (a human-friendly,
@@ -126,14 +138,24 @@ export function examplePresetSeedPrompt(
     return { text: description, fromRenderedQuery: false };
   }
   const query = pluginPresetQuery(record, locale);
-  if (query) {
-    const head = firstPromptParagraph(renderPluginPresetQuery(record, query));
-    // Skip meta-instructions that reference fields/assets the model can't see
-    // from the textarea; fall back to the description.
-    if (head && !isMetaInstructionSeed(head)) {
-      return { text: head, fromRenderedQuery: true };
-    }
+  // Input-templated queries (raw `{{...}}` placeholders in the leading
+  // paragraph) are authored as editable human seeds; keep the rendered head so
+  // editing a hydrated value in the composer still writes back into the
+  // plugin inputs.
+  if (query && HAS_INPUT_PLACEHOLDER_PATTERN.test(firstPromptParagraph(query))) {
+    const head = usableQueryHead(record, query);
+    if (head) return { text: head, fromRenderedQuery: true };
   }
+  // Otherwise prefer the curated natural-language description: for many
+  // example plugins the en query opens with a generator-facing build spec
+  // (stack/file-layout instructions, raw HTML, or a paragraph dangling "as
+  // described below" whose referent was truncated away) that reads as noise
+  // in the composer. The full spec still reaches the agent as plugin context
+  // (SKILL.md + example.html) once the plugin is applied.
   if (description) return { text: description, fromRenderedQuery: false };
+  if (query) {
+    const head = usableQueryHead(record, query);
+    if (head) return { text: head, fromRenderedQuery: true };
+  }
   return { text: fallback(), fromRenderedQuery: false };
 }

@@ -30,6 +30,14 @@ type CaptureFrameRect = Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>;
 
 export const ANNOTATION_EVENT = 'opendesign:annotation';
 export type AnnotationAction = 'draft' | 'queue' | 'send';
+export type DrawToolbarElement =
+  | 'rect'
+  | 'pen'
+  | 'undo'
+  | 'redo'
+  | 'attach_image'
+  | 'annotation_submit'
+  | 'exit';
 
 export interface AnnotationEventDetail {
   file: File | null;
@@ -56,6 +64,7 @@ interface Props {
   hideChrome?: boolean;
   sendDisabled?: boolean;
   sendDisabledReason?: string;
+  onToolbarClick?: (element: DrawToolbarElement, submitAction?: AnnotationAction) => void;
 }
 
 const STROKE_COLOR = '#ff3b30';
@@ -79,6 +88,7 @@ export function PreviewDrawOverlay({
   hideChrome = false,
   sendDisabled = false,
   sendDisabledReason,
+  onToolbarClick,
 }: Props) {
   const t = useT();
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -393,10 +403,12 @@ export function PreviewDrawOverlay({
       boxDraftRef.current = null;
       syncHistoryState();
       redraw();
+      onToolbarClick?.('undo');
       return;
     }
     const stroke = strokesRef.current.pop();
     if (!stroke) return;
+    onToolbarClick?.('undo');
     undoneStrokesRef.current.push(stroke);
     drawingRef.current = null;
     syncHistoryState();
@@ -407,6 +419,7 @@ export function PreviewDrawOverlay({
     if (sending) return;
     const stroke = undoneStrokesRef.current.pop();
     if (!stroke) return;
+    onToolbarClick?.('redo');
     strokesRef.current.push(stroke);
     drawingRef.current = null;
     syncHistoryState();
@@ -620,6 +633,7 @@ export function PreviewDrawOverlay({
     // While a task is running the primary Send is disabled (use Queue instead).
     // The note/attachment is not lost: Queue still stages it for the next turn.
     if (action === 'send' && sendDisabled) return;
+    onToolbarClick?.('annotation_submit', action);
     setCaptureWarning(null);
     setPendingAction(action);
     try {
@@ -880,7 +894,10 @@ export function PreviewDrawOverlay({
           <div className="preview-draw-tool-cluster" style={drawToolbarClusterStyle}>
             <button
               type="button"
-              onClick={closeOverlay}
+              onClick={() => {
+                onToolbarClick?.('exit');
+                closeOverlay();
+              }}
               disabled={sending}
               aria-label={t('common.close')}
               title={t('common.close')}
@@ -891,7 +908,10 @@ export function PreviewDrawOverlay({
             <div style={subToolGroupStyle} aria-label={t('fileViewer.markTool')}>
               <button
                 type="button"
-                onClick={() => setMarkTool('box')}
+                onClick={() => {
+                  onToolbarClick?.('rect');
+                  setMarkTool('box');
+                }}
                 disabled={sending}
                 aria-label={t('fileViewer.boxSelect')}
                 title={t('fileViewer.boxSelect')}
@@ -903,7 +923,10 @@ export function PreviewDrawOverlay({
               </button>
               <button
                 type="button"
-                onClick={() => setMarkTool('pen')}
+                onClick={() => {
+                  onToolbarClick?.('pen');
+                  setMarkTool('pen');
+                }}
                 disabled={sending}
                 aria-label={t('sketch.toolPen')}
                 title={t('sketch.toolPen')}
@@ -944,7 +967,10 @@ export function PreviewDrawOverlay({
             />
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => {
+                onToolbarClick?.('attach_image');
+                fileInputRef.current?.click();
+              }}
               disabled={sending}
               aria-label={t('chat.annotationAttachImage')}
               title={t('chat.annotationAttachImage')}

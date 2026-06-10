@@ -36,3 +36,9 @@ export {
   type DiagnosticsExportInput,
   type DiagnosticsExportResult,
 } from "./zip.js";
+
+export {
+  buildRunEventLogSources,
+  buildAgentCliLogSources,
+  type AgentCliLogOptions,
+} from "./agent-logs.js";

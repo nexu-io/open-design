@@ -494,10 +494,10 @@ describe('buildTracePayload', () => {
     expect(trace.metadata.manifest_completeness).toBeUndefined();
   });
 
-  it('includes trace-safe object manifests when the artifact manifest gate is on', () => {
+  it('includes trace-safe object manifests when content telemetry is on', () => {
     const batch = buildTracePayload(
       makeCtx({
-        prefs: { metrics: true, content: false, artifactManifest: true },
+        prefs: { metrics: true, content: true },
         attachmentManifest: [
           {
             attachment_id: 'att-1',
@@ -589,7 +589,7 @@ describe('buildTracePayload', () => {
     const batch = buildTracePayload(
       makeCtx({
         artifacts: many,
-        prefs: { metrics: true, content: false, artifactManifest: true },
+        prefs: { metrics: true, content: true },
       }),
     );
     const trace = (batch[0] as any).body;
@@ -622,7 +622,7 @@ describe('buildTracePayload', () => {
       makeCtx({
         artifactManifest: many,
         manifestCompleteness: 'complete',
-        prefs: { metrics: true, content: false, artifactManifest: true },
+        prefs: { metrics: true, content: true },
       }),
     );
     const trace = (batch[0] as any).body;
@@ -657,7 +657,7 @@ describe('buildTracePayload', () => {
       makeCtx({
         attachmentManifest: many,
         manifestCompleteness: 'complete',
-        prefs: { metrics: true, content: false, artifactManifest: true },
+        prefs: { metrics: true, content: true },
         run: {
           runId: 'run-1',
           status: 'succeeded',
@@ -1443,7 +1443,7 @@ describe('reportRunCompleted', () => {
     const fetchSpy = vi.fn();
     const result = await reportRunCompleted(
       makeCtx({
-        prefs: { metrics: true, content: false, artifactManifest: true },
+        prefs: { metrics: true, content: false },
       }),
       { config: TEST_CONFIG, fetchImpl: fetchSpy as any },
     );

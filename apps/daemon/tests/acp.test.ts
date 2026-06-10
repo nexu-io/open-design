@@ -305,6 +305,402 @@ test('attachAcpSession keeps incremental ACP message chunks unchanged', () => {
   assert.deepEqual(textDeltas, ['Agent Haven', ' — managed AI agents']);
 });
 
+test('attachAcpSession suppresses split duplicate DSML artifact text and preserves trailing prose', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'build landing page',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call_update',
+    toolCallId: 'call-1',
+    title: 'edit',
+    status: 'completed',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Build passes. No AI slop detected.\n\n< | DSML artifact identifier="page" type="text/html">' },
+  });
+  assert.equal(child.stdin.writableEnded, false);
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: '\n<!doctype html><html><body>raw html</body></html>\n</art' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'ifact>Tail' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const textDeltas = events
+    .filter((entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'text_delta')
+    .map((entry) => (entry.payload as { delta?: unknown }).delta);
+
+  assert.deepEqual(textDeltas, ['Build passes. No AI slop detected.\n\n', 'Tail']);
+  assert.equal(
+    events.some((entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'usage'),
+    true,
+  );
+});
+
+test('attachAcpSession suppresses split duplicate legacy artifact text', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'build landing page',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call_update',
+    toolCallId: 'call-1',
+    title: 'edit',
+    status: 'completed',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Ready to output.\n\n<art' },
+  });
+  assert.equal(child.stdin.writableEnded, false);
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'ifact identifier="page" type="text/html">\n<!doctype html><html></html></artifact>' },
+  });
+  assert.equal(child.stdin.writableEnded, false);
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const textDeltas = events
+    .filter((entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'text_delta')
+    .map((entry) => (entry.payload as { delta?: unknown }).delta);
+
+  assert.deepEqual(textDeltas, ['Ready to output.\n\n']);
+});
+
+test('attachAcpSession suppresses DSML echo after opaque completed write update', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'build landing page',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call',
+    toolCallId: 'tc-opaque',
+    title: 'edit',
+    status: 'pending',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call_update',
+    toolCallId: 'tc-opaque',
+    status: 'completed',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Done\n\n<artifact identifier="page">raw html</artifact>Tail' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: ' Later docs mention <artifact identifier="example">literal</artifact> syntax.' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const textDeltas = events
+    .filter((entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'text_delta')
+    .map((entry) => (entry.payload as { delta?: unknown }).delta);
+
+  assert.deepEqual(textDeltas, [
+    'Done\n\nTail',
+    ' Later docs mention <artifact identifier="example">literal</artifact> syntax.',
+  ]);
+});
+
+test('attachAcpSession suppresses incremental artifact echo after earlier assistant text', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'build landing page',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Planning changes.\n' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call_update',
+    toolCallId: 'call-1',
+    title: 'edit',
+    status: 'completed',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Done.\n\n<artifact identifier="page">raw html</artifact>Tail' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const textDeltas = events
+    .filter((entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'text_delta')
+    .map((entry) => (entry.payload as { delta?: unknown }).delta);
+
+  assert.deepEqual(textDeltas, ['Planning changes.\n', 'Done.\n\nTail']);
+});
+
+test('attachAcpSession clears ACP suppression after plain prose before later literal artifact text', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'build landing page',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call_update',
+    toolCallId: 'call-1',
+    title: 'edit',
+    status: 'completed',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Build passes.\n\n' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Later docs mention <artifact identifier="example">literal</artifact> syntax.' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const textDeltas = events
+    .filter((entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'text_delta')
+    .map((entry) => (entry.payload as { delta?: unknown }).delta);
+
+  assert.deepEqual(textDeltas, [
+    'Build passes.\n\n',
+    'Later docs mention <artifact identifier="example">literal</artifact> syntax.',
+  ]);
+});
+
+test('attachAcpSession keeps ACP suppression after plain incremental prose before echo chunk', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'build landing page',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call_update',
+    toolCallId: 'call-1',
+    title: 'edit',
+    status: 'completed',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Build passes.\n\n' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: '<artifact identifier="page">raw html</artifact>Tail' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const textDeltas = events
+    .filter((entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'text_delta')
+    .map((entry) => (entry.payload as { delta?: unknown }).delta);
+
+  assert.deepEqual(textDeltas, ['Build passes.\n\n', 'Tail']);
+});
+
+test('attachAcpSession suppresses prose-prefixed delayed artifact echo after plain prose', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'build landing page',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call_update',
+    toolCallId: 'call-1',
+    title: 'edit',
+    status: 'completed',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Build passes.\n\n' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Here is the generated file:\n<artifact identifier="page">raw html</artifact>Tail' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const textDeltas = events
+    .filter((entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'text_delta')
+    .map((entry) => (entry.payload as { delta?: unknown }).delta);
+
+  assert.deepEqual(textDeltas, ['Build passes.\n\n', 'Here is the generated file:\nTail']);
+});
+
+test('attachAcpSession keeps ACP suppression after unrelated failed tool before echo chunk', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'build landing page',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call_update',
+    toolCallId: 'write-1',
+    title: 'edit',
+    status: 'completed',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call_update',
+    toolCallId: 'grep-1',
+    title: 'grep',
+    status: 'failed',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Build passes.\n\n<artifact identifier="page">raw html</artifact>Tail' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const textDeltas = events
+    .filter((entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'text_delta')
+    .map((entry) => (entry.payload as { delta?: unknown }).delta);
+
+  assert.deepEqual(textDeltas, ['Build passes.\n\nTail']);
+});
+
+test('attachAcpSession keeps ACP suppression across plain cumulative snapshots', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'build landing page',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call_update',
+    toolCallId: 'call-1',
+    title: 'edit',
+    status: 'completed',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Build passes.\n\n' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Build passes.\n\n<artifact identifier="page">raw html</artifact>Tail' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const textDeltas = events
+    .filter((entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'text_delta')
+    .map((entry) => (entry.payload as { delta?: unknown }).delta);
+
+  assert.deepEqual(textDeltas, ['Build passes.\n\n', 'Tail']);
+});
+
+test('attachAcpSession preserves literal artifact prose before any write echo is expected', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'document artifact syntax',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  const literal = 'To show the syntax, write <artifact identifier="page">literal</artifact> in docs.';
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: literal },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const textDeltas = events
+    .filter((entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'text_delta')
+    .map((entry) => (entry.payload as { delta?: unknown }).delta);
+
+  assert.deepEqual(textDeltas, [literal]);
+});
+
 test('attachAcpSession exposes abort and sends session cancel after session creation', () => {
   const child = new FakeAcpChild();
   const writes: string[] = [];

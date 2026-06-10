@@ -10,9 +10,9 @@
 // Privacy gates are layered: `prefs.metrics` is the master switch, and
 // `prefs.content` is required for Langfuse traces because this sink is used
 // for turn-quality evals. If either is off, no network call is made.
-// `prefs.artifactManifest` decides whether the produced-files manifest is
-// included. None of these defaults to true; the Web onboarding flow flips
-// metrics + content after explicit consent.
+// Complete-context manifests are part of content telemetry: when metrics and
+// content are both enabled, Langfuse receives the trace and associated object
+// references. If either is off, no network call is made.
 //
 // See: specs/change/20260507-langfuse-telemetry/spec.md
 
@@ -923,14 +923,15 @@ function buildTimingSpanBodies(
       end: runEnd,
       input: {
         phase: 'finalize',
-        artifact_manifest_enabled: ctx.prefs.artifactManifest === true,
+        artifact_manifest_enabled: ctx.prefs.metrics === true && ctx.prefs.content === true,
       },
       output: {
         status: ctx.run.status,
         artifact_count: ctx.artifacts.length,
         attachment_count: ctx.attachmentManifest?.length ?? 0,
         manifest_completeness:
-          ctx.manifestCompleteness ?? (ctx.prefs.artifactManifest ? 'unavailable' : 'off'),
+          ctx.manifestCompleteness ??
+          (ctx.prefs.metrics === true && ctx.prefs.content === true ? 'unavailable' : 'off'),
       },
       metadata: { boundary: 'finalizeStartAt -> run.endedAt' },
     },
@@ -1013,7 +1014,7 @@ function shouldCreateGenerationObservation(ctx: ReportContext): boolean {
 
 export function buildTracePayload(ctx: ReportContext): unknown[] {
   const wantsContent = ctx.prefs.metrics === true && ctx.prefs.content === true;
-  const wantsArtifacts = ctx.prefs.artifactManifest === true;
+  const wantsArtifacts = wantsContent;
 
   const sessionId =
     ctx.conversationId.length <= SESSION_ID_MAX ? ctx.conversationId : undefined;

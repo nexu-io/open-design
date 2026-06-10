@@ -105,6 +105,46 @@ describe('streamViaDaemon', () => {
     expect(handlers.onDone).toHaveBeenCalledTimes(1);
   });
 
+  it('prefers a structured daemon error over the lifecycle exit fallback when the run later fails', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse(
+          [
+            'event: error',
+            'data: {"code":"AGENT_EXECUTION_FAILED","message":"intentional fake codex failure","retryable":false}',
+            '',
+            'event: end',
+            'data: {"code":1,"status":"failed"}',
+            '',
+            '',
+          ].join('\n'),
+        );
+      }
+      if (url === '/api/runs/run-1') {
+        return jsonResponse({ id: 'run-1', status: 'running' });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'do the thing' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'intentional fake codex failure' }),
+    );
+    expect(handlers.onError).not.toHaveBeenCalledWith(new Error('agent exited with code 1'));
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
   it('surfaces a terminal failure with the finalized resumable flag', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
