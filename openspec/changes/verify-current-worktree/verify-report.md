@@ -168,13 +168,21 @@ After the first push, GitHub Actions triggered the Docker image workflow as expe
 error TS5058: The specified path does not exist: 'tsconfig.json'.
 ```
 
-`deploy/Dockerfile` was updated so the partial dependency-install layer uses `pnpm install --frozen-lockfile --ignore-scripts`; after `COPY apps ./apps`, it runs `pnpm rebuild` and `node ./scripts/postinstall.mjs` with the full workspace context available, then continues the daemon/web build steps.
+The first Dockerfile follow-up used `pnpm install --frozen-lockfile --ignore-scripts` and a later global `pnpm rebuild`, but the resulting multi-arch GitHub Actions run stayed in `Build and push` for an extended period and was cancelled. That approach risked rebuilding too much under QEMU.
+
+The Dockerfile was then changed to keep dependency lifecycle scripts enabled while skipping only the repository workspace-build postinstall during the partial install layer:
+
+```bash
+OD_SKIP_WORKSPACE_POSTINSTALL=1 pnpm install --frozen-lockfile
+```
+
+`scripts/postinstall.mjs` now exits early only when `OD_SKIP_WORKSPACE_POSTINSTALL=1`. After `COPY apps ./apps`, the Dockerfile runs `node ./scripts/postinstall.mjs` with the full workspace context available, then continues the daemon/web build steps. This directly addresses the missing `apps/daemon/tsconfig.json` failure without a global rebuild.
 
 The production Next build updated `apps/web/next-env.d.ts` from `.next/dev/types/routes.d.ts` to `.next/types/routes.d.ts` locally. That generated churn was reverted before commit because this repository has tooling that restores the development route-types reference after build/prepare flows.
 
 ## Conclusion
 The previous blocker is resolved: tracked files no longer contain conflict markers, focused web validation passes, guard passes, workspace typecheck passes with a local pnpm shim, and the Docker workflow now runs for `main` pushes and PR smoke builds.
 
-Residual limitation: Docker itself is unavailable in this container, so the final image build/push must be verified by GitHub Actions after push. The local evidence validates workflow syntax through YAML/LSP, repo checks, and the Dockerfile's key build commands, and the first push proved the workflow trigger/publish path starts correctly. The follow-up Dockerfile fix is expected to clear the install-layer failure in GitHub Actions.
+Residual limitation: Docker itself is unavailable in this container, so the final image build/push must be verified by GitHub Actions after push. The local evidence validates workflow syntax through YAML/LSP, repo checks, and the Dockerfile's key build commands, and the first push proved the workflow trigger/publish path starts correctly. The final Dockerfile fix is expected to clear the install-layer failure without the slow global rebuild.
 
 Remaining scope risk: this verification proves baseline/deploy readiness after conflict cleanup and Docker workflow correction, not the separate DevTools console-error product fix described in `devtools-context.md`.

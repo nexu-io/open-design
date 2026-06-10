@@ -41,6 +41,11 @@ function resolvePackageManagerInvocation() {
 
 const packageManager = resolvePackageManagerInvocation();
 
+if (process.env.OD_SKIP_WORKSPACE_POSTINSTALL === "1") {
+  process.stdout.write("postinstall: skipping workspace builds because OD_SKIP_WORKSPACE_POSTINSTALL=1\n");
+  process.exit(0);
+}
+
 for (const target of buildTargets) {
   const result = spawnSync(
     packageManager.command,

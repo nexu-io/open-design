@@ -20,5 +20,6 @@
 - [x] Run build steps used by `deploy/Dockerfile` outside Docker because Docker is unavailable in this environment.
 - [x] Push the Docker workflow fix and observe GitHub Actions trigger the Docker image workflow.
 - [x] Fix the Dockerfile install layer after GitHub Actions showed `postinstall` was running before the daemon `tsconfig.json` existed in the image build context.
+- [x] Replace the slow global `pnpm rebuild` Dockerfile fix with an explicit `OD_SKIP_WORKSPACE_POSTINSTALL=1` gate so dependency install scripts still run normally while the root workspace build waits for the full source tree.
 - [x] Revert production `next build` churn in `apps/web/next-env.d.ts` before commit because repository tooling expects the development route-types reference.
 - [ ] If the intended scope is still the DevTools console-error fix from `devtools-context.md`, create a dedicated SDD change for those root-cause files and implement it separately.

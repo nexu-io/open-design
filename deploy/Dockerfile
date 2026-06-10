@@ -30,11 +30,10 @@ COPY apps/web/package.json ./apps/web/package.json
 COPY e2e/package.json ./e2e/package.json
 RUN corepack enable && \
     corepack prepare pnpm@10.33.2 --activate && \
-    pnpm install --frozen-lockfile --ignore-scripts
+    OD_SKIP_WORKSPACE_POSTINSTALL=1 pnpm install --frozen-lockfile
 
 COPY apps ./apps
-RUN pnpm rebuild && \
-    node ./scripts/postinstall.mjs && \
+RUN node ./scripts/postinstall.mjs && \
     pnpm --filter @open-design/daemon build && \
     pnpm --filter @open-design/web build && \
     pnpm --filter @open-design/daemon deploy --legacy --prod /app/deploy/daemon && \
