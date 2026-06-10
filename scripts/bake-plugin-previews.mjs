@@ -42,9 +42,12 @@ import path from 'node:path';
 
 // Bump when the bake recipe changes (capture geometry, timing, encoder, waits…)
 // so every plugin re-bakes even though its page content is byte-identical.
-//   v2: deck mode (16:9 + slide-walk for fixed-viewport PPT/slideshow pages) +
+//   v2: deck mode (slide-walk for fixed-viewport PPT/slideshow pages) +
 //       force-load webfonts before capture (CJK templates were baking tofu).
-const BAKE_VERSION = 2;
+//   v3: bound the slide-walk — cap deckSignal's DOM scan + a wall-time cap — so a
+//       deck that renders every slide in one giant rail (#deck{width:10000vw})
+//       no longer drags the walk, and the clip, out to 20s+ in CI.
+const BAKE_VERSION = 3;
 
 // ---- config ---------------------------------------------------------------
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:17579';
@@ -59,6 +62,13 @@ const DECK_W = 1760;
 const DECK_H = 1344;            // 1760/1344 = 1.31, the tile aspect
 const SLIDE_MS = 1150;          // deck per-slide dwell: ~.9s CSS transition + settle
 const MAX_SLIDES = 6;           // advance budget; HOLD + slides stays ~<=9s
+const MAX_WALK_MS = 8000;       // hard wall-time cap on the walk: even when signal
+                                // reads are slow (huge-DOM decks), the clip stays
+                                // bounded (HOLD + walk ~<=10.5s)
+const DECK_SCAN_CAP = 600;      // deckSignal scans only the first N elements — the
+                                // slide rail/track is a structural element near the
+                                // DOM top, so this stays cheap on decks that render
+                                // every slide in one giant rail
 const OUT_W = Number(process.env.PREVIEW_W || 640); // small — tile renders ~393px
 const FPS = Number(process.env.PREVIEW_FPS || 30);  // 30 is smooth for a gentle pan, half the bytes of 60
 const VELOCITY = 0.30;          // px/ms — base pan pace (snappy but readable)
@@ -116,9 +126,16 @@ async function discoverIds() {
 // offset of a horizontal track, and any active-slide marker. Deliberately does
 // NOT read canvas pixels, so a continuously-animating WebGL background doesn't
 // look like a slide change. Runs in the page; must stay self-contained.
-function deckSignal() {
+function deckSignal(cap) {
   const parts = [location.hash];
-  for (const el of document.querySelectorAll('*')) {
+  // getBoundingClientRect + getComputedStyle force layout/style per element, so
+  // scanning ALL of them is pathological on a deck that renders every slide in
+  // one rail (thousands of nodes). The rail/track is structural and near the top
+  // of the DOM, so the first `cap` elements in document order suffice.
+  const els = document.querySelectorAll('*');
+  const n = Math.min(els.length, cap || 600);
+  for (let i = 0; i < n; i += 1) {
+    const el = els[i];
     const r = el.getBoundingClientRect();
     if (r.width > window.innerWidth * 1.5 || r.height > window.innerHeight * 1.5) {
       parts.push(getComputedStyle(el).transform);
@@ -155,10 +172,11 @@ async function walkSlides(page, driver) {
   let moved = 0;
   const t0 = Date.now();
   for (let s = 0; s < MAX_SLIDES; s += 1) {
-    const before = await page.evaluate(deckSignal);
+    if (Date.now() - t0 > MAX_WALK_MS) break; // backstop so the clip never runs long
+    const before = await page.evaluate(deckSignal, DECK_SCAN_CAP);
     await driveDeck(page, driver);
     await sleep(SLIDE_MS);
-    if ((await page.evaluate(deckSignal)) === before) break; // reached the last slide
+    if ((await page.evaluate(deckSignal, DECK_SCAN_CAP)) === before) break; // last slide
     moved += 1;
   }
   return Math.max(SLIDE_MS, Date.now() - t0);
@@ -183,14 +201,14 @@ async function bakeOne(browser, id, hash) {
   // advances the deck, so decks reload to reset to slide 1 before capturing.
   let deckDriver = null;
   {
-    const sig0 = await page.evaluate(deckSignal);
+    const sig0 = await page.evaluate(deckSignal, DECK_SCAN_CAP);
     await driveDeck(page, 'arrow');
     await sleep(900);
-    if ((await page.evaluate(deckSignal)) !== sig0) deckDriver = 'arrow';
+    if ((await page.evaluate(deckSignal, DECK_SCAN_CAP)) !== sig0) deckDriver = 'arrow';
     else {
       await driveDeck(page, 'wheel');
       await sleep(900);
-      if ((await page.evaluate(deckSignal)) !== sig0) deckDriver = 'wheel';
+      if ((await page.evaluate(deckSignal, DECK_SCAN_CAP)) !== sig0) deckDriver = 'wheel';
     }
   }
   const vScrollable = await page.evaluate(
