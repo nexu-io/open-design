@@ -10,9 +10,10 @@
 // as a cheap stand-in for the old live hover-pan iframe — the `<video>` mounts
 // as soon as the tile is on-screen and loops the in-place span while idle
 // (animated pages still look alive), and on hover jumps to the pan. The element
-// stays mounted the whole time it's on-screen, so hover never remounts/reloads
-// the source and can't flash black at the hand-off, and `preload="auto"`
-// buffers the whole small clip up front so the idle->pan jump never stalls.
+// stays mounted across a generous margin, so hover never remounts/reloads the
+// source and can't flash black at the hand-off; it only decodes/plays while the
+// tile is truly visible, and `preload="metadata"` paints the first frame off the
+// faststart header instead of buffering the whole clip up front.
 
 import { useEffect, useRef, useState } from 'react';
 import type { MediaPreviewSpec } from '../preview';
@@ -20,10 +21,15 @@ import type { MediaPreviewSpec } from '../preview';
 interface Props {
   preview: MediaPreviewSpec;
   pluginTitle: string;
+  // `inView` (a generous margin) MOUNTS the clip so its first frame is ready
+  // before the tile scrolls in; `visible` (no margin) gates actually
+  // playing/decoding it, so off-screen tiles in the mount margin stay paused on
+  // their poster instead of all spinning up decodes + clip downloads at once.
   inView: boolean;
+  visible?: boolean;
 }
 
-export function MediaSurface({ preview, pluginTitle, inView }: Props) {
+export function MediaSurface({ preview, pluginTitle, inView, visible = inView }: Props) {
   const [hovering, setHovering] = useState(false);
   // Track per-URL poster load failure so a 404 / decode error / dead
   // host swaps in the typographic fallback instead of leaving the
@@ -43,7 +49,12 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
   // in-place span can loop while idle; plain video-template plugins keep the
   // cheaper poster-until-hover behaviour.
   const idlePlays = isVideo && holdMs != null;
+  // Mount across the wider `inView` margin so hover/scroll-in never remounts +
+  // reloads the source, but only decode/buffer when truly `visible` (or
+  // hovering) — otherwise every tile in the margin runs a simultaneous decode +
+  // full-clip download and the gallery stutters / first frames lag.
   const showVideo = inView && isVideo && (idlePlays || hovering);
+  const playing = showVideo && ((idlePlays && visible) || hovering);
 
   // Idle: loop the leading [0, holdMs] in-place-animation span. Hover: jump to
   // holdMs and loop the pan span [holdMs, end] so it responds immediately
@@ -51,7 +62,7 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
   // while on-screen.
   useEffect(() => {
     const v = videoRef.current;
-    if (!v || !showVideo || holdMs == null) return;
+    if (!v || !playing || holdMs == null) return;
     const hold = holdMs / 1000;
     const clamp = (t: number) => {
       if (hovering) {
@@ -82,7 +93,7 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
     const onTime = () => clamp(v.currentTime);
     v.addEventListener('timeupdate', onTime);
     return () => v.removeEventListener('timeupdate', onTime);
-  }, [showVideo, hovering, holdMs]);
+  }, [playing, hovering, holdMs]);
 
   // The `autoplay` attribute alone doesn't reliably start a freshly-mounted
   // muted clip here (Electron/Chromium leaves it paused at readyState 1), so
@@ -90,6 +101,12 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
   useEffect(() => {
     const v = videoRef.current;
     if (!v || !showVideo) return;
+    if (!playing) {
+      // Mounted but off-screen (in the margin) or idle-disabled: hold the poster
+      // frame, don't decode.
+      v.pause();
+      return;
+    }
     const tryPlay = () => {
       const p = v.play();
       if (p && typeof p.catch === 'function') p.catch(() => {});
@@ -97,7 +114,7 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
     tryPlay();
     v.addEventListener('canplay', tryPlay);
     return () => v.removeEventListener('canplay', tryPlay);
-  }, [showVideo]);
+  }, [showVideo, playing]);
 
   const hasPoster = Boolean(preview.poster);
   const useFallback = !hasPoster || posterLoadFailed;
@@ -136,9 +153,11 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
           muted
           playsInline
           loop
-          // On-screen baked clips buffer the whole (small ~450KB) clip so the
-          // idle->pan hand-off never stalls; hover-only videos stay lazy.
-          preload={idlePlays ? 'auto' : 'none'}
+          // `metadata` paints the first frame off the +faststart header (moov +
+          // a few frames) instead of waiting on the whole file, so tiles show
+          // fast and don't all saturate the network buffering full clips up
+          // front; the idle hold buffers the pan span before hover.
+          preload={idlePlays ? 'metadata' : 'none'}
           // Look like an inert iframe thumbnail: no native controls or PiP, and
           // clicks fall through to the card (open detail) instead of the video.
           disablePictureInPicture

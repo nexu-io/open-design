@@ -47,7 +47,12 @@ import path from 'node:path';
 //   v3: bound the slide-walk — cap deckSignal's DOM scan + a wall-time cap — so a
 //       deck that renders every slide in one giant rail (#deck{width:10000vw})
 //       no longer drags the walk, and the clip, out to 20s+ in CI.
-const BAKE_VERSION = 3;
+//   v4: honor an `od.preview.motion` ('scroll'|'deck'|'static') declaration;
+//       auto-detect deck-vs-scroll by viewport height (not by probing, which
+//       misread tall pages with a horizontal marquee as decks); pan via REAL
+//       wheel events so scroll-hijack landing pages (custom/transform scroll)
+//       actually move.
+const BAKE_VERSION = 4;
 
 // ---- config ---------------------------------------------------------------
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:17579';
@@ -120,6 +125,25 @@ async function discoverIds() {
   return LIMIT ? ids.slice(0, LIMIT) : ids;
 }
 
+// Authors can declare how their preview should be captured via
+// `od.preview.motion` ('scroll' | 'deck' | 'static'); we honor it and only
+// auto-detect when it's absent. Returns an id -> motion map (missing => null).
+async function loadMotionMap() {
+  const map = {};
+  try {
+    const res = await fetch(`${BASE_URL}/api/plugins`);
+    const data = await res.json();
+    const items = Array.isArray(data) ? data : (data.plugins || data.items || data.available || []);
+    for (const it of items) {
+      if (!it || typeof it !== 'object') continue;
+      const id = it.id || it.slug;
+      const m = it.manifest?.od?.preview?.motion;
+      if (id && (m === 'scroll' || m === 'deck' || m === 'static')) map[id] = m;
+    }
+  } catch {}
+  return map;
+}
+
 // ---- deck (PPT/slideshow) driving -----------------------------------------
 // A structural fingerprint of the current slide, robust across deck styles:
 // the transform of any slide-rail wider/taller than the viewport, the scroll
@@ -182,8 +206,23 @@ async function walkSlides(page, driver) {
   return Math.max(SLIDE_MS, Date.now() - t0);
 }
 
+// Probe which input advances a fixed-viewport deck: press the arrow key, then
+// nudge the wheel, watching deckSignal for a real slide change. Returns 'arrow',
+// 'wheel', or null when nothing moves it (a single static screen). Advances the
+// deck as a side effect, so callers that go on to capture reload first.
+async function probeDeckDriver(page) {
+  const sig0 = await page.evaluate(deckSignal, DECK_SCAN_CAP);
+  await driveDeck(page, 'arrow');
+  await sleep(900);
+  if ((await page.evaluate(deckSignal, DECK_SCAN_CAP)) !== sig0) return 'arrow';
+  await driveDeck(page, 'wheel');
+  await sleep(900);
+  if ((await page.evaluate(deckSignal, DECK_SCAN_CAP)) !== sig0) return 'wheel';
+  return null;
+}
+
 // ---- render + encode one plugin -------------------------------------------
-async function bakeOne(browser, id, hash) {
+async function bakeOne(browser, id, hash, motion) {
   const page = await browser.newPage();
   await page.setViewport({ width: RENDER_W, height: VIEW_H, deviceScaleFactor: 1 });
   try {
@@ -193,31 +232,33 @@ async function bakeOne(browser, id, hash) {
   } catch (e) { await page.close(); return { id, skipped: `load ${e.message}` }; }
   await sleep(1000);
 
-  // Classify navigation by PROBING, not guessing from scrollHeight: press the
-  // arrow key, then nudge the wheel, and see whether a slide actually moves
-  // (deckSignal ignores the WebGL background, so only real navigation counts).
-  // Most decks are arrow-key; some advance on the wheel; the rest are ordinary
-  // vertical-scroll pages (incl. up/down decks) and keep the linear pan. Probing
-  // advances the deck, so decks reload to reset to slide 1 before capturing.
+  // Capture mode: an explicit `od.preview.motion` declaration wins; otherwise
+  // auto-detect.
+  let mode = motion;
   let deckDriver = null;
-  {
-    const sig0 = await page.evaluate(deckSignal, DECK_SCAN_CAP);
-    await driveDeck(page, 'arrow');
-    await sleep(900);
-    if ((await page.evaluate(deckSignal, DECK_SCAN_CAP)) !== sig0) deckDriver = 'arrow';
-    else {
-      await driveDeck(page, 'wheel');
-      await sleep(900);
-      if ((await page.evaluate(deckSignal, DECK_SCAN_CAP)) !== sig0) deckDriver = 'wheel';
+  if (mode === 'scroll' || mode === 'deck' || mode === 'static') {
+    // Explicit declaration: a deck still needs its advancing input probed.
+    if (mode === 'deck') deckDriver = await probeDeckDriver(page);
+  } else {
+    // A vertically-scrollable page is a landing page (pan it) — even with a
+    // horizontal marquee/carousel sub-component; classifying by scroll height,
+    // not by probing, keeps a tall page off the deck path (a wheel probe would
+    // scroll it and the scroll-driven animation reads as a slide change, which
+    // walked precision-farming pages sideways). A fixed-viewport page is a deck
+    // only if an input actually advances it; otherwise it's a single static
+    // screen that just holds its in-place animation (default viewport, no walk).
+    const vScrollable = await page.evaluate(
+      () => document.documentElement.scrollHeight > window.innerHeight * 1.15,
+    );
+    if (vScrollable) {
+      mode = 'scroll';
+    } else {
+      deckDriver = await probeDeckDriver(page);
+      mode = deckDriver ? 'deck' : 'static';
     }
   }
-  const vScrollable = await page.evaluate(
-    () => document.documentElement.scrollHeight > window.innerHeight * 1.15,
-  );
-  // A horizontally-navigable deck OR a fixed-viewport single slide is a deck:
-  // capture at the deck aspect and walk it. A page that only scrolls vertically
-  // (a landing page, or an up/down deck) keeps the linear pan.
-  const isDeck = deckDriver !== null || !vScrollable;
+  const isDeck = mode === 'deck';
+  const isStatic = mode === 'static';
   let capW = RENDER_W, capH = VIEW_H;
   if (isDeck) {
     capW = DECK_W; capH = DECK_H;
@@ -307,8 +348,20 @@ async function bakeOne(browser, id, hash) {
     try { await client.send('Page.screencastFrameAck', { sessionId: e.sessionId }); } catch {}
   });
 
-  const maxY = isDeck ? 0 : await page.evaluate(() =>
+  const maxY = (isDeck || isStatic) ? 0 : await page.evaluate(() =>
     Math.max(0, document.documentElement.scrollHeight - window.innerHeight));
+  // Detect the scroll mechanism BEFORE recording: this probe jumps the page
+  // (scrollTo 160 -> 0), which once the screencast is running would bake a
+  // visible lurch at the head of the pan. Ordinary pages scroll via
+  // window.scrollTo; scroll-hijack landing pages (custom / transform scroll)
+  // ignore it and need real wheel events to drive their own scroll handler.
+  const windowScrolls = maxY > 0 && (await page.evaluate(() => {
+    const before = window.scrollY || document.documentElement.scrollTop;
+    window.scrollTo(0, 160);
+    const moved = (window.scrollY || document.documentElement.scrollTop) > before + 40;
+    window.scrollTo(0, 0);
+    return moved;
+  }));
 
   await client.send('Page.startScreencast',
     { format: 'jpeg', quality: 80, everyNthFrame: 1, maxWidth: capW, maxHeight: capH });
@@ -321,22 +374,38 @@ async function bakeOne(browser, id, hash) {
   let durMs;
   if (isDeck) {
     durMs = await walkSlides(page, deckDriver);
+  } else if (maxY <= 0) {
+    // Static / single-screen page: just hold, capturing its in-place animation.
+    durMs = 2500;
+    await sleep(durMs);
   } else {
     // Pre-computed from the measured page height so the pan always reaches the
     // bottom within MAX_PAN (whole clip stays ~<=10s): base VELOCITY for normal
     // pages, auto-sped-up (capped duration) for tall ones.
-    durMs = maxY <= 0 ? 2500 : Math.min(MAX_PAN, Math.round(maxY / VELOCITY));
-    await page.evaluate((dur, my) => new Promise((res) => {
-      if (my <= 0) { setTimeout(res, dur); return; }
-      let start = null;
-      function step(t) {
-        if (start === null) start = t;
-        const e = Math.min(1, (t - start) / dur);
-        window.scrollTo(0, Math.round(my * e)); // linear = constant velocity
-        if (e < 1) requestAnimationFrame(step); else res();
+    durMs = Math.min(MAX_PAN, Math.round(maxY / VELOCITY));
+    // Smooth rAF window.scrollTo for ordinary pages; real wheel events for
+    // scroll-hijack pages (windowScrolls probed above, before recording).
+    if (windowScrolls) {
+      await page.evaluate((dur, my) => new Promise((res) => {
+        let start = null;
+        function step(t) {
+          if (start === null) start = t;
+          const e = Math.min(1, (t - start) / dur);
+          window.scrollTo(0, Math.round(my * e)); // linear = constant velocity
+          if (e < 1) requestAnimationFrame(step); else res();
+        }
+        requestAnimationFrame(step);
+      }), durMs, maxY);
+    } else {
+      await page.mouse.move(Math.round(capW / 2), Math.round(capH / 2));
+      const tick = 40;
+      const perTick = Math.max(8, Math.round(maxY / (durMs / tick)));
+      const t0 = Date.now();
+      while (Date.now() - t0 < durMs) {
+        await page.mouse.wheel({ deltaY: perTick });
+        await sleep(tick);
       }
-      requestAnimationFrame(step);
-    }), durMs, maxY);
+    }
   }
   await client.send('Page.stopScreencast');
   await page.close();
@@ -382,6 +451,7 @@ async function bakeOne(browser, id, hash) {
 // ---- main -----------------------------------------------------------------
 mkdirSync(OUT, { recursive: true });
 const ids = await discoverIds();
+const motionMap = await loadMotionMap();
 console.log(`baking ${ids.length} plugin previews from ${BASE_URL} -> ${OUT}`);
 const browser = await puppeteer.launch({
   executablePath: resolveChrome(), headless: 'new',
@@ -402,7 +472,7 @@ for (const id of ids) {
   let hash = null;
   try {
     const html = await (await fetch(`${BASE_URL}/api/plugins/${encodeURIComponent(id)}/preview`)).text();
-    hash = createHash('sha256').update(html).update(` ${BAKE_VERSION}`).digest('hex').slice(0, 16);
+    hash = createHash('sha256').update(html).update(` ${BAKE_VERSION} ${motionMap[id] || ''}`).digest('hex').slice(0, 16);
   } catch {}
   const prev = previews[id];
   // In CI the unchanged clips already live on R2 (not on disk), so PREVIEW_REMOTE
@@ -416,7 +486,7 @@ for (const id of ids) {
     continue;
   }
   let r;
-  try { r = await bakeOne(browser, id, hash); } catch (e) { r = { id, skipped: `error ${e.message}` }; }
+  try { r = await bakeOne(browser, id, hash, motionMap[id]); } catch (e) { r = { id, skipped: `error ${e.message}` }; }
   if (r.skipped) { skip += 1; console.log(`  ~ ${id}: skip (${r.skipped})`); continue; }
   previews[id] = { video: r.video, poster: r.poster, durationMs: r.durationMs, holdMs: r.holdMs, hash };
   ok += 1;
