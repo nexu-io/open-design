@@ -16,6 +16,13 @@ import { localizedAgentGuidesPartE } from './agent-guides.part-e.i18n';
 import { localizedAgentGuidesPartF } from './agent-guides.part-f.i18n';
 import { localizedAgentGuidesPartG } from './agent-guides.part-g.i18n';
 import { localizedAgentGuidesPartH } from './agent-guides.part-h.i18n';
+import { localizedAgentGuidesPartI } from './agent-guides.part-i.i18n';
+import { localizedAgentGuidesPartJ } from './agent-guides.part-j.i18n';
+import { localizedAgentGuidesPartK } from './agent-guides.part-k.i18n';
+import { localizedAgentGuidesPartL } from './agent-guides.part-l.i18n';
+import { localizedAgentGuidesPartM } from './agent-guides.part-m.i18n';
+import { localizedAgentGuidesPartN } from './agent-guides.part-n.i18n';
+import { localizedAgentGuidesPartO } from './agent-guides.part-o.i18n';
 
 type Guides = NonNullable<InfoPageCopy['agentGuides']>;
 
@@ -29,5 +36,12 @@ export function buildLocalizedAgentGuides(en: Guides): Partial<Record<LandingLoc
     ...localizedAgentGuidesPartF(en),
     ...localizedAgentGuidesPartG(en),
     ...localizedAgentGuidesPartH(en),
+    ...localizedAgentGuidesPartI(en),
+    ...localizedAgentGuidesPartJ(en),
+    ...localizedAgentGuidesPartK(en),
+    ...localizedAgentGuidesPartL(en),
+    ...localizedAgentGuidesPartM(en),
+    ...localizedAgentGuidesPartN(en),
+    ...localizedAgentGuidesPartO(en),
   };
 }

@@ -52,7 +52,7 @@ const tiers = [
       { slug: 'kimi',   name: 'Kimi CLI',             vendor: 'Moonshot',      key: 'Moonshot API key (BYOK)' },
       { slug: 'devin',  name: 'Devin for Terminal',   vendor: 'Cognition',     key: 'Devin account' },
       { slug: 'deepseek', name: 'DeepSeek TUI',       vendor: 'DeepSeek',      key: 'DeepSeek API key (BYOK)' },
-      { slug: 'pi',     name: 'Pi',                   vendor: 'Inflection',    key: 'Pi account (interactive auth)' },
+      { slug: 'pi',     name: 'Pi',                   vendor: 'community',     key: 'Provider keys (BYOK) or subscription login' },
     ],
   },
   {
@@ -63,6 +63,10 @@ const tiers = [
       { slug: 'kiro',  name: 'Kiro CLI',             vendor: 'Amazon (preview)', key: 'AWS credentials (BYOK)' },
       { slug: 'kilo',  name: 'Kilo',                 vendor: 'community',      key: 'Provider keys via Kilo config (BYOK)' },
       { slug: 'qoder', name: 'Qoder CLI',            vendor: 'community',      key: 'Provider keys via Qoder config (BYOK)' },
+      { slug: 'trae-cli', name: 'Trae CLI',         vendor: 'ByteDance',     key: 'Provider keys via BYOK' },
+      { slug: 'aider', name: 'Aider',               vendor: 'community',     key: 'Provider API keys (BYOK)' },
+      { slug: 'antigravity', name: 'Antigravity',   vendor: 'Google',        key: 'Google account (preview)' },
+      { slug: 'reasonix', name: 'DeepSeek Reasonix', vendor: 'community',    key: 'DeepSeek API key (BYOK)' },
     ],
   },
 ];
@@ -84,6 +88,17 @@ const DETAIL_ROUTES: Record<string, string> = {
   grok: 'grok-design',
   kimi: 'kimi-design',
   deepseek: 'deepseek-design',
+  'trae-cli': 'trae-cli-design',
+  aider: 'aider-design',
+  antigravity: 'antigravity-design',
+  reasonix: 'reasonix-design',
+  hermes: 'hermes-design',
+  devin: 'devin-design',
+  pi: 'pi-design',
+  kiro: 'kiro-design',
+  kilo: 'kilo-design',
+  vibe: 'vibe-design',
+  qoder: 'qoder-design',
 };
 
 const localizedCredentialLabels: Partial<Record<LandingLocaleCode, Record<string, string>>> = {
