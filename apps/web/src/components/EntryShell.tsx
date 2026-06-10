@@ -296,6 +296,11 @@ interface Props {
   providerModelsCache?: ProviderModelsCache;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
   agents: AgentInfo[];
+  // True while the cold-start agent detection stream is still in flight
+  // (`fetchAgentsStream` has not reached its terminal `done`). Onboarding
+  // uses this to show the AMR cloud card in a detecting/skeleton state
+  // instead of hiding it during the seconds AMR's probe takes to settle.
+  agentsLoading?: boolean;
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
   onAgentChange: (id: string) => void;
@@ -415,6 +420,7 @@ export function EntryShell({
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
   agents,
+  agentsLoading = false,
   daemonLive,
   onModeChange,
   onAgentChange,
@@ -662,6 +668,7 @@ export function EntryShell({
           <OnboardingView
             config={config}
             agents={agents}
+            agentsLoading={agentsLoading}
             providerModelsCache={activeProviderModelsCache}
             onProviderModelsCacheChange={activeSetProviderModelsCache}
             daemonLive={daemonLive}
@@ -903,6 +910,7 @@ function OnboardingView({
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
   agents,
+  agentsLoading = false,
   daemonLive,
   onModeChange,
   onAgentChange,
@@ -917,6 +925,7 @@ function OnboardingView({
   providerModelsCache?: ProviderModelsCache;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
   agents: AgentInfo[];
+  agentsLoading?: boolean;
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
   onAgentChange: (id: string) => void;
@@ -937,6 +946,11 @@ function OnboardingView({
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [cliScanStatus, setCliScanStatus] = useState<'idle' | 'scanning' | 'done'>('idle');
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
+  // True while the one-shot AMR re-probe (fired when the cold-start stream
+  // settled without surfacing AMR) is in flight. Combined with
+  // `agentsLoading`, this is the full window during which AMR availability
+  // is still undecided — and the AMR cloud card renders its skeleton.
+  const [amrRefreshPending, setAmrRefreshPending] = useState(false);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
   const [amrLoginCancelPending, setAmrLoginCancelPending] = useState(false);
   const [newsletterSubmitting, setNewsletterSubmitting] = useState(false);
@@ -1030,7 +1044,13 @@ function OnboardingView({
     (agent) => agent.available && agent.id !== 'amr' && visibleAgentIds.includes(agent.id),
   );
   const amrAgent = agents.find((agent) => agent.id === 'amr' && agent.available) ?? null;
-  const showAmrCloudOption = amrAgent !== null || agents.length === 0;
+  // AMR availability is still undecided while the cold-start stream runs or
+  // the one-shot re-probe is in flight. During that window we show the AMR
+  // cloud card in a skeleton state rather than hiding it (the gap users hit
+  // today: card absent for several seconds, then it pops in). Once detection
+  // settles, the card is either real (amrAgent) or omitted.
+  const amrDetecting = !amrAgent && (agentsLoading || amrRefreshPending);
+  const showAmrCloudOption = amrAgent !== null;
   const amrSignedIn = amrStatus?.loggedIn === true;
   const amrSelectedAndSignedOut = runtime === 'amr' && !amrSignedIn;
   const amrAgentChoice = config.agentModels?.amr ?? {};
@@ -1070,10 +1090,16 @@ function OnboardingView({
   }, [amrAgent, onAgentChange, onModeChange, runtime]);
 
   useEffect(() => {
-    if (amrAgent || amrAgentRefreshAttemptedRef.current) return;
+    // The cold-start stream finished without AMR. Re-probe once before we
+    // conclude AMR is unavailable, and keep the card in its skeleton state
+    // for the duration so it doesn't flash out-and-back-in.
+    if (amrAgent || amrAgentRefreshAttemptedRef.current || agentsLoading) return;
     amrAgentRefreshAttemptedRef.current = true;
-    void Promise.resolve(onRefreshAgents()).catch(() => undefined);
-  }, [amrAgent, onRefreshAgents]);
+    setAmrRefreshPending(true);
+    void Promise.resolve(onRefreshAgents())
+      .catch(() => undefined)
+      .finally(() => setAmrRefreshPending(false));
+  }, [amrAgent, agentsLoading, onRefreshAgents]);
 
   useEffect(() => {
     if (!amrAgent) return;
@@ -1836,6 +1862,8 @@ function OnboardingView({
                       }}
                     />
                   </div>
+                ) : amrDetecting ? (
+                  <OnboardingAmrCloudSkeleton />
                 ) : null}
                 <div className="onboarding-view__alternatives">
                   {runtimeItems.map((item) => (
@@ -2773,6 +2801,53 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// Placeholder for the AMR cloud card shown while AMR availability is still
+// being probed (the cold-start detection stream / one-shot re-probe). It
+// mirrors the real card's footprint exactly — same featured/amr grid, same
+// 246px min-height — so resolving to the real card causes no layout jump.
+// The AMR brand (icon + name) is known up-front and rendered solid; only the
+// version meta, benefit list, and model picker — the parts that depend on the
+// probe result — shimmer. Non-interactive and announced via role="status".
+function OnboardingAmrCloudSkeleton() {
+  const t = useT();
+  return (
+    <div className="onboarding-view__amr-cloud-card">
+      <div
+        className="onboarding-view__card onboarding-view__card--featured onboarding-view__card--amr onboarding-view__card--benefit-aside onboarding-view__card--skeleton"
+        role="status"
+        aria-busy="true"
+        aria-label={t('common.loading')}
+      >
+        <span className="onboarding-view__identity">
+          <span className="onboarding-view__icon onboarding-view__icon--asset">
+            <AgentIcon id="amr" size={52} className="onboarding-view__agent-logo" />
+          </span>
+          <span className="onboarding-view__card-copy">
+            <span className="onboarding-view__card-top">
+              <strong>{t('settings.amrCloud')}</strong>
+            </span>
+            <span className="onboarding-view__skeleton-line onboarding-view__skeleton-line--meta" />
+          </span>
+        </span>
+        <span className="onboarding-view__benefit-aside" aria-hidden="true">
+          <span className="onboarding-view__benefit-stack onboarding-view__benefit-stack--skeleton">
+            <span className="onboarding-view__skeleton-line onboarding-view__skeleton-line--benefit" />
+            <span className="onboarding-view__skeleton-line onboarding-view__skeleton-line--benefit" />
+            <span className="onboarding-view__skeleton-line onboarding-view__skeleton-line--benefit" />
+            <span className="onboarding-view__skeleton-line onboarding-view__skeleton-line--benefit" />
+          </span>
+        </span>
+        <span className="onboarding-view__card-model" aria-hidden="true">
+          <span className="onboarding-view__skeleton-model">
+            <span className="onboarding-view__skeleton-model-label" />
+            <span className="onboarding-view__skeleton-model-bar" />
+          </span>
+        </span>
+      </div>
     </div>
   );
 }

@@ -2075,6 +2075,7 @@ function AppInner() {
         promptTemplates={promptTemplates}
         defaultDesignSystemId={config.designSystemId}
         agents={agents}
+        agentsLoading={agentsLoading}
         config={config}
         providerModelsCache={providerModelsCache}
         onProviderModelsCacheChange={setProviderModelsCache}

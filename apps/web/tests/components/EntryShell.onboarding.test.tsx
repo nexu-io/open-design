@@ -820,6 +820,43 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
   });
 
+  it('shows the AMR cloud card as a skeleton while agent detection is still in flight', async () => {
+    // Before this fix, the AMR cloud card was simply absent for the several
+    // seconds AMR's probe takes to settle (showAmrCloudOption was false once
+    // any non-AMR agent had arrived), then popped in with no loading state.
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
+    ) as typeof fetch;
+    renderOnboarding({
+      agents: [cliAgent()], // AMR has not surfaced from the stream yet
+      agentsLoading: true, // cold-start detection stream still running
+      onRefreshAgents: vi.fn(() => [cliAgent()]),
+    });
+
+    const skeleton = document.querySelector('.onboarding-view__card--skeleton');
+    expect(skeleton).toBeTruthy();
+    // The brand identity is known up-front and rendered solid; only the
+    // probe-dependent details shimmer.
+    expect(skeleton?.textContent).toContain('Open Design AMR');
+    expect(skeleton?.getAttribute('aria-busy')).toBe('true');
+    expect(skeleton?.querySelectorAll('.onboarding-view__skeleton-line--benefit').length).toBe(4);
+    expect(skeleton?.querySelector('.onboarding-view__skeleton-model-bar')).toBeTruthy();
+    // The real, selectable AMR card is not present while detecting.
+    expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
+    // Alternatives remain available throughout detection.
+    expect(screen.getByRole('button', { name: /Local coding agent/i })).toBeTruthy();
+  });
+
+  it('renders the real AMR cloud card and no skeleton once AMR is available', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
+    ) as typeof fetch;
+    renderOnboarding({ agentsLoading: false });
+
+    expect(screen.getByRole('button', { name: /Open Design AMR/i })).toBeTruthy();
+    expect(document.querySelector('.onboarding-view__card--skeleton')).toBeNull();
+  });
+
   it('lets Skip exit onboarding without starting AMR login', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
       jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
