@@ -133,6 +133,12 @@ export async function fetchCandidates(
       console.error(`search failed for "${q}": ${(e as Error).message}`);
     }
   }
+  // Any search failure means this sweep is incomplete: the failed query's
+  // results for this window are unknown. Return early (caller aborts) so the
+  // watermark does not advance past an incomplete sweep and skip those
+  // candidates permanently — the next run re-covers the same window.
+  if (searchFailures > 0) return { candidates: [], searchFailures, queryCount: queries.length };
+
   const fresh = [...idSet].filter((id) => !existingIds.has(id));
   if (fresh.length === 0) return { candidates: [], searchFailures, queryCount: queries.length };
 
