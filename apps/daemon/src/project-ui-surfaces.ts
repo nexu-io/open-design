@@ -372,8 +372,25 @@ function resolveImportSpecifier(
 function resolveReference(ctx: DiscoveryContext, fromFile: string, raw: string): string | null {
   const cleaned = cleanReference(raw);
   if (!cleaned || isExternalUrl(cleaned) || cleaned.startsWith('data:') || cleaned.startsWith('#')) return null;
-  if (cleaned.startsWith('/')) return resolveModulePath(ctx, cleaned.slice(1));
+  if (cleaned.startsWith('/')) return resolveRootReference(ctx, fromFile, cleaned.slice(1));
   return resolveLocalModule(ctx, fromFile, cleaned);
+}
+
+function resolveRootReference(ctx: DiscoveryContext, fromFile: string, projectPath: string): string | null {
+  const direct = resolveModulePath(ctx, projectPath);
+  if (direct) return direct;
+
+  const owner = packageInfoForFile(ctx, fromFile);
+  const ownerPublic = owner
+    ? resolveModulePath(ctx, normalizeProjectPath(path.posix.join(owner.dir, 'public', projectPath)))
+    : null;
+  if (ownerPublic) return ownerPublic;
+
+  if (owner?.dir !== '') {
+    const rootPublic = resolveModulePath(ctx, normalizeProjectPath(path.posix.join('public', projectPath)));
+    if (rootPublic) return rootPublic;
+  }
+  return null;
 }
 
 function externalDependencyForCssImport(

@@ -643,6 +643,44 @@ describe('DesignFilesPanel selection', () => {
 describe('DesignFilesPanel preview', () => {
   afterEach(() => cleanup());
 
+  it('auto-previews the initial design file again after switching projects', async () => {
+    function makePanel(projectId: string, files: ProjectFile[], preferredPreviewFile: string) {
+      return (
+        <DesignFilesPanel
+          projectId={projectId}
+          files={files}
+          liveArtifacts={[]}
+          preferredPreviewFile={preferredPreviewFile}
+          autoPreviewDesignArtifacts
+          onRefreshFiles={vi.fn()}
+          onOpenFile={vi.fn()}
+          onOpenLiveArtifact={vi.fn()}
+          onRenameFile={vi.fn()}
+          onDeleteFile={vi.fn()}
+          onDeleteFiles={vi.fn()}
+          onUpload={vi.fn()}
+          onUploadFiles={vi.fn()}
+          onPaste={vi.fn()}
+          onNewSketch={vi.fn()}
+        />
+      );
+    }
+
+    const { rerender } = render(
+      makePanel('project-a', [file({ name: 'project-a.html', kind: 'html' })], 'project-a.html'),
+    );
+
+    expect((await screen.findByTestId('design-file-preview')).textContent).toContain('project-a.html');
+
+    rerender(
+      makePanel('project-b', [file({ name: 'project-b.html', kind: 'html' })], 'project-b.html'),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('design-file-preview').textContent).toContain('project-b.html');
+    });
+  });
+
   it('shows file size and modified time in the preview stats', () => {
     const { container } = renderPanel([file({ name: 'chart.png', kind: 'image', size: 4096 })]);
     fireEvent.click(container.querySelector('.df-file-row .df-row-icon')!);

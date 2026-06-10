@@ -389,7 +389,7 @@ export function DesignFilesPanel({
   const MENU_ESTIMATED_HEIGHT = 145;
   const MENU_SAFE_PADDING = 8;
   const [preview, setPreview] = useState<string | null>(null);
-  const autoPreviewAppliedRef = useRef(false);
+  const autoPreviewAppliedProjectRef = useRef<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const lastKeyPress = useRef<Map<string, number>>(new Map());
   const [deleting, setDeleting] = useState(false);
@@ -708,17 +708,17 @@ export function DesignFilesPanel({
   );
 
   useEffect(() => {
-    if (autoPreviewAppliedRef.current) return;
-    if (!initialPreviewFile) return;
-    autoPreviewAppliedRef.current = true;
-    setPreview(initialPreviewFile.name);
-  }, [initialPreviewFile]);
-
-  useEffect(() => {
     if (!preview) return;
     if (visibleDesignFiles.some((f) => f.name === preview)) return;
     setPreview(null);
   }, [visibleDesignFiles, preview]);
+
+  useEffect(() => {
+    if (autoPreviewAppliedProjectRef.current === projectId) return;
+    if (!initialPreviewFile) return;
+    autoPreviewAppliedProjectRef.current = projectId;
+    setPreview(initialPreviewFile.name);
+  }, [initialPreviewFile, projectId]);
 
   useEffect(() => {
     uiSurfacesPromiseRef.current = null;

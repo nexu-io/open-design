@@ -397,6 +397,8 @@ describe('POST /api/import/folder', () => {
 
   it('does not synthesize Next routes for non-Next React apps that use a src/pages convention', async () => {
     const folder = makeFolder();
+    await mkdir(path.join(folder, 'public/assets'), { recursive: true });
+    await mkdir(path.join(folder, 'public/fonts'), { recursive: true });
     await mkdir(path.join(folder, 'src/pages'), { recursive: true });
     await writeFile(
       path.join(folder, 'package.json'),
@@ -409,10 +411,19 @@ describe('POST /api/import/folder', () => {
         },
       }),
     );
-    await writeFile(path.join(folder, 'index.html'), '<div id="root"></div><script type="module" src="/src/main.tsx"></script>');
-    await writeFile(path.join(folder, 'src/main.tsx'), "import React from 'react';\nimport './App';\n");
+    await writeFile(
+      path.join(folder, 'index.html'),
+      '<div id="root"></div><img src="/assets/logo.png"><script type="module" src="/src/main.tsx"></script>',
+    );
+    await writeFile(path.join(folder, 'src/main.tsx'), "import React from 'react';\nimport './App';\nimport './App.css';\n");
     await writeFile(path.join(folder, 'src/App.tsx'), 'export function App(){return <main>App</main>}');
+    await writeFile(
+      path.join(folder, 'src/App.css'),
+      "@font-face{font-family:Inter;src:url('/fonts/Inter.woff2')} main{font-family:Inter}",
+    );
     await writeFile(path.join(folder, 'src/pages/Home.tsx'), 'export function Home(){return <main>Home</main>}');
+    await writeFile(path.join(folder, 'public/assets/logo.png'), 'png');
+    await writeFile(path.join(folder, 'public/fonts/Inter.woff2'), 'font');
 
     const importResp = await importFolder({ baseDir: folder });
     expect(importResp.status).toBe(200);
@@ -427,6 +438,9 @@ describe('POST /api/import/folder', () => {
         framework: string | null;
         entryFile: string;
         previewFile: string | null;
+        styleFiles: string[];
+        assetFiles: string[];
+        fontFiles: string[];
       }>;
     };
 
@@ -441,6 +455,10 @@ describe('POST /api/import/folder', () => {
         }),
       ]),
     );
+    const reactSurface = body.surfaces.find((surface) => surface.kind === 'react-app');
+    expect(reactSurface?.styleFiles).toContain('src/App.css');
+    expect(reactSurface?.assetFiles).toContain('public/assets/logo.png');
+    expect(reactSurface?.fontFiles).toContain('public/fonts/Inter.woff2');
     expect(body.surfaces).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
