@@ -80,11 +80,9 @@ async function postToFeishu(webhook: string, secret: string | undefined, text: s
 
 // This workflow's file name, used to look up its own prior runs.
 const WORKFLOW_FILE = 'tutorials-youtube-sync.yml';
-// Never sweep further back than this, so a long gap (or a missing watermark)
-// can't trigger a huge first digest.
-const MAX_LOOKBACK_DAYS = 14;
-// Default window when there is no run-history watermark (first run / local):
-// wider than a day so a single delayed/skipped run can't open a gap.
+// Window used only when there is no watermark source (local runs, or a CI run
+// with no prior successful run yet) — wide enough that a single delayed/skipped
+// run can't open a gap, narrow enough not to dump history on a first run.
 const FALLBACK_DAYS = 2;
 
 function isoDaysAgo(days: number): string {
@@ -114,29 +112,39 @@ async function lastSuccessfulRunStart(): Promise<string | null> {
   return prior.length ? prior[prior.length - 1] : null;
 }
 
+type WindowResult = { since: string; reason: string } | { fail: string };
+
 /**
- * Resolve the digest window start. An explicit --days always wins (manual
- * catch-up). Otherwise prefer the last successful run as a gap-free watermark so
- * delayed/skipped scheduled runs never drop videos; fall back to a short fixed
- * window when no watermark is available. Clamped to MAX_LOOKBACK_DAYS.
+ * Resolve the digest window start.
+ * - Explicit --days always wins, with no upper clamp, so a manual catch-up after
+ *   a long outage actually covers the requested range.
+ * - In CI (a watermark source exists), the last successful run is the gap-free
+ *   watermark. If that lookup ERRORS, fail the job rather than silently sweeping
+ *   a wrong (short) window — dedupe only covers already-published videos, so a
+ *   bad window would drop or duplicate notifications while the run looks green.
+ * - The short FALLBACK_DAYS window is used only when there is genuinely no
+ *   watermark (local run, or a CI run with no prior successful run yet).
  */
-async function resolveWindowStart(explicitDays: number | null): Promise<{ since: string; reason: string }> {
-  const floor = isoDaysAgo(MAX_LOOKBACK_DAYS);
+async function resolveWindowStart(explicitDays: number | null): Promise<WindowResult> {
   if (explicitDays != null) {
-    const since = isoDaysAgo(explicitDays);
-    return { since: since < floor ? floor : since, reason: `--days ${explicitDays}` };
+    return { since: isoDaysAgo(explicitDays), reason: `--days ${explicitDays}` };
   }
-  try {
-    const watermark = await lastSuccessfulRunStart();
+  const hasWatermarkSource = Boolean(process.env.GITHUB_TOKEN && process.env.GITHUB_REPOSITORY);
+  if (hasWatermarkSource) {
+    let watermark: string | null;
+    try {
+      watermark = await lastSuccessfulRunStart();
+    } catch (e) {
+      return { fail: `watermark lookup failed: ${(e as Error).message}` };
+    }
     if (watermark) {
       // Small overlap for clock skew between schedule fire and publish time.
       const since = new Date(Date.parse(watermark) - 60 * 60 * 1000).toISOString();
-      return { since: since < floor ? floor : since, reason: `since last successful run ${watermark} (−1h overlap)` };
+      return { since, reason: `since last successful run ${watermark} (−1h overlap)` };
     }
-  } catch (e) {
-    console.error(`watermark lookup failed, using fallback: ${(e as Error).message}`);
+    return { since: isoDaysAgo(FALLBACK_DAYS), reason: `no prior successful run; ${FALLBACK_DAYS}-day window` };
   }
-  return { since: isoDaysAgo(FALLBACK_DAYS), reason: `fallback ${FALLBACK_DAYS}-day window` };
+  return { since: isoDaysAgo(FALLBACK_DAYS), reason: `no watermark source; ${FALLBACK_DAYS}-day window` };
 }
 
 async function main(): Promise<void> {
@@ -150,7 +158,13 @@ async function main(): Promise<void> {
 
   // Window start = last successful run (gap-free across delayed/skipped runs),
   // or a short fallback window. --days overrides for manual catch-up.
-  const { since, reason } = await resolveWindowStart(explicitDays);
+  const window = await resolveWindowStart(explicitDays);
+  if ('fail' in window) {
+    console.error(`Cannot resolve a safe window: ${window.fail}; aborting.`);
+    process.exitCode = 1;
+    return;
+  }
+  const { since, reason } = window;
   console.log(`Window start: ${since} (${reason})`);
 
   const { candidates, searchFailures, queryCount } = await fetchCandidates(key, since, existing);
