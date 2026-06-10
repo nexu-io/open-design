@@ -30,6 +30,12 @@ type BlockState = {
   input: string;
   inputValue?: unknown;
 };
+type RuntimeTask = {
+  id: string;
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'stopped';
+  activeForm?: string;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -60,6 +66,113 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
   let currentMessageStreamedThinking = false;
   // Per-message role-marker guards for cross-chunk detection (#3247).
   const roleGuards = new Map<string, RoleMarkerGuard>();
+  const runtimeTasks = new Map<string, RuntimeTask>();
+  const canonicalTaskToolUseIds = new Set<string>();
+  let nextRuntimeTaskId = 1;
+  let suppressNextArtifactText = false;
+  let suppressDuplicateArtifactText = false;
+  let artifactOpenCandidate = '';
+  let pendingArtifactText = '';
+
+  function normalizeTaskStatus(value: unknown): RuntimeTask['status'] {
+    if (value === 'completed' || value === 'in_progress' || value === 'stopped') {
+      return value;
+    }
+    if (value === 'complete' || value === 'done') return 'completed';
+    if (value === 'doing' || value === 'active') return 'in_progress';
+    if (value === 'failed' || value === 'canceled' || value === 'cancelled') return 'stopped';
+    return 'pending';
+  }
+
+  function nextGeneratedRuntimeTaskId(): string {
+    while (runtimeTasks.has(String(nextRuntimeTaskId))) {
+      nextRuntimeTaskId += 1;
+    }
+    const id = String(nextRuntimeTaskId);
+    nextRuntimeTaskId += 1;
+    return id;
+  }
+
+  function runtimeTaskIdFromCreate(input: Record<string, unknown>): string {
+    if (typeof input.taskId === 'string' && input.taskId) {
+      const numericId = Number(input.taskId);
+      if (Number.isSafeInteger(numericId) && numericId >= nextRuntimeTaskId) {
+        nextRuntimeTaskId = numericId + 1;
+      }
+      return input.taskId;
+    }
+    return nextGeneratedRuntimeTaskId();
+  }
+
+  function emitCanonicalTaskSnapshot(toolUseId: unknown, name: unknown, input: unknown): boolean {
+    if (typeof toolUseId !== 'string' || typeof name !== 'string' || !isRecord(input)) return false;
+    if (canonicalTaskToolUseIds.has(toolUseId)) return true;
+    let changed = false;
+    if (name === 'TaskCreate') {
+      const content = typeof input.subject === 'string'
+        ? input.subject
+        : typeof input.description === 'string'
+          ? input.description
+          : '';
+      if (!content) return false;
+      const id = runtimeTaskIdFromCreate(input);
+      const activeForm = typeof input.activeForm === 'string' ? input.activeForm : undefined;
+      runtimeTasks.set(id, {
+        id,
+        content,
+        status: normalizeTaskStatus(input.status),
+        ...(activeForm ? { activeForm } : {}),
+      });
+      changed = true;
+    } else if (name === 'TaskUpdate') {
+      if (typeof input.taskId !== 'string') return false;
+      const existing = runtimeTasks.get(input.taskId);
+      if (!existing) return false;
+      const content = typeof input.subject === 'string'
+        ? input.subject
+        : typeof input.description === 'string'
+          ? input.description
+          : existing.content;
+      const activeForm = typeof input.activeForm === 'string' ? input.activeForm : existing.activeForm;
+      runtimeTasks.set(input.taskId, {
+        ...existing,
+        content,
+        status: normalizeTaskStatus(input.status),
+        ...(activeForm ? { activeForm } : {}),
+      });
+      changed = true;
+    } else {
+      return false;
+    }
+    canonicalTaskToolUseIds.add(toolUseId);
+    if (!changed || runtimeTasks.size === 0) return false;
+    onEvent({
+      type: 'tool_use',
+      id: `${toolUseId}:todo-task`,
+      name: 'TodoWrite',
+      input: {
+        todos: Array.from(runtimeTasks.values()).map(({ content, status, activeForm }) => ({
+          content,
+          status,
+          ...(activeForm ? { activeForm } : {}),
+        })),
+      },
+    });
+    return true;
+  }
+
+  function emitToolUse(id: unknown, name: unknown, input: unknown): void {
+    if (emitCanonicalTaskSnapshot(id, name, input)) return;
+    if (isFileWriteToolUse(name, input)) {
+      suppressNextArtifactText = true;
+    }
+    onEvent({
+      type: 'tool_use',
+      id,
+      name,
+      input,
+    });
+  }
 
   function blockKey(index: unknown): string {
     return `${currentMessageId ?? 'anon'}:${index}`;
@@ -80,6 +193,10 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
   // r3324xxxxxx. Thinking is passed through unguarded; only the
   // user-visible text channel is policed.
   function emitSafeText(msgId: string | null, text: string, eventType: string = 'text_delta') {
+    if (eventType === 'text_delta') {
+      text = stripDuplicateArtifactText(text);
+      if (!text) return;
+    }
     if (eventType !== 'text_delta' || !msgId) {
       onEvent({ type: eventType, delta: text });
       return;
@@ -99,6 +216,68 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
       const warn = guard.warningEvent();
       if (warn) onEvent(warn);
     }
+  }
+
+  function stripDuplicateArtifactText(text: string): string {
+    if (
+      !suppressNextArtifactText &&
+      !suppressDuplicateArtifactText &&
+      artifactOpenCandidate.length === 0
+    ) {
+      return text;
+    }
+    const openTag = '<artifact';
+    const current = `${artifactOpenCandidate}${text}`;
+    artifactOpenCandidate = '';
+    if (suppressDuplicateArtifactText) {
+      const closeIndex = current.indexOf('</artifact>');
+      if (closeIndex === -1) return '';
+      suppressDuplicateArtifactText = false;
+      suppressNextArtifactText = false;
+      return stripDuplicateArtifactText(current.slice(closeIndex + '</artifact>'.length));
+    }
+    const openIndex = current.indexOf(openTag);
+    if (openIndex === -1) {
+      const candidateLength = artifactOpenCandidateLength(current, openTag);
+      if (suppressNextArtifactText && candidateLength > 0) {
+        artifactOpenCandidate = current.slice(-candidateLength);
+        return current.slice(0, -candidateLength);
+      }
+      if (suppressNextArtifactText) {
+        suppressNextArtifactText = false;
+        return current;
+      }
+      return current;
+    }
+    suppressDuplicateArtifactText = true;
+    suppressNextArtifactText = false;
+    const prefix = `${pendingArtifactText}${current.slice(0, openIndex)}`;
+    pendingArtifactText = '';
+    return `${prefix}${stripDuplicateArtifactText(current.slice(openIndex))}`;
+  }
+
+  function artifactOpenCandidateLength(text: string, openTag: string): number {
+    const max = Math.min(openTag.length - 1, text.length);
+    for (let len = max; len > 0; len -= 1) {
+      if (openTag.startsWith(text.slice(-len))) return len;
+    }
+    return 0;
+  }
+
+  function isFileWriteToolUse(name: unknown, input: unknown): boolean {
+    if (typeof name !== 'string' || !isRecord(input)) return false;
+    const path = typeof input.file_path === 'string'
+      ? input.file_path
+      : typeof input.path === 'string'
+        ? input.path
+        : '';
+    const writesFile = name === 'Write' ||
+      name === 'Edit' ||
+      name === 'write_file' ||
+      name === 'replace';
+    if (!writesFile) return false;
+    if (/\.(html|htm|css|js|jsx|ts|tsx|md)$/iu.test(path)) return true;
+    return typeof input.content === 'string' || typeof input.new_string === 'string';
   }
 
   function feed(chunk: string) {
@@ -122,12 +301,14 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
   function flush() {
     const rem = buffer.trim();
     buffer = '';
-    if (!rem) return;
-    try {
-      handleObject(JSON.parse(rem));
-    } catch {
-      onEvent({ type: 'raw', line: rem });
+    if (rem) {
+      try {
+        handleObject(JSON.parse(rem));
+      } catch {
+        onEvent({ type: 'raw', line: rem });
+      }
     }
+    flushPendingArtifactText();
   }
 
   function handleObject(obj: unknown) {
@@ -184,12 +365,7 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
             streamedToolUseIds.delete(block.id);
             continue;
           }
-          onEvent({
-            type: 'tool_use',
-            id: block.id,
-            name: block.name,
-            input: block.input ?? null,
-          });
+          emitToolUse(block.id, block.name, block.input ?? null);
         } else if (
           !textAlreadyStreamed &&
           block.type === 'text' &&
@@ -266,6 +442,7 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
 
   function handleStreamEvent(ev: Record<string, unknown>) {
     if (ev.type === 'message_start') {
+      flushPendingArtifactText();
       // Clean up per-message role-marker guard from the previous message.
       if (currentMessageId) roleGuards.delete(currentMessageId);
       currentMessageId = isRecord(ev.message) && typeof ev.message.id === 'string' ? ev.message.id : null;
@@ -330,12 +507,7 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
       const state = blocks.get(key);
       if (state && state.type === 'tool_use' && typeof state.id === 'string' && state.input.trim()) {
         try {
-          onEvent({
-            type: 'tool_use',
-            id: state.id,
-            name: state.name,
-            input: JSON.parse(state.input),
-          });
+          emitToolUse(state.id, state.name, JSON.parse(state.input));
           streamedToolUseIds.add(state.id);
         } catch {
           // Fall through to the final assistant wrapper's input if the
@@ -347,17 +519,21 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
         typeof state.id === 'string' &&
         state.inputValue !== undefined
       ) {
-        onEvent({
-          type: 'tool_use',
-          id: state.id,
-          name: state.name,
-          input: state.inputValue,
-        });
+        emitToolUse(state.id, state.name, state.inputValue);
         streamedToolUseIds.add(state.id);
       }
       blocks.delete(key);
       return;
     }
+  }
+
+  function flushPendingArtifactText() {
+    const text = `${pendingArtifactText}${artifactOpenCandidate}`;
+    if (!text) return;
+    pendingArtifactText = '';
+    artifactOpenCandidate = '';
+    suppressNextArtifactText = false;
+    emitSafeText(currentMessageId, text);
   }
 
   return { feed, flush };

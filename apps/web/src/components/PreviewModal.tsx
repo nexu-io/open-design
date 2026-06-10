@@ -78,6 +78,13 @@ export interface PreviewSidebar {
 // the whole modal layout. Stays optional so existing callers
 // (DesignSystemPreviewModal, ExamplesTab) can keep their current
 // chrome unchanged.
+export interface PreviewPrimaryActionMenuItem {
+  label: string;
+  description?: string;
+  onClick: () => void;
+  testId?: string;
+}
+
 export interface PreviewPrimaryAction {
   label: string;
   onClick: () => void;
@@ -85,6 +92,11 @@ export interface PreviewPrimaryAction {
   busyLabel?: string;
   disabled?: boolean;
   testId?: string;
+  // When present, the primary button becomes a split button: clicking the
+  // main face still runs `onClick`, while a caret toggle opens this menu of
+  // secondary variants (e.g. "Use plugin" vs "Use with query"). Mirrors the
+  // plugin-card use-menu so the modal offers the same affordance.
+  menu?: PreviewPrimaryActionMenuItem[];
 }
 
 export interface PreviewShareTarget {
@@ -245,6 +257,7 @@ export function PreviewModal({
     : views[0]?.id ?? '';
   const [activeId, setActiveId] = useState<string>(initial);
   const [templateShareOpen, setTemplateShareOpen] = useState(false);
+  const [primaryMenuOpen, setPrimaryMenuOpen] = useState(false);
   const [copyShareFeedback, setCopyShareFeedback] = useState<{
     key: string;
     ok: boolean;
@@ -254,6 +267,7 @@ export function PreviewModal({
     sidebar?.defaultOpen ?? false,
   );
   const templateShareRef = useRef<HTMLDivElement | null>(null);
+  const primaryMenuRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const stageFrameRef = useRef<HTMLDivElement | null>(null);
   const previewIframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -337,6 +351,28 @@ export function PreviewModal({
       document.removeEventListener('keydown', onKey);
     };
   }, [templateShareOpen]);
+
+  // Same outside-click / Escape dismissal for the primary-action split menu.
+  useEffect(() => {
+    if (!primaryMenuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (!primaryMenuRef.current?.contains(target)) {
+        setPrimaryMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPrimaryMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [primaryMenuOpen]);
 
   // Lock body scroll while open.
   useEffect(() => {
@@ -538,20 +574,90 @@ export function PreviewModal({
             ) : null}
             <div className="ds-modal-actions">
               {primaryAction ? (
-                <button
-                  type="button"
-                  className="ds-modal-primary-action"
-                  onClick={primaryAction.onClick}
-                  disabled={primaryAction.disabled || primaryAction.busy}
-                  aria-busy={primaryAction.busy ? 'true' : undefined}
-                  {...(primaryAction.testId
-                    ? { 'data-testid': primaryAction.testId }
-                    : {})}
-                >
-                  {primaryAction.busy
-                    ? primaryAction.busyLabel ?? primaryAction.label
-                    : primaryAction.label}
-                </button>
+                primaryAction.menu && primaryAction.menu.length > 0 ? (
+                  <div
+                    className="ds-modal-primary-action-group"
+                    ref={primaryMenuRef}
+                  >
+                    <button
+                      type="button"
+                      className="ds-modal-primary-action ds-modal-primary-action--split"
+                      onClick={primaryAction.onClick}
+                      disabled={primaryAction.disabled || primaryAction.busy}
+                      aria-busy={primaryAction.busy ? 'true' : undefined}
+                      {...(primaryAction.testId
+                        ? { 'data-testid': primaryAction.testId }
+                        : {})}
+                    >
+                      {primaryAction.busy
+                        ? primaryAction.busyLabel ?? primaryAction.label
+                        : primaryAction.label}
+                    </button>
+                    <button
+                      type="button"
+                      className="ds-modal-primary-action ds-modal-primary-action-caret"
+                      onClick={() => setPrimaryMenuOpen((v) => !v)}
+                      disabled={primaryAction.disabled || primaryAction.busy}
+                      aria-haspopup="menu"
+                      aria-expanded={primaryMenuOpen}
+                      aria-label={`More ways to ${primaryAction.label}`}
+                      {...(primaryAction.testId
+                        ? { 'data-testid': `${primaryAction.testId}-menu` }
+                        : {})}
+                    >
+                      <Icon name="chevron-down" size={12} />
+                    </button>
+                    {primaryMenuOpen ? (
+                      <div
+                        className="share-menu-popover ds-modal-primary-action-popover"
+                        role="menu"
+                      >
+                        {primaryAction.menu.map((item, index) => (
+                          <button
+                            key={item.testId ?? `${item.label}-${index}`}
+                            type="button"
+                            role="menuitem"
+                            className="share-menu-item ds-modal-primary-action-option"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setPrimaryMenuOpen(false);
+                              item.onClick();
+                            }}
+                            {...(item.testId
+                              ? { 'data-testid': item.testId }
+                              : {})}
+                          >
+                            <span className="ds-modal-primary-action-option__body">
+                              <span className="ds-modal-primary-action-option__label">
+                                {item.label}
+                              </span>
+                              {item.description ? (
+                                <span className="ds-modal-primary-action-option__desc">
+                                  {item.description}
+                                </span>
+                              ) : null}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="ds-modal-primary-action"
+                    onClick={primaryAction.onClick}
+                    disabled={primaryAction.disabled || primaryAction.busy}
+                    aria-busy={primaryAction.busy ? 'true' : undefined}
+                    {...(primaryAction.testId
+                      ? { 'data-testid': primaryAction.testId }
+                      : {})}
+                  >
+                    {primaryAction.busy
+                      ? primaryAction.busyLabel ?? primaryAction.label
+                      : primaryAction.label}
+                  </button>
+                )
               ) : null}
               {sidebar ? (
                 <button

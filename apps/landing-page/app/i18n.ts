@@ -914,6 +914,10 @@ export interface LandingUiCopy {
     noEntries: string;
     suggestVideo: string;
     noCategory: string;
+    contributeTitle: string;
+    contributeBody: string;
+    contributeCta: string;
+    contributeSuggest: string;
     thumbnailAlt: (title: string) => string;
     detailTitle: (title: string) => string;
     localizedTitle: (title: string, author: string) => string;
@@ -3433,6 +3437,11 @@ const LANDING_UI_COPY: LandingUiCopy = {
     noEntries: "No tutorials yet. We're curating the first batch — check back soon, or",
     suggestVideo: 'suggest a video',
     noCategory: 'No tutorials in this category yet. More are on the way.',
+    contributeTitle: 'Made an Open Design tutorial?',
+    contributeBody:
+      'Share your video — just paste a link in a quick form and a maintainer will add it to this page.',
+    contributeCta: 'Submit a tutorial ↗',
+    contributeSuggest: 'Prefer a pull request? ↗',
     thumbnailAlt: (title) => `Thumbnail for ${title}`,
     detailTitle: (title) => `${title} — Open Design Tutorials`,
     localizedTitle: (title) => title,
@@ -3719,6 +3728,11 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       noEntries: '暂时还没有教程。我们正在整理第一批视频，请稍后再来，或者',
       suggestVideo: '推荐一个视频',
       noCategory: '这个分类还没有教程，更多内容正在整理。',
+      contributeTitle: '做过 Open Design 的教程？',
+      contributeBody:
+        '把你的视频分享给社区——在简单的表单里贴个链接就行，维护者会把它加到这个页面。',
+      contributeCta: '提交一个教程 ↗',
+      contributeSuggest: '想直接提 PR？↗',
       thumbnailAlt: (title) => `${title} 的视频封面`,
       detailTitle: (title) => `${title} — Open Design 教程`,
       localizedTitle: (_title, author) => `Open Design 教程：${author}`,
@@ -3987,6 +4001,11 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       noEntries: '暫時還沒有教學。我們正在整理第一批影片，請稍後再來，或者',
       suggestVideo: '推薦一支影片',
       noCategory: '這個分類還沒有教學，更多內容正在整理。',
+      contributeTitle: '做過 Open Design 的教學？',
+      contributeBody:
+        '把你的影片分享給社群——在簡單的表單裡貼個連結就行，維護者會把它加到這個頁面。',
+      contributeCta: '提交一個教學 ↗',
+      contributeSuggest: '想直接提 PR？↗',
       thumbnailAlt: (title) => `${title} 的影片封面`,
       detailTitle: (title) => `${title} — Open Design 教學`,
       localizedTitle: (_title, author) => `Open Design 教學：${author}`,

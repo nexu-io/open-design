@@ -674,6 +674,15 @@
   color: var(--text);
   min-height: 1.5em;
 }
+.df-tip-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 2px;
+}
+.df-tip-link:hover {
+  color: var(--accent);
+}
 .df-tip-caret {
   display: inline-block;
   width: 1px;

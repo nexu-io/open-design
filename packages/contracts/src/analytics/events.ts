@@ -25,6 +25,7 @@ export type AnalyticsEventName =
   // Run lifecycle (daemon authoritative)
   | 'run_created'
   | 'run_finished'
+  | 'langfuse_report_result'
   | 'run_retry_attempted'
   | 'run_retry_finished'
   // Packaged updater lifecycle
@@ -247,6 +248,7 @@ export type TrackingRunFailureDetail =
   | 'cli_version_incompatible'
   | 'prompt_too_large'
   | 'upstream_5xx'
+  | 'upstream_client_error'
   | 'stream_disconnected'
   | 'network_error'
   | 'provider_high_demand'
@@ -255,13 +257,16 @@ export type TrackingRunFailureDetail =
   | 'timeout'
   | 'empty_output'
   | 'tool_error'
+  | 'plugin_artifact_missing'
   | 'cli_not_installed'
+  | 'agent_config_invalid'
   | 'spawn_failed'
   | 'spawn_enoexec'
   | 'spawn_ebadf'
   | 'spawn_eperm'
   | 'stdin_write_eof'
   | 'agent_protocol_error'
+  | 'fabricated_role_marker'
   | 'permission_request_not_found'
   | 'qoder_stop_sequence'
   | 'signal_killed'
@@ -290,6 +295,7 @@ export type TrackingRunFailureUserAction =
   | 'switch_model'
   | 'reduce_context'
   | 'install_cli'
+  | 'fix_config'
   | 'none';
 export type TrackingRunRetryStrategy = 'same_run_transient';
 export type TrackingRunRetryFinalResult =
@@ -320,6 +326,15 @@ export type TrackingStderrLineCountBucket =
   | '6_20'
   | '21_100'
   | 'gt_100';
+export type TrackingRunCloseReason =
+  | 'exit_0'
+  | 'exit_nonzero'
+  | 'signal'
+  | 'cancel_requested'
+  | 'stream_error'
+  | 'fatal_rpc_error'
+  | 'empty_output'
+  | 'unknown';
 export type TrackingLangfuseDeliveryStatus =
   | 'not_expected'
   | 'queued'
@@ -336,6 +351,14 @@ export type TrackingLangfuseDropReason =
   | 'langfuse_4xx'
   | 'langfuse_5xx'
   | 'network_error';
+export type TrackingLangfuseReportResult =
+  | 'accepted'
+  | 'failed'
+  | 'skipped';
+export type TrackingLangfuseReportSkipReason =
+  | 'run_not_found'
+  | 'duplicate_run'
+  | 'not_expected';
 
 export type TrackingFeedbackRating = 'positive' | 'negative';
 // Click events emit `none` when the user clears a previously-set rating, so
@@ -1059,6 +1082,14 @@ export interface HomeChatComposerClickProps {
     // is the task-type rail (原型 / 幻灯片 / HyperFrames / 视频 / …).
     | 'working_dir'
     | 'working_dir_clear'
+    // The × on the active plugin chip above the composer (mirrors
+    // `working_dir_clear`): removes the bound plugin, whether it was attached
+    // from a Community card or an example-prompt preset. `chip_id` is the
+    // plugin id.
+    | 'plugin_chip_clear'
+    // Re-selecting a previously used folder from the working-dir picker's
+    // "Recent folders" submenu.
+    | 'working_dir_recent'
     | 'task_chip'
     // Sub-category filter pill under the task rail (全部 / Landing / Brand /
     // Dashboards / …). `subcategory` carries the picked slug; '全部' sends
@@ -1522,13 +1553,20 @@ export interface ComposerBarClickProps {
 // Next-step action affordance shown under the last successful assistant
 // message. `next_step_exposed` fires once when the affordance becomes visible
 // so the funnel can divide clicks by exposure; the action elements drive the
-// "second-turn rate" / "share rate" acceptance metrics. `chip_id` carries the
-// recommended-chip identity (e.g. `polish_visual`, `second_version`) for the
-// `chip` element.
+// "second-turn rate" / "share rate" acceptance metrics. The featured
+// design-toolbox rows (`toolbox_action`, with `chip_id` carrying the action id)
+// and `toolbox_more` replaced the former recommended chips as the card's
+// primary iteration entry. `chip` remains for back-compat on legacy events.
 export interface NextStepActionClickProps {
   page_name: 'chat_panel';
   area: 'next_step';
-  element: 'next_step_exposed' | 'share' | 'chip' | 'share_to_open_design';
+  element:
+    | 'next_step_exposed'
+    | 'share'
+    | 'chip'
+    | 'toolbox_action'
+    | 'toolbox_more'
+    | 'share_to_open_design';
   chip_id?: string;
 }
 
@@ -1549,6 +1587,27 @@ export interface AmrEntryClickProps {
   source_product: 'open_design';
   source_detail: TrackingAmrEntrySource;
   entry_occurred_at: string;
+}
+
+// Terminal outcome of one AMR (vela) sign-in attempt, fired exactly once
+// per attempt when the login poll loop settles. This is the main-app-side
+// completion signal that pairs with the amr_entry click: dashboards count
+// AMR-authorized users from this event without joining the separate AMR
+// PostHog project. `result` semantics:
+//   success   — poll observed loggedIn=true within the budget
+//   failed    — `vela login` failed to spawn or exited before sign-in
+//   cancelled — the user clicked Cancel (or backed out mid-start)
+//   timeout   — the 5-minute poll budget elapsed
+export interface AmrAuthResultProps {
+  page_name: TrackingPageName;
+  area: 'amr_auth';
+  result: 'success' | 'failed' | 'cancelled' | 'timeout';
+  error_code?: string;
+  duration_ms: number;
+  // Attribution carried over from the amr_entry click that started this
+  // attempt; absent when login was started without a recorded entry.
+  entry_id?: string;
+  source_detail?: TrackingAmrEntrySource;
 }
 
 export interface ChatPanelResourcesPopoverClickProps {
@@ -2234,6 +2293,14 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   diagnostic_source?: TrackingRunDiagnosticSource;
   stderr_present?: boolean;
   stderr_line_count_bucket?: TrackingStderrLineCountBucket;
+  stdout_present?: boolean;
+  stdout_line_count_bucket?: TrackingStderrLineCountBucket;
+  rpc_close_reason?: TrackingRunCloseReason;
+  first_token_seen?: boolean;
+  user_visible_output_seen?: boolean;
+  tool_call_seen?: boolean;
+  artifact_write_seen?: boolean;
+  live_artifact_seen?: boolean;
   artifact_count: number;
   // True when the run raised an AskUserQuestion clarification card. Such runs
   // are intent-clarification turns (the agent stops to ask the user a question)
@@ -2272,6 +2339,26 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   retry_attempt_count?: number;
   retry_final_result?: TrackingRunRetryFinalResult;
   retry_suppressed_reason?: TrackingRunRetrySuppressedReason;
+}
+
+export interface LangfuseReportResultProps {
+  page_name: 'chat_panel' | 'design_system_project';
+  area: 'chat_panel' | 'design_system_generation';
+  project_id: string | null;
+  conversation_id: string | null;
+  run_id: string;
+  langfuse_trace_id: string;
+  langfuse_expected: boolean;
+  langfuse_delivery_status: TrackingLangfuseDeliveryStatus;
+  langfuse_drop_reason?: TrackingLangfuseDropReason;
+  langfuse_report_result: TrackingLangfuseReportResult;
+  langfuse_report_trigger: 'final_message';
+  langfuse_report_skip_reason?: TrackingLangfuseReportSkipReason;
+  report_duration_ms?: number;
+  result?: TrackingRunResult;
+  error_code?: string;
+  agent_provider_id?: TrackingCliProviderId;
+  model_id?: string;
 }
 
 export interface RunRetryBaseProps {
@@ -2541,6 +2628,7 @@ export type AnalyticsEventPayload =
   | { event: 'plugin_replacement_result'; props: PluginReplacementResultProps }
   | { event: 'run_created'; props: RunCreatedProps }
   | { event: 'run_finished'; props: RunFinishedProps }
+  | { event: 'langfuse_report_result'; props: LangfuseReportResultProps }
   | { event: 'run_retry_attempted'; props: RunRetryAttemptedProps }
   | { event: 'run_retry_finished'; props: RunRetryFinishedProps }
   | { event: 'update_install_result'; props: UpdateInstallResultProps }
@@ -2569,6 +2657,7 @@ export type AnalyticsEventPayload =
       props: SettingsByokModelsFetchResultProps;
     }
   | { event: 'settings_connector_auth_result'; props: SettingsConnectorAuthResultProps }
+  | { event: 'amr_auth_result'; props: AmrAuthResultProps }
   | { event: 'onboarding_runtime_scan_result'; props: OnboardingRuntimeScanResultProps }
   | { event: 'onboarding_complete_result'; props: OnboardingCompleteResultProps }
   | {
@@ -2882,6 +2971,9 @@ export interface DeriveConfigureGlobalsInput {
   // Whether a BYOK key/url has been saved (web client only — daemon
   // can leave this undefined).
   byokConfigured?: boolean;
+  // Whether the user has completed AMR (vela) sign-in. AMR ships with the
+  // app, so authorization — not installation — is its "configured" signal.
+  amrAuthorized?: boolean;
 }
 
 export function deriveConfigureGlobals(
@@ -2892,24 +2984,34 @@ export function deriveConfigureGlobals(
   configure_availability: TrackingConfigureAvailability;
 } {
   const agents = input.agents ?? [];
-  const hasAvailableCli = agents.some((a) => a.available === true);
+  // The AMR runtime is bundled with the app, so its agent row must not
+  // count as a user-configured local CLI: with it included every install
+  // reports 'local_cli' and the 'amr'/'none' buckets can never appear.
+  // AMR's configured signal is `amrAuthorized` (sign-in), not detection.
+  const cliAgents = agents.filter((a) => a.id !== 'amr');
+  const hasAvailableCli = cliAgents.some((a) => a.available === true);
   const selectedAgent = input.agentId
     ? agents.find((a) => a.id === input.agentId)
     : undefined;
   const selectedAgentAvailable = selectedAgent?.available === true;
   const byokConfigured = input.byokConfigured === true;
+  const amrAuthorized = input.amrAuthorized === true;
 
+  // 'api' mode means BYOK is the active execution path, so treat it as a
+  // configured BYOK signal even when the caller cannot see the saved key
+  // (the daemon never can). 'daemon' mode used to hardcode 'local_cli',
+  // which made 'none' unreachable on desktop; the type now follows what
+  // is actually configured, with mode only steering availability below.
+  const byokSignal = byokConfigured || input.mode === 'api';
   let configureType: TrackingConfigureType;
-  if (input.mode === 'daemon') {
-    configureType = byokConfigured ? 'both' : 'local_cli';
-  } else if (input.mode === 'api') {
-    configureType = hasAvailableCli ? 'both' : 'byok';
-  } else if (hasAvailableCli && byokConfigured) {
+  if (hasAvailableCli && byokSignal) {
     configureType = 'both';
   } else if (hasAvailableCli) {
     configureType = 'local_cli';
-  } else if (byokConfigured) {
+  } else if (byokSignal) {
     configureType = 'byok';
+  } else if (amrAuthorized) {
+    configureType = 'amr';
   } else {
     configureType = 'none';
   }
@@ -2921,7 +3023,7 @@ export function deriveConfigureGlobals(
       : 'unavailable';
   } else if (input.mode === 'api') {
     configureAvailability = byokConfigured ? 'available' : 'unavailable';
-  } else if (hasAvailableCli || byokConfigured) {
+  } else if (hasAvailableCli || byokConfigured || amrAuthorized) {
     configureAvailability = 'available';
   } else {
     configureAvailability = 'unknown';

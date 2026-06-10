@@ -57,9 +57,11 @@ import {
 import {
   RUNS_CHANGED_EVENT,
   fetchAmrModels,
+  fetchVelaLoginStatus,
   listProjectRuns,
   type VelaLoginStatus,
 } from './providers/daemon';
+import { AMR_LOGIN_STATUS_EVENT } from './components/amrLoginPolling';
 import { navigate, useRoute } from './router';
 import {
   fetchDaemonConfig,
@@ -569,6 +571,11 @@ function AppInner() {
     analytics.setIdentity(config.installationId ?? null);
   }, [analytics.setIdentity, config.installationId, config.telemetry?.metrics]);
 
+  // App-level AMR sign-in state — declared here because the configure
+  // globals effect below reads it; the sync effects live next to the
+  // other AMR plumbing further down.
+  const [amrLoginStatus, setAmrLoginStatus] = useState<VelaLoginStatus | null>(null);
+
   // v2 analytics requires every event to carry the configure-state
   // triplet (has_available_configure_cli / configure_type /
   // configure_availability). We push it into the PostHog global register
@@ -598,11 +605,13 @@ function AppInner() {
       agentId: config.agentId,
       agents: agents.map((a) => ({ id: a.id, available: a.available })),
       byokConfigured,
+      amrAuthorized: amrLoginStatus?.loggedIn === true,
     });
     analytics.setConfigureGlobals(globals);
   }, [
     analytics.setConfigureGlobals,
     agentsLoading,
+    amrLoginStatus,
     config.mode,
     config.agentId,
     config.apiKey,
@@ -698,7 +707,38 @@ function AppInner() {
     };
   }, [amrPollRestartToken, daemonLive]);
 
+  // App-level AMR sign-in state. Feeds two analytics globals: the
+  // `amr` configure_type bucket (deriveConfigureGlobals below) and the
+  // `user_id` public param (the AMR account id is the only join key
+  // between this PostHog project and the AMR-side one). Child surfaces
+  // push status changes up via onAmrLoginStatusChange; the global
+  // AMR_LOGIN_STATUS_EVENT covers logins finishing in surfaces that
+  // unmounted before their poll settled.
+  useEffect(() => {
+    let cancelled = false;
+    const sync = async () => {
+      const status = await fetchVelaLoginStatus();
+      if (!cancelled && status) setAmrLoginStatus(status);
+    };
+    void sync();
+    const onStatusEvent = () => {
+      void sync();
+    };
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
+    };
+  }, [daemonLive]);
+
+  useEffect(() => {
+    analytics.setUserId(
+      amrLoginStatus?.loggedIn === true ? amrLoginStatus.user?.id ?? null : null,
+    );
+  }, [analytics.setUserId, amrLoginStatus]);
+
   const handleAmrLoginStatusChange = useCallback((status: VelaLoginStatus | null) => {
+    if (status) setAmrLoginStatus(status);
     if (status?.loggedIn !== true) return;
     restartAmrPolling();
   }, [restartAmrPolling]);

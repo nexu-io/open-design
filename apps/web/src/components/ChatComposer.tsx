@@ -2,6 +2,7 @@
 
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -39,7 +40,16 @@ import {
   groupByProvider,
   type MediaModel,
 } from "../media/models";
-import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchConnectors } from "../providers/registry";
+import {
+  projectRawUrl,
+  uploadProjectFiles,
+  openFolderDialog,
+  fetchConnectors,
+  fetchRecentLinkedDirs,
+  pushRecentLinkedDir,
+  dirExists,
+} from "../providers/registry";
+import { WorkingDirPicker } from './WorkingDirPicker';
 import { patchProject } from "../state/projects";
 import { fetchMcpServers } from "../state/mcp";
 import type { McpServerConfig, McpTemplate } from "../state/mcp";
@@ -60,6 +70,19 @@ import { buildVisualAnnotationAttachment, commentTargetDisplayName } from '../co
 import { Icon, type IconName } from "./Icon";
 import { SessionModeToggle } from './SessionModeToggle';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
+import {
+  DESIGN_TOOLBOX_ACTIONS,
+  designToolboxActionBadge,
+  designToolboxActionDescription,
+  designToolboxActionTitle,
+  findDesignToolboxSkill,
+  getDesignToolboxAction,
+  skillMatchesQuery,
+  type DesignToolboxAction,
+  type DesignToolboxActionId,
+} from '../runtime/design-toolbox';
+import { ComposerPluginPreview } from './ComposerPluginPreview';
+import { computeToolboxDetailPosition } from './composer-detail-position';
 import { PluginDetailsModal } from "./PluginDetailsModal";
 import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
 import { BUILT_IN_PETS, CUSTOM_PET_ID } from "./pet/pets";
@@ -111,15 +134,6 @@ interface SlashCommand {
   icon: 'sparkles' | 'eye' | 'sliders';
 }
 
-type DesignToolboxActionId =
-  | 'auto-match'
-  | 'motion'
-  | 'motion-polish'
-  | 'anti-ai-polish'
-  | 'visual-polish'
-  | 'image-gen'
-  | 'video-gen';
-
 type DesignToolboxResourceKind =
   | 'skill'
   | 'plugin'
@@ -127,14 +141,6 @@ type DesignToolboxResourceKind =
   | 'mcp-template'
   | 'connector'
   | 'file';
-
-interface DesignToolboxAction {
-  id: DesignToolboxActionId;
-  icon: IconName;
-  preferredSkillIds: string[];
-  categoryHints: string[];
-  searchTerms: string[];
-}
 
 interface DesignToolboxResourceIndex {
   skills: SkillSummary[];
@@ -163,58 +169,6 @@ type DesignToolboxResource =
   | (DesignToolboxResourceBase & { kind: 'mcp-template'; template: McpTemplate })
   | (DesignToolboxResourceBase & { kind: 'connector'; connector: ConnectorDetail })
   | (DesignToolboxResourceBase & { kind: 'file'; file: ProjectFile });
-
-const DESIGN_TOOLBOX_ACTIONS: DesignToolboxAction[] = [
-  {
-    id: 'auto-match',
-    icon: 'sparkles',
-    preferredSkillIds: ['creative-director', 'frontend-design', 'design-taste-frontend'],
-    categoryHints: ['creative-direction', 'web-artifacts'],
-    searchTerms: ['match', 'recommend', 'next step', 'workflow', 'skills', 'mcp', 'plugins', 'connector', 'files', '匹配', '下一步', '推荐', '流程', '审美'],
-  },
-  {
-    id: 'motion',
-    icon: 'play',
-    preferredSkillIds: ['emilkowalski-motion', 'gsap-react', 'gsap-scrolltrigger', 'gsap-timeline', 'gsap-core'],
-    categoryHints: ['animation-motion'],
-    searchTerms: ['animation', 'motion', 'gsap', 'micro interaction', 'scrolltrigger', '动效', '动画', '微交互'],
-  },
-  {
-    id: 'motion-polish',
-    icon: 'sliders',
-    preferredSkillIds: ['gsap-performance', 'emilkowalski-motion', 'gsap-timeline', 'gsap-core'],
-    categoryHints: ['animation-motion'],
-    searchTerms: ['motion polish', 'easing', 'performance', 'reduced motion', 'timeline', '动效润色', '缓动', '性能'],
-  },
-  {
-    id: 'anti-ai-polish',
-    icon: 'paint-bucket',
-    preferredSkillIds: ['design-taste-frontend', 'gpt-taste', 'frontend-design', 'impeccable-design-polish'],
-    categoryHints: ['creative-direction', 'web-artifacts'],
-    searchTerms: ['anti ai', 'anti slop', 'taste', 'generic', 'beautify', '反 ai', '去 ai 味', '美化', '润色'],
-  },
-  {
-    id: 'visual-polish',
-    icon: 'palette',
-    preferredSkillIds: ['impeccable-design-polish', 'frontend-design', 'creative-director', 'design-taste-frontend'],
-    categoryHints: ['creative-direction', 'web-artifacts'],
-    searchTerms: ['polish', 'critique', 'audit', 'harden', 'responsive', 'accessibility', '润色', '审稿', '交付'],
-  },
-  {
-    id: 'image-gen',
-    icon: 'image',
-    preferredSkillIds: ['imagegen-frontend-web', 'fal-generate', 'imagen', 'venice-image-generate', 'image-enhancer'],
-    categoryHints: ['image-generation'],
-    searchTerms: ['image', 'generate image', 'visual reference', 'moodboard', 'section image', '生图', '配图', '视觉参考'],
-  },
-  {
-    id: 'video-gen',
-    icon: 'play',
-    preferredSkillIds: ['video-hyperframes', 'sora', 'fal-video-edit', 'venice-video', 'replicate'],
-    categoryHints: ['video-generation'],
-    searchTerms: ['video', 'sora', 'remotion', 'hyperframes', 'storyboard', '生视频', '视频', '分镜'],
-  },
-];
 
 interface Props {
   projectId: string | null;
@@ -349,6 +303,22 @@ export interface ChatComposerHandle {
     meta?: ChatSendMeta;
   }) => void;
   focus: () => void;
+  /**
+   * Run a design-toolbox action by id from outside the composer (e.g. the
+   * assistant "next step" card). Resolves the action, matches its preferred
+   * skill, and seeds the composer draft with the action prompt + `@skill`
+   * mention — identical to picking the action inside the toolbox panel, so the
+   * draft still waits for the user to send. No-op for an unknown id.
+   */
+  applyDesignToolboxAction: (id: DesignToolboxActionId) => void;
+  /**
+   * Seed the composer with a specific skill by id (same path as picking it in
+   * the toolbox panel). Used by the next-step card's full skill list. No-op for
+   * an unknown id.
+   */
+  applyDesignToolboxSkill: (skillId: string) => void;
+  /** Legacy: open the standalone toolbox popover. Currently unused by callers. */
+  openDesignToolbox: () => void;
 }
 
 export interface ChatSendMeta {
@@ -779,6 +749,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // strip the chip when the user removes the corresponding `@<skill>`
     // token from the draft, keeping draft and chips in sync.
     const [stagedSkills, setStagedSkills] = useState<SkillSummary[]>([]);
+    // Legacy standalone design-toolbox popover. The next-step card now renders
+    // its own cascading skill menu, so nothing opens this anymore; kept compiling
+    // behind `openDesignToolbox` until the panel subsystem is removed wholesale.
+    const [designToolboxOpen, setDesignToolboxOpen] = useState(false);
     const [stagedMcpServers, setStagedMcpServers] = useState<McpServerConfig[]>([]);
     const [stagedConnectors, setStagedConnectors] = useState<ConnectorDetail[]>([]);
     const [stagedWorkspaceContexts, setStagedWorkspaceContexts] = useState<WorkspaceContextItem[]>([]);
@@ -840,8 +814,59 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // host. Replaces the old textareaRef + manual selection plumbing. IME
     // composition guarding now lives inside the editor's command handlers.
     const editorRef = useRef<LexicalComposerInputHandle | null>(null);
+    // Always points at the latest `applyDesignToolboxAction` closure so the
+    // imperative handle (whose deps array doesn't track `draft`/`t`) never seeds
+    // the composer from a stale draft when the next-step card fires an action.
+    const applyDesignToolboxActionRef = useRef<(action: DesignToolboxAction) => void>(() => {});
+    // Same latest-closure trick for picking a skill by id from the next-step card.
+    const applyDesignToolboxSkillByIdRef = useRef<(skillId: string) => void>(() => {});
     const petEnabled = Boolean(onAdoptPet && onTogglePet);
     const linkedDirs = projectMetadata?.linkedDirs ?? [];
+    // The project's working directory: the local folder the agent can read
+    // (via `linkedDirs` → `--add-dir`). Shown in the WorkingDirPicker below
+    // the input, mirroring Home. We treat it as a single primary folder.
+    const workingDir = linkedDirs[0] ?? null;
+    const [recentDirs, setRecentDirs] = useState<string[]>([]);
+    useEffect(() => {
+      let cancelled = false;
+      void fetchRecentLinkedDirs().then((dirs) => {
+        if (!cancelled) setRecentDirs(dirs);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, []);
+    const rememberRecentDir = useCallback(async (dir: string) => {
+      setRecentDirs((prev) => [dir, ...prev.filter((d) => d !== dir)].slice(0, 5));
+      const persisted = await pushRecentLinkedDir(dir);
+      setRecentDirs(persisted);
+    }, []);
+    // Live-check whether the selected working directory still exists, so a
+    // folder deleted from disk turns the picker red without a page reload.
+    // Re-checked when the dir changes, when the window/tab regains focus
+    // (e.g. after deleting it in Finder), and when the picker is opened.
+    const [workingDirMissing, setWorkingDirMissing] = useState(false);
+    const checkWorkingDir = useCallback(async () => {
+      if (!workingDir) {
+        setWorkingDirMissing(false);
+        return;
+      }
+      const ok = await dirExists(workingDir);
+      setWorkingDirMissing(!ok);
+    }, [workingDir]);
+    useEffect(() => {
+      void checkWorkingDir();
+      const onFocus = () => void checkWorkingDir();
+      const onVisible = () => {
+        if (document.visibilityState === 'visible') void checkWorkingDir();
+      };
+      window.addEventListener('focus', onFocus);
+      document.addEventListener('visibilitychange', onVisible);
+      return () => {
+        window.removeEventListener('focus', onFocus);
+        document.removeEventListener('visibilitychange', onVisible);
+      };
+    }, [checkWorkingDir]);
     const visibleWorkspaceContext =
       activeWorkspaceContext && activeWorkspaceContext.id !== dismissedWorkspaceContextId
         ? activeWorkspaceContext
@@ -1257,6 +1282,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         focus: () => {
           editorRef.current?.focus();
         },
+        applyDesignToolboxAction: (id: DesignToolboxActionId) => {
+          const action = getDesignToolboxAction(id);
+          if (!action) return;
+          applyDesignToolboxActionRef.current(action);
+        },
+        applyDesignToolboxSkill: (skillId: string) => {
+          applyDesignToolboxSkillByIdRef.current(skillId);
+        },
+        openDesignToolbox: () => {
+          setComposerEngaged(true);
+          setDesignToolboxOpen(true);
+        },
       }),
       [connectors, mcpServers, pluginsForComposer, skills]
     );
@@ -1485,6 +1522,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         skill,
       );
     }
+    // Recreated each render, so this captures the latest draft/context closure
+    // for the imperative handle (see applyDesignToolboxActionRef).
+    applyDesignToolboxActionRef.current = applyDesignToolboxAction;
 
     function applyDesignToolboxSkill(skill: SkillSummary) {
       applyDesignToolboxPrompt(
@@ -1498,6 +1538,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         skill,
       );
     }
+    // Latest-closure bridge for the imperative handle (see the ref declaration).
+    applyDesignToolboxSkillByIdRef.current = (skillId: string) => {
+      const skill = skills.find((s) => s.id === skillId);
+      if (skill) applyDesignToolboxSkill(skill);
+    };
 
     function applyDesignToolboxResource(resource: DesignToolboxResource) {
       if (resource.kind === 'skill') {
@@ -1901,6 +1946,39 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (result?.metadata) onProjectMetadataChange?.(result.metadata);
     }
 
+    // The WorkingDirPicker treats the project's working directory as a single
+    // primary folder, so selecting one replaces `linkedDirs`. The folder is
+    // read-only awareness for the agent (→ `--add-dir`), not a Design Files
+    // import, and `baseDir` is never touched.
+    async function setWorkingDirFolder(dir: string) {
+      if (!projectId) return;
+      const base = projectMetadata ?? { kind: 'prototype' as const };
+      const metadata: ProjectMetadata = { ...base, linkedDirs: [dir] };
+      const result = await patchProject(projectId, { metadata });
+      // The daemon rejects stale/inaccessible/system dirs with
+      // INVALID_LINKED_DIR (patchProject → null). Only commit the selection
+      // and promote it in recents when the project accepted it; otherwise
+      // surface the failure and leave recents untouched so a rejected path
+      // isn't re-promoted to the top of the menu.
+      if (!result?.metadata) {
+        onShowToast?.(t('homeWorkingDir.applyFailed'));
+        return;
+      }
+      onProjectMetadataChange?.(result.metadata);
+      void rememberRecentDir(dir);
+    }
+    async function handlePickWorkingDir() {
+      const selected = await openFolderDialog();
+      if (selected) await setWorkingDirFolder(selected);
+    }
+    async function clearWorkingDir() {
+      if (!projectId) return;
+      const base = projectMetadata ?? { kind: 'prototype' as const };
+      const metadata: ProjectMetadata = { ...base, linkedDirs: [] };
+      const result = await patchProject(projectId, { metadata });
+      if (result?.metadata) onProjectMetadataChange?.(result.metadata);
+    }
+
     async function handleSwitchDesignSystem(
       designSystemId: string | null,
       title: string | null,
@@ -1924,14 +2002,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       return true;
     }
 
-    async function handleUnlinkFolder(dir: string) {
-      if (!projectId) return;
-      const base = projectMetadata ?? { kind: 'prototype' as const };
-      const existing = base.linkedDirs ?? [];
-      const metadata: ProjectMetadata = { ...base, linkedDirs: existing.filter((d) => d !== dir) };
-      const result = await patchProject(projectId, { metadata });
-      if (result?.metadata) onProjectMetadataChange?.(result.metadata);
-    }
 
     // Lexical drives every text change through this callback. `present` is the
     // entity list the editor's text currently references (MentionNodes plus
@@ -2429,26 +2499,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               t={t}
             />
           ) : null}
-          {linkedDirs.length > 0 ? (
-            <div className="linked-dirs-row" data-testid="linked-dirs">
-              {linkedDirs.map((dir) => (
-                <div key={dir} className="linked-dir-chip">
-                  <Icon name="folder" size={13} />
-                  <span className="linked-dir-name" title={dir}>
-                    {dir.split('/').pop() || dir}
-                  </span>
-                  <button
-                    className="staged-remove"
-                    onClick={() => handleUnlinkFolder(dir)}
-                    title={t('chat.linkedFolderRemoveAria', { path: dir })}
-                    aria-label={t('chat.linkedFolderRemoveAria', { path: dir })}
-                  >
-                    <Icon name="close" size={11} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
           {activeFileContext ? (
             <div
               className="composer-active-file"
@@ -2607,50 +2657,64 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 fileInputRef.current?.click();
               }}
               attachLoading={uploading}
-              toolboxLabel={t('chat.designToolbox.title')}
-              renderToolbox={(close) => (
-                <DesignToolboxPanel
-                  actions={DESIGN_TOOLBOX_ACTIONS}
-                  skills={skills}
-                  plugins={pluginsForComposer}
-                  mcpServers={enabledMcpServers}
-                  mcpTemplates={mcpTemplates}
-                  connectors={connectors}
-                  projectFiles={projectFiles}
-                  activeSkillIds={stagedSkills.map((skill) => skill.id)}
-                  activePluginId={activeAppliedPlugin?.pluginId ?? pinnedPluginId ?? null}
-                  activeMcpServerIds={stagedMcpServers.map((server) => server.id)}
-                  activeConnectorIds={stagedConnectors.map((connector) => connector.id)}
-                  activeFilePaths={staged.map((item) => item.path)}
-                  onOpened={() => trackDesignToolbox({ element: 'design_toolbox_open' })}
-                  onPickAction={(action) => {
-                    trackDesignToolbox({
-                      element: 'design_toolbox_action',
-                      toolbox_action_id: action.id,
-                    });
-                    applyDesignToolboxAction(action);
-                    close();
-                  }}
-                  onPickSkill={(skill) => {
-                    trackDesignToolbox({
-                      element: 'design_toolbox_resource',
-                      resource_kind: 'skill',
-                      resource_id: skill.id,
-                    });
-                    applyDesignToolboxSkill(skill);
-                    close();
-                  }}
-                  onPickResource={(resource) => {
-                    trackDesignToolbox({
-                      element: 'design_toolbox_resource',
-                      ...designToolboxResourceTracking(resource),
-                    });
-                    applyDesignToolboxResource(resource);
-                    close();
-                  }}
-                />
-              )}
             />
+            {designToolboxOpen ? (
+              <div className="composer-toolbox-standalone">
+                {/* Click-catcher backdrop. A <div> (not a <button>) so it never
+                    inherits the app's global button:hover fill, which otherwise
+                    painted the whole screen when the cursor crossed it. */}
+                <div
+                  className="composer-toolbox-standalone-backdrop"
+                  aria-hidden="true"
+                  onClick={() => setDesignToolboxOpen(false)}
+                />
+                <div
+                  className="plus-menu__popup composer-toolbox-standalone-popup"
+                  role="menu"
+                >
+                  <DesignToolboxPanel
+                    actions={DESIGN_TOOLBOX_ACTIONS}
+                    skills={skills}
+                    plugins={pluginsForComposer}
+                    mcpServers={enabledMcpServers}
+                    mcpTemplates={mcpTemplates}
+                    connectors={connectors}
+                    projectFiles={projectFiles}
+                    activeSkillIds={stagedSkills.map((skill) => skill.id)}
+                    activePluginId={activeAppliedPlugin?.pluginId ?? pinnedPluginId ?? null}
+                    activeMcpServerIds={stagedMcpServers.map((server) => server.id)}
+                    activeConnectorIds={stagedConnectors.map((connector) => connector.id)}
+                    activeFilePaths={staged.map((item) => item.path)}
+                    onOpened={() => trackDesignToolbox({ element: 'design_toolbox_open' })}
+                    onPickAction={(action) => {
+                      trackDesignToolbox({
+                        element: 'design_toolbox_action',
+                        toolbox_action_id: action.id,
+                      });
+                      applyDesignToolboxAction(action);
+                      setDesignToolboxOpen(false);
+                    }}
+                    onPickSkill={(skill) => {
+                      trackDesignToolbox({
+                        element: 'design_toolbox_resource',
+                        resource_kind: 'skill',
+                        resource_id: skill.id,
+                      });
+                      applyDesignToolboxSkill(skill);
+                      setDesignToolboxOpen(false);
+                    }}
+                    onPickResource={(resource) => {
+                      trackDesignToolbox({
+                        element: 'design_toolbox_resource',
+                        ...designToolboxResourceTracking(resource),
+                      });
+                      applyDesignToolboxResource(resource);
+                      setDesignToolboxOpen(false);
+                    }}
+                  />
+                </div>
+              </div>
+            ) : null}
             {leadingAccessory}
             <span className="composer-spacer" />
             {footerAccessory}
@@ -2707,6 +2771,20 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             ) : null}
           </div>
         </div>
+        {projectId ? (
+          <div className="composer-workdir-row">
+            <WorkingDirPicker
+              placement="up"
+              workingDir={workingDir}
+              invalid={workingDirMissing}
+              recentDirs={recentDirs}
+              onOpen={() => void checkWorkingDir()}
+              onPickDirectory={() => void handlePickWorkingDir()}
+              onSelectRecent={(dir) => void setWorkingDirFolder(dir)}
+              onClear={() => void clearWorkingDir()}
+            />
+          </div>
+        ) : null}
         {uploadError ? <span className="composer-hint">{uploadError}</span> : null}
         {detailsRecord ? (
           <PluginDetailsModal
@@ -3621,14 +3699,15 @@ function DesignToolboxPanel({
   }
   function showToolboxDetail(key: string, rect: DOMRect, node: ReactNode) {
     cancelDetailClose();
-    const detailWidth = 264;
-    const gap = 8;
-    const toRight = rect.right + gap;
-    const left =
-      toRight + detailWidth > window.innerWidth - 8
-        ? rect.left - gap - detailWidth
-        : toRight;
-    setToolboxDetail({ key, left, top: rect.top, node });
+    // Plugin rows render a tall visual preview; the helper clamps both axes
+    // into the viewport so the fixed panel never lands off-screen on a
+    // narrow pane (see computeToolboxDetailPosition).
+    const { left, top } = computeToolboxDetailPosition(
+      rect,
+      { width: window.innerWidth, height: window.innerHeight },
+      { detailWidth: 264, gap: 8, margin: 8, estimatedHeight: 340 },
+    );
+    setToolboxDetail({ key, left, top, node });
   }
   function scheduleToolboxDetailClose(key: string) {
     cancelDetailClose();
@@ -3724,18 +3803,25 @@ function DesignToolboxPanel({
                   }
                 }}
                 detail={
-                  <>
-                    <div className="plus-menu__detail-title">{resource.title}</div>
-                    {resource.subtitle ? (
-                      <div className="plus-menu__detail-desc">{resource.subtitle}</div>
-                    ) : null}
-                    <div className="plus-menu__detail-skill">
-                      {designToolboxResourceKindLabel(resource.kind, t)}
-                    </div>
-                    <div className="plus-menu__detail-badge">
-                      {active ? t('chat.designToolbox.selected') : resource.badge}
-                    </div>
-                  </>
+                  // Plugin rows reuse the rich visual preview (poster /
+                  // sandboxed example iframe + meta); every other kind keeps
+                  // the compact text detail since it has no preview asset.
+                  resource.kind === 'plugin' ? (
+                    <ComposerPluginPreview record={resource.plugin} locale={locale} />
+                  ) : (
+                    <>
+                      <div className="plus-menu__detail-title">{resource.title}</div>
+                      {resource.subtitle ? (
+                        <div className="plus-menu__detail-desc">{resource.subtitle}</div>
+                      ) : null}
+                      <div className="plus-menu__detail-skill">
+                        {designToolboxResourceKindLabel(resource.kind, t)}
+                      </div>
+                      <div className="plus-menu__detail-badge">
+                        {active ? t('chat.designToolbox.selected') : resource.badge}
+                      </div>
+                    </>
+                  )
                 }
               />
             );
@@ -3907,42 +3993,6 @@ function pluginMatchesQuery(plugin: InstalledPluginRecord, query: string): boole
     .includes(q);
 }
 
-function skillMatchesQuery(skill: SkillSummary, query: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return [
-    skill.id,
-    skill.name,
-    skill.description,
-    skill.mode,
-    skill.surface ?? '',
-    ...skill.triggers,
-  ]
-    .join(' ')
-    .toLowerCase()
-    .includes(q);
-}
-
-function designToolboxActionTitle(
-  action: DesignToolboxAction,
-  t: TranslateFn,
-): string {
-  return t(`chat.designToolbox.action.${action.id}.title` as keyof Dict);
-}
-
-function designToolboxActionBadge(
-  action: DesignToolboxAction,
-  t: TranslateFn,
-): string {
-  return t(`chat.designToolbox.action.${action.id}.badge` as keyof Dict);
-}
-
-function designToolboxActionDescription(
-  action: DesignToolboxAction,
-  t: TranslateFn,
-): string {
-  return t(`chat.designToolbox.action.${action.id}.description` as keyof Dict);
-}
 
 function buildDesignToolboxResources({
   skills,
@@ -4203,25 +4253,6 @@ function designToolboxResourceIsActive(
   }
 }
 
-function findDesignToolboxSkill(
-  action: DesignToolboxAction,
-  skills: SkillSummary[],
-): SkillSummary | null {
-  for (const id of action.preferredSkillIds) {
-    const exact = skills.find((skill) => skill.id === id || skill.name === id);
-    if (exact) return exact;
-  }
-  const categoryHintSet = new Set(action.categoryHints);
-  const categoryMatch = skills.find((skill) =>
-    skill.category ? categoryHintSet.has(skill.category) : false,
-  );
-  if (categoryMatch) return categoryMatch;
-  return (
-    skills.find((skill) =>
-      action.searchTerms.some((term) => skillMatchesQuery(skill, term)),
-    ) ?? null
-  );
-}
 
 function designToolboxActionMatchesQuery(
   action: DesignToolboxAction,

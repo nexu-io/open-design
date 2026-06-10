@@ -263,4 +263,114 @@ describe('Langfuse message finalization gate', () => {
       appVersion: { version: '0.7.0', channel: 'beta', packaged: true },
     });
   });
+
+  it('captures Langfuse report acceptance after final message reporting resolves', async () => {
+    const run = {
+      id: 'run-accepted',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      agentId: 'codex',
+      model: 'default',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+    };
+    const capture = vi.fn();
+    const report = vi.fn(async () => ({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted' as const,
+    }));
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        analytics: { capture },
+        getAppVersion: () => '0.7.0',
+        runs: { get: vi.fn(() => run) },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      getAppVersion: () => ({ version: '0.7.0', channel: 'beta', packaged: true }),
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, runId: run.id, endedAt: 1234 },
+      { telemetryFinalized: true },
+      {
+        analyticsContext: {
+          deviceId: 'device-1',
+          sessionId: 'session-1',
+          clientType: 'desktop',
+          locale: 'zh-CN',
+          requestId: 'request-1',
+        },
+        projectId: 'project-1',
+        conversationId: 'conv-1',
+      },
+    );
+    await Promise.resolve();
+
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'langfuse_report_result',
+        insertId: 'run-accepted-langfuse-report-accepted',
+        properties: expect.objectContaining({
+          run_id: 'run-accepted',
+          langfuse_trace_id: 'run-accepted',
+          langfuse_expected: true,
+          langfuse_delivery_status: 'accepted',
+          langfuse_report_result: 'accepted',
+          langfuse_report_trigger: 'final_message',
+        }),
+      }),
+    );
+  });
+
+  it('captures skipped Langfuse reporting when a finalized message references a missing run', () => {
+    const capture = vi.fn();
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        analytics: { capture },
+        getAppVersion: () => '0.7.0',
+        runs: { get: vi.fn(() => undefined) },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      getAppVersion: () => ({ version: '0.7.0', channel: 'beta', packaged: true }),
+      report: vi.fn(),
+    });
+
+    reporter(
+      { ...terminalMessage, runId: 'run-missing', endedAt: 1234 },
+      { telemetryFinalized: true },
+      {
+        analyticsContext: {
+          deviceId: 'device-1',
+          sessionId: 'session-1',
+          clientType: 'desktop',
+          locale: 'zh-CN',
+          requestId: 'request-1',
+        },
+        projectId: 'project-1',
+        conversationId: 'conv-1',
+      },
+    );
+
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'langfuse_report_result',
+        insertId: 'run-missing-langfuse-report-skipped-run_not_found',
+        properties: expect.objectContaining({
+          project_id: 'project-1',
+          conversation_id: 'conv-1',
+          run_id: 'run-missing',
+          langfuse_report_result: 'skipped',
+          langfuse_report_skip_reason: 'run_not_found',
+        }),
+      }),
+    );
+  });
 });

@@ -26,11 +26,13 @@ import { DesignSpecView } from '../DesignSpecView';
 import { PreviewModal, type PreviewView } from '../PreviewModal';
 import { buildPluginShareUrl, PluginShareMenu } from './PluginShareMenu';
 import { PluginMetaSections } from './PluginMetaSections';
+import { buildPluginUseMenu } from './pluginUseMenu';
+import type { PluginUseAction } from '../plugins-home/useActions';
 
 interface Props {
   record: InstalledPluginRecord;
   onClose: () => void;
-  onUse: (record: InstalledPluginRecord) => void;
+  onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
   isApplying?: boolean;
   hideUseAction?: boolean;
 }
@@ -176,11 +178,12 @@ export function PluginDesignSystemDetail({
       primaryAction={hideUseAction
         ? undefined
         : {
-            label: 'Use plugin',
-            onClick: () => onUse(record),
+            label: t('preview.usePlugin'),
+            onClick: () => onUse(record, 'use'),
             busy: !!isApplying,
             busyLabel: 'Applying…',
             testId: `plugin-details-use-${record.id}`,
+            menu: buildPluginUseMenu(record, onUse, t),
           }}
       headerExtras={<PluginShareMenu record={record} variant="inline" />}
     />

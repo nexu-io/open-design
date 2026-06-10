@@ -212,7 +212,7 @@ process.exit(0);
         expect(runsBody.runs[0]).toMatchObject({
           conversationId,
           status: 'failed',
-          exitCode: 0,
+          exitCode: 1,
         });
       },
     );

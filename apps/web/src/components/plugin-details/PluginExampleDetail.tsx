@@ -17,13 +17,15 @@ import {
 import { PreviewModal } from '../PreviewModal';
 import { buildPluginShareUrl } from './PluginShareMenu';
 import { PluginMetaSections } from './PluginMetaSections';
+import { buildPluginUseMenu } from './pluginUseMenu';
+import type { PluginUseAction } from '../plugins-home/useActions';
 
 interface Props {
   record: InstalledPluginRecord;
   /** When set, fetch this specific example stem; otherwise hit /preview. */
   exampleStem?: string | null;
   onClose: () => void;
-  onUse: (record: InstalledPluginRecord) => void;
+  onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
   isApplying?: boolean;
   hideUseAction?: boolean;
 }
@@ -144,11 +146,12 @@ export function PluginExampleDetail({
       primaryAction={hideUseAction
         ? undefined
         : {
-            label: 'Use plugin',
-            onClick: () => onUse(record),
+            label: t('preview.usePlugin'),
+            onClick: () => onUse(record, 'use'),
             busy: !!isApplying,
             busyLabel: 'Applying…',
             testId: `plugin-details-use-${record.id}`,
+            menu: buildPluginUseMenu(record, onUse, t),
           }}
       hideSidebarToggle
     />

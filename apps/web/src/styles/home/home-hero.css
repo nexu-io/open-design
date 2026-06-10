@@ -1097,75 +1097,17 @@
   color: var(--text-muted);
   font-size: 12px;
 }
-.home-hero__working-dir-wrap {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-.home-hero__working-dir {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 32px;
-  max-width: 180px;
-  padding: 0 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--bg-panel);
-  box-shadow: var(--shadow-xs);
-  color: var(--text-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out);
-}
-.home-hero__working-dir:hover {
-  background: var(--bg-subtle);
-  border-color: var(--border-strong);
-  color: var(--accent);
-}
-.home-hero__working-dir.picked {
-  padding-right: 30px;
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
-  color: var(--text-strong);
-}
-.home-hero__working-dir span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.home-hero__working-dir-clear {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-left: -22px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--text-soft);
-  cursor: pointer;
-  opacity: 0;
-  transition: color 120ms var(--ease-out), opacity 120ms var(--ease-out);
-}
-.home-hero__working-dir-wrap:hover .home-hero__working-dir-clear,
-.home-hero__working-dir-clear:focus-visible {
-  opacity: 0.8;
-}
-.home-hero__working-dir-clear:hover {
-  color: var(--accent);
-  opacity: 1;
-}
-.home-hero__working-dir-clear:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 22%, transparent);
-  outline-offset: 2px;
+/* Host wrapper that aligns the shared WorkingDirPicker to the input card's
+   left edge (card is max-width 720px, centered). The picker itself is
+   layout-neutral; this row gives it the Home placement. */
+.home-hero__workdir-row {
+  width: 100%;
+  max-width: 720px;
+  /* Hug the input card: cancel the 14px column gap and the trigger's 4px
+     top padding so the picker sits ~5px below the card. */
+  margin: -13px auto 0;
+  display: flex;
+  justify-content: flex-start;
 }
 .home-hero__active-type-chip {
   appearance: none;
@@ -2132,6 +2074,14 @@
 
 .home-hero__plugin-preset-preview .plugins-home__html-iframe {
   transform: scale(0.172);
+}
+
+/* Baked clips are framed 1.31:1 for the Community grid; the wider preset tiles
+   would otherwise object-fit:cover-crop the hero out of the middle. Anchor to
+   the top so the hero headline stays in frame. Scoped to the preset cards. */
+.home-hero__plugin-preset-preview .plugins-home__media-video,
+.home-hero__plugin-preset-preview .plugins-home__media-img {
+  object-position: top center;
 }
 
 .home-hero__plugin-preset-title {

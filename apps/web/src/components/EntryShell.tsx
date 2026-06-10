@@ -39,6 +39,10 @@ import {
 } from '../analytics/events';
 import { recordAmrEntry, type AmrEntryAttribution } from '../analytics/amr-attribution';
 import {
+  beginAmrAuthTracking,
+  resolveAmrAuthTracking,
+} from '../analytics/amr-auth';
+import {
   clearOnboardingSessionId,
   getOrCreateOnboardingSessionId,
 } from '../analytics/onboarding-session';
@@ -130,6 +134,7 @@ import {
 } from './amrLoginPolling';
 import { closeAmrActivationWindowBestEffort } from './AmrLoginPill';
 import { AnimatePresence } from 'motion/react';
+import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import { renderModelOptions } from './modelOptions';
 import {
   providerModelsCacheKey,
@@ -516,12 +521,7 @@ export function EntryShell({
     const frame = window.requestAnimationFrame(() => {
       const scrollContainer = entryMainScrollRef.current;
       if (!scrollContainer) return;
-      if (typeof scrollContainer.scrollTo === 'function') {
-        scrollContainer.scrollTo({ top: 0, left: 0 });
-        return;
-      }
-      scrollContainer.scrollTop = 0;
-      scrollContainer.scrollLeft = 0;
+      smoothScrollToTop(scrollContainer);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [homePromptHandoff?.id, view]);
@@ -597,7 +597,13 @@ export function EntryShell({
       ...(payload.contextConnectors && payload.contextConnectors.length > 0
         ? { contextConnectors: payload.contextConnectors }
         : {}),
-      ...(payload.workingDir ? { userWorkingDir: payload.workingDir } : {}),
+      // The Home working-directory picker grants the agent read-only
+      // awareness of a local folder (via `--add-dir`), it does NOT import
+      // that folder into Design Files. So the picked path becomes the new
+      // project's `linkedDirs` rather than its `baseDir`/`userWorkingDir`:
+      // Design Files stays the managed `.od/projects/<id>` artifact store,
+      // independent of the user's local files.
+      ...(payload.workingDir ? { linkedDirs: [payload.workingDir] } : {}),
       ...(payload.examplePromptContext ? {
         examplePrompt: true,
         examplePromptTitle: payload.examplePromptContext.title,
@@ -620,7 +626,10 @@ export function EntryShell({
       ...(payload.attachments && payload.attachments.length > 0
         ? { pendingFiles: payload.attachments }
         : {}),
-      ...(payload.workingDirToken ? { userWorkingDirToken: payload.workingDirToken } : {}),
+      // No `userWorkingDirToken`: linkedDirs grant read-only `--add-dir`
+      // access and are validated by the daemon at create time, so they do
+      // not need the desktop main-process trust token that baseDir imports
+      // require for write access.
       autoSendFirstMessage: true,
     });
   }
@@ -1449,8 +1458,10 @@ function OnboardingView({
         return;
       }
       if (amrLoginPollCancelledRef.current) return;
+      beginAmrAuthTracking(attribution);
       const loginResult = await startVelaLogin(attribution);
       if (amrLoginPollCancelledRef.current) {
+        resolveAmrAuthTracking(analytics.track, 'cancelled');
         if (loginResult.ok || loginResult.alreadyRunning) {
           const cancelResult = await cancelVelaLogin();
           closeAmrActivationWindowBestEffort();
@@ -1463,6 +1474,7 @@ function OnboardingView({
         return;
       }
       if (!loginResult.ok && !loginResult.alreadyRunning) {
+        resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed');
         setAmrLoginError(loginResult.error || t('settings.amrLoginErrorCompact'));
         return;
       }
@@ -1477,6 +1489,7 @@ function OnboardingView({
   async function handleCancelAmrLogin() {
     if (!amrLoginPending || amrLoginCancelPending) return;
     amrLoginPollCancelledRef.current = true;
+    resolveAmrAuthTracking(analytics.track, 'cancelled');
     setAmrLoginError(null);
     setAmrLoginCancelPending(true);
     setAmrStatus((current) => (
@@ -1505,9 +1518,20 @@ function OnboardingView({
       const nextStatus = await fetchVelaLoginStatus();
       if (nextStatus) setAmrStatus(nextStatus);
       const outcome = amrLoginPollOutcome(nextStatus, startedAt);
-      if (outcome === 'signed-in') return true;
+      if (outcome === 'signed-in') {
+        resolveAmrAuthTracking(analytics.track, 'success', undefined, {
+          signedInUserId: nextStatus?.user?.id ?? null,
+        });
+        notifyAmrLoginStatusChanged();
+        return true;
+      }
       if (outcome === 'stopped' || outcome === 'timed-out') {
-        if (outcome === 'timed-out') void cancelVelaLogin();
+        if (outcome === 'timed-out') {
+          resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout');
+          void cancelVelaLogin();
+        } else {
+          resolveAmrAuthTracking(analytics.track, 'failed', 'login_stopped');
+        }
         setAmrLoginError(t('settings.amrLoginErrorCompact'));
         return false;
       }

@@ -20,6 +20,10 @@ import {
 import { useT } from '../i18n';
 import { useAnalytics } from '../analytics/provider';
 import { recordAmrEntry, type AmrEntryAttribution } from '../analytics/amr-attribution';
+import {
+  beginAmrAuthTracking,
+  resolveAmrAuthTracking,
+} from '../analytics/amr-auth';
 import { KNOWN_PROVIDERS } from '../state/config';
 import { fetchProviderModels } from '../providers/provider-models';
 import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
@@ -185,6 +189,10 @@ export function InlineModelSwitcher({
       const next = await refreshAmrStatus();
       const outcome = amrLoginPollOutcome(next, startedAt);
       if (outcome === 'signed-in') {
+        resolveAmrAuthTracking(analytics.track, 'success', undefined, {
+          signedInUserId: next?.user?.id ?? null,
+        });
+        notifyAmrLoginStatusChanged();
         stopAmrPolling();
         amrLoginStartedAtRef.current = null;
         setAmrLoginPending(false);
@@ -193,9 +201,12 @@ export function InlineModelSwitcher({
       if (outcome === 'stopped' || outcome === 'timed-out') {
         stopAmrPolling();
         if (outcome === 'timed-out') {
+          resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout');
           void cancelVelaLogin().then(() =>
             notifyAmrLoginStatusChanged('login-canceled'),
           );
+        } else {
+          resolveAmrAuthTracking(analytics.track, 'failed', 'login_stopped');
         }
         amrLoginStartedAtRef.current = null;
         setAmrLoginPending(false);
@@ -205,7 +216,7 @@ export function InlineModelSwitcher({
     amrPollRef.current = window.setInterval(() => {
       void tick();
     }, AMR_LOGIN_POLL_INTERVAL_MS);
-  }, [refreshAmrStatus, stopAmrPolling, t]);
+  }, [analytics.track, refreshAmrStatus, stopAmrPolling, t]);
 
   const handleAmrSignIn = useCallback(async (
     attribution?: AmrEntryAttribution | null,
@@ -214,8 +225,10 @@ export function InlineModelSwitcher({
     amrLoginStartedAtRef.current = startedAt;
     setAmrLoginError(null);
     setAmrLoginPending(true);
+    beginAmrAuthTracking(attribution, startedAt);
     const result = await startVelaLogin(attribution);
     if (!result.ok && !result.alreadyRunning) {
+      resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed');
       amrLoginStartedAtRef.current = null;
       setAmrLoginPending(false);
       setAmrLoginError(result.error || t('settings.amrLoginErrorCompact'));
@@ -223,9 +236,10 @@ export function InlineModelSwitcher({
     }
     notifyAmrLoginStatusChanged('login-started');
     startAmrPolling(startedAt);
-  }, [startAmrPolling, t]);
+  }, [analytics.track, startAmrPolling, t]);
 
   const handleAmrCancelLogin = useCallback(async () => {
+    resolveAmrAuthTracking(analytics.track, 'cancelled');
     stopAmrPolling();
     amrLoginStartedAtRef.current = null;
     setAmrLoginError(null);
@@ -233,7 +247,7 @@ export function InlineModelSwitcher({
     await cancelVelaLogin();
     notifyAmrLoginStatusChanged('login-canceled');
     await refreshAmrStatus();
-  }, [refreshAmrStatus, stopAmrPolling]);
+  }, [analytics.track, refreshAmrStatus, stopAmrPolling]);
 
   const handleAgentButtonClick = useCallback(
     async (agentId: string) => {

@@ -199,7 +199,7 @@ describe('AmrLoginPill', () => {
     expect(screen.getByText('leaf@example.com')).toBeTruthy();
     expect(screen.getByText('TEST')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'AMR Console' }).getAttribute('href')).toBe(
-      'https://vela.powerformer.net/wallet',
+      'https://vela.powerformer.net/wallet?source=open_design',
     );
   });
 
@@ -214,7 +214,7 @@ describe('AmrLoginPill', () => {
 
     expect(screen.getByText('LOCAL')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'AMR Console' }).getAttribute('href')).toBe(
-      'http://localhost:5173/wallet',
+      'http://localhost:5173/wallet?source=open_design',
     );
   });
 
@@ -229,7 +229,7 @@ describe('AmrLoginPill', () => {
 
     expect(screen.queryByText('PROD')).toBeNull();
     expect(screen.getByRole('link', { name: 'AMR Console' }).getAttribute('href')).toBe(
-      'https://open-design.ai/amr/wallet',
+      'https://open-design.ai/amr/wallet?source=open_design',
     );
   });
 

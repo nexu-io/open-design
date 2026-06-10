@@ -1,6 +1,7 @@
 import {
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -12,13 +13,22 @@ import type {
   InstalledPluginRecord,
   McpServerConfig,
 } from '@open-design/contracts';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
+import { ComposerPluginPreview } from './ComposerPluginPreview';
+import { localizePluginTitle } from './plugins-home/localization';
+import { resolveFlyoutSide } from './composer-flyout-placement';
 import { Icon, type IconName } from './Icon';
 
 const PLUS_MENU_MARGIN = 12;
 const PLUS_MENU_GAP = 8;
 const PLUS_MENU_WIDTH = 190;
 const PLUS_MENU_FLYOUT_WIDTH = 360;
+// The Plugins flyout is wider than the others because it carries a
+// side-by-side hover-preview column. This MUST match the rendered width of
+// `.plus-menu__flyout--plugins` in styles/home/plus-menu.css — over-reserving
+// here makes medium-width panes wrongly fall back to the contained layout and
+// silently drop the preview column.
+const PLUS_MENU_PLUGIN_FLYOUT_WIDTH = 466;
 const PLUS_MENU_PREFERRED_MIN_HEIGHT = 180;
 const PLUS_MENU_FLYOUT_MAX_HEIGHT = 320;
 type PlusMenuFlyoutPlacement = 'right' | 'left' | 'contained';
@@ -73,7 +83,10 @@ function getPlusMenuStyle(anchor: HTMLElement): CSSProperties {
   };
 }
 
-function getFlyoutPlacement(anchor: HTMLElement): PlusMenuFlyoutPlacement {
+function getFlyoutPlacement(
+  anchor: HTMLElement,
+  flyoutWidth: number = PLUS_MENU_FLYOUT_WIDTH,
+): PlusMenuFlyoutPlacement {
   const rect = anchor.getBoundingClientRect();
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1024;
   const boundary = getFlyoutBoundary(anchor);
@@ -82,11 +95,14 @@ function getFlyoutPlacement(anchor: HTMLElement): PlusMenuFlyoutPlacement {
     Math.max(PLUS_MENU_MARGIN, rect.left),
     Math.max(PLUS_MENU_MARGIN, viewportWidth - PLUS_MENU_MARGIN - menuWidth),
   );
-  const hasRightSpace = menuLeft + menuWidth + PLUS_MENU_GAP + PLUS_MENU_FLYOUT_WIDTH <= boundary.right;
-  if (hasRightSpace) return 'right';
-  const hasLeftSpace = menuLeft - PLUS_MENU_GAP - PLUS_MENU_FLYOUT_WIDTH >= boundary.left;
-  if (hasLeftSpace) return 'left';
-  return 'contained';
+  return resolveFlyoutSide({
+    menuLeft,
+    menuWidth,
+    flyoutWidth,
+    gap: PLUS_MENU_GAP,
+    boundaryLeft: boundary.left,
+    boundaryRight: boundary.right,
+  });
 }
 
 export interface ComposerPlusMenuProps {
@@ -132,9 +148,15 @@ export interface ComposerPlusMenuProps {
   onOpen?: () => void;
 }
 
-function pluginMatches(plugin: InstalledPluginRecord, needle: string): boolean {
+function pluginMatches(
+  plugin: InstalledPluginRecord,
+  needle: string,
+  localizedTitle: string,
+): boolean {
   if (!needle) return true;
-  return `${plugin.title} ${plugin.id}`.toLowerCase().includes(needle);
+  // Match the localized title too, so a Chinese search hits a plugin whose
+  // raw `title` is English but whose `title_i18n` is the displayed name.
+  return `${localizedTitle} ${plugin.title} ${plugin.id}`.toLowerCase().includes(needle);
 }
 
 function mcpMatches(server: McpServerConfig, needle: string): boolean {
@@ -166,11 +188,16 @@ export function ComposerPlusMenu({
   onOpen,
 }: ComposerPlusMenuProps) {
   const t = useT();
+  const { locale } = useI18n();
   const [open, setOpen] = useState(false);
   const [submenu, setSubmenu] = useState<
     'connectors' | 'plugins' | 'mcp' | 'toolbox' | null
   >(null);
   const [query, setQuery] = useState('');
+  // Id of the plugin row the preview column is mirroring. Defaults to the
+  // first filtered row (see `hoveredPlugin`) so the panel is never blank
+  // while the menu is open.
+  const [hoveredPluginId, setHoveredPluginId] = useState<string | null>(null);
   const [menuStyle, setMenuStyle] = useState<CSSProperties | null>(null);
   const [flyoutPlacement, setFlyoutPlacement] = useState<PlusMenuFlyoutPlacement>('right');
   const [flyoutVerticalPlacement, setFlyoutVerticalPlacement] = useState<PlusMenuFlyoutVerticalPlacement>('down');
@@ -186,6 +213,7 @@ export function ComposerPlusMenu({
   // otherwise show the empty state even when servers exist.
   useEffect(() => {
     setQuery('');
+    setHoveredPluginId(null);
   }, [submenu]);
 
   useEffect(() => () => {
@@ -282,7 +310,11 @@ export function ComposerPlusMenu({
       const anchor = triggerRef.current;
       if (!anchor) return;
       setMenuStyle(getPlusMenuStyle(anchor));
-      setFlyoutPlacement(getFlyoutPlacement(anchor));
+      const flyoutWidth =
+        submenu === 'plugins'
+          ? PLUS_MENU_PLUGIN_FLYOUT_WIDTH
+          : PLUS_MENU_FLYOUT_WIDTH;
+      setFlyoutPlacement(getFlyoutPlacement(anchor, flyoutWidth));
       const activeRow = popupRef.current?.querySelector<HTMLDivElement>('.plus-menu__submenu-row.is-open') ?? null;
       updateFlyoutGeometry(activeRow);
     };
@@ -294,15 +326,24 @@ export function ComposerPlusMenu({
       window.removeEventListener('resize', updateMenuPosition);
       window.removeEventListener('scroll', updateMenuPosition, true);
     };
-  }, [open]);
+  }, [open, submenu]);
 
   const needle = query.trim().toLowerCase();
   const filteredPlugins = needle
-    ? plugins.filter((p) => pluginMatches(p, needle))
+    ? plugins.filter((p) => pluginMatches(p, needle, localizePluginTitle(locale, p)))
     : plugins;
   const filteredMcp = needle
     ? mcpServers.filter((s) => mcpMatches(s, needle))
     : mcpServers;
+  // The preview mirrors the hovered row, falling back to the first visible
+  // plugin so the panel is populated the moment the submenu opens. When a
+  // search prunes the hovered row out of view, the fallback re-anchors it.
+  const hoveredPlugin = useMemo(() => {
+    if (submenu !== 'plugins' || filteredPlugins.length === 0) return null;
+    return (
+      filteredPlugins.find((p) => p.id === hoveredPluginId) ?? filteredPlugins[0]
+    );
+  }, [submenu, filteredPlugins, hoveredPluginId]);
   const popupStyle = menuStyle
     ? ({
         ...menuStyle,
@@ -413,55 +454,69 @@ export function ComposerPlusMenu({
             open={submenu === 'plugins'}
             onOpen={(row) => openSubmenu('plugins', row)}
             onClose={scheduleCloseSubmenu}
+            flyoutClassName={
+              filteredPlugins.length > 0 ? 'plus-menu__flyout--plugins' : undefined
+            }
           >
-            <div className="plus-menu__search">
-              <Icon name="search" size={13} />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={t('entry.navPlugins')}
-                aria-label={t('entry.navPlugins')}
-              />
+            <div className="plus-menu__plugin-pane">
+              <div className="plus-menu__plugin-main">
+                <div className="plus-menu__search">
+                  <Icon name="search" size={13} />
+                  <input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={t('entry.navPlugins')}
+                    aria-label={t('entry.navPlugins')}
+                  />
+                </div>
+                <div className="plus-menu__list">
+                  {filteredPlugins.length === 0 ? (
+                    <div className="plus-menu__empty">{t('homeHero.noPlugins')}</div>
+                  ) : (
+                    filteredPlugins.map((plugin) => (
+                      <button
+                        key={plugin.id}
+                        type="button"
+                        role="menuitem"
+                        className={`plus-menu__item${
+                          plugin.id === hoveredPlugin?.id ? ' is-previewed' : ''
+                        }`}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onMouseEnter={() => setHoveredPluginId(plugin.id)}
+                        onFocus={() => setHoveredPluginId(plugin.id)}
+                        onClick={() => {
+                          close();
+                          onPickPlugin(plugin);
+                        }}
+                      >
+                        <Icon name="sparkles" size={15} className="plus-menu__item-icon" />
+                        <span>{localizePluginTitle(locale, plugin)}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+                {onAddPlugin ? (
+                  <>
+                    <div className="plus-menu__divider" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="plus-menu__item"
+                      onClick={() => {
+                        close();
+                        onAddPlugin();
+                      }}
+                    >
+                      <Icon name="plus" size={15} className="plus-menu__item-icon" />
+                      <span>{t('homeHero.addPlugin')}</span>
+                    </button>
+                  </>
+                ) : null}
+              </div>
+              {hoveredPlugin ? (
+                <ComposerPluginPreview record={hoveredPlugin} locale={locale} />
+              ) : null}
             </div>
-            <div className="plus-menu__list">
-              {filteredPlugins.length === 0 ? (
-                <div className="plus-menu__empty">{t('homeHero.noPlugins')}</div>
-              ) : (
-                filteredPlugins.map((plugin) => (
-                  <button
-                    key={plugin.id}
-                    type="button"
-                    role="menuitem"
-                    className="plus-menu__item"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      close();
-                      onPickPlugin(plugin);
-                    }}
-                  >
-                    <Icon name="sparkles" size={15} className="plus-menu__item-icon" />
-                    <span>{plugin.title}</span>
-                  </button>
-                ))
-              )}
-            </div>
-            {onAddPlugin ? (
-              <>
-                <div className="plus-menu__divider" />
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="plus-menu__item"
-                  onClick={() => {
-                    close();
-                    onAddPlugin();
-                  }}
-                >
-                  <Icon name="plus" size={15} className="plus-menu__item-icon" />
-                  <span>{t('homeHero.addPlugin')}</span>
-                </button>
-              </>
-            ) : null}
           </PlusSubmenuRow>
           <PlusSubmenuRow
             label="MCP"
@@ -543,6 +598,7 @@ function PlusSubmenuRow({
   open,
   onOpen,
   onClose,
+  flyoutClassName,
   children,
 }: {
   label: string;
@@ -550,6 +606,8 @@ function PlusSubmenuRow({
   open: boolean;
   onOpen: (row: HTMLDivElement | null) => void;
   onClose: () => void;
+  /** Extra class on the flyout, e.g. the wide plugins-preview variant. */
+  flyoutClassName?: string;
   children: ReactNode;
 }) {
   const rowRef = useRef<HTMLDivElement | null>(null);
@@ -574,7 +632,7 @@ function PlusSubmenuRow({
       </button>
       {open ? (
         <div
-          className="plus-menu__flyout"
+          className={`plus-menu__flyout${flyoutClassName ? ` ${flyoutClassName}` : ''}`}
           role="menu"
           onMouseEnter={() => onOpen(rowRef.current)}
           onMouseLeave={onClose}

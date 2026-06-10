@@ -55,6 +55,13 @@ import {
 } from '../utils/inlineMentions';
 import { useI18n, useT } from '../i18n';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
+import {
+  examplePresetSeedPrompt,
+  pluginPresetQuery,
+  renderPluginPresetQuery,
+  promptLocaleKind,
+  type PromptLocaleKind,
+} from './plugins-home/presetSeedPrompt';
 import type { Locale } from '../i18n/types';
 import {
   localizeSkillDescription,
@@ -67,6 +74,7 @@ import { applyFacetSelection } from './plugins-home/facets';
 import { inferPluginPreview } from './plugins-home/preview';
 import { SessionModeToggle } from './SessionModeToggle';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
+import { WorkingDirPicker } from './WorkingDirPicker';
 import {
   LexicalComposerInput,
   type LexicalComposerInputHandle,
@@ -101,6 +109,10 @@ interface Props {
   sessionMode?: ChatSessionMode;
   onSessionModeChange?: (mode: ChatSessionMode) => void;
   activePluginTitle: string | null;
+  // True when the active plugin chip shows a user-picked plugin (Community card
+  // or example-prompt preset) rather than a task-type chip's default plugin —
+  // an explicit pick owns its own clear (×) button even when a task chip is set.
+  activePluginIsExplicit?: boolean;
   activePluginRecord?: InstalledPluginRecord | null;
   activeChipId: string | null;
   onClearActivePlugin: () => void;
@@ -155,7 +167,9 @@ interface Props {
   error: string | null;
   showActivePluginChip?: boolean;
   workingDir?: string | null;
+  recentDirs?: string[];
   onPickWorkingDir?: () => void;
+  onSelectRecentWorkingDir?: (dir: string) => void;
   onClearWorkingDir?: () => void;
   onExamplePromptStatusChange?: (info: ExamplePromptInfo | null) => void;
   executionSwitcher?: ReactNode;
@@ -213,6 +227,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     sessionMode = 'design',
     onSessionModeChange,
     activePluginTitle,
+    activePluginIsExplicit = false,
     activePluginRecord = null,
     activeSkillId = null,
     activeSkillTitle = null,
@@ -259,7 +274,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     error,
     showActivePluginChip = true,
     workingDir = null,
+    recentDirs = [],
     onPickWorkingDir,
+    onSelectRecentWorkingDir,
     onClearWorkingDir,
     onExamplePromptStatusChange,
     executionSwitcher,
@@ -968,11 +985,19 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   </span>
                   <span className="home-hero__active-label">{activePluginTitle}</span>
                 </button>
-                {activeCreateChip ? null : (
+                {activeCreateChip && !activePluginIsExplicit ? null : (
                   <button
                     type="button"
                     className="home-hero__active-clear od-tooltip"
-                    onClick={onClearActivePlugin}
+                    onClick={() => {
+                      trackHomeChatComposerClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'chat_composer',
+                        element: 'plugin_chip_clear',
+                        chip_id: activePluginRecord?.id,
+                      });
+                      onClearActivePlugin();
+                    }}
                     aria-label={t('homeHero.clearActivePlugin')}
                     title={t('homeHero.clearActivePlugin')}
                     data-tooltip={t('homeHero.clearActivePlugin')}
@@ -1323,46 +1348,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 fileInputRef.current?.click();
               }}
             />
-            {onPickWorkingDir ? (
-              <div className="home-hero__working-dir-wrap">
-                <button
-                  type="button"
-                  className={`home-hero__working-dir od-tooltip${workingDir ? ' picked' : ''}`}
-                  onClick={() => {
-                    trackHomeChatComposerClick(analytics.track, {
-                      page_name: 'home',
-                      area: 'chat_composer',
-                      element: 'working_dir',
-                    });
-                    onPickWorkingDir?.();
-                  }}
-                  title={workingDir ?? t('workingDirPicker.homeTitle')}
-                  data-tooltip={workingDir ?? t('workingDirPicker.homeTitle')}
-                >
-                  <Icon name="folder" size={13} />
-                  <span>
-                    {workingDir ? workingDir.split(/[/\\]/).filter(Boolean).pop() : t('workingDirPicker.select')}
-                  </span>
-                </button>
-                {workingDir ? (
-                  <button
-                    type="button"
-                    className="home-hero__working-dir-clear"
-                    onClick={() => {
-                      trackHomeChatComposerClick(analytics.track, {
-                        page_name: 'home',
-                        area: 'chat_composer',
-                        element: 'working_dir_clear',
-                      });
-                      onClearWorkingDir?.();
-                    }}
-                    aria-label={t('workingDirPicker.clearAria')}
-                  >
-                    <Icon name="close" size={10} />
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
             {activeCreateChip ? (
               <ActiveTypeChip chip={activeCreateChip} onClear={onClearActiveChip} />
             ) : null}
@@ -1424,6 +1409,39 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           </div>
         </div>
       </div>
+
+      {onPickWorkingDir ? (
+        <div className="home-hero__workdir-row">
+          <WorkingDirPicker
+            workingDir={workingDir}
+            recentDirs={recentDirs}
+            onPickDirectory={() => {
+              trackHomeChatComposerClick(analytics.track, {
+                page_name: 'home',
+                area: 'chat_composer',
+                element: 'working_dir',
+              });
+              onPickWorkingDir();
+            }}
+            onSelectRecent={(dir) => {
+              trackHomeChatComposerClick(analytics.track, {
+                page_name: 'home',
+                area: 'chat_composer',
+                element: 'working_dir_recent',
+              });
+              onSelectRecentWorkingDir?.(dir);
+            }}
+            onClear={() => {
+              trackHomeChatComposerClick(analytics.track, {
+                page_name: 'home',
+                area: 'chat_composer',
+                element: 'working_dir_clear',
+              });
+              onClearWorkingDir?.();
+            }}
+          />
+        </div>
+      ) : null}
 
       {activeCreateChip ? null : (
         <RailGroup
@@ -1609,8 +1627,14 @@ function PluginPromptPresetCard({
   pending: boolean;
   record: InstalledPluginRecord;
 }) {
-  const preview = useMemo(() => inferPluginPreview(record), [record]);
-  const seedPrompt = examplePresetSeedPrompt(record, locale, chipId);
+  // Example-prompt preset tiles are thumbnails too — prefer the cheap baked
+  // hover-pan clip when one exists (same as the gallery cards).
+  const preview = useMemo(() => inferPluginPreview(record, { preferBaked: true }), [record]);
+  // Home cards keep their richer structured-preview path as the last-resort
+  // fallback (the detail modal injects a simpler one).
+  const seedPrompt = examplePresetSeedPrompt(record, locale, () =>
+    pluginPresetPromptPreview(record, locale, chipId),
+  ).text;
   return (
     <button
       type="button"
@@ -1671,9 +1695,6 @@ function formatFileSize(bytes: number): string {
 
 const HOME_HERO_PROMPT_MAX_HEIGHT = 180;
 const HOME_HERO_AUTHORING_PROMPT_MAX_HEIGHT = 132;
-// `{{name}}` plugin-input placeholder — still used when rendering plugin
-// preset query previews (renderPluginPresetQuery).
-const INPUT_PLACEHOLDER_PATTERN = /\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g;
 
 function pluginMentionText(record: InstalledPluginRecord): string {
   return inlineMentionToken(record.title);
@@ -2678,12 +2699,22 @@ function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): stri
   }
 }
 
-function homeHeroExamplePluginsForChip(
+// Generic catch-all scenario routers are not real "example" templates: they
+// ship no concrete seed for the gallery and only exist as the silent default
+// binding a media surface carries (see scenario-defaults.ts). Keep them out of
+// the example-prompt presets so e.g. the "Media generation (default scenario)"
+// card never appears under the audio/image/video chips — and, because the
+// example card's selected state is keyed on the active plugin id, never shows
+// up pre-selected when a media mode is entered.
+const EXAMPLE_PRESET_HIDDEN_PLUGIN_IDS = new Set<string>(['od-media-generation']);
+
+export function homeHeroExamplePluginsForChip(
   chipId: string,
   plugins: InstalledPluginRecord[],
   locale: Locale,
 ): InstalledPluginRecord[] {
   const presets = plugins
+    .filter((plugin) => !EXAMPLE_PRESET_HIDDEN_PLUGIN_IDS.has(plugin.id))
     .filter((plugin) => (
       pluginMatchesExampleChip(plugin, chipId) ||
       curatedPluginPriorityForChip(plugin, chipId) !== null
@@ -2731,7 +2762,7 @@ function movePluginPresetToEnd(
   ];
 }
 
-function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: string): boolean {
+export function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: string): boolean {
   const slugs = pluginRecordSlugs(record);
   const has = (...values: string[]) => values.some((value) => slugs.has(value));
   const hasPart = (...values: string[]) => {
@@ -2754,7 +2785,10 @@ function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: string)
     case 'video':
       return (has('video') || hasPart('video-template')) && !hasPart('hyperframes', 'audio');
     case 'audio':
-      return has('audio') || hasPart('audio');
+      // Exclude video / HyperFrames templates that merely carry an
+      // `audio-reactive` tag (substring-matched by hasPart('audio')): their
+      // home is the Video / HyperFrames chips, not the audio gallery.
+      return (has('audio') || hasPart('audio')) && !hasPart('video', 'hyperframes');
     default:
       return false;
   }
@@ -2812,91 +2846,6 @@ function pluginPresetPromptPreview(
     ? renderPluginPresetQuery(record, query)
     : localizePluginDescription(locale, record);
   return textPromptForPluginPreset(record, rendered, chipId, locale);
-}
-
-// The seed text dropped into the composer when a preset card is picked.
-// The full build spec now rides along as plugin context (SKILL.md +
-// example.html injected once the plugin is applied), so the textarea only
-// needs a short, human-readable, editable hook — not the verbatim spec.
-function examplePresetSeedPrompt(
-  record: InstalledPluginRecord,
-  locale: Locale,
-  chipId: string,
-): string {
-  const description = localizePluginDescription(locale, record).trim();
-  // zh: the localized useCase.query is a generator-facing meta-instruction
-  // ("follow the en field verbatim; start from example.html"), useless as a
-  // human seed — surface the curated one-line description instead.
-  if (promptLocaleKind(locale) === 'zh' && description) return description;
-  const query = pluginPresetQuery(record, locale);
-  if (query) {
-    const head = firstPromptParagraph(renderPluginPresetQuery(record, query));
-    // Skip meta-instructions that reference fields/assets the model can't see
-    // from the textarea; fall back to the description.
-    if (head && !isMetaInstructionSeed(head)) return head;
-  }
-  if (description) return description;
-  return pluginPresetPromptPreview(record, locale, chipId);
-}
-
-function firstPromptParagraph(value: string): string {
-  const normalized = value.replace(/\r\n/g, '\n').trim();
-  if (!normalized) return '';
-  // First paragraph = text up to the first blank line / markdown rule fence.
-  const [head] = normalized.split(/\n\s*\n/);
-  return (head ?? normalized).trim();
-}
-
-function isMetaInstructionSeed(value: string): boolean {
-  return /逐字注入|以\s*en\s*字段为准|verbatim|example\.html/iu.test(value);
-}
-
-function pluginPresetQuery(record: InstalledPluginRecord, locale: Locale): string | null {
-  const query = record.manifest?.od?.useCase?.query;
-  if (typeof query === 'string') return query;
-  if (query && typeof query === 'object') {
-    const localized = query as Record<string, unknown>;
-    const exact = localized[locale];
-    if (typeof exact === 'string') return exact;
-    const language = locale.split('-')[0];
-    const languageMatch = Object.entries(localized).find(([key, value]) => (
-      key.toLowerCase().startsWith(`${language}-`) && typeof value === 'string'
-    ));
-    if (typeof languageMatch?.[1] === 'string') return languageMatch[1];
-    for (const key of ['zh-CN', 'en', 'default']) {
-      if (typeof localized[key] === 'string') return localized[key];
-    }
-    const first = Object.values(localized).find((value) => typeof value === 'string');
-    if (typeof first === 'string') return first;
-  }
-  return null;
-}
-
-function renderPluginPresetQuery(record: InstalledPluginRecord, query: string): string {
-  const fields = record.manifest?.od?.inputs ?? [];
-  const valueByName = new Map<string, string>();
-  for (const field of fields) {
-    const value = field.default ?? field.placeholder ?? field.label ?? field.name;
-    valueByName.set(field.name, String(value));
-  }
-  return query
-    .replace(
-      HOME_ESCAPED_ARGUMENT_PLACEHOLDER_PATTERN,
-      (_placeholder, _name: string | undefined, defaultValue: string | undefined) => defaultValue ?? '',
-    )
-    .replace(
-      HOME_ARGUMENT_PLACEHOLDER_PATTERN,
-      (
-        _placeholder,
-        _doubleName: string | undefined,
-        _singleName: string | undefined,
-        doubleDefault: string | undefined,
-        singleDefault: string | undefined,
-      ) => doubleDefault ?? singleDefault ?? '',
-    )
-    .replace(INPUT_PLACEHOLDER_PATTERN, (_placeholder, key: string) => (
-      valueByName.get(key) ?? key
-    ));
 }
 
 function textPromptForPluginPreset(
@@ -3074,12 +3023,6 @@ function fallbackPluginPresetPrompt(
   }
   return `Create ${englishArticle(artifact)} ${artifact} with the "${title}" preset${description ? `: ${description}` : '.'}`;
 }
-
-const HOME_ESCAPED_ARGUMENT_PLACEHOLDER_PATTERN =
-  /\{argument\s+name=\\"([^"]+)\\"\s+default=\\"([^"]*)\\"[^}]*\}/g;
-
-const HOME_ARGUMENT_PLACEHOLDER_PATTERN =
-  /\{argument\s+name=(?:"([^"]+)"|'([^']+)')\s+default=(?:"([^"]*)"|'([^']*)')[^}]*\}/g;
 
 const HOME_PROMPT_EXAMPLES: Record<Locale, Record<string, string[]>> = {
   "en": {
@@ -3826,13 +3769,6 @@ function homeHeroChipPromptExamples(chipId: string, locale: Locale): string[] {
   return homeHeroChipPromptExamplesForLocale(chipId, locale);
 }
 
-type PromptLocaleKind = 'zh' | 'ja' | 'en';
-
-function promptLocaleKind(locale: Locale): PromptLocaleKind {
-  if (locale === 'zh-CN' || locale === 'zh-TW') return 'zh';
-  if (locale === 'ja') return 'ja';
-  return 'en';
-}
 
 function briefForChipId(chipId: string): Record<string, string> {
   switch (chipId) {

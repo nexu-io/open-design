@@ -3,10 +3,18 @@ import { amrRechargeUrlForProfile, resolveRunFailureUi } from '../../src/runtime
 
 describe('amrRechargeUrlForProfile', () => {
   it('matches the selected AMR profile wallet origin', () => {
-    expect(amrRechargeUrlForProfile('prod')).toBe('https://open-design.ai/amr/wallet');
-    expect(amrRechargeUrlForProfile('test')).toBe('https://vela.powerformer.net/wallet');
-    expect(amrRechargeUrlForProfile('local')).toBe('http://localhost:5173/wallet');
-    expect(amrRechargeUrlForProfile(' unknown ')).toBe('https://open-design.ai/amr/wallet');
+    expect(amrRechargeUrlForProfile('prod')).toBe(
+      'https://open-design.ai/amr/wallet?source=open_design',
+    );
+    expect(amrRechargeUrlForProfile('test')).toBe(
+      'https://vela.powerformer.net/wallet?source=open_design',
+    );
+    expect(amrRechargeUrlForProfile('local')).toBe(
+      'http://localhost:5173/wallet?source=open_design',
+    );
+    expect(amrRechargeUrlForProfile(' unknown ')).toBe(
+      'https://open-design.ai/amr/wallet?source=open_design',
+    );
   });
 });
 

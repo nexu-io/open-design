@@ -7,6 +7,7 @@
 // hammer the daemon on first paint. The text-fallback variant
 // short-circuits the lazy mount because it has no off-screen cost.
 
+import { useCallback } from 'react';
 import type { PluginPreviewSpec } from '../preview';
 import { useInView } from '../useInView';
 import { DesignSystemSurface } from './DesignSystemSurface';
@@ -23,19 +24,50 @@ interface Props {
 }
 
 export function PreviewSurface({ pluginId, pluginTitle, preview, eager = false }: Props) {
-  const { ref, inView } = useInView<HTMLDivElement>({
+  // Three nested visibility zones for a baked clip:
+  //  - `inView` (tight): mount cheap-but-live content — iframes, design surfaces.
+  //    Kept tight so a 350-plugin gallery never spins up dozens of live iframes.
+  //  - `keep` (wide): keep the <video> + poster MOUNTED across a few screens, so
+  //    scrolling away and back doesn't remount + reload the clip. The bytes are
+  //    HTTP-cached (immutable), but a fresh <video> still re-fetches metadata and
+  //    re-decodes the first frame, which reads as a load every scroll-back.
+  //  - `visible` (no margin): only DECODE/play while truly on screen, so the
+  //    kept-mounted off-screen clips stay paused on their poster instead of all
+  //    running simultaneous decodes.
+  const { ref: nearRef, inView } = useInView<HTMLDivElement>({
     rootMargin: eager ? '480px' : '120px',
     once: false,
   });
+  const { ref: keepRef, inView: keep } = useInView<HTMLDivElement>({
+    rootMargin: eager ? '1800px' : '1500px',
+    once: false,
+  });
+  const { ref: visibleRef, inView: visible } = useInView<HTMLDivElement>({
+    rootMargin: '0px',
+    once: false,
+  });
+  const setRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      nearRef.current = node;
+      keepRef.current = node;
+      visibleRef.current = node;
+    },
+    [nearRef, keepRef, visibleRef],
+  );
 
   return (
     <div
-      ref={ref}
+      ref={setRef}
       className={`plugins-home__preview plugins-home__preview--${preview.kind}`}
       data-preview-kind={preview.kind}
     >
       {preview.kind === 'media' ? (
-        <MediaSurface preview={preview} pluginTitle={pluginTitle} inView={inView} />
+        <MediaSurface
+          preview={preview}
+          pluginTitle={pluginTitle}
+          inView={keep}
+          visible={visible}
+        />
       ) : preview.kind === 'html' ? (
         <HtmlSurface
           preview={preview}
