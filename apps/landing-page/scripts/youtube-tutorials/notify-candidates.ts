@@ -78,19 +78,82 @@ async function postToFeishu(webhook: string, secret: string | undefined, text: s
   }
 }
 
+// This workflow's file name, used to look up its own prior runs.
+const WORKFLOW_FILE = 'tutorials-youtube-sync.yml';
+// Never sweep further back than this, so a long gap (or a missing watermark)
+// can't trigger a huge first digest.
+const MAX_LOOKBACK_DAYS = 14;
+// Default window when there is no run-history watermark (first run / local):
+// wider than a day so a single delayed/skipped run can't open a gap.
+const FALLBACK_DAYS = 2;
+
+function isoDaysAgo(days: number): string {
+  return new Date(Date.now() - days * 86400_000).toISOString();
+}
+
+/**
+ * Start time (RFC 3339) of the most recent successful run of this workflow that
+ * isn't the current run, via the Actions API. Returns null when unavailable
+ * (no token, no prior success, or an API error).
+ */
+async function lastSuccessfulRunStart(): Promise<string | null> {
+  const token = process.env.GITHUB_TOKEN;
+  const repo = process.env.GITHUB_REPOSITORY;
+  if (!token || !repo) return null;
+  const currentRunId = process.env.GITHUB_RUN_ID;
+  const url = `https://api.github.com/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/runs?status=success&per_page=10`;
+  const res = await fetch(url, {
+    headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json' },
+  });
+  if (!res.ok) throw new Error(`Actions API HTTP ${res.status}`);
+  const data = (await res.json()) as { workflow_runs?: { id: number; created_at: string }[] };
+  const prior = (data.workflow_runs ?? [])
+    .filter((r) => String(r.id) !== currentRunId)
+    .map((r) => r.created_at)
+    .sort();
+  return prior.length ? prior[prior.length - 1] : null;
+}
+
+/**
+ * Resolve the digest window start. An explicit --days always wins (manual
+ * catch-up). Otherwise prefer the last successful run as a gap-free watermark so
+ * delayed/skipped scheduled runs never drop videos; fall back to a short fixed
+ * window when no watermark is available. Clamped to MAX_LOOKBACK_DAYS.
+ */
+async function resolveWindowStart(explicitDays: number | null): Promise<{ since: string; reason: string }> {
+  const floor = isoDaysAgo(MAX_LOOKBACK_DAYS);
+  if (explicitDays != null) {
+    const since = isoDaysAgo(explicitDays);
+    return { since: since < floor ? floor : since, reason: `--days ${explicitDays}` };
+  }
+  try {
+    const watermark = await lastSuccessfulRunStart();
+    if (watermark) {
+      // Small overlap for clock skew between schedule fire and publish time.
+      const since = new Date(Date.parse(watermark) - 60 * 60 * 1000).toISOString();
+      return { since: since < floor ? floor : since, reason: `since last successful run ${watermark} (−1h overlap)` };
+    }
+  } catch (e) {
+    console.error(`watermark lookup failed, using fallback: ${(e as Error).message}`);
+  }
+  return { since: isoDaysAgo(FALLBACK_DAYS), reason: `fallback ${FALLBACK_DAYS}-day window` };
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const printOnly = args.includes('--print');
-  // Default to a 1-day window so the daily digest only surfaces videos
-  // published since the previous run. Consecutive daily runs tile the timeline
-  // back-to-back, so nothing is missed; already-catalogued videos are filtered
-  // regardless. Widen with --days only for manual catch-up sweeps.
   const daysIdx = args.indexOf('--days');
-  const days = daysIdx !== -1 ? Number(args[daysIdx + 1]) : 1;
+  const explicitDays = daysIdx !== -1 ? Number(args[daysIdx + 1]) : null;
 
   const key = await loadYoutubeKey();
   const existing = await readExistingVideoIds();
-  const { candidates, searchFailures, queryCount } = await fetchCandidates(key, days, existing);
+
+  // Window start = last successful run (gap-free across delayed/skipped runs),
+  // or a short fallback window. --days overrides for manual catch-up.
+  const { since, reason } = await resolveWindowStart(explicitDays);
+  console.log(`Window start: ${since} (${reason})`);
+
+  const { candidates, searchFailures, queryCount } = await fetchCandidates(key, since, existing);
 
   if (searchFailures === queryCount) {
     console.error(`All ${queryCount} search queries failed; aborting.`);
@@ -98,7 +161,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log(`${candidates.length} candidate(s) after dedupe + relevance gate (last ${days}d)`);
+  console.log(`${candidates.length} candidate(s) after dedupe + relevance gate`);
 
   // Stamp the date from the publishedAfter window's "now" without Date APIs in
   // the digest body? We need a date string for the header; derive from newest

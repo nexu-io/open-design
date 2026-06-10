@@ -111,17 +111,18 @@ export interface CandidateResult {
 }
 
 /**
- * Discover Open-Design-relevant tutorial candidates from the last `days`,
- * already filtered against the existing catalogue (caller passes known ids) and
- * the LLM relevance gate. Sorted by date descending so numbering is stable.
+ * Discover Open-Design-relevant tutorial candidates published since
+ * `publishedAfter` (RFC 3339), already filtered against the existing catalogue
+ * (caller passes known ids) and the LLM relevance gate. Sorted by date
+ * descending so numbering is stable. The caller owns the window start so it can
+ * derive a gap-free watermark instead of a fixed wall-clock window.
  */
 export async function fetchCandidates(
   key: string,
-  days: number,
+  publishedAfter: string,
   existingIds: Set<string>,
   queries: string[] = DEFAULT_QUERIES,
 ): Promise<CandidateResult> {
-  const publishedAfter = new Date(Date.now() - days * 86400_000).toISOString();
   const idSet = new Set<string>();
   let searchFailures = 0;
   for (const q of queries) {
