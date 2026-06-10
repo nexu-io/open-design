@@ -3268,7 +3268,11 @@ beforeAll(() => {
 
   afterEach(() => {
     cleanup();
-    window.localStorage.removeItem('open-design:locale');
+    // clear() instead of removeItem() so the locale-source marker
+    // (open-design:locale-source) also gets wiped. setLocale() in
+    // i18n/index.tsx writes both keys; a targeted remove would leak
+    // the source tag and cause order-dependent test results.
+    window.localStorage.clear();
     document.documentElement.removeAttribute('lang');
     document.documentElement.removeAttribute('dir');
   });
