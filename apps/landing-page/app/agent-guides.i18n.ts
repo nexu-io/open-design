@@ -1,13 +1,10 @@
 /*
  * Localized agent-guide copy for the landing-page agent detail pages.
  *
- * en + zh live directly in info-page-i18n.ts. Every other landing locale
- * gets its agent pages from the part files here (split to stay under the
- * repo changed-file blob guard). buildLocalizedAgentGuides() spreads the
- * English guide first then overrides with the translation; it is wired into
- * compactInfoPageCopy so a compact locale renders fully localized agent
- * pages instead of falling back to English. Machine-translated; native
- * review welcome.
+ * en + zh live directly in info-page-i18n.ts. Every other landing locale gets
+ * its agent pages from the part files here (split for the changed-file blob
+ * guard). Wired into compactInfoPageCopy via buildLocalizedAgentGuides.
+ * Machine-translated; native review welcome.
  */
 import type { InfoPageCopy } from './info-page-i18n';
 import type { LandingLocaleCode } from './i18n';

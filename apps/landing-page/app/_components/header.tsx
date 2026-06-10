@@ -330,6 +330,7 @@ export function Header({
                   { route: 'cursor-design', name: 'Cursor' },
                   { route: 'claude-code-design', name: 'Claude Code' },
                   { route: 'opencode-design', name: 'OpenCode' },
+                  { route: 'gemini-design', name: 'Gemini CLI' },
                 ].map((agentItem) => (
                   <li role='none' key={agentItem.route}>
                     <a role='menuitem' href={href(`/agents/${agentItem.route}/`)}>

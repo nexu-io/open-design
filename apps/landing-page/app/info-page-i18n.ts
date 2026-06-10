@@ -141,6 +141,43 @@ type AgentGuideCopy = {
   ctaBody: string;
 };
 
+// Shape of one competitor comparison ("alternative") detail page.
+// Mirrors the original `claudeAlternative` block so every per-competitor
+// page under `/alternatives/<slug>/` shares one structure. The
+// `pickClaude*` field names are historical — read them as "pick the
+// competitor".
+type AlternativeDetailCopy = {
+  title: string;
+  description: string;
+  breadcrumb: string;
+  label: string;
+  heading: string;
+  lead: string;
+  tldrTitle: string;
+  tldrBody: string;
+  toc: string[];
+  whyTitle: string;
+  whyLead: string;
+  reasons: LinkText[];
+  localByokTitle: string;
+  localByokBody: string[];
+  featureTitle: string;
+  features: FeatureCopy[];
+  whoTitle: string;
+  pickClaudeTitle: string;
+  pickClaude: string[];
+  pickOpenTitle: string;
+  pickOpen: string[];
+  migrateTitle: string;
+  migrateLead: string;
+  migrateSteps: string[];
+  migrateClosing: string;
+  faqTitle: string;
+  faq: NamedText[];
+  ctaTitle: string;
+  ctaBody: string;
+};
+
 export interface InfoPageCopy {
   common: {
     breadcrumbAria: string;
@@ -281,6 +318,10 @@ export interface InfoPageCopy {
   // `cursor`, `opencode`). Partial: non-en locales that don't override
   // a given slug inherit the English copy via the `...en` spread.
   agentGuides: Partial<Record<string, AgentGuideCopy>>;
+  // Per-competitor comparison pages, keyed by slug (`lovable`, `figma`,
+  // `bolt`, `v0`, `framer`). Optional + Partial: only en supplies copy
+  // today; every other locale falls back to en via `getAlternativeCopy`.
+  alternatives?: Partial<Record<string, AlternativeDetailCopy>>;
   download: {
     title: string;
     description: string;
@@ -637,6 +678,85 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
       ctaTitle: 'Switch in three commands.',
       ctaBody:
         'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
+    },
+    alternatives: {
+      lovable: {
+        title: 'Open-source Lovable alternative — Open Design (design-first, BYOK, local)',
+        description:
+          'Open Design is the open-source, local-first alternative to Lovable for design-first work. BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen — artifacts ship as files in your repo.',
+        breadcrumb: 'Open-source Lovable alternative',
+        label: 'Alternative · Lovable',
+        heading: 'Open-source Lovable alternative.',
+        lead:
+          'Lovable turns a prompt into a deployed full-stack app. Open Design is a self-evolving design agent for Claude Code — local-first, BYOK, open source — focused on design artifacts and a portable brand rather than shipping the backend. Different primary job, overlapping prompt-to-UI surface.',
+        tldrTitle: 'TL;DR',
+        tldrBody:
+          'Lovable ships hosted apps; Open Design ships design artifacts as files you own. If you want a design-first, BYOK, open-source workflow with your own agent, Open Design is the alternative — and it is honest about where Lovable wins.',
+        toc: ['Why people search', 'Local-first + BYOK', 'Feature comparison', 'Who should pick which', 'Migration / first run', 'FAQ'],
+        whyTitle: 'Why people search for a Lovable alternative',
+        whyLead: 'A few reasons keep showing up when teams look past Lovable:',
+        reasons: [
+          { label: 'Own the output.', body: 'Designs and code should live as files in your repo, not inside a hosted project.' },
+          { label: 'BYOK economics.', body: 'Bring your own provider key; API spend bills to your account instead of per-message credits.' },
+          { label: 'Agent choice.', body: 'Drive design from the coding agent you already use — Claude Code, Codex, Cursor, and more.' },
+          { label: 'Open source.', body: 'Apache-2.0, full source, self-hostable and rebrandable for your studio.' },
+          { label: 'Design-first.', body: 'A portable DESIGN.md brand every skill respects, not one-off per-project styling.' },
+        ],
+        localByokTitle: 'Local-first + BYOK, explained',
+        localByokBody: [
+          'Open Design runs a desktop app, a local daemon, and Markdown skill/system catalogs on your machine — no design output is forced through a vendor cloud.',
+          'You bring your own agent key (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen). Credentials stay in local config or environment variables, and API spend bills to you.',
+        ],
+        featureTitle: 'Feature comparison',
+        features: [
+          { name: 'Primary job', od: 'Design-first artifacts + portable brand', cd: 'Prompt-to-deployed full-stack app' },
+          { name: 'License', od: 'Apache-2.0, full source on GitHub', cd: 'Closed-source, hosted product' },
+          { name: 'Runtime', od: 'Local daemon on your machine', cd: 'Vendor cloud' },
+          { name: 'Agent', od: 'BYOK: Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', cd: 'Vendor-managed models' },
+          { name: 'API spend', od: 'Bills to your account', cd: 'Per-message credits / subscription' },
+          { name: 'Design system', od: 'Portable DESIGN.md in your repo', cd: 'Per-project styling' },
+          { name: 'Output ownership', od: 'Files in your project directory', cd: 'Hosted project + code export' },
+          { name: 'Hosting / deploy', od: 'You own deploy; not bundled', cd: 'One-click hosting included' },
+          { name: 'Self-host', od: 'Yes, run anywhere Node 24 runs', cd: 'No' },
+          { name: 'CLI / CI', od: 'Yes via od CLI + HTTP daemon', cd: 'Web UI first' },
+        ],
+        whoTitle: 'Who should pick which',
+        pickClaudeTitle: 'Pick Lovable if',
+        pickClaude: [
+          'You want a deployed full-stack web app from a prompt with zero setup.',
+          'You want one-click hosting and the backend wired up for you.',
+          'You prefer a hosted UI and per-project credits over local files.',
+        ],
+        pickOpenTitle: 'Pick Open Design if',
+        pickOpen: [
+          'You want design artifacts and a brand as version-controlled files.',
+          'You want BYOK with your existing coding agent.',
+          'You want open source you can fork, rebrand, embed in CLI, or self-host.',
+          'You want one DESIGN.md per brand that every skill respects.',
+        ],
+        migrateTitle: 'Migration / first run',
+        migrateLead: 'There is no automatic import from Lovable today; start design-first with a one-time brand-extraction run:',
+        migrateSteps: [
+          'Install Open Design from the quickstart.',
+          'Open the web UI and point your agent at a Lovable project or screenshot you like.',
+          'Ask the agent to extract the brand into a DESIGN.md file.',
+          'Pick a skill and render it against your new brand.',
+        ],
+        migrateClosing:
+          'From then on, every skill renders in your brand without re-prompting — and the files stay in your repo.',
+        faqTitle: 'FAQ',
+        faq: [
+          { name: 'Is Open Design a drop-in replacement for Lovable?', text: 'No. Lovable ships deployed full-stack apps; Open Design is design-first and produces artifacts you own. They overlap on prompt-to-UI, not on hosting a backend.' },
+          { name: 'Can Open Design build a full app like Lovable?', text: 'Open Design focuses on design artifacts, prototypes, and brand systems. For production backends and one-click hosting, Lovable is the better fit.' },
+          { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. API spend bills to your account.' },
+          { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
+          { name: 'Can I keep using Lovable alongside Open Design?', text: 'Yes. Many teams prototype design in Open Design and ship apps in Lovable; migration is manual today.' },
+          { name: 'Why "open-source Lovable alternative" rather than "AI design tool"?', text: 'That is how many teams describe the product shape they are searching for when they want files and BYOK.' },
+        ],
+        ctaTitle: 'Design-first, in three commands.',
+        ctaBody:
+          'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
+      },
     },
     agentGuides: {
       'claude-code': {
@@ -1552,6 +1672,230 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           { name: 'Is Open Design the same project as OpenCode?', text: 'No. Both are open-source, but they are separate projects. Open Design integrates OpenCode as a first-party agent adapter.' },
         ],
         ctaTitle: 'Design with OpenCode, the open way.',
+        ctaBody: 'Star the repo, download the desktop app, or join the community to request an adapter.',
+      },
+      gemini: {
+        title: 'Gemini CLI for design — Open Design',
+        description:
+          'How people use Google’s Gemini CLI for UI and web design — its multimodal image understanding, the 1M-token context, GEMINI.md and MCP — and how Open Design turns Gemini CLI into a local-first, open-source design agent.',
+        breadcrumb: 'Gemini CLI',
+        label: 'Agent · Gemini CLI',
+        heading: 'Gemini CLI for design.',
+        lead: 'Gemini CLI is Google’s open-source terminal agent. Its multimodal models read screenshots and its 1M-token context holds a whole design system, which makes it a real design tool — once you give it references, conventions, and a verification loop. Open Design wires it into an open-source design workflow: your Google account or API key, your files, local-first.',
+        tldrTitle: 'TL;DR',
+        tldrBody:
+          'Gemini CLI turns reference images into responsive UI with strong multimodal understanding and a huge context window, free to start with a Google account. Open Design gives it a curated design-system and skill library plus a desktop workflow — BYOK and keep everything local.',
+        toc: ['What is Gemini CLI', 'Designing with Gemini CLI', 'Resources', 'With Open Design', 'FAQ'],
+        rich: {
+          heroCtaLead:
+            'Open Design turns Gemini CLI into a local-first, open-source design agent — your Google account or Gemini API key, your files, a curated skill and design-system library around it.',
+          heroCtaActions: [
+            { label: 'Use Gemini CLI inside Open Design', href: '/quickstart/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+          ],
+          intro: [
+            'Gemini CLI is Google’s open-source AI agent for the terminal. Two things make it interesting for design specifically: its models are strongly multimodal, so it reads a screenshot and reasons about layout, spacing, and hierarchy; and its 1M-token context window can hold an entire design system and codebase at once. Paired with the right references, conventions, and a verification loop, it builds real, responsive UI — and it is free to start with a Google account. This is a practical, end-to-end guide to using Gemini CLI for UI, frontend, and design-system work, and to wiring it into a structured design workflow with Open Design.',
+            'It covers what Gemini CLI actually is, why its multimodal models and huge context fit design, how to set it up from zero, the screenshot-to-UI loop, how GEMINI.md and MCP extend it, how it compares to Codex, Claude Code, and Cursor, the pitfalls that make AI output look generic, and how Open Design closes the gap as an open, local-first design layer — a natural pairing, since both are open-source and run on your own machine.',
+          ],
+          heroImage: {
+            src: '/agents/gemini-design/gemini-design-hero.webp',
+            alt: 'Gemini CLI design feedback loop: a terminal agent reading a reference image, a browser rendering the UI, and a workspace, with a feedback arrow looping back',
+            caption: 'The core loop: Gemini CLI reads your references in the terminal, builds and verifies the UI in a real browser, and iterates against them — with a whole design system in context.',
+          },
+          tocLabel: 'On this page',
+          toc: [
+            { id: 'what-is-gemini-cli', label: 'What Gemini CLI actually is' },
+            { id: 'why-design', label: 'Why multimodal + huge context fit design' },
+            { id: 'setup', label: 'Set up Gemini CLI for design (from zero)' },
+            { id: 'screenshot-workflow', label: 'The screenshot-to-UI workflow' },
+            { id: 'extend', label: 'GEMINI.md, MCP, and extensions' },
+            { id: 'vs', label: 'Gemini CLI vs Codex vs Claude Code vs Cursor' },
+            { id: 'pitfalls', label: 'Pitfalls and the “AI slop” look' },
+            { id: 'open-design', label: 'Designing with Gemini CLI in Open Design' },
+            { id: 'faq', label: 'FAQ' },
+          ],
+          sections: [
+            {
+              id: 'what-is-gemini-cli',
+              heading: 'What Gemini CLI actually is',
+              blocks: [
+                { kind: 'p', text: 'Gemini CLI is an open-source (Apache-2.0) AI agent that Google ships for the terminal. It reads your repository, edits files, runs shell commands, fetches the web, and can ground answers with Google Search — planning and verifying work from natural-language tasks rather than just completing lines. The same engine also powers the Gemini Code Assist agent inside VS Code.' },
+                { kind: 'p', text: 'For design work, two properties stand out. Its models are natively multimodal, so you can hand it a screenshot and it reasons about the actual layout. And its context window reaches up to 1M tokens, large enough to hold your whole design system, component library, and reference set at once instead of summarizing them away.' },
+                { kind: 'steps', items: [
+                  { label: 'Context files', body: 'Gemini CLI reads a GEMINI.md file for persistent project context — the natural place to encode your design conventions, tokens, and review checklists. Personal and team settings layer on top.' },
+                  { label: 'Built-in tools + MCP', body: 'It ships file, shell, web-fetch, and Google Search tools out of the box, and supports MCP servers (configured in ~/.gemini/settings.json) to add external context like a live Figma file.' },
+                  { label: 'Free to start', body: 'Signing in with a personal Google account gives a generous free tier of Gemini requests; you can also bring a Gemini API key or use Vertex AI.' },
+                ] },
+                { kind: 'ul', items: [
+                  'Vendor: Google',
+                  'Credential: Google account (free tier) or Gemini API key from AI Studio (BYOK) or Vertex AI',
+                  'License: Apache-2.0, open source',
+                ] },
+              ],
+            },
+            {
+              id: 'why-design',
+              heading: 'Why multimodal models and a huge context fit design',
+              blocks: [
+                { kind: 'p', text: 'Gemini CLI’s design edge comes from two model properties — but, as with every agent, taste still has to be supplied.' },
+                { kind: 'steps', items: [
+                  { label: 'Strong multimodal understanding', body: 'Because Gemini models are natively multimodal, the agent reads reference screenshots well — comparing its rendered output back to an image instead of guessing from a prose description.' },
+                  { label: 'A 1M-token context window', body: 'A large context means the whole design system, tokens, and many reference states fit at once, so the agent reuses your real primitives rather than inventing one-off styles.' },
+                  { label: 'Conventions in GEMINI.md', body: 'A GEMINI.md (plus the Figma MCP server) points the agent at your tokens, components, and real specs, so it works against a brand instead of a default look.' },
+                ] },
+                { kind: 'image', src: '/agents/gemini-design/gemini-design-taste-triangle.webp', alt: 'Diagram showing design system, skill, and reference image converging into good design output', caption: 'Taste comes from three inputs you provide: a design system, a skill, and real reference images.' },
+                { kind: 'p', text: 'The lesson is the same one every agent teaches: Gemini CLI does not have taste by default. It produces good design when you give it constraints — a design system, an aesthetic skill, and concrete references. Open Design packages exactly those inputs, which is why the two fit together (more below).' },
+              ],
+            },
+            {
+              id: 'setup',
+              heading: 'Set up Gemini CLI for design work, from zero',
+              blocks: [
+                { kind: 'p', text: 'Here is the full path from a clean machine to a Gemini CLI that can build and verify UI.' },
+                { kind: 'code', lang: 'bash', code: '# 1. Install Gemini CLI (Node 20+)\nnpm install -g @google/gemini-cli\n# or run without installing: npx https://github.com/google-gemini/gemini-cli\n\n# 2. Start it in your project and authenticate on first run\ncd your-project\ngemini            # sign in with your Google account, or set GEMINI_API_KEY\n\n# 3. Generate project context\n/init             # scaffolds a GEMINI.md for this project\n\n# 4. Wire the Figma MCP server (optional, for design handoff)\n#    add it under "mcpServers" in ~/.gemini/settings.json' },
+                { kind: 'image', src: '/agents/gemini-design/gemini-design-setup-flow.webp', alt: 'Five-step setup flow: install, authenticate, configure GEMINI.md, add a skill, verify', caption: 'The setup sequence: install → authenticate → configure GEMINI.md → add a skill → enable browser verification.' },
+                { kind: 'steps', items: [
+                  { label: 'Encode your design rules', body: 'Put your tokens, primitives, and conventions in GEMINI.md and point Gemini at them, so output matches a brand instead of defaulting to a generic look.' },
+                  { label: 'Add browser verification', body: 'Wire a Playwright or browser MCP so Gemini renders in a real browser and checks its output across breakpoints instead of only confirming the build passes.' },
+                ] },
+              ],
+            },
+            {
+              id: 'screenshot-workflow',
+              heading: 'The screenshot-to-UI workflow',
+              blocks: [
+                { kind: 'p', text: 'The highest-leverage design loop with Gemini CLI is turning a reference image into working, responsive UI and iterating until it matches — leaning on the multimodal model to compare output back to the reference.' },
+                { kind: 'ol', items: [
+                  'Start from the clearest visual references you have — and include multiple states (desktop and mobile, hover, empty, loading), not just one hero shot.',
+                  'Be specific in the prompt; vague prompts produce generic UI even with a strong model.',
+                  'Keep your design system and conventions in GEMINI.md, and tell Gemini where the tokens and canonical primitives live.',
+                  'Run a dev server and have Gemini render in a real browser, resizing to breakpoints to check the result.',
+                  'Iterate by having Gemini compare its implementation back to the screenshots — not merely confirm it builds.',
+                ] },
+                { kind: 'p', text: 'Reference an image with @ to attach it to the prompt, then give concrete constraints:' },
+                { kind: 'code', lang: 'bash', code: 'gemini\n# in the prompt:\n> @reference-desktop.png @reference-mobile.png\n  Implement this design in React + Vite + Tailwind + TypeScript.\n  Reuse my existing design-system components and tokens from GEMINI.md.\n  Match spacing, layout, and hierarchy; make it responsive.\n  Render it in the browser and iterate until it matches the references\n  across breakpoints.' },
+                { kind: 'p', text: 'Keep prompts small and focused, commit good iterations and revert bad ones (telling Gemini when you revert), so each pass builds on a clean base.' },
+              ],
+            },
+            {
+              id: 'extend',
+              heading: 'GEMINI.md, MCP, and extensions',
+              blocks: [
+                { kind: 'p', text: 'Three extension points make Gemini CLI practical for sustained design work, and all three map cleanly onto an open design workflow.' },
+                { kind: 'steps', items: [
+                  { label: 'GEMINI.md context', body: 'Project rules live in a GEMINI.md at the repo root (with global and team layers). It is the durable home for your design conventions, read on every run.' },
+                  { label: 'MCP servers', body: 'Configure MCP servers under ~/.gemini/settings.json — the portable way to bring in design context and external tools, most relevantly the Figma MCP server, that work across agents, not just Gemini.' },
+                  { label: 'Extensions and built-in tools', body: 'Gemini CLI extensions and its built-in Google Search, file, shell, and web-fetch tools let it gather references and run the verification loop without leaving the terminal.' },
+                ] },
+                { kind: 'p', text: 'These are portable, multi-agent capabilities — exactly the kind of thing Open Design is built to orchestrate, rather than re-create per project.' },
+              ],
+            },
+            {
+              id: 'vs',
+              heading: 'Gemini CLI vs Codex vs Claude Code vs Cursor for design',
+              blocks: [
+                { kind: 'p', text: 'There is no single winner for design work — each agent has a different strength, and experienced teams stack them. A fair summary:' },
+                { kind: 'table', columns: ['Agent', 'Design strength', 'Best for'], rows: [
+                  ['Gemini CLI', 'Strong multimodal image understanding and a 1M-token context; open-source with a free tier', 'Screenshot-heavy work and holding a whole design system in context'],
+                  ['Codex', 'Strong visual polish with a frontend skill; sandboxed async builds', 'Delegated async builds and portable AGENTS.md rules'],
+                  ['Claude Code', 'Specific design decisions (hex, spacing, type) and codebase-aware UX', 'Frontend reasoning and large-context refactors'],
+                  ['Cursor', 'Visual build-and-see loop with live preview and inline edits', 'Tight iterate-and-watch UI work inside an IDE'],
+                ] },
+                { kind: 'p', text: 'The recurring community verdict is that taste comes from humans: all of them default to a generic aesthetic without skills, references, and constraints. That is the real problem to solve — and it is design-tool-shaped, not model-shaped.' },
+              ],
+            },
+            {
+              id: 'pitfalls',
+              heading: 'Pitfalls, and how to avoid the “AI slop” look',
+              blocks: [
+                { kind: 'p', text: 'The most common complaint about AI-generated design is that it looks generic — soft gradients, floating panels, oversized rounded corners, dramatic shadows, an Inter-and-purple vibe that “screams an AI made this.” Other reported issues include broken mobile layouts and instructions leaking into UI copy. None of these are unique to Gemini CLI; they are what happens when any agent runs without a curated design context.' },
+                { kind: 'steps', items: [
+                  { label: 'Add an aesthetic skill', body: 'A curated design skill forces the agent to commit to a real direction instead of the default look.' },
+                  { label: 'Verify in a real browser', body: 'Use the multimodal model to render and self-check across breakpoints so layouts do not silently break on mobile.' },
+                  { label: 'Supply tokens and references', body: 'Real design tokens and reference screenshots are the single biggest lever on output quality.' },
+                  { label: 'Encode rules in GEMINI.md', body: 'Put “no hero cards, max two typefaces, brand-first hierarchy” style rules where the agent reads them every run.' },
+                ] },
+                { kind: 'p', text: 'Notice that every mitigation is about giving the agent a curated design context. Maintaining that context by hand, per project, is the toil Open Design removes.' },
+              ],
+            },
+            {
+              id: 'open-design',
+              heading: 'Designing with Gemini CLI inside Open Design',
+              blocks: [
+                { kind: 'p', text: 'Open Design is the open-source design layer the workflow above keeps asking for. It treats Gemini CLI as a first-party adapter and wraps it in a curated skill and design-system library, a structured render pipeline, and a local desktop UI — so the design context that makes Gemini good is there from the first run, not assembled by hand each time. Both are open-source and local-first, which makes the pairing a natural fit.' },
+                { kind: 'ol', items: [
+                  'Install Open Design and select Gemini CLI as your agent.',
+                  'Authenticate with your Google account or Gemini API key (BYOK) — credentials stay on your machine and are never proxied through us.',
+                  'Pick a design system and a skill, then generate decks, prototypes, and landing pages with consistent taste.',
+                  'Every artifact and DESIGN.md file lives in your own repo, not a hosted cloud.',
+                ] },
+                { kind: 'p', text: 'Same Gemini CLI agent, same key — plus a real, portable, open-source design workflow around it. It is local-first and Apache-2.0, so nothing about your work or your credentials leaves your machine.' },
+              ],
+            },
+          ],
+          faqTitle: 'Frequently asked questions',
+          faq: [
+            { name: 'Can Gemini CLI really do design work?', text: 'Yes — with an aesthetic skill, a design system, and real reference images in context, Gemini CLI produces production-quality, responsive UI, and its strong multimodal models verify output against references. Without that context it tends to default to a generic look, which is the gap Open Design fills.' },
+            { name: 'Do I need to pay to design with Gemini CLI?', text: 'No — signing in with a Google account gives a generous free tier, and you can also bring a Gemini API key (BYOK) or use Vertex AI. Open Design never proxies your credentials either way.' },
+            { name: 'What makes Gemini CLI good for design specifically?', text: 'Two things: its models are strongly multimodal, so it reads reference screenshots well, and its 1M-token context can hold an entire design system and reference set at once. Both help — but taste still comes from the design system, skill, and references you supply.' },
+            { name: 'Gemini CLI or Claude Code for frontend design?', text: 'Both are strong. Claude Code is known for specific, codebase-aware design decisions; Gemini CLI’s edge is multimodal understanding plus a huge context and a free tier. Many teams use both — Open Design lets you switch agents without changing your design workflow.' },
+            { name: 'How do I connect Gemini CLI to Figma?', text: 'Add the Figma MCP server under mcpServers in ~/.gemini/settings.json. Gemini can then pull real design context — components, variables, layout data — so the generated code matches the source instead of approximating it.' },
+            { name: 'Is Open Design affiliated with Google?', text: 'No. Gemini CLI is a product of Google; Open Design is an independent open-source project that supports it as a first-party adapter. Gemini is a trademark of Google.' },
+            { name: 'Are my files and credentials safe?', text: 'Yes — Open Design is local-first and Apache-2.0. Your files, artifacts, and DESIGN.md stay in your own repo, and your Google credentials are used directly by your agent, never routed through Open Design servers.' },
+          ],
+          ctaTitle: 'Design with Gemini CLI, the open way.',
+          ctaBody: 'Bring your own Google account or Gemini API key, keep every file local, and get a curated design library around the agent you already use.',
+          ctaActions: [
+            { label: 'Use Gemini CLI inside Open Design', href: '/quickstart/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+          ],
+          hubLinkLabel: 'See all supported agents',
+        },
+        aboutTitle: 'What is Gemini CLI',
+        aboutBody: [
+          'Gemini CLI is Google’s open-source (Apache-2.0) terminal AI agent. It reads your codebase, edits files, runs commands, fetches the web, and grounds answers with Google Search.',
+          'Its models are natively multimodal and its context window reaches 1M tokens, so it reads reference screenshots and holds a whole design system at once.',
+          'Open Design treats Gemini CLI as a first-party adapter, so the agent slots into a structured, open-source design pipeline.',
+        ],
+        vendorLabel: 'Vendor',
+        vendor: 'Google',
+        credentialLabel: 'Credential',
+        credential: 'Google account (free tier) or Gemini API key (BYOK)',
+        designTitle: 'Designing with Gemini CLI',
+        designLead: 'Gemini CLI’s design strengths cluster around its model and context:',
+        designPoints: [
+          { label: 'Multimodal screenshot → UI', body: 'Strong image understanding turns a reference image into responsive markup and checks the result against it.' },
+          { label: '1M-token context', body: 'A whole design system, component library, and reference set fit at once, so output reuses your real primitives.' },
+          { label: 'GEMINI.md + MCP', body: 'Context files carry your conventions; the Figma MCP server brings real design context into code.' },
+          { label: 'Open and free to start', body: 'Apache-2.0 and a generous free tier via a Google account, with BYOK via the Gemini API.' },
+        ],
+        linksTitle: 'Real-world resources',
+        linksLead: 'Official repo and docs for Gemini CLI:',
+        links: [
+          { label: 'google-gemini/gemini-cli (GitHub)', href: 'https://github.com/google-gemini/gemini-cli', source: 'GitHub · Google' },
+          { label: 'Introducing Gemini CLI', href: 'https://blog.google/innovation-and-ai/technology/developers-tools/introducing-gemini-cli-open-source-ai-agent/', source: 'Blog · Google' },
+          { label: 'Gemini CLI documentation', href: 'https://google-gemini.github.io/gemini-cli/', source: 'Docs · Google' },
+        ],
+        withOdTitle: 'Gemini CLI + Open Design',
+        withOdLead:
+          'Open Design is the open-source design layer around Gemini CLI: a curated skill and design-system library, a structured render pipeline, and a local desktop UI.',
+        withOdSteps: [
+          'Install Open Design and select Gemini CLI as your agent.',
+          'Authenticate with your Google account or Gemini API key (BYOK) — credentials stay on your machine.',
+          'Choose a design system and skill, then generate decks, prototypes, and landing pages with consistent taste.',
+          'Artifacts and DESIGN.md files live in your own repo, not a hosted cloud.',
+        ],
+        withOdClosing:
+          'The same Gemini CLI agent — with a real, portable design workflow around it.',
+        faqTitle: 'FAQ',
+        faq: [
+          { name: 'Is Open Design made by Google?', text: 'No. Gemini CLI is a Google product; Open Design is an independent open-source project that integrates it as a first-party adapter.' },
+          { name: 'Do I need to pay?', text: 'No — a Google account gives a free tier, or bring a Gemini API key (BYOK). Open Design never proxies your credentials.' },
+          { name: 'Is Open Design affiliated with Google?', text: 'No. Open Design is independent; Gemini is a trademark of Google.' },
+        ],
+        ctaTitle: 'Design with Gemini CLI, the open way.',
         ctaBody: 'Star the repo, download the desktop app, or join the community to request an adapter.',
       },
     },
@@ -3275,6 +3619,230 @@ INFO_PAGE_COPY.zh = {
       ctaTitle: '用开源的方式，跟 OpenCode 一起设计。',
       ctaBody: '给仓库点 Star、下载桌面版，或加入社区申请新适配器。',
     },
+    gemini: {
+      title: '用 Gemini CLI 做设计 — Open Design',
+      description:
+        '设计师如何用 Google 的 Gemini CLI 做 UI 与网页设计——它的多模态图像理解、1M token 上下文、GEMINI.md 与 MCP——以及 Open Design 如何把它变成一个本地优先、开源的设计 agent。',
+      breadcrumb: 'Gemini CLI',
+      label: 'Agent · Gemini CLI',
+      heading: '用 Gemini CLI 做设计。',
+      lead: 'Gemini CLI 是 Google 的开源终端 agent。它的多模态模型能读截图，1M token 上下文能装下整套设计系统，这让它成为一个真正能用的设计工具——前提是你给它参考、约定和一套验证回路。Open Design 把它接进开源设计工作流：用你的 Google 账号或 API key、你自己的文件、本地优先。',
+      tldrTitle: 'TL;DR',
+      tldrBody:
+        'Gemini CLI 凭强多模态理解和超大上下文把参考图变成响应式 UI，用 Google 账号即可免费起步。Open Design 在它外面套一套精选的设计系统与 skill 库 + 桌面工作流——BYOK，一切留本地。',
+      toc: ['什么是 Gemini CLI', '用 Gemini CLI 做设计', '资源', '配合 Open Design', '常见问题'],
+      rich: {
+        heroCtaLead:
+          'Open Design 把 Gemini CLI 变成一个本地优先、开源的设计 agent——用你的 Google 账号或 Gemini API key、你自己的文件，外加一套精选的 skill 与设计系统库。',
+        heroCtaActions: [
+          { label: '在 Open Design 里使用 Gemini CLI', href: '/quickstart/', variant: 'primary' },
+          { label: '在 GitHub 上 Star', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+          { label: '下载桌面端', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+        ],
+        intro: [
+          'Gemini CLI 是 Google 为终端打造的开源 AI agent。有两点让它在设计上格外有意思：它的模型是原生多模态的，能读一张截图并对布局、间距、层级做推理；它的上下文窗口可达 1M token，能一次装下整套设计系统和代码库。配上对的参考、约定和验证回路，它能构建真正的响应式 UI——而且用 Google 账号即可免费起步。这是一份从头到尾、可落地的指南，讲如何用 Gemini CLI 做 UI、前端和设计系统工作，并把它接入 Open Design 的结构化设计工作流。',
+          '内容涵盖：Gemini CLI 到底是什么、为什么它的多模态模型与超大上下文适合做设计、如何从零配置、截图转 UI 的回路、GEMINI.md 与 MCP 如何扩展它、它与 Codex / Claude Code / Cursor 的对比、让 AI 产出显得套路化的那些坑，以及 Open Design 如何作为一个开源、本地优先的设计层补上这道缺口——这是个天然搭配，因为两者都开源、都跑在你自己机器上。',
+        ],
+        heroImage: {
+          src: '/agents/gemini-design/gemini-design-hero.webp',
+          alt: 'Gemini CLI 设计反馈回路：读参考图的终端 agent、渲染 UI 的浏览器，以及一个工作区，带一条回环反馈箭头',
+          caption: '核心回路：Gemini CLI 在终端里读取你的参考，在真实浏览器中构建并验证 UI，再对照参考迭代——而且整套设计系统都在上下文里。',
+        },
+        tocLabel: '本页目录',
+        toc: [
+          { id: 'what-is-gemini-cli', label: 'Gemini CLI 到底是什么' },
+          { id: 'why-design', label: '为什么多模态 + 超大上下文适合做设计' },
+          { id: 'setup', label: '从零配置 Gemini CLI 做设计' },
+          { id: 'screenshot-workflow', label: '截图转 UI 的工作流' },
+          { id: 'extend', label: 'GEMINI.md、MCP 与扩展' },
+          { id: 'vs', label: 'Gemini CLI vs Codex vs Claude Code vs Cursor' },
+          { id: 'pitfalls', label: '常见坑与“AI 味”观感' },
+          { id: 'open-design', label: '在 Open Design 里用 Gemini CLI 做设计' },
+          { id: 'faq', label: '常见问题' },
+        ],
+        sections: [
+          {
+            id: 'what-is-gemini-cli',
+            heading: 'Gemini CLI 到底是什么',
+            blocks: [
+              { kind: 'p', text: 'Gemini CLI 是 Google 为终端发布的开源（Apache-2.0）AI agent。它读取你的代码仓库、编辑文件、运行 shell 命令、抓取网页，还能用 Google 搜索为答案做事实接地——从自然语言任务出发去规划并验证，而不只是补全几行。同一个引擎也驱动 VS Code 里的 Gemini Code Assist agent。' },
+              { kind: 'p', text: '对设计工作而言，有两个特性突出。它的模型原生多模态，所以你把一张截图交给它，它是对着真实布局在推理。它的上下文窗口可达 1M token，大到能一次装下你的整套设计系统、组件库和参考集，而不必把它们摘要掉。' },
+              { kind: 'steps', items: [
+                { label: '上下文文件', body: 'Gemini CLI 读取 GEMINI.md 作为持久项目上下文——这正是写入设计约定、token 与审阅清单的天然位置。个人与团队设置可叠加其上。' },
+                { label: '内置工具 + MCP', body: '它开箱自带文件、shell、网页抓取和 Google 搜索工具，并支持 MCP server（在 ~/.gemini/settings.json 里配置）以引入外部上下文，比如一个实时 Figma 文件。' },
+                { label: '免费起步', body: '用个人 Google 账号登录即可获得相当慷慨的 Gemini 免费额度；你也可以自带 Gemini API key 或用 Vertex AI。' },
+              ] },
+              { kind: 'ul', items: [
+                '厂商：Google',
+                '凭证：Google 账号（免费额度）或来自 AI Studio 的 Gemini API key（BYOK）或 Vertex AI',
+                '许可：Apache-2.0，开源',
+              ] },
+            ],
+          },
+          {
+            id: 'why-design',
+            heading: '为什么多模态模型与超大上下文适合做设计',
+            blocks: [
+              { kind: 'p', text: 'Gemini CLI 在设计上的优势来自两个模型特性——但和所有 agent 一样，审美仍需你来提供。' },
+              { kind: 'steps', items: [
+                { label: '强多模态理解', body: '因为 Gemini 模型原生多模态，agent 能很好地读参考截图——把它渲染出的产出对照一张图来比对，而不是从文字描述里猜。' },
+                { label: '1M token 上下文窗口', body: '大上下文意味着整套设计系统、token 和许多参考状态能一次性塞进去，于是 agent 复用你真实的基础元件，而不是另造一次性样式。' },
+                { label: 'GEMINI.md 里的约定', body: '一份 GEMINI.md（加上 Figma MCP server）把 agent 指向你的 token、组件和真实规格，让它对着品牌工作，而不是默认观感。' },
+              ] },
+              { kind: 'image', src: '/agents/gemini-design/gemini-design-taste-triangle.webp', alt: '展示设计系统、skill 与参考图三者汇聚成优质设计产出的示意图', caption: '审美来自你提供的三种输入：一套设计系统、一个 skill，以及真实的参考图。' },
+              { kind: 'p', text: '结论和每个 agent 教给我们的一样：Gemini CLI 默认并没有审美。只有当你给它约束——一套设计系统、一个审美 skill、具体的参考——它才能产出好设计。Open Design 打包的正是这些输入，这也是两者天然契合的原因（下文详述）。' },
+            ],
+          },
+          {
+            id: 'setup',
+            heading: '从零把 Gemini CLI 配置成能做设计',
+            blocks: [
+              { kind: 'p', text: '下面是从一台干净机器，到一个能构建并验证 UI 的 Gemini CLI 的完整路径。' },
+              { kind: 'code', lang: 'bash', code: '# 1. 安装 Gemini CLI（需 Node 20+）\nnpm install -g @google/gemini-cli\n# 或免安装运行：npx https://github.com/google-gemini/gemini-cli\n\n# 2. 在你的项目里启动，首次运行时认证\ncd your-project\ngemini            # 用 Google 账号登录，或设置 GEMINI_API_KEY\n\n# 3. 生成项目上下文\n/init             # 为本项目生成 GEMINI.md\n\n# 4. 接入 Figma MCP server（可选，用于设计交付）\n#    在 ~/.gemini/settings.json 的 "mcpServers" 下添加' },
+              { kind: 'image', src: '/agents/gemini-design/gemini-design-setup-flow.webp', alt: '五步配置流程：安装、认证、配置 GEMINI.md、添加 skill、验证', caption: '配置顺序：安装 → 认证 → 配置 GEMINI.md → 添加 skill → 启用浏览器验证。' },
+              { kind: 'steps', items: [
+                { label: '把设计规则写进去', body: '把你的 token、基础元件和约定放进 GEMINI.md 并让 Gemini 指向它们，这样产出会贴合品牌，而不是退回到泛泛的样子。' },
+                { label: '加上浏览器验证', body: '接入 Playwright 或浏览器 MCP，让 Gemini 在真实浏览器里渲染，并跨断点检查产出，而不仅仅确认构建通过。' },
+              ] },
+            ],
+          },
+          {
+            id: 'screenshot-workflow',
+            heading: '截图转 UI 的工作流',
+            blocks: [
+              { kind: 'p', text: '用 Gemini CLI 做设计、杠杆最高的回路，是把一张参考图变成能跑、且响应式的 UI，并迭代到匹配为止——靠多模态模型把产出对照参考来比对。' },
+              { kind: 'ol', items: [
+                '从你手上最清晰的视觉参考开始——并且要包含多种状态（桌面与移动、hover、空态、加载态），而不只是一张主视觉。',
+                '提示要具体；即便是强模型，含糊的提示也只会产出泛泛的 UI。',
+                '把你的设计系统与约定放进 GEMINI.md，并告诉 Gemini token 与标准基础元件在哪里。',
+                '跑一个 dev server，让 Gemini 在真实浏览器中渲染，并切到各断点检查结果。',
+                '通过让 Gemini 把它的实现对照截图来迭代——而不只是确认能构建通过。',
+              ] },
+              { kind: 'p', text: '用 @ 引用一张图片把它附到提示里，然后用具体约束给出提示：' },
+              { kind: 'code', lang: 'bash', code: 'gemini\n# 在提示里：\n> @reference-desktop.png @reference-mobile.png\n  用 React + Vite + Tailwind + TypeScript 实现这个设计。\n  复用 GEMINI.md 里我现有的设计系统组件和 token。\n  匹配间距、布局和层级；做成响应式。\n  在浏览器中渲染，并迭代到 UI 在各断点上都与参考一致。' },
+              { kind: 'p', text: '提示保持小而聚焦，好的迭代就提交、坏的就回退（回退时告诉 Gemini 一声），让每一轮都建立在干净的基础上。' },
+            ],
+          },
+          {
+            id: 'extend',
+            heading: 'GEMINI.md、MCP 与扩展',
+            blocks: [
+              { kind: 'p', text: '三个扩展点让 Gemini CLI 在持续的设计工作中真正好用，而且它们都能干净地映射到一套开放的设计工作流上。' },
+              { kind: 'steps', items: [
+                { label: 'GEMINI.md 上下文', body: '项目规则放在仓库根目录的 GEMINI.md（还有全局与团队层）。它是你设计约定的长期归宿，每次运行都会读取。' },
+                { label: 'MCP server', body: '在 ~/.gemini/settings.json 下配置 MCP server——这是把设计上下文和外部工具（最相关的是 Figma MCP server）引入进来的可移植方式，跨 agent 通用，而不只服务于 Gemini。' },
+                { label: '扩展与内置工具', body: 'Gemini CLI 的扩展，以及它内置的 Google 搜索、文件、shell、网页抓取工具，让它能在不离开终端的情况下收集参考、跑完验证回路。' },
+              ] },
+              { kind: 'p', text: '这些都是可移植、跨 agent 的能力——正是 Open Design 被设计来去编排的那类东西，而不是每个项目里重造一遍。' },
+            ],
+          },
+          {
+            id: 'vs',
+            heading: 'Gemini CLI vs Codex vs Claude Code vs Cursor 做设计',
+            blocks: [
+              { kind: 'p', text: '做设计没有唯一赢家——每个 agent 各有所长，有经验的团队会把它们叠着用。一个公允的总结：' },
+              { kind: 'table', columns: ['Agent', '设计强项', '最适合'], rows: [
+                ['Gemini CLI', '强多模态图像理解 + 1M token 上下文；开源且有免费额度', '截图密集的工作，以及把整套设计系统装进上下文'],
+                ['Codex', '配上前端 skill 后视觉打磨强；沙箱化异步构建', '托管式异步构建，以及可移植的 AGENTS.md 规则'],
+                ['Claude Code', '具体的设计决策（hex、间距、字体）和懂代码库的 UX', '前端推理与大上下文重构'],
+                ['Cursor', '带实时预览与行内编辑的“边写边看”回路', 'IDE 里“边迭代边看”的紧凑 UI 工作'],
+              ] },
+              { kind: 'p', text: '社区反复得出的结论是：审美来自人。它们在没有 skill、参考和约束时都会退回到一个泛泛的样子。那才是真正要解决的问题——而它是“设计工具”形状的，不是“模型”形状的。' },
+            ],
+          },
+          {
+            id: 'pitfalls',
+            heading: '常见坑，以及如何避开“AI 味”观感',
+            blocks: [
+              { kind: 'p', text: '对 AI 生成设计最常见的抱怨，是它看着很泛——柔和渐变、悬浮面板、过大的圆角、夸张阴影，一股“Inter 字体加紫色”的味道，“一看就是 AI 做的”。其他被反映的问题还包括移动端布局错乱、指令文字泄漏进 UI 文案里。这些都不是 Gemini CLI 独有的；它们是任何 agent 在缺少精选设计上下文时都会发生的事。' },
+              { kind: 'steps', items: [
+                { label: '加一个审美 skill', body: '一个精选的设计 skill 会逼 agent 选定一个真实方向，而不是用默认那套。' },
+                { label: '在真实浏览器里验证', body: '用多模态模型跨断点渲染并自检，这样布局就不会在移动端悄悄崩掉。' },
+                { label: '提供 token 和参考', body: '真实的设计 token 和参考截图，是对产出质量影响最大的那个杠杆。' },
+                { label: '把规则写进 GEMINI.md', body: '把“不要 hero 卡片、最多两种字体、品牌优先层级”这类规则，放在 agent 每次都会读到的地方。' },
+              ] },
+              { kind: 'p', text: '注意到没有：每一条缓解措施都是在给 agent 一份精选的设计上下文。逐个项目、用手去维护这份上下文，正是 Open Design 帮你省掉的苦活。' },
+            ],
+          },
+          {
+            id: 'open-design',
+            heading: '在 Open Design 里用 Gemini CLI 做设计',
+            blocks: [
+              { kind: 'p', text: 'Open Design 就是上面这套工作流一直在要的那一层开源设计层。它把 Gemini CLI 当作一等适配器，外面裹上一个精选的 skill 与设计系统库、一条结构化的渲染流水线，以及一个本地桌面端 UI——让那份让 Gemini 变好用的设计上下文，从第一次运行就在那儿，而不是每次都手工拼。两者都开源、都本地优先，这让搭配水到渠成。' },
+              { kind: 'ol', items: [
+                '安装 Open Design，选 Gemini CLI 作为你的 agent。',
+                '用你的 Google 账号或 Gemini API key（BYOK）认证——凭证留在你的机器上，绝不经我们代理。',
+                '挑一套设计系统和一个 skill，然后生成审美一致的演示稿、原型和落地页。',
+                '每一份产物和 DESIGN.md 都存在你自己的 repo 里，而不是某个托管云。',
+              ] },
+              { kind: 'p', text: '同一个 Gemini CLI agent、同一把密钥——外面再加一套真实、可移植、开源的设计工作流。它本地优先、Apache-2.0 授权，所以你的工作和凭证没有任何东西会离开你的机器。' },
+            ],
+          },
+        ],
+        faqTitle: '常见问题',
+        faq: [
+          { name: 'Gemini CLI 真的能做设计吗？', text: '能——只要上下文里有一个审美 skill、一套设计系统和真实参考图，Gemini CLI 就能产出生产级、响应式的 UI，而它的强多模态模型会把产出对照参考做验证。缺了这份上下文，它就容易退回到泛泛的样子，而这正是 Open Design 补齐的缺口。' },
+          { name: '用 Gemini CLI 做设计要付费吗？', text: '不一定——用 Google 账号登录就有相当慷慨的免费额度，你也可以自带 Gemini API key（BYOK）或用 Vertex AI。无论哪种方式，Open Design 都不会代理你的凭证。' },
+          { name: 'Gemini CLI 在设计上具体强在哪？', text: '两点：它的模型强多模态，能很好地读参考截图；它的 1M token 上下文能一次装下整套设计系统和参考集。这都有帮助——但审美仍来自你提供的设计系统、skill 和参考。' },
+          { name: '前端设计选 Gemini CLI 还是 Claude Code？', text: '两者都很强。Claude Code 以具体、懂代码库的设计决策著称；Gemini CLI 的优势是多模态理解加超大上下文和免费额度。很多团队两个都用——Open Design 让你切换 agent 时无需改动设计工作流。' },
+          { name: '怎么把 Gemini CLI 连到 Figma？', text: '在 ~/.gemini/settings.json 的 mcpServers 下加上 Figma MCP server。Gemini 就能拉取真实的设计上下文——组件、变量、布局数据——让生成的代码贴合源设计，而不是近似。' },
+          { name: 'Open Design 和 Google 有关联吗？', text: '没有。Gemini CLI 是 Google 的产品；Open Design 是一个独立的开源项目，把它作为一等适配器来支持。Gemini 是 Google 的商标。' },
+          { name: '我的文件和凭证安全吗？', text: '安全——Open Design 本地优先、Apache-2.0。你的文件、产物和 DESIGN.md 都留在你自己的 repo 里，你的 Google 凭证由你的 agent 直接使用，绝不经 Open Design 的服务器中转。' },
+        ],
+        ctaTitle: '用开放的方式，和 Gemini CLI 一起做设计。',
+        ctaBody: '带上你自己的 Google 账号或 Gemini API key，把每个文件都留在本地，并在你已经在用的 agent 外面，得到一个精选的设计库。',
+        ctaActions: [
+          { label: '在 Open Design 里使用 Gemini CLI', href: '/quickstart/', variant: 'primary' },
+          { label: '在 GitHub 上 Star', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+          { label: '下载桌面端', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+        ],
+        hubLinkLabel: '查看所有支持的 agent',
+      },
+      aboutTitle: '什么是 Gemini CLI',
+      aboutBody: [
+        'Gemini CLI 是 Google 的开源（Apache-2.0）终端 AI agent。它读取代码库、编辑文件、运行命令、抓取网页，并用 Google 搜索为答案做事实接地。',
+        '它的模型原生多模态，上下文窗口达 1M token，因此能读参考截图、一次性装下整套设计系统。',
+        'Open Design 把 Gemini CLI 当作一等适配器，让它接入一条结构化、开源的设计流水线。',
+      ],
+      vendorLabel: '厂商',
+      vendor: 'Google',
+      credentialLabel: '凭证',
+      credential: 'Google 账号（免费额度）或 Gemini API key（BYOK）',
+      designTitle: '用 Gemini CLI 做设计',
+      designLead: 'Gemini CLI 的设计强项围绕它的模型与上下文：',
+      designPoints: [
+        { label: '多模态截图 → UI', body: '强图像理解把参考图变成响应式标记，并对照它检查结果。' },
+        { label: '1M token 上下文', body: '整套设计系统、组件库和参考集一次装下，产出复用你真实的基础元件。' },
+        { label: 'GEMINI.md + MCP', body: '上下文文件承载你的约定；Figma MCP server 把真实设计上下文带进代码。' },
+        { label: '开源且免费起步', body: 'Apache-2.0，用 Google 账号有慷慨免费额度，也可经 Gemini API BYOK。' },
+      ],
+      linksTitle: '真实资源',
+      linksLead: 'Gemini CLI 的官方仓库与文档：',
+      links: [
+        { label: 'google-gemini/gemini-cli（GitHub）', href: 'https://github.com/google-gemini/gemini-cli', source: 'GitHub · Google' },
+        { label: '官方发布：Introducing Gemini CLI', href: 'https://blog.google/innovation-and-ai/technology/developers-tools/introducing-gemini-cli-open-source-ai-agent/', source: 'Blog · Google' },
+        { label: 'Gemini CLI 文档', href: 'https://google-gemini.github.io/gemini-cli/', source: 'Docs · Google' },
+      ],
+      withOdTitle: 'Gemini CLI + Open Design',
+      withOdLead:
+        'Open Design 是 Gemini CLI 外面那层开源设计层：精选的 skill 与设计系统库、结构化渲染流水线，以及本地桌面端 UI。',
+      withOdSteps: [
+        '安装 Open Design，选 Gemini CLI 作为你的 agent。',
+        '用你的 Google 账号或 Gemini API key（BYOK）认证——凭证留在你的机器上。',
+        '挑一套设计系统和 skill，然后生成审美一致的演示稿、原型和落地页。',
+        '产物和 DESIGN.md 都存在你自己的 repo 里，而非托管云。',
+      ],
+      withOdClosing:
+        '同一个 Gemini CLI agent——外面加一套真实、可移植的设计工作流。',
+      faqTitle: '常见问题',
+      faq: [
+        { name: 'Open Design 是 Google 做的吗？', text: '不是。Gemini CLI 是 Google 的产品；Open Design 是一个独立的开源项目，把它作为一等适配器集成进来。' },
+        { name: '要付费吗？', text: '不一定——Google 账号有免费额度，也可自带 Gemini API key（BYOK）。Open Design 不代理你的凭证。' },
+        { name: 'Open Design 和 Google 有关联吗？', text: '没有。Open Design 独立；Gemini 是 Google 的商标。' },
+      ],
+      ctaTitle: '用开放的方式，和 Gemini CLI 一起做设计。',
+      ctaBody: '给仓库点 Star、下载桌面版，或加入社区申请新适配器。',
+    },
   },
   download: {
     ...INFO_PAGE_COPY.en!.download,
@@ -4295,6 +4863,19 @@ export function getInfoPageCopy(locale: LandingLocaleCode): InfoPageCopy {
     INFO_PAGE_COPY[locale] ??
     compactInfoPageCopy(locale, compactInfoTextFromHome(locale)) ??
     INFO_PAGE_COPY[DEFAULT_LOCALE]!
+  );
+}
+
+// Copy for one `/alternatives/<slug>/` comparison page. Only en supplies
+// these today, so non-en locales fall back to the English copy — the page
+// still renders, just in English, until localized overrides land.
+export function getAlternativeCopy(
+  locale: LandingLocaleCode,
+  slug: string,
+): AlternativeDetailCopy | undefined {
+  return (
+    INFO_PAGE_COPY[locale]?.alternatives?.[slug] ??
+    INFO_PAGE_COPY[DEFAULT_LOCALE]!.alternatives?.[slug]
   );
 }
 
