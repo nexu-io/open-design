@@ -868,6 +868,7 @@ async function consumeDaemonRun({
   let exitCode: number | null = null;
   let exitSignal: string | null = null;
   let endStatus: ChatRunStatus | null = null;
+  let pendingStructuredError: Error | null = null;
   // Tracks whether the server explicitly declared `status: 'succeeded'` in
   // the SSE end payload (or via the fallback run-status fetch). Distinct
   // from `endStatus === 'succeeded'`, which can be a local fallback when
@@ -994,6 +995,8 @@ async function consumeDaemonRun({
 
           if (event.event === 'error') {
             const data = event.data as SseErrorPayload;
+            const structuredError = daemonSseError(data);
+            pendingStructuredError = structuredError;
             // The daemon emits this error frame from the child-close handler
             // BEFORE `finishWithRetryDecision()` runs, so a transient failure it
             // can recover via a same-run retry is reported here first and only
@@ -1014,13 +1017,13 @@ async function consumeDaemonRun({
             if (status && (status.status === 'failed' || status.status === 'canceled')) {
               onRunStatus?.('failed');
               handlers.onError(
-                markErrorResumable(daemonSseError(data), status.resumable === true),
+                markErrorResumable(structuredError, status.resumable === true),
               );
               return;
             }
             if (!status) {
               onRunStatus?.('failed');
-              handlers.onError(daemonSseError(data));
+              handlers.onError(structuredError);
               return;
             }
             continue;
@@ -1086,6 +1089,10 @@ async function consumeDaemonRun({
       (!serverDeclaredSuccess &&
         (exitSignal || (exitCode !== null && exitCode !== 0)));
     if (looksLikeFailure) {
+      if (pendingStructuredError) {
+        handlers.onError(markErrorResumable(pendingStructuredError, endResumable));
+        return;
+      }
       if (shouldSuppressLifecycleExitFallback(agentId, exitCode, exitSignal, stderrBuf)) {
         handlers.onDone(acc);
         return;
