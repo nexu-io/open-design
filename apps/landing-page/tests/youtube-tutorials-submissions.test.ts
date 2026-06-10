@@ -61,10 +61,16 @@ describe('github-submissions', () => {
     assert.equal(issues.find((i) => i.number === 2)?.videoUrl, 'https://youtu.be/abcdef12345');
   });
 
-  it('ignores a non-YouTube URL that merely carries ?v=', async () => {
-    stub([{ ...ISSUE, body: 'link: https://example.com/watch?v=dQw4w9WgXcQ' }]);
-    const issues = await fetchSubmissionIssues('tok', 'nexu-io/open-design');
-    assert.equal(issues[0].videoUrl, undefined);
+  it('ignores non-YouTube and lookalike hosts (substring spoofing)', async () => {
+    for (const body of [
+      'link: https://example.com/watch?v=dQw4w9WgXcQ',
+      'link: https://notyoutube.com/watch?v=dQw4w9WgXcQ',
+      'link: https://evil-youtube.com/watch?v=dQw4w9WgXcQ',
+    ]) {
+      stub([{ ...ISSUE, body }]);
+      const issues = await fetchSubmissionIssues('tok', 'nexu-io/open-design');
+      assert.equal(issues[0].videoUrl, undefined, body);
+    }
   });
 
   it('propagates (does not swallow) a failed search so the caller can abort', async () => {
