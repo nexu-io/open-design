@@ -76,6 +76,17 @@ describe('analytics run_finished contract', () => {
         tool_call_count: 2,
         tool_duration_ms: 350,
         finalize_duration_ms: 30,
+        diagnostic_source: 'error_event',
+        stderr_present: true,
+        stderr_line_count_bucket: '1_5',
+        stdout_present: true,
+        stdout_line_count_bucket: '1_5',
+        rpc_close_reason: 'stream_error',
+        first_token_seen: true,
+        user_visible_output_seen: true,
+        tool_call_seen: true,
+        artifact_write_seen: false,
+        live_artifact_seen: false,
         retry_attempt_count: 1,
         retry_final_result: 'success',
       },
@@ -89,6 +100,8 @@ describe('analytics run_finished contract', () => {
     expect(payload.props.cache_token_source).toBe('anthropic');
     expect(payload.props.total_duration_ms).toBe(1234);
     expect(payload.props.tool_call_count).toBe(2);
+    expect(payload.props.rpc_close_reason).toBe('stream_error');
+    expect(payload.props.first_token_seen).toBe(true);
     expect(payload.props.retry_attempt_count).toBe(1);
     expect(payload.props.retry_final_result).toBe('success');
   });
@@ -127,5 +140,32 @@ describe('analytics run_finished contract', () => {
 
     expect(attempted.props.retry_strategy).toBe('same_run_transient');
     expect(finished.props.retry_suppressed_reason).toBe('tool_call_seen');
+  });
+
+  it('accepts Langfuse report result events for actual delivery monitoring', () => {
+    const payload = {
+      event: 'langfuse_report_result',
+      props: {
+        page_name: 'chat_panel',
+        area: 'chat_panel',
+        project_id: 'proj-1',
+        conversation_id: 'conv-1',
+        run_id: 'run-1',
+        langfuse_trace_id: 'run-1',
+        langfuse_expected: true,
+        langfuse_delivery_status: 'failed',
+        langfuse_drop_reason: 'network_error',
+        langfuse_report_result: 'failed',
+        langfuse_report_trigger: 'final_message',
+        report_duration_ms: 123,
+        result: 'failed',
+        error_code: 'AGENT_EXECUTION_FAILED',
+        agent_provider_id: 'codex_cli',
+        model_id: 'default',
+      },
+    } satisfies Extract<AnalyticsEventPayload, { event: 'langfuse_report_result' }>;
+
+    expect(payload.props.langfuse_report_result).toBe('failed');
+    expect(payload.props.langfuse_delivery_status).toBe('failed');
   });
 });

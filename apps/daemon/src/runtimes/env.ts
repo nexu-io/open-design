@@ -125,6 +125,20 @@ export function spawnEnvForAgent(
     ]);
     return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
+  if (agentId === 'opencode') {
+    // OpenCode is bun-based and, left to its defaults, walks up from its cwd to
+    // the nearest project root and runs `bun install` there at startup to set up
+    // local plugins. When that root is a pnpm workspace (the daemon's own repo,
+    // or a project nested inside it), the install replaces the pnpm `.pnpm` store
+    // with a bun `node_modules/.bun` + `bun.lock` and breaks the workspace.
+    // Disable project-config discovery (and its install) so OpenCode only honors
+    // the config the daemon injects via OPENCODE_CONFIG_CONTENT — this is exactly
+    // what the AMR path already does for its private OpenCode server.
+    if (!env.OPENCODE_DISABLE_PROJECT_CONFIG?.trim()) {
+      env.OPENCODE_DISABLE_PROJECT_CONFIG = 'true';
+    }
+    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+  }
   return reapplySandboxRuntimeEnv(env, sandboxRuntime);
 }
 

@@ -892,6 +892,15 @@ export interface Dict {
   'homeHero.chip.figmaHint': string;
   'homeHero.chip.folderHint': string;
   'homeHero.chip.templateHint': string;
+  'homeWorkingDir.trigger': string;
+  'homeWorkingDir.pick': string;
+  'homeWorkingDir.replace': string;
+  'homeWorkingDir.recent': string;
+  'homeWorkingDir.recentEmpty': string;
+  'homeWorkingDir.clear': string;
+  'homeWorkingDir.hint': string;
+  'homeWorkingDir.missing': string;
+  'homeWorkingDir.applyFailed': string;
   'workingDirPicker.title': string;
   'workingDirPicker.homeTitle': string;
   'workingDirPicker.processing': string;
@@ -2304,6 +2313,11 @@ export interface Dict {
   'chat.example3Prompt': string;
 
   // Preview modal
+  'preview.usePlugin': string;
+  'preview.usePluginOnly': string;
+  'preview.usePluginOnlyDesc': string;
+  'preview.replicateContent': string;
+  'preview.replicateContentDesc': string;
   'preview.shareMenu': string;
   'preview.exportMenu': string;
   'preview.shareTemplateBadge': string;
@@ -2882,17 +2896,16 @@ export interface Dict {
   'assistant.unfinishedSummary': string;
   'assistant.unfinishedMore': string;
   'assistant.continueRemaining': string;
+  'chat.resumeRunCta': string;
   'assistant.outTokens': string;
   'assistant.producedFiles': string;
   'assistant.openFile': string;
   'assistant.downloadFile': string;
   'nextStep.title': string;
+  'nextStep.more': string;
   'nextStep.share': string;
-  'nextStep.chipJoiner': string;
-  'nextStep.chipPolishVisual': string;
-  'nextStep.chipBrand': string;
-  'nextStep.chipConcise': string;
-  'nextStep.chipSecondVersion': string;
+  'nextStep.download': string;
+  'nextStep.contribute': string;
   'assistant.thinking': string;
   'assistant.thought': string;
   'assistant.thoughtFor': string;

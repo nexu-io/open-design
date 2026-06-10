@@ -110,7 +110,16 @@ export interface AppConfigPrefs {
   customInstructions?: string | null;
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
+  // Most-recently-used local working directories the user granted the agent
+  // read access to from the Home composer. Become a project's
+  // `metadata.linkedDirs` (read-only `--add-dir` awareness, no Design Files
+  // import). Stored most-recent-first; capped at RECENT_LINKED_DIRS_MAX.
+  recentLinkedDirs?: string[];
 }
+
+// Cap on how many recent working directories we remember. Keeps the picker's
+// "Recent" submenu short and the config file bounded.
+export const RECENT_LINKED_DIRS_MAX = 5;
 
 const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'onboardingCompleted',
@@ -128,6 +137,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'customInstructions',
   'projectLocations',
   'defaultProjectLocationId',
+  'recentLinkedDirs',
 ] as const);
 
 function configFile(dataDir: string): string {
@@ -397,6 +407,29 @@ function applyConfigValue(
       target[key] = normalizeLocationId(value, 'default');
     } else if (value === null) {
       target[key] = null;
+    } else {
+      delete target[key];
+    }
+    return;
+  }
+  if (key === 'recentLinkedDirs') {
+    if (Array.isArray(value)) {
+      // Keep non-empty strings, trim, de-dupe preserving most-recent-first
+      // order, and cap the list. Path existence/safety is enforced later by
+      // validateLinkedDirs when the dir is actually attached to a project, so
+      // a folder that was since deleted simply drops out at use time rather
+      // than corrupting the whole config write here.
+      const seen = new Set<string>();
+      const cleaned: string[] = [];
+      for (const entry of value) {
+        if (typeof entry !== 'string') continue;
+        const trimmed = entry.trim();
+        if (!trimmed || seen.has(trimmed)) continue;
+        seen.add(trimmed);
+        cleaned.push(trimmed);
+        if (cleaned.length >= RECENT_LINKED_DIRS_MAX) break;
+      }
+      target[key] = cleaned;
     } else {
       delete target[key];
     }

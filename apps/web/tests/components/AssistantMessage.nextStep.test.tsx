@@ -2,8 +2,9 @@
 
 /**
  * Gate coverage for the "next step" affordance under the last assistant
- * message. Iteration chips should appear for the last successful turn even
- * without a previewable artifact; the Share action still needs HTML.
+ * message. The featured design-toolbox rows should appear for the last
+ * successful turn even without a previewable artifact; the Share action still
+ * needs HTML.
  */
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -58,11 +59,13 @@ function producedFile(name: string, kind: ProjectFile['kind'] = 'html'): Project
 
 const handlers = () => ({
   onArtifactShare: vi.fn(),
-  onArtifactChip: vi.fn(),
+  onToolboxAction: vi.fn(),
 });
 
+const AUTO_MATCH_TITLE = en['chat.designToolbox.action.auto-match.title'];
+
 describe('AssistantMessage next-step affordance', () => {
-  it('renders for the last successful turn with an HTML artifact and routes Share with the file name', () => {
+  it('routes Share through the More → Share cascade with the file name', () => {
     const h = handlers();
     render(
       <AssistantMessage
@@ -74,7 +77,9 @@ describe('AssistantMessage next-step affordance', () => {
       />,
     );
     expect(screen.getByTestId('next-step-actions')).toBeTruthy();
-    fireEvent.click(screen.getByText(en['nextStep.share']));
+    fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
+    fireEvent.mouseEnter(screen.getByTestId('next-step-more-share'));
+    fireEvent.click(screen.getByTestId('next-step-share-share'));
     expect(h.onArtifactShare).toHaveBeenCalledWith('landing.html');
   });
 
@@ -91,29 +96,26 @@ describe('AssistantMessage next-step affordance', () => {
     expect(screen.queryByTestId('next-step-actions')).toBeNull();
   });
 
-  it('keeps the busy Share to Open Design row mounted on the source turn after it is no longer last', () => {
+  it('reaches Contribute (share to Open Design) through the More → Share cascade', () => {
+    const onShareToOpenDesign = vi.fn();
     render(
       <AssistantMessage
         message={baseMessage({ producedFiles: [producedFile('landing.html')] })}
         streaming={false}
         projectId="proj-1"
-        isLast={false}
+        isLast
         onFeedback={vi.fn()}
-        onShareToOpenDesign={vi.fn()}
-        shareToOpenDesignBusy
+        onShareToOpenDesign={onShareToOpenDesign}
         {...handlers()}
       />,
     );
-
-    const button = screen.getByTestId<HTMLButtonElement>('assistant-share-to-od');
-    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
-    expect(button.disabled).toBe(true);
-    expect(button.textContent).toBe(en['assistant.shareToOpenDesignBusy']);
-    expect(screen.queryByTestId('next-step-options-row')).toBeNull();
-    expect(screen.queryByText(en['nextStep.chipPolishVisual'])).toBeNull();
+    fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
+    fireEvent.mouseEnter(screen.getByTestId('next-step-more-share'));
+    fireEvent.click(screen.getByTestId('next-step-share-contribute'));
+    expect(onShareToOpenDesign).toHaveBeenCalledTimes(1);
   });
 
-  it('renders iteration chips without the Share action when the turn produced no previewable HTML artifact', () => {
+  it('renders the featured toolbox rows even when the turn produced no previewable HTML artifact', () => {
     render(
       <AssistantMessage
         message={baseMessage({ producedFiles: [producedFile('notes.md', 'text')] })}
@@ -124,35 +126,7 @@ describe('AssistantMessage next-step affordance', () => {
       />,
     );
     expect(screen.getByTestId('next-step-actions')).toBeTruthy();
-    expect(screen.queryByText(en['nextStep.share'])).toBeNull();
-    expect(screen.getByText(en['nextStep.chipPolishVisual'])).toBeTruthy();
-  });
-
-  it('keeps Share to Open Design separated after the regular next-step actions', () => {
-    render(
-      <AssistantMessage
-        message={baseMessage({ producedFiles: [producedFile('notes.md', 'text')] })}
-        streaming={false}
-        projectId="proj-1"
-        isLast
-        onFeedback={vi.fn()}
-        onShareToOpenDesign={vi.fn()}
-        {...handlers()}
-      />,
-    );
-
-    const nextSteps = screen.getByTestId('next-step-actions');
-    const optionsRow = screen.getByTestId('next-step-options-row');
-    const divider = screen.getByTestId('next-step-open-design-divider');
-    const shareToOd = screen.getByTestId('assistant-share-to-od-panel');
-
-    expect(nextSteps).toBeTruthy();
-    expect(screen.getByText(en['nextStep.chipBrand'])).toBeTruthy();
-    expect(shareToOd).toBeTruthy();
-    expect(nextSteps.contains(shareToOd)).toBe(true);
-    expect(optionsRow.contains(shareToOd)).toBe(false);
-    expect(optionsRow.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(divider.compareDocumentPosition(shareToOd) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText(AUTO_MATCH_TITLE)).toBeTruthy();
   });
 
   it('does not render when the handlers are not wired', () => {

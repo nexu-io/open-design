@@ -19,6 +19,12 @@ import { useAnalytics } from '../analytics/provider';
 import { trackChatPanelClick, trackRunFailedToastSurfaceView } from '../analytics/events';
 import { attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
 import { useT } from '../i18n';
+import {
+  FEATURED_DESIGN_TOOLBOX_ACTION_IDS,
+  findDesignToolboxSkill,
+  getDesignToolboxAction,
+  type DesignToolboxActionId,
+} from '../runtime/design-toolbox';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { fetchProjectFileText, fetchProjectUiSurfaces, projectRawUrl, startProjectUiPreview } from '../providers/registry';
@@ -38,6 +44,7 @@ import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } 
 import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
 import { AmrGuidance } from './AmrGuidance';
 import { amrRechargeUrlForProfile, resolveRunFailureUi } from '../runtime/amr-guidance';
+import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import {
   ChatComposer,
   type ChatComposerHandle,
@@ -942,6 +949,7 @@ interface Props {
     meta?: ChatSendMeta,
   ) => void;
   onRetry?: (assistantMessage: ChatMessage) => void;
+  onResumeRun?: (assistantMessage: ChatMessage) => void;
   onStop: () => void;
   // Skills available for @-mention assembly. ProjectView filters out the
   // user's disabled set before passing them in here.
@@ -979,8 +987,10 @@ interface Props {
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
   // "Next step" affordance handlers forwarded to the last assistant message.
+  // The featured design-toolbox rows are driven directly off the composer ref
+  // owned here, so they need no handler from ProjectView (unlike onArtifactShare).
   onArtifactShare?: (fileName: string) => void;
-  onArtifactChip?: (fileName: string | null, prompt: string) => void;
+  onArtifactDownload?: (fileName: string) => void;
   onForkFromMessage?: (assistantMessage: ChatMessage) => void;
   forkingMessageId?: string | null;
   // Header "+" button — kicks off ProjectView's create-conversation flow.
@@ -1153,6 +1163,7 @@ export function ChatPane({
   onDeleteComment,
   onSend,
   onRetry,
+  onResumeRun,
   onStop,
   onRemoveQueuedSend,
   onUpdateQueuedSend,
@@ -1176,7 +1187,7 @@ export function ChatPane({
   onContinueRemainingTasks,
   onAssistantFeedback,
   onArtifactShare,
-  onArtifactChip,
+  onArtifactDownload,
   onForkFromMessage,
   forkingMessageId = null,
   onNewConversation,
@@ -1276,7 +1287,6 @@ export function ChatPane({
     onContinueRemainingTasks,
     onAssistantFeedback,
     onArtifactShare,
-    onArtifactChip,
     onForkFromMessage,
     onShareToOpenDesign,
   });
@@ -1285,11 +1295,31 @@ export function ChatPane({
     onContinueRemainingTasks,
     onAssistantFeedback,
     onArtifactShare,
-    onArtifactChip,
     onForkFromMessage,
     onShareToOpenDesign,
   };
   const importedSurfaceScrollResetKeyRef = useRef<string | null>(null);
+  // Featured design-toolbox follow-up rows on the assistant "next step" card.
+  // The toolbox left the "+" menu, so these route straight into the composer
+  // we own here: seeding an action's prompt+skill, or opening the full panel.
+  // Both stay stable (composer ref + no deps) so AssistantMessage stays memoized.
+  const handleToolboxAction = useCallback((id: DesignToolboxActionId) => {
+    composerRef.current?.applyDesignToolboxAction(id);
+  }, []);
+  const handlePickSkill = useCallback((skillId: string) => {
+    composerRef.current?.applyDesignToolboxSkill(skillId);
+  }, []);
+  // The `@skill` shown in each featured row's hover detail — matched the same
+  // way the composer matches it, using the raw skill name (what gets inlined
+  // into the draft). Recomputed only when the skill list changes.
+  const featuredToolboxSkillNames = useMemo<Partial<Record<DesignToolboxActionId, string | null>>>(() => {
+    const map: Partial<Record<DesignToolboxActionId, string | null>> = {};
+    for (const id of FEATURED_DESIGN_TOOLBOX_ACTION_IDS) {
+      const action = getDesignToolboxAction(id);
+      map[id] = action ? (findDesignToolboxSkill(action, skills)?.name ?? null) : null;
+    }
+    return map;
+  }, [skills]);
   const [tab, setTab] = useState<Tab>('chat');
   const [showConvList, setShowConvList] = useState(false);
   const [conversationSearch, setConversationSearch] = useState('');
@@ -1361,6 +1391,21 @@ export function ChatPane({
   const runFailureUi = retryAssistant
     ? resolveRunFailureUi(failedRunErrorEvent?.code, retryAssistant.agentId)
     : null;
+  // Offer Continue (resume) when the failed run is resumable AND the active
+  // agent still matches the agent that produced it. The daemon stores a
+  // resumable session per (conversation, agent); after an agent switch the new
+  // agent has no id for that session, so a resume would silently start fresh —
+  // fall back to the from-scratch Retry instead. We do NOT require `onResumeRun`
+  // here: because the daemon persists the resumable session, the plain Retry
+  // path (which re-sends the original prompt) would itself silently resume that
+  // session and double the work. So every ChatPane surface must offer Continue
+  // for a resumable failure — `onResumeRun` when wired (primary chat, carries
+  // the resume_continue analytics), otherwise a plain `onSend` of the canonical
+  // continue prompt (resumes the session without re-sending the original turn).
+  const canResumeFailedRun =
+    !!retryAssistant?.resumable &&
+    !!retryAssistant?.agentId &&
+    retryAssistant.agentId === config?.agentId;
   // Prefer a case-specific message (AMR auth / balance) over the raw upstream
   // string; fall back to the live global error (also covers conversation-load
   // / audio errors) then the persisted run error so a reload still shows it.
@@ -2616,7 +2661,11 @@ export function ChatPane({
                 assistantCallbacksRef={assistantCallbacksRef}
                 onContinueRemainingTasks={onContinueRemainingTasks}
                 onArtifactShare={onArtifactShare}
-                onArtifactChip={onArtifactChip}
+                onToolboxAction={handleToolboxAction}
+                onPickSkill={handlePickSkill}
+                onArtifactDownload={onArtifactDownload}
+                nextStepSkills={skills}
+                toolboxSkillNames={featuredToolboxSkillNames}
                 onForkFromMessage={onForkFromMessage}
                 onAssistantFeedback={onAssistantFeedback}
                 forkingMessageId={forkingMessageId}
@@ -2709,7 +2758,26 @@ export function ChatPane({
                               {t('chat.amrError.rechargeCta')}
                             </button>
                           ) : null}
-                          {runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry ? (
+                          {canResumeFailedRun ? (
+                            // Resumable failure: continue the agent's existing
+                            // CLI session instead of restarting from scratch, so
+                            // partial work is kept. Replaces the from-scratch
+                            // Retry as the single primary recovery action. Use
+                            // the wired resume handler when present, otherwise a
+                            // plain send of the continue prompt — never the
+                            // re-sending Retry path, which would resume + repeat.
+                            <button
+                              type="button"
+                              className="ghost chat-error-retry"
+                              onClick={() =>
+                                onResumeRun
+                                  ? onResumeRun(retryAssistant)
+                                  : onSend(RESUME_CONTINUE_PROMPT, [], [])
+                              }
+                            >
+                              {t('chat.resumeRunCta')}
+                            </button>
+                          ) : runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry ? (
                             <button
                               type="button"
                               className="ghost chat-error-retry"
@@ -2824,7 +2892,6 @@ interface AssistantCallbacks {
     | ((message: ChatMessage, change: ChatMessageFeedbackChange) => void)
     | undefined;
   onArtifactShare: ((fileName: string) => void) | undefined;
-  onArtifactChip: ((fileName: string | null, prompt: string) => void) | undefined;
   onForkFromMessage: ((message: ChatMessage) => void) | undefined;
   onShareToOpenDesign: ((assistantMessageId: string) => void) | undefined;
 }
@@ -2882,7 +2949,11 @@ function ChatRows({
   assistantCallbacksRef,
   onContinueRemainingTasks,
   onArtifactShare,
-  onArtifactChip,
+  onToolboxAction,
+  onPickSkill,
+  onArtifactDownload,
+  nextStepSkills,
+  toolboxSkillNames,
   onForkFromMessage,
   onAssistantFeedback,
   forkingMessageId,
@@ -2919,7 +2990,11 @@ function ChatRows({
   assistantCallbacksRef: MutableRefObject<AssistantCallbacks>;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onArtifactShare?: (fileName: string) => void;
-  onArtifactChip?: (fileName: string | null, prompt: string) => void;
+  onToolboxAction?: (id: DesignToolboxActionId) => void;
+  onPickSkill?: (skillId: string) => void;
+  onArtifactDownload?: (fileName: string) => void;
+  nextStepSkills?: SkillSummary[];
+  toolboxSkillNames?: Partial<Record<DesignToolboxActionId, string | null>>;
   onForkFromMessage?: (message: ChatMessage) => void;
   onAssistantFeedback?: (message: ChatMessage, change: ChatMessageFeedbackChange) => void;
   forkingMessageId?: string | null;
@@ -3024,11 +3099,11 @@ function ChatRows({
             ? (fileName) => assistantCallbacksRef.current.onArtifactShare?.(fileName)
             : undefined
         }
-        onArtifactChip={
-          onArtifactChip
-            ? (fileName, prompt) => assistantCallbacksRef.current.onArtifactChip?.(fileName, prompt)
-            : undefined
-        }
+        onToolboxAction={onToolboxAction}
+        onPickSkill={onPickSkill}
+        onArtifactDownload={onArtifactDownload}
+        nextStepSkills={nextStepSkills}
+        toolboxSkillNames={toolboxSkillNames}
       />
     );
   };

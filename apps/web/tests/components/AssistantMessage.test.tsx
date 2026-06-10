@@ -7,7 +7,6 @@
  */
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { useState } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
@@ -119,41 +118,28 @@ describe('AssistantMessage feedback gate', () => {
     expect(onForkFromMessage).toHaveBeenCalledTimes(1);
   });
 
-  it('disables the Share to Open Design button before a duplicate click can reuse stale props', () => {
+  it('reaches Contribute (share to Open Design) through the More -> Share cascade', () => {
     const onShare = vi.fn();
 
-    function Harness() {
-      const [busy, setBusy] = useState(false);
-      return (
-        <AssistantMessage
-          message={baseMessage()}
-          streaming={false}
-          projectId="proj-1"
-          isLast
-          onFeedback={vi.fn()}
-          onShareToOpenDesign={() => {
-            if (busy) return;
-            onShare();
-            setBusy(true);
-          }}
-          shareToOpenDesignBusy={busy}
-        />
-      );
-    }
+    render(
+      <AssistantMessage
+        message={baseMessage()}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        onFeedback={vi.fn()}
+        onShareToOpenDesign={onShare}
+      />,
+    );
 
-    render(<Harness />);
-
-    const button = screen.getByTestId<HTMLButtonElement>('assistant-share-to-od');
-
-    expect(screen.getByTestId('assistant-share-to-od-panel').contains(button)).toBe(true);
-    expect(button.closest('.assistant-completion-row')).toBeNull();
-
-    fireEvent.click(button);
-    expect(button.disabled).toBe(true);
-    fireEvent.click(button);
+    // Contribute lives behind the next-step card's More -> Share flyout; the busy
+    // guard in NextStepActions (and the menu closing on click) prevent a second
+    // submit, replacing the old always-visible disabled button.
+    fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
+    fireEvent.mouseEnter(screen.getByTestId('next-step-more-share'));
+    fireEvent.click(screen.getByTestId('next-step-share-contribute'));
 
     expect(onShare).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: 'Preparing package…' })).toBeTruthy();
   });
 
   it('does not show the fork action while the assistant is streaming', () => {

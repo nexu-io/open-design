@@ -42,6 +42,7 @@ import {
 import { useI18n } from '../i18n';
 import { ContextChipStrip } from './ContextChipStrip';
 import { InlinePluginsRail } from './InlinePluginsRail';
+import { localizePluginTitle } from './plugins-home/localization';
 
 interface Props {
   // Active project the apply will be scoped to. Omit on Home.
@@ -166,7 +167,7 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
           {
             kind: 'plugin',
             id: recordId,
-            label: activeRecord?.title ?? recordId,
+            label: activeRecord ? localizePluginTitle(locale, activeRecord) : recordId,
           },
         ];
       }

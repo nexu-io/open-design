@@ -81,6 +81,10 @@ const residualAllowedExactPaths = new Set([
   // PostCSS loads Tailwind through a web-local .mjs compatibility config entry.
   "apps/web/postcss.config.mjs",
   "scripts/bake-html-ppt-examples.mjs",
+  // CI-only plugin-preview renderer. Kept .mjs and run directly by Node so its
+  // runtime deps (puppeteer-core + a headless Chrome + ffmpeg) are provided by
+  // the CI environment and never pulled into the daemon/web TS build or bundle.
+  "scripts/bake-plugin-previews.mjs",
   "scripts/scaffold-html-ppt-skills.mjs",
   "scripts/sync-hyperframes-skill.mjs",
   "scripts/verify-media-models.mjs",

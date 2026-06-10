@@ -106,6 +106,12 @@ export interface RunSummary {
     lineCount: number;
     truncated: boolean;
   };
+  stdout?: {
+    tail: string;
+    lineCount: number;
+    truncated: boolean;
+  };
+  diagnostics?: unknown;
 }
 
 export interface MessageSummary {
@@ -1113,6 +1119,8 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     ...(ctx.run.failure ?? {}),
     ...(ctx.run.timings ?? {}),
     stderr: ctx.run.stderr,
+    stdout: ctx.run.stdout,
+    diagnostics: ctx.run.diagnostics,
     eventsSummary: ctx.eventsSummary,
     tokens,
     cost_usd: costBreakdown.cost_usd,
