@@ -130,6 +130,7 @@ import {
 } from './amrLoginPolling';
 import { closeAmrActivationWindowBestEffort } from './AmrLoginPill';
 import { AnimatePresence } from 'motion/react';
+import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import { renderModelOptions } from './modelOptions';
 import {
   providerModelsCacheKey,
@@ -516,12 +517,7 @@ export function EntryShell({
     const frame = window.requestAnimationFrame(() => {
       const scrollContainer = entryMainScrollRef.current;
       if (!scrollContainer) return;
-      if (typeof scrollContainer.scrollTo === 'function') {
-        scrollContainer.scrollTo({ top: 0, left: 0 });
-        return;
-      }
-      scrollContainer.scrollTop = 0;
-      scrollContainer.scrollLeft = 0;
+      smoothScrollToTop(scrollContainer);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [homePromptHandoff?.id, view]);
