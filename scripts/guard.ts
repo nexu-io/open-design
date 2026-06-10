@@ -98,6 +98,8 @@ const residualAllowedExactPaths = new Set([
   "apps/daemon/tests/fixtures/fake-vela.mjs",
   "tools/dev/bin/tools-dev.mjs",
   "tools/dev/esbuild.config.mjs",
+  // esbuild config for the MCP server bridging Claude Code to Open Design.
+  "packages/od-mcp/esbuild.config.mjs",
   "tools/pack/bin/tools-pack.mjs",
   "tools/pack/esbuild.config.mjs",
   "tools/serve/bin/tools-serve.mjs",
