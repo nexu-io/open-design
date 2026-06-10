@@ -59,6 +59,7 @@ import {
   DESIGN_TOOLBOX_ACTIONS,
   designToolboxActionBadge,
   designToolboxActionDescription,
+  designToolboxActionMatchesQuery,
   designToolboxActionTitle,
   findDesignToolboxSkill,
   getDesignToolboxAction,
@@ -3359,10 +3360,17 @@ function DesignToolboxPanel({
   );
   const visibleActions = useMemo(
     () =>
-      actions.filter((action) =>
-        designToolboxActionMatchesQuery(action, query, findDesignToolboxSkill(action, skills), t),
-      ),
-    [actions, query, skills, t],
+      actions.filter((action) => {
+        const skill = findDesignToolboxSkill(action, skills);
+        return designToolboxActionMatchesQuery(
+          action,
+          query,
+          skill,
+          t,
+          skill ? [localizeSkillName(locale, skill), localizeSkillDescription(locale, skill)] : [],
+        );
+      }),
+    [actions, query, skills, locale, t],
   );
   const visibleResources = useMemo(
     () => {
@@ -3946,29 +3954,6 @@ function designToolboxResourceIsActive(
   }
 }
 
-
-function designToolboxActionMatchesQuery(
-  action: DesignToolboxAction,
-  query: string,
-  skill: SkillSummary | null,
-  t: TranslateFn,
-): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return [
-    designToolboxActionTitle(action, t),
-    designToolboxActionBadge(action, t),
-    designToolboxActionDescription(action, t),
-    ...action.searchTerms,
-    skill?.id ?? '',
-    skill?.name ?? '',
-    skill?.description ?? '',
-    skill?.category ?? '',
-  ]
-    .join(' ')
-    .toLowerCase()
-    .includes(q);
-}
 
 function isDesignToolboxSkill(skill: SkillSummary): boolean {
   const category = skill.category ?? '';
