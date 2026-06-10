@@ -436,9 +436,9 @@ export type TrackingChatPanelPageViewSource =
 // --- Onboarding page_view (welcome flow) ---
 //
 // CSV row "Onboarding / page_view". Fires once per step exposure inside the
-// welcome flow. The current first-run flow is Connect → About you; the
-// design-system and generation literals remain in the contract for historical
-// rows and a future reintroduction. Each step's `step_index` / `step_name`
+// welcome flow. The current first-run flow is Connect → About you →
+// Newsletter; the design-system and generation literals remain in the
+// contract for historical rows and a future reintroduction. Each step's `step_index` / `step_name`
 // must match the enum pairs below. `onboarding_session_id` is generated once
 // per session so dashboards can stitch the funnel.
 export type TrackingOnboardingArea =

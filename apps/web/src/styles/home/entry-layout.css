@@ -1696,7 +1696,7 @@
 
 .onboarding-view__steps {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   width: min(860px, 100%);
   margin: 0;
@@ -2872,14 +2872,6 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 16px;
-}
-
-.onboarding-view__newsletter-inline {
-  display: grid;
-  gap: 14px;
-  margin-top: 8px;
-  padding-top: 18px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
 }
 
 .onboarding-view__email-field {

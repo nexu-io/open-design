@@ -47,6 +47,10 @@ test('[P0] @critical onboarding lets AMR Cloud sign in and complete setup after 
   await expect
     .poll(() => page.evaluate(() => window.__amrOnboardingStatusCalls ?? 0))
     .toBeGreaterThanOrEqual(2);
+  // Login success lands on the About-you step; advance past it to the
+  // newsletter step, which is now the final step that hosts Finish setup.
+  await expect(page.getByRole('button', { name: /^Continue$/i })).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: /^Continue$/i }).click();
   await expect(page.getByRole('button', { name: /Finish setup/i })).toBeVisible({ timeout: 10_000 });
   await expectOnboardingFinished(page);
   await pollStoredConfig(page).toMatchObject({
@@ -115,6 +119,10 @@ test('[P0] onboarding recovers from a transient AMR status failure and still con
 
   await page.getByRole('button', { name: /sign in to continue/i }).click();
 
+  // Recovery lands on About you; step through to the newsletter step where
+  // Finish setup now lives.
+  await expect(page.getByRole('button', { name: /^Continue$/i })).toBeVisible({ timeout: 12_000 });
+  await page.getByRole('button', { name: /^Continue$/i }).click();
   await expect(page.getByRole('button', { name: /Finish setup/i })).toBeVisible({ timeout: 12_000 });
 });
 
@@ -265,6 +273,9 @@ test('[P0] onboarding about-you step accepts profile selections and completes se
   await expect(expectOnboardingTrigger(page, 'Use case')).toContainText('Prototype / app UI');
   await expect(expectOnboardingTrigger(page, 'Where did you hear about us?')).toContainText('Search');
 
+  // About you is no longer the final step; advance to the newsletter step
+  // before finishing.
+  await page.getByRole('button', { name: /^Continue$/i }).click();
   await page.getByRole('button', { name: /Finish setup/i }).click();
 
   await expectOnboardingFinished(page);
@@ -322,6 +333,8 @@ test('[P0] @critical onboarding BYOK path can fetch models, test the provider, a
 
   await page.getByRole('button', { name: /^Continue$/i }).click();
   await expect(page.getByText(/Optional details for better defaults/i)).toBeVisible();
+  // Advance from About you to the newsletter step, then finish.
+  await page.getByRole('button', { name: /^Continue$/i }).click();
   await page.getByRole('button', { name: /Finish setup/i }).click();
 
   await expectOnboardingFinished(page);

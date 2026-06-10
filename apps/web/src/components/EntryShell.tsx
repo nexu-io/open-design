@@ -1141,10 +1141,14 @@ function OnboardingView({
       area = 'runtime';
       stepIndex = '1';
       stepName = 'connect';
-    } else {
+    } else if (step === 1) {
       area = 'about_you';
       stepIndex = '2';
       stepName = 'about_you';
+    } else {
+      area = 'newsletter';
+      stepIndex = '3';
+      stepName = 'newsletter';
     }
     trackPageView(analytics.track, {
       page_name: 'onboarding',
@@ -1164,6 +1168,10 @@ function OnboardingView({
   // PR #2453 follow-up).
   const onboardingStartedAtRef = useRef<number>(Date.now());
   const lifecycleReportedRef = useRef(false);
+  // Guards `about_you_submit` to exactly one emit per onboarding session,
+  // independent of how many times the user crosses the About-you step via
+  // the clickable stepper or Back/Continue.
+  const aboutYouReportedRef = useRef(false);
   function currentRuntimeType(): TrackingOnboardingRuntimeType {
     if (runtime === 'amr') return 'amr_cloud';
     if (runtime === 'local') return 'local_cli';
@@ -1176,7 +1184,8 @@ function OnboardingView({
     stepName: TrackingOnboardingStepName;
   } {
     if (stepIdx === 0) return { area: 'runtime', stepIndex: '1', stepName: 'connect' };
-    return { area: 'about_you', stepIndex: '2', stepName: 'about_you' };
+    if (stepIdx === 1) return { area: 'about_you', stepIndex: '2', stepName: 'about_you' };
+    return { area: 'newsletter', stepIndex: '3', stepName: 'newsletter' };
   }
   function emitOnboardingClick(
     element: TrackingOnboardingClickElement,
@@ -1270,6 +1279,7 @@ function OnboardingView({
   const steps = [
     t('settings.onboardingStepConnect'),
     t('settings.onboardingStepProfile'),
+    t('settings.onboardingStepNewsletter'),
   ];
   const isLastStep = step === steps.length - 1;
 
@@ -1437,16 +1447,17 @@ function OnboardingView({
       return;
     }
     if (isLastStep) {
-      // Emit the About-you survey snapshot FIRST, before the
-      // continue/complete pair. This is the bombproof carrier for the
-      // user's role / org size / use case / discovery source picks:
-      // per-dropdown clicks are racy on a fast Finish-setup (the user
-      // can pick all four dropdowns and click Finish inside one ~3s
-      // window, and PostHog's posthog-js client may not flush the
-      // individual rows before the route change unmounts the analytics
-      // provider). The snapshot click + the survey fields on
+      // Emit the About-you survey snapshot on the completion path, before
+      // the continue/complete pair. Reading `profileRef` captures the
+      // user's final role / org size / use case / discovery source picks
+      // even on a fast Finish. Gating it here — rather than when the user
+      // leaves the About-you step — keeps it exactly-once no matter how the
+      // final step was reached: primary CTA, Back-then-Continue, or a
+      // forward jump via the clickable stepper. `emitAboutYouSubmit` is
+      // additionally idempotent per session (see its `aboutYouReportedRef`
+      // guard). The snapshot click + the survey fields on
       // `onboarding_complete_result` give the funnel two independent
-      // paths for the same data.
+      // carriers for the same data.
       emitAboutYouSubmit();
       const newsletterEmail = profileRef.current.email;
       const shouldSubmitNewsletter =
@@ -1572,9 +1583,26 @@ function OnboardingView({
   // the latest state. `'unknown'` covers an untouched field on the
   // About-you step (the spec keeps the wire type open-string so a new
   // role / use-case option doesn't force a contract bump).
+  //
+  // This now fires from the completion path (the final Newsletter step),
+  // so it stamps the About-you step coordinates explicitly instead of
+  // reading the live `step` via `emitOnboardingClick`: the event describes
+  // the About-you submission, not whatever step the user finished on. The
+  // `aboutYouReportedRef` guard keeps it exactly-once per session.
   function emitAboutYouSubmit(): void {
+    if (aboutYouReportedRef.current) return;
+    const onboardingSessionId = onboardingSessionIdRef.current;
+    if (!onboardingSessionId) return;
+    aboutYouReportedRef.current = true;
     const snapshot = profileRef.current;
-    emitOnboardingClick('about_you_submit', 'continue', {
+    trackOnboardingClick(analytics.track, {
+      page_name: 'onboarding',
+      area: 'about_you',
+      element: 'about_you_submit',
+      action: 'continue',
+      step_index: '2',
+      step_name: 'about_you',
+      onboarding_session_id: onboardingSessionId,
       role: snapshot.role || 'unknown',
       organization_size: snapshot.orgSize || 'unknown',
       use_cases: snapshot.useCase.length > 0 ? snapshot.useCase : ['unknown'],
@@ -1582,7 +1610,7 @@ function OnboardingView({
     });
   }
 
-  // Optional newsletter signup captured on the About-you step. The last-step
+  // Optional newsletter signup captured on the Newsletter step. The last-step
   // button shows loading while this settles; failures are swallowed so
   // onboarding completion never depends on the marketing site. A blank or
   // malformed email is simply skipped. Only a boolean opt-in is tracked — the
@@ -2017,28 +2045,31 @@ function OnboardingView({
                   }}
                 />
               </div>
-              <div className="onboarding-view__newsletter-inline">
-                <OnboardingPanelHeader
-                  title={t('settings.onboardingNewsletterTitle')}
-                  body={t('settings.onboardingNewsletterBody')}
+            </div>
+          ) : null}
+
+          {step === 2 ? (
+            <div className="onboarding-view__panel onboarding-view__panel--newsletter">
+              <OnboardingPanelHeader
+                title={t('settings.onboardingNewsletterTitle')}
+                body={t('settings.onboardingNewsletterBody')}
+              />
+              <label className="onboarding-view__email-field">
+                <span className="onboarding-view__email-label">
+                  {t('newsletter.label')}
+                </span>
+                <input
+                  className="onboarding-view__email-input"
+                  type="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  placeholder={t('newsletter.placeholder')}
+                  value={profile.email}
+                  onChange={(event) =>
+                    setProfile((current) => ({ ...current, email: event.target.value }))
+                  }
                 />
-                <label className="onboarding-view__email-field">
-                  <span className="onboarding-view__email-label">
-                    {t('newsletter.label')}
-                  </span>
-                  <input
-                    className="onboarding-view__email-input"
-                    type="email"
-                    autoComplete="email"
-                    inputMode="email"
-                    placeholder={t('newsletter.placeholder')}
-                    value={profile.email}
-                    onChange={(event) =>
-                      setProfile((current) => ({ ...current, email: event.target.value }))
-                    }
-                  />
-                </label>
-              </div>
+              </label>
             </div>
           ) : null}
 
