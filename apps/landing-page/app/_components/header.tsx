@@ -331,6 +331,11 @@ export function Header({
                   { route: 'claude-code-design', name: 'Claude Code' },
                   { route: 'opencode-design', name: 'OpenCode' },
                   { route: 'gemini-design', name: 'Gemini CLI' },
+                  { route: 'copilot-design', name: 'GitHub Copilot CLI' },
+                  { route: 'qwen-design', name: 'Qwen Code' },
+                  { route: 'grok-design', name: 'Grok CLI' },
+                  { route: 'kimi-design', name: 'Kimi CLI' },
+                  { route: 'deepseek-design', name: 'DeepSeek TUI' },
                 ].map((agentItem) => (
                   <li role='none' key={agentItem.route}>
                     <a role='menuitem' href={href(`/agents/${agentItem.route}/`)}>
