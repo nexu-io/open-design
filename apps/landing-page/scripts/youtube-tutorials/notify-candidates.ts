@@ -138,10 +138,15 @@ async function resolveWindowStart(explicitDays: number | null): Promise<WindowRe
       return { fail: `watermark lookup failed: ${(e as Error).message}` };
     }
     if (watermark) {
-      // Use the prior run's start as the exact lower bound — no overlap.
-      // Consecutive windows are contiguous ([T_prev, now] then [T_this, now]),
-      // so delayed/skipped runs stay gap-free while nothing is re-emitted, which
-      // avoids duplicate digests without needing an "already notified" store.
+      // Lower bound = prior successful run's start. Windows are contiguous, so
+      // delayed/skipped runs stay gap-free. A residual overlap equal to the prior
+      // run's setup time (start → search call, ~1 min) can re-list a video once
+      // if it was published in that minute and not yet acted on. That is bounded
+      // and cosmetic here: the digest is human-reviewed, so a rare duplicate line
+      // is simply not picked twice, and once published it's filtered by the
+      // catalogue. Eliminating it fully needs a durable already-notified store,
+      // which is out of scope for this window-tuning change (follow-up if it ever
+      // proves noisy).
       return { since: watermark, reason: `since last successful run ${watermark}` };
     }
     return { since: isoDaysAgo(FALLBACK_DAYS), reason: `no prior successful run; ${FALLBACK_DAYS}-day window` };
