@@ -45,7 +45,7 @@ describe('same-run retry runtime', () => {
       await new Promise<void>((resolve) => started?.server.close(() => resolve()));
     }
     started = null;
-    if (binDir) await rm(binDir, { recursive: true, force: true });
+    if (binDir) await rm(binDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     binDir = null;
     restoreEnv(originalEnv);
   });
