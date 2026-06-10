@@ -5,7 +5,7 @@ import { forwardRef, useImperativeHandle } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane } from '../../src/components/ChatPane';
-import type { Conversation, ProjectMetadata } from '../../src/types';
+import type { ChatMessage, Conversation, ProjectMetadata } from '../../src/types';
 
 const composerMocks = vi.hoisted(() => ({
   focus: vi.fn(),
@@ -133,6 +133,29 @@ describe('ChatPane error card payload discipline (#3907)', () => {
     expect(container.querySelector('.msg.error')!.getAttribute('data-error-expanded')).toBe('true');
 
     rerender(paneElement({ error: `${LONG_RAW_ERROR} (second attempt)` }));
+
+    expect(container.querySelector('.msg.error')!.getAttribute('data-error-expanded')).toBe('false');
+    expect(container.querySelector('.chat-error-text')!.getAttribute('data-clamped')).toBe('true');
+  });
+
+  it('collapses the expanded view when a new failed run repeats the same payload', () => {
+    // Distinct failed runs frequently render the identical string (same
+    // upstream 400 on retry, or a shared runFailureUi translation), so the
+    // reset must key off the failure identity, not the display text.
+    const failedRunMessage = (id: string, runId: string): ChatMessage => ({
+      id,
+      role: 'assistant',
+      content: '',
+      runId,
+      runStatus: 'failed',
+      events: [{ kind: 'status', label: 'error', detail: LONG_RAW_ERROR }],
+    });
+    const { container, rerender } = renderPane({ messages: [failedRunMessage('a1', 'run-1')] });
+
+    fireEvent.click(screen.getByRole('button', { name: 'chat.errorShowDetails' }));
+    expect(container.querySelector('.msg.error')!.getAttribute('data-error-expanded')).toBe('true');
+
+    rerender(paneElement({ messages: [failedRunMessage('a2', 'run-2')] }));
 
     expect(container.querySelector('.msg.error')!.getAttribute('data-error-expanded')).toBe('false');
     expect(container.querySelector('.chat-error-text')!.getAttribute('data-clamped')).toBe('true');

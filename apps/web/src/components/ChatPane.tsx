@@ -954,9 +954,12 @@ export function ChatPane({
   const errorNeedsClamp =
     !!displayError && (displayError.length > 160 || displayError.includes('\n'));
   const [errorDetailsExpanded, setErrorDetailsExpanded] = useState(false);
+  // Key the reset on the failure identity too: distinct failed runs often
+  // render the identical string (same upstream 400 on retry, shared
+  // runFailureUi translation), and a new failure must start collapsed.
   useEffect(() => {
     setErrorDetailsExpanded(false);
-  }, [displayError]);
+  }, [displayError, retryAssistant?.id, retryAssistant?.runId]);
   // The failed run whose error this top-level card represents. AssistantMessage
   // suppresses only THIS message's per-message error pill (to avoid the
   // duplicate); other failed turns — older history, or once a follow-up makes
