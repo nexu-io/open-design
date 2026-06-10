@@ -71,8 +71,12 @@ test('[P2] captures the onboarding runtime selection surface', async ({ page }) 
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: /Welcome|欢迎/i })).toBeVisible();
   await expect(page.getByText(/Open Design AMR/i)).toBeVisible();
-  await expect(page.locator('.onboarding-view__amr-cloud-card .onboarding-view__model-picker select')).toHaveValue(
-    'deepseek-v4-flash',
+  await expect(
+    page
+      .locator('.onboarding-view__amr-cloud-card .onboarding-view__model-picker')
+      .getByRole('button'),
+  ).toContainText(
+    'DeepSeek V4 Flash',
   );
   await waitForVisualFonts(page);
 

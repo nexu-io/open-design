@@ -74,6 +74,7 @@ import {
   DESIGN_TOOLBOX_ACTIONS,
   designToolboxActionBadge,
   designToolboxActionDescription,
+  designToolboxActionMatchesQuery,
   designToolboxActionTitle,
   findDesignToolboxSkill,
   getDesignToolboxAction,
@@ -2657,6 +2658,49 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 fileInputRef.current?.click();
               }}
               attachLoading={uploading}
+              toolboxLabel={t('chat.designToolbox.title')}
+              renderToolbox={(close) => (
+                <DesignToolboxPanel
+                  actions={DESIGN_TOOLBOX_ACTIONS}
+                  skills={skills}
+                  plugins={pluginsForComposer}
+                  mcpServers={enabledMcpServers}
+                  mcpTemplates={mcpTemplates}
+                  connectors={connectors}
+                  projectFiles={projectFiles}
+                  activeSkillIds={stagedSkills.map((skill) => skill.id)}
+                  activePluginId={activeAppliedPlugin?.pluginId ?? pinnedPluginId ?? null}
+                  activeMcpServerIds={stagedMcpServers.map((server) => server.id)}
+                  activeConnectorIds={stagedConnectors.map((connector) => connector.id)}
+                  activeFilePaths={staged.map((item) => item.path)}
+                  onOpened={() => trackDesignToolbox({ element: 'design_toolbox_open' })}
+                  onPickAction={(action) => {
+                    trackDesignToolbox({
+                      element: 'design_toolbox_action',
+                      toolbox_action_id: action.id,
+                    });
+                    applyDesignToolboxAction(action);
+                    close();
+                  }}
+                  onPickSkill={(skill) => {
+                    trackDesignToolbox({
+                      element: 'design_toolbox_resource',
+                      resource_kind: 'skill',
+                      resource_id: skill.id,
+                    });
+                    applyDesignToolboxSkill(skill);
+                    close();
+                  }}
+                  onPickResource={(resource) => {
+                    trackDesignToolbox({
+                      element: 'design_toolbox_resource',
+                      ...designToolboxResourceTracking(resource),
+                    });
+                    applyDesignToolboxResource(resource);
+                    close();
+                  }}
+                />
+              )}
             />
             {designToolboxOpen ? (
               <div className="composer-toolbox-standalone">
@@ -3666,10 +3710,17 @@ function DesignToolboxPanel({
   );
   const visibleActions = useMemo(
     () =>
-      actions.filter((action) =>
-        designToolboxActionMatchesQuery(action, query, findDesignToolboxSkill(action, skills), t),
-      ),
-    [actions, query, skills, t],
+      actions.filter((action) => {
+        const skill = findDesignToolboxSkill(action, skills);
+        return designToolboxActionMatchesQuery(
+          action,
+          query,
+          skill,
+          t,
+          skill ? [localizeSkillName(locale, skill), localizeSkillDescription(locale, skill)] : [],
+        );
+      }),
+    [actions, query, skills, locale, t],
   );
   const visibleResources = useMemo(
     () => {
@@ -4253,29 +4304,6 @@ function designToolboxResourceIsActive(
   }
 }
 
-
-function designToolboxActionMatchesQuery(
-  action: DesignToolboxAction,
-  query: string,
-  skill: SkillSummary | null,
-  t: TranslateFn,
-): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return [
-    designToolboxActionTitle(action, t),
-    designToolboxActionBadge(action, t),
-    designToolboxActionDescription(action, t),
-    ...action.searchTerms,
-    skill?.id ?? '',
-    skill?.name ?? '',
-    skill?.description ?? '',
-    skill?.category ?? '',
-  ]
-    .join(' ')
-    .toLowerCase()
-    .includes(q);
-}
 
 function isDesignToolboxSkill(skill: SkillSummary): boolean {
   const category = skill.category ?? '';

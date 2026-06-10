@@ -45,10 +45,13 @@ const PLATFORM_LABEL_KEY: Record<
 interface Props {
   share: SocialShareResponse;
   className?: string;
+  // Fired at click time for both the intent and copy flavours so callers can
+  // attach analytics without each one re-implementing the branch logic.
+  onShare?: (platform: SocialSharePlatform) => void;
   onAfterShare?: () => void;
 }
 
-export function SocialShareGrid({ share, className, onAfterShare }: Props) {
+export function SocialShareGrid({ share, className, onShare, onAfterShare }: Props) {
   const t = useT();
   const [feedbackPlatform, setFeedbackPlatform] = useState<SocialSharePlatform | null>(null);
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -100,7 +103,10 @@ export function SocialShareGrid({ share, className, onAfterShare }: Props) {
               href={target.shareUrl}
               target="_blank"
               rel="noreferrer noopener"
-              onClick={() => onAfterShare?.()}
+              onClick={() => {
+                onShare?.(target.platform);
+                onAfterShare?.();
+              }}
             >
               <span className="social-share-button__icon" aria-hidden>{icon}</span>
               <span>{label}</span>
@@ -113,6 +119,7 @@ export function SocialShareGrid({ share, className, onAfterShare }: Props) {
             type="button"
             className={`social-share-button social-share-button--${target.platform}`}
             onClick={() => {
+              onShare?.(target.platform);
               void copyAndOpen(target.platform, target.entryUrl);
             }}
           >

@@ -23,6 +23,7 @@ import { PluginCard } from './plugins-home/PluginCard';
 import { isFeaturedPlugin, type FacetOption } from './plugins-home/facets';
 import { localizePluginTitle } from './plugins-home/localization';
 import { usePluginFacets } from './plugins-home/usePluginFacets';
+import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
 import { useSavedPluginIds } from './plugins-home/savedPlugins';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Toast } from './Toast';
@@ -462,7 +463,9 @@ function pluginFacetLabel(slug: string, fallback: string, t: ReturnType<typeof u
     case 'public-link': return t('pluginsHome.facet.publicLink');
     case 'github-pr': return t('pluginsHome.facet.githubPr');
     case 'github-gist': return t('pluginsHome.facet.githubGist');
-    default: return fallback;
+    // Subcategory pills render through the same CategoryPill, so unknown
+    // top-level slugs fall through to the subfacet table before giving up.
+    default: return pluginSubfacetLabel(slug, fallback, t);
   }
 }
 

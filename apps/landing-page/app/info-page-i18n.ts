@@ -6,6 +6,7 @@ import {
   type LandingLocaleCode,
 } from './i18n';
 import { buildLocalizedAgentGuides } from './agent-guides.i18n';
+import { LOCALIZED_ALTERNATIVES } from './alternatives-i18n';
 
 type LinkText = {
   label: string;
@@ -139,6 +140,47 @@ type AgentGuideCopy = {
   faq: NamedText[];
   ctaTitle: string;
   ctaBody: string;
+};
+
+// Shape of one competitor comparison ("alternative") detail page.
+// Mirrors the original `claudeAlternative` block so every per-competitor
+// page under `/alternatives/<slug>/` shares one structure. The
+// `pickClaude*` field names are historical — read them as "pick the
+// competitor".
+export type AlternativeDetailCopy = {
+  title: string;
+  description: string;
+  breadcrumb: string;
+  label: string;
+  heading: string;
+  lead: string;
+  tldrTitle: string;
+  tldrBody: string;
+  toc: string[];
+  whyTitle: string;
+  whyLead: string;
+  reasons: LinkText[];
+  localByokTitle: string;
+  localByokBody: string[];
+  featureTitle: string;
+  features: FeatureCopy[];
+  whoTitle: string;
+  pickClaudeTitle: string;
+  pickClaude: string[];
+  pickOpenTitle: string;
+  pickOpen: string[];
+  migrateTitle: string;
+  migrateLead: string;
+  migrateSteps: string[];
+  migrateClosing: string;
+  faqTitle: string;
+  faq: NamedText[];
+  ctaTitle: string;
+  ctaBody: string;
+  // Optional rich long-form payload (hero illustration + sectioned blocks),
+  // same contract as agent detail pages. When present, the alternatives page
+  // renders the industrial long-form layout instead of the flat sections.
+  rich?: AgentRichCopy;
 };
 
 export interface InfoPageCopy {
@@ -281,6 +323,10 @@ export interface InfoPageCopy {
   // `cursor`, `opencode`). Partial: non-en locales that don't override
   // a given slug inherit the English copy via the `...en` spread.
   agentGuides: Partial<Record<string, AgentGuideCopy>>;
+  // Per-competitor comparison pages, keyed by slug (`lovable`, `figma`,
+  // `bolt`, `v0`, `framer`). Optional + Partial: only en supplies copy
+  // today; every other locale falls back to en via `getAlternativeCopy`.
+  alternatives?: Partial<Record<string, AlternativeDetailCopy>>;
   download: {
     title: string;
     description: string;
@@ -509,15 +555,15 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
         'Pick the agent already on your laptop, point Open Design at it, and start rendering.',
     },
     compare: {
-      title: 'Open Design vs Claude Design, Figma Make, v0, Lovable — honest comparison',
+      title: 'Open Design vs Figma, Lovable, Bolt, v0, Framer — honest comparisons',
       description:
-        'Compare Open Design to the major AI design tools. Hosted vs local-first, BYOK vs vendor-locked, single-shot generation vs portable DESIGN.md systems.',
+        'Compare Open Design to the major AI design and app-building tools. Hosted vs local-first, BYOK vs vendor-locked, single-shot generation vs portable DESIGN.md systems.',
       breadcrumb: 'Compare',
       label: 'Evaluation · Nº 02',
       heading: 'Open Design vs everything else.',
       lead:
-        'Short, honest summaries of how Open Design relates to the other AI design tools you might be evaluating.',
-      toc: ['vs Claude Design', 'vs Figma Make', 'vs v0', 'vs Lovable / Bolt', 'vs Open CoDesign', 'Honest limits'],
+        'Short, honest summaries of how Open Design relates to the other AI design and app-building tools you might be evaluating. Each links to a full, candid comparison.',
+      toc: ['vs Claude Design', 'vs Figma', 'vs Lovable', 'vs Bolt', 'vs v0', 'vs Framer', 'Honest limits'],
       comparisons: [
         {
           competitor: 'Claude Design',
@@ -526,28 +572,34 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           cta: 'Read the full comparison ->',
         },
         {
-          competitor: 'Figma Make',
+          competitor: 'Figma',
           summary:
-            'Figma Make focuses on prompt-to-mockup inside Figma. Open Design ships portable artifacts directly into your project.',
-          cta: 'See the repo for migration notes ->',
+            'Figma is a hosted, hands-on design canvas. Open Design is agent-driven and local-first, with your brand and artifacts as files in your repo.',
+          cta: 'Read the full comparison ->',
         },
         {
-          competitor: 'v0 by Vercel',
+          competitor: 'Lovable',
           summary:
-            'v0 generates React components on a hosted runtime. Open Design generates decks, dashboards, landing pages, and brand systems locally.',
-          cta: 'See the repo for migration notes ->',
+            'Lovable ships hosted prompt-to-app builds. Open Design is the design-first, BYOK layer for the coding agent you already use.',
+          cta: 'Read the full comparison ->',
         },
         {
-          competitor: 'Lovable / Bolt',
+          competitor: 'Bolt',
           summary:
-            'Lovable and Bolt focus on hosted prompt-to-app. Open Design is the design-skill layer for an agent you already use.',
-          cta: 'See the repo for migration notes ->',
+            'Bolt builds running full-stack apps in the browser. Open Design produces design artifacts you own, locally, with your own agent.',
+          cta: 'Read the full comparison ->',
         },
         {
-          competitor: 'Open CoDesign',
+          competitor: 'v0',
           summary:
-            'Open CoDesign is a sibling open-source project. Open Design can wrap codesign-style workflows through its skill protocol.',
-          cta: 'See the repo for migration notes ->',
+            'v0 generates hosted UI tuned for the Vercel and React stack. Open Design generates design with any agent, locally, as files you own.',
+          cta: 'Read the full comparison ->',
+        },
+        {
+          competitor: 'Framer',
+          summary:
+            'Framer is a hosted no-code site builder. Open Design is the open-source, agent-driven alternative that keeps design as files you deploy anywhere.',
+          cta: 'Read the full comparison ->',
         },
       ],
       limitsTitle: "Honest limits — what Open Design isn't",
@@ -637,6 +689,1235 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
       ctaTitle: 'Switch in three commands.',
       ctaBody:
         'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
+    },
+    alternatives: {
+      lovable: {
+        title: 'Open-source Lovable alternative — Open Design (design-first, BYOK, local)',
+        description:
+          'Open Design is the open-source, local-first alternative to Lovable for design-first work. BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen — artifacts ship as files in your repo.',
+        breadcrumb: 'Open-source Lovable alternative',
+        label: 'Alternative · Lovable',
+        heading: 'Open-source Lovable alternative.',
+        lead:
+          'Lovable turns a prompt into a deployed full-stack app. Open Design is a self-evolving design agent for Claude Code — local-first, BYOK, open source — focused on design artifacts and a portable brand rather than shipping the backend. Different primary job, overlapping prompt-to-UI surface.',
+        tldrTitle: 'TL;DR',
+        tldrBody:
+          'Lovable ships hosted apps; Open Design ships design artifacts as files you own. If you want a design-first, BYOK, open-source workflow with your own agent, Open Design is the alternative — and it is honest about where Lovable wins.',
+        toc: ['Why people search', 'Local-first + BYOK', 'Feature comparison', 'Who should pick which', 'Migration / first run', 'FAQ'],
+        whyTitle: 'Why people search for a Lovable alternative',
+        whyLead: 'A few reasons keep showing up when teams look past Lovable:',
+        reasons: [
+          { label: 'Own the output.', body: 'Designs and code should live as files in your repo, not inside a hosted project.' },
+          { label: 'BYOK economics.', body: 'Bring your own provider key; API spend bills to your account instead of per-message credits.' },
+          { label: 'Agent choice.', body: 'Drive design from the coding agent you already use — Claude Code, Codex, Cursor, and more.' },
+          { label: 'Open source.', body: 'Apache-2.0, full source, self-hostable and rebrandable for your studio.' },
+          { label: 'Design-first.', body: 'A portable DESIGN.md brand every skill respects, not one-off per-project styling.' },
+        ],
+        localByokTitle: 'Local-first + BYOK, explained',
+        localByokBody: [
+          'Open Design runs a desktop app, a local daemon, and Markdown skill/system catalogs on your machine — no design output is forced through a vendor cloud.',
+          'You bring your own agent key (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen). Credentials stay in local config or environment variables, and API spend bills to you.',
+        ],
+        featureTitle: 'Feature comparison',
+        features: [
+          { name: 'Primary job', od: 'Design-first artifacts + portable brand', cd: 'Prompt-to-deployed full-stack app' },
+          { name: 'License', od: 'Apache-2.0, full source on GitHub', cd: 'Closed-source, hosted product' },
+          { name: 'Runtime', od: 'Local daemon on your machine', cd: 'Vendor cloud' },
+          { name: 'Agent', od: 'BYOK: Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', cd: 'Vendor-managed models' },
+          { name: 'API spend', od: 'Bills to your account', cd: 'Per-message credits / subscription' },
+          { name: 'Design system', od: 'Portable DESIGN.md in your repo', cd: 'Per-project styling' },
+          { name: 'Output ownership', od: 'Files in your project directory', cd: 'Hosted project + code export' },
+          { name: 'Hosting / deploy', od: 'You own deploy; not bundled', cd: 'One-click hosting included' },
+          { name: 'Self-host', od: 'Yes, run anywhere Node 24 runs', cd: 'No' },
+          { name: 'CLI / CI', od: 'Yes via od CLI + HTTP daemon', cd: 'Web UI first' },
+        ],
+        whoTitle: 'Who should pick which',
+        pickClaudeTitle: 'Pick Lovable if',
+        pickClaude: [
+          'You want a deployed full-stack web app from a prompt with zero setup.',
+          'You want one-click hosting and the backend wired up for you.',
+          'You prefer a hosted UI and per-project credits over local files.',
+        ],
+        pickOpenTitle: 'Pick Open Design if',
+        pickOpen: [
+          'You want design artifacts and a brand as version-controlled files.',
+          'You want BYOK with your existing coding agent.',
+          'You want open source you can fork, rebrand, embed in CLI, or self-host.',
+          'You want one DESIGN.md per brand that every skill respects.',
+        ],
+        migrateTitle: 'Migration / first run',
+        migrateLead: 'There is no automatic import from Lovable today; start design-first with a one-time brand-extraction run:',
+        migrateSteps: [
+          'Install Open Design from the quickstart.',
+          'Open the web UI and point your agent at a Lovable project or screenshot you like.',
+          'Ask the agent to extract the brand into a DESIGN.md file.',
+          'Pick a skill and render it against your new brand.',
+        ],
+        migrateClosing:
+          'From then on, every skill renders in your brand without re-prompting — and the files stay in your repo.',
+        faqTitle: 'FAQ',
+        faq: [
+          { name: 'Is Open Design a drop-in replacement for Lovable?', text: 'No. Lovable ships deployed full-stack apps; Open Design is design-first and produces artifacts you own. They overlap on prompt-to-UI, not on hosting a backend.' },
+          { name: 'Can Open Design build a full app like Lovable?', text: 'Open Design focuses on design artifacts, prototypes, and brand systems. For production backends and one-click hosting, Lovable is the better fit.' },
+          { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. API spend bills to your account.' },
+          { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
+          { name: 'Can I keep using Lovable alongside Open Design?', text: 'Yes. Many teams prototype design in Open Design and ship apps in Lovable; migration is manual today.' },
+          { name: 'Why "open-source Lovable alternative" rather than "AI design tool"?', text: 'That is how many teams describe the product shape they are searching for when they want files and BYOK.' },
+        ],
+        ctaTitle: 'Design-first, in three commands.',
+        ctaBody:
+          'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
+        rich: {
+          heroCtaLead:
+            'Open Design is the open-source, local-first design layer around the coding agent you already use — your key, your files, a curated skill and design-system library.',
+          heroCtaActions: [
+            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+          ],
+          heroImage: {
+            src: '/alternatives/lovable/lovable-hero.webp',
+            alt: 'Open Design vs Lovable — warm-paper editorial illustration of code converging into a design hub',
+          },
+          intro: [
+            'Lovable turns a prompt into a deployed full-stack app. Open Design is a self-evolving design agent for Claude Code and other coding agents — local-first, BYOK, Apache-2.0 — focused on producing design artifacts and a portable brand you keep as files in your own repo.',
+            'This is an honest comparison: what Lovable is, why teams look for an alternative, how local-first + BYOK changes the economics, a feature-by-feature table, who should pick which, and how to move a design across. It is candid about where Lovable wins.',
+          ],
+          tocLabel: 'On this page',
+          toc: [
+            { id: 'what-is-lovable', label: 'What Lovable is' },
+            { id: 'why-switch', label: 'Why switch' },
+            { id: 'local-byok', label: 'Local-first + BYOK' },
+            { id: 'compare', label: 'Feature comparison' },
+            { id: 'who-picks', label: 'Who picks which' },
+            { id: 'migrate', label: 'Migration' },
+          ],
+          sections: [
+            {
+              id: 'what-is-lovable',
+              heading: 'What Lovable is',
+              blocks: [
+                { kind: 'p', text: 'Lovable (lovable.dev) is a hosted AI app builder: describe a product in natural language and it generates and deploys a full-stack web app — frontend, backend, and database wiring — that you can host in one click. It is genuinely good at going from prompt to a running app.' },
+                { kind: 'p', text: 'It is closed-source and runs in the vendor cloud, billed by subscription and per-message credits. That is a different posture from Open Design, which is a local-first, open-source design agent you point your own coding agent at — and the two overlap on prompt-to-UI, not on hosting a backend.' },
+                { kind: 'ul', items: [
+                  'Vendor: Lovable (lovable.dev) — hosted SaaS',
+                  'Pricing: subscription + per-message credits',
+                  'Primary output: a deployed app, plus code export',
+                ] },
+              ],
+            },
+            {
+              id: 'why-switch',
+              heading: 'Why teams look for a Lovable alternative',
+              blocks: [
+                { kind: 'p', text: 'Teams start looking past Lovable when they want to own the output, control spend, and keep design as portable, version-controlled assets rather than state inside a hosted project.' },
+                { kind: 'steps', items: [
+                  { label: 'Own the output', body: 'Designs and code should live as files in your repo, not inside a hosted project you can only edit through one UI.' },
+                  { label: 'BYOK economics', body: 'Bring your own provider key so API spend bills to your account, instead of paying per-message credits on top of a subscription.' },
+                  { label: 'Agent choice', body: 'Drive design from the coding agent you already use — Claude Code, Codex, Cursor, and more — not a single vendor-managed model.' },
+                  { label: 'Open source', body: 'Apache-2.0 and self-hostable: fork it, rebrand it for your studio, or embed it in CI.' },
+                ] },
+              ],
+            },
+            {
+              id: 'local-byok',
+              heading: 'Local-first + BYOK, explained',
+              blocks: [
+                { kind: 'p', text: 'Open Design runs a desktop app, a local daemon, and Markdown skill and design-system catalogs on your machine. No design output is forced through a vendor cloud, and your brand lives in your repo as a portable DESIGN.md file every skill respects.' },
+                { kind: 'p', text: 'You bring your own agent key. Credentials stay in local config or environment variables — Open Design never proxies them — and the API spend bills directly to you.' },
+              ],
+            },
+            {
+              id: 'compare',
+              heading: 'Open Design vs Lovable, feature by feature',
+              blocks: [
+                { kind: 'table', columns: ['Feature', 'Open Design', 'Lovable'], rows: [
+                  ['Primary job', 'Design-first artifacts + portable brand', 'Prompt-to-deployed full-stack app'],
+                  ['License', 'Apache-2.0, full source on GitHub', 'Closed-source, hosted product'],
+                  ['Runtime', 'Local daemon on your machine', 'Vendor cloud'],
+                  ['Agent', 'BYOK: Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', 'Vendor-managed models'],
+                  ['API spend', 'Bills to your account', 'Per-message credits / subscription'],
+                  ['Design system', 'Portable DESIGN.md in your repo', 'Per-project styling'],
+                  ['Output ownership', 'Files in your project directory', 'Hosted project + code export'],
+                  ['Hosting / deploy', 'You own deploy; not bundled', 'One-click hosting included'],
+                  ['Self-host', 'Yes, run anywhere Node 24 runs', 'No'],
+                  ['CLI / CI', 'Yes via od CLI + HTTP daemon', 'Web UI first'],
+                ] },
+                { kind: 'p', text: 'Where Lovable wins: if your goal is a deployed, hosted full-stack app with the backend wired up for you, Lovable does that out of the box and Open Design does not. Open Design is design-first.' },
+              ],
+            },
+            {
+              id: 'who-picks',
+              heading: 'Who should pick which',
+              blocks: [
+                { kind: 'p', text: 'Pick Lovable if:' },
+                { kind: 'ul', items: [
+                  'You want a deployed full-stack web app from a prompt with zero setup.',
+                  'You want one-click hosting and the backend wired up for you.',
+                  'You prefer a hosted UI and per-project credits over local files.',
+                ] },
+                { kind: 'p', text: 'Pick Open Design if:' },
+                { kind: 'ul', items: [
+                  'You want design artifacts and a brand as version-controlled files.',
+                  'You want BYOK with your existing coding agent.',
+                  'You want open source you can fork, rebrand, embed in CLI, or self-host.',
+                  'You want one DESIGN.md per brand that every skill respects.',
+                ] },
+              ],
+            },
+            {
+              id: 'migrate',
+              heading: 'Moving a design from Lovable into Open Design',
+              blocks: [
+                { kind: 'p', text: 'There is no automatic import from Lovable today; start design-first with a one-time brand-extraction run.' },
+                { kind: 'ol', items: [
+                  'Install Open Design from the quickstart.',
+                  'Open the web UI and point your agent at a Lovable project or screenshot you like.',
+                  'Ask the agent to extract the brand into a DESIGN.md file.',
+                  'Pick a skill and render it against your new brand.',
+                ] },
+                { kind: 'p', text: 'From then on, every skill renders in your brand without re-prompting — and the files stay in your repo.' },
+              ],
+            },
+          ],
+          faqTitle: 'FAQ',
+          faq: [
+            { name: 'Is Open Design a drop-in replacement for Lovable?', text: 'No. Lovable ships deployed full-stack apps; Open Design is design-first and produces artifacts you own. They overlap on prompt-to-UI, not on hosting a backend.' },
+            { name: 'Can Open Design build a full app like Lovable?', text: 'Open Design focuses on design artifacts, prototypes, and brand systems. For production backends and one-click hosting, Lovable is the better fit.' },
+            { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. API spend bills to your account and credentials are never proxied through us.' },
+            { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
+            { name: 'Can I keep using Lovable alongside Open Design?', text: 'Yes. Many teams prototype design in Open Design and ship apps in Lovable; migration is manual today.' },
+            { name: 'Is Open Design affiliated with Lovable?', text: 'No. Open Design is an independent, open-source project. Lovable is a trademark of its owner; this is an unaffiliated comparison.' },
+          ],
+          ctaTitle: 'Design-first, in three commands.',
+          ctaBody:
+            'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
+          ctaActions: [
+            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+          ],
+          hubLinkLabel: 'See all comparisons',
+        },
+      },
+      figma: {
+        title: 'Open-source Figma alternative — Open Design (design-first, BYOK, local)',
+        description:
+          'Open Design is the open-source, local-first alternative to Figma for agent-driven design. BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen — your brand and artifacts live as files in your repo.',
+        breadcrumb: 'Open-source Figma alternative',
+        label: 'Alternative · Figma',
+        heading: 'Open-source Figma alternative.',
+        lead:
+          'Figma is a hosted, collaborative canvas you design on by hand. Open Design is a self-evolving design agent for Claude Code — local-first, BYOK, Apache-2.0 — where you drive design through your coding agent and keep a portable brand as files. Different shape, same goal: shipped interfaces.',
+        tldrTitle: 'TL;DR',
+        tldrBody:
+          'Figma is a manual cloud design tool; Open Design is an agent-driven, local-first, open-source design layer. If you want files in your repo and BYOK over a hosted canvas, Open Design is the alternative — and it is honest about where Figma wins.',
+        toc: ['Why people search', 'Local-first + BYOK', 'Feature comparison', 'Who should pick which', 'Migration / first run', 'FAQ'],
+        whyTitle: 'Why people search for a Figma alternative',
+        whyLead: 'A few reasons keep coming up when teams look past Figma:',
+        reasons: [
+          { label: 'Own the files.', body: 'Design should be version-controlled artifacts in your repo, not documents in a vendor cloud.' },
+          { label: 'Open source.', body: 'Apache-2.0, self-hostable, rebrandable — not a closed, per-seat SaaS.' },
+          { label: 'Agent-driven.', body: 'Generate and iterate design with the coding agent you already use, instead of drawing every frame by hand.' },
+          { label: 'Portable brand.', body: 'One DESIGN.md encodes a brand every skill respects, versioned with your code.' },
+        ],
+        localByokTitle: 'Local-first + BYOK, explained',
+        localByokBody: [
+          'Open Design runs a desktop app, a local daemon, and Markdown skill and design-system catalogs on your machine — your designs are files, not cloud documents.',
+          'You bring your own agent key; credentials stay local and never proxy through us, and API spend bills to you.',
+        ],
+        featureTitle: 'Feature comparison',
+        features: [
+          { name: 'How you design', od: 'Prompt your coding agent', cd: 'Manual canvas, by hand' },
+          { name: 'License', od: 'Apache-2.0, full source on GitHub', cd: 'Closed-source, hosted product' },
+          { name: 'Runtime', od: 'Local daemon on your machine', cd: 'Vendor cloud' },
+          { name: 'Output ownership', od: 'Files in your project directory', cd: 'Cloud documents' },
+          { name: 'Design system', od: 'Portable DESIGN.md in your repo', cd: 'Hosted libraries' },
+          { name: 'Collaboration', od: 'Git / your repo', cd: 'Real-time multiplayer canvas' },
+          { name: 'Pricing', od: 'Free product; you pay agent API costs', cd: 'Per-editor seats' },
+          { name: 'Self-host', od: 'Yes, run anywhere Node 24 runs', cd: 'No' },
+          { name: 'Handoff', od: 'Code artifacts in your repo', cd: 'Dev Mode / inspect' },
+        ],
+        whoTitle: 'Who should pick which',
+        pickClaudeTitle: 'Pick Figma if',
+        pickClaude: [
+          'You want hands-on vector editing and a real-time multiplayer canvas.',
+          'Your team lives in a mature plugin and component ecosystem.',
+          'You prefer a hosted designer-to-developer handoff over files.',
+        ],
+        pickOpenTitle: 'Pick Open Design if',
+        pickOpen: [
+          'You want design artifacts and a brand as version-controlled files.',
+          'You want BYOK with your existing coding agent.',
+          'You want open source you can fork, rebrand, embed in CLI, or self-host.',
+          'You want one DESIGN.md per brand that every skill respects.',
+        ],
+        migrateTitle: 'Migration / first run',
+        migrateLead: 'There is no automatic import from Figma today; start design-first with a one-time brand-extraction run:',
+        migrateSteps: [
+          'Install Open Design from the quickstart.',
+          'Open the web UI and point your agent at a Figma frame or screenshot you like.',
+          'Ask the agent to extract the brand into a DESIGN.md file.',
+          'Pick a skill and render it against your new brand.',
+        ],
+        migrateClosing: 'From then on, every skill renders in your brand without re-prompting — and the files stay in your repo.',
+        faqTitle: 'FAQ',
+        faq: [
+          { name: 'Is Open Design a drop-in replacement for Figma?', text: 'No. Figma is a hands-on collaborative canvas; Open Design is an agent-driven, local-first design layer. They overlap on producing interfaces, not on real-time canvas editing.' },
+          { name: 'Can I still use Figma alongside Open Design?', text: 'Yes. Many teams design in Figma and use Open Design to generate and iterate from a portable brand; migration is manual today.' },
+          { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. Credentials are never proxied through us.' },
+          { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
+          { name: 'Is Open Design affiliated with Figma?', text: 'No. Open Design is an independent, open-source project. Figma is a trademark of its owner; this is an unaffiliated comparison.' },
+        ],
+        ctaTitle: 'Design-first, in three commands.',
+        ctaBody:
+          'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
+        rich: {
+          heroCtaLead:
+            'Open Design is the open-source, local-first design layer around the coding agent you already use — your key, your files, a curated skill and design-system library.',
+          heroCtaActions: [
+            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+          ],
+          heroImage: {
+            src: '/alternatives/figma/figma-hero.webp',
+            alt: 'Open Design vs Figma — warm-paper editorial illustration of code converging into a design hub',
+          },
+          intro: [
+            'Figma turns a cloud canvas into shared, hands-on interface design. Open Design is a self-evolving design agent for Claude Code and other coding agents — local-first, BYOK, Apache-2.0 — where you drive design through your agent and keep a portable brand as files in your own repo.',
+            'This is an honest comparison: what Figma is, why teams look for an alternative, how local-first + BYOK changes the shape of the work, a feature-by-feature table, who should pick which, and how to move a design across. It is candid about where Figma wins.',
+          ],
+          tocLabel: 'On this page',
+          toc: [
+            { id: 'what-is-figma', label: 'What Figma is' },
+            { id: 'why-switch', label: 'Why switch' },
+            { id: 'local-byok', label: 'Local-first + BYOK' },
+            { id: 'compare', label: 'Feature comparison' },
+            { id: 'who-picks', label: 'Who picks which' },
+            { id: 'migrate', label: 'Migration' },
+          ],
+          sections: [
+            {
+              id: 'what-is-figma',
+              heading: 'What Figma is',
+              blocks: [
+                { kind: 'p', text: 'Figma is a hosted, collaborative interface design tool: a browser-based vector canvas with real-time multiplayer editing, prototyping, a large plugin and component ecosystem, and a designer-to-developer handoff. It is the default for hands-on UI design, and it has added AI features of its own.' },
+                { kind: 'p', text: 'It is closed-source and runs in the vendor cloud, billed per editor seat. Open Design is a different shape: a local-first, open-source design agent you point your own coding agent at — the two overlap on producing interfaces, not on real-time canvas editing.' },
+                { kind: 'ul', items: [
+                  'Vendor: Figma — hosted SaaS',
+                  'Pricing: per-editor seats',
+                  'Primary output: cloud design documents',
+                ] },
+              ],
+            },
+            {
+              id: 'why-switch',
+              heading: 'Why teams look for a Figma alternative',
+              blocks: [
+                { kind: 'p', text: 'Teams start looking past Figma when they want design to be files they own, generated and iterated by the agent they already use, rather than documents living in a vendor cloud.' },
+                { kind: 'steps', items: [
+                  { label: 'Own the files', body: 'Design should be version-controlled artifacts in your repo, not cloud documents you only reach through one app.' },
+                  { label: 'Open source', body: 'Apache-2.0 and self-hostable: fork it, rebrand it for your studio, or embed it in CI — not a closed per-seat SaaS.' },
+                  { label: 'Agent-driven', body: 'Generate and iterate design with the coding agent you already use, instead of drawing every frame by hand.' },
+                  { label: 'Portable brand', body: 'One DESIGN.md encodes a brand every skill respects, versioned with your code.' },
+                ] },
+              ],
+            },
+            {
+              id: 'local-byok',
+              heading: 'Local-first + BYOK, explained',
+              blocks: [
+                { kind: 'p', text: 'Open Design runs a desktop app, a local daemon, and Markdown skill and design-system catalogs on your machine. Your designs are files, not cloud documents, and your brand lives in your repo as a portable DESIGN.md file every skill respects.' },
+                { kind: 'p', text: 'You bring your own agent key. Credentials stay in local config or environment variables — Open Design never proxies them — and the API spend bills directly to you.' },
+              ],
+            },
+            {
+              id: 'compare',
+              heading: 'Open Design vs Figma, feature by feature',
+              blocks: [
+                { kind: 'table', columns: ['Feature', 'Open Design', 'Figma'], rows: [
+                  ['How you design', 'Prompt your coding agent', 'Manual canvas, by hand'],
+                  ['License', 'Apache-2.0, full source on GitHub', 'Closed-source, hosted product'],
+                  ['Runtime', 'Local daemon on your machine', 'Vendor cloud'],
+                  ['Output ownership', 'Files in your project directory', 'Cloud documents'],
+                  ['Design system', 'Portable DESIGN.md in your repo', 'Hosted libraries'],
+                  ['Collaboration', 'Git / your repo', 'Real-time multiplayer canvas'],
+                  ['Pricing', 'Free product; you pay agent API costs', 'Per-editor seats'],
+                  ['Self-host', 'Yes, run anywhere Node 24 runs', 'No'],
+                  ['Handoff', 'Code artifacts in your repo', 'Dev Mode / inspect'],
+                ] },
+                { kind: 'p', text: 'Where Figma wins: hands-on vector editing, a real-time multiplayer canvas, and a deep, mature plugin and component ecosystem. If that hands-on canvas is the job, Figma is hard to beat — Open Design is design-first and agent-driven instead.' },
+              ],
+            },
+            {
+              id: 'who-picks',
+              heading: 'Who should pick which',
+              blocks: [
+                { kind: 'p', text: 'Pick Figma if:' },
+                { kind: 'ul', items: [
+                  'You want hands-on vector editing and a real-time multiplayer canvas.',
+                  'Your team lives in a mature plugin and component ecosystem.',
+                  'You prefer a hosted designer-to-developer handoff over files.',
+                ] },
+                { kind: 'p', text: 'Pick Open Design if:' },
+                { kind: 'ul', items: [
+                  'You want design artifacts and a brand as version-controlled files.',
+                  'You want BYOK with your existing coding agent.',
+                  'You want open source you can fork, rebrand, embed in CLI, or self-host.',
+                  'You want one DESIGN.md per brand that every skill respects.',
+                ] },
+              ],
+            },
+            {
+              id: 'migrate',
+              heading: 'Moving a design from Figma into Open Design',
+              blocks: [
+                { kind: 'p', text: 'There is no automatic import from Figma today; start design-first with a one-time brand-extraction run.' },
+                { kind: 'ol', items: [
+                  'Install Open Design from the quickstart.',
+                  'Open the web UI and point your agent at a Figma frame or screenshot you like.',
+                  'Ask the agent to extract the brand into a DESIGN.md file.',
+                  'Pick a skill and render it against your new brand.',
+                ] },
+                { kind: 'p', text: 'From then on, every skill renders in your brand without re-prompting — and the files stay in your repo.' },
+              ],
+            },
+          ],
+          faqTitle: 'FAQ',
+          faq: [
+            { name: 'Is Open Design a drop-in replacement for Figma?', text: 'No. Figma is a hands-on collaborative canvas; Open Design is an agent-driven, local-first design layer. They overlap on producing interfaces, not on real-time canvas editing.' },
+            { name: 'Can I still use Figma alongside Open Design?', text: 'Yes. Many teams design in Figma and use Open Design to generate and iterate from a portable brand; migration is manual today.' },
+            { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. Credentials are never proxied through us.' },
+            { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
+            { name: 'Is Open Design affiliated with Figma?', text: 'No. Open Design is an independent, open-source project. Figma is a trademark of its owner; this is an unaffiliated comparison.' },
+          ],
+          ctaTitle: 'Design-first, in three commands.',
+          ctaBody:
+            'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
+          ctaActions: [
+            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+          ],
+          hubLinkLabel: 'See all comparisons',
+        },
+      },
+      bolt: {
+        title: 'Open-source Bolt alternative — Open Design (design-first, BYOK, local)',
+        description:
+          'Open Design is the open-source, local-first alternative to Bolt (bolt.new) for design-first work. BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen — artifacts ship as files in your repo.',
+        breadcrumb: 'Open-source Bolt alternative',
+        label: 'Alternative · Bolt',
+        heading: 'Open-source Bolt alternative.',
+        lead:
+          'Bolt (bolt.new) turns a prompt into a running full-stack app in the browser. Open Design is a self-evolving design agent for Claude Code — local-first, BYOK, open source — focused on design artifacts and a portable brand rather than shipping the backend. Different primary job, overlapping prompt-to-UI surface.',
+        tldrTitle: 'TL;DR',
+        tldrBody:
+          'Bolt ships hosted apps; Open Design ships design artifacts as files you own. If you want a design-first, BYOK, open-source workflow with your own agent, Open Design is the alternative — and it is honest about where Bolt wins.',
+        toc: ['Why people search', 'Local-first + BYOK', 'Feature comparison', 'Who should pick which', 'Migration / first run', 'FAQ'],
+        whyTitle: 'Why people search for a Bolt alternative',
+        whyLead: 'A few reasons keep showing up when teams look past Bolt:',
+        reasons: [
+          { label: 'Own the output.', body: 'Designs and code should live as files in your repo, not inside a hosted in-browser project.' },
+          { label: 'BYOK economics.', body: 'Bring your own provider key; API spend bills to your account instead of per-token credits.' },
+          { label: 'Agent choice.', body: 'Drive design from the coding agent you already use — Claude Code, Codex, Cursor, and more.' },
+          { label: 'Open source.', body: 'Apache-2.0, self-hostable, rebrandable for your studio.' },
+        ],
+        localByokTitle: 'Local-first + BYOK, explained',
+        localByokBody: [
+          'Open Design runs a desktop app, a local daemon, and Markdown skill and design-system catalogs on your machine — no design output is forced through a vendor cloud.',
+          'You bring your own agent key; credentials stay local and never proxy through us, and API spend bills to you.',
+        ],
+        featureTitle: 'Feature comparison',
+        features: [
+          { name: 'Primary job', od: 'Design-first artifacts + portable brand', cd: 'Prompt-to-running full-stack app' },
+          { name: 'License', od: 'Apache-2.0, full source on GitHub', cd: 'Closed-source, hosted product' },
+          { name: 'Runtime', od: 'Local daemon on your machine', cd: 'In-browser / vendor cloud' },
+          { name: 'Agent', od: 'BYOK: Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', cd: 'Vendor-managed models' },
+          { name: 'API spend', od: 'Bills to your account', cd: 'Per-token credits / subscription' },
+          { name: 'Design system', od: 'Portable DESIGN.md in your repo', cd: 'Per-project styling' },
+          { name: 'Output ownership', od: 'Files in your project directory', cd: 'Hosted project + code export' },
+          { name: 'Self-host', od: 'Yes, run anywhere Node 24 runs', cd: 'No' },
+          { name: 'CLI / CI', od: 'Yes via od CLI + HTTP daemon', cd: 'Web UI first' },
+        ],
+        whoTitle: 'Who should pick which',
+        pickClaudeTitle: 'Pick Bolt if',
+        pickClaude: [
+          'You want a running full-stack app from a prompt, in the browser, with zero setup.',
+          'You want to deploy straight from the same hosted environment.',
+          'You prefer a hosted UI and per-token credits over local files.',
+        ],
+        pickOpenTitle: 'Pick Open Design if',
+        pickOpen: [
+          'You want design artifacts and a brand as version-controlled files.',
+          'You want BYOK with your existing coding agent.',
+          'You want open source you can fork, rebrand, embed in CLI, or self-host.',
+          'You want one DESIGN.md per brand that every skill respects.',
+        ],
+        migrateTitle: 'Migration / first run',
+        migrateLead: 'There is no automatic import from Bolt today; start design-first with a one-time brand-extraction run:',
+        migrateSteps: [
+          'Install Open Design from the quickstart.',
+          'Open the web UI and point your agent at a Bolt project or screenshot you like.',
+          'Ask the agent to extract the brand into a DESIGN.md file.',
+          'Pick a skill and render it against your new brand.',
+        ],
+        migrateClosing: 'From then on, every skill renders in your brand without re-prompting — and the files stay in your repo.',
+        faqTitle: 'FAQ',
+        faq: [
+          { name: 'Is Open Design a drop-in replacement for Bolt?', text: 'No. Bolt ships running full-stack apps; Open Design is design-first and produces artifacts you own. They overlap on prompt-to-UI, not on running a backend.' },
+          { name: 'Can Open Design build a full app like Bolt?', text: 'Open Design focuses on design artifacts, prototypes, and brand systems. For an instant in-browser full-stack app, Bolt is the better fit.' },
+          { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. API spend bills to your account and credentials are never proxied through us.' },
+          { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
+          { name: 'Is Open Design affiliated with Bolt?', text: 'No. Open Design is an independent, open-source project. Bolt and bolt.new are trademarks of their owner; this is an unaffiliated comparison.' },
+        ],
+        ctaTitle: 'Design-first, in three commands.',
+        ctaBody:
+          'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
+        rich: {
+          heroCtaLead:
+            'Open Design is the open-source, local-first design layer around the coding agent you already use — your key, your files, a curated skill and design-system library.',
+          heroCtaActions: [
+            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+          ],
+          heroImage: {
+            src: '/alternatives/bolt/bolt-hero.webp',
+            alt: 'Open Design vs Bolt — warm-paper editorial illustration of code converging into a design hub',
+          },
+          intro: [
+            'Bolt turns a prompt into a running full-stack app in the browser. Open Design is a self-evolving design agent for Claude Code and other coding agents — local-first, BYOK, Apache-2.0 — focused on producing design artifacts and a portable brand you keep as files in your own repo.',
+            'This is an honest comparison: what Bolt is, why teams look for an alternative, how local-first + BYOK changes the economics, a feature-by-feature table, who should pick which, and how to move a design across. It is candid about where Bolt wins.',
+          ],
+          tocLabel: 'On this page',
+          toc: [
+            { id: 'what-is-bolt', label: 'What Bolt is' },
+            { id: 'why-switch', label: 'Why switch' },
+            { id: 'local-byok', label: 'Local-first + BYOK' },
+            { id: 'compare', label: 'Feature comparison' },
+            { id: 'who-picks', label: 'Who picks which' },
+            { id: 'migrate', label: 'Migration' },
+          ],
+          sections: [
+            {
+              id: 'what-is-bolt',
+              heading: 'What Bolt is',
+              blocks: [
+                { kind: 'p', text: 'Bolt (bolt.new, from StackBlitz) is a hosted AI app builder that runs in the browser: describe a product and it generates and runs a full-stack web app you can deploy. It is genuinely fast at going from prompt to a running app, with the dev environment in the browser.' },
+                { kind: 'p', text: 'It is closed-source and hosted, billed by subscription and per-token credits. Open Design is a different posture: a local-first, open-source design agent you point your own coding agent at — and the two overlap on prompt-to-UI, not on running a backend.' },
+                { kind: 'ul', items: [
+                  'Vendor: StackBlitz (bolt.new) — hosted SaaS',
+                  'Pricing: subscription + per-token credits',
+                  'Primary output: a running app, plus code export',
+                ] },
+              ],
+            },
+            {
+              id: 'why-switch',
+              heading: 'Why teams look for a Bolt alternative',
+              blocks: [
+                { kind: 'p', text: 'Teams start looking past Bolt when they want to own the output, control spend, and keep design as portable, version-controlled assets rather than state inside a hosted in-browser project.' },
+                { kind: 'steps', items: [
+                  { label: 'Own the output', body: 'Designs and code should live as files in your repo, not inside a hosted in-browser project.' },
+                  { label: 'BYOK economics', body: 'Bring your own provider key so API spend bills to your account, instead of paying per-token credits on top of a subscription.' },
+                  { label: 'Agent choice', body: 'Drive design from the coding agent you already use — Claude Code, Codex, Cursor, and more — not a single vendor-managed model.' },
+                  { label: 'Open source', body: 'Apache-2.0 and self-hostable: fork it, rebrand it for your studio, or embed it in CI.' },
+                ] },
+              ],
+            },
+            {
+              id: 'local-byok',
+              heading: 'Local-first + BYOK, explained',
+              blocks: [
+                { kind: 'p', text: 'Open Design runs a desktop app, a local daemon, and Markdown skill and design-system catalogs on your machine. No design output is forced through a vendor cloud, and your brand lives in your repo as a portable DESIGN.md file every skill respects.' },
+                { kind: 'p', text: 'You bring your own agent key. Credentials stay in local config or environment variables — Open Design never proxies them — and the API spend bills directly to you.' },
+              ],
+            },
+            {
+              id: 'compare',
+              heading: 'Open Design vs Bolt, feature by feature',
+              blocks: [
+                { kind: 'table', columns: ['Feature', 'Open Design', 'Bolt'], rows: [
+                  ['Primary job', 'Design-first artifacts + portable brand', 'Prompt-to-running full-stack app'],
+                  ['License', 'Apache-2.0, full source on GitHub', 'Closed-source, hosted product'],
+                  ['Runtime', 'Local daemon on your machine', 'In-browser / vendor cloud'],
+                  ['Agent', 'BYOK: Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', 'Vendor-managed models'],
+                  ['API spend', 'Bills to your account', 'Per-token credits / subscription'],
+                  ['Design system', 'Portable DESIGN.md in your repo', 'Per-project styling'],
+                  ['Output ownership', 'Files in your project directory', 'Hosted project + code export'],
+                  ['Self-host', 'Yes, run anywhere Node 24 runs', 'No'],
+                  ['CLI / CI', 'Yes via od CLI + HTTP daemon', 'Web UI first'],
+                ] },
+                { kind: 'p', text: 'Where Bolt wins: if your goal is an instant, running full-stack app in the browser with the dev environment wired up for you, Bolt does that out of the box. Open Design is design-first.' },
+              ],
+            },
+            {
+              id: 'who-picks',
+              heading: 'Who should pick which',
+              blocks: [
+                { kind: 'p', text: 'Pick Bolt if:' },
+                { kind: 'ul', items: [
+                  'You want a running full-stack app from a prompt, in the browser, with zero setup.',
+                  'You want to deploy straight from the same hosted environment.',
+                  'You prefer a hosted UI and per-token credits over local files.',
+                ] },
+                { kind: 'p', text: 'Pick Open Design if:' },
+                { kind: 'ul', items: [
+                  'You want design artifacts and a brand as version-controlled files.',
+                  'You want BYOK with your existing coding agent.',
+                  'You want open source you can fork, rebrand, embed in CLI, or self-host.',
+                  'You want one DESIGN.md per brand that every skill respects.',
+                ] },
+              ],
+            },
+            {
+              id: 'migrate',
+              heading: 'Moving a design from Bolt into Open Design',
+              blocks: [
+                { kind: 'p', text: 'There is no automatic import from Bolt today; start design-first with a one-time brand-extraction run.' },
+                { kind: 'ol', items: [
+                  'Install Open Design from the quickstart.',
+                  'Open the web UI and point your agent at a Bolt project or screenshot you like.',
+                  'Ask the agent to extract the brand into a DESIGN.md file.',
+                  'Pick a skill and render it against your new brand.',
+                ] },
+                { kind: 'p', text: 'From then on, every skill renders in your brand without re-prompting — and the files stay in your repo.' },
+              ],
+            },
+          ],
+          faqTitle: 'FAQ',
+          faq: [
+            { name: 'Is Open Design a drop-in replacement for Bolt?', text: 'No. Bolt ships running full-stack apps; Open Design is design-first and produces artifacts you own. They overlap on prompt-to-UI, not on running a backend.' },
+            { name: 'Can Open Design build a full app like Bolt?', text: 'Open Design focuses on design artifacts, prototypes, and brand systems. For an instant in-browser full-stack app, Bolt is the better fit.' },
+            { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. API spend bills to your account and credentials are never proxied through us.' },
+            { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
+            { name: 'Is Open Design affiliated with Bolt?', text: 'No. Open Design is an independent, open-source project. Bolt and bolt.new are trademarks of their owner; this is an unaffiliated comparison.' },
+          ],
+          ctaTitle: 'Design-first, in three commands.',
+          ctaBody:
+            'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
+          ctaActions: [
+            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+          ],
+          hubLinkLabel: 'See all comparisons',
+        },
+      },
+      v0: {
+        title: 'Open-source v0 alternative — Open Design (design-first, BYOK, local)',
+        description:
+          'Open Design is the open-source, local-first alternative to v0 by Vercel for design-first work. BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen — artifacts ship as files in your repo.',
+        breadcrumb: 'Open-source v0 alternative',
+        label: 'Alternative · v0',
+        heading: 'Open-source v0 alternative.',
+        lead:
+          'v0 by Vercel turns a prompt into hosted UI components. Open Design is a self-evolving design agent for Claude Code — local-first, BYOK, open source — that drives any coding agent and keeps your brand and artifacts as files. Closest overlap of the bunch: prompt-to-UI, different posture.',
+        tldrTitle: 'TL;DR',
+        tldrBody:
+          'v0 generates UI in Vercel’s hosted flow; Open Design generates design with your own agent, locally, as files you own. If you want BYOK, any agent, and open source over a hosted generator, Open Design is the alternative — and it is honest about where v0 wins.',
+        toc: ['Why people search', 'Local-first + BYOK', 'Feature comparison', 'Who should pick which', 'Migration / first run', 'FAQ'],
+        whyTitle: 'Why people search for a v0 alternative',
+        whyLead: 'A few reasons keep showing up when teams look past v0:',
+        reasons: [
+          { label: 'Own the output.', body: 'UI should be files in your repo, not generations in a hosted project.' },
+          { label: 'BYOK economics.', body: 'Bring your own provider key; API spend bills to your account instead of per-generation credits.' },
+          { label: 'Any agent, any stack.', body: 'Drive design from the coding agent you already use, not a single vendor-managed model.' },
+          { label: 'Open source.', body: 'Apache-2.0, self-hostable, rebrandable for your studio.' },
+        ],
+        localByokTitle: 'Local-first + BYOK, explained',
+        localByokBody: [
+          'Open Design runs a desktop app, a local daemon, and Markdown skill and design-system catalogs on your machine — your UI is files, not hosted generations.',
+          'You bring your own agent key; credentials stay local and never proxy through us, and API spend bills to you.',
+        ],
+        featureTitle: 'Feature comparison',
+        features: [
+          { name: 'Primary job', od: 'Design-first artifacts + portable brand', cd: 'Prompt-to-hosted UI components' },
+          { name: 'License', od: 'Apache-2.0, full source on GitHub', cd: 'Closed-source, hosted product' },
+          { name: 'Runtime', od: 'Local daemon on your machine', cd: 'Vendor cloud' },
+          { name: 'Agent', od: 'BYOK: Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', cd: 'Vendor-managed model' },
+          { name: 'API spend', od: 'Bills to your account', cd: 'Per-generation credits / subscription' },
+          { name: 'Design system', od: 'Portable DESIGN.md in your repo', cd: 'Per-project styling' },
+          { name: 'Output ownership', od: 'Files in your project directory', cd: 'Hosted project + code export' },
+          { name: 'Self-host', od: 'Yes, run anywhere Node 24 runs', cd: 'No' },
+          { name: 'CLI / CI', od: 'Yes via od CLI + HTTP daemon', cd: 'Web UI first' },
+        ],
+        whoTitle: 'Who should pick which',
+        pickClaudeTitle: 'Pick v0 if',
+        pickClaude: [
+          'You want UI generated tightly into the Vercel and React ecosystem.',
+          'You want to deploy straight to Vercel from the same flow.',
+          'You prefer a hosted generator and per-generation credits over local files.',
+        ],
+        pickOpenTitle: 'Pick Open Design if',
+        pickOpen: [
+          'You want design artifacts and a brand as version-controlled files.',
+          'You want BYOK with your existing coding agent, on any stack.',
+          'You want open source you can fork, rebrand, embed in CLI, or self-host.',
+          'You want one DESIGN.md per brand that every skill respects.',
+        ],
+        migrateTitle: 'Migration / first run',
+        migrateLead: 'There is no automatic import from v0 today; start design-first with a one-time brand-extraction run:',
+        migrateSteps: [
+          'Install Open Design from the quickstart.',
+          'Open the web UI and point your agent at a v0 generation or screenshot you like.',
+          'Ask the agent to extract the brand into a DESIGN.md file.',
+          'Pick a skill and render it against your new brand.',
+        ],
+        migrateClosing: 'From then on, every skill renders in your brand without re-prompting — and the files stay in your repo.',
+        faqTitle: 'FAQ',
+        faq: [
+          { name: 'Is Open Design a drop-in replacement for v0?', text: 'No. v0 generates UI in Vercel’s hosted flow; Open Design is design-first and produces artifacts you own with any agent. They overlap on prompt-to-UI, not on the Vercel-hosted pipeline.' },
+          { name: 'Does Open Design lock me to a stack?', text: 'No. BYOK with any supported agent, and your output is plain files in your repo — not tied to one framework or host.' },
+          { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. API spend bills to your account and credentials are never proxied through us.' },
+          { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
+          { name: 'Is Open Design affiliated with v0 or Vercel?', text: 'No. Open Design is an independent, open-source project. v0 and Vercel are trademarks of their owner; this is an unaffiliated comparison.' },
+        ],
+        ctaTitle: 'Design-first, in three commands.',
+        ctaBody:
+          'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
+        rich: {
+          heroCtaLead:
+            'Open Design is the open-source, local-first design layer around the coding agent you already use — your key, your files, a curated skill and design-system library.',
+          heroCtaActions: [
+            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+          ],
+          heroImage: {
+            src: '/alternatives/v0/v0-hero.webp',
+            alt: 'Open Design vs v0 — warm-paper editorial illustration of code converging into a design hub',
+          },
+          intro: [
+            'v0 by Vercel turns a prompt into hosted UI components, tuned for the React and Vercel ecosystem. Open Design is a self-evolving design agent for Claude Code and other coding agents — local-first, BYOK, Apache-2.0 — focused on producing design artifacts and a portable brand you keep as files in your own repo.',
+            'This is an honest comparison: what v0 is, why teams look for an alternative, how local-first + BYOK changes the shape of the work, a feature-by-feature table, who should pick which, and how to move a design across. It is candid about where v0 wins.',
+          ],
+          tocLabel: 'On this page',
+          toc: [
+            { id: 'what-is-v0', label: 'What v0 is' },
+            { id: 'why-switch', label: 'Why switch' },
+            { id: 'local-byok', label: 'Local-first + BYOK' },
+            { id: 'compare', label: 'Feature comparison' },
+            { id: 'who-picks', label: 'Who picks which' },
+            { id: 'migrate', label: 'Migration' },
+          ],
+          sections: [
+            {
+              id: 'what-is-v0',
+              heading: 'What v0 is',
+              blocks: [
+                { kind: 'p', text: 'v0 by Vercel is a hosted AI UI generator: describe a UI and it produces front-end components, tuned for the React, Next.js and Tailwind ecosystem, that you can deploy straight to Vercel. It is fast and tightly integrated with that stack.' },
+                { kind: 'p', text: 'It is closed-source and runs in the vendor cloud, billed by subscription and per-generation credits. Open Design is a different posture: a local-first, open-source design agent you point your own coding agent at — overlapping on prompt-to-UI, not on the Vercel-hosted pipeline.' },
+                { kind: 'ul', items: [
+                  'Vendor: Vercel (v0) — hosted SaaS',
+                  'Pricing: subscription + per-generation credits',
+                  'Primary output: hosted UI, plus code export',
+                ] },
+              ],
+            },
+            {
+              id: 'why-switch',
+              heading: 'Why teams look for a v0 alternative',
+              blocks: [
+                { kind: 'p', text: 'Teams start looking past v0 when they want to own the output, control spend, use any agent and any stack, and keep design as portable, version-controlled assets.' },
+                { kind: 'steps', items: [
+                  { label: 'Own the output', body: 'UI should be files in your repo, not generations in a hosted project.' },
+                  { label: 'BYOK economics', body: 'Bring your own provider key so API spend bills to your account, instead of per-generation credits on top of a subscription.' },
+                  { label: 'Any agent, any stack', body: 'Drive design from the coding agent you already use, on the stack you choose — not a single vendor-managed model.' },
+                  { label: 'Open source', body: 'Apache-2.0 and self-hostable: fork it, rebrand it for your studio, or embed it in CI.' },
+                ] },
+              ],
+            },
+            {
+              id: 'local-byok',
+              heading: 'Local-first + BYOK, explained',
+              blocks: [
+                { kind: 'p', text: 'Open Design runs a desktop app, a local daemon, and Markdown skill and design-system catalogs on your machine. Your UI is files, not hosted generations, and your brand lives in your repo as a portable DESIGN.md file every skill respects.' },
+                { kind: 'p', text: 'You bring your own agent key. Credentials stay in local config or environment variables — Open Design never proxies them — and the API spend bills directly to you.' },
+              ],
+            },
+            {
+              id: 'compare',
+              heading: 'Open Design vs v0, feature by feature',
+              blocks: [
+                { kind: 'table', columns: ['Feature', 'Open Design', 'v0'], rows: [
+                  ['Primary job', 'Design-first artifacts + portable brand', 'Prompt-to-hosted UI components'],
+                  ['License', 'Apache-2.0, full source on GitHub', 'Closed-source, hosted product'],
+                  ['Runtime', 'Local daemon on your machine', 'Vendor cloud'],
+                  ['Agent', 'BYOK: Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', 'Vendor-managed model'],
+                  ['API spend', 'Bills to your account', 'Per-generation credits / subscription'],
+                  ['Design system', 'Portable DESIGN.md in your repo', 'Per-project styling'],
+                  ['Output ownership', 'Files in your project directory', 'Hosted project + code export'],
+                  ['Self-host', 'Yes, run anywhere Node 24 runs', 'No'],
+                  ['CLI / CI', 'Yes via od CLI + HTTP daemon', 'Web UI first'],
+                ] },
+                { kind: 'p', text: 'Where v0 wins: if you live in the Vercel, Next.js and React ecosystem and want UI generated and deployed in one tight hosted flow, v0 is built for exactly that. Open Design is design-first and stack-agnostic.' },
+              ],
+            },
+            {
+              id: 'who-picks',
+              heading: 'Who should pick which',
+              blocks: [
+                { kind: 'p', text: 'Pick v0 if:' },
+                { kind: 'ul', items: [
+                  'You want UI generated tightly into the Vercel and React ecosystem.',
+                  'You want to deploy straight to Vercel from the same flow.',
+                  'You prefer a hosted generator and per-generation credits over local files.',
+                ] },
+                { kind: 'p', text: 'Pick Open Design if:' },
+                { kind: 'ul', items: [
+                  'You want design artifacts and a brand as version-controlled files.',
+                  'You want BYOK with your existing coding agent, on any stack.',
+                  'You want open source you can fork, rebrand, embed in CLI, or self-host.',
+                  'You want one DESIGN.md per brand that every skill respects.',
+                ] },
+              ],
+            },
+            {
+              id: 'migrate',
+              heading: 'Moving a design from v0 into Open Design',
+              blocks: [
+                { kind: 'p', text: 'There is no automatic import from v0 today; start design-first with a one-time brand-extraction run.' },
+                { kind: 'ol', items: [
+                  'Install Open Design from the quickstart.',
+                  'Open the web UI and point your agent at a v0 generation or screenshot you like.',
+                  'Ask the agent to extract the brand into a DESIGN.md file.',
+                  'Pick a skill and render it against your new brand.',
+                ] },
+                { kind: 'p', text: 'From then on, every skill renders in your brand without re-prompting — and the files stay in your repo.' },
+              ],
+            },
+          ],
+          faqTitle: 'FAQ',
+          faq: [
+            { name: 'Is Open Design a drop-in replacement for v0?', text: 'No. v0 generates UI in Vercel’s hosted flow; Open Design is design-first and produces artifacts you own with any agent. They overlap on prompt-to-UI, not on the Vercel-hosted pipeline.' },
+            { name: 'Does Open Design lock me to a stack?', text: 'No. BYOK with any supported agent, and your output is plain files in your repo — not tied to one framework or host.' },
+            { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. API spend bills to your account and credentials are never proxied through us.' },
+            { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
+            { name: 'Is Open Design affiliated with v0 or Vercel?', text: 'No. Open Design is an independent, open-source project. v0 and Vercel are trademarks of their owner; this is an unaffiliated comparison.' },
+          ],
+          ctaTitle: 'Design-first, in three commands.',
+          ctaBody:
+            'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
+          ctaActions: [
+            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+          ],
+          hubLinkLabel: 'See all comparisons',
+        },
+      },
+      framer: {
+        title: 'Open-source Framer alternative — Open Design (design-first, BYOK, local)',
+        description:
+          'Open Design is the open-source, local-first alternative to Framer for agent-driven design. BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen — your brand and artifacts live as files in your repo.',
+        breadcrumb: 'Open-source Framer alternative',
+        label: 'Alternative · Framer',
+        heading: 'Open-source Framer alternative.',
+        lead:
+          'Framer is a hosted, no-code visual builder for designing and publishing sites. Open Design is a self-evolving design agent for Claude Code — local-first, BYOK, open source — where you drive design through your coding agent and keep a portable brand as files. Different shape, same goal: shipped interfaces.',
+        tldrTitle: 'TL;DR',
+        tldrBody:
+          'Framer is a hosted no-code site builder; Open Design is an agent-driven, local-first, open-source design layer. If you want files in your repo and BYOK over a hosted canvas, Open Design is the alternative — and it is honest about where Framer wins.',
+        toc: ['Why people search', 'Local-first + BYOK', 'Feature comparison', 'Who should pick which', 'Migration / first run', 'FAQ'],
+        whyTitle: 'Why people search for a Framer alternative',
+        whyLead: 'A few reasons keep coming up when teams look past Framer:',
+        reasons: [
+          { label: 'Own the files.', body: 'Design should be version-controlled artifacts in your repo, not a project in a vendor cloud.' },
+          { label: 'Open source.', body: 'Apache-2.0, self-hostable, rebrandable — not a closed, hosted SaaS.' },
+          { label: 'Agent-driven.', body: 'Generate and iterate design with the coding agent you already use, instead of building every section by hand.' },
+          { label: 'Not locked to one host.', body: 'Your output is files; deploy anywhere, not only the vendor’s hosting.' },
+        ],
+        localByokTitle: 'Local-first + BYOK, explained',
+        localByokBody: [
+          'Open Design runs a desktop app, a local daemon, and Markdown skill and design-system catalogs on your machine — your designs are files, not a hosted project.',
+          'You bring your own agent key; credentials stay local and never proxy through us, and API spend bills to you.',
+        ],
+        featureTitle: 'Feature comparison',
+        features: [
+          { name: 'How you design', od: 'Prompt your coding agent', cd: 'No-code visual builder, by hand' },
+          { name: 'License', od: 'Apache-2.0, full source on GitHub', cd: 'Closed-source, hosted product' },
+          { name: 'Runtime', od: 'Local daemon on your machine', cd: 'Vendor cloud' },
+          { name: 'Output ownership', od: 'Files in your project directory', cd: 'Hosted project' },
+          { name: 'Design system', od: 'Portable DESIGN.md in your repo', cd: 'Per-project styling' },
+          { name: 'Hosting / deploy', od: 'You own deploy; not bundled', cd: 'Hosting included' },
+          { name: 'Agent', od: 'BYOK: Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', cd: 'Vendor-managed models' },
+          { name: 'Self-host', od: 'Yes, run anywhere Node 24 runs', cd: 'No' },
+          { name: 'CLI / CI', od: 'Yes via od CLI + HTTP daemon', cd: 'Web UI first' },
+        ],
+        whoTitle: 'Who should pick which',
+        pickClaudeTitle: 'Pick Framer if',
+        pickClaude: [
+          'You want a no-code visual builder to design and publish a site.',
+          'You want hosting included in one place.',
+          'You prefer a hosted canvas over files and BYOK.',
+        ],
+        pickOpenTitle: 'Pick Open Design if',
+        pickOpen: [
+          'You want design artifacts and a brand as version-controlled files.',
+          'You want BYOK with your existing coding agent.',
+          'You want open source you can fork, rebrand, embed in CLI, or self-host.',
+          'You want one DESIGN.md per brand that every skill respects.',
+        ],
+        migrateTitle: 'Migration / first run',
+        migrateLead: 'There is no automatic import from Framer today; start design-first with a one-time brand-extraction run:',
+        migrateSteps: [
+          'Install Open Design from the quickstart.',
+          'Open the web UI and point your agent at a Framer site or screenshot you like.',
+          'Ask the agent to extract the brand into a DESIGN.md file.',
+          'Pick a skill and render it against your new brand.',
+        ],
+        migrateClosing: 'From then on, every skill renders in your brand without re-prompting — and the files stay in your repo.',
+        faqTitle: 'FAQ',
+        faq: [
+          { name: 'Is Open Design a drop-in replacement for Framer?', text: 'No. Framer is a hosted no-code site builder; Open Design is an agent-driven, local-first design layer. They overlap on producing interfaces, not on no-code publishing and hosting.' },
+          { name: 'Can Open Design publish a site like Framer?', text: 'Open Design produces design artifacts and code you own; you deploy them yourself. For an all-in-one no-code builder plus hosting, Framer is the better fit.' },
+          { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. Credentials are never proxied through us.' },
+          { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
+          { name: 'Is Open Design affiliated with Framer?', text: 'No. Open Design is an independent, open-source project. Framer is a trademark of its owner; this is an unaffiliated comparison.' },
+        ],
+        ctaTitle: 'Design-first, in three commands.',
+        ctaBody:
+          'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
+        rich: {
+          heroCtaLead:
+            'Open Design is the open-source, local-first design layer around the coding agent you already use — your key, your files, a curated skill and design-system library.',
+          heroCtaActions: [
+            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+          ],
+          heroImage: {
+            src: '/alternatives/framer/framer-hero.webp',
+            alt: 'Open Design vs Framer — warm-paper editorial illustration of code converging into a design hub',
+          },
+          intro: [
+            'Framer turns a hosted, no-code canvas into designed and published websites. Open Design is a self-evolving design agent for Claude Code and other coding agents — local-first, BYOK, Apache-2.0 — where you drive design through your agent and keep a portable brand as files in your own repo.',
+            'This is an honest comparison: what Framer is, why teams look for an alternative, how local-first + BYOK changes the shape of the work, a feature-by-feature table, who should pick which, and how to move a design across. It is candid about where Framer wins.',
+          ],
+          tocLabel: 'On this page',
+          toc: [
+            { id: 'what-is-framer', label: 'What Framer is' },
+            { id: 'why-switch', label: 'Why switch' },
+            { id: 'local-byok', label: 'Local-first + BYOK' },
+            { id: 'compare', label: 'Feature comparison' },
+            { id: 'who-picks', label: 'Who picks which' },
+            { id: 'migrate', label: 'Migration' },
+          ],
+          sections: [
+            {
+              id: 'what-is-framer',
+              heading: 'What Framer is',
+              blocks: [
+                { kind: 'p', text: 'Framer is a hosted, no-code visual builder for designing and publishing websites: a canvas you lay out by hand, with components, CMS, AI features, and one-place hosting. It is strong at taking a marketing site from design to live without writing code.' },
+                { kind: 'p', text: 'It is closed-source and runs in the vendor cloud, billed by subscription. Open Design is a different posture: a local-first, open-source design agent you point your own coding agent at — overlapping on producing interfaces, not on no-code publishing and hosting.' },
+                { kind: 'ul', items: [
+                  'Vendor: Framer — hosted SaaS',
+                  'Pricing: subscription (per site / plan)',
+                  'Primary output: a published, hosted site',
+                ] },
+              ],
+            },
+            {
+              id: 'why-switch',
+              heading: 'Why teams look for a Framer alternative',
+              blocks: [
+                { kind: 'p', text: 'Teams start looking past Framer when they want design to be files they own, generated by the agent they already use, deployable anywhere, rather than a project that lives in (and publishes from) a vendor cloud.' },
+                { kind: 'steps', items: [
+                  { label: 'Own the files', body: 'Design should be version-controlled artifacts in your repo, not a hosted project.' },
+                  { label: 'Open source', body: 'Apache-2.0 and self-hostable: fork it, rebrand it for your studio, or embed it in CI — not a closed hosted SaaS.' },
+                  { label: 'Agent-driven', body: 'Generate and iterate design with the coding agent you already use, instead of building every section by hand.' },
+                  { label: 'Not locked to one host', body: 'Your output is files; deploy anywhere, not only the vendor’s hosting.' },
+                ] },
+              ],
+            },
+            {
+              id: 'local-byok',
+              heading: 'Local-first + BYOK, explained',
+              blocks: [
+                { kind: 'p', text: 'Open Design runs a desktop app, a local daemon, and Markdown skill and design-system catalogs on your machine. Your designs are files, not a hosted project, and your brand lives in your repo as a portable DESIGN.md file every skill respects.' },
+                { kind: 'p', text: 'You bring your own agent key. Credentials stay in local config or environment variables — Open Design never proxies them — and the API spend bills directly to you.' },
+              ],
+            },
+            {
+              id: 'compare',
+              heading: 'Open Design vs Framer, feature by feature',
+              blocks: [
+                { kind: 'table', columns: ['Feature', 'Open Design', 'Framer'], rows: [
+                  ['How you design', 'Prompt your coding agent', 'No-code visual builder, by hand'],
+                  ['License', 'Apache-2.0, full source on GitHub', 'Closed-source, hosted product'],
+                  ['Runtime', 'Local daemon on your machine', 'Vendor cloud'],
+                  ['Output ownership', 'Files in your project directory', 'Hosted project'],
+                  ['Design system', 'Portable DESIGN.md in your repo', 'Per-project styling'],
+                  ['Hosting / deploy', 'You own deploy; not bundled', 'Hosting included'],
+                  ['Agent', 'BYOK: Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', 'Vendor-managed models'],
+                  ['Self-host', 'Yes, run anywhere Node 24 runs', 'No'],
+                  ['CLI / CI', 'Yes via od CLI + HTTP daemon', 'Web UI first'],
+                ] },
+                { kind: 'p', text: 'Where Framer wins: if you want a no-code visual builder that designs and publishes a marketing site with hosting included, Framer does that end to end. Open Design is design-first and agent-driven instead.' },
+              ],
+            },
+            {
+              id: 'who-picks',
+              heading: 'Who should pick which',
+              blocks: [
+                { kind: 'p', text: 'Pick Framer if:' },
+                { kind: 'ul', items: [
+                  'You want a no-code visual builder to design and publish a site.',
+                  'You want hosting included in one place.',
+                  'You prefer a hosted canvas over files and BYOK.',
+                ] },
+                { kind: 'p', text: 'Pick Open Design if:' },
+                { kind: 'ul', items: [
+                  'You want design artifacts and a brand as version-controlled files.',
+                  'You want BYOK with your existing coding agent.',
+                  'You want open source you can fork, rebrand, embed in CLI, or self-host.',
+                  'You want one DESIGN.md per brand that every skill respects.',
+                ] },
+              ],
+            },
+            {
+              id: 'migrate',
+              heading: 'Moving a design from Framer into Open Design',
+              blocks: [
+                { kind: 'p', text: 'There is no automatic import from Framer today; start design-first with a one-time brand-extraction run.' },
+                { kind: 'ol', items: [
+                  'Install Open Design from the quickstart.',
+                  'Open the web UI and point your agent at a Framer site or screenshot you like.',
+                  'Ask the agent to extract the brand into a DESIGN.md file.',
+                  'Pick a skill and render it against your new brand.',
+                ] },
+                { kind: 'p', text: 'From then on, every skill renders in your brand without re-prompting — and the files stay in your repo.' },
+              ],
+            },
+          ],
+          faqTitle: 'FAQ',
+          faq: [
+            { name: 'Is Open Design a drop-in replacement for Framer?', text: 'No. Framer is a hosted no-code site builder; Open Design is an agent-driven, local-first design layer. They overlap on producing interfaces, not on no-code publishing and hosting.' },
+            { name: 'Can Open Design publish a site like Framer?', text: 'Open Design produces design artifacts and code you own; you deploy them yourself. For an all-in-one no-code builder plus hosting, Framer is the better fit.' },
+            { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. Credentials are never proxied through us.' },
+            { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
+            { name: 'Is Open Design affiliated with Framer?', text: 'No. Open Design is an independent, open-source project. Framer is a trademark of its owner; this is an unaffiliated comparison.' },
+          ],
+          ctaTitle: 'Design-first, in three commands.',
+          ctaBody:
+            'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
+          ctaActions: [
+            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+          ],
+          hubLinkLabel: 'See all comparisons',
+        },
+      },
+      'claude-design': {
+        title: 'Open-source Claude Design alternative — Open Design (BYOK, local-first)',
+        description:
+          'Open Design is the open-source, local-first alternative to Claude Design. BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen — your skills and DESIGN.md live in your repo.',
+        breadcrumb: 'Open-source Claude Design alternative',
+        label: 'Alternative · Claude Design',
+        heading: 'Open-source Claude Design alternative.',
+        lead:
+          'Open Design is the open-source, local-first alternative to Claude Design. Same use case — prompt to design artifact — different posture: BYOK with the agent you already use, keep your brand as a portable DESIGN.md file, and ship artifacts as files in your project.',
+        tldrTitle: 'TL;DR',
+        tldrBody:
+          'Same job, different posture: local-first, BYOK, open source (Apache-2.0), with portable DESIGN.md systems and composable SKILL.md skills. Honest about where a hosted product is more convenient.',
+        toc: ['Why people search', 'Local-first + BYOK', 'Feature comparison', 'Who should pick which', 'Migration / first run', 'FAQ'],
+        whyTitle: 'Why people search for a Claude Design alternative',
+        whyLead: 'A few reasons keep showing up in support threads, GitHub discussions, and Discord:',
+        reasons: [
+          { label: 'Data ownership.', body: 'Designs should live as files in a repo, not documents in a vendor DB.' },
+          { label: 'BYOK economics.', body: 'Bring your own provider key; API spend bills to your account.' },
+          { label: 'Agent choice.', body: 'Drive design from the agent you already use for code.' },
+          { label: 'Brand portability.', body: 'One DESIGN.md file encodes a brand for every skill.' },
+          { label: 'Self-host / fork.', body: 'Apache-2.0, full source, rebrandable for your studio or company.' },
+        ],
+        localByokTitle: 'Local-first + BYOK, explained',
+        localByokBody: [
+          'Open Design runs a desktop app, a local daemon, and Markdown skill/system catalogs on your machine — no design output is forced through a vendor cloud.',
+          'You bring your own agent key; credentials stay in local config or environment variables, and API spend bills to you.',
+        ],
+        featureTitle: 'Feature comparison',
+        features: [
+          { name: 'License', od: 'Apache-2.0, full source on GitHub', cd: 'Closed-source, hosted product' },
+          { name: 'Runtime', od: 'Local daemon on your machine', cd: 'Vendor cloud' },
+          { name: 'Agent', od: 'BYOK: Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', cd: 'Vendor-managed agent' },
+          { name: 'API spend', od: 'Bills to your account', cd: 'Bundled into vendor subscription' },
+          { name: 'Design system', od: 'Portable DESIGN.md in your repo', cd: 'Stored in vendor DB' },
+          { name: 'Skills', od: 'Composable SKILL.md you can fork', cd: 'Built-in templates' },
+          { name: 'Self-host', od: 'Yes, run anywhere Node 24 runs', cd: 'No' },
+          { name: 'Artifact ownership', od: 'Files in your project directory', cd: 'Vendor-hosted documents' },
+          { name: 'CLI / CI', od: 'Yes via od CLI + HTTP daemon', cd: 'Web UI only' },
+        ],
+        whoTitle: 'Who should pick which',
+        pickClaudeTitle: 'Pick Claude Design if',
+        pickClaude: [
+          'You want zero local setup and one vendor bill.',
+          'You are already deep in a Claude-first hosted workflow.',
+          'Your team prefers a hosted UI over Markdown files.',
+        ],
+        pickOpenTitle: 'Pick Open Design if',
+        pickOpen: [
+          'You want design artifacts as version-controlled files.',
+          'You want BYOK with your existing coding agent.',
+          'You want to fork, rebrand, embed in CLI, or self-host.',
+          'You want one DESIGN.md per brand that every skill respects.',
+        ],
+        migrateTitle: 'Migration / first run',
+        migrateLead: 'There is no automatic import from Claude Design today; use a one-time brand-extraction run:',
+        migrateSteps: [
+          'Install Open Design from the quickstart.',
+          'Open the web UI and point your agent at a Claude Design artifact you like.',
+          'Ask the agent to extract the brand into a DESIGN.md file.',
+          'Pick a skill and render it against your new brand.',
+        ],
+        migrateClosing: 'From then on, every skill renders in your brand without re-prompting — and the files stay in your repo.',
+        faqTitle: 'FAQ',
+        faq: [
+          { name: 'Is Open Design really a drop-in alternative to Claude Design?', text: 'Not literally, but they overlap on prompt-to-design-artifact use cases.' },
+          { name: 'Can I use Claude as my agent in Open Design?', text: 'Yes. Open Design supports Claude Code and Anthropic API BYOK flows; credentials are never proxied through us.' },
+          { name: 'What happens to my Claude Design designs?', text: 'You can keep using Claude Design alongside Open Design; migration is manual today.' },
+          { name: 'Does Open Design generate the same artifact types?', text: 'Yes for common types: landing pages, decks, dashboards, social posts, brand systems, and prototypes.' },
+          { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
+          { name: 'Is Open Design affiliated with Anthropic or Claude?', text: 'No. Open Design is an independent, open-source project. Claude is a trademark of Anthropic; this is an unaffiliated comparison.' },
+        ],
+        ctaTitle: 'Switch in three commands.',
+        ctaBody:
+          'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
+        rich: {
+          heroCtaLead:
+            'Open Design is the open-source, local-first design layer around the coding agent you already use — your key, your files, a curated skill and design-system library.',
+          heroCtaActions: [
+            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+          ],
+          heroImage: {
+            src: '/alternatives/claude-design/claude-design-hero.webp',
+            alt: 'Open Design vs Claude Design — warm-paper editorial illustration of code converging into a design hub',
+          },
+          intro: [
+            'Claude Design is a hosted, vendor-managed product for prompt-to-design work. Open Design is a self-evolving design agent for Claude Code and other coding agents — local-first, BYOK, Apache-2.0 — that keeps your skills and a portable brand as files in your own repo.',
+            'This is an honest comparison: why teams look for an alternative, how local-first + BYOK changes the economics, a feature-by-feature table, who should pick which, and how to move a design across. It is candid about where a hosted product is more convenient.',
+          ],
+          tocLabel: 'On this page',
+          toc: [
+            { id: 'what-is-claude-design', label: 'What Claude Design is' },
+            { id: 'why-switch', label: 'Why switch' },
+            { id: 'local-byok', label: 'Local-first + BYOK' },
+            { id: 'compare', label: 'Feature comparison' },
+            { id: 'who-picks', label: 'Who picks which' },
+            { id: 'migrate', label: 'Migration' },
+          ],
+          sections: [
+            {
+              id: 'what-is-claude-design',
+              heading: 'What Claude Design is',
+              blocks: [
+                { kind: 'p', text: 'Claude Design is a hosted, vendor-managed product for turning prompts into design artifacts, tied to a single vendor’s cloud and agent. It is convenient: zero local setup, one bill, a hosted UI.' },
+                { kind: 'p', text: 'Open Design is a different posture: a local-first, open-source design agent you point your own coding agent at — overlapping on the prompt-to-design-artifact job, not on being a hosted product.' },
+                { kind: 'ul', items: [
+                  'Vendor: hosted SaaS, single-vendor agent',
+                  'Pricing: bundled into a vendor subscription',
+                  'Primary output: vendor-hosted documents',
+                ] },
+              ],
+            },
+            {
+              id: 'why-switch',
+              heading: 'Why teams look for a Claude Design alternative',
+              blocks: [
+                { kind: 'p', text: 'These reasons keep showing up in support threads, GitHub discussions, and Discord:' },
+                { kind: 'steps', items: [
+                  { label: 'Data ownership', body: 'Designs should live as files in a repo, not documents in a vendor DB.' },
+                  { label: 'BYOK economics', body: 'Bring your own provider key so API spend bills to your account instead of a bundled subscription.' },
+                  { label: 'Agent choice', body: 'Drive design from the agent you already use for code — Claude Code, Codex, Cursor, and more.' },
+                  { label: 'Self-host / fork', body: 'Apache-2.0, full source, rebrandable for your studio or company.' },
+                ] },
+              ],
+            },
+            {
+              id: 'local-byok',
+              heading: 'Local-first + BYOK, explained',
+              blocks: [
+                { kind: 'p', text: 'Open Design runs a desktop app, a local daemon, and Markdown skill/system catalogs on your machine. No design output is forced through a vendor cloud, and your brand lives in your repo as a portable DESIGN.md file every skill respects.' },
+                { kind: 'p', text: 'You bring your own agent key. Credentials stay in local config or environment variables — Open Design never proxies them — and the API spend bills directly to you.' },
+              ],
+            },
+            {
+              id: 'compare',
+              heading: 'Open Design vs Claude Design, feature by feature',
+              blocks: [
+                { kind: 'table', columns: ['Feature', 'Open Design', 'Claude Design'], rows: [
+                  ['License', 'Apache-2.0, full source on GitHub', 'Closed-source, hosted product'],
+                  ['Runtime', 'Local daemon on your machine', 'Vendor cloud'],
+                  ['Agent', 'BYOK: Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', 'Vendor-managed agent'],
+                  ['API spend', 'Bills to your account', 'Bundled into vendor subscription'],
+                  ['Design system', 'Portable DESIGN.md in your repo', 'Stored in vendor DB'],
+                  ['Skills', 'Composable SKILL.md you can fork', 'Built-in templates'],
+                  ['Self-host', 'Yes, run anywhere Node 24 runs', 'No'],
+                  ['Artifact ownership', 'Files in your project directory', 'Vendor-hosted documents'],
+                  ['CLI / CI', 'Yes via od CLI + HTTP daemon', 'Web UI only'],
+                ] },
+                { kind: 'p', text: 'Where Claude Design wins: zero local setup, one vendor bill, and a hosted UI. If that convenience is the priority, a hosted product is hard to beat — Open Design trades it for ownership, BYOK, and open source.' },
+              ],
+            },
+            {
+              id: 'who-picks',
+              heading: 'Who should pick which',
+              blocks: [
+                { kind: 'p', text: 'Pick Claude Design if:' },
+                { kind: 'ul', items: [
+                  'You want zero local setup and one vendor bill.',
+                  'You are already deep in a Claude-first hosted workflow.',
+                  'Your team prefers a hosted UI over Markdown files.',
+                ] },
+                { kind: 'p', text: 'Pick Open Design if:' },
+                { kind: 'ul', items: [
+                  'You want design artifacts as version-controlled files.',
+                  'You want BYOK with your existing coding agent.',
+                  'You want to fork, rebrand, embed in CLI, or self-host.',
+                  'You want one DESIGN.md per brand that every skill respects.',
+                ] },
+              ],
+            },
+            {
+              id: 'migrate',
+              heading: 'Moving a design from Claude Design into Open Design',
+              blocks: [
+                { kind: 'p', text: 'There is no automatic import from Claude Design today; use a one-time brand-extraction run.' },
+                { kind: 'ol', items: [
+                  'Install Open Design from the quickstart.',
+                  'Open the web UI and point your agent at a Claude Design artifact you like.',
+                  'Ask the agent to extract the brand into a DESIGN.md file.',
+                  'Pick a skill and render it against your new brand.',
+                ] },
+                { kind: 'p', text: 'From then on, every skill renders in your brand without re-prompting — and the files stay in your repo.' },
+              ],
+            },
+          ],
+          faqTitle: 'FAQ',
+          faq: [
+            { name: 'Is Open Design really a drop-in alternative to Claude Design?', text: 'Not literally, but they overlap on prompt-to-design-artifact use cases.' },
+            { name: 'Can I use Claude as my agent in Open Design?', text: 'Yes. Open Design supports Claude Code and Anthropic API BYOK flows; credentials are never proxied through us.' },
+            { name: 'What happens to my Claude Design designs?', text: 'You can keep using Claude Design alongside Open Design; migration is manual today.' },
+            { name: 'Does Open Design generate the same artifact types?', text: 'Yes for common types: landing pages, decks, dashboards, social posts, brand systems, and prototypes.' },
+            { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
+            { name: 'Is Open Design affiliated with Anthropic or Claude?', text: 'No. Open Design is an independent, open-source project. Claude is a trademark of Anthropic; this is an unaffiliated comparison.' },
+          ],
+          ctaTitle: 'Switch in three commands.',
+          ctaBody:
+            'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
+          ctaActions: [
+            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+          ],
+          hubLinkLabel: 'See all comparisons',
+        },
+      },
     },
     agentGuides: {
       'claude-code': {
@@ -4295,6 +5576,26 @@ export function getInfoPageCopy(locale: LandingLocaleCode): InfoPageCopy {
     INFO_PAGE_COPY[locale] ??
     compactInfoPageCopy(locale, compactInfoTextFromHome(locale)) ??
     INFO_PAGE_COPY[DEFAULT_LOCALE]!
+  );
+}
+
+// Copy for one `/alternatives/<slug>/` comparison page. Only en supplies
+// these today, so non-en locales fall back to the English copy — the page
+// still renders, just in English, until localized overrides land.
+export function getAlternativeCopy(
+  locale: LandingLocaleCode,
+  slug: string,
+): AlternativeDetailCopy | undefined {
+  // Non-default locales always prefer the localized translation. Some
+  // hand-written locale copies inherit en's `alternatives` map, so we must
+  // not let that English copy win over the localized shard.
+  if (locale !== DEFAULT_LOCALE) {
+    const localized = LOCALIZED_ALTERNATIVES[locale]?.[slug];
+    if (localized) return localized;
+  }
+  return (
+    INFO_PAGE_COPY[locale]?.alternatives?.[slug] ??
+    INFO_PAGE_COPY[DEFAULT_LOCALE]!.alternatives?.[slug]
   );
 }
 

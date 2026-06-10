@@ -14,6 +14,12 @@ import {
   clearHostBrowserData,
   isOpenDesignHostAvailable,
 } from '@open-design/host';
+import type { TrackingReferenceBoardCategory } from '@open-design/contracts/analytics';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackReferenceBoardClick,
+  trackReferenceBoardSurfaceView,
+} from '../analytics/events';
 import {
   openExternalUrl,
   projectRawUrl,
@@ -1953,6 +1959,7 @@ export function DesignBrowserPanel({
             {isBlank ? (
               <DesignBrowserStart
                 onNavigate={navigateTo}
+                projectId={projectId}
               />
             ) : desktopHostAvailable ? (
               <webview
@@ -2586,12 +2593,23 @@ const REFERENCE_ALL_CATEGORY = 'all';
 
 function DesignBrowserStart({
   onNavigate,
+  projectId,
 }: {
   onNavigate: (url: string) => void;
+  projectId?: string;
 }) {
+  const analytics = useAnalytics();
   const [activeCategory, setActiveCategory] = useState<string>(REFERENCE_ALL_CATEGORY);
   const [query, setQuery] = useState('');
   const searchRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    trackReferenceBoardSurfaceView(analytics.track, {
+      page_name: 'file_manager',
+      area: 'reference_board',
+      ...(projectId ? { project_id: projectId } : {}),
+    });
+  }, [analytics.track, projectId]);
 
   const visibleGroups = useMemo(
     () => filterReferenceGroups(REFERENCE_GROUPS, activeCategory, query),
@@ -2604,6 +2622,28 @@ function DesignBrowserStart({
     setQuery('');
     setActiveCategory(REFERENCE_ALL_CATEGORY);
     searchRef.current?.focus();
+  };
+
+  const selectCategory = (categoryId: string) => {
+    setActiveCategory(categoryId);
+    trackReferenceBoardClick(analytics.track, {
+      page_name: 'file_manager',
+      area: 'reference_board',
+      element: 'category_chip',
+      category_id: categoryId as TrackingReferenceBoardCategory,
+      ...(projectId ? { project_id: projectId } : {}),
+    });
+  };
+
+  const openSite = (site: ReferenceSite) => {
+    trackReferenceBoardClick(analytics.track, {
+      page_name: 'file_manager',
+      area: 'reference_board',
+      element: 'open_site',
+      site_id: referenceSiteId(site.url),
+      ...(projectId ? { project_id: projectId } : {}),
+    });
+    onNavigate(site.url);
   };
 
   return (
@@ -2631,7 +2671,7 @@ function DesignBrowserStart({
             role="tab"
             aria-selected={activeCategory === REFERENCE_ALL_CATEGORY}
             className={`db-reference-chip${activeCategory === REFERENCE_ALL_CATEGORY ? ' is-active' : ''}`}
-            onClick={() => setActiveCategory(REFERENCE_ALL_CATEGORY)}
+            onClick={() => selectCategory(REFERENCE_ALL_CATEGORY)}
           >
             All
             <span className="db-reference-chip-count">{REFERENCE_TOTAL}</span>
@@ -2643,7 +2683,7 @@ function DesignBrowserStart({
               role="tab"
               aria-selected={activeCategory === group.id}
               className={`db-reference-chip${activeCategory === group.id ? ' is-active' : ''}`}
-              onClick={() => setActiveCategory(group.id)}
+              onClick={() => selectCategory(group.id)}
             >
               {group.title}
               <span className="db-reference-chip-count">{group.sites.length}</span>
@@ -2659,6 +2699,16 @@ function DesignBrowserStart({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onFocus={() => {
+              // Tracked on focus rather than every keystroke so each
+              // engagement counts once.
+              trackReferenceBoardClick(analytics.track, {
+                page_name: 'file_manager',
+                area: 'reference_board',
+                element: 'search_input',
+                ...(projectId ? { project_id: projectId } : {}),
+              });
+            }}
             onKeyDown={(event) => {
               if (event.key === 'Escape' && query) {
                 event.preventDefault();
@@ -2713,7 +2763,7 @@ function DesignBrowserStart({
                     className="db-reference-card"
                     onPointerEnter={() => warmBrowserOrigin(site.url)}
                   >
-                    <button type="button" onClick={() => onNavigate(site.url)}>
+                    <button type="button" onClick={() => openSite(site)}>
                       <BrowserSiteIcon
                         className="db-reference-icon"
                         fallback="globe"
@@ -2726,7 +2776,7 @@ function DesignBrowserStart({
                     </button>
                     <p>{site.detail}</p>
                     <div className="db-reference-actions">
-                      <button type="button" onClick={() => onNavigate(site.url)}>
+                      <button type="button" onClick={() => openSite(site)}>
                         <Icon name="globe" size={13} />
                         Open
                       </button>
@@ -2858,6 +2908,19 @@ export function hostnameFromUrl(url: string): string {
   } catch {
     return url;
   }
+}
+
+// Slugs a reference site URL into the snake_case `site_id` reported by
+// reference-board analytics: hostname minus the TLD, non-alphanumerics
+// folded into underscores (`land-book.com` → `land_book`,
+// `fonts.google.com` → `fonts_google`).
+function referenceSiteId(url: string): string {
+  const labels = hostnameFromUrl(url).toLowerCase().split('.');
+  const slug = (labels.length > 1 ? labels.slice(0, -1) : labels)
+    .join('_')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return slug || 'unknown';
 }
 
 export function faviconUrl(url: string): string | undefined {

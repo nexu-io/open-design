@@ -8,7 +8,7 @@ tutorials about Open Design, with a human in the loop.
 ```
 daily cron (GitHub Actions)
   notify-candidates.ts
-    → YouTube Data API search (last N days)
+    → YouTube Data API search (videos published since the last successful run)
     → drop already-catalogued videos
     → LLM relevance gate (reject lookalikes / roundups)
     → post a numbered digest to Feishu
@@ -23,6 +23,18 @@ generate-selected.ts  (run by the maintainer / agent)
 
 The cron **never** generates entries or opens PRs on its own — selection is the
 human review step, done in Feishu before any content is written.
+
+The same daily digest also lists **user submissions** so they enter the same
+review flow:
+
+- **Submission issues** — open issues from the "Submit a tutorial" form (label
+  `tutorials`). When a maintainer approves one, generate its entry from the
+  video link in the issue body and open a PR with `Closes #<issue>` (the issue
+  closes on merge):
+  `tsx scripts/youtube-tutorials/generate-selected.ts <video-url-from-issue>`
+- **Contribution PRs** — open PRs that touch `app/content/tutorials/**`. They
+  are auto-labeled `tutorials` by `.github/workflows/labeler.yml` so the digest
+  can list them; review/merge happens on GitHub as normal.
 
 ## Files
 
@@ -56,7 +68,9 @@ before it ever reaches the digest.
 ## Manual runs
 
 ```bash
-# Reproduce the candidate digest locally (no Feishu post)
+# Reproduce the candidate digest locally (no Feishu post). Without a run-history
+# watermark (i.e. locally), it uses a 2-day fallback window; pass --days N for a
+# wider catch-up sweep.
 npx tsx scripts/youtube-tutorials/notify-candidates.ts --days 14 --print
 
 # Generate approved entries (ids or URLs), then open a PR with the new files

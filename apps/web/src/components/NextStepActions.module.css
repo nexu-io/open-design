@@ -240,9 +240,61 @@
 .flyoutMenu {
   width: 200px;
 }
-.flyoutSkills {
-  width: 260px;
-  max-height: min(60vh, 360px);
+.flyoutToolbox {
+  width: 300px;
+  max-height: min(70vh, 500px);
+  padding: 10px;
+}
+
+.toolboxFlyoutTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px 8px;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-default);
+}
+
+.toolboxFlyoutTitle svg {
+  color: var(--accent-strong);
+}
+
+.flyoutSearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 10px;
+  color: var(--text-muted);
+  background: var(--bg-default);
+}
+.flyoutSearch input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-default);
+  outline: none;
+}
+.flyoutScroll {
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.flyoutSectionLabel {
+  padding: 8px 8px 4px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+.flyoutEmpty {
+  padding: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .flyoutRow {
@@ -274,32 +326,4 @@
 .flyoutRow:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.flyoutSearch {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid var(--border-soft, var(--border));
-  color: var(--text-muted);
-}
-.flyoutSearch input {
-  flex: 1 1 auto;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  font-size: 13px;
-  color: var(--text-default);
-  outline: none;
-}
-.flyoutScroll {
-  overflow-y: auto;
-  scrollbar-width: thin;
-}
-.flyoutEmpty {
-  padding: 8px;
-  font-size: 12px;
-  color: var(--text-muted);
 }

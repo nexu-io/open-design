@@ -93,9 +93,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   // dropped every event fired during onboarding because no consent
   // existed yet — observed live on the nightly.10 QA run, which left
   // zero `page_view pn=onboarding` rows on PostHog despite the user
-  // completing the flow. `artifactManifest` stays off; the existing
-  // PrivacySection lets the user enable it explicitly.
-  telemetry: { metrics: true, content: true, artifactManifest: false },
+  // completing the flow.
+  telemetry: { metrics: true, content: true },
 };
 
 /** Well-known providers with pre-filled base URLs. */

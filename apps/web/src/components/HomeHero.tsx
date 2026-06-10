@@ -68,10 +68,12 @@ import {
   localizeSkillName,
 } from '../i18n/content';
 import { PreviewSurface } from './plugins-home/cards/PreviewSurface';
+import { readHomeGuideStage, writeHomeGuideStage } from './home-hero/firstRunGuide';
 import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
 import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { applyFacetSelection } from './plugins-home/facets';
 import { inferPluginPreview } from './plugins-home/preview';
+import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
 import { SessionModeToggle } from './SessionModeToggle';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
 import { WorkingDirPicker } from './WorkingDirPicker';
@@ -93,6 +95,9 @@ export interface HomeHeroSubmitHandler {
 export interface HomeHeroHandle {
   focus(): void;
   focusEnd(): void;
+  // Flash the send button twice — fired after a plugin Use action or an
+  // example-prompt card seeds the composer, to pull the eye to the next step.
+  pulseSend(): void;
 }
 
 export interface ExamplePromptInfo {
@@ -103,6 +108,11 @@ export interface ExamplePromptInfo {
 
 interface Props {
   active?: boolean;
+  // Arms the first-run guidance trail (prototype chip → first preset
+  // card sheen). Tri-state: true = brand-new user (no projects), false =
+  // existing user, undefined = projects still loading — the guide neither
+  // arms nor completes until the answer is known.
+  firstRunGuide?: boolean;
   prompt: string;
   onPromptChange: (value: string) => void;
   onSubmit: HomeHeroSubmitHandler;
@@ -224,6 +234,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     prompt,
     onPromptChange,
     onSubmit,
+    firstRunGuide,
     sessionMode = 'design',
     onSessionModeChange,
     activePluginTitle,
@@ -290,6 +301,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   const [hoveredPlugin, setHoveredPlugin] = useState<InstalledPluginRecord | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // Two-flash attention pulse on the send button; armed via the
+  // imperative `pulseSend()` handle, cleared when the animation ends.
+  const [sendAttention, setSendAttention] = useState(false);
+  // First-run guidance trail (see home-hero/firstRunGuide.ts): which rail
+  // chip is pulsing, and whether the first example-prompt card is pulsing.
+  const [guidePulseChipId, setGuidePulseChipId] = useState<string | null>(null);
+  const [guidePulseFirstPreset, setGuidePulseFirstPreset] = useState(false);
   // Selected second-level sub-category slug (Prototype / Slide deck rail).
   // Local-only: it filters the example-prompt cards below the rail. It never
   // binds a plugin or stamps an active badge.
@@ -529,12 +547,57 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       applyFacetSelection(pool, { category: activeChipId, subcategory: selectedSubcategory }),
     );
   }, [activeExamplePlugins, activeChipId, selectedSubcategory, pluginOptions]);
+
+  // First-run guide, beat 1: pulse the Prototype chip for brand-new users.
+  // The settle delay lets the hero finish its entrance before the sheen.
+  useEffect(() => {
+    if (firstRunGuide !== true) return;
+    if (readHomeGuideStage() !== 'chip') return;
+    const arm = window.setTimeout(() => setGuidePulseChipId('prototype'), 900);
+    const disarm = window.setTimeout(() => setGuidePulseChipId(null), 3600);
+    return () => {
+      window.clearTimeout(arm);
+      window.clearTimeout(disarm);
+    };
+  }, [firstRunGuide]);
+
+  // Users with existing projects never see the trail — complete ANY
+  // unfinished stage silently. A chip pick during the loading window can
+  // move the stage to 'card' before we know the user is not new, so 'chip'
+  // alone is not enough to close off.
+  useEffect(() => {
+    if (firstRunGuide !== false) return;
+    if (readHomeGuideStage() !== 'done') writeHomeGuideStage('done');
+  }, [firstRunGuide]);
+
   const activePromptExamples = useMemo(
     () => activeChipId && activeExamplePlugins.length === 0
       ? homeHeroChipPromptExamples(activeChipId, locale)
       : [],
     [activeChipId, activeExamplePlugins.length, locale],
   );
+
+  // Beat 2: once the picked chip's example cards render, pulse the first
+  // card exactly once, then the trail is done (the send pulse takes over
+  // after a card pick).
+  useEffect(() => {
+    if (firstRunGuide !== true) return;
+    if (readHomeGuideStage() !== 'card') return;
+    // Either card surface counts: plugin preset tiles, or the static
+    // prompt-example fallback a presetless chip renders instead.
+    const hasExampleCards =
+      filteredExamplePlugins.length > 0 || activePromptExamples.length > 0;
+    if (!activeChipId || !hasExampleCards) return;
+    const arm = window.setTimeout(() => {
+      setGuidePulseFirstPreset(true);
+      writeHomeGuideStage('done');
+    }, 500);
+    const disarm = window.setTimeout(() => setGuidePulseFirstPreset(false), 3200);
+    return () => {
+      window.clearTimeout(arm);
+      window.clearTimeout(disarm);
+    };
+  }, [firstRunGuide, activeChipId, filteredExamplePlugins.length, activePromptExamples.length]);
   const authoringLayoutActive =
     activeChipId === 'create-plugin' || pendingChipId === 'create-plugin';
   const promptMaxHeight = authoringLayoutActive
@@ -634,6 +697,17 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [previewHomeFileKey]);
 
+  // Shared by the imperative pulseSend() handle (plugin Use / preset picks
+  // routed through HomeView) and the component-internal static
+  // prompt-example path — every "composer just got seeded" flow shows the
+  // same Send cue.
+  function triggerSendAttention() {
+    // Drop the class for a frame so a pulse requested mid-animation
+    // restarts instead of being swallowed.
+    setSendAttention(false);
+    requestAnimationFrame(() => setSendAttention(true));
+  }
+
   useImperativeHandle(
     ref,
     (): HomeHeroHandle => ({
@@ -642,6 +716,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       },
       focusEnd() {
         editorRef.current?.focus();
+      },
+      pulseSend() {
+        triggerSendAttention();
       },
     }),
     [],
@@ -804,6 +881,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     editorRef.current?.setText(example);
     setSelectedIndex(0);
     requestAnimationFrame(() => editorRef.current?.focus());
+    triggerSendAttention();
   }
 
   function pickExamplePluginPreset(record: InstalledPluginRecord, chipId: string, promptText: string) {
@@ -836,6 +914,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       element: 'task_chip',
       chip_id: chip.id,
     });
+    // First chip pick completes the guide's first beat; the preset-card
+    // pulse arms once the example cards for this chip render.
+    if (readHomeGuideStage() === 'chip') {
+      writeHomeGuideStage('card');
+      setGuidePulseChipId(null);
+    }
     onPickChip(chip);
   }
 
@@ -1395,9 +1479,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             ) : null}
             <button
               type="button"
-              className="home-hero__submit od-tooltip"
+              className={`home-hero__submit od-tooltip${sendAttention ? ' home-hero__attention-sheen' : ''}`}
               data-testid="home-hero-submit"
               onClick={onSubmit}
+              onAnimationEnd={() => setSendAttention(false)}
               disabled={!canSubmit}
               title={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
               data-tooltip={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
@@ -1452,6 +1537,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           pluginsLoading={pluginsLoading}
           onPickChip={handlePickTaskChip}
           variant="tabs"
+          pulseChipId={guidePulseChipId}
         >
           <ShortcutsMenu
             activeChipId={activeChipId}
@@ -1505,6 +1591,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           pendingPluginId={pendingPluginId}
           locale={locale}
           onPick={pickExamplePluginPreset}
+          pulseFirstPreset={guidePulseFirstPreset}
         />
       ) : activePromptExamples.length > 0 ? (
         <div
@@ -1515,11 +1602,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             {t('homeHero.promptExamples')}
           </div>
           <div className="home-hero__prompt-examples-grid">
-            {activePromptExamples.map((example) => (
+            {activePromptExamples.map((example, index) => (
               <button
                 key={example}
                 type="button"
-                className="home-hero__prompt-example"
+                className={`home-hero__prompt-example${guidePulseFirstPreset && index === 0 ? ' home-hero__attention-sheen' : ''}`}
                 data-testid="home-hero-prompt-example"
                 onClick={() => usePromptExample(example)}
               >
@@ -1575,6 +1662,7 @@ function PluginPromptPresets({
   onPick,
   pendingPluginId,
   plugins,
+  pulseFirstPreset = false,
 }: {
   activePluginId: string | null;
   chipId: string;
@@ -1582,6 +1670,8 @@ function PluginPromptPresets({
   onPick: (record: InstalledPluginRecord, chipId: string, promptText: string) => void;
   pendingPluginId: string | null;
   plugins: InstalledPluginRecord[];
+  // First-run guide: the first card carries the attention sheen.
+  pulseFirstPreset?: boolean;
 }) {
   const { t } = useI18n();
   return (
@@ -1593,7 +1683,7 @@ function PluginPromptPresets({
         {t('homeHero.promptExamples')}
       </div>
       <div className="home-hero__plugin-presets" role="list">
-        {plugins.map((record) => (
+        {plugins.map((record, index) => (
           <PluginPromptPresetCard
             key={record.id}
             chipId={chipId}
@@ -1602,6 +1692,7 @@ function PluginPromptPresets({
             active={activePluginId === record.id}
             pending={pendingPluginId === record.id}
             disabled={pendingPluginId !== null}
+            pulse={pulseFirstPreset && index === 0}
             onPick={onPick}
           />
         ))}
@@ -1617,6 +1708,7 @@ function PluginPromptPresetCard({
   locale,
   onPick,
   pending,
+  pulse = false,
   record,
 }: {
   active: boolean;
@@ -1625,6 +1717,7 @@ function PluginPromptPresetCard({
   locale: Locale;
   onPick: (record: InstalledPluginRecord, chipId: string, promptText: string) => void;
   pending: boolean;
+  pulse?: boolean;
   record: InstalledPluginRecord;
 }) {
   // Example-prompt preset tiles are thumbnails too — prefer the cheap baked
@@ -1638,7 +1731,7 @@ function PluginPromptPresetCard({
   return (
     <button
       type="button"
-      className={`home-hero__plugin-preset${active ? ' is-active' : ''}${pending ? ' is-pending' : ''}`}
+      className={`home-hero__plugin-preset${active ? ' is-active' : ''}${pending ? ' is-pending' : ''}${pulse ? ' home-hero__attention-sheen' : ''}`}
       data-testid="home-hero-plugin-preset"
       data-plugin-id={record.id}
       role="listitem"
@@ -2438,6 +2531,8 @@ interface RailGroupProps {
   pluginsLoading: boolean;
   onPickChip: (chip: HomeHeroChip) => void;
   variant?: 'rail' | 'tabs';
+  // First-run guide: this chip carries the attention sheen.
+  pulseChipId?: string | null;
   children?: ReactNode;
 }
 
@@ -2449,6 +2544,7 @@ function RailGroup({
   pluginsLoading,
   onPickChip,
   variant = 'rail',
+  pulseChipId = null,
   children,
 }: RailGroupProps) {
   const t = useT();
@@ -2474,6 +2570,7 @@ function RailGroup({
           : ['home-hero__rail-chip', `home-hero__rail-chip--${group}`];
         if (isActive) cls.push('is-active');
         if (isPending) cls.push('is-pending');
+        if (pulseChipId === chip.id) cls.push('home-hero__attention-sheen');
         return (
           <button
             key={chip.id}
@@ -2555,7 +2652,9 @@ function SubTypeRow({
             aria-selected={isActive}
           >
             <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
-            <span className="home-hero__subtype-chip-label">{sub.label}</span>
+            <span className="home-hero__subtype-chip-label">
+              {pluginSubfacetLabel(sub.slug, sub.label, t)}
+            </span>
           </button>
         );
       })}

@@ -329,12 +329,19 @@ process.exit(1);
     );
   });
 
-  it('retries transient AMR Link catalog failures before aborting startup', async () => {
+  it('survives transient AMR Link catalog failures without aborting the run', async () => {
+    // The run preflight resolves the AMR catalog through the shared
+    // AmrModelLoadingCache, which degrades to the offline `vela model preset`
+    // seed whenever the authoritative `vela model list` is momentarily
+    // unavailable (and refreshes the remote catalog in the background). So a
+    // transient catalog failure must NOT abort the run — the per-run path no
+    // longer blocks on a synchronous `model list` retry loop.
     const previousRuntimeKey = process.env.VELA_RUNTIME_KEY;
     const previousLinkUrl = process.env.VELA_LINK_URL;
     const stateFile = join(tmpdir(), `od-amr-model-retry-${randomUUID()}.json`);
     try {
-      process.env.VELA_RUNTIME_KEY = 'fake-runtime-key';
+      // Unique key so the shared model cache key is unique per test run.
+      process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
       process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
 
       await withFakeAgent(
@@ -381,12 +388,94 @@ child.on('exit', (code, signal) => {
           expect(body).toContain('"type":"text_delta","delta":"Hello from fake "');
           expect(body).toContain('"type":"text_delta","delta":"vela."');
           expect(body).not.toContain('model_catalog_unavailable');
+          expect(body).not.toContain('AMR_MODEL_UNAVAILABLE');
+          // The catalog probe runs at least once (remote attempted, then the
+          // run proceeds from the preset seed). We no longer assert an exact
+          // synchronous retry count: the remote retry/backoff now happens in
+          // the cache's background refresh, not on the per-run hot path.
           const attempts = JSON.parse(readFileSync(stateFile, 'utf8')) as { attempts: number };
-          expect(attempts.attempts).toBe(3);
+          expect(attempts.attempts).toBeGreaterThanOrEqual(1);
         },
       );
     } finally {
       rmSync(stateFile, { force: true });
+      if (previousRuntimeKey == null) delete process.env.VELA_RUNTIME_KEY;
+      else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
+      if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
+      else process.env.VELA_LINK_URL = previousLinkUrl;
+    }
+  });
+
+  it('proceeds with the AMR run via the cached/preset catalog when the live model list is unavailable', async () => {
+    // Red spec for the packaged-nightly "AMR model the selected model is not
+    // available from Vela" report: the run preflight used to do a fresh,
+    // blocking `vela model list` (authoritative remote catalog) on EVERY run
+    // and fail-close the run whenever that single call timed out / errored —
+    // even though the user is logged in, the model picker already shows a
+    // model (seeded from the offline `vela model preset`), and the selected
+    // model is real. Under CorpLink/飞连 the remote call routinely exceeds the
+    // 10s timeout, so a logged-in user with a valid model could not run AMR at
+    // all. The fix reuses the shared AmrModelLoadingCache (cached remote when
+    // hot, otherwise the offline preset seed) instead of a per-run blocking
+    // remote probe, so a transient `model list` failure no longer kills the run.
+    const previousRuntimeKey = process.env.VELA_RUNTIME_KEY;
+    const previousLinkUrl = process.env.VELA_LINK_URL;
+    try {
+      // A unique runtime key both marks the user as logged-in AND makes the
+      // shared model cache key unique so this case never reuses another test's
+      // cached remote catalog.
+      process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
+      process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+
+      await withFakeAgent(
+        'vela',
+        `
+const { spawn } = require('node:child_process');
+const fixture = ${JSON.stringify(FAKE_VELA_FIXTURE)};
+const args = process.argv.slice(2);
+// Simulate a persistently unreachable authoritative catalog (gateway
+// timeout / 飞连 congestion): every \`vela model list\` fails. \`model preset\`,
+// \`login\`, and \`agent run\` still delegate to the fixture, mirroring the real
+// CLI where the offline preset and the ACP run do not need the gateway.
+if (args[0] === 'model' && args[1] === 'list') {
+  process.stderr.write('Get "https://amr-link.open-design.ai/v1/models": context deadline exceeded\\n');
+  process.exit(1);
+}
+const child = spawn(process.execPath, [fixture, ...args], {
+  stdio: 'inherit',
+  env: process.env,
+});
+child.on('exit', (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  process.exit(code ?? 0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'amr',
+              message: 'hello',
+              // Present in the preset seed (DEFAULT_MODEL_PRESET_JSON) but the
+              // live `model list` is unavailable, so only the preset path can
+              // surface it.
+              model: 'glm-5.1',
+            }),
+          });
+          const body = await response.text();
+
+          expect(response.ok).toBe(true);
+          // The run must NOT be fail-closed on the unavailable live catalog.
+          expect(body).not.toContain('AMR_MODEL_UNAVAILABLE');
+          expect(body).not.toContain('model_catalog_unavailable');
+          expect(body).not.toContain('is not available from Vela');
+          // It must actually proceed into the ACP run and stream assistant text.
+          expect(body).toContain('"type":"text_delta","delta":"Hello from fake "');
+          expect(body).toContain('"type":"text_delta","delta":"vela."');
+        },
+      );
+    } finally {
       if (previousRuntimeKey == null) delete process.env.VELA_RUNTIME_KEY;
       else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
       if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;

@@ -310,7 +310,7 @@ interface Props {
   // tests that don't wire chat send).
   onArtifactShare?: (fileName: string) => void;
   // Featured design-toolbox follow-up rows on the "next step" card. Seeding the
-  // composer with an action / opening the full toolbox both route through the
+  // composer with an action / opening the toolbox both route through the
   // composer; see ChatPane's composer ref wiring.
   onToolboxAction?: (id: DesignToolboxActionId) => void;
   onPickSkill?: (skillId: string) => void;
@@ -352,8 +352,8 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'suppressDirectionForms',
   'hasDesignSystemContext',
   // Memoized + stable from ChatPane; compared so a late skill-list load
-  // refreshes the featured next-step rows' `@skill` hover detail and the full
-  // More → Design toolbox skill list.
+  // refreshes the featured next-step rows' `@skill` hover detail and the
+  // More → Design toolbox global resources.
   'toolboxSkillNames',
   'nextStepSkills',
   // Live streaming tool input changes identity on every `tool_input_delta`.
