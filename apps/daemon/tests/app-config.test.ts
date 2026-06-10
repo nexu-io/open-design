@@ -25,7 +25,6 @@ import { isLocalSameOrigin } from '../src/origin-validation.js';
 const DEFAULT_TELEMETRY = {
   metrics: true,
   content: true,
-  artifactManifest: false,
 } as const;
 
 describe('app-config', () => {

@@ -2,95 +2,95 @@
   "generatedAt": null,
   "previews": {
     "example-3d-creator-portfolio": {
-      "video": "example-3d-creator-portfolio.49ddefc89dfa6cae.mp4",
-      "poster": "example-3d-creator-portfolio.49ddefc89dfa6cae.poster.jpg",
+      "video": "example-3d-creator-portfolio.7baca4a2f8fe0135.mp4",
+      "poster": "example-3d-creator-portfolio.7baca4a2f8fe0135.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "49ddefc89dfa6cae"
+      "hash": "7baca4a2f8fe0135"
     },
     "example-ai-designer-portfolio": {
-      "video": "example-ai-designer-portfolio.f8c892f769c29fe1.mp4",
-      "poster": "example-ai-designer-portfolio.f8c892f769c29fe1.poster.jpg",
-      "durationMs": 7002,
+      "video": "example-ai-designer-portfolio.44eb17358a2cac55.mp4",
+      "poster": "example-ai-designer-portfolio.44eb17358a2cac55.poster.jpg",
+      "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "f8c892f769c29fe1"
+      "hash": "44eb17358a2cac55"
     },
     "example-acreage-farming": {
-      "video": "example-acreage-farming.3a3ba9e4e395385c.mp4",
-      "poster": "example-acreage-farming.3a3ba9e4e395385c.poster.jpg",
-      "durationMs": 6937,
+      "video": "example-acreage-farming.f35f3677cb33573c.mp4",
+      "poster": "example-acreage-farming.f35f3677cb33573c.poster.jpg",
+      "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "3a3ba9e4e395385c"
+      "hash": "f35f3677cb33573c"
     },
     "example-aerocore": {
-      "video": "example-aerocore.c6456f92efe30b0b.mp4",
-      "poster": "example-aerocore.c6456f92efe30b0b.poster.jpg",
-      "durationMs": 7006,
+      "video": "example-aerocore.469701751a1613f0.mp4",
+      "poster": "example-aerocore.469701751a1613f0.poster.jpg",
+      "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "c6456f92efe30b0b"
+      "hash": "469701751a1613f0"
     },
     "example-audio-jingle": {
-      "video": "example-audio-jingle.13ed6dd93a78f3fd.mp4",
-      "poster": "example-audio-jingle.13ed6dd93a78f3fd.poster.jpg",
-      "durationMs": 1150,
+      "video": "example-audio-jingle.f4c2e4f0d0523134.mp4",
+      "poster": "example-audio-jingle.f4c2e4f0d0523134.poster.jpg",
+      "durationMs": 2500,
       "holdMs": 2500,
-      "hash": "13ed6dd93a78f3fd"
+      "hash": "f4c2e4f0d0523134"
     },
     "example-blog-post": {
-      "video": "example-blog-post.8e3d0a16642e3cb6.mp4",
-      "poster": "example-blog-post.8e3d0a16642e3cb6.poster.jpg",
+      "video": "example-blog-post.55237a22300d62e1.mp4",
+      "poster": "example-blog-post.55237a22300d62e1.poster.jpg",
       "durationMs": 5500,
       "holdMs": 2500,
-      "hash": "8e3d0a16642e3cb6"
+      "hash": "55237a22300d62e1"
     },
     "example-cinematic-landing-page": {
-      "video": "example-cinematic-landing-page.aa90252f56131a69.mp4",
-      "poster": "example-cinematic-landing-page.aa90252f56131a69.poster.jpg",
-      "durationMs": 6982,
+      "video": "example-cinematic-landing-page.5c16a1234eecc1a0.mp4",
+      "poster": "example-cinematic-landing-page.5c16a1234eecc1a0.poster.jpg",
+      "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "aa90252f56131a69"
+      "hash": "5c16a1234eecc1a0"
     },
     "example-clinical-case-report": {
-      "video": "example-clinical-case-report.857413807ba8f5a3.mp4",
-      "poster": "example-clinical-case-report.857413807ba8f5a3.poster.jpg",
+      "video": "example-clinical-case-report.45f70624f603247c.mp4",
+      "poster": "example-clinical-case-report.45f70624f603247c.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "857413807ba8f5a3"
+      "hash": "45f70624f603247c"
     },
     "od-code-migration": {
-      "video": "od-code-migration.3b8fb02770a0ac0e.mp4",
-      "poster": "od-code-migration.3b8fb02770a0ac0e.poster.jpg",
+      "video": "od-code-migration.aa33dda205aa79a5.mp4",
+      "poster": "od-code-migration.aa33dda205aa79a5.poster.jpg",
       "durationMs": 1323,
       "holdMs": 2500,
-      "hash": "3b8fb02770a0ac0e"
+      "hash": "aa33dda205aa79a5"
     },
     "example-codex-interactive-capability-map": {
-      "video": "example-codex-interactive-capability-map.659ce25ad33b1c3c.mp4",
-      "poster": "example-codex-interactive-capability-map.659ce25ad33b1c3c.poster.jpg",
+      "video": "example-codex-interactive-capability-map.b597f4c8b26e3e8c.mp4",
+      "poster": "example-codex-interactive-capability-map.b597f4c8b26e3e8c.poster.jpg",
       "durationMs": 920,
       "holdMs": 2500,
-      "hash": "659ce25ad33b1c3c"
+      "hash": "b597f4c8b26e3e8c"
     },
     "example-critique": {
-      "video": "example-critique.e850d669114c7a9c.mp4",
-      "poster": "example-critique.e850d669114c7a9c.poster.jpg",
+      "video": "example-critique.3b8c59826858ddca.mp4",
+      "poster": "example-critique.3b8c59826858ddca.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "e850d669114c7a9c"
+      "hash": "3b8c59826858ddca"
     },
     "example-dashboard-ui-glass": {
-      "video": "example-dashboard-ui-glass.76cdb4df2368505e.mp4",
-      "poster": "example-dashboard-ui-glass.76cdb4df2368505e.poster.jpg",
-      "durationMs": 1150,
+      "video": "example-dashboard-ui-glass.f7054b39f07cab45.mp4",
+      "poster": "example-dashboard-ui-glass.f7054b39f07cab45.poster.jpg",
+      "durationMs": 2500,
       "holdMs": 2500,
-      "hash": "76cdb4df2368505e"
+      "hash": "f7054b39f07cab45"
     },
     "example-data-report": {
-      "video": "example-data-report.56127f9fff30aae3.mp4",
-      "poster": "example-data-report.56127f9fff30aae3.poster.jpg",
+      "video": "example-data-report.2c7bb6180477d0ba.mp4",
+      "poster": "example-data-report.2c7bb6180477d0ba.poster.jpg",
       "durationMs": 3047,
       "holdMs": 2500,
-      "hash": "56127f9fff30aae3"
+      "hash": "2c7bb6180477d0ba"
     },
     "example-dating-web": {
       "video": "example-dating-web.be1964a1d0ed3893.mp4",
@@ -100,333 +100,333 @@
       "hash": "be1964a1d0ed3893"
     },
     "example-docs-page": {
-      "video": "example-docs-page.0c1e01c3cb554ce2.mp4",
-      "poster": "example-docs-page.0c1e01c3cb554ce2.poster.jpg",
+      "video": "example-docs-page.eb8359c2effbadbf.mp4",
+      "poster": "example-docs-page.eb8359c2effbadbf.poster.jpg",
       "durationMs": 2280,
       "holdMs": 2500,
-      "hash": "0c1e01c3cb554ce2"
+      "hash": "eb8359c2effbadbf"
     },
     "example-dreamcore-landing": {
-      "video": "example-dreamcore-landing.0a9cdc5aedab1546.mp4",
-      "poster": "example-dreamcore-landing.0a9cdc5aedab1546.poster.jpg",
+      "video": "example-dreamcore-landing.6fc7d79fee1814a8.mp4",
+      "poster": "example-dreamcore-landing.6fc7d79fee1814a8.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "0a9cdc5aedab1546"
+      "hash": "6fc7d79fee1814a8"
     },
     "example-email-marketing": {
-      "video": "example-email-marketing.ab1cd71f27962bff.mp4",
-      "poster": "example-email-marketing.ab1cd71f27962bff.poster.jpg",
+      "video": "example-email-marketing.a4e148be5f90ed27.mp4",
+      "poster": "example-email-marketing.a4e148be5f90ed27.poster.jpg",
       "durationMs": 2473,
       "holdMs": 2500,
-      "hash": "ab1cd71f27962bff"
+      "hash": "a4e148be5f90ed27"
     },
     "example-eng-runbook": {
-      "video": "example-eng-runbook.c3beabeab875cbd8.mp4",
-      "poster": "example-eng-runbook.c3beabeab875cbd8.poster.jpg",
+      "video": "example-eng-runbook.08e4310a718beb2c.mp4",
+      "poster": "example-eng-runbook.08e4310a718beb2c.poster.jpg",
       "durationMs": 6080,
       "holdMs": 2500,
-      "hash": "c3beabeab875cbd8"
+      "hash": "08e4310a718beb2c"
     },
     "example-evergreen-finance": {
-      "video": "example-evergreen-finance.ed21bb311f5f3ed1.mp4",
-      "poster": "example-evergreen-finance.ed21bb311f5f3ed1.poster.jpg",
+      "video": "example-evergreen-finance.426b6938b9d81ab1.mp4",
+      "poster": "example-evergreen-finance.426b6938b9d81ab1.poster.jpg",
       "durationMs": 3983,
       "holdMs": 2500,
-      "hash": "ed21bb311f5f3ed1"
+      "hash": "426b6938b9d81ab1"
     },
     "example-finance-report": {
-      "video": "example-finance-report.0eb10eeaa552ff14.mp4",
-      "poster": "example-finance-report.0eb10eeaa552ff14.poster.jpg",
+      "video": "example-finance-report.9dc95a28719f2dc7.mp4",
+      "poster": "example-finance-report.9dc95a28719f2dc7.poster.jpg",
       "durationMs": 2640,
       "holdMs": 2500,
-      "hash": "0eb10eeaa552ff14"
+      "hash": "9dc95a28719f2dc7"
     },
     "example-github-dashboard": {
-      "video": "example-github-dashboard.16f3c9efb8665dd2.mp4",
-      "poster": "example-github-dashboard.16f3c9efb8665dd2.poster.jpg",
+      "video": "example-github-dashboard.e62822fb978db2cf.mp4",
+      "poster": "example-github-dashboard.e62822fb978db2cf.poster.jpg",
       "durationMs": 2147,
       "holdMs": 2500,
-      "hash": "16f3c9efb8665dd2"
+      "hash": "e62822fb978db2cf"
     },
     "example-frame-glitch-title": {
-      "video": "example-frame-glitch-title.92fc2d199c0053c8.mp4",
-      "poster": "example-frame-glitch-title.92fc2d199c0053c8.poster.jpg",
-      "durationMs": 1150,
+      "video": "example-frame-glitch-title.7153836f67f276a6.mp4",
+      "poster": "example-frame-glitch-title.7153836f67f276a6.poster.jpg",
+      "durationMs": 2500,
       "holdMs": 2500,
-      "hash": "92fc2d199c0053c8"
+      "hash": "7153836f67f276a6"
     },
     "example-deck-guizang-editorial": {
-      "video": "example-deck-guizang-editorial.204901d094c8c87c.mp4",
-      "poster": "example-deck-guizang-editorial.204901d094c8c87c.poster.jpg",
+      "video": "example-deck-guizang-editorial.ee7bff4a06d7aeb4.mp4",
+      "poster": "example-deck-guizang-editorial.ee7bff4a06d7aeb4.poster.jpg",
       "durationMs": 1377,
       "holdMs": 2500,
-      "hash": "204901d094c8c87c"
+      "hash": "ee7bff4a06d7aeb4"
     },
     "example-guizang-ppt": {
-      "video": "example-guizang-ppt.ad034c5fd80d4429.mp4",
-      "poster": "example-guizang-ppt.ad034c5fd80d4429.poster.jpg",
-      "durationMs": 21704,
+      "video": "example-guizang-ppt.663a525867cc1664.mp4",
+      "poster": "example-guizang-ppt.663a525867cc1664.poster.jpg",
+      "durationMs": 8266,
       "holdMs": 2500,
-      "hash": "ad034c5fd80d4429"
+      "hash": "663a525867cc1664"
     },
     "example-hr-onboarding": {
-      "video": "example-hr-onboarding.8c24fcf2fd89a0db.mp4",
-      "poster": "example-hr-onboarding.8c24fcf2fd89a0db.poster.jpg",
+      "video": "example-hr-onboarding.b56793efd1795ce3.mp4",
+      "poster": "example-hr-onboarding.b56793efd1795ce3.poster.jpg",
       "durationMs": 4197,
       "holdMs": 2500,
-      "hash": "8c24fcf2fd89a0db"
+      "hash": "b56793efd1795ce3"
     },
     "example-html-ppt-course-module": {
-      "video": "example-html-ppt-course-module.a520adb8bdab5173.mp4",
-      "poster": "example-html-ppt-course-module.a520adb8bdab5173.poster.jpg",
+      "video": "example-html-ppt-course-module.a303059649563955.mp4",
+      "poster": "example-html-ppt-course-module.a303059649563955.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "a520adb8bdab5173"
+      "hash": "a303059649563955"
     },
     "example-html-ppt-graphify-dark-graph": {
-      "video": "example-html-ppt-graphify-dark-graph.5f42b85c99e86e33.mp4",
-      "poster": "example-html-ppt-graphify-dark-graph.5f42b85c99e86e33.poster.jpg",
+      "video": "example-html-ppt-graphify-dark-graph.b761d60177f0585a.mp4",
+      "poster": "example-html-ppt-graphify-dark-graph.b761d60177f0585a.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "5f42b85c99e86e33"
+      "hash": "b761d60177f0585a"
     },
     "example-html-ppt-hermes-cyber-terminal": {
-      "video": "example-html-ppt-hermes-cyber-terminal.5d29a488236e7fc9.mp4",
-      "poster": "example-html-ppt-hermes-cyber-terminal.5d29a488236e7fc9.poster.jpg",
+      "video": "example-html-ppt-hermes-cyber-terminal.0ec73ed9bccb4e46.mp4",
+      "poster": "example-html-ppt-hermes-cyber-terminal.0ec73ed9bccb4e46.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "5d29a488236e7fc9"
+      "hash": "0ec73ed9bccb4e46"
     },
     "example-html-ppt-knowledge-arch-blueprint": {
-      "video": "example-html-ppt-knowledge-arch-blueprint.d2ff6991d29a6ba0.mp4",
-      "poster": "example-html-ppt-knowledge-arch-blueprint.d2ff6991d29a6ba0.poster.jpg",
+      "video": "example-html-ppt-knowledge-arch-blueprint.87c941c223d5ca0c.mp4",
+      "poster": "example-html-ppt-knowledge-arch-blueprint.87c941c223d5ca0c.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "d2ff6991d29a6ba0"
+      "hash": "87c941c223d5ca0c"
     },
     "example-html-ppt-obsidian-claude-gradient": {
-      "video": "example-html-ppt-obsidian-claude-gradient.64f3a925066a1272.mp4",
-      "poster": "example-html-ppt-obsidian-claude-gradient.64f3a925066a1272.poster.jpg",
+      "video": "example-html-ppt-obsidian-claude-gradient.944857e1a106ee9b.mp4",
+      "poster": "example-html-ppt-obsidian-claude-gradient.944857e1a106ee9b.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "64f3a925066a1272"
+      "hash": "944857e1a106ee9b"
     },
     "example-html-ppt-pitch-deck": {
-      "video": "example-html-ppt-pitch-deck.76bb0d79d1701a28.mp4",
-      "poster": "example-html-ppt-pitch-deck.76bb0d79d1701a28.poster.jpg",
+      "video": "example-html-ppt-pitch-deck.e1e5c4e096ecf9d3.mp4",
+      "poster": "example-html-ppt-pitch-deck.e1e5c4e096ecf9d3.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "76bb0d79d1701a28"
+      "hash": "e1e5c4e096ecf9d3"
     },
     "example-html-ppt-presenter-mode-reveal": {
-      "video": "example-html-ppt-presenter-mode-reveal.0d746b42bc1974f6.mp4",
-      "poster": "example-html-ppt-presenter-mode-reveal.0d746b42bc1974f6.poster.jpg",
+      "video": "example-html-ppt-presenter-mode-reveal.931ffe63972e3b50.mp4",
+      "poster": "example-html-ppt-presenter-mode-reveal.931ffe63972e3b50.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "0d746b42bc1974f6"
+      "hash": "931ffe63972e3b50"
     },
     "example-html-ppt-product-launch": {
-      "video": "example-html-ppt-product-launch.44adbeb942fbe203.mp4",
-      "poster": "example-html-ppt-product-launch.44adbeb942fbe203.poster.jpg",
+      "video": "example-html-ppt-product-launch.11525a22a440b872.mp4",
+      "poster": "example-html-ppt-product-launch.11525a22a440b872.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "44adbeb942fbe203"
+      "hash": "11525a22a440b872"
     },
     "example-html-ppt-taste-brutalist": {
-      "video": "example-html-ppt-taste-brutalist.40b576ab82e27fd9.mp4",
-      "poster": "example-html-ppt-taste-brutalist.40b576ab82e27fd9.poster.jpg",
+      "video": "example-html-ppt-taste-brutalist.d9c1da1282087bd5.mp4",
+      "poster": "example-html-ppt-taste-brutalist.d9c1da1282087bd5.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "40b576ab82e27fd9"
+      "hash": "d9c1da1282087bd5"
     },
     "example-html-ppt-taste-editorial": {
-      "video": "example-html-ppt-taste-editorial.76ad8a0249e97dae.mp4",
-      "poster": "example-html-ppt-taste-editorial.76ad8a0249e97dae.poster.jpg",
+      "video": "example-html-ppt-taste-editorial.66269f2391f209b0.mp4",
+      "poster": "example-html-ppt-taste-editorial.66269f2391f209b0.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "76ad8a0249e97dae"
+      "hash": "66269f2391f209b0"
     },
     "example-html-ppt-tech-sharing": {
-      "video": "example-html-ppt-tech-sharing.09482f315a58001b.mp4",
-      "poster": "example-html-ppt-tech-sharing.09482f315a58001b.poster.jpg",
+      "video": "example-html-ppt-tech-sharing.c5e55a04787f83db.mp4",
+      "poster": "example-html-ppt-tech-sharing.c5e55a04787f83db.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "09482f315a58001b"
+      "hash": "c5e55a04787f83db"
     },
     "example-html-ppt-testing-safety-alert": {
-      "video": "example-html-ppt-testing-safety-alert.455566d9e4e148a1.mp4",
-      "poster": "example-html-ppt-testing-safety-alert.455566d9e4e148a1.poster.jpg",
+      "video": "example-html-ppt-testing-safety-alert.6e42cb6ce6e31f4b.mp4",
+      "poster": "example-html-ppt-testing-safety-alert.6e42cb6ce6e31f4b.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "455566d9e4e148a1"
+      "hash": "6e42cb6ce6e31f4b"
     },
     "example-html-ppt-weekly-report": {
-      "video": "example-html-ppt-weekly-report.b29ebc75b4e1bc9e.mp4",
-      "poster": "example-html-ppt-weekly-report.b29ebc75b4e1bc9e.poster.jpg",
+      "video": "example-html-ppt-weekly-report.95607c8dc47ca659.mp4",
+      "poster": "example-html-ppt-weekly-report.95607c8dc47ca659.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "b29ebc75b4e1bc9e"
+      "hash": "95607c8dc47ca659"
     },
     "example-html-ppt-xhs-pastel-card": {
-      "video": "example-html-ppt-xhs-pastel-card.8a22100450d21c82.mp4",
-      "poster": "example-html-ppt-xhs-pastel-card.8a22100450d21c82.poster.jpg",
+      "video": "example-html-ppt-xhs-pastel-card.25ac252b20e5742d.mp4",
+      "poster": "example-html-ppt-xhs-pastel-card.25ac252b20e5742d.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "8a22100450d21c82"
+      "hash": "25ac252b20e5742d"
     },
     "example-html-ppt-xhs-white-editorial": {
-      "video": "example-html-ppt-xhs-white-editorial.faf29c1623bac996.mp4",
-      "poster": "example-html-ppt-xhs-white-editorial.faf29c1623bac996.poster.jpg",
+      "video": "example-html-ppt-xhs-white-editorial.09cdbd5cda1648fb.mp4",
+      "poster": "example-html-ppt-xhs-white-editorial.09cdbd5cda1648fb.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "faf29c1623bac996"
+      "hash": "09cdbd5cda1648fb"
     },
     "example-html-ppt-zhangzara-8-bit-orbit": {
-      "video": "example-html-ppt-zhangzara-8-bit-orbit.3b8c082d0bbdd5a8.mp4",
-      "poster": "example-html-ppt-zhangzara-8-bit-orbit.3b8c082d0bbdd5a8.poster.jpg",
+      "video": "example-html-ppt-zhangzara-8-bit-orbit.058224ab888cfc67.mp4",
+      "poster": "example-html-ppt-zhangzara-8-bit-orbit.058224ab888cfc67.poster.jpg",
       "durationMs": 1150,
       "holdMs": 2500,
-      "hash": "3b8c082d0bbdd5a8"
+      "hash": "058224ab888cfc67"
     },
     "example-html-ppt-zhangzara-retro-windows": {
-      "video": "example-html-ppt-zhangzara-retro-windows.8f3a804d58d21c8e.mp4",
-      "poster": "example-html-ppt-zhangzara-retro-windows.8f3a804d58d21c8e.poster.jpg",
-      "durationMs": 6964,
+      "video": "example-html-ppt-zhangzara-retro-windows.c4595755aa58ad8a.mp4",
+      "poster": "example-html-ppt-zhangzara-retro-windows.c4595755aa58ad8a.poster.jpg",
+      "durationMs": 6955,
       "holdMs": 2500,
-      "hash": "8f3a804d58d21c8e"
+      "hash": "c4595755aa58ad8a"
     },
     "example-video-hyperframes": {
-      "video": "example-video-hyperframes.d97d38e85a46d926.mp4",
-      "poster": "example-video-hyperframes.d97d38e85a46d926.poster.jpg",
+      "video": "example-video-hyperframes.a2e7f0664e7ceed4.mp4",
+      "poster": "example-video-hyperframes.a2e7f0664e7ceed4.poster.jpg",
       "durationMs": 1155,
       "holdMs": 2500,
-      "hash": "d97d38e85a46d926"
+      "hash": "a2e7f0664e7ceed4"
     },
     "example-innovation": {
-      "video": "example-innovation.b5487b50206666e6.mp4",
-      "poster": "example-innovation.b5487b50206666e6.poster.jpg",
+      "video": "example-innovation.9aa60cc61e4a1498.mp4",
+      "poster": "example-innovation.9aa60cc61e4a1498.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "b5487b50206666e6"
+      "hash": "9aa60cc61e4a1498"
     },
     "example-invoice": {
-      "video": "example-invoice.d200a11481999f7e.mp4",
-      "poster": "example-invoice.d200a11481999f7e.poster.jpg",
+      "video": "example-invoice.47e4696e5feb09b4.mp4",
+      "poster": "example-invoice.47e4696e5feb09b4.poster.jpg",
       "durationMs": 2010,
       "holdMs": 2500,
-      "hash": "d200a11481999f7e"
+      "hash": "47e4696e5feb09b4"
     },
     "example-kami-landing": {
-      "video": "example-kami-landing.e07031f03feeccb0.mp4",
-      "poster": "example-kami-landing.e07031f03feeccb0.poster.jpg",
+      "video": "example-kami-landing.88e807f53ad2a73e.mp4",
+      "poster": "example-kami-landing.88e807f53ad2a73e.poster.jpg",
       "durationMs": 6723,
       "holdMs": 2500,
-      "hash": "e07031f03feeccb0"
+      "hash": "88e807f53ad2a73e"
     },
     "example-ppt-keynote": {
-      "video": "example-ppt-keynote.9668faa3d538db96.mp4",
-      "poster": "example-ppt-keynote.9668faa3d538db96.poster.jpg",
+      "video": "example-ppt-keynote.dfbc26dc4596662b.mp4",
+      "poster": "example-ppt-keynote.dfbc26dc4596662b.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "9668faa3d538db96"
+      "hash": "dfbc26dc4596662b"
     },
     "example-layered-depth": {
-      "video": "example-layered-depth.3eeb50eb3aae97db.mp4",
-      "poster": "example-layered-depth.3eeb50eb3aae97db.poster.jpg",
+      "video": "example-layered-depth.0626ecf2fc39bf08.mp4",
+      "poster": "example-layered-depth.0626ecf2fc39bf08.poster.jpg",
       "durationMs": 3663,
       "holdMs": 2500,
-      "hash": "3eeb50eb3aae97db"
+      "hash": "0626ecf2fc39bf08"
     },
     "example-frame-liquid-bg-hero": {
-      "video": "example-frame-liquid-bg-hero.310bb2dc28e16e63.mp4",
-      "poster": "example-frame-liquid-bg-hero.310bb2dc28e16e63.poster.jpg",
-      "durationMs": 1150,
+      "video": "example-frame-liquid-bg-hero.9e6ddc203d8e7b72.mp4",
+      "poster": "example-frame-liquid-bg-hero.9e6ddc203d8e7b72.poster.jpg",
+      "durationMs": 2500,
       "holdMs": 2500,
-      "hash": "310bb2dc28e16e63"
+      "hash": "9e6ddc203d8e7b72"
     },
     "example-liquid-glass-agency": {
-      "video": "example-liquid-glass-agency.e76920af12eda6ff.mp4",
-      "poster": "example-liquid-glass-agency.e76920af12eda6ff.poster.jpg",
+      "video": "example-liquid-glass-agency.8f3cd335566a1555.mp4",
+      "poster": "example-liquid-glass-agency.8f3cd335566a1555.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "e76920af12eda6ff"
+      "hash": "8f3cd335566a1555"
     },
     "example-live-dashboard": {
-      "video": "example-live-dashboard.086d9d4fcd90c1cc.mp4",
-      "poster": "example-live-dashboard.086d9d4fcd90c1cc.poster.jpg",
-      "durationMs": 1603,
+      "video": "example-live-dashboard.8efac14d49673383.mp4",
+      "poster": "example-live-dashboard.8efac14d49673383.poster.jpg",
+      "durationMs": 1473,
       "holdMs": 2500,
-      "hash": "086d9d4fcd90c1cc"
+      "hash": "8efac14d49673383"
     },
     "example-frame-logo-outro": {
-      "video": "example-frame-logo-outro.2d2e01b00c4cb5d7.mp4",
-      "poster": "example-frame-logo-outro.2d2e01b00c4cb5d7.poster.jpg",
-      "durationMs": 1150,
+      "video": "example-frame-logo-outro.5155099221d30e65.mp4",
+      "poster": "example-frame-logo-outro.5155099221d30e65.poster.jpg",
+      "durationMs": 2500,
       "holdMs": 2500,
-      "hash": "2d2e01b00c4cb5d7"
+      "hash": "5155099221d30e65"
     },
     "example-luxury-botanical": {
-      "video": "example-luxury-botanical.82717d9267adabf5.mp4",
-      "poster": "example-luxury-botanical.82717d9267adabf5.poster.jpg",
+      "video": "example-luxury-botanical.ac7b7212ab6525bd.mp4",
+      "poster": "example-luxury-botanical.ac7b7212ab6525bd.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "82717d9267adabf5"
+      "hash": "ac7b7212ab6525bd"
     },
     "example-article-magazine": {
-      "video": "example-article-magazine.61b3151ea0212e39.mp4",
-      "poster": "example-article-magazine.61b3151ea0212e39.poster.jpg",
+      "video": "example-article-magazine.ab74f291dc1437ef.mp4",
+      "poster": "example-article-magazine.ab74f291dc1437ef.poster.jpg",
       "durationMs": 2397,
       "holdMs": 2500,
-      "hash": "61b3151ea0212e39"
+      "hash": "ab74f291dc1437ef"
     },
     "example-magazine-poster": {
-      "video": "example-magazine-poster.9e73eae9b8cbb996.mp4",
-      "poster": "example-magazine-poster.9e73eae9b8cbb996.poster.jpg",
+      "video": "example-magazine-poster.91ebc1665a2286ea.mp4",
+      "poster": "example-magazine-poster.91ebc1665a2286ea.poster.jpg",
       "durationMs": 1643,
       "holdMs": 2500,
-      "hash": "9e73eae9b8cbb996"
+      "hash": "91ebc1665a2286ea"
     },
     "example-poster-hero": {
-      "video": "example-poster-hero.bbc7fa4aee2cc5b6.mp4",
-      "poster": "example-poster-hero.bbc7fa4aee2cc5b6.poster.jpg",
+      "video": "example-poster-hero.50067ac884e596b7.mp4",
+      "poster": "example-poster-hero.50067ac884e596b7.poster.jpg",
       "durationMs": 3430,
       "holdMs": 2500,
-      "hash": "bbc7fa4aee2cc5b6"
+      "hash": "50067ac884e596b7"
     },
     "example-meeting-notes": {
-      "video": "example-meeting-notes.b06117cf6fe437d9.mp4",
-      "poster": "example-meeting-notes.b06117cf6fe437d9.poster.jpg",
+      "video": "example-meeting-notes.f6fa234b2d5d261b.mp4",
+      "poster": "example-meeting-notes.f6fa234b2d5d261b.poster.jpg",
       "durationMs": 3277,
       "holdMs": 2500,
-      "hash": "b06117cf6fe437d9"
+      "hash": "f6fa234b2d5d261b"
     },
     "example-mindloop-landing": {
-      "video": "example-mindloop-landing.314d9311ef5aae15.mp4",
-      "poster": "example-mindloop-landing.314d9311ef5aae15.poster.jpg",
+      "video": "example-mindloop-landing.82de7e40bdc07572.mp4",
+      "poster": "example-mindloop-landing.82de7e40bdc07572.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "314d9311ef5aae15"
+      "hash": "82de7e40bdc07572"
     },
     "example-resume-modern": {
-      "video": "example-resume-modern.e3bf961c68c2f6e6.mp4",
-      "poster": "example-resume-modern.e3bf961c68c2f6e6.poster.jpg",
+      "video": "example-resume-modern.d92af61e36bc9669.mp4",
+      "poster": "example-resume-modern.d92af61e36bc9669.poster.jpg",
       "durationMs": 800,
       "holdMs": 2500,
-      "hash": "e3bf961c68c2f6e6"
+      "hash": "d92af61e36bc9669"
     },
     "example-motion-frames": {
-      "video": "example-motion-frames.d44a111bc6a36ac8.mp4",
-      "poster": "example-motion-frames.d44a111bc6a36ac8.poster.jpg",
-      "durationMs": 1150,
+      "video": "example-motion-frames.c7748a4d06f04f50.mp4",
+      "poster": "example-motion-frames.c7748a4d06f04f50.poster.jpg",
+      "durationMs": 2500,
       "holdMs": 2500,
-      "hash": "d44a111bc6a36ac8"
+      "hash": "c7748a4d06f04f50"
     },
     "example-mythic-naturecore": {
-      "video": "example-mythic-naturecore.3904f28d4490bee2.mp4",
-      "poster": "example-mythic-naturecore.3904f28d4490bee2.poster.jpg",
-      "durationMs": 1191,
+      "video": "example-mythic-naturecore.ac3e218fb4919591.mp4",
+      "poster": "example-mythic-naturecore.ac3e218fb4919591.poster.jpg",
+      "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "3904f28d4490bee2"
+      "hash": "ac3e218fb4919591"
     },
     "od-new-generation": {
       "video": "od-new-generation.0ca0819285dc12f5.mp4",
@@ -436,46 +436,46 @@
       "hash": "0ca0819285dc12f5"
     },
     "example-nimbus-grid": {
-      "video": "example-nimbus-grid.eb29332ccff9b423.mp4",
-      "poster": "example-nimbus-grid.eb29332ccff9b423.poster.jpg",
+      "video": "example-nimbus-grid.3eb328d95ab20968.mp4",
+      "poster": "example-nimbus-grid.3eb328d95ab20968.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "eb29332ccff9b423"
+      "hash": "3eb328d95ab20968"
     },
     "example-open-design-landing": {
-      "video": "example-open-design-landing.dd7be77c14313efd.mp4",
-      "poster": "example-open-design-landing.dd7be77c14313efd.poster.jpg",
-      "durationMs": 6983,
+      "video": "example-open-design-landing.ebbf0231d87db539.mp4",
+      "poster": "example-open-design-landing.ebbf0231d87db539.poster.jpg",
+      "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "dd7be77c14313efd"
+      "hash": "ebbf0231d87db539"
     },
     "example-orbis-nft": {
-      "video": "example-orbis-nft.eafe491951d3e2b2.mp4",
-      "poster": "example-orbis-nft.eafe491951d3e2b2.poster.jpg",
+      "video": "example-orbis-nft.dbaa9abe10bf0ab0.mp4",
+      "poster": "example-orbis-nft.dbaa9abe10bf0ab0.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "eafe491951d3e2b2"
+      "hash": "dbaa9abe10bf0ab0"
     },
     "example-orbit-general": {
-      "video": "example-orbit-general.c2d51ada724beb8d.mp4",
-      "poster": "example-orbit-general.c2d51ada724beb8d.poster.jpg",
+      "video": "example-orbit-general.ecd707b783f5f171.mp4",
+      "poster": "example-orbit-general.ecd707b783f5f171.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "c2d51ada724beb8d"
+      "hash": "ecd707b783f5f171"
     },
     "example-orbit-gmail": {
-      "video": "example-orbit-gmail.a62b0b58ed874e2b.mp4",
-      "poster": "example-orbit-gmail.a62b0b58ed874e2b.poster.jpg",
+      "video": "example-orbit-gmail.b15b249debd3e546.mp4",
+      "poster": "example-orbit-gmail.b15b249debd3e546.poster.jpg",
       "durationMs": 2047,
       "holdMs": 2500,
-      "hash": "a62b0b58ed874e2b"
+      "hash": "b15b249debd3e546"
     },
     "example-orbit-linear": {
-      "video": "example-orbit-linear.2848b282c1957176.mp4",
-      "poster": "example-orbit-linear.2848b282c1957176.poster.jpg",
+      "video": "example-orbit-linear.87ecc2178b587342.mp4",
+      "poster": "example-orbit-linear.87ecc2178b587342.poster.jpg",
       "durationMs": 847,
       "holdMs": 2500,
-      "hash": "2848b282c1957176"
+      "hash": "87ecc2178b587342"
     },
     "example-orbit-notion": {
       "video": "example-orbit-notion.16a3236a5478b92f.mp4",
@@ -485,403 +485,396 @@
       "hash": "16a3236a5478b92f"
     },
     "example-pm-spec": {
-      "video": "example-pm-spec.f8a0afdb8fdf27cf.mp4",
-      "poster": "example-pm-spec.f8a0afdb8fdf27cf.poster.jpg",
+      "video": "example-pm-spec.6ef0265fe7bc7647.mp4",
+      "poster": "example-pm-spec.6ef0265fe7bc7647.poster.jpg",
       "durationMs": 5200,
       "holdMs": 2500,
-      "hash": "f8a0afdb8fdf27cf"
+      "hash": "6ef0265fe7bc7647"
     },
     "example-portfolio-cosmic": {
-      "video": "example-portfolio-cosmic.6a639dbea4026ec8.mp4",
-      "poster": "example-portfolio-cosmic.6a639dbea4026ec8.poster.jpg",
-      "durationMs": 6954,
+      "video": "example-portfolio-cosmic.c76a03adf46bd2e6.mp4",
+      "poster": "example-portfolio-cosmic.c76a03adf46bd2e6.poster.jpg",
+      "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "6a639dbea4026ec8"
+      "hash": "c76a03adf46bd2e6"
     },
     "example-pricing-page": {
-      "video": "example-pricing-page.7058ebe61916e3dd.mp4",
-      "poster": "example-pricing-page.7058ebe61916e3dd.poster.jpg",
+      "video": "example-pricing-page.17e9cdfe8a53fbaa.mp4",
+      "poster": "example-pricing-page.17e9cdfe8a53fbaa.poster.jpg",
       "durationMs": 2290,
       "holdMs": 2500,
-      "hash": "7058ebe61916e3dd"
+      "hash": "17e9cdfe8a53fbaa"
     },
     "example-saas-landing": {
-      "video": "example-saas-landing.ecc18d0a048ac52d.mp4",
-      "poster": "example-saas-landing.ecc18d0a048ac52d.poster.jpg",
+      "video": "example-saas-landing.00ad45618e60f727.mp4",
+      "poster": "example-saas-landing.00ad45618e60f727.poster.jpg",
       "durationMs": 2677,
       "holdMs": 2500,
-      "hash": "ecc18d0a048ac52d"
-    },
-    "example-shamoni": {
-      "video": "example-shamoni.165299646863da4d.mp4",
-      "poster": "example-shamoni.165299646863da4d.poster.jpg",
-      "durationMs": 7500,
-      "holdMs": 2500,
-      "hash": "165299646863da4d"
+      "hash": "00ad45618e60f727"
     },
     "example-skyelite-private-jets": {
-      "video": "example-skyelite-private-jets.d1355e9690800ac9.mp4",
-      "poster": "example-skyelite-private-jets.d1355e9690800ac9.poster.jpg",
-      "durationMs": 1150,
+      "video": "example-skyelite-private-jets.3c9d3d9d74f8a11f.mp4",
+      "poster": "example-skyelite-private-jets.3c9d3d9d74f8a11f.poster.jpg",
+      "durationMs": 2500,
       "holdMs": 2500,
-      "hash": "d1355e9690800ac9"
+      "hash": "3c9d3d9d74f8a11f"
     },
     "example-social-media-dashboard": {
-      "video": "example-social-media-dashboard.aee1836b12225339.mp4",
-      "poster": "example-social-media-dashboard.aee1836b12225339.poster.jpg",
+      "video": "example-social-media-dashboard.b7580acde50bbc4f.mp4",
+      "poster": "example-social-media-dashboard.b7580acde50bbc4f.poster.jpg",
       "durationMs": 2110,
       "holdMs": 2500,
-      "hash": "aee1836b12225339"
+      "hash": "b7580acde50bbc4f"
     },
     "example-social-media-matrix-tracker-template": {
-      "video": "example-social-media-matrix-tracker-template.813549f4c7711dbc.mp4",
-      "poster": "example-social-media-matrix-tracker-template.813549f4c7711dbc.poster.jpg",
-      "durationMs": 4567,
+      "video": "example-social-media-matrix-tracker-template.b67e5045a17701e0.mp4",
+      "poster": "example-social-media-matrix-tracker-template.b67e5045a17701e0.poster.jpg",
+      "durationMs": 4400,
       "holdMs": 2500,
-      "hash": "813549f4c7711dbc"
+      "hash": "b67e5045a17701e0"
     },
     "example-social-spotify-card": {
-      "video": "example-social-spotify-card.1d011380abc07ee0.mp4",
-      "poster": "example-social-spotify-card.1d011380abc07ee0.poster.jpg",
+      "video": "example-social-spotify-card.29d3455ab514c1a7.mp4",
+      "poster": "example-social-spotify-card.29d3455ab514c1a7.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "1d011380abc07ee0"
+      "hash": "29d3455ab514c1a7"
     },
     "example-sprite-animation": {
-      "video": "example-sprite-animation.a4de16f123710a08.mp4",
-      "poster": "example-sprite-animation.a4de16f123710a08.poster.jpg",
-      "durationMs": 6943,
+      "video": "example-sprite-animation.262b1a664b10051f.mp4",
+      "poster": "example-sprite-animation.262b1a664b10051f.poster.jpg",
+      "durationMs": 6925,
       "holdMs": 2500,
-      "hash": "a4de16f123710a08"
+      "hash": "262b1a664b10051f"
     },
     "example-stellar-launch": {
-      "video": "example-stellar-launch.d283b3a4733726ee.mp4",
-      "poster": "example-stellar-launch.d283b3a4733726ee.poster.jpg",
-      "durationMs": 1150,
+      "video": "example-stellar-launch.80cf5661a892f7bc.mp4",
+      "poster": "example-stellar-launch.80cf5661a892f7bc.poster.jpg",
+      "durationMs": 2500,
       "holdMs": 2500,
-      "hash": "d283b3a4733726ee"
+      "hash": "80cf5661a892f7bc"
     },
     "example-deck-swiss-international": {
-      "video": "example-deck-swiss-international.2373dca8325902f6.mp4",
-      "poster": "example-deck-swiss-international.2373dca8325902f6.poster.jpg",
+      "video": "example-deck-swiss-international.8ba29a8b180278ea.mp4",
+      "poster": "example-deck-swiss-international.8ba29a8b180278ea.poster.jpg",
       "durationMs": 1377,
       "holdMs": 2500,
-      "hash": "2373dca8325902f6"
+      "hash": "8ba29a8b180278ea"
     },
     "example-team-okrs": {
-      "video": "example-team-okrs.3118dcc7c708deb1.mp4",
-      "poster": "example-team-okrs.3118dcc7c708deb1.poster.jpg",
+      "video": "example-team-okrs.bea6cf75af14743c.mp4",
+      "poster": "example-team-okrs.bea6cf75af14743c.poster.jpg",
       "durationMs": 647,
       "holdMs": 2500,
-      "hash": "3118dcc7c708deb1"
+      "hash": "bea6cf75af14743c"
     },
     "example-tweaks": {
-      "video": "example-tweaks.b3688bb7a8f9295b.mp4",
-      "poster": "example-tweaks.b3688bb7a8f9295b.poster.jpg",
+      "video": "example-tweaks.9f9c95b58a6c24e0.mp4",
+      "poster": "example-tweaks.9f9c95b58a6c24e0.poster.jpg",
       "durationMs": 2163,
       "holdMs": 2500,
-      "hash": "b3688bb7a8f9295b"
+      "hash": "9f9c95b58a6c24e0"
     },
     "example-card-twitter": {
-      "video": "example-card-twitter.4be1e46c3cfab6f5.mp4",
-      "poster": "example-card-twitter.4be1e46c3cfab6f5.poster.jpg",
-      "durationMs": 2309,
+      "video": "example-card-twitter.3b65ac3d8694f024.mp4",
+      "poster": "example-card-twitter.3b65ac3d8694f024.poster.jpg",
+      "durationMs": 2308,
       "holdMs": 2500,
-      "hash": "4be1e46c3cfab6f5"
+      "hash": "3b65ac3d8694f024"
     },
     "example-vfx-text-cursor": {
-      "video": "example-vfx-text-cursor.c99e7a0d823c1d7b.mp4",
-      "poster": "example-vfx-text-cursor.c99e7a0d823c1d7b.poster.jpg",
-      "durationMs": 1150,
+      "video": "example-vfx-text-cursor.ddd6e98922538b58.mp4",
+      "poster": "example-vfx-text-cursor.ddd6e98922538b58.poster.jpg",
+      "durationMs": 2500,
       "holdMs": 2500,
-      "hash": "c99e7a0d823c1d7b"
+      "hash": "ddd6e98922538b58"
     },
     "example-velar-luxury-real-estate": {
-      "video": "example-velar-luxury-real-estate.4c873e0cdab57e8e.mp4",
-      "poster": "example-velar-luxury-real-estate.4c873e0cdab57e8e.poster.jpg",
+      "video": "example-velar-luxury-real-estate.ac2b01d23011bd30.mp4",
+      "poster": "example-velar-luxury-real-estate.ac2b01d23011bd30.poster.jpg",
       "durationMs": 7327,
       "holdMs": 2500,
-      "hash": "4c873e0cdab57e8e"
+      "hash": "ac2b01d23011bd30"
     },
     "example-video-shortform": {
-      "video": "example-video-shortform.aa2599dcd51691c6.mp4",
-      "poster": "example-video-shortform.aa2599dcd51691c6.poster.jpg",
-      "durationMs": 1150,
+      "video": "example-video-shortform.a6313c4eb34cb1d7.mp4",
+      "poster": "example-video-shortform.a6313c4eb34cb1d7.poster.jpg",
+      "durationMs": 2500,
       "holdMs": 2500,
-      "hash": "aa2599dcd51691c6"
+      "hash": "a6313c4eb34cb1d7"
     },
     "example-waitlist-page": {
-      "video": "example-waitlist-page.97b6b36e8688a766.mp4",
-      "poster": "example-waitlist-page.97b6b36e8688a766.poster.jpg",
-      "durationMs": 1150,
+      "video": "example-waitlist-page.f02fab04d68258f9.mp4",
+      "poster": "example-waitlist-page.f02fab04d68258f9.poster.jpg",
+      "durationMs": 2500,
       "holdMs": 2500,
-      "hash": "97b6b36e8688a766"
+      "hash": "f02fab04d68258f9"
     },
     "example-web-prototype": {
-      "video": "example-web-prototype.300853cce8797e58.mp4",
-      "poster": "example-web-prototype.300853cce8797e58.poster.jpg",
+      "video": "example-web-prototype.939fc4990a4d4d76.mp4",
+      "poster": "example-web-prototype.939fc4990a4d4d76.poster.jpg",
       "durationMs": 720,
       "holdMs": 2500,
-      "hash": "300853cce8797e58"
+      "hash": "939fc4990a4d4d76"
     },
     "example-web-prototype-taste-brutalist": {
-      "video": "example-web-prototype-taste-brutalist.f499524dae0dd3db.mp4",
-      "poster": "example-web-prototype-taste-brutalist.f499524dae0dd3db.poster.jpg",
+      "video": "example-web-prototype-taste-brutalist.7430274db7d5178c.mp4",
+      "poster": "example-web-prototype-taste-brutalist.7430274db7d5178c.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "f499524dae0dd3db"
+      "hash": "7430274db7d5178c"
     },
     "example-web-prototype-taste-editorial": {
-      "video": "example-web-prototype-taste-editorial.464f675363734401.mp4",
-      "poster": "example-web-prototype-taste-editorial.464f675363734401.poster.jpg",
+      "video": "example-web-prototype-taste-editorial.85f9a9794adf3a99.mp4",
+      "poster": "example-web-prototype-taste-editorial.85f9a9794adf3a99.poster.jpg",
       "durationMs": 7380,
       "holdMs": 2500,
-      "hash": "464f675363734401"
+      "hash": "85f9a9794adf3a99"
     },
     "example-web-prototype-taste-soft": {
-      "video": "example-web-prototype-taste-soft.81671dbb8f3cf1f0.mp4",
-      "poster": "example-web-prototype-taste-soft.81671dbb8f3cf1f0.poster.jpg",
-      "durationMs": 1160,
-      "holdMs": 2500,
-      "hash": "81671dbb8f3cf1f0"
-    },
-    "example-social-x-post-card": {
-      "video": "example-social-x-post-card.8a9b9e2d03e663de.mp4",
-      "poster": "example-social-x-post-card.8a9b9e2d03e663de.poster.jpg",
-      "durationMs": 6677,
-      "holdMs": 2500,
-      "hash": "8a9b9e2d03e663de"
-    },
-    "example-card-xiaohongshu": {
-      "video": "example-card-xiaohongshu.b7862153e2bce1de.mp4",
-      "poster": "example-card-xiaohongshu.b7862153e2bce1de.poster.jpg",
+      "video": "example-web-prototype-taste-soft.eb98733cbd5a5b31.mp4",
+      "poster": "example-web-prototype-taste-soft.eb98733cbd5a5b31.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
-      "hash": "b7862153e2bce1de"
+      "hash": "eb98733cbd5a5b31"
+    },
+    "example-social-x-post-card": {
+      "video": "example-social-x-post-card.f1fa369389871dfc.mp4",
+      "poster": "example-social-x-post-card.f1fa369389871dfc.poster.jpg",
+      "durationMs": 6677,
+      "holdMs": 2500,
+      "hash": "f1fa369389871dfc"
+    },
+    "example-card-xiaohongshu": {
+      "video": "example-card-xiaohongshu.e92bf03c52807225.mp4",
+      "poster": "example-card-xiaohongshu.e92bf03c52807225.poster.jpg",
+      "durationMs": 7500,
+      "holdMs": 2500,
+      "hash": "e92bf03c52807225"
     },
     "example-html-ppt-zhangzara-biennale-yellow": {
-      "video": "example-html-ppt-zhangzara-biennale-yellow.6c511ffefaf9f375.mp4",
-      "poster": "example-html-ppt-zhangzara-biennale-yellow.6c511ffefaf9f375.poster.jpg",
-      "durationMs": 6941,
-      "holdMs": 2500,
-      "hash": "6c511ffefaf9f375"
-    },
-    "example-html-ppt-zhangzara-block-frame": {
-      "video": "example-html-ppt-zhangzara-block-frame.79b1141c79bd9018.mp4",
-      "poster": "example-html-ppt-zhangzara-block-frame.79b1141c79bd9018.poster.jpg",
-      "durationMs": 6945,
-      "holdMs": 2500,
-      "hash": "79b1141c79bd9018"
-    },
-    "example-html-ppt-zhangzara-blue-professional": {
-      "video": "example-html-ppt-zhangzara-blue-professional.ce8f2780d09aa07a.mp4",
-      "poster": "example-html-ppt-zhangzara-blue-professional.ce8f2780d09aa07a.poster.jpg",
-      "durationMs": 6952,
-      "holdMs": 2500,
-      "hash": "ce8f2780d09aa07a"
-    },
-    "example-html-ppt-zhangzara-bold-poster": {
-      "video": "example-html-ppt-zhangzara-bold-poster.af6c66ac1cb9f163.mp4",
-      "poster": "example-html-ppt-zhangzara-bold-poster.af6c66ac1cb9f163.poster.jpg",
-      "durationMs": 6940,
-      "holdMs": 2500,
-      "hash": "af6c66ac1cb9f163"
-    },
-    "example-html-ppt-zhangzara-broadside": {
-      "video": "example-html-ppt-zhangzara-broadside.804b3e67e3a30752.mp4",
-      "poster": "example-html-ppt-zhangzara-broadside.804b3e67e3a30752.poster.jpg",
-      "durationMs": 6941,
-      "holdMs": 2500,
-      "hash": "804b3e67e3a30752"
-    },
-    "example-html-ppt-zhangzara-capsule": {
-      "video": "example-html-ppt-zhangzara-capsule.f756eb57a278f614.mp4",
-      "poster": "example-html-ppt-zhangzara-capsule.f756eb57a278f614.poster.jpg",
-      "durationMs": 6943,
-      "holdMs": 2500,
-      "hash": "f756eb57a278f614"
-    },
-    "example-html-ppt-zhangzara-cartesian": {
-      "video": "example-html-ppt-zhangzara-cartesian.9bc23e56021105eb.mp4",
-      "poster": "example-html-ppt-zhangzara-cartesian.9bc23e56021105eb.poster.jpg",
-      "durationMs": 6935,
-      "holdMs": 2500,
-      "hash": "9bc23e56021105eb"
-    },
-    "example-html-ppt-zhangzara-cobalt-grid": {
-      "video": "example-html-ppt-zhangzara-cobalt-grid.8a6e1315a48c622c.mp4",
-      "poster": "example-html-ppt-zhangzara-cobalt-grid.8a6e1315a48c622c.poster.jpg",
-      "durationMs": 6949,
-      "holdMs": 2500,
-      "hash": "8a6e1315a48c622c"
-    },
-    "example-html-ppt-zhangzara-coral": {
-      "video": "example-html-ppt-zhangzara-coral.73cbbbd57ef785d9.mp4",
-      "poster": "example-html-ppt-zhangzara-coral.73cbbbd57ef785d9.poster.jpg",
-      "durationMs": 6939,
-      "holdMs": 2500,
-      "hash": "73cbbbd57ef785d9"
-    },
-    "example-html-ppt-zhangzara-creative-mode": {
-      "video": "example-html-ppt-zhangzara-creative-mode.82088702084efe32.mp4",
-      "poster": "example-html-ppt-zhangzara-creative-mode.82088702084efe32.poster.jpg",
-      "durationMs": 6966,
-      "holdMs": 2500,
-      "hash": "82088702084efe32"
-    },
-    "example-html-ppt-zhangzara-editorial-tri-tone": {
-      "video": "example-html-ppt-zhangzara-editorial-tri-tone.8eaa77b159fb2dc9.mp4",
-      "poster": "example-html-ppt-zhangzara-editorial-tri-tone.8eaa77b159fb2dc9.poster.jpg",
-      "durationMs": 6968,
-      "holdMs": 2500,
-      "hash": "8eaa77b159fb2dc9"
-    },
-    "example-html-ppt-zhangzara-grove": {
-      "video": "example-html-ppt-zhangzara-grove.1560592f5e03d38a.mp4",
-      "poster": "example-html-ppt-zhangzara-grove.1560592f5e03d38a.poster.jpg",
-      "durationMs": 6935,
-      "holdMs": 2500,
-      "hash": "1560592f5e03d38a"
-    },
-    "example-html-ppt-zhangzara-long-table": {
-      "video": "example-html-ppt-zhangzara-long-table.8bf94aa3fc8ac7b4.mp4",
-      "poster": "example-html-ppt-zhangzara-long-table.8bf94aa3fc8ac7b4.poster.jpg",
-      "durationMs": 6940,
-      "holdMs": 2500,
-      "hash": "8bf94aa3fc8ac7b4"
-    },
-    "example-html-ppt-zhangzara-mat": {
-      "video": "example-html-ppt-zhangzara-mat.cc4f94d641812bba.mp4",
-      "poster": "example-html-ppt-zhangzara-mat.cc4f94d641812bba.poster.jpg",
-      "durationMs": 6941,
-      "holdMs": 2500,
-      "hash": "cc4f94d641812bba"
-    },
-    "example-html-ppt-zhangzara-monochrome": {
-      "video": "example-html-ppt-zhangzara-monochrome.4409564a55ee8d30.mp4",
-      "poster": "example-html-ppt-zhangzara-monochrome.4409564a55ee8d30.poster.jpg",
-      "durationMs": 6942,
-      "holdMs": 2500,
-      "hash": "4409564a55ee8d30"
-    },
-    "example-html-ppt-zhangzara-neo-grid-bold": {
-      "video": "example-html-ppt-zhangzara-neo-grid-bold.eb56f23542bcccba.mp4",
-      "poster": "example-html-ppt-zhangzara-neo-grid-bold.eb56f23542bcccba.poster.jpg",
-      "durationMs": 6974,
-      "holdMs": 2500,
-      "hash": "eb56f23542bcccba"
-    },
-    "example-html-ppt-zhangzara-peoples-platform": {
-      "video": "example-html-ppt-zhangzara-peoples-platform.46d2119540f47b26.mp4",
-      "poster": "example-html-ppt-zhangzara-peoples-platform.46d2119540f47b26.poster.jpg",
-      "durationMs": 6971,
-      "holdMs": 2500,
-      "hash": "46d2119540f47b26"
-    },
-    "example-html-ppt-zhangzara-pin-and-paper": {
-      "video": "example-html-ppt-zhangzara-pin-and-paper.ce2eec0367ed16e2.mp4",
-      "poster": "example-html-ppt-zhangzara-pin-and-paper.ce2eec0367ed16e2.poster.jpg",
-      "durationMs": 6977,
-      "holdMs": 2500,
-      "hash": "ce2eec0367ed16e2"
-    },
-    "example-html-ppt-zhangzara-pink-script": {
-      "video": "example-html-ppt-zhangzara-pink-script.21f9403c94f455da.mp4",
-      "poster": "example-html-ppt-zhangzara-pink-script.21f9403c94f455da.poster.jpg",
-      "durationMs": 6974,
-      "holdMs": 2500,
-      "hash": "21f9403c94f455da"
-    },
-    "example-html-ppt-zhangzara-playful": {
-      "video": "example-html-ppt-zhangzara-playful.88c0bbac8f49b01a.mp4",
-      "poster": "example-html-ppt-zhangzara-playful.88c0bbac8f49b01a.poster.jpg",
+      "video": "example-html-ppt-zhangzara-biennale-yellow.6843682cc21bef27.mp4",
+      "poster": "example-html-ppt-zhangzara-biennale-yellow.6843682cc21bef27.poster.jpg",
       "durationMs": 6938,
       "holdMs": 2500,
-      "hash": "88c0bbac8f49b01a"
+      "hash": "6843682cc21bef27"
     },
-    "example-html-ppt-zhangzara-raw-grid": {
-      "video": "example-html-ppt-zhangzara-raw-grid.a36c8bf3c13ce9dc.mp4",
-      "poster": "example-html-ppt-zhangzara-raw-grid.a36c8bf3c13ce9dc.poster.jpg",
-      "durationMs": 6946,
+    "example-html-ppt-zhangzara-block-frame": {
+      "video": "example-html-ppt-zhangzara-block-frame.93a6d2d828fd2d9b.mp4",
+      "poster": "example-html-ppt-zhangzara-block-frame.93a6d2d828fd2d9b.poster.jpg",
+      "durationMs": 6944,
       "holdMs": 2500,
-      "hash": "a36c8bf3c13ce9dc"
+      "hash": "93a6d2d828fd2d9b"
     },
-    "example-html-ppt-zhangzara-retro-zine": {
-      "video": "example-html-ppt-zhangzara-retro-zine.80b134f53698a136.mp4",
-      "poster": "example-html-ppt-zhangzara-retro-zine.80b134f53698a136.poster.jpg",
-      "durationMs": 6939,
+    "example-html-ppt-zhangzara-blue-professional": {
+      "video": "example-html-ppt-zhangzara-blue-professional.985740d9e65c09b8.mp4",
+      "poster": "example-html-ppt-zhangzara-blue-professional.985740d9e65c09b8.poster.jpg",
+      "durationMs": 6943,
       "holdMs": 2500,
-      "hash": "80b134f53698a136"
+      "hash": "985740d9e65c09b8"
     },
-    "example-html-ppt-zhangzara-sakura-chroma": {
-      "video": "example-html-ppt-zhangzara-sakura-chroma.3ead66ea85b3b247.mp4",
-      "poster": "example-html-ppt-zhangzara-sakura-chroma.3ead66ea85b3b247.poster.jpg",
-      "durationMs": 6950,
+    "example-html-ppt-zhangzara-bold-poster": {
+      "video": "example-html-ppt-zhangzara-bold-poster.3de4e612834a2b80.mp4",
+      "poster": "example-html-ppt-zhangzara-bold-poster.3de4e612834a2b80.poster.jpg",
+      "durationMs": 6947,
       "holdMs": 2500,
-      "hash": "3ead66ea85b3b247"
+      "hash": "3de4e612834a2b80"
     },
-    "example-html-ppt-zhangzara-scatterbrain": {
-      "video": "example-html-ppt-zhangzara-scatterbrain.ffde16ac4e2d5ef4.mp4",
-      "poster": "example-html-ppt-zhangzara-scatterbrain.ffde16ac4e2d5ef4.poster.jpg",
-      "durationMs": 6949,
+    "example-html-ppt-zhangzara-broadside": {
+      "video": "example-html-ppt-zhangzara-broadside.e05f527900ea603e.mp4",
+      "poster": "example-html-ppt-zhangzara-broadside.e05f527900ea603e.poster.jpg",
+      "durationMs": 6943,
       "holdMs": 2500,
-      "hash": "ffde16ac4e2d5ef4"
+      "hash": "e05f527900ea603e"
     },
-    "example-html-ppt-zhangzara-signal": {
-      "video": "example-html-ppt-zhangzara-signal.8bc7b06c3685552b.mp4",
-      "poster": "example-html-ppt-zhangzara-signal.8bc7b06c3685552b.poster.jpg",
+    "example-html-ppt-zhangzara-capsule": {
+      "video": "example-html-ppt-zhangzara-capsule.f260dcb3973064ca.mp4",
+      "poster": "example-html-ppt-zhangzara-capsule.f260dcb3973064ca.poster.jpg",
       "durationMs": 6948,
       "holdMs": 2500,
-      "hash": "8bc7b06c3685552b"
+      "hash": "f260dcb3973064ca"
     },
-    "example-html-ppt-zhangzara-soft-editorial": {
-      "video": "example-html-ppt-zhangzara-soft-editorial.4099c92ea1c0029a.mp4",
-      "poster": "example-html-ppt-zhangzara-soft-editorial.4099c92ea1c0029a.poster.jpg",
-      "durationMs": 6974,
+    "example-html-ppt-zhangzara-cartesian": {
+      "video": "example-html-ppt-zhangzara-cartesian.04568842564882f1.mp4",
+      "poster": "example-html-ppt-zhangzara-cartesian.04568842564882f1.poster.jpg",
+      "durationMs": 6932,
       "holdMs": 2500,
-      "hash": "4099c92ea1c0029a"
+      "hash": "04568842564882f1"
     },
-    "example-html-ppt-zhangzara-stencil-tablet": {
-      "video": "example-html-ppt-zhangzara-stencil-tablet.4ffcf31713c9b196.mp4",
-      "poster": "example-html-ppt-zhangzara-stencil-tablet.4ffcf31713c9b196.poster.jpg",
-      "durationMs": 6978,
+    "example-html-ppt-zhangzara-cobalt-grid": {
+      "video": "example-html-ppt-zhangzara-cobalt-grid.89546b43e1cf831f.mp4",
+      "poster": "example-html-ppt-zhangzara-cobalt-grid.89546b43e1cf831f.poster.jpg",
+      "durationMs": 6944,
       "holdMs": 2500,
-      "hash": "4ffcf31713c9b196"
+      "hash": "89546b43e1cf831f"
     },
-    "example-html-ppt-zhangzara-studio": {
-      "video": "example-html-ppt-zhangzara-studio.7a95c24950a609a7.mp4",
-      "poster": "example-html-ppt-zhangzara-studio.7a95c24950a609a7.poster.jpg",
-      "durationMs": 6935,
+    "example-html-ppt-zhangzara-coral": {
+      "video": "example-html-ppt-zhangzara-coral.64c2325b3c8b8d67.mp4",
+      "poster": "example-html-ppt-zhangzara-coral.64c2325b3c8b8d67.poster.jpg",
+      "durationMs": 6945,
       "holdMs": 2500,
-      "hash": "7a95c24950a609a7"
+      "hash": "64c2325b3c8b8d67"
     },
-    "example-html-ppt-zhangzara-vellum": {
-      "video": "example-html-ppt-zhangzara-vellum.6331e83162238639.mp4",
-      "poster": "example-html-ppt-zhangzara-vellum.6331e83162238639.poster.jpg",
+    "example-html-ppt-zhangzara-creative-mode": {
+      "video": "example-html-ppt-zhangzara-creative-mode.57f71f9babcc76c2.mp4",
+      "poster": "example-html-ppt-zhangzara-creative-mode.57f71f9babcc76c2.poster.jpg",
+      "durationMs": 6972,
+      "holdMs": 2500,
+      "hash": "57f71f9babcc76c2"
+    },
+    "example-html-ppt-zhangzara-editorial-tri-tone": {
+      "video": "example-html-ppt-zhangzara-editorial-tri-tone.76b677fd1c67076f.mp4",
+      "poster": "example-html-ppt-zhangzara-editorial-tri-tone.76b677fd1c67076f.poster.jpg",
+      "durationMs": 6970,
+      "holdMs": 2500,
+      "hash": "76b677fd1c67076f"
+    },
+    "example-html-ppt-zhangzara-grove": {
+      "video": "example-html-ppt-zhangzara-grove.3182cc60aadf7e93.mp4",
+      "poster": "example-html-ppt-zhangzara-grove.3182cc60aadf7e93.poster.jpg",
       "durationMs": 6936,
       "holdMs": 2500,
-      "hash": "6331e83162238639"
+      "hash": "3182cc60aadf7e93"
+    },
+    "example-html-ppt-zhangzara-long-table": {
+      "video": "example-html-ppt-zhangzara-long-table.a244abff9507c66c.mp4",
+      "poster": "example-html-ppt-zhangzara-long-table.a244abff9507c66c.poster.jpg",
+      "durationMs": 6937,
+      "holdMs": 2500,
+      "hash": "a244abff9507c66c"
+    },
+    "example-html-ppt-zhangzara-mat": {
+      "video": "example-html-ppt-zhangzara-mat.715b7757e30dbaa9.mp4",
+      "poster": "example-html-ppt-zhangzara-mat.715b7757e30dbaa9.poster.jpg",
+      "durationMs": 6944,
+      "holdMs": 2500,
+      "hash": "715b7757e30dbaa9"
+    },
+    "example-html-ppt-zhangzara-monochrome": {
+      "video": "example-html-ppt-zhangzara-monochrome.28042a522f43da64.mp4",
+      "poster": "example-html-ppt-zhangzara-monochrome.28042a522f43da64.poster.jpg",
+      "durationMs": 6943,
+      "holdMs": 2500,
+      "hash": "28042a522f43da64"
+    },
+    "example-html-ppt-zhangzara-neo-grid-bold": {
+      "video": "example-html-ppt-zhangzara-neo-grid-bold.e106241982475271.mp4",
+      "poster": "example-html-ppt-zhangzara-neo-grid-bold.e106241982475271.poster.jpg",
+      "durationMs": 6975,
+      "holdMs": 2500,
+      "hash": "e106241982475271"
+    },
+    "example-html-ppt-zhangzara-peoples-platform": {
+      "video": "example-html-ppt-zhangzara-peoples-platform.fb2a5ad2b0592fa4.mp4",
+      "poster": "example-html-ppt-zhangzara-peoples-platform.fb2a5ad2b0592fa4.poster.jpg",
+      "durationMs": 6974,
+      "holdMs": 2500,
+      "hash": "fb2a5ad2b0592fa4"
+    },
+    "example-html-ppt-zhangzara-pin-and-paper": {
+      "video": "example-html-ppt-zhangzara-pin-and-paper.e8ea6c43f8784fdd.mp4",
+      "poster": "example-html-ppt-zhangzara-pin-and-paper.e8ea6c43f8784fdd.poster.jpg",
+      "durationMs": 6981,
+      "holdMs": 2500,
+      "hash": "e8ea6c43f8784fdd"
+    },
+    "example-html-ppt-zhangzara-pink-script": {
+      "video": "example-html-ppt-zhangzara-pink-script.ae9687e4034cef12.mp4",
+      "poster": "example-html-ppt-zhangzara-pink-script.ae9687e4034cef12.poster.jpg",
+      "durationMs": 6978,
+      "holdMs": 2500,
+      "hash": "ae9687e4034cef12"
+    },
+    "example-html-ppt-zhangzara-playful": {
+      "video": "example-html-ppt-zhangzara-playful.b4429f8945ddddfb.mp4",
+      "poster": "example-html-ppt-zhangzara-playful.b4429f8945ddddfb.poster.jpg",
+      "durationMs": 6935,
+      "holdMs": 2500,
+      "hash": "b4429f8945ddddfb"
+    },
+    "example-html-ppt-zhangzara-raw-grid": {
+      "video": "example-html-ppt-zhangzara-raw-grid.2d58bc144b8d4731.mp4",
+      "poster": "example-html-ppt-zhangzara-raw-grid.2d58bc144b8d4731.poster.jpg",
+      "durationMs": 6946,
+      "holdMs": 2500,
+      "hash": "2d58bc144b8d4731"
+    },
+    "example-html-ppt-zhangzara-retro-zine": {
+      "video": "example-html-ppt-zhangzara-retro-zine.92d1f955525af1d1.mp4",
+      "poster": "example-html-ppt-zhangzara-retro-zine.92d1f955525af1d1.poster.jpg",
+      "durationMs": 6936,
+      "holdMs": 2500,
+      "hash": "92d1f955525af1d1"
+    },
+    "example-html-ppt-zhangzara-sakura-chroma": {
+      "video": "example-html-ppt-zhangzara-sakura-chroma.bf647c10576b7441.mp4",
+      "poster": "example-html-ppt-zhangzara-sakura-chroma.bf647c10576b7441.poster.jpg",
+      "durationMs": 6955,
+      "holdMs": 2500,
+      "hash": "bf647c10576b7441"
+    },
+    "example-html-ppt-zhangzara-scatterbrain": {
+      "video": "example-html-ppt-zhangzara-scatterbrain.798e77d7b8007f66.mp4",
+      "poster": "example-html-ppt-zhangzara-scatterbrain.798e77d7b8007f66.poster.jpg",
+      "durationMs": 6945,
+      "holdMs": 2500,
+      "hash": "798e77d7b8007f66"
+    },
+    "example-html-ppt-zhangzara-signal": {
+      "video": "example-html-ppt-zhangzara-signal.8eba4a49f01a71e0.mp4",
+      "poster": "example-html-ppt-zhangzara-signal.8eba4a49f01a71e0.poster.jpg",
+      "durationMs": 6946,
+      "holdMs": 2500,
+      "hash": "8eba4a49f01a71e0"
+    },
+    "example-html-ppt-zhangzara-soft-editorial": {
+      "video": "example-html-ppt-zhangzara-soft-editorial.d530dc12fa55e60b.mp4",
+      "poster": "example-html-ppt-zhangzara-soft-editorial.d530dc12fa55e60b.poster.jpg",
+      "durationMs": 6968,
+      "holdMs": 2500,
+      "hash": "d530dc12fa55e60b"
+    },
+    "example-html-ppt-zhangzara-stencil-tablet": {
+      "video": "example-html-ppt-zhangzara-stencil-tablet.058cbc8008780a6e.mp4",
+      "poster": "example-html-ppt-zhangzara-stencil-tablet.058cbc8008780a6e.poster.jpg",
+      "durationMs": 6973,
+      "holdMs": 2500,
+      "hash": "058cbc8008780a6e"
+    },
+    "example-html-ppt-zhangzara-studio": {
+      "video": "example-html-ppt-zhangzara-studio.82be61103ca55999.mp4",
+      "poster": "example-html-ppt-zhangzara-studio.82be61103ca55999.poster.jpg",
+      "durationMs": 6944,
+      "holdMs": 2500,
+      "hash": "82be61103ca55999"
+    },
+    "example-html-ppt-zhangzara-vellum": {
+      "video": "example-html-ppt-zhangzara-vellum.f6890ebae9201dfd.mp4",
+      "poster": "example-html-ppt-zhangzara-vellum.f6890ebae9201dfd.poster.jpg",
+      "durationMs": 6935,
+      "holdMs": 2500,
+      "hash": "f6890ebae9201dfd"
     },
     "example-kami-deck": {
-      "video": "example-kami-deck.14e272ba8e3cc44f.mp4",
-      "poster": "example-kami-deck.14e272ba8e3cc44f.poster.jpg",
-      "durationMs": 6931,
+      "video": "example-kami-deck.d07686a788f852c2.mp4",
+      "poster": "example-kami-deck.d07686a788f852c2.poster.jpg",
+      "durationMs": 6932,
       "holdMs": 2500,
-      "hash": "14e272ba8e3cc44f"
+      "hash": "d07686a788f852c2"
     },
     "example-open-design-landing-deck": {
-      "video": "example-open-design-landing-deck.8076ea8d692aa1ba.mp4",
-      "poster": "example-open-design-landing-deck.8076ea8d692aa1ba.poster.jpg",
-      "durationMs": 6934,
+      "video": "example-open-design-landing-deck.5ce058c5a510a264.mp4",
+      "poster": "example-open-design-landing-deck.5ce058c5a510a264.poster.jpg",
+      "durationMs": 6935,
       "holdMs": 2500,
-      "hash": "8076ea8d692aa1ba"
+      "hash": "5ce058c5a510a264"
     },
     "example-weekly-update": {
-      "video": "example-weekly-update.e376828a9ef45d25.mp4",
-      "poster": "example-weekly-update.e376828a9ef45d25.poster.jpg",
-      "durationMs": 6926,
+      "video": "example-weekly-update.358555aa38e1af3b.mp4",
+      "poster": "example-weekly-update.358555aa38e1af3b.poster.jpg",
+      "durationMs": 6928,
       "holdMs": 2500,
-      "hash": "e376828a9ef45d25"
+      "hash": "358555aa38e1af3b"
     }
   }
 }

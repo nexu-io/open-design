@@ -242,6 +242,7 @@ import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
 import { decideSafeRunRetry } from './run-retry-policy.js';
 import {
+  amrUserIdForRunAnalytics,
   hasExplicitRequestedModelForAnalytics,
   scanRunEventsForUsageAnalytics,
   summarizeRunTimingAnalytics,
@@ -1505,6 +1506,27 @@ function resolveDaemonResourceDir(resourceRoot, segment, fallback) {
   return resourceRoot ? path.join(resourceRoot, segment) : fallback;
 }
 
+// Where the daemon reads the baked plugin-preview manifest from. In a packaged
+// build the bundled manifest lives under the resource root (OD_RESOURCE_ROOT,
+// Resources/open-design) like every other resource tree — NOT under PROJECT_ROOT,
+// which for the prebundled daemon resolves to Resources/app (two levels up from
+// the sidecar) and has no data/. An explicit OD_PLUGIN_PREVIEWS_DIR override and
+// the dev PROJECT_ROOT layout still win. Exported for regression coverage.
+export function resolveDaemonPluginPreviewsDir({ env = process.env, resourceRoot, projectRoot }) {
+  // Resolve the override from the injected `env` (absolute passthrough, relative
+  // against projectRoot) rather than re-reading process.env, so the helper is
+  // pure and the override path is actually testable.
+  const override = env.OD_PLUGIN_PREVIEWS_DIR;
+  if (override) {
+    return path.isAbsolute(override) ? override : path.resolve(projectRoot, override);
+  }
+  return resolveDaemonResourceDir(
+    resourceRoot,
+    path.join('data', 'plugin-previews'),
+    path.join(projectRoot, 'data', 'plugin-previews'),
+  );
+}
+
 const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot();
 // Built web app lives in `out/` — that's where Next.js writes the static
 // export configured in next.config.ts. The folder name used to be `dist/`
@@ -1514,7 +1536,10 @@ const STATIC_DIR = path.join(PROJECT_ROOT, 'apps', 'web', 'out');
 // Baked plugin preview clips (scripts/bake-plugin-previews.mjs). Served at
 // PLUGIN_PREVIEWS_ROUTE; their manifest rewrites html plugins' previews to a
 // cheap poster + hover-play video in the home gallery.
-const PLUGIN_PREVIEWS_DIR = resolvePluginPreviewsDir(PROJECT_ROOT);
+const PLUGIN_PREVIEWS_DIR = resolveDaemonPluginPreviewsDir({
+  resourceRoot: DAEMON_RESOURCE_ROOT,
+  projectRoot: PROJECT_ROOT,
+});
 const OD_BIN = resolveDaemonCliPath();
 const OD_NODE_BIN = process.execPath;
 const SKILLS_DIR = resolveDaemonResourceDir(
@@ -5669,6 +5694,7 @@ export async function startServer({
       runtime,
       projectRoot: PROJECT_ROOT,
       runsDir: path.join(RUNTIME_DATA_DIR, 'runs'),
+      dataDir: RUNTIME_DATA_DIR,
     }),
   );
 
@@ -11012,9 +11038,6 @@ export async function startServer({
       console.warn('[custom-instructions] readAppConfig failed', err);
     }
 
-    // Project-level custom instructions from the projects table.
-    const projectInstructions = project?.customInstructions ?? '';
-
     let designSystemBody;
     let designSystemTitle;
     // Compiled (tokens.css + components manifest / components.html)
@@ -11275,7 +11298,6 @@ export async function startServer({
       ...(pluginBlock ? { pluginBlock } : {}),
       ...(activeStageBlocks ? { activeStageBlocks } : {}),
       userInstructions,
-      projectInstructions,
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
@@ -12391,16 +12413,39 @@ export async function startServer({
             agentLaunch,
           )
         : null;
+      const amrModelScope = resolveAmrProfile(modelProbeEnv ?? process.env);
+      // Resolve the AMR model catalog through the SAME shared cache the UI's
+      // `/api/amr/models` endpoint serves (AmrModelLoadingCache): a cached
+      // authoritative `vela model list` when it is hot, otherwise the offline
+      // `vela model preset` seed while a remote refresh runs in the background.
+      //
+      // Why not a fresh `vela model list` per run: that authoritative call
+      // needs network reachability to the AMR gateway AND `$HOME` (the offline
+      // `preset`/`--version` calls need neither), takes up to ~10s, and only
+      // retries a narrow set of network errors. Running it blocking on every
+      // turn turned any transient gateway/timeout/HOME hiccup into a hard
+      // "AMR model … is not available from Vela" — even for a logged-in user
+      // who already picked a real model the picker surfaced from the preset
+      // seed. Under CorpLink/飞连 the call routinely exceeded the timeout, so
+      // AMR became unusable in packaged nightlies. Reusing the cache keeps that
+      // blocking probe off the per-run hot path and degrades to preset instead
+      // of fail-closing; vela's own `session/set_model` remains the final gate.
       let liveModels = [];
       try {
-        liveModels =
-          launchPath && typeof def.fetchModels === 'function'
-            ? ((await def.fetchModels(launchPath, modelProbeEnv)) ?? [])
-            : [];
-      } catch {
+        const probe = await resolveAmrModelProbe();
+        const catalog = await amrModelLoadingCache.get(probe.cacheKey, {
+          fetchPreset: () => fetchVelaPresetModels(probe.launchPath, probe.env),
+          fetchRemote: () => fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
+        });
+        liveModels = catalog.models ?? [];
+      } catch (error) {
+        // Do not swallow silently: a probe failure here is exactly what made
+        // the packaged AMR breakage undiagnosable (the old `catch {}` left no
+        // trace in any log or diagnostics bundle). Record it and degrade to the
+        // remembered catalog below.
+        console.warn('[amr] model catalog preflight probe failed', error);
         liveModels = [];
       }
-      const amrModelScope = resolveAmrProfile(modelProbeEnv ?? process.env);
       const rememberedLiveModels = getRememberedLiveModels(def.id, amrModelScope);
       if (liveModels.length > 0) {
         rememberLiveModels(def.id, liveModels, amrModelScope);
@@ -12409,12 +12454,26 @@ export async function startServer({
       const liveModelIds = new Set(
         liveModels.map((candidate) => candidate?.id).filter(Boolean),
       );
+      // A request that came in as 'default'/empty is normally pre-resolved to a
+      // concrete id via the agent-wide cached model order; if it still is not,
+      // adopt the first catalog entry so the spawn layer always has a real id.
+      const userAskedForDefault =
+        typeof model !== 'string' ||
+        !model.trim() ||
+        model.trim().toLowerCase() === 'default';
+      if (
+        !safeModel ||
+        safeModel === 'default' ||
+        (userAskedForDefault && !liveModelIds.has(safeModel))
+      ) {
+        safeModel = liveModels[0]?.id ?? safeModel ?? null;
+        agentOptions.model = safeModel;
+      }
       if (liveModelIds.size === 0) {
-        // An empty AMR catalog usually means the user is signed out — `vela
-        // models` returns 401 and the catch above leaves `liveModels` empty.
-        // Surface AMR_AUTH_REQUIRED first so the chat shows the relogin
-        // affordance; otherwise the user sees a misleading "choose a model"
-        // when the real fix is to sign in.
+        // The catalog is genuinely empty: even the offline preset seed could
+        // not be read, which almost always means the user is signed out (`vela`
+        // catalog calls 401) or the CLI is unrunnable. Prefer the relogin
+        // affordance over a misleading "choose a model".
         if (def.id === 'amr') {
           const loginStatus = readVelaLoginStatus(
             modelProbeEnv ?? process.env,
@@ -12430,37 +12489,29 @@ export async function startServer({
             return design.runs.finish(run, 'failed', 1, null);
           }
         }
-        send('error', createAmrModelUnavailablePayload(safeModel, {
-          reason: 'model_catalog_unavailable',
-        }));
-        return design.runs.finish(run, 'failed', 1, null);
-      }
-      // `safeModel` was pre-resolved via the agent-wide cached model order,
-      // so a request that came in as 'default' (or empty) is already a
-      // concrete id by this point — `safeModel === 'default'` is rarely true.
-      // If the user actually asked for the agent default and the cached id no
-      // longer appears in the FRESH catalog (e.g. the AMR Link catalog rolled
-      // since `/api/agents` last responded), fall back to `liveModels[0]` from
-      // the fresh probe instead of rejecting their run as `AMR_MODEL_UNAVAILABLE`.
-      const userAskedForDefault =
-        typeof model !== 'string' ||
-        !model.trim() ||
-        model.trim().toLowerCase() === 'default';
-      if (
-        !safeModel ||
-        safeModel === 'default' ||
-        (userAskedForDefault && !liveModelIds.has(safeModel))
-      ) {
-        safeModel = liveModels[0]?.id ?? null;
-        agentOptions.model = safeModel;
-      }
-      if (!safeModel || !liveModelIds.has(safeModel)) {
+        // Logged in but no catalog at all AND no resolvable model: only now is
+        // there nothing safe to forward, so surface the model error.
+        if (!safeModel) {
+          send('error', createAmrModelUnavailablePayload(safeModel, {
+            reason: 'model_catalog_unavailable',
+          }));
+          return design.runs.finish(run, 'failed', 1, null);
+        }
+        // Otherwise fall through with the user's selected model and let vela's
+        // `session/set_model` be the authoritative gate.
+      } else if (!safeModel) {
+        // Catalog known but we could not resolve any model id to forward.
         send('error', createAmrModelUnavailablePayload(
           typeof model === 'string' && model.trim() ? model : safeModel,
           { availableModels: [...liveModelIds] },
         ));
         return design.runs.finish(run, 'failed', 1, null);
       }
+      // NOTE: when the selected model is absent from the (possibly preset-only
+      // or stale) catalog we intentionally do NOT fail-close. The cached/preset
+      // catalog can lag the live one, and a logged-in user picked a concrete
+      // id; vela rejects a truly unsupported model at `session/set_model` with
+      // a precise error, which beats a pre-emptive block on a flaky metadata read.
     }
 
     // Plain-streaming adapters that own a "continue most recent
@@ -13720,7 +13771,7 @@ export async function startServer({
       }
       if (agentStreamError) {
         markRpcCloseReason('stream_error');
-        return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
+        return finishWithRetryDecision('failed', code === 0 ? 1 : (code ?? 1), signal ?? null);
       }
       if (
         code !== 0 &&
@@ -14599,10 +14650,31 @@ export async function startServer({
       // Without it, a run for an uninstalled agent would still report
       // `available` whenever any unrelated CLI was on PATH — see PR #2285
       // review.
+      // AMR sign-in state is daemon-visible (vela's config file or the
+      // Settings-backed VELA_RUNTIME_KEY/VELA_LINK_URL env config), so the
+      // server-side captures can fill `amrAuthorized` even though BYOK
+      // stays web-only. Merge the configured AMR env exactly like the
+      // /api/integrations/vela/status route and the run launcher do —
+      // env-configured users are signed in to the UI, and dropping the
+      // configured env here would keep reporting them as 'none'.
+      const velaStatusForAnalytics = (() => {
+        try {
+          const configuredAmrEnv = agentCliEnvForAgent(
+            (appCfgForAnalytics as {
+              agentCliEnv?: Parameters<typeof agentCliEnvForAgent>[0];
+            }).agentCliEnv,
+            'amr',
+          );
+          return readVelaLoginStatus(process.env, configuredAmrEnv);
+        } catch {
+          return null;
+        }
+      })();
       const configureGlobals = deriveConfigureGlobals({
         mode: 'daemon',
         agentId: typeof reqBody.agentId === 'string' ? reqBody.agentId : null,
         agents: detectedAgentsForAnalytics,
+        amrAuthorized: velaStatusForAnalytics?.loggedIn === true,
       });
       const promptText =
         typeof reqBody.currentPrompt === 'string'
@@ -14690,6 +14762,7 @@ export async function startServer({
         page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
         area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
         ...configureGlobals,
+        ...amrUserIdForRunAnalytics(velaStatusForAnalytics),
         project_id: requestProjectId,
         conversation_id:
           typeof reqBody.conversationId === 'string' ? reqBody.conversationId : null,

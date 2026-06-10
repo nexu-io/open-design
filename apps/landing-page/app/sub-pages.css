@@ -1120,7 +1120,7 @@ body.sub-page {
 .info-page {
   max-width: 920px;
 }
-.info-page .info-section + .info-section { margin-top: 64px; }
+.info-page .info-section + .info-section { margin-top: 44px; }
 .info-page h2 {
   font-family: var(--serif);
   font-weight: 600;
@@ -2358,3 +2358,238 @@ dialog.tpl-share-popover .detail-share-dialog-text {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Agent detail — industrial long-form layout (`/agents/<slug>-design/`).
+ * Opt-in: only rendered when an agent guide carries a `rich` payload. Hero
+ * CTA strip leads with the product, deep sections carry prose + code + images.
+ * ------------------------------------------------------------------------- */
+.agent-hero-cta {
+  margin: 4px 0 8px;
+  padding: 22px 24px;
+  border: 1px solid var(--ink);
+  background: var(--paper-warm);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 20px;
+}
+.agent-hero-cta p {
+  flex: 1 1 320px;
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  max-width: 60ch;
+}
+.agent-hero-cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.agent-intro p {
+  font-size: 16.5px;
+  color: var(--ink-soft);
+}
+.agent-section-img {
+  margin: 22px 0 6px;
+}
+.agent-section-img img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line, rgba(20, 18, 11, 0.12));
+  border-radius: 8px;
+  background: var(--paper-warm);
+}
+.agent-section-img figcaption {
+  margin-top: 8px;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+.agent-code {
+  margin: 0 0 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--line, rgba(20, 18, 11, 0.12));
+  border-radius: 8px;
+  background: #14120b;
+  overflow-x: auto;
+}
+.agent-code code {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.65;
+  color: #f0ede4;
+  white-space: pre;
+  background: none;
+  padding: 0;
+}
+.agent-steps {
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0;
+}
+.agent-steps li {
+  position: relative;
+  padding-left: 1.4em;
+  margin-bottom: 10px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+.agent-steps li::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--coral);
+}
+.agent-steps li strong { color: var(--ink); }
+@media (max-width: 600px) {
+  .agent-hero-cta { padding: 18px; }
+  .agent-hero-cta-actions .btn { flex: 1 1 auto; text-align: center; }
+}
+
+/* Unify list styling inside agent long-form sections: bare <ul>/<ol> share the
+ * same rhythm and coral marker as `.agent-steps`, so a section that mixes both
+ * (steps + facts list) reads as one consistent list family rather than two. */
+.solution-page .info-section ul,
+.solution-page .info-section ol {
+  list-style: none;
+  margin: 0 0 18px;
+  padding-left: 0;
+  max-width: 70ch;
+}
+/* The coral dash / number markers are only for plain prose lists. Components
+ * that ship their own layout and numbering — the FAQ (.faq-list), the how-to
+ * steps (.solution-steps), and the template / system galleries
+ * (.solution-tpl-grid / .solution-system-grid) — keep the list-style reset
+ * above but opt OUT of the marker + indent below, so they don't get a
+ * duplicate coral counter or a stray dash shifting their cards. */
+.solution-page .info-section ul:not(.solution-tpl-grid):not(.solution-system-grid) li,
+.solution-page .info-section ol:not(.faq-list):not(.solution-steps) li {
+  position: relative;
+  padding-left: 1.4em;
+  margin-bottom: 10px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+.solution-page .info-section ul:not(.solution-tpl-grid):not(.solution-system-grid) li::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--coral);
+}
+/* Ordered prose lists keep their number, coral, in a monospace marker. */
+.solution-page .info-section ol:not(.faq-list):not(.solution-steps) {
+  counter-reset: agent-ol;
+}
+.solution-page .info-section ol:not(.faq-list):not(.solution-steps) li {
+  padding-left: 1.9em;
+  counter-increment: agent-ol;
+}
+.solution-page .info-section ol:not(.faq-list):not(.solution-steps) li::before {
+  content: counter(agent-ol) ".";
+  position: absolute;
+  left: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--coral);
+}
+/* steps and the unified lists now share one look; keep steps' bottom margin
+ * tight when it directly precedes a fact list in the same section. */
+.solution-page .info-section .agent-steps + ul,
+.solution-page .info-section .agent-steps + ol { margin-top: 2px; }
+
+/* ---------------------------------------------------------------------------
+ * Solution + agent pages: single-column text content fills the section and
+ * lines up with the full-width hero / feature rows / tables / template grid,
+ * instead of stranding in a ~707px column pinned hard left (the 70ch ul/ol
+ * prose cap above is meant for genuine bullet lists but also catches the FAQ
+ * list and how-to steps, which should fill). Prose is justified so both edges
+ * sit flush. Genuine prose bullet lists keep the readable 70ch measure.
+ * ------------------------------------------------------------------------- */
+.solution-page .info-section > p,
+.solution-page .info-section .faq-list,
+.solution-page .info-section .solution-steps,
+.solution-page .solution-step-text p { max-width: none; }
+.solution-page .info-section > p {
+  text-align: justify;
+  text-justify: inter-character;
+}
+/* Let the step's text column grow to the section's right edge so the step body
+ * lines up with the FAQ rows and the feature/compare tables above and below. */
+.solution-page .solution-step-text { flex: 1 1 auto; min-width: 0; }
+/* The template grid inherits the narrow ~706px cap from the catalog `.tpl-grid`
+ * (built for the dense /templates/ index), which strands its three columns in
+ * the left half of the wide solution canvas. Drop the cap so the grid fills the
+ * section and its cards line up with everything else. */
+.solution-page .info-section ul.solution-tpl-grid,
+.solution-page .info-section ul.solution-system-grid { max-width: none; }
+
+/* ---------------------------------------------------------------------------
+ * Agent rich page is a long-form ARTICLE, not a solution marketing page: ONE
+ * centered single-column measure for everything — heading, hero banner, intro,
+ * TOC, how-to sections, FAQ, CTA all share the same width and the same left
+ * edge. This avoids the two failure modes of a wide solution canvas: prose
+ * stranded in a narrow column pinned hard left (huge empty right), and a wide
+ * 2-column hero whose heading wraps mid-word and whose left edge doesn't line
+ * up with the narrower body below it.
+ * ------------------------------------------------------------------------- */
+.info-page.solution-page.agent-rich {
+  max-width: 1080px;
+  margin-inline: auto;
+}
+/* Everything fills the single measure — drop the inherited 70ch prose caps
+ * (.info-page p, .solution-page .info-section > p) so the intro, section
+ * paragraphs, and lists all reach the column's right edge and line up with the
+ * full-width hero banner instead of re-stranding in a ~640px column. */
+.agent-rich .agent-intro p,
+.agent-rich .info-section > p,
+.agent-rich .info-section ul,
+.agent-rich .info-section ol { max-width: none; }
+
+/* Justify body prose so both the left AND right edge sit flush — the ragged
+ * right edge of plain left-aligned text reads as sloppy for CJK copy. Lists
+ * and captions stay left-aligned (their markers want a hard left edge). */
+.agent-rich .agent-intro p,
+.agent-rich .info-section > p {
+  text-align: justify;
+  text-justify: inter-character;
+}
+
+/* Header fills the full measure too — override the shared .catalog-head 880px
+ * cap and its 720px lead cap so the heading, lead, hero banner, and body all
+ * share one left edge and one right edge. Nothing in the article is narrower
+ * than anything else. */
+.agent-rich-head { margin-bottom: 4px; max-width: none; }
+.agent-rich-head .lead { max-width: none; }
+
+/* Hero banner: full-width editorial illustration under the header. The agent's
+ * own mark is baked into the illustration's central hub, so no overlay needed. */
+.agent-hero-banner {
+  margin: 28px 0 6px;
+}
+.agent-hero-banner > img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper-warm);
+}
+
+/* ---------------------------------------------------------------------------
+ * Agents hub (/agents/) — all adapters in one grid, no tier split. Tighten the
+ * vertical rhythm: the page is a long list of short sections, so the shared
+ * 44px info-section gap reads as too airy here.
+ * ------------------------------------------------------------------------- */
+.agents-hub .info-section + .info-section { margin-top: 30px; }
+.agents-hub .info-section > p { margin-bottom: 14px; }
+.agents-hub .agent-grid { margin-top: 18px; }

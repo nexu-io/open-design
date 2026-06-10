@@ -19,7 +19,6 @@ const PINNED_TEMPLATE_PLUGIN_IDS = [
   'example-aerocore',
   'example-liquid-glass-agency',
   'example-portfolio-cosmic',
-  'example-shamoni',
   'example-innovation',
   'example-orbis-nft',
   'example-mindloop-landing',

@@ -168,6 +168,7 @@ describe("copyResourceTree", () => {
         "assets/frames",
         "assets/community-pets",
         "prompt-templates",
+        "data/plugin-previews",
       ];
 
       for (const name of resourceNames) {

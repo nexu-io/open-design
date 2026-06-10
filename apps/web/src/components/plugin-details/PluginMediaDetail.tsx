@@ -17,7 +17,11 @@ import type {
 import { useT } from '../../i18n';
 import { resolvePluginQueryFallback } from '../../state/projects';
 import { Icon } from '../Icon';
-import { PreviewModal, type PreviewView } from '../PreviewModal';
+import {
+  PreviewModal,
+  type PreviewSharePopoverItem,
+  type PreviewView,
+} from '../PreviewModal';
 import { PluginMetaSections } from './PluginMetaSections';
 import { buildPluginShareUrl, PluginShareMenu } from './PluginShareMenu';
 import { buildPluginUseMenu } from './pluginUseMenu';
@@ -29,6 +33,10 @@ interface Props {
   onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
   isApplying?: boolean;
   hideUseAction?: boolean;
+  // Analytics — forwarded to PreviewModal's share popover. Does NOT cover
+  // the headerExtras PluginShareMenu (copy install command), which is a
+  // separate menu.
+  onSharePopoverItemClick?: (item: PreviewSharePopoverItem) => void;
 }
 
 interface MediaPreview {
@@ -80,6 +88,7 @@ export function PluginMediaDetail({
   onUse,
   isApplying,
   hideUseAction,
+  onSharePopoverItemClick,
 }: Props) {
   const t = useT();
   const [copied, setCopied] = useState(false);
@@ -237,6 +246,7 @@ export function PluginMediaDetail({
             menu: buildPluginUseMenu(record, onUse, t),
           }}
       headerExtras={<PluginShareMenu record={record} variant="inline" />}
+      onSharePopoverItemClick={onSharePopoverItemClick}
     />
   );
 }

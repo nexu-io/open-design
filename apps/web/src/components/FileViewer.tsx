@@ -20,6 +20,7 @@ import {
   trackArtifactHeaderClick,
   trackArtifactToolbarClick,
   trackCommentPopoverClick,
+  trackDrawToolbarClick,
   trackPageView,
   trackPresentPopoverClick,
   trackShareOptionPopoverClick,
@@ -107,7 +108,7 @@ import { Icon } from './Icon';
 import { RemixIcon } from './RemixIcon';
 import { SocialShareGrid } from './SocialShareGrid';
 import { Toast } from './Toast';
-import { PreviewDrawOverlay } from './PreviewDrawOverlay';
+import { PreviewDrawOverlay, type DrawToolbarElement } from './PreviewDrawOverlay';
 import {
   buildBoardCommentAttachments,
   commentSnapshotEqual,
@@ -4599,6 +4600,19 @@ function HtmlViewer({
       artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
     });
   };
+  const fireDrawToolbarClick = (
+    element: DrawToolbarElement,
+    submitAction?: 'draft' | 'queue' | 'send',
+  ) => {
+    trackDrawToolbarClick(analytics.track, {
+      page_name: 'artifact',
+      area: 'draw_toolbar',
+      element,
+      ...(submitAction ? { submit_action: submitAction } : {}),
+      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+    });
+  };
   const fireArtifactHeaderClick = (
     element:
       | 'back'
@@ -8579,6 +8593,7 @@ function HtmlViewer({
                     filePath={file.name}
                     sendDisabled={streaming}
                     sendDisabledReason={t('chat.annotationSendDisabledReason')}
+                    onToolbarClick={fireDrawToolbarClick}
                   >
                     <div className="artifact-preview-transport-stack">
                       {OD_PREVIEW_KEEP_ALIVE ? (

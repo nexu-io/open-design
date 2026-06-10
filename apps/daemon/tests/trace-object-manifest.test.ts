@@ -272,12 +272,33 @@ describe('buildTraceObjectManifests', () => {
     expect(manifests?.artifactManifest).toHaveLength(101);
   });
 
-  it('leaves production telemetry relay configuration to fallback manifests without reading project files', async () => {
+  it('derives the object relay endpoint from the telemetry relay endpoint', async () => {
     const projectsRoot = path.join(dataDir, 'projects');
     const projectDir = path.join(projectsRoot, 'proj-1');
     await mkdir(projectDir, { recursive: true });
     await writeFile(path.join(projectDir, 'artifact.txt'), 'release artifact');
-    const fetchSpy = vi.fn();
+    const fetchSpy = vi.fn(async (url: string, init: RequestInit) => {
+      const parsed = JSON.parse(init.body as string) as {
+        objects: Array<{ storage_ref: string; content_base64?: string }>;
+      };
+      if (url.includes('/api/objects/authorize')) {
+        expect(parsed.objects).toHaveLength(1);
+        return new Response(JSON.stringify({ upload_token: 'upload-token' }), { status: 200 });
+      }
+      expect(url).toBe('https://telemetry.open-design.ai/api/objects/batch');
+      expect((parsed as unknown as { upload_token: string }).upload_token).toBe('upload-token');
+      expect(parsed.objects).toHaveLength(1);
+      return new Response(
+        JSON.stringify({
+          objects: parsed.objects.map((object) => ({
+            storage_ref: object.storage_ref,
+            status: 'available',
+            size_bytes: Buffer.from(object.content_base64!, 'base64').byteLength,
+          })),
+        }),
+        { status: 200 },
+      );
+    });
 
     const manifests = await buildTraceObjectManifests({
       installationId: 'install-1',
@@ -292,14 +313,21 @@ describe('buildTraceObjectManifests', () => {
       fetchImpl: fetchSpy as any,
       env: {
         NODE_ENV: 'production',
-        OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse',
+        OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse//',
       },
       now: () => new Date('2026-06-08T00:00:00.000Z'),
     });
 
-    expect(manifests).toBeUndefined();
-    expect(projectFileReadTracker.calls).toBe(0);
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy.mock.calls[0]![0]).toBe('https://telemetry.open-design.ai/api/objects/authorize');
+    expect(fetchSpy.mock.calls[1]![0]).toBe('https://telemetry.open-design.ai/api/objects/batch');
+    expect(projectFileReadTracker.calls).toBe(1);
+    expect(manifests?.completeness).toBe('complete');
+    expect(manifests?.artifactManifest?.[0]).toMatchObject({
+      status: 'ok',
+      stored_in_open_design: true,
+      size_bytes: 'release artifact'.length,
+    });
   });
 
   it('skips over-limit project files before loading their contents', async () => {

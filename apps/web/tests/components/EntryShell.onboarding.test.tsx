@@ -620,12 +620,9 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     chooseDropdownOption('Organization size', /Growth company/i);
     chooseDropdownOption('Use case', /Product design/i);
     chooseDropdownOption('Where did you hear about us?', /Search/i);
-    // About you is no longer the last step — advance to the newsletter step.
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
     });
-    // Finish from the newsletter step.
     fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
 
     expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
@@ -645,22 +642,14 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
           step_index: '2',
           step_name: 'about_you',
         }),
-        expect.objectContaining({
-          page_name: 'onboarding',
-          area: 'newsletter',
-          step_index: '3',
-          step_name: 'newsletter',
-        }),
       ]),
     );
 
-    // The About-you survey snapshot now fires on Finish from the newsletter
-    // step (the new last step), so it carries area: 'newsletter'. The payload
-    // — the user's role/org/use-case/source picks — is what matters and is
-    // still intact.
+    // The About-you survey snapshot fires from the final step and carries
+    // the user's role/org/use-case/source picks.
     expect(findTrackedEvent('ui_click', (payload) => payload.element === 'about_you_submit')).toMatchObject({
       page_name: 'onboarding',
-      area: 'newsletter',
+      area: 'about_you',
       element: 'about_you_submit',
       action: 'continue',
       role: 'engineer',
@@ -709,8 +698,6 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
     });
-    // About you -> newsletter step (where the email field now lives)
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
     });
@@ -759,8 +746,6 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
     });
-    // Advance to the newsletter step, then finish without typing an email.
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
     });
@@ -816,8 +801,6 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
     });
-    // About you -> newsletter step
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
     });

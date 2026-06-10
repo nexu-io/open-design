@@ -25,6 +25,8 @@ import {
   trackCommunityGalleryClick,
   trackHomeChatComposerClick,
   trackPageView,
+  trackPluginDetailModalClick,
+  trackPluginDetailModalSharePopoverClick,
   trackPluginDetailModalSurfaceView,
   trackPluginReplacementModalClick,
   trackPluginReplacementModalSurfaceView,
@@ -59,6 +61,7 @@ import type {
   SkillSummary,
 } from '../types';
 import { inlineMentionToken, mentionTokenPresent } from '../utils/inlineMentions';
+import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import { missingRequiredInputs, pluginInputsAreValid } from '../utils/pluginRequiredInputs';
 import { HomeHero, type ExamplePromptInfo, type HomeHeroHandle } from './HomeHero';
 import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
@@ -80,7 +83,6 @@ import { PluginDetailsModal } from './PluginDetailsModal';
 import { HomeTemplatesReveal } from './HomeTemplatesReveal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
-import type { FacetSelection } from './plugins-home/facets';
 import { localizePluginTitle } from './plugins-home/localization';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { examplePresetSeedPrompt } from './plugins-home/presetSeedPrompt';
@@ -379,12 +381,7 @@ export function HomeView({
     requestAnimationFrame(() => {
       const scrollContainer = homeViewRef.current?.closest('.entry-main--scroll');
       if (!(scrollContainer instanceof HTMLElement)) return;
-      if (typeof scrollContainer.scrollTo === 'function') {
-        scrollContainer.scrollTo({ top: 0, left: 0 });
-      } else {
-        scrollContainer.scrollTop = 0;
-        scrollContainer.scrollLeft = 0;
-      }
+      smoothScrollToTop(scrollContainer);
     });
   }, []);
   useEffect(() => {
@@ -580,20 +577,6 @@ export function HomeView({
     selectedPluginContexts,
     stagedFiles.length,
   ]);
-
-  // The Home chip rail and the Community grid share a mental
-  // model — "Prototype" up top is the same artifact intent as the
-  // `prototype` slice down below. When the user picks a chip,
-  // we drive the starters' FacetSelection from it so they get a
-  // pre-filtered shelf of templates for the same intent without having
-  // to scroll and re-pick. `pendingChipId` (set on click, before apply
-  // resolves) is preferred over `active?.chipId` so the filter snaps on
-  // the same frame as the click.
-  const presetStartersSelection = useMemo<FacetSelection | null>(() => {
-    const chipId = pendingChipId ?? active?.chipId ?? null;
-    if (!chipId) return null;
-    return facetSelectionForChip(chipId);
-  }, [pendingChipId, active?.chipId]);
 
   // When the active plugin was bound through a chip, the badge shows
   // the chip label (e.g. "Prototype") instead of the underlying plugin
@@ -1685,7 +1668,6 @@ export function HomeView({
           onOpenExternal={handleCommunityOpenExternal}
           onBrowseRegistry={onBrowseRegistry}
           preferDefaultFacet={false}
-          presetSelection={presetStartersSelection}
           cardLayout="gallery"
         />
       </HomeTemplatesReveal>
@@ -1694,9 +1676,40 @@ export function HomeView({
         {detailsRecord ? (
           <PluginDetailsModal
             record={detailsRecord}
-            onClose={() => setDetailsRecord(null)}
-            onUse={(record, action) => void routePluginUse(record, action)}
+            onClose={() => {
+              // Covers the close button, Esc and the backdrop — every
+              // variant funnels dismissal through this single onClose.
+              trackPluginDetailModalClick(analytics.track, {
+                page_name: 'home',
+                area: 'plugin_detail_modal',
+                element: 'close',
+                plugin_id: detailsRecord.sourceMarketplaceEntryName ?? detailsRecord.id,
+                plugin_type: detailsRecord.marketplaceTrust ?? 'official',
+              });
+              setDetailsRecord(null);
+            }}
+            onUse={(record, action) => {
+              // Track here (not inside routePluginUse) so the gallery's
+              // own onUse keeps its community_gallery attribution; the
+              // kebab 'use-with-query' action maps to the dropdown face.
+              trackPluginDetailModalClick(analytics.track, {
+                page_name: 'home',
+                area: 'plugin_detail_modal',
+                element: action === 'use-with-query' ? 'use_plugin_dropdown' : 'use_plugin',
+                plugin_id: record.sourceMarketplaceEntryName ?? record.id,
+                plugin_type: record.marketplaceTrust ?? 'official',
+              });
+              void routePluginUse(record, action);
+            }}
             isApplying={pendingApplyId === detailsRecord.id}
+            onSharePopoverItemClick={(item) =>
+              trackPluginDetailModalSharePopoverClick(analytics.track, {
+                page_name: 'home',
+                area: 'plugin_detail_share_popover',
+                element: item,
+                plugin_id: detailsRecord.sourceMarketplaceEntryName ?? detailsRecord.id,
+                plugin_type: detailsRecord.marketplaceTrust ?? 'official',
+              })}
           />
         ) : null}
       </AnimatePresence>
@@ -1814,27 +1827,6 @@ export function shouldShowActivePluginChip(active: ActivePlugin | null): boolean
   // Otherwise a type chip whose default plugin IS this record stands in for the
   // task chip and suppresses a separate plugin chip.
   return active.record.id !== defaultPluginIdForChip(active.chipId);
-}
-
-// Maps a Home hero chip id to the Community facet slice the
-// user most likely wants to browse next. The chip rail is intent
-// ("I want to design a slide deck"); the starters grid is the catalog
-// for that intent, so pinning the same `deck` slice lets the
-// user keep scanning examples without re-picking the same artifact
-// kind in a different control. The list mirrors the `apply-scenario`
-// and `apply-figma-migration` chip ids in `home-hero/chips.ts`; any
-// new chip there should add a row here too.
-function facetSelectionForChip(chipId: string): FacetSelection | null {
-  switch (chipId) {
-    case 'prototype': return { category: 'prototype', subcategory: null };
-    case 'live-artifact': return { category: 'live-artifact', subcategory: null };
-    case 'deck': return { category: 'deck', subcategory: null };
-    case 'image': return { category: 'image', subcategory: null };
-    case 'video': return { category: 'video', subcategory: null };
-    case 'hyperframes': return { category: 'hyperframes', subcategory: null };
-    case 'audio': return { category: 'audio', subcategory: null };
-    default: return null;
-  }
 }
 
 function homeHeroChipLabelForId(chipId: string, t: ReturnType<typeof useI18n>['t']): string {

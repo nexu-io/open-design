@@ -39,6 +39,10 @@ import {
 } from '../analytics/events';
 import { recordAmrEntry, type AmrEntryAttribution } from '../analytics/amr-attribution';
 import {
+  beginAmrAuthTracking,
+  resolveAmrAuthTracking,
+} from '../analytics/amr-auth';
+import {
   clearOnboardingSessionId,
   getOrCreateOnboardingSessionId,
 } from '../analytics/onboarding-session';
@@ -130,7 +134,7 @@ import {
 } from './amrLoginPolling';
 import { closeAmrActivationWindowBestEffort } from './AmrLoginPill';
 import { AnimatePresence } from 'motion/react';
-import { renderModelOptions } from './modelOptions';
+import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import {
   providerModelsCacheKey,
   type ProviderModelsCache,
@@ -162,6 +166,7 @@ function writeStoredRailOpen(open: boolean): void {
 
 const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
 const X_URL = 'https://x.com/nexudotio';
+const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 
 // The topbar chips (GitHub star, model switcher, Use everywhere)
 // collapse into the settings dropdown when the viewport gets
@@ -516,12 +521,7 @@ export function EntryShell({
     const frame = window.requestAnimationFrame(() => {
       const scrollContainer = entryMainScrollRef.current;
       if (!scrollContainer) return;
-      if (typeof scrollContainer.scrollTo === 'function') {
-        scrollContainer.scrollTo({ top: 0, left: 0 });
-        return;
-      }
-      scrollContainer.scrollTop = 0;
-      scrollContainer.scrollLeft = 0;
+      smoothScrollToTop(scrollContainer);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [homePromptHandoff?.id, view]);
@@ -644,6 +644,13 @@ export function EntryShell({
       config={config}
       onThemeChange={onThemeChange}
       onOpenSettings={onOpenSettings}
+      onTrackTriggerClick={() => {
+        trackHomeToolbarClick(analytics.track, {
+          page_name: 'home',
+          area: 'toolbar',
+          element: 'settings',
+        });
+      }}
     />
   );
 
@@ -1108,14 +1115,10 @@ function OnboardingView({
       area = 'runtime';
       stepIndex = '1';
       stepName = 'connect';
-    } else if (step === 1) {
+    } else {
       area = 'about_you';
       stepIndex = '2';
       stepName = 'about_you';
-    } else {
-      area = 'newsletter';
-      stepIndex = '3';
-      stepName = 'newsletter';
     }
     trackPageView(analytics.track, {
       page_name: 'onboarding',
@@ -1147,8 +1150,7 @@ function OnboardingView({
     stepName: TrackingOnboardingStepName;
   } {
     if (stepIdx === 0) return { area: 'runtime', stepIndex: '1', stepName: 'connect' };
-    if (stepIdx === 1) return { area: 'about_you', stepIndex: '2', stepName: 'about_you' };
-    return { area: 'newsletter', stepIndex: '3', stepName: 'newsletter' };
+    return { area: 'about_you', stepIndex: '2', stepName: 'about_you' };
   }
   function emitOnboardingClick(
     element: TrackingOnboardingClickElement,
@@ -1242,7 +1244,6 @@ function OnboardingView({
   const steps = [
     t('settings.onboardingStepConnect'),
     t('settings.onboardingStepProfile'),
-    t('settings.onboardingStepNewsletter'),
   ];
   const isLastStep = step === steps.length - 1;
 
@@ -1458,8 +1459,10 @@ function OnboardingView({
         return;
       }
       if (amrLoginPollCancelledRef.current) return;
+      beginAmrAuthTracking(attribution);
       const loginResult = await startVelaLogin(attribution);
       if (amrLoginPollCancelledRef.current) {
+        resolveAmrAuthTracking(analytics.track, 'cancelled');
         if (loginResult.ok || loginResult.alreadyRunning) {
           const cancelResult = await cancelVelaLogin();
           closeAmrActivationWindowBestEffort();
@@ -1472,6 +1475,7 @@ function OnboardingView({
         return;
       }
       if (!loginResult.ok && !loginResult.alreadyRunning) {
+        resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed');
         setAmrLoginError(loginResult.error || t('settings.amrLoginErrorCompact'));
         return;
       }
@@ -1486,6 +1490,7 @@ function OnboardingView({
   async function handleCancelAmrLogin() {
     if (!amrLoginPending || amrLoginCancelPending) return;
     amrLoginPollCancelledRef.current = true;
+    resolveAmrAuthTracking(analytics.track, 'cancelled');
     setAmrLoginError(null);
     setAmrLoginCancelPending(true);
     setAmrStatus((current) => (
@@ -1514,9 +1519,20 @@ function OnboardingView({
       const nextStatus = await fetchVelaLoginStatus();
       if (nextStatus) setAmrStatus(nextStatus);
       const outcome = amrLoginPollOutcome(nextStatus, startedAt);
-      if (outcome === 'signed-in') return true;
+      if (outcome === 'signed-in') {
+        resolveAmrAuthTracking(analytics.track, 'success', undefined, {
+          signedInUserId: nextStatus?.user?.id ?? null,
+        });
+        notifyAmrLoginStatusChanged();
+        return true;
+      }
       if (outcome === 'stopped' || outcome === 'timed-out') {
-        if (outcome === 'timed-out') void cancelVelaLogin();
+        if (outcome === 'timed-out') {
+          resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout');
+          void cancelVelaLogin();
+        } else {
+          resolveAmrAuthTracking(analytics.track, 'failed', 'login_stopped');
+        }
         setAmrLoginError(t('settings.amrLoginErrorCompact'));
         return false;
       }
@@ -1742,8 +1758,6 @@ function OnboardingView({
     ? t('settings.amrSigningIn')
     : step === 0 && amrSelectedAndSignedOut
       ? t('settings.amrSignInToContinue')
-    : step === 1
-      ? t('settings.onboardingContinue')
     : isLastStep
       ? t('settings.onboardingFinish')
       : t('settings.onboardingContinue');
@@ -1975,31 +1989,28 @@ function OnboardingView({
                   }}
                 />
               </div>
-            </div>
-          ) : null}
-
-          {step === 2 ? (
-            <div className="onboarding-view__panel">
-              <OnboardingPanelHeader
-                title={t('settings.onboardingNewsletterTitle')}
-                body={t('settings.onboardingNewsletterBody')}
-              />
-              <label className="onboarding-view__email-field">
-                <span className="onboarding-view__email-label">
-                  {t('newsletter.label')}
-                </span>
-                <input
-                  className="onboarding-view__email-input"
-                  type="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  placeholder={t('newsletter.placeholder')}
-                  value={profile.email}
-                  onChange={(event) =>
-                    setProfile((current) => ({ ...current, email: event.target.value }))
-                  }
+              <div className="onboarding-view__newsletter-inline">
+                <OnboardingPanelHeader
+                  title={t('settings.onboardingNewsletterTitle')}
+                  body={t('settings.onboardingNewsletterBody')}
                 />
-              </label>
+                <label className="onboarding-view__email-field">
+                  <span className="onboarding-view__email-label">
+                    {t('newsletter.label')}
+                  </span>
+                  <input
+                    className="onboarding-view__email-input"
+                    type="email"
+                    autoComplete="email"
+                    inputMode="email"
+                    placeholder={t('newsletter.placeholder')}
+                    value={profile.email}
+                    onChange={(event) =>
+                      setProfile((current) => ({ ...current, email: event.target.value }))
+                    }
+                  />
+                </label>
+              </div>
             </div>
           ) : null}
 
@@ -2130,6 +2141,8 @@ function OnboardingCliSetupPanel({
           value={selectedModel}
           options={modelOptions}
           onChange={onSelectModel}
+          searchable
+          searchPlaceholder={t('newproj.modelSearch')}
         />
       ) : null}
     </div>
@@ -2150,35 +2163,26 @@ function OnboardingAmrModelSelect({
   const t = useT();
   const modelSource = modelsSource ?? 'fallback';
   const displayModels = models.map((model) => ({
-    ...model,
+    value: model.id,
     label: formatOnboardingAmrModelLabel(model),
   }));
   const modelSourceLabel = t('settings.onboardingAmrModelSourceLabel');
   return (
-    <label
+    <div
       className="onboarding-view__model-picker"
       onClick={(event) => event.stopPropagation()}
     >
-      <span className="onboarding-view__model-label">
-        {t('settings.modelPicker')}
-        <span className={`onboarding-view__model-source ${modelSource}`}>
-          {modelSourceLabel}
-        </span>
-      </span>
-      <span className="onboarding-view__model-select-wrap">
-        <select
-          value={selectedModel}
-          onChange={(event) => onSelectModel(event.target.value)}
-        >
-          {renderModelOptions(displayModels)}
-        </select>
-        <Icon
-          name="chevron-down"
-          size={12}
-          className="onboarding-view__model-select-chevron"
-        />
-      </span>
-    </label>
+      <OnboardingDropdown
+        label={`${t('settings.modelPicker')} · ${modelSourceLabel}`}
+        placeholder={t('settings.modelSourceFallback')}
+        value={selectedModel}
+        options={displayModels}
+        onChange={onSelectModel}
+        searchable
+        searchPlaceholder={t('newproj.modelSearch')}
+        sourceTone={modelSource}
+      />
+    </div>
   );
 }
 
@@ -2325,6 +2329,8 @@ function OnboardingByokSetupPanel({
         value={selectedProvider?.baseUrl ?? ''}
         options={providerOptions}
         onChange={onProviderChange}
+        searchable
+        searchPlaceholder={t('settings.quickFillProvider')}
       />
       <label className="onboarding-view__inline-field">
         <span>{t('settings.apiKey')}</span>
@@ -2359,6 +2365,8 @@ function OnboardingByokSetupPanel({
             options={modelOptions}
             onChange={onModelChange}
             placement="top"
+            searchable
+            searchPlaceholder={t('newproj.modelSearch')}
           />
         ) : (
           <label className="onboarding-view__inline-field">
@@ -2535,6 +2543,9 @@ type OnboardingDropdownBaseProps = {
   placeholder: string;
   options: Array<{ value: string; label: string }>;
   placement?: 'bottom' | 'top';
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  sourceTone?: string;
 };
 
 type OnboardingDropdownProps =
@@ -2550,6 +2561,7 @@ type OnboardingDropdownProps =
     });
 
 export function OnboardingDropdown(props: OnboardingDropdownProps) {
+  const t = useT();
   const {
     label,
     placeholder,
@@ -2557,11 +2569,16 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
     options,
     placement = 'bottom',
     multiple = false,
+    searchable = false,
+    searchPlaceholder,
+    sourceTone,
   } = props;
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [resolvedPlacement, setResolvedPlacement] = useState(placement);
   const [menuMaxHeight, setMenuMaxHeight] = useState(240);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const dropdownIdRef = useRef(`onboarding-dropdown-${Math.random().toString(36).slice(2)}`);
   const selectedValues = Array.isArray(value) ? value : value ? [value] : [];
   const selectedOptions = options.filter((option) => selectedValues.includes(option.value));
   const selectedOption = selectedOptions[0];
@@ -2570,6 +2587,14 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
     ? selectedOptions.map((option) => option.label).join(', ')
     : selectedOption?.label;
   const triggerLabel = selectedLabel || placeholder;
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleOptions =
+    searchable && normalizedQuery
+      ? options.filter((option) =>
+          `${option.label} ${option.value}`.toLowerCase().includes(normalizedQuery),
+        )
+      : options;
+  const emptyMessage = searchable ? t('homeHero.footer.noMatches') : t('settings.fetchModelsEmpty');
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -2623,6 +2648,39 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open) {
+      setQuery('');
+    }
+  }, [open]);
+
+  useEffect(() => {
+    function handlePeerOpen(event: Event) {
+      if ((event as CustomEvent<string>).detail !== dropdownIdRef.current) {
+        setOpen(false);
+      }
+    }
+
+    window.addEventListener(ONBOARDING_DROPDOWN_OPEN_EVENT, handlePeerOpen);
+    return () => {
+      window.removeEventListener(ONBOARDING_DROPDOWN_OPEN_EVENT, handlePeerOpen);
+    };
+  }, []);
+
+  function toggleOpen() {
+    setOpen((current) => {
+      const nextOpen = !current;
+      if (nextOpen) {
+        window.dispatchEvent(
+          new CustomEvent(ONBOARDING_DROPDOWN_OPEN_EVENT, {
+            detail: dropdownIdRef.current,
+          }),
+        );
+      }
+      return nextOpen;
+    });
+  }
+
   return (
     <div
       className="onboarding-view__select-field"
@@ -2630,7 +2688,12 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
       data-open={open || undefined}
       ref={rootRef}
     >
-      <span className="onboarding-view__select-label">{label}</span>
+      <span
+        className="onboarding-view__select-label"
+        data-source-tone={sourceTone || undefined}
+      >
+        {label}
+      </span>
       <button
         type="button"
         className={`onboarding-view__select-trigger${open ? ' is-open' : ''}${
@@ -2639,7 +2702,7 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
         aria-haspopup="listbox"
         aria-expanded={open}
         title={triggerLabel}
-        onClick={() => setOpen((current) => !current)}
+        onClick={toggleOpen}
       >
         <span>{triggerLabel}</span>
         <Icon name="chevron-down" size={16} />
@@ -2647,38 +2710,67 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
       {open ? (
         <div
           className="onboarding-view__select-menu"
-          role="listbox"
-          aria-label={label}
-          aria-multiselectable={multiple || undefined}
+          data-searchable={searchable || undefined}
           style={{ '--onboarding-select-menu-max-height': `${menuMaxHeight}px` } as CSSProperties}
         >
-          {options.map((option) => {
-            const selected = selectedValues.includes(option.value);
-            return (
-              <button
-                key={option.value}
-                type="button"
-                className={`onboarding-view__select-option${selected ? ' is-selected' : ''}`}
-                role="option"
-                aria-selected={selected}
-                onClick={() => {
-                  if (props.multiple) {
-                    props.onChange(
-                      selected
-                        ? selectedValues.filter((selectedValue) => selectedValue !== option.value)
-                        : [...selectedValues, option.value],
-                    );
-                    return;
+          {searchable ? (
+            <label
+              className="onboarding-view__select-search"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <Icon name="search" size={14} />
+              <input
+                type="search"
+                value={query}
+                placeholder={searchPlaceholder || placeholder}
+                aria-label={searchPlaceholder || label}
+                autoFocus
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Escape') {
+                    event.stopPropagation();
                   }
-                  props.onChange(option.value);
-                  setOpen(false);
                 }}
-              >
-                <span>{option.label}</span>
-                {selected ? <Icon name="check" size={15} /> : null}
-              </button>
-            );
-          })}
+              />
+            </label>
+          ) : null}
+          <div
+            className="onboarding-view__select-options"
+            role="listbox"
+            aria-label={label}
+            aria-multiselectable={multiple || undefined}
+          >
+            {visibleOptions.map((option) => {
+              const selected = selectedValues.includes(option.value);
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`onboarding-view__select-option${selected ? ' is-selected' : ''}`}
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => {
+                    if (props.multiple) {
+                      props.onChange(
+                        selected
+                          ? selectedValues.filter((selectedValue) => selectedValue !== option.value)
+                          : [...selectedValues, option.value],
+                      );
+                      return;
+                    }
+                    props.onChange(option.value);
+                    setOpen(false);
+                  }}
+                >
+                  <span>{option.label}</span>
+                  {selected ? <Icon name="check" size={15} /> : null}
+                </button>
+              );
+            })}
+            {visibleOptions.length === 0 ? (
+              <div className="onboarding-view__select-empty">{emptyMessage}</div>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>

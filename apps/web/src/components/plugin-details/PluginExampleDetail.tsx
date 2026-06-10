@@ -14,7 +14,7 @@ import {
   fetchPluginPreviewHtml,
   type SkillExampleResult,
 } from '../../providers/registry';
-import { PreviewModal } from '../PreviewModal';
+import { PreviewModal, type PreviewSharePopoverItem } from '../PreviewModal';
 import { buildPluginShareUrl } from './PluginShareMenu';
 import { PluginMetaSections } from './PluginMetaSections';
 import { buildPluginUseMenu } from './pluginUseMenu';
@@ -28,6 +28,8 @@ interface Props {
   onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
   isApplying?: boolean;
   hideUseAction?: boolean;
+  // Analytics — forwarded to PreviewModal's share popover.
+  onSharePopoverItemClick?: (item: PreviewSharePopoverItem) => void;
 }
 
 export function PluginExampleDetail({
@@ -37,6 +39,7 @@ export function PluginExampleDetail({
   onUse,
   isApplying,
   hideUseAction,
+  onSharePopoverItemClick,
 }: Props) {
   const { t, locale } = useI18n();
   const localizedTitle = localizePluginTitle(locale, record);
@@ -154,6 +157,7 @@ export function PluginExampleDetail({
             menu: buildPluginUseMenu(record, onUse, t),
           }}
       hideSidebarToggle
+      onSharePopoverItemClick={onSharePopoverItemClick}
     />
   );
 }

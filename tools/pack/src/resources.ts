@@ -64,6 +64,12 @@ const BUNDLED_RESOURCE_TREES = [
   { from: join("assets", "frames"), to: "frames" },
   { from: join("assets", "community-pets"), to: "community-pets" },
   { from: "prompt-templates", to: "prompt-templates" },
+  // Baked plugin-preview manifest. The gallery's pre-rendered hover-pan clips
+  // live on R2; the daemon needs this checked-in manifest to map each plugin to
+  // its clip (it serves clips from R2 when the files aren't on disk, which is the
+  // packaged case). Without it the packaged daemon reads an empty manifest and the
+  // gallery falls back to live, GPU-expensive iframes instead of the baked clips.
+  { from: join("data", "plugin-previews"), to: join("data", "plugin-previews") },
 ] as const;
 
 export async function copyBundledResourceTrees({

@@ -1,0 +1,239 @@
+/*
+ * notify-candidates — daily cron entry. Discovers new Open-Design tutorial
+ * candidates from YouTube, then posts a numbered digest to a Feishu (Lark)
+ * webhook for a human to review. It does NOT generate entries or open a PR:
+ * a maintainer replies with which numbers to publish, and the selected videos
+ * are turned into entries by `generate-selected.ts`.
+ *
+ * Usage:
+ *   tsx scripts/youtube-tutorials/notify-candidates.ts [--days 14] [--print]
+ *
+ * Env:
+ *   YOUTUBE_API_KEY                        YouTube Data API v3 (or ~/.youtube/.env)
+ *   ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY + ANTHROPIC_BASE_URL   relevance gate
+ *   FEISHU_TUTORIALS_WEBHOOK               Feishu custom-bot incoming webhook URL
+ *   FEISHU_TUTORIALS_SECRET                optional, if the bot has signing enabled
+ *
+ * --print skips Feishu and writes the digest to stdout (used locally to
+ * reproduce the candidate numbering before generating selected entries).
+ */
+import { createHmac } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { readExistingVideoIds, type VideoInput } from './lib.ts';
+import { fetchCandidates, loadYoutubeKey } from './youtube.ts';
+
+function fmtViews(n?: number): string {
+  if (!n) return '';
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
+  return String(n);
+}
+
+function fmtDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function buildDigest(candidates: VideoInput[], today: string): string {
+  const lines: string[] = [];
+  lines.push(`📺 Open Design 教程候选 · ${today} · 共 ${candidates.length} 条待审`);
+  lines.push('');
+  candidates.forEach((v, i) => {
+    const meta = [v.author, v.date, fmtViews(v.viewCount) && `${fmtViews(v.viewCount)} 次观看`, fmtDuration(v.durationSeconds)]
+      .filter(Boolean)
+      .join(' · ');
+    lines.push(`[${i + 1}] ${v.title}`);
+    lines.push(`    ${meta}`);
+    lines.push(`    https://youtu.be/${v.videoId}`);
+  });
+  lines.push('');
+  lines.push('回复指令(发给 Claude):');
+  lines.push('• 上架 1 3 5    只上这几条');
+  lines.push('• 全上 / 全不上');
+  lines.push('• 全上 除 2 4    除这几条其余都上');
+  lines.push('');
+  lines.push('(已自动过滤:已收录的 + 经 LLM 闸门判定非 Open Design 的内容)');
+  return lines.join('\n');
+}
+
+async function postToFeishu(webhook: string, secret: string | undefined, text: string): Promise<void> {
+  const body: Record<string, unknown> = { msg_type: 'text', content: { text } };
+  if (secret) {
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const sign = createHmac('sha256', `${timestamp}\n${secret}`).update('').digest('base64');
+    body.timestamp = timestamp;
+    body.sign = sign;
+  }
+  const res = await fetch(webhook, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json().catch(() => ({}))) as { code?: number; msg?: string; StatusCode?: number };
+  // Feishu signals failure with a non-zero `code` (new format) OR a non-zero
+  // `StatusCode` (legacy format), both returned on an HTTP 200. Treat either as
+  // a failure so a digest that never reached the group does not look posted.
+  const failed = !res.ok || (json.code != null && json.code !== 0) || (json.StatusCode != null && json.StatusCode !== 0);
+  if (failed) {
+    throw new Error(`Feishu webhook failed: HTTP ${res.status} ${JSON.stringify(json).slice(0, 200)}`);
+  }
+}
+
+// This workflow's file name, used to look up its own prior runs.
+const WORKFLOW_FILE = 'tutorials-youtube-sync.yml';
+// Window used only when there is no watermark source (local runs, or a CI run
+// with no prior successful run yet) — wide enough that a single delayed/skipped
+// run can't open a gap, narrow enough not to dump history on a first run.
+const FALLBACK_DAYS = 2;
+
+function isoDaysAgo(days: number): string {
+  return new Date(Date.now() - days * 86400_000).toISOString();
+}
+
+/**
+ * Start time (RFC 3339) of the most recent successful run of this workflow that
+ * isn't the current run, via the Actions API. Returns null when unavailable
+ * (no token, no prior success, or an API error).
+ */
+export async function lastSuccessfulRunStart(): Promise<string | null> {
+  const token = process.env.GITHUB_TOKEN;
+  const repo = process.env.GITHUB_REPOSITORY;
+  if (!token || !repo) return null;
+  const currentRunId = process.env.GITHUB_RUN_ID;
+  // Scope to this run's ref so only the canonical digest branch (main, for the
+  // schedule) advances its own watermark. Without this, a successful
+  // workflow_dispatch run on a feature branch could become main's watermark and
+  // permanently skip the range that branch run "covered".
+  const branch = process.env.GITHUB_REF_NAME ?? 'main';
+  const url = `https://api.github.com/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/runs?status=success&branch=${encodeURIComponent(branch)}&per_page=10`;
+  const res = await fetch(url, {
+    headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json' },
+  });
+  if (!res.ok) throw new Error(`Actions API HTTP ${res.status}`);
+  const data = (await res.json()) as {
+    workflow_runs?: { id: number; created_at: string; run_started_at?: string }[];
+  };
+  // Use run_started_at (actual execution start), NOT created_at (queue/creation
+  // time). They differ by the queue wait, which can be 10-15 min; deriving the
+  // watermark from created_at would re-emit candidates published while a run sat
+  // queued. Fall back to created_at only if run_started_at is absent.
+  const prior = (data.workflow_runs ?? [])
+    .filter((r) => String(r.id) !== currentRunId)
+    .map((r) => r.run_started_at ?? r.created_at)
+    .sort();
+  return prior.length ? prior[prior.length - 1] : null;
+}
+
+type WindowResult = { since: string; reason: string } | { fail: string };
+
+/**
+ * Resolve the digest window start.
+ * - Explicit --days always wins, with no upper clamp, so a manual catch-up after
+ *   a long outage actually covers the requested range.
+ * - In CI (a watermark source exists), the last successful run is the gap-free
+ *   watermark. If that lookup ERRORS, fail the job rather than silently sweeping
+ *   a wrong (short) window — dedupe only covers already-published videos, so a
+ *   bad window would drop or duplicate notifications while the run looks green.
+ * - The short FALLBACK_DAYS window is used only when there is genuinely no
+ *   watermark (local run, or a CI run with no prior successful run yet).
+ */
+async function resolveWindowStart(explicitDays: number | null): Promise<WindowResult> {
+  if (explicitDays != null) {
+    return { since: isoDaysAgo(explicitDays), reason: `--days ${explicitDays}` };
+  }
+  const hasWatermarkSource = Boolean(process.env.GITHUB_TOKEN && process.env.GITHUB_REPOSITORY);
+  if (hasWatermarkSource) {
+    let watermark: string | null;
+    try {
+      watermark = await lastSuccessfulRunStart();
+    } catch (e) {
+      return { fail: `watermark lookup failed: ${(e as Error).message}` };
+    }
+    if (watermark) {
+      // Lower bound = prior successful run's start. Windows are contiguous, so
+      // delayed/skipped runs stay gap-free. A residual overlap equal to the prior
+      // run's setup time (start → search call, ~1 min) can re-list a video once
+      // if it was published in that minute and not yet acted on. That is bounded
+      // and cosmetic here: the digest is human-reviewed, so a rare duplicate line
+      // is simply not picked twice, and once published it's filtered by the
+      // catalogue. Eliminating it fully needs a durable already-notified store,
+      // which is out of scope for this window-tuning change (follow-up if it ever
+      // proves noisy).
+      return { since: watermark, reason: `since last successful run ${watermark}` };
+    }
+    return { since: isoDaysAgo(FALLBACK_DAYS), reason: `no prior successful run; ${FALLBACK_DAYS}-day window` };
+  }
+  return { since: isoDaysAgo(FALLBACK_DAYS), reason: `no watermark source; ${FALLBACK_DAYS}-day window` };
+}
+
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  const printOnly = args.includes('--print');
+  const daysIdx = args.indexOf('--days');
+  const explicitDays = daysIdx !== -1 ? Number(args[daysIdx + 1]) : null;
+  // The --days operator escape hatch must fail fast on bad input rather than
+  // crash (NaN -> RangeError) or silently no-op (negative -> future window).
+  if (explicitDays != null && !(Number.isInteger(explicitDays) && explicitDays > 0)) {
+    console.error(`Invalid --days value "${args[daysIdx + 1]}"; expected a positive integer.`);
+    process.exit(1);
+  }
+
+  const key = await loadYoutubeKey();
+  const existing = await readExistingVideoIds();
+
+  // Window start = last successful run (gap-free across delayed/skipped runs),
+  // or a short fallback window. --days overrides for manual catch-up.
+  const window = await resolveWindowStart(explicitDays);
+  if ('fail' in window) {
+    console.error(`Cannot resolve a safe window: ${window.fail}; aborting.`);
+    process.exitCode = 1;
+    return;
+  }
+  const { since, reason } = window;
+  console.log(`Window start: ${since} (${reason})`);
+
+  const { candidates, searchFailures, queryCount } = await fetchCandidates(key, since, existing);
+
+  // Abort on ANY search failure (not just all). A partial failure is an
+  // incomplete sweep; posting + succeeding would advance the watermark past the
+  // failed query's window and skip those candidates forever. Failing instead
+  // holds the watermark so the next run re-covers the window.
+  if (searchFailures > 0) {
+    console.error(`${searchFailures}/${queryCount} search queries failed; aborting before posting so the watermark holds and the next run re-covers this window.`);
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(`${candidates.length} candidate(s) after dedupe + relevance gate`);
+
+  // Stamp the date from the publishedAfter window's "now" without Date APIs in
+  // the digest body? We need a date string for the header; derive from newest
+  // candidate or fall back to a generic label.
+  const today = candidates[0]?.date ?? new Date().toISOString().slice(0, 10);
+  const digest = buildDigest(candidates, today);
+
+  if (printOnly) {
+    console.log('\n' + digest);
+    return;
+  }
+
+  if (candidates.length === 0) {
+    console.log('No new candidates; skipping Feishu post.');
+    return;
+  }
+
+  const webhook = process.env.FEISHU_TUTORIALS_WEBHOOK;
+  if (!webhook) {
+    console.error('Missing FEISHU_TUTORIALS_WEBHOOK; printing digest instead:\n');
+    console.log(digest);
+    process.exitCode = 1;
+    return;
+  }
+  await postToFeishu(webhook, process.env.FEISHU_TUTORIALS_SECRET, digest);
+  console.log('Posted candidate digest to Feishu.');
+}
+
+// Only sweep when run directly; importing (e.g. from tests) must have no effect.
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  void main();
+}
