@@ -18,5 +18,7 @@
 - [x] Fix Docker image workflow so pushes to `main` publish branch-ref/`edge`/`sha-*` images and pull requests smoke-build without pushing.
 - [x] Include all known Dockerfile/workflow inputs in the pull-request smoke-build path filter, including `scripts/**` and `e2e/**`.
 - [x] Run build steps used by `deploy/Dockerfile` outside Docker because Docker is unavailable in this environment.
+- [x] Push the Docker workflow fix and observe GitHub Actions trigger the Docker image workflow.
+- [x] Fix the Dockerfile install layer after GitHub Actions showed `postinstall` was running before the daemon `tsconfig.json` existed in the image build context.
 - [x] Revert production `next build` churn in `apps/web/next-env.d.ts` before commit because repository tooling expects the development route-types reference.
 - [ ] If the intended scope is still the DevTools console-error fix from `devtools-context.md`, create a dedicated SDD change for those root-cause files and implement it separately.

@@ -149,7 +149,7 @@ Updated `.github/workflows/docker-image.yml` so:
 ### Build-path evidence
 Docker is not installed in this environment (`docker: command not found`), so a real local `docker buildx`/runtime-image verification could not be executed here.
 
-As a substitute, the critical in-Docker build commands were executed directly:
+As an initial substitute, the critical in-Docker build commands were executed directly:
 
 ```bash
 corepack pnpm --filter @open-design/daemon build
@@ -161,11 +161,20 @@ test -d apps/web/out
 
 Result: passed (`DOCKERFILE_BUILD_STEPS_OK`).
 
+After the first push, GitHub Actions triggered the Docker image workflow as expected but the image build failed during the Dockerfile install layer. The failure showed root `postinstall` was running while the Docker build context contained only `apps/daemon/package.json`, not `apps/daemon/tsconfig.json`:
+
+```text
+@open-design/daemon build /app/apps/daemon
+error TS5058: The specified path does not exist: 'tsconfig.json'.
+```
+
+`deploy/Dockerfile` was updated so the partial dependency-install layer uses `pnpm install --frozen-lockfile --ignore-scripts`; after `COPY apps ./apps`, it runs `pnpm rebuild` and `node ./scripts/postinstall.mjs` with the full workspace context available, then continues the daemon/web build steps.
+
 The production Next build updated `apps/web/next-env.d.ts` from `.next/dev/types/routes.d.ts` to `.next/types/routes.d.ts` locally. That generated churn was reverted before commit because this repository has tooling that restores the development route-types reference after build/prepare flows.
 
 ## Conclusion
 The previous blocker is resolved: tracked files no longer contain conflict markers, focused web validation passes, guard passes, workspace typecheck passes with a local pnpm shim, and the Docker workflow now runs for `main` pushes and PR smoke builds.
 
-Residual limitation: Docker itself is unavailable in this container, so the final image build/push must be verified by GitHub Actions after push. The local evidence validates workflow syntax through YAML/LSP, repo checks, and the Dockerfile's key build commands, but not the actual multi-arch Buildx runtime image.
+Residual limitation: Docker itself is unavailable in this container, so the final image build/push must be verified by GitHub Actions after push. The local evidence validates workflow syntax through YAML/LSP, repo checks, and the Dockerfile's key build commands, and the first push proved the workflow trigger/publish path starts correctly. The follow-up Dockerfile fix is expected to clear the install-layer failure in GitHub Actions.
 
 Remaining scope risk: this verification proves baseline/deploy readiness after conflict cleanup and Docker workflow correction, not the separate DevTools console-error product fix described in `devtools-context.md`.
