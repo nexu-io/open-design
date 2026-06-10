@@ -2682,12 +2682,29 @@ function emittedRenderableQuestionForm(text) {
   return false;
 }
 
-function detectSkillPluginCandidateOnRunSuccess(db, runs, run, input, projectRoot) {
+function assistantMessageEmittedQuestionForm(db, assistantMessageId) {
+  if (!assistantMessageId) return false;
+  const row = db.prepare(`SELECT content FROM messages WHERE id = ?`).get(assistantMessageId);
+  return emittedRenderableQuestionForm(row?.content);
+}
+
+function deferredSkillPluginCandidateForRun(db, run) {
+  if (!run.projectId || !run.conversationId) return null;
+  return listSkillPluginCandidates(db, run.projectId)
+    .find((candidate) =>
+      candidate.status !== 'dismissed' &&
+      !candidate.assistantMessageId &&
+      candidate.conversationId === run.conversationId,
+    ) ?? null;
+}
+
+export function detectSkillPluginCandidateOnRunSuccess(db, runs, run, input, projectRoot) {
   if (!run.projectId || !run.conversationId) return;
   void runs
     .wait(run)
     .then(async (finalStatus) => {
       if (finalStatus.status !== 'succeeded') return;
+      const pausedForQuestion = assistantMessageEmittedQuestionForm(db, run.assistantMessageId);
       const detected = await detectSkillPluginCandidate({
         projectId: run.projectId,
         runId: run.id,
@@ -2698,8 +2715,10 @@ function detectSkillPluginCandidateOnRunSuccess(db, runs, run, input, projectRoo
         projectRoot,
       });
       const candidate = detected ? insertSkillPluginCandidate(db, detected) : null;
-      if (!candidate || candidate.status === 'dismissed') return;
-      upsertSkillPluginCandidateAssistantMessage(db, run, candidate);
+      if (pausedForQuestion) return;
+      const candidateToShow = candidate ?? deferredSkillPluginCandidateForRun(db, run);
+      if (!candidateToShow || candidateToShow.status === 'dismissed') return;
+      upsertSkillPluginCandidateAssistantMessage(db, run, candidateToShow);
     })
     .catch((err) => {
       console.warn('[plugins] skill candidate detection failed', err);
@@ -2725,6 +2744,11 @@ export function upsertSkillPluginCandidateAssistantMessage(db, run, candidate) {
     candidate.assistantMessageId !== run.assistantMessageId &&
     typeof existingMessagePosition === 'number';
   const messageId = canReuseExistingMessage ? candidate.assistantMessageId : randomUUID();
+  const shouldMoveReusedMessage =
+    canReuseExistingMessage &&
+    typeof currentMessagePosition === 'number' &&
+    typeof existingMessagePosition === 'number' &&
+    existingMessagePosition <= currentMessagePosition;
   if (
     candidate.assistantMessageId &&
     candidate.assistantMessageId !== messageId &&
@@ -2749,6 +2773,12 @@ export function upsertSkillPluginCandidateAssistantMessage(db, run, candidate) {
     createdAt: now,
     endedAt: now,
   });
+  if (shouldMoveReusedMessage) {
+    const max = db
+      .prepare(`SELECT COALESCE(MAX(position), -1) AS m FROM messages WHERE conversation_id = ?`)
+      .get(run.conversationId)?.m ?? -1;
+    db.prepare(`UPDATE messages SET position = ? WHERE id = ?`).run(Number(max) + 1, messageId);
+  }
   db.prepare(
     `UPDATE skill_plugin_candidates
         SET assistant_message_id = ?, updated_at = ?
