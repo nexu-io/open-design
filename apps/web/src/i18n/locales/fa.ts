@@ -1927,7 +1927,6 @@ export const fa: Dict = {
   'designFiles.usefulInfoLabel': 'اطلاعات مفید',
   'designFiles.usefulInfoTip': 'برای باز کردن هر فایل در یک زبانه کامل، روی آن دوبار کلیک کنید.',
   'designFiles.usefulInfoTip2': 'در گفتگو @ را تایپ کنید تا یک فایل را به‌عنوان زمینه ارجاع دهید.',
-  'designFiles.usefulInfoTip3': 'جست‌وجوی سریع فایل‌ها با ⌘P (Ctrl+P).',
   'designFiles.usefulInfoTip4': 'یک دیزاین‌سیستم انتخاب کنید تا نتیجه با سبک برندتان هماهنگ باشد.',
   'designFiles.usefulInfoTip5': 'ایده‌ای ندارید؟ قالب‌های افزونه در بخش انجمن صفحهٔ اصلی را امتحان کنید.',
   'designFiles.usefulInfoTip6': 'سؤال یا پیشنهادی دارید؟ به Discord ما بپیوندید.',

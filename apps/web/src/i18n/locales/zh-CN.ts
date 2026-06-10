@@ -1927,7 +1927,6 @@ export const zhCN: Dict = {
   'designFiles.usefulInfoLabel': '使用提示',
   'designFiles.usefulInfoTip': '双击任意文件可在独立标签页中打开。',
   'designFiles.usefulInfoTip2': '在聊天中输入 @ 即可把文件引用为上下文。',
-  'designFiles.usefulInfoTip3': '用 ⌘P(Ctrl+P)快速搜索文件。',
   'designFiles.usefulInfoTip4': '选好设计系统再生成，结果会与品牌风格保持一致。',
   'designFiles.usefulInfoTip5': '没有想法？试试首页 Community 的插件模板，一键生成同款。',
   'designFiles.usefulInfoTip6': '遇到问题或有建议？加入 Discord 和我们聊聊。',

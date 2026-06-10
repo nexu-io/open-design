@@ -1927,7 +1927,6 @@ export const ptBR: Dict = {
   'designFiles.usefulInfoLabel': 'Informações úteis',
   'designFiles.usefulInfoTip': 'Clique duas vezes em qualquer arquivo para abri-lo em uma aba completa.',
   'designFiles.usefulInfoTip2': 'Digite @ no chat para referenciar um arquivo como contexto.',
-  'designFiles.usefulInfoTip3': 'Busque arquivos rapidamente com ⌘P (Ctrl+P).',
   'designFiles.usefulInfoTip4': 'Escolha um design system para manter o resultado alinhado à marca.',
   'designFiles.usefulInfoTip5': 'Sem ideias? Experimente um template de plugin na Comunidade, na página inicial.',
   'designFiles.usefulInfoTip6': 'Dúvidas ou sugestões? Entre no nosso Discord.',

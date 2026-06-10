@@ -161,7 +161,6 @@ function ActionNoticeView({ notice }: { notice: ActionNotice | null }) {
 const USEFUL_TIPS: ReadonlyArray<{ key: keyof Dict; url?: string }> = [
   { key: 'designFiles.usefulInfoTip' },
   { key: 'designFiles.usefulInfoTip2' },
-  { key: 'designFiles.usefulInfoTip3' },
   { key: 'designFiles.usefulInfoTip9' },
   { key: 'designFiles.usefulInfoTip10' },
   { key: 'designFiles.usefulInfoTip4' },

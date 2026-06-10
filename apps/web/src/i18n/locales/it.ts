@@ -1927,7 +1927,6 @@ export const it: Dict = {
   'designFiles.usefulInfoLabel': 'Informazioni utili',
   'designFiles.usefulInfoTip': 'Fai doppio clic su un file per aprirlo in una scheda completa.',
   'designFiles.usefulInfoTip2': 'Digita @ nella chat per usare un file come contesto.',
-  'designFiles.usefulInfoTip3': 'Cerca i file rapidamente con ⌘P (Ctrl+P).',
   'designFiles.usefulInfoTip4': 'Scegli un design system per risultati coerenti con il brand.',
   'designFiles.usefulInfoTip5': 'Senza idee? Prova un template plugin nella Community in Home.',
   'designFiles.usefulInfoTip6': 'Domande o suggerimenti? Unisciti al nostro Discord.',

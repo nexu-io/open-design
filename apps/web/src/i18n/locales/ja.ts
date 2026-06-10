@@ -1927,7 +1927,6 @@ export const ja: Dict = {
   'designFiles.usefulInfoLabel': '役立つ情報',
   'designFiles.usefulInfoTip': 'ファイルをダブルクリックすると、フルタブで開きます。',
   'designFiles.usefulInfoTip2': 'チャットで @ を入力すると、ファイルをコンテキストとして参照できます。',
-  'designFiles.usefulInfoTip3': '⌘P(Ctrl+P)でファイルをすばやく検索。',
   'designFiles.usefulInfoTip4': 'デザインシステムを選ぶと、ブランドに沿ったデザインを生成できます。',
   'designFiles.usefulInfoTip5': 'アイデアに迷ったら、ホームのコミュニティにあるプラグインテンプレートをお試しください。',
   'designFiles.usefulInfoTip6': '質問やご意見は、Discord でお気軽にどうぞ。',

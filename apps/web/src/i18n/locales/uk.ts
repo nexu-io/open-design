@@ -1927,7 +1927,6 @@ export const uk: Dict = {
   'designFiles.usefulInfoLabel': 'Корисна інформація',
   'designFiles.usefulInfoTip': 'Двічі клацніть будь-який файл, щоб відкрити його в окремій вкладці.',
   'designFiles.usefulInfoTip2': 'Введіть @ у чаті, щоб додати файл як контекст.',
-  'designFiles.usefulInfoTip3': 'Швидкий пошук файлів через ⌘P (Ctrl+P).',
   'designFiles.usefulInfoTip4': 'Оберіть дизайн-систему — результат відповідатиме стилю бренду.',
   'designFiles.usefulInfoTip5': 'Немає ідей? Спробуйте шаблон плагіна в розділі «Спільнота» на головній.',
   'designFiles.usefulInfoTip6': 'Питання чи пропозиції? Приєднуйтесь до нас у Discord.',

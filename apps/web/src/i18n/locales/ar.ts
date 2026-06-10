@@ -1927,7 +1927,6 @@ export const ar: Dict = {
   'designFiles.usefulInfoLabel': 'معلومات مفيدة',
   'designFiles.usefulInfoTip': 'انقر نقرًا مزدوجًا على أي ملف لفتحه في علامة تبويب كاملة.',
   'designFiles.usefulInfoTip2': 'اكتب @ في المحادثة للإشارة إلى ملف كسياق.',
-  'designFiles.usefulInfoTip3': 'ابحث عن الملفات بسرعة عبر ⌘P (Ctrl+P).',
   'designFiles.usefulInfoTip4': 'اختر نظام تصميم لتحصل على نتائج متوافقة مع هوية علامتك.',
   'designFiles.usefulInfoTip5': 'لا توجد أفكار؟ جرّب قالب إضافة من قسم المجتمع في الصفحة الرئيسية.',
   'designFiles.usefulInfoTip6': 'لديك سؤال أو اقتراح؟ انضم إلينا على Discord.',

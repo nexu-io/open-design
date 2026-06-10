@@ -2492,7 +2492,6 @@ export interface Dict {
   'designFiles.usefulInfoLabel': string;
   'designFiles.usefulInfoTip': string;
   'designFiles.usefulInfoTip2': string;
-  'designFiles.usefulInfoTip3': string;
   'designFiles.usefulInfoTip4': string;
   'designFiles.usefulInfoTip5': string;
   'designFiles.usefulInfoTip6': string;

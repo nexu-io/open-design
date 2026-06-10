@@ -1927,7 +1927,6 @@ export const tr: Dict = {
   'designFiles.usefulInfoLabel': 'Faydalı bilgiler',
   'designFiles.usefulInfoTip': 'Herhangi bir dosyayı tam sekmede açmak için çift tıklayın.',
   'designFiles.usefulInfoTip2': 'Bir dosyayı bağlam olarak eklemek için sohbete @ yazın.',
-  'designFiles.usefulInfoTip3': 'Dosyaları ⌘P (Ctrl+P) ile hızlıca arayın.',
   'designFiles.usefulInfoTip4': 'Bir tasarım sistemi seçin; sonuçlar markanıza uygun olsun.',
   'designFiles.usefulInfoTip5': 'Fikriniz mi yok? Ana sayfadaki Topluluk bölümünden bir eklenti şablonu deneyin.',
   'designFiles.usefulInfoTip6': 'Soru veya öneriniz mi var? Discord sunucumuza katılın.',

@@ -1927,7 +1927,6 @@ export const hu: Dict = {
   'designFiles.usefulInfoLabel': 'Hasznos információk',
   'designFiles.usefulInfoTip': 'Kattints duplán bármelyik fájlra, hogy egy teljes lapon nyisd meg.',
   'designFiles.usefulInfoTip2': 'Írj @ jelet a csevegésben, hogy fájlt használj kontextusként.',
-  'designFiles.usefulInfoTip3': 'Gyors fájlkeresés a ⌘P (Ctrl+P) billentyűvel.',
   'designFiles.usefulInfoTip4': 'Válassz design rendszert, és az eredmény a márkádhoz igazodik.',
   'designFiles.usefulInfoTip5': 'Nincs ötleted? Próbálj ki egy plugin sablont a kezdőlap Közösség részében.',
   'designFiles.usefulInfoTip6': 'Kérdésed vagy javaslatod van? Csatlakozz hozzánk Discordon.',

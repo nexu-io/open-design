@@ -1927,7 +1927,6 @@ export const id: Dict = {
   'designFiles.usefulInfoLabel': 'Useful info',
   'designFiles.usefulInfoTip': 'Double-click any file to open it in a full tab.',
   'designFiles.usefulInfoTip2': 'Ketik @ di obrolan untuk merujuk berkas sebagai konteks.',
-  'designFiles.usefulInfoTip3': 'Cari berkas dengan cepat lewat ⌘P (Ctrl+P).',
   'designFiles.usefulInfoTip4': 'Pilih design system agar hasil tetap sesuai gaya brand.',
   'designFiles.usefulInfoTip5': 'Belum ada ide? Coba template plugin di Komunitas pada halaman Beranda.',
   'designFiles.usefulInfoTip6': 'Ada pertanyaan atau saran? Gabung Discord kami.',

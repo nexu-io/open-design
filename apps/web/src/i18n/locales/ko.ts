@@ -1927,7 +1927,6 @@ export const ko: Dict = {
   'designFiles.usefulInfoLabel': '유용한 정보',
   'designFiles.usefulInfoTip': '파일을 더블클릭하면 전체 탭에서 열립니다.',
   'designFiles.usefulInfoTip2': '채팅에서 @를 입력해 파일을 컨텍스트로 참조하세요.',
-  'designFiles.usefulInfoTip3': '⌘P(Ctrl+P)로 파일을 빠르게 검색하세요.',
   'designFiles.usefulInfoTip4': '디자인 시스템을 선택하면 브랜드 스타일에 맞는 결과를 생성합니다.',
   'designFiles.usefulInfoTip5': '아이디어가 없다면 홈의 커뮤니티에서 플러그인 템플릿을 사용해 보세요.',
   'designFiles.usefulInfoTip6': '질문이나 제안이 있다면 Discord에서 함께 이야기해요.',

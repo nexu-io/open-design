@@ -1927,7 +1927,6 @@ export const zhTW: Dict = {
   'designFiles.usefulInfoLabel': '使用提示',
   'designFiles.usefulInfoTip': '雙擊任意檔案即可在獨立分頁中開啟。',
   'designFiles.usefulInfoTip2': '在聊天中輸入 @ 即可把檔案引用為上下文。',
-  'designFiles.usefulInfoTip3': '用 ⌘P(Ctrl+P)快速搜尋檔案。',
   'designFiles.usefulInfoTip4': '選好設計系統再生成，結果會與品牌風格保持一致。',
   'designFiles.usefulInfoTip5': '沒有想法？試試首頁「社群」的外掛模板，一鍵生成同款。',
   'designFiles.usefulInfoTip6': '遇到問題或有建議？加入 Discord 和我們聊聊。',

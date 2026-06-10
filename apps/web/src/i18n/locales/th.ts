@@ -1927,7 +1927,6 @@ export const th: Dict = {
   'designFiles.usefulInfoLabel': 'ข้อมูลที่เป็นประโยชน์',
   'designFiles.usefulInfoTip': 'ดับเบิลคลิกที่ไฟล์ใดก็ได้เพื่อเปิดในแท็บเต็ม',
   'designFiles.usefulInfoTip2': 'พิมพ์ @ ในแชทเพื่ออ้างอิงไฟล์เป็นบริบท',
-  'designFiles.usefulInfoTip3': 'ค้นหาไฟล์อย่างรวดเร็วด้วย ⌘P (Ctrl+P)',
   'designFiles.usefulInfoTip4': 'เลือกระบบดีไซน์เพื่อให้ผลลัพธ์ตรงกับสไตล์แบรนด์ของคุณ',
   'designFiles.usefulInfoTip5': 'ยังไม่มีไอเดีย? ลองเทมเพลตปลั๊กอินในคอมมูนิตี้บนหน้าแรก',
   'designFiles.usefulInfoTip6': 'มีคำถามหรือข้อเสนอแนะ? เข้าร่วม Discord ของเรา',
