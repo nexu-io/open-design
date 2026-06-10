@@ -34,6 +34,10 @@ export interface AcpMcpServerInput {
 
 interface AcpSessionOptions {
   mcpServers?: AcpMcpServerInput[];
+  // How the `env` field of each mcpServer entry is shaped.
+  // `'array'` (default) → `[{name, value}]` (Hermes, Kimi, …).
+  // `'map'`   → `{"KEY": "val"}` (reasonix 1.x Go, standard MCP).
+  envFormat?: 'array' | 'map';
 }
 
 export interface ModelOption {
@@ -67,6 +71,8 @@ interface AttachAcpSessionOptions {
   model?: string | null;
   imagePaths?: string[];
   mcpServers?: AcpMcpServerInput[];
+  // Passed through to buildAcpSessionNewParams — see AcpSessionOptions.
+  envFormat?: 'array' | 'map';
   send: (event: string, payload: unknown) => void;
   clientName?: string;
   clientVersion?: string;
@@ -88,22 +94,28 @@ function asObject(value: unknown): JsonObject | null {
   return value && typeof value === 'object' ? value as JsonObject : null;
 }
 
-export function buildAcpSessionNewParams(cwd: string, { mcpServers }: AcpSessionOptions = {}) {
+export function buildAcpSessionNewParams(cwd: string, { mcpServers, envFormat = 'array' }: AcpSessionOptions = {}) {
   const servers = Array.isArray(mcpServers) ? mcpServers : [];
+  const wantsMap = envFormat === 'map';
   return {
     cwd: path.resolve(cwd),
     // MCP is an optional compatibility layer. Default to no MCP servers so ACP
     // agents can run through the skill + CLI path without MCP support. Do not
     // auto-install or mutate user/global MCP config; callers must pass an
     // explicit per-session MCP descriptor when a compatible agent supports it.
-    // Normalize to the ACP stdio server shape expected by Kimi/Hermes.
-    mcpServers: servers.map((s) => ({
-      type: typeof s?.type === 'string' ? s.type : 'stdio',
-      name: typeof s?.name === 'string' ? s.name : '',
-      command: typeof s?.command === 'string' ? s.command : '',
-      args: Array.isArray(s?.args) ? s.args : [],
-      env: Array.isArray(s?.env) ? s.env : [],
-    })),
+    mcpServers: servers.map((s) => {
+      const envArr = Array.isArray(s?.env) ? s.env : [];
+      const env = wantsMap
+        ? Object.fromEntries(envArr.map((e: any) => [e?.name ?? '', e?.value ?? '']))
+        : envArr;
+      return {
+        type: typeof s?.type === 'string' ? s.type : 'stdio',
+        name: typeof s?.name === 'string' ? s.name : '',
+        command: typeof s?.command === 'string' ? s.command : '',
+        args: Array.isArray(s?.args) ? s.args : [],
+        env,
+      };
+    }),
   };
 }
 
@@ -707,6 +719,7 @@ export function attachAcpSession({
   model,
   imagePaths = [],
   mcpServers,
+  envFormat = 'array',
   send,
   clientName = 'open-design',
   clientVersion = 'runtime-adapter',
@@ -977,7 +990,7 @@ export function attachAcpSession({
         'session/new',
         buildAcpSessionNewParams(
           effectiveCwd,
-          mcpServers ? { mcpServers } : {},
+          mcpServers ? { mcpServers, envFormat } : { envFormat },
         ),
         'session/new',
       );
