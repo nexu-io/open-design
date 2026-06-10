@@ -5535,6 +5535,7 @@ export async function startServer({
       runtime,
       projectRoot: PROJECT_ROOT,
       runsDir: path.join(RUNTIME_DATA_DIR, 'runs'),
+      dataDir: RUNTIME_DATA_DIR,
     }),
   );
 
@@ -12247,16 +12248,39 @@ export async function startServer({
             agentLaunch,
           )
         : null;
+      const amrModelScope = resolveAmrProfile(modelProbeEnv ?? process.env);
+      // Resolve the AMR model catalog through the SAME shared cache the UI's
+      // `/api/amr/models` endpoint serves (AmrModelLoadingCache): a cached
+      // authoritative `vela model list` when it is hot, otherwise the offline
+      // `vela model preset` seed while a remote refresh runs in the background.
+      //
+      // Why not a fresh `vela model list` per run: that authoritative call
+      // needs network reachability to the AMR gateway AND `$HOME` (the offline
+      // `preset`/`--version` calls need neither), takes up to ~10s, and only
+      // retries a narrow set of network errors. Running it blocking on every
+      // turn turned any transient gateway/timeout/HOME hiccup into a hard
+      // "AMR model … is not available from Vela" — even for a logged-in user
+      // who already picked a real model the picker surfaced from the preset
+      // seed. Under CorpLink/飞连 the call routinely exceeded the timeout, so
+      // AMR became unusable in packaged nightlies. Reusing the cache keeps that
+      // blocking probe off the per-run hot path and degrades to preset instead
+      // of fail-closing; vela's own `session/set_model` remains the final gate.
       let liveModels = [];
       try {
-        liveModels =
-          launchPath && typeof def.fetchModels === 'function'
-            ? ((await def.fetchModels(launchPath, modelProbeEnv)) ?? [])
-            : [];
-      } catch {
+        const probe = await resolveAmrModelProbe();
+        const catalog = await amrModelLoadingCache.get(probe.cacheKey, {
+          fetchPreset: () => fetchVelaPresetModels(probe.launchPath, probe.env),
+          fetchRemote: () => fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
+        });
+        liveModels = catalog.models ?? [];
+      } catch (error) {
+        // Do not swallow silently: a probe failure here is exactly what made
+        // the packaged AMR breakage undiagnosable (the old `catch {}` left no
+        // trace in any log or diagnostics bundle). Record it and degrade to the
+        // remembered catalog below.
+        console.warn('[amr] model catalog preflight probe failed', error);
         liveModels = [];
       }
-      const amrModelScope = resolveAmrProfile(modelProbeEnv ?? process.env);
       const rememberedLiveModels = getRememberedLiveModels(def.id, amrModelScope);
       if (liveModels.length > 0) {
         rememberLiveModels(def.id, liveModels, amrModelScope);
@@ -12265,12 +12289,26 @@ export async function startServer({
       const liveModelIds = new Set(
         liveModels.map((candidate) => candidate?.id).filter(Boolean),
       );
+      // A request that came in as 'default'/empty is normally pre-resolved to a
+      // concrete id via the agent-wide cached model order; if it still is not,
+      // adopt the first catalog entry so the spawn layer always has a real id.
+      const userAskedForDefault =
+        typeof model !== 'string' ||
+        !model.trim() ||
+        model.trim().toLowerCase() === 'default';
+      if (
+        !safeModel ||
+        safeModel === 'default' ||
+        (userAskedForDefault && !liveModelIds.has(safeModel))
+      ) {
+        safeModel = liveModels[0]?.id ?? safeModel ?? null;
+        agentOptions.model = safeModel;
+      }
       if (liveModelIds.size === 0) {
-        // An empty AMR catalog usually means the user is signed out — `vela
-        // models` returns 401 and the catch above leaves `liveModels` empty.
-        // Surface AMR_AUTH_REQUIRED first so the chat shows the relogin
-        // affordance; otherwise the user sees a misleading "choose a model"
-        // when the real fix is to sign in.
+        // The catalog is genuinely empty: even the offline preset seed could
+        // not be read, which almost always means the user is signed out (`vela`
+        // catalog calls 401) or the CLI is unrunnable. Prefer the relogin
+        // affordance over a misleading "choose a model".
         if (def.id === 'amr') {
           const loginStatus = readVelaLoginStatus(
             modelProbeEnv ?? process.env,
@@ -12286,37 +12324,29 @@ export async function startServer({
             return design.runs.finish(run, 'failed', 1, null);
           }
         }
-        send('error', createAmrModelUnavailablePayload(safeModel, {
-          reason: 'model_catalog_unavailable',
-        }));
-        return design.runs.finish(run, 'failed', 1, null);
-      }
-      // `safeModel` was pre-resolved via the agent-wide cached model order,
-      // so a request that came in as 'default' (or empty) is already a
-      // concrete id by this point — `safeModel === 'default'` is rarely true.
-      // If the user actually asked for the agent default and the cached id no
-      // longer appears in the FRESH catalog (e.g. the AMR Link catalog rolled
-      // since `/api/agents` last responded), fall back to `liveModels[0]` from
-      // the fresh probe instead of rejecting their run as `AMR_MODEL_UNAVAILABLE`.
-      const userAskedForDefault =
-        typeof model !== 'string' ||
-        !model.trim() ||
-        model.trim().toLowerCase() === 'default';
-      if (
-        !safeModel ||
-        safeModel === 'default' ||
-        (userAskedForDefault && !liveModelIds.has(safeModel))
-      ) {
-        safeModel = liveModels[0]?.id ?? null;
-        agentOptions.model = safeModel;
-      }
-      if (!safeModel || !liveModelIds.has(safeModel)) {
+        // Logged in but no catalog at all AND no resolvable model: only now is
+        // there nothing safe to forward, so surface the model error.
+        if (!safeModel) {
+          send('error', createAmrModelUnavailablePayload(safeModel, {
+            reason: 'model_catalog_unavailable',
+          }));
+          return design.runs.finish(run, 'failed', 1, null);
+        }
+        // Otherwise fall through with the user's selected model and let vela's
+        // `session/set_model` be the authoritative gate.
+      } else if (!safeModel) {
+        // Catalog known but we could not resolve any model id to forward.
         send('error', createAmrModelUnavailablePayload(
           typeof model === 'string' && model.trim() ? model : safeModel,
           { availableModels: [...liveModelIds] },
         ));
         return design.runs.finish(run, 'failed', 1, null);
       }
+      // NOTE: when the selected model is absent from the (possibly preset-only
+      // or stale) catalog we intentionally do NOT fail-close. The cached/preset
+      // catalog can lag the live one, and a logged-in user picked a concrete
+      // id; vela rejects a truly unsupported model at `session/set_model` with
+      // a precise error, which beats a pre-emptive block on a flaky metadata read.
     }
 
     // Plain-streaming adapters that own a "continue most recent
