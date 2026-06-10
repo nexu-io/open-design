@@ -960,8 +960,18 @@ function AppInner() {
   // avoids racing the local-config initial value against a slow agents
   // probe — by the time this runs, daemonConfig has already overlaid the
   // user's previous choice, so we only fill an empty slot.
+  //
+  // First-run onboarding is the one time we must NOT do this: the onboarding
+  // flow is the sole authority for the initial agent pick (AMR is the
+  // recommended default there), and AMR (vela) detection is asynchronous. If
+  // this fallback fires during onboarding while AMR is still being detected it
+  // snaps the slot to the registry-first *detected* agent (Claude) and
+  // persists it to the daemon, which then races and clobbers the user's AMR
+  // selection on the next launch. Gate on onboardingCompleted so this only
+  // backfills an empty slot for returning users.
   useEffect(() => {
     if (!daemonConfigLoaded || agentsLoading) return;
+    if (config.onboardingCompleted !== true) return;
     if (config.agentId) return;
     const firstAvailable = agents.find((a) => a.available);
     if (!firstAvailable) return;
@@ -972,7 +982,13 @@ function AppInner() {
       void syncConfigToDaemon(next);
       return next;
     });
-  }, [daemonConfigLoaded, agentsLoading, agents, config.agentId]);
+  }, [
+    daemonConfigLoaded,
+    agentsLoading,
+    agents,
+    config.agentId,
+    config.onboardingCompleted,
+  ]);
 
   // Auto-pick the default design system the same way — only after daemon
   // config has merged so we never overwrite a daemon-stored selection.
