@@ -903,22 +903,6 @@
 .chat-composer-fixed-layer .composer {
   pointer-events: auto;
 }
-/* Elevation kicks in only when a pinned todo card is sitting directly
- * above the composer. Without the card the chat scroll already provides
- * its own visual edge; the shadow would just darken empty whitespace. */
-.chat-pinned-todo + .composer {
-  box-shadow: 0 -10px 22px -10px rgba(0, 0, 0, 0.22);
-}
-/* Dark mode: the same alpha disappears against the dark panel, so push
- * it harder and let it spread a bit further. */
-[data-theme="dark"] .chat-pinned-todo + .composer {
-  box-shadow: 0 -14px 28px -12px rgba(0, 0, 0, 0.65);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .chat-pinned-todo + .composer {
-    box-shadow: 0 -14px 28px -12px rgba(0, 0, 0, 0.65);
-  }
-}
 .composer-shell {
   container-type: inline-size;
   border: 1px solid var(--bg-fill-secondary);

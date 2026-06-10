@@ -257,6 +257,11 @@ interface Props {
   // in-flight Write/Edit's code in real time before the full `tool_use`
   // arrives. Never persisted.
   liveToolInput?: Record<string, { name: string; text: string; seq?: number }>;
+  // ChatPane renders the canonical conversation-level TodoWrite card as its
+  // own row, while this message strips TodoWrite tool groups to avoid a
+  // duplicate per-message card.
+  showConversationTodoCard?: boolean;
+  conversationTodoInput?: unknown | null;
   projectId: string | null;
   // Analytics context for the assistant_feedback_* events. Defaults
   // applied at the call site keep AssistantMessage usable in tests
@@ -328,6 +333,8 @@ interface Props {
 const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'message',
   'streaming',
+  'showConversationTodoCard',
+  'conversationTodoInput',
   'projectId',
   'projectKind',
   'conversationId',
@@ -383,6 +390,8 @@ function AssistantMessageImpl({
   message,
   streaming,
   liveToolInput,
+  showConversationTodoCard = false,
+  conversationTodoInput = null,
   projectId,
   projectKind = null,
   conversationId = null,
@@ -419,9 +428,9 @@ function AssistantMessageImpl({
   // shows the questions + options, so suppressing the trailing prose
   // avoids rendering the same content twice. The system prompt asks the
   // model not to do this; this is the belt-and-suspenders.
-  // The chat-pane-level PinnedTodoBar renders the canonical TodoWrite card
-  // above the composer, so we strip any TodoWrite tool-groups out of the
-  // per-message flow to avoid the same task list rendering twice.
+  // ChatPane renders the canonical TodoWrite card as a standalone chat row, so
+  // we strip TodoWrite tool-groups out of the per-message flow to avoid the
+  // same task list rendering twice.
   const settledUseIds = useMemo(
     () => new Set(events.filter((e) => e.kind === "tool_use").map((e) => e.id)),
     [events],
@@ -466,12 +475,16 @@ function AssistantMessageImpl({
           ];
         })()
       : [...buildBlocks(events), ...liveCodeBlocks];
-    return stripTodoToolGroups(
+    return placeConversationTodoCard(
       stripEmptyThinkingBlocks(
         suppressDuplicateQuestionForms(suppressAskUserQuestionFallbackText(rawBlocks)),
       ),
+      {
+        show: showConversationTodoCard,
+        input: conversationTodoInput,
+      },
     );
-  }, [events, liveAuq, liveCodeBlocks]);
+  }, [events, liveAuq, liveCodeBlocks, showConversationTodoCard, conversationTodoInput]);
   const fileOps = useMemo(() => deriveFileOps(events), [events]);
   const produced = message.producedFiles ?? [];
   const displayedProduced = useMemo(
@@ -2674,14 +2687,28 @@ type Block =
  * single tool-group block so the chat surface stays compact during chains
  * of edits / reads.
  */
-// Drop any tool-group composed entirely of TodoWrite calls. ChatPane
-// renders one canonical TodoCard above the composer using
-// `latestTodosFromConversation`, so leaving the same task list inline in
-// each assistant message just duplicates the view.
-function stripTodoToolGroups(blocks: Block[]): Block[] {
-  return blocks.filter((block) => {
-    if (block.kind !== "tool-group") return true;
-    return !block.items.every((it) => isTodoWriteToolName(it.use.name));
+function placeConversationTodoCard(
+  blocks: Block[],
+  options: { show: boolean; input: unknown | null },
+): Block[] {
+  let placed = false;
+  return blocks.flatMap((block): Block[] => {
+    if (block.kind !== "tool-group") return [block];
+    if (!block.items.every((it) => isTodoWriteToolName(it.use.name))) return [block];
+    if (!options.show || placed) return [];
+    placed = true;
+    const item = block.items[0];
+    if (!item || options.input == null) return [block];
+    return [{
+      ...block,
+      items: [{
+        ...item,
+        use: {
+          ...item.use,
+          input: options.input,
+        },
+      }],
+    }];
   });
 }
 
