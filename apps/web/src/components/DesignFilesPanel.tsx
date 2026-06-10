@@ -154,13 +154,22 @@ function ActionNoticeView({ notice }: { notice: ActionNotice | null }) {
   );
 }
 
-// Useful-info tips that rotate one at a time in the panel footer. A tip with
-// a `url` renders its typed line as a link to that destination.
+// Useful-info tips that rotate one at a time in the panel footer, ordered as
+// a loose journey: file basics → feeding context → generating → iterating →
+// exporting/sharing → community. A tip with a `url` renders its typed line as
+// a link to that destination.
 const USEFUL_TIPS: ReadonlyArray<{ key: keyof Dict; url?: string }> = [
   { key: 'designFiles.usefulInfoTip' },
   { key: 'designFiles.usefulInfoTip2' },
   { key: 'designFiles.usefulInfoTip3' },
+  { key: 'designFiles.usefulInfoTip9' },
+  { key: 'designFiles.usefulInfoTip10' },
   { key: 'designFiles.usefulInfoTip4' },
+  { key: 'designFiles.usefulInfoTip11' },
+  { key: 'designFiles.usefulInfoTip12' },
+  { key: 'designFiles.usefulInfoTip13' },
+  { key: 'designFiles.usefulInfoTip14' },
+  { key: 'designFiles.usefulInfoTip15' },
   { key: 'designFiles.usefulInfoTip5' },
   { key: 'designFiles.usefulInfoTip6', url: 'https://discord.gg/mHAjSMV6gz' },
   { key: 'designFiles.usefulInfoTip7', url: 'https://github.com/nexu-io/open-design' },

@@ -2498,6 +2498,13 @@ export interface Dict {
   'designFiles.usefulInfoTip6': string;
   'designFiles.usefulInfoTip7': string;
   'designFiles.usefulInfoTip8': string;
+  'designFiles.usefulInfoTip9': string;
+  'designFiles.usefulInfoTip10': string;
+  'designFiles.usefulInfoTip11': string;
+  'designFiles.usefulInfoTip12': string;
+  'designFiles.usefulInfoTip13': string;
+  'designFiles.usefulInfoTip14': string;
+  'designFiles.usefulInfoTip15': string;
   'quickSwitcher.placeholder': string;
   'quickSwitcher.empty': string;
   'quickSwitcher.noMatches': string;
