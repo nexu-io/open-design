@@ -321,6 +321,76 @@ describe('FileWorkspace upload input', () => {
     expect(markup).not.toContain('<strong>avatar-1</strong>');
   });
 
+  it('renders a design-system contents rail with review and edit actions', () => {
+    const markup = renderToStaticMarkup(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('preview/logo.html'),
+          workspaceFile('ui_kits/website/index.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={{
+          id: 'user:passive-book',
+          title: 'Passive Book Design System',
+          category: 'Brand',
+          summary: 'Passive Book brand system',
+          source: 'user',
+          status: 'draft',
+        }}
+      />,
+    );
+
+    expect(markup).toContain('data-testid="design-system-review-toc"');
+    expect(markup).toContain('href="#design-system-section-');
+    expect(markup).toContain('Looks good');
+    expect(markup).toContain('Needs work...');
+    expect(markup).toContain('data-testid="design-system-review-edit-');
+    expect(markup).not.toContain('data-testid="design-system-review-open-');
+  });
+
+  it('opens the section preview file for editing from the design-system review card', () => {
+    const onTabsStateChange = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('ui_kits/website/index.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={onTabsStateChange}
+        designSystemProject={{
+          id: 'user:passive-book',
+          title: 'Passive Book Design System',
+          category: 'Brand',
+          summary: 'Passive Book brand system',
+          source: 'user',
+          status: 'draft',
+        }}
+      />,
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByTitle('Edit ui_kits/website/index.html'));
+    });
+
+    expect(onTabsStateChange).toHaveBeenCalledWith(expect.objectContaining({
+      active: 'ui_kits/website/index.html',
+      tabs: ['ui_kits/website/index.html'],
+    }));
+  });
+
   it('treats favicon previews as brand guidance', () => {
     const markup = renderToStaticMarkup(
       <FileWorkspace

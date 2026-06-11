@@ -220,6 +220,16 @@ describe('FileWorkspace design-system project surface', () => {
             </head>
             <body>
               <div id="root"></div>
+              <img
+                alt="Hero"
+                src="../assets/site/hero.png"
+                srcset="../assets/site/hero.png 1x, ../assets/site/hero@2x.png 2x"
+              >
+              <img
+                alt="Root"
+                src="/assets/site/root.png"
+                srcset="/assets/site/root.png 1x, /assets/site/root@2x.png 2x"
+              >
               <script type="text/babel" src="Widget.jsx"></script>
               <script type="text/babel">ReactDOM.createRoot(document.getElementById("root")).render(<Widget />);</script>
             </body>
@@ -230,7 +240,11 @@ describe('FileWorkspace design-system project surface', () => {
         return Promise.resolve('function Widget(){ return <strong>Passive Book loaded</strong>; }');
       }
       if (name === 'colors_and_type.css') {
-        return Promise.resolve('@font-face { font-family: Passive; src: url("./fonts/brand.woff2"); } :root { --pb-green: #00d07e; }');
+        return Promise.resolve(`
+          @font-face { font-family: Passive; src: url("./fonts/brand.woff2"); }
+          .root-asset { background-image: url("/assets/site/root-bg.png"); }
+          :root { --pb-green: #00d07e; }
+        `);
       }
       return Promise.resolve(null);
     });
@@ -261,11 +275,21 @@ describe('FileWorkspace design-system project surface', () => {
     });
 
     const iframe = container.querySelector<HTMLIFrameElement>('.ds-project-review-item iframe');
-    expect(iframe?.getAttribute('srcdoc')).toContain('function Widget()');
-    expect(iframe?.getAttribute('srcdoc')).toContain('data-od-inline-asset="Widget.jsx"');
-    expect(iframe?.getAttribute('srcdoc')).toContain('data-od-inline-asset="../../colors_and_type.css"');
-    expect(iframe?.getAttribute('srcdoc')).toContain('url("/api/projects/ds-acme/raw/fonts/brand.woff2")');
-    expect(iframe?.getAttribute('srcdoc')).not.toContain('src="Widget.jsx"');
+    const srcdoc = iframe?.getAttribute('srcdoc') ?? '';
+    expect(srcdoc).toContain('function Widget()');
+    expect(srcdoc).toContain('data-od-inline-asset="Widget.jsx"');
+    expect(srcdoc).toContain('data-od-inline-asset="../../colors_and_type.css"');
+    expect(srcdoc).toContain('url("/api/projects/ds-acme/raw/fonts/brand.woff2")');
+    expect(srcdoc).toContain('src="/api/projects/ds-acme/raw/ui_kits/assets/site/hero.png"');
+    expect(srcdoc).toContain(
+      'srcset="/api/projects/ds-acme/raw/ui_kits/assets/site/hero.png 1x, /api/projects/ds-acme/raw/ui_kits/assets/site/hero%402x.png 2x"',
+    );
+    expect(srcdoc).toContain('url("/api/projects/ds-acme/raw/assets/site/root-bg.png")');
+    expect(srcdoc).toContain('src="/api/projects/ds-acme/raw/assets/site/root.png"');
+    expect(srcdoc).toContain(
+      'srcset="/api/projects/ds-acme/raw/assets/site/root.png 1x, /api/projects/ds-acme/raw/assets/site/root%402x.png 2x"',
+    );
+    expect(srcdoc).not.toContain('src="Widget.jsx"');
   });
 
   it('keeps project-backed design systems inside the normal workspace tabs with inline preview cards', () => {

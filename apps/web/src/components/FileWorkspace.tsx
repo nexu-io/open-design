@@ -2461,6 +2461,17 @@ function DesignSystemProjectPanel({
     ? sectionReviews.filter((item) => designSystemSectionVisibleDuringGeneration(item))
     : sectionReviews;
   const groupedSectionReviews = designSystemReviewGroups(visibleSectionReviews);
+  const reviewTocGroups = groupedSectionReviews
+    .map((group) => ({
+      title: group.title,
+      items: group.items.map((item) => ({
+        id: `design-system-section-${slugForTestId(`${group.title}:${item.section.title}`)}`,
+        label: item.section.title,
+        statusClass: designSystemSectionStatusClass(item.sectionStatus),
+        statusLabel: item.sectionStatusLabel,
+      })),
+    }))
+    .filter((group) => group.items.length > 0);
   const creatingInitialDraft = streaming && !published;
   const generationSteps = designSystemInitialGenerationSteps({
     files,
@@ -2541,8 +2552,7 @@ function DesignSystemProjectPanel({
     // default to show it is done. Gate that on the current status, not just the
     // stored decision: when a section is regenerated after approval its status
     // moves back to needs-attention, and it has to reopen so the "review again"
-    // notice and the review buttons (both rendered only while expanded) stay
-    // visible. Without the needsAttention guard a stale "looks-good" decision
+    // notice and regenerated preview stay visible. Without the needsAttention guard a stale "looks-good" decision
     // keeps the regenerated section collapsed and the change is easy to miss.
     // The user can still re-expand with the chevron (expandedSections[instanceId]),
     // and an active agent run forces it open.
@@ -2550,8 +2560,12 @@ function DesignSystemProjectPanel({
       !needsAttention && (reviewDecisions[section.title] ?? reviewEntry?.decision) === 'looks-good';
     const expanded =
       (expandedSections[instanceId] ?? (defaultExpanded && !reviewedGood)) || sectionActivity.running;
+    const sectionSlug = slugForTestId(instanceId);
+    const sectionAnchorId = `design-system-section-${sectionSlug}`;
+    const editableFile = designSystemSectionEditableFile(section, previewFile, fileByName);
     return (
       <section
+        id={sectionAnchorId}
         key={instanceId}
         className={[
           'ds-project-section',
@@ -2593,73 +2607,83 @@ function DesignSystemProjectPanel({
               </span>
             ) : null}
           </span>
-          {expanded ? (
-            <div className="ds-project-review-actions" aria-label={`${section.title} review`}>
+          <div className="ds-project-review-actions" aria-label={`${section.title} review`}>
+            <button
+              type="button"
+              className={`ghost success ${reviewDecisions[section.title] === 'looks-good' ? 'active' : ''}`}
+              data-testid={`design-system-review-good-${slugForTestId(section.title)}`}
+              onClick={() => {
+                markSectionReview(section.title, 'looks-good');
+                // Collapse on validate, overriding any manual expand so the
+                // section always tidies away once it is marked good.
+                setExpandedSections((current) => ({ ...current, [instanceId]: false }));
+              }}
+            >
+              <Icon name="check" size={13} />
+              Looks good
+            </button>
+            <button
+              type="button"
+              className={`ghost danger ${reviewDecisions[section.title] === 'needs-work' ? 'active' : ''}`}
+              data-testid={`design-system-review-work-${slugForTestId(section.title)}`}
+              onClick={() => openNeedsWorkFeedback(section.title)}
+            >
+              <Icon name="comment" size={13} />
+              Needs work...
+            </button>
+            {editableFile ? (
               <button
                 type="button"
-                className={`ghost success ${reviewDecisions[section.title] === 'looks-good' ? 'active' : ''}`}
-                data-testid={`design-system-review-good-${slugForTestId(section.title)}`}
-                onClick={() => {
-                  markSectionReview(section.title, 'looks-good');
-                  // Collapse on validate, overriding any manual expand so the
-                  // section always tidies away once it is marked good.
-                  setExpandedSections((current) => ({ ...current, [instanceId]: false }));
+                className="ghost compact"
+                data-testid={`design-system-review-edit-${sectionSlug}`}
+                title={`Edit ${editableFile.name}`}
+                onClick={() => onOpenFile(editableFile.name)}
+              >
+                <Icon name="edit" size={13} />
+                Edit
+              </button>
+            ) : null}
+            {feedbackSection === section.title ? (
+              <form
+                className="ds-project-feedback-popover"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submitNeedsWorkFeedback(section.title, section.files);
                 }}
               >
-                <Icon name="check" size={13} />
-                Looks good
-              </button>
-              <button
-                type="button"
-                className={`ghost danger ${reviewDecisions[section.title] === 'needs-work' ? 'active' : ''}`}
-                data-testid={`design-system-review-work-${slugForTestId(section.title)}`}
-                onClick={() => openNeedsWorkFeedback(section.title)}
-              >
-                <Icon name="comment" size={13} />
-                Needs work...
-              </button>
-              {feedbackSection === section.title ? (
-                <form
-                  className="ds-project-feedback-popover"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    submitNeedsWorkFeedback(section.title, section.files);
-                  }}
-                >
-                  <label htmlFor={`ds-feedback-${slugForTestId(section.title)}`}>
-                    Tell the agent what to change
-                  </label>
-                  <textarea
-                    id={`ds-feedback-${slugForTestId(section.title)}`}
-                    value={feedbackText}
-                    rows={3}
-                    placeholder={`e.g. tighten spacing in ${section.title}, regenerate this preview...`}
-                    onChange={(event) => setFeedbackText(event.target.value)}
-                    autoFocus
-                  />
-                  <div>
-                    <button
-                      type="button"
-                      className="ghost compact"
-                      onClick={() => {
-                        setFeedbackSection(null);
-                        setFeedbackText('');
-                      }}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="primary compact"
-                      disabled={!feedbackText.trim()}
-                    >
-                      Send
-                    </button>
-                  </div>
-                </form>
+                <label htmlFor={`ds-feedback-${slugForTestId(section.title)}`}>
+                  Tell the agent what to change
+                </label>
+                <textarea
+                  id={`ds-feedback-${slugForTestId(section.title)}`}
+                  value={feedbackText}
+                  rows={3}
+                  placeholder={`e.g. tighten spacing in ${section.title}, regenerate this preview...`}
+                  onChange={(event) => setFeedbackText(event.target.value)}
+                  autoFocus
+                />
+                <div>
+                  <button
+                    type="button"
+                    className="ghost compact"
+                    onClick={() => {
+                      setFeedbackSection(null);
+                      setFeedbackText('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="primary compact"
+                    disabled={!feedbackText.trim()}
+                  >
+                    Send
+                  </button>
+                </div>
+              </form>
               ) : null}
-            </div>
-          ) : null}
+          </div>
         </div>
         {expanded ? (
           <div className="ds-project-section-body">
@@ -2732,8 +2756,37 @@ function DesignSystemProjectPanel({
 
   return (
     <div className="ds-project-panel">
-      <div className="ds-project-main ds-project-main--review">
-        <div className="ds-project-head ds-project-head--review">
+      <div className="ds-project-review-layout">
+        {reviewTocGroups.length > 0 ? (
+          <nav
+            className="ds-project-toc"
+            aria-label="Design system sections"
+            data-testid="design-system-review-toc"
+          >
+            <div className="ds-project-toc__title">
+              <Icon name="panel-left" size={14} />
+              <span>Contents</span>
+            </div>
+            {reviewTocGroups.map((group) => (
+              <div key={group.title} className="ds-project-toc__group">
+                <strong>{group.title}</strong>
+                {group.items.map((item) => (
+                  <a key={item.id} href={`#${item.id}`}>
+                    <span
+                      className={['ds-project-toc__dot', item.statusClass].join(' ')}
+                      aria-label={item.statusLabel}
+                      title={item.statusLabel}
+                    />
+                    <span>{item.label}</span>
+                  </a>
+                ))}
+              </div>
+            ))}
+          </nav>
+        ) : null}
+
+        <div className="ds-project-main ds-project-main--review">
+          <div className="ds-project-head ds-project-head--review">
           <h1>
             {published
               ? `${systemDisplayName} design system`
@@ -2848,6 +2901,7 @@ function DesignSystemProjectPanel({
               <span>Preview cards will appear here as the agent creates them.</span>
             </div>
           ) : null}
+          </div>
         </div>
       </div>
     </div>
@@ -2870,6 +2924,19 @@ function designSystemHasSourceContext(system: DesignSystemSummary): boolean {
 
 function slugForTestId(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function designSystemSectionEditableFile(
+  section: DesignSystemProjectSection,
+  previewFile: ProjectFile | null,
+  fileByName: Map<string, ProjectFile>,
+): ProjectFile | null {
+  if (previewFile && (previewFile.kind === 'html' || previewFile.kind === 'sketch')) return previewFile;
+  const htmlFile = section.files
+    .map((name) => fileByName.get(name))
+    .find((file) => file?.kind === 'html');
+  if (htmlFile) return htmlFile;
+  return previewFile ?? section.files.map((name) => fileByName.get(name)).find(Boolean) ?? null;
 }
 
 function designSystemSectionPreviewFile(
@@ -3795,14 +3862,19 @@ async function inlineDesignSystemPreviewRelativeAssets(
     if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
     const stylesheetPath = resolveDesignSystemPreviewRelativePath(ownerFileName, href);
     if (!stylesheetPath) continue;
-    replacements.push(fetchProjectFileText(projectId, stylesheetPath, { cache: 'no-store' }).then((css) =>
-      css == null
-        ? null
-        : {
-            from: tag,
-            to: `<style data-od-inline-asset="${escapeDesignSystemPreviewAttr(href)}">\n${rewriteDesignSystemPreviewCssUrls(css, projectId, stylesheetPath).replace(/<\/style/gi, '<\\/style')}\n</style>`,
-          },
-    ));
+    replacements.push(fetchProjectFileText(projectId, stylesheetPath, { cache: 'no-store' }).then((css) => {
+      if (css == null) return null;
+      const safeCss = rewriteDesignSystemPreviewCssUrls(css, projectId, stylesheetPath)
+        .replace(/<\/style/gi, '<\\/style');
+      return {
+        from: tag,
+        to: [
+          `<style data-od-inline-asset="${escapeDesignSystemPreviewAttr(href)}">`,
+          safeCss,
+          '</style>',
+        ].join('\n'),
+      };
+    }));
   }
 
   const scripts = html.match(/<script\b[^>]*\bsrc\s*=\s*["'][^"']+["'][^>]*>\s*<\/script>/gi) ?? [];
@@ -3818,7 +3890,11 @@ async function inlineDesignSystemPreviewRelativeAssets(
         .replace(/\ssrc\s*=\s*(['"])[\s\S]*?\1/i, '');
       return {
         from: tag,
-        to: `<script${attrs} data-od-inline-asset="${escapeDesignSystemPreviewAttr(src)}">\n${js.replace(/<\/script/gi, '<\\/script')}\n</script>`,
+        to: [
+          `<script${attrs} data-od-inline-asset="${escapeDesignSystemPreviewAttr(src)}">`,
+          js.replace(/<\/script/gi, '<\\/script'),
+          '</script>',
+        ].join('\n'),
       };
     }));
   }
@@ -3826,7 +3902,11 @@ async function inlineDesignSystemPreviewRelativeAssets(
   const resolved = (await Promise.all(replacements)).filter(
     (replacement): replacement is { from: string; to: string } => replacement !== null,
   );
-  return resolved.reduce((next, replacement) => next.replace(replacement.from, () => replacement.to), html);
+  const withInlineAssets = resolved.reduce(
+    (next, replacement) => next.replace(replacement.from, () => replacement.to),
+    html,
+  );
+  return rewriteDesignSystemPreviewHtmlAssetUrls(withInlineAssets, projectId, ownerFileName);
 }
 
 async function fetchDesignSystemPreviewRelativeText(
@@ -3840,7 +3920,7 @@ async function fetchDesignSystemPreviewRelativeText(
 }
 
 function resolveDesignSystemPreviewRelativePath(ownerFileName: string, assetRef: string): string | null {
-  if (/^(?:https?:|data:|blob:|mailto:|tel:|#|\/)/i.test(assetRef)) return null;
+  if (/^(?:https?:|data:|blob:|mailto:|tel:|#)/i.test(assetRef)) return null;
   try {
     const url = new URL(assetRef, `https://od.local/${baseDirForDesignSystemPreviewFile(ownerFileName)}`);
     if (url.origin !== 'https://od.local') return null;
@@ -3857,6 +3937,46 @@ function rewriteDesignSystemPreviewCssUrls(css: string, projectId: string, style
     if (!filePath) return match;
     return `url("${escapeDesignSystemPreviewCssUrl(projectRawUrl(projectId, filePath))}")`;
   });
+}
+
+function rewriteDesignSystemPreviewHtmlAssetUrls(html: string, projectId: string, ownerFileName: string): string {
+  const directAssetTags = new RegExp(
+    '(<(?:img|source|video|audio|track|embed|object|image|use)\\b[^>]*?\\s' +
+      '(?:src|poster|data|href|xlink:href)\\s*=\\s*)([\'"])([\\s\\S]*?)\\2',
+    'gi',
+  );
+  const withDirectAssets = html.replace(directAssetTags, (match, prefix: string, quote: string, rawRef: string) => {
+    const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(rawRef, projectId, ownerFileName);
+    if (rewritten === rawRef) return match;
+    return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
+  });
+  const srcsetAssetTags = new RegExp(
+    '(<(?:img|source)\\b[^>]*?\\ssrcset\\s*=\\s*)([\'"])([\\s\\S]*?)\\2',
+    'gi',
+  );
+  return withDirectAssets.replace(srcsetAssetTags, (match, prefix: string, quote: string, rawSrcset: string) => {
+    const rewritten = rewriteDesignSystemPreviewSrcset(rawSrcset, projectId, ownerFileName);
+    if (rewritten === rawSrcset) return match;
+    return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
+  });
+}
+
+function rewriteDesignSystemPreviewHtmlAssetRef(ref: string, projectId: string, ownerFileName: string): string {
+  const filePath = resolveDesignSystemPreviewRelativePath(ownerFileName, ref.trim());
+  return filePath ? projectRawUrl(projectId, filePath) : ref;
+}
+
+function rewriteDesignSystemPreviewSrcset(srcset: string, projectId: string, ownerFileName: string): string {
+  if (/\bdata:/i.test(srcset)) return srcset;
+  return srcset
+    .split(',')
+    .map((candidate) => {
+      const match = candidate.trim().match(/^(\S+)(\s+.+)?$/);
+      if (!match) return candidate;
+      const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(match[1] ?? '', projectId, ownerFileName);
+      return `${rewritten}${match[2] ?? ''}`;
+    })
+    .join(', ');
 }
 
 function baseDirForDesignSystemPreviewFile(name: string): string {
@@ -3880,8 +4000,6 @@ function escapeDesignSystemPreviewAttr(value: string): string {
 function escapeDesignSystemPreviewCssUrl(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\a ');
 }
-
-
 
 function Tab({
   label,
