@@ -158,6 +158,52 @@ describe('COMMAND_SPEC integrity', () => {
   });
 
   it('exposes the supported shells as completion subcommands', () => {
-    expect(new Set(COMMAND_SPEC.completion.subcommands)).toEqual(new Set(SUPPORTED_SHELLS));
+    expect(new Set(COMMAND_SPEC.completion?.subcommands ?? [])).toEqual(
+      new Set(SUPPORTED_SHELLS),
+    );
   });
+});
+
+// Fixture pinning the known second-level surface for command families that
+// dispatch subcommands in cli.ts. If a handler there gains a subcommand and
+// COMMAND_SPEC isn't updated, the relevant case fails — catching silent drift
+// between the completion table and the real CLI. Each list is a *subset* the
+// spec must contain (so adding a new subcommand to the spec doesn't break the
+// test), keyed to the handlers' switch/dispatch in cli.ts.
+const KNOWN_SUBCOMMANDS: Record<string, string[]> = {
+  config: ['get', 'set', 'list', 'unset'],
+  ui: ['list', 'show', 'respond', 'revoke', 'prefill'],
+  daemon: ['db', 'start', 'status', 'stop', 'vacuum', 'verify'],
+  atoms: ['info', 'list', 'show'],
+  chat: ['new'],
+  memory: ['tree'],
+  run: ['cancel', 'info', 'list', 'redesign', 'start', 'watch'],
+  files: ['delete', 'diff', 'list', 'read', 'upload', 'write'],
+  templates: ['delete', 'list', 'save'],
+  conversation: ['db', 'info', 'list', 'new', 'start', 'status', 'stop'],
+  project: ['create', 'delete', 'editors', 'import', 'import-folder', 'info', 'list', 'open-in'],
+  'design-systems': [
+    'rename', 'import-local', 'import-github', 'import-shadcn', 'rebuild-token-contract',
+  ],
+};
+
+describe('COMMAND_SPEC covers known cli.ts subcommands', () => {
+  for (const [command, expected] of Object.entries(KNOWN_SUBCOMMANDS)) {
+    it(`completes the known subcommands of \`od ${command}\``, () => {
+      const spec = COMMAND_SPEC[command];
+      expect(spec, `${command} missing from COMMAND_SPEC`).toBeDefined();
+      const have = new Set(spec?.subcommands ?? []);
+      const missing = expected.filter((sub) => !have.has(sub));
+      expect(missing, `od ${command} is missing completions for: ${missing.join(', ')}`).toEqual(
+        [],
+      );
+    });
+
+    it(`offers those subcommands through computeCompletions for \`od ${command}\``, () => {
+      const out = computeCompletions({ words: [command], current: '' });
+      for (const sub of expected) {
+        expect(out, `\`od ${command} <TAB>\` should offer ${sub}`).toContain(sub);
+      }
+    });
+  }
 });

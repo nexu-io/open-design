@@ -63,7 +63,7 @@ export const COMMAND_SPEC: Record<string, CommandSpec> = {
       'upgrade', 'validate', 'verify', 'whoami', 'yank',
     ],
   },
-  ui: { subcommands: [] },
+  ui: { subcommands: ['list', 'show', 'respond', 'revoke', 'prefill'] },
   marketplace: {
     subcommands: [
       'add', 'doctor', 'info', 'list', 'login', 'plugins', 'refresh',
@@ -89,18 +89,23 @@ export const COMMAND_SPEC: Record<string, CommandSpec> = {
       'templates',
     ],
   },
-  memory: { subcommands: [] },
+  memory: { subcommands: ['tree'] },
   run: { subcommands: ['cancel', 'info', 'list', 'redesign', 'start', 'watch'] },
   files: { subcommands: ['delete', 'diff', 'list', 'read', 'upload', 'write'] },
   templates: { subcommands: ['delete', 'list', 'save'] },
   conversation: {
     subcommands: ['db', 'info', 'list', 'new', 'start', 'status', 'stop'],
   },
-  chat: { subcommands: [] },
-  daemon: { subcommands: [] },
-  atoms: { subcommands: [] },
+  chat: { subcommands: ['new'] },
+  daemon: { subcommands: ['db', 'start', 'status', 'stop', 'vacuum', 'verify'] },
+  atoms: { subcommands: ['info', 'list', 'show'] },
   skills: { subcommands: [] },
-  'design-systems': { subcommands: [] },
+  'design-systems': {
+    subcommands: [
+      'rename', 'import-local', 'import-github', 'import-shadcn',
+      'rebuild-token-contract',
+    ],
+  },
   craft: { subcommands: [] },
   diagnostics: { subcommands: [] },
   status: { subcommands: [] },
