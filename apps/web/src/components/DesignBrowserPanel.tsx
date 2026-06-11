@@ -783,6 +783,18 @@ export function DesignBrowserPanel({
   const clearConsoleEntries = useCallback(() => {
     setConsoleEntries((current) => (current.length > 0 ? [] : current));
   }, []);
+  const consoleBufferRef = useRef<BrowserConsoleEntry[]>([]);
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushConsoleBuffer = useCallback(() => {
+    flushTimerRef.current = null;
+    const buffer = consoleBufferRef.current;
+    if (buffer.length === 0) return;
+    consoleBufferRef.current = [];
+    setConsoleEntries((current) => {
+      const next = [...current, ...buffer].slice(-CONSOLE_ENTRY_LIMIT);
+      return sameConsoleEntries(current, next) ? current : next;
+    });
+  }, []);
   const assignWebviewNode = useCallback((node: HTMLWebViewElement | null) => {
     // Set `allowpopups` imperatively rather than as a JSX prop. React's DOM
     // renderer does not treat `allowpopups` as a known boolean attribute, so
@@ -1040,11 +1052,18 @@ export function DesignBrowserPanel({
     const onNavigate = (event: Event) => {
       const navigationEvent = event as WebviewNavigationEvent;
       if (navigationEvent.isMainFrame === false) return;
-      clearConsoleEntries();
+      if (event.type === 'did-navigate') clearConsoleEntries();
       const pendingTarget = pendingLoadTargetRef.current;
       const nextUrl = navigationEvent.url || safeGetWebviewUrl(node);
       const isPendingCommit = Boolean(pendingTarget && nextUrl && sameUrl(pendingTarget, nextUrl));
       syncFromWebview(nextUrl, undefined, { recordVisit: !isPendingCommit });
+    };
+    const onInPageNavigate = (event: Event) => {
+      const navigationEvent = event as WebviewNavigationEvent;
+      if (navigationEvent.isMainFrame === false) return;
+      const pendingTarget = pendingLoadTargetRef.current;
+      const nextUrl = navigationEvent.url || safeGetWebviewUrl(node);
+      syncFromWebview(nextUrl, undefined, { recordVisit: false });
     };
     const onTitle = (event: Event) => {
       const titleEvent = event as WebviewTitleEvent;
@@ -1068,25 +1087,22 @@ export function DesignBrowserPanel({
       const consoleEvent = event as WebviewConsoleMessageEvent;
       const message = consoleEvent.message?.trim();
       if (!message) return;
-      setConsoleEntries((current) => {
-        const next = [
-          ...current,
-          {
-            message,
-            level: normalizeBrowserConsoleLevel(consoleEvent.level),
-            ...(typeof consoleEvent.line === 'number' && Number.isFinite(consoleEvent.line) ? { line: consoleEvent.line } : {}),
-            ...(typeof consoleEvent.sourceId === 'string' && consoleEvent.sourceId.trim() ? { sourceId: consoleEvent.sourceId } : {}),
-            timestamp: Date.now(),
-          },
-        ].slice(-CONSOLE_ENTRY_LIMIT);
-        return sameConsoleEntries(current, next) ? current : next;
+      consoleBufferRef.current.push({
+        message,
+        level: normalizeBrowserConsoleLevel(consoleEvent.level),
+        ...(typeof consoleEvent.line === 'number' && Number.isFinite(consoleEvent.line) ? { line: consoleEvent.line } : {}),
+        ...(typeof consoleEvent.sourceId === 'string' && consoleEvent.sourceId.trim() ? { sourceId: consoleEvent.sourceId } : {}),
+        timestamp: Date.now(),
       });
+      if (!flushTimerRef.current) {
+        flushTimerRef.current = setTimeout(flushConsoleBuffer, 250);
+      }
     };
 
     node.addEventListener('did-start-loading', onStart);
     node.addEventListener('did-stop-loading', onStop);
     node.addEventListener('did-navigate', onNavigate);
-    node.addEventListener('did-navigate-in-page', onNavigate);
+    node.addEventListener('did-navigate-in-page', onInPageNavigate);
     node.addEventListener('page-title-updated', onTitle);
     node.addEventListener('page-favicon-updated', onFavicon);
     node.addEventListener('did-fail-load', onFail);
@@ -1097,14 +1113,18 @@ export function DesignBrowserPanel({
       node.removeEventListener('did-start-loading', onStart);
       node.removeEventListener('did-stop-loading', onStop);
       node.removeEventListener('did-navigate', onNavigate);
-      node.removeEventListener('did-navigate-in-page', onNavigate);
+      node.removeEventListener('did-navigate-in-page', onInPageNavigate);
       node.removeEventListener('page-title-updated', onTitle);
       node.removeEventListener('page-favicon-updated', onFavicon);
       node.removeEventListener('did-fail-load', onFail);
       node.removeEventListener('dom-ready', onStop);
       node.removeEventListener('console-message', onConsoleMessage);
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
     };
-  }, [addressEditing, clearConsoleEntries, commitHistory, recordNavigation, updateCurrentNavigationTitle, updateLoadingState, webviewNode]);
+  }, [addressEditing, clearConsoleEntries, commitHistory, flushConsoleBuffer, recordNavigation, updateCurrentNavigationTitle, updateLoadingState, webviewNode]);
 
   const suggestions = useMemo(() => {
     const query = addressValue.trim().toLocaleLowerCase();

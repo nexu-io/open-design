@@ -1712,6 +1712,7 @@ export function FileWorkspace({
 
     return out;
   }, [
+    browserConsoleEntriesByTab,
     browserTabs,
     conversations,
     designSystemProject,

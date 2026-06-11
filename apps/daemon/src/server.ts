@@ -1915,6 +1915,28 @@ const WORKSPACE_CONTEXT_KINDS = new Set([
   'live-artifact',
 ]);
 
+function normalizeBrowserConsoleEntries(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) return undefined;
+  const VALID_LEVELS = new Set(['verbose', 'info', 'warning', 'error']);
+  const capped = [];
+  for (let i = entries.length - 1; i >= 0 && capped.length < 8; i -= 1) {
+    const e = entries[i];
+    if (!e || typeof e !== 'object') continue;
+    const message = typeof e.message === 'string' ? e.message.trim().slice(0, 2000) : '';
+    if (!message) continue;
+    const level = VALID_LEVELS.has(e.level) ? e.level : 'verbose';
+    const sourceId = typeof e.sourceId === 'string' ? e.sourceId.trim().slice(0, 500) : '';
+    const line = typeof e.line === 'number' && Number.isFinite(e.line) ? e.line : undefined;
+    const timestamp = typeof e.timestamp === 'number' && Number.isFinite(e.timestamp) ? e.timestamp : undefined;
+    const entry = { message, level };
+    if (sourceId) entry.sourceId = sourceId;
+    if (line !== undefined) entry.line = line;
+    if (timestamp !== undefined) entry.timestamp = timestamp;
+    capped.unshift(entry);
+  }
+  return capped.length > 0 ? capped : undefined;
+}
+
 function normalizeWorkspaceContextItems(items) {
   if (!Array.isArray(items)) return [];
   const out = [];
@@ -1934,7 +1956,7 @@ function normalizeWorkspaceContextItems(items) {
     const dedupeKey = `${kind}:${id}`;
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
-    const normalized: Record<string, string> = { id, kind, label };
+    const normalized: Record<string, unknown> = { id, kind, label };
     const tabId = cleanString(record.tabId, 240);
     const pathValue = cleanString(record.path, 500);
     const absolutePath = cleanString(record.absolutePath, 1000);
@@ -1945,6 +1967,8 @@ function normalizeWorkspaceContextItems(items) {
     if (absolutePath) normalized.absolutePath = absolutePath;
     if (url) normalized.url = url;
     if (title) normalized.title = title;
+    const consoleEntries = normalizeBrowserConsoleEntries(record.browserConsoleEntries);
+    if (consoleEntries) normalized.browserConsoleEntries = consoleEntries;
     out.push(normalized);
   }
   return out;
