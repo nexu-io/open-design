@@ -328,6 +328,7 @@ function createDefaultDesignFilesNavState(): DesignFilesNavState {
 interface DesignSystemProjectSectionReview {
   section: DesignSystemProjectSection;
   previewFile: ProjectFile | null;
+  previewDisplay: DesignSystemReviewPreviewDisplay;
   reviewEntry: DesignSystemReviewEntry | undefined;
   sectionActivity: DesignSystemSectionActivity;
   changedAfterFeedback: boolean;
@@ -335,6 +336,15 @@ interface DesignSystemProjectSectionReview {
   sectionStatusLabel: string;
   reviewTimeLabel: string | null;
 }
+type DesignSystemReviewPreviewDisplay = 'specimen' | 'ui-kit' | 'asset';
+interface DesignSystemCardManifestEntry {
+  path: string;
+  group?: string;
+  name?: string;
+  subtitle?: string;
+  viewport?: string;
+}
+type DesignSystemCardManifestMap = Map<string, DesignSystemCardManifestEntry>;
 type DesignSystemGenerationStepStatus = 'pending' | 'running' | 'succeeded';
 interface DesignSystemGenerationStep {
   id: string;
@@ -2371,6 +2381,7 @@ function DesignSystemProjectPanel({
   const [feedbackText, setFeedbackText] = useState('');
   const [status, setStatus] = useState(system.status ?? 'draft');
   const [statusBusy, setStatusBusy] = useState(false);
+  const [cardManifest, setCardManifest] = useState<DesignSystemCardManifestMap>(() => new Map());
   useEffect(() => {
     setStatus(system.status ?? 'draft');
   }, [system.status]);
@@ -2383,11 +2394,28 @@ function DesignSystemProjectPanel({
   }, [designSystemReview]);
   const allFileNames = files.map((file) => file.name);
   const fileByName = new Map(files.map((file) => [file.name, file]));
+  const manifestFile = files.find((file) => normalizeDesignSystemPath(file.name) === '_ds_manifest.json');
+  const manifestFileName = manifestFile?.name ?? null;
+  const manifestSignature = manifestFile ? `${manifestFile.name}:${manifestFile.mtime}` : '';
+  useEffect(() => {
+    if (!system.id || !manifestFileName) {
+      setCardManifest(new Map());
+      return undefined;
+    }
+    let cancelled = false;
+    void fetchProjectFileText(projectId, manifestFileName).then((text) => {
+      if (cancelled) return;
+      setCardManifest(parseDesignSystemCardManifest(text));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [manifestFileName, manifestSignature, projectId, system.id]);
   const fontFiles = allFileNames.filter((name) =>
     /\.(otf|ttf|woff|woff2)$/i.test(name) || name.toLowerCase().includes('/fonts/'),
   );
   const githubEvidence = designSystemGithubEvidenceState(system, allFileNames);
-  const sections = buildDesignSystemReviewSections(allFileNames, fileByName);
+  const sections = buildDesignSystemReviewSections(allFileNames, fileByName, cardManifest);
   const published = status === 'published';
   const isDefault = published && defaultDesignSystemId === system.id;
   // Strip a trailing "design system" from the title so the heading
@@ -2415,6 +2443,7 @@ function DesignSystemProjectPanel({
     return {
       section,
       previewFile,
+      previewDisplay: designSystemReviewPreviewDisplay(section, previewFile),
       reviewEntry,
       sectionActivity,
       changedAfterFeedback,
@@ -2429,8 +2458,6 @@ function DesignSystemProjectPanel({
   const visibleSectionReviews = streaming && !published && generationReviewHasStarted
     ? sectionReviews.filter((item) => designSystemSectionVisibleDuringGeneration(item))
     : sectionReviews;
-  const needsReviewSectionReviews = visibleSectionReviews.filter(designSystemReviewNeedsAttention);
-  const primaryNeedsReview = needsReviewSectionReviews.slice(0, 1);
   const groupedSectionReviews = designSystemReviewGroups(visibleSectionReviews);
   const creatingInitialDraft = streaming && !published;
   const generationSteps = designSystemInitialGenerationSteps({
@@ -2527,6 +2554,7 @@ function DesignSystemProjectPanel({
         className={[
           'ds-project-section',
           'ds-project-review-item',
+          `ds-project-review-item--${item.previewDisplay}`,
           expanded ? 'is-expanded' : 'is-collapsed',
         ].join(' ')}
       >
@@ -2803,14 +2831,6 @@ function DesignSystemProjectPanel({
         ) : null}
 
         <div className="ds-project-sections">
-          {primaryNeedsReview.length > 0 ? (
-            <div className="ds-project-section-group">
-              {primaryNeedsReview.map((item, index) =>
-                renderReviewCard(item, `needs-review:${item.section.title}`, index === 0),
-              )}
-            </div>
-          ) : null}
-
           {groupedSectionReviews.map((group) => (
             <div key={group.title} className="ds-project-section-group">
               <h2>{group.title}</h2>
@@ -2865,6 +2885,7 @@ function designSystemSectionPreviewFile(
 function buildDesignSystemReviewSections(
   names: string[],
   fileByName: Map<string, ProjectFile>,
+  cardManifest: DesignSystemCardManifestMap = new Map(),
 ): DesignSystemProjectSection[] {
   const artifactNames = names
     .filter((name) => isDesignSystemReviewArtifactFile(name, fileByName))
@@ -2872,11 +2893,12 @@ function buildDesignSystemReviewSections(
   if (artifactNames.length > 0) {
     const reviewNames = preferPreviewArtifactsOverRawAssets(artifactNames);
     return reviewNames.map((name) => {
-      const title = designSystemReviewTitleFromPath(name);
-      const category = inferDesignSystemReviewCategory(name, title);
+      const manifestEntry = cardManifest.get(normalizeDesignSystemPath(name));
+      const title = manifestEntry?.name?.trim() || designSystemReviewTitleFromPath(name);
+      const category = inferDesignSystemReviewCategory(name, title, manifestEntry);
       return {
         title,
-        subtitle: designSystemReviewSubtitle(title, category),
+        subtitle: manifestEntry?.subtitle?.trim() || designSystemReviewSubtitle(title, category, name),
         category,
         files: designSystemRelatedFilesForCategory(name, category, names),
       };
@@ -2953,23 +2975,32 @@ function designSystemReviewTitleFromPath(name: string): string {
     || 'overview';
 }
 
-function inferDesignSystemReviewCategory(name: string, title: string): DesignSystemReviewCategory {
+function inferDesignSystemReviewCategory(
+  name: string,
+  title: string,
+  manifestEntry?: DesignSystemCardManifestEntry,
+): DesignSystemReviewCategory {
   const text = `${normalizeDesignSystemPath(name)} ${title}`.toLowerCase();
+  const group = manifestEntry?.group?.toLowerCase() ?? '';
+  if (group.includes('ui kit')) return 'Components';
   if (/\b(type|typography|font|text)\b/u.test(text)) return 'Type';
   if (/\b(color|colors|palette|theme)\b/u.test(text)) return 'Colors';
-  if (/\b(space|spacing|radius|layout-grid)\b/u.test(text)) return 'Spacing';
+  if (/\b(space|spacing|radius|radii|shadow|shadows|elevation|layout-grid)\b/u.test(text)) return 'Spacing';
   if (/\b(brand|logo|logos|mark|wordmark|icon|favicon)\b/u.test(text)) return 'Brand';
+  if (group.includes('brand')) return 'Brand';
   return 'Components';
 }
 
-function designSystemReviewSubtitle(title: string, category: DesignSystemReviewCategory): string {
-  const text = title.toLowerCase();
+function designSystemReviewSubtitle(title: string, category: DesignSystemReviewCategory, name = ''): string {
+  const text = `${title} ${normalizeDesignSystemPath(name)}`.toLowerCase();
+  if (text.includes('ui_kits/') || text.includes('ui-kit')) return 'Applied UI kit example';
   if (text.includes('typography')) return 'Text hierarchy and styles';
+  if (text.includes('type-')) return 'Typography scale and font guidance';
   if (text.includes('font')) return 'Font family specimens';
   if (text.includes('node')) return 'Data type color coding system';
   if (text.includes('ui-palette') || text.includes('palette')) return 'Interface color palette';
   if (text.includes('dark')) return 'Dark theme color palette';
-  if (text.includes('spacing') || text.includes('radius')) return 'Spacing scale and border radius tokens';
+  if (text.includes('spacing') || text.includes('radius') || text.includes('radii') || text.includes('shadow')) return 'Spacing scale and border radius tokens';
   if (text.includes('favicon')) return 'Brand app icon and favicon';
   if (text.includes('logo') || text.includes('brand')) return 'Brand logo marks';
   if (text.includes('interface') || text.includes('ui')) return 'Interface and component patterns';
@@ -2985,6 +3016,46 @@ function designSystemReviewSubtitle(title: string, category: DesignSystemReviewC
     case 'Components':
       return 'Reusable product interface examples';
   }
+}
+
+function parseDesignSystemCardManifest(text: string | null): DesignSystemCardManifestMap {
+  if (!text) return new Map();
+  try {
+    const parsed = JSON.parse(text) as { cards?: unknown };
+    const cards = Array.isArray(parsed.cards) ? parsed.cards : [];
+    const entries: Array<[string, DesignSystemCardManifestEntry]> = [];
+    for (const card of cards) {
+      if (!card || typeof card !== 'object') continue;
+      const record = card as Record<string, unknown>;
+      if (typeof record.path !== 'string' || !record.path.trim()) continue;
+      const path = normalizeDesignSystemPath(record.path);
+      entries.push([
+        path,
+        {
+          path,
+          group: typeof record.group === 'string' ? record.group : undefined,
+          name: typeof record.name === 'string' ? record.name : undefined,
+          subtitle: typeof record.subtitle === 'string' ? record.subtitle : undefined,
+          viewport: typeof record.viewport === 'string' ? record.viewport : undefined,
+        },
+      ]);
+    }
+    return new Map(entries);
+  } catch {
+    return new Map();
+  }
+}
+
+function designSystemReviewPreviewDisplay(
+  section: DesignSystemProjectSection,
+  previewFile: ProjectFile | null,
+): DesignSystemReviewPreviewDisplay {
+  if (!previewFile) return 'specimen';
+  const path = normalizeDesignSystemPath(previewFile.name);
+  if (path.startsWith('ui_kits/') || path.includes('/ui_kits/')) return 'ui-kit';
+  if (previewFile.kind !== 'html') return 'asset';
+  if (section.category === 'Components' && !path.startsWith('preview/')) return 'ui-kit';
+  return 'specimen';
 }
 
 function designSystemRelatedFilesForCategory(
