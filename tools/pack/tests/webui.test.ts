@@ -189,6 +189,8 @@ describe("stageWebuiLauncherResources", () => {
 
       // localhost authority → still launches from the bundle dir.
       expect(runDesktopExec(stageRoot, `file://localhost${desktopPath}`)).toBe(bundleDir);
+      // URI authorities are case-insensitive, so mixed-case localhost is local too.
+      expect(runDesktopExec(stageRoot, `file://LOCALHOST${desktopPath}`)).toBe(bundleDir);
       // A foreign authority is a remote URI → must not launch locally.
       expect(runDesktopExec(stageRoot, `file://otherhost${desktopPath}`)).toBeNull();
 
