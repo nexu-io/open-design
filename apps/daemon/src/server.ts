@@ -11886,7 +11886,40 @@ export async function startServer({
         ...(errorCode ? { error_code: errorCode } : {}),
       };
     };
+    const destroyChildStdio = (child) => {
+      // Best-effort cleanup of stdio streams on a child process we're about
+      // to drop. The daemon-sidecar (apps/daemon) keeps listeners attached
+      // to child.stdout / child.stderr / child.stdin across the run
+      // lifecycle (line ~12890..~13500+ in this file). Those listeners hold
+      // the Stream objects alive, and the Stream objects own the read side
+      // of the OS pipes — so dropping the child reference via
+      // `run.child = null` without destroying the streams leaks the pipe
+      // file descriptors. After a few hundred retries the daemon
+      // accumulates 10k+ FDs and posix_spawn returns EBADF.
+      //
+      // See: https://github.com/nexu-io/open-design/issues/4100
+      if (!child) return;
+      const destroyStream = (stream) => {
+        if (!stream || stream.destroyed) return;
+        try { stream.removeAllListeners(); } catch {}
+        try { stream.destroy(); } catch {}
+      };
+      destroyStream(child.stdout);
+      destroyStream(child.stderr);
+      destroyStream(child.stdin);
+    };
     const restartSameRunAfterRetry = () => {
+      // Release the previous child's stdio streams before letting the
+      // reference drop — see destroyChildStdio for rationale.
+      destroyChildStdio(run.child);
+      if (
+        run.child &&
+        typeof run.child.kill === 'function' &&
+        run.child.exitCode === null &&
+        !run.child.killed
+      ) {
+        try { run.child.kill('SIGTERM'); } catch {}
+      }
       run.status = 'queued';
       run.updatedAt = Date.now();
       run.child = null;
