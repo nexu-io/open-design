@@ -83,7 +83,7 @@ import {
   codexAgentDef,
   codexNeedsDangerFullAccessSandbox,
 } from './runtimes/defs/codex.js';
-import { resolveAgentExecutable } from './runtimes/executables.js';
+import { applyAgentLaunchEnv, resolveAgentLaunch } from './runtimes/launch.js';
 
 const execFile = promisify(execFileCb);
 type ProviderConfig = { apiKey?: string; baseUrl?: string; model?: string };
@@ -3805,17 +3805,23 @@ const CODEX_IMAGE_UNAVAILABLE_MARKER = 'IMAGE_GEN_UNAVAILABLE';
 const CODEX_OUTPUT_BASENAME = 'od-codex-image.png';
 
 async function renderCodexCliImage(ctx: MediaContext, onProgress?: ProgressFn): Promise<RenderResult> {
-  const codexBin = resolveAgentExecutable(
-    codexAgentDef,
-    process.env as Record<string, string>,
-  );
-  if (!codexBin) {
+  // Resolve Codex the same way the daemon's runtime launcher does — not the
+  // bare `resolveAgentExecutable`. `resolveAgentLaunch` swaps an npm wrapper
+  // for the native Codex binary when one is present, and the matching
+  // `applyAgentLaunchEnv` (below) prepends the running Node dir + Codex
+  // toolchain dirs to the child's PATH. Without that symmetry a GUI-launched
+  // daemon (the desktop/packaged app, where PATH is minimal) can *resolve* a
+  // shell-installed Codex but still fail at spawn with a `#!/usr/bin/env node`
+  // interpreter-lookup error. Same invariant the chat-run launch path uses.
+  const launch = resolveAgentLaunch(codexAgentDef, process.env as Record<string, string>);
+  if (!launch.launchPath) {
     throw new Error(
       'codex-image-gen needs the Codex CLI on PATH (or set CODEX_BIN). Install it ' +
         'and sign in with your ChatGPT account — https://developers.openai.com/codex/cli — ' +
         'then this model generates images with no OPENAI_API_KEY.',
     );
   }
+  const childEnv = applyAgentLaunchEnv(process.env, launch);
 
   // Render into a private temp workspace, not the project dir: the codex
   // turn writes scratch state (and its sandbox is rooted here), and we only
@@ -3825,7 +3831,7 @@ async function renderCodexCliImage(ctx: MediaContext, onProgress?: ProgressFn): 
   const outPath = path.join(tmpRoot, CODEX_OUTPUT_BASENAME);
   try {
     const prompt = buildCodexImagePrompt(ctx, outPath);
-    await runCodexImageGen(codexBin, prompt, tmpRoot, onProgress);
+    await runCodexImageGen(launch.launchPath, childEnv, prompt, tmpRoot, onProgress);
     let bytes: Buffer;
     try {
       bytes = await readFile(outPath);
@@ -3887,6 +3893,7 @@ function assertCodexPngBytes(bytes: Buffer): void {
  */
 function runCodexImageGen(
   codexBin: string,
+  env: NodeJS.ProcessEnv,
   prompt: string,
   cwd: string,
   onProgress?: ProgressFn,
@@ -3914,7 +3921,9 @@ function runCodexImageGen(
 
     const child = spawn(codexBin, args, {
       cwd,
-      env: process.env,
+      // PATH augmented via applyAgentLaunchEnv so the spawned Codex (or its
+      // node/bun shebang shim) resolves even under a minimal GUI-launch PATH.
+      env,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     // A fast-exiting codex (bad auth / image_gen unavailable) can close stdin

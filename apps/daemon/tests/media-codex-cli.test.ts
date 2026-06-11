@@ -131,4 +131,30 @@ describe('codex-cli image provider', () => {
     process.env.FAKE_CODEX_MODE = 'fail';
     await expect(generate()).rejects.toThrow(/codex image_gen exited exit 1/i);
   });
+
+  it('still spawns Codex under a minimal GUI-launch PATH', async () => {
+    // Reproduce the desktop/packaged launch: a daemon PATH with no `node` on
+    // it. The fake Codex is a `#!/usr/bin/env node` shim (like the real npm
+    // wrapper), so its interpreter only resolves if the provider re-injects
+    // the running Node dir into the child PATH the way the daemon's runtime
+    // launcher does (resolveAgentLaunch + applyAgentLaunchEnv). Without that
+    // symmetry the shebang lookup fails (`env: node: …`, exit 127) and a
+    // GUI-launched app can never reach image_gen even with Codex installed.
+    process.env.FAKE_CODEX_MODE = 'success';
+    const emptyDir = path.join(root, 'empty-path');
+    await mkdir(emptyDir, { recursive: true });
+    const savedPath = process.env.PATH;
+    // `/usr/bin/env` is absolute in the shebang, so it still runs — but it
+    // searches this PATH for `node`, which is absent here on purpose.
+    process.env.PATH = emptyDir;
+    try {
+      const result = await generate();
+      expect(result.providerId).toBe('codex-cli');
+      expect(result.usedStubFallback).toBe(false);
+      expect(result.size).toBeGreaterThan(200);
+    } finally {
+      if (savedPath == null) delete process.env.PATH;
+      else process.env.PATH = savedPath;
+    }
+  });
 });
