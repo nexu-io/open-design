@@ -150,6 +150,15 @@ describe("release workflows", () => {
     expect(stable).toContain(".github\\workflow\\scripts\\release\\prepare-platform-assets.ps1");
     expect(countOccurrences(stable, ".github/workflow/scripts/release/storage/publish-platform.ts")).toBeGreaterThanOrEqual(4);
     expect(stable).toContain(".github/workflow/scripts/release/storage/publish-metadata.ts");
+    // The stable promotion gate (scripts/release-stable.ts) validates the
+    // nightly's metadata.github.{commit,branch,repository,workflow}; the publish
+    // step must therefore pass the RELEASE_* attribution env. #3995 unified the
+    // publisher but left these unset for release-stable, so github.* shipped
+    // empty and no nightly could be promoted.
+    expect(stable).toContain("RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}");
+    expect(stable).toContain("RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}");
+    expect(stable).toContain("RELEASE_REPOSITORY: ${{ github.repository }}");
+    expect(stable).toContain("RELEASE_WORKFLOW: ${{ github.workflow }}");
     expect(stable).toContain(".github/workflow/scripts/release/storage/verify-metadata.ts");
     expect(stable).toContain(".github/workflow/scripts/release/storage/summary-metadata.ts");
     expect(stable).toContain("open-design-release-mac-arm64-publish-manifest");
