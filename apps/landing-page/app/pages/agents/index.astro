@@ -46,7 +46,7 @@ const tiers = [
     label: page.tiers[1].label,
     blurb: page.tiers[1].blurb,
     agents: [
-      { slug: 'grok',   name: 'Grok CLI',                 vendor: 'xAI',           key: 'xAI SuperGrok OAuth (`grok login --oauth`)' },
+      { slug: 'grok',   name: 'Grok Build',                 vendor: 'xAI',           key: 'xAI SuperGrok OAuth (`grok login --oauth`)' },
       { slug: 'hermes', name: 'Hermes',               vendor: 'community',     key: 'xAI / OpenAI / Anthropic keys via `hermes auth add`' },
       { slug: 'kimi',   name: 'Kimi CLI',             vendor: 'Moonshot',      key: 'Moonshot API key (BYOK)' },
       { slug: 'devin',  name: 'Devin for Terminal',   vendor: 'Cognition',     key: 'Devin account' },
@@ -204,7 +204,7 @@ const jsonLd = [
 ];
 ---
 
-<Layout title={title} description={description} active="home" jsonLd={jsonLd}>
+<Layout title={title} description={description} active="agent" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
     <a href={href('/')}>Open Design</a>
     <span>/</span>
