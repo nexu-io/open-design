@@ -1,13 +1,14 @@
 /* -------- Design system picker (custom popover dropdown) ------------ */
 .ds-picker { position: relative; }
-/* Each `.newproj-section` keeps a residual identity transform from the
-   `od-fade-slide-up` entrance animation (`animation-fill-mode: both`), which
-   makes every section its own stacking context. `.ds-picker` is such a
-   section, so the popover's `z-index` is trapped inside the picker and cannot
-   rise above later sibling sections (Target platforms, Companion, Fidelity,
-   Create) — they would paint over the open dropdown. Lift the OPEN picker's
-   whole stacking context above its siblings to keep the popover on top. */
-.ds-picker.open { z-index: 40; }
+/* While its popover is open, the picker must paint above its sibling
+   sections. Each `.newproj-section` keeps a transform applied after the
+   entrance animation (`od-fade-slide-up ... both` in entrance.css), which
+   makes every section its own stacking context — the popover's z-index
+   alone can't escape its section, so later siblings (Target platforms,
+   model picker, toggles, …) would cover the open list. Raising the open
+   picker's section above its `z-index: auto` siblings restores the
+   expected "dropdown on top" order. */
+.ds-picker:has(.ds-picker-popover) { z-index: 31; }
 .ds-picker-trigger {
   display: flex;
   align-items: center;
