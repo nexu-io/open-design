@@ -327,7 +327,7 @@ export function Header({
                 </li>
                 {[
                   { route: 'codex-design', name: 'Codex' },
-                  { route: 'cursor-design', name: 'Cursor' },
+                  { route: 'cursor-design', name: 'Cursor Agent' },
                   { route: 'claude-code-design', name: 'Claude Code' },
                   { route: 'opencode-design', name: 'OpenCode' },
                   { route: 'gemini-design', name: 'Gemini CLI' },

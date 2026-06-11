@@ -38,7 +38,7 @@ export function localizedAgentGuidesPartA(en: Guides): Partial<Record<LandingLoc
         ...en['cursor']!,
         title: "デザイナーのための Cursor — Open Design",
         description: "デザイナーが UI と Web デザインに Cursor をどう使うか — Design Mode、Figma からコードへ、Figma MCP — そして Open Design が Cursor をローカルファーストでオープンソースのデザインエージェントへと変える方法。",
-        breadcrumb: "Cursor",
+        breadcrumb: "Cursor Agent",
         label: "エージェント · Cursor",
         heading: "デザイナーのための Cursor。",
         lead: "Cursor は AI コードエディタで、いまやビジュアルな Design Mode を備えています。デザイナーはこれを使い、ポイントして描くことで UI を編集し、Figma をコードに変換します。Open Design は Cursor Agent をオープンソースのデザインワークフローへと接続し、あなたのファイルをローカルに保ちます。",

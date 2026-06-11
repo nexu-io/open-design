@@ -2819,7 +2819,7 @@ INFO_PAGE_COPY['zh-tw'] = {
       ...INFO_PAGE_COPY.zh!.agentGuides!['cursor']!,
       title: "Cursor 做設計 — Open Design",
       description: "設計師如何用 Cursor 做 UI 和網頁設計 —— Design Mode、Figma 轉程式碼、Figma MCP —— 以及 Open Design 如何把 Cursor 變成本地優先的開源設計 Agent。",
-      breadcrumb: "Cursor",
+      breadcrumb: "Cursor Agent",
       label: "Agent · Cursor",
       heading: "Cursor 給設計師。",
       lead: "Cursor 是那個 AI 程式碼編輯器，現在帶了視覺化 Design Mode。設計師用它點選、勾畫來改 UI，也用它把 Figma 轉成程式碼。Open Design 把 Cursor Agent 接進開源設計工作流，檔案全留本地。",

@@ -38,7 +38,7 @@ export function localizedAgentGuidesPartC(en: Guides): Partial<Record<LandingLoc
         ...en['cursor']!,
         title: "Cursor für Designer — Open Design",
         description: "Wie Designer Cursor für UI- und Webdesign nutzen — Design Mode, Figma-zu-Code, der Figma-MCP — und wie Open Design Cursor zu einem local-first, quelloffenen Design-Agenten macht.",
-        breadcrumb: "Cursor",
+        breadcrumb: "Cursor Agent",
         label: "Agent · Cursor",
         heading: "Cursor für Designer.",
         lead: "Cursor ist der KI-Code-Editor, jetzt mit einem visuellen Design Mode. Designer nutzen ihn, um UI durch Zeigen und Zeichnen zu bearbeiten und Figma in Code zu verwandeln. Open Design bindet den Cursor Agent in einen quelloffenen Design-Workflow ein, der deine Dateien lokal hält.",

@@ -38,7 +38,7 @@ export function localizedAgentGuidesPartM(en: Guides): Partial<Record<LandingLoc
         ...en['cursor']!,
         title: "Cursor للمصممين — Open Design",
         description: "كيف يستخدم المصممون Cursor في تصميم الواجهات والويب — وضع التصميم، Figma إلى شيفرة، Figma MCP — وكيف يحوّله Open Design إلى وكيل تصميم محلي أولًا ومفتوح المصدر.",
-        breadcrumb: "Cursor",
+        breadcrumb: "Cursor Agent",
         label: "وكيل · Cursor",
         heading: "Cursor للمصممين.",
         lead: "‏Cursor هو محرّر الشيفرة بالذكاء الاصطناعي، ومعه الآن وضع تصميم بصري. يستخدمه المصممون لتحرير الواجهة بالإشارة والرسم، ولتحويل Figma إلى شيفرة. يربط Open Design وكيل Cursor بسير عمل تصميمي مفتوح المصدر يبقي ملفاتك محلية.",

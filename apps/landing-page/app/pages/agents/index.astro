@@ -24,9 +24,10 @@ const common = copy.common;
 
 
 // First-party adapters live in `apps/daemon/src/runtimes/defs/`. Keep
-// this list in lockstep with that directory; opendesigner.io advertises
-// "16 out of the box" — Open Design ships one more, and the names below
-// match the canonical `name:` field on each `RuntimeAgentDef`.
+// this list in lockstep with that directory. The names below are the
+// user-facing display names for each adapter and should track the
+// `name:` field on the corresponding `RuntimeAgentDef`, so the hub, the
+// Agent dropdown, and the detail-page breadcrumbs all stay in sync.
 const tiers = [
   {
     label: page.tiers[0].label,
@@ -34,7 +35,7 @@ const tiers = [
     agents: [
       { slug: 'claude-code', name: 'Claude Code',     vendor: 'Anthropic',     key: 'Anthropic API key (BYOK) or Claude subscription' },
       { slug: 'codex',       name: 'Codex',           vendor: 'OpenAI',        key: 'OpenAI API key (BYOK) or ChatGPT subscription' },
-      { slug: 'cursor',      name: 'Cursor',    vendor: 'Cursor',        key: 'Cursor account (uses your provider keys)' },
+      { slug: 'cursor',      name: 'Cursor Agent', vendor: 'Cursor',        key: 'Cursor account (uses your provider keys)' },
       { slug: 'gemini',      name: 'Gemini CLI',      vendor: 'Google',        key: 'Google AI Studio key (BYOK)' },
       { slug: 'copilot',     name: 'GitHub Copilot CLI', vendor: 'GitHub',     key: 'GitHub Copilot subscription' },
       { slug: 'opencode',    name: 'OpenCode',        vendor: 'community',     key: 'Provider keys via OpenCode config (BYOK)' },

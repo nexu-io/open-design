@@ -38,7 +38,7 @@ export function localizedAgentGuidesPartN(en: Guides): Partial<Record<LandingLoc
         ...en['cursor']!,
         title: "Tasarımcılar için Cursor — Open Design",
         description: "Tasarımcılar Cursor'ı UI ve web tasarımı için nasıl kullanır — Design Mode, Figma'dan koda, Figma MCP — ve Open Design Cursor'ı nasıl yerel öncelikli, açık kaynaklı bir tasarım ajanına dönüştürür.",
-        breadcrumb: "Cursor",
+        breadcrumb: "Cursor Agent",
         label: "Ajan · Cursor",
         heading: "Tasarımcılar için Cursor.",
         lead: "Cursor, artık görsel bir Design Mode'a sahip AI kod editörüdür. Tasarımcılar onu işaret ve çizim yoluyla UI düzenlemek ve Figma'yı koda dönüştürmek için kullanır. Open Design, Cursor Agent'ı dosyalarınızı yerel tutan açık kaynaklı bir tasarım iş akışına bağlar.",

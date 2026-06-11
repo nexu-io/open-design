@@ -38,7 +38,7 @@ export function localizedAgentGuidesPartI(en: Guides): Partial<Record<LandingLoc
         ...en['cursor']!,
         title: "Cursor cho nhà thiết kế — Open Design",
         description: "Cách các nhà thiết kế dùng Cursor cho thiết kế UI và web — Design Mode, Figma-to-code, Figma MCP — và cách Open Design biến Cursor thành một agent thiết kế local-first, mã nguồn mở.",
-        breadcrumb: "Cursor",
+        breadcrumb: "Cursor Agent",
         label: "Agent · Cursor",
         heading: "Cursor cho nhà thiết kế.",
         lead: "Cursor là trình soạn code AI, giờ đây có Design Mode trực quan. Các nhà thiết kế dùng nó để chỉnh sửa UI bằng cách trỏ và vẽ, và để biến Figma thành code. Open Design cắm Cursor Agent vào một quy trình thiết kế mã nguồn mở giữ tệp tin của bạn ở máy.",
