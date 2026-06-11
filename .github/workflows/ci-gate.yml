@@ -1,11 +1,6 @@
 name: ci-gate
 
 on:
-  pull_request:
-  merge_group:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       target_sha:
@@ -30,7 +25,11 @@ on:
         default: ""
 
 permissions:
-  actions: read
+  # Keep write access here even while ci-gate is manual-only: the parked manual
+  # path still needs to dispatch ci-runner / ci-hosted runs when operators do
+  # not provide explicit run-id overrides. Do not downgrade this to read-only
+  # unless the dispatch bootstrap moves elsewhere.
+  actions: write
   contents: read
 
 concurrency:
@@ -43,13 +42,18 @@ jobs:
     # publish the current factual gate `Validate workspace`. Do not rename this
     # back to `Validate workspace` until the repository ruleset is explicitly
     # switched over to ci-gate in a separate follow-up.
+    #
+    # Manual-only parking note:
+    # ci-gate / ci-runner / ci-hosted no longer auto-trigger on PR / push /
+    # merge_group. Keep the manual path usable so operators can still run the
+    # parked stack on demand while deeper ci-gate redesign work is in flight.
     name: Validate workspace gate
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
       GITHUB_TOKEN: ${{ github.token }}
-      TARGET_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.target_sha || (github.event_name != 'workflow_dispatch' && (github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha) || '') }}
-      TARGET_EVENT: ${{ github.event_name == 'workflow_dispatch' && inputs.target_event || (github.event_name != 'workflow_dispatch' && github.event_name || '') }}
+      TARGET_SHA: ${{ github.event_name == 'workflow_dispatch' && (inputs.target_sha || github.sha) || (github.event_name != 'workflow_dispatch' && (github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha) || '') }}
+      TARGET_EVENT: ${{ github.event_name == 'workflow_dispatch' && (inputs.target_event || 'workflow_dispatch') || (github.event_name != 'workflow_dispatch' && github.event_name || '') }}
       RUNNER_RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.runner_run_id || '' }}
       HOSTED_RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.hosted_run_id || '' }}
       RUNNER_WORKFLOW: ci-runner
@@ -62,6 +66,72 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
+
+      - name: Validate manual override combinations
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          target_sha='${{ inputs.target_sha }}'
+          target_event='${{ inputs.target_event }}'
+          runner_run_id='${{ inputs.runner_run_id }}'
+          hosted_run_id='${{ inputs.hosted_run_id }}'
+          has_target_override=0
+          has_run_id_override=0
+
+          if [ -n "$target_sha" ] || [ -n "$target_event" ]; then
+            has_target_override=1
+          fi
+
+          if [ -n "$runner_run_id" ] || [ -n "$hosted_run_id" ]; then
+            has_run_id_override=1
+          fi
+
+          # Manual-only parking rule:
+          # - no overrides: ci-gate may dispatch fresh provider runs itself
+          # - explicit historical aggregation: both run ids must be supplied
+          #
+          # Do not "relax" this by letting target overrides proceed without both
+          # run ids. ci-gate can only bootstrap fresh child runs for the current
+          # ref / workflow_dispatch event, so a looser combination would just
+          # poll until timeout.
+          if [ "$has_target_override" = "1" ] && { [ -z "$runner_run_id" ] || [ -z "$hosted_run_id" ]; }; then
+            echo "target_sha/target_event overrides require both runner_run_id and hosted_run_id" >&2
+            exit 1
+          fi
+
+          if [ "$has_run_id_override" = "1" ] && { [ -z "$runner_run_id" ] || [ -z "$hosted_run_id" ]; }; then
+            echo "runner_run_id and hosted_run_id must be supplied together" >&2
+            exit 1
+          fi
+
+      - name: Record provider dispatch window
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.runner_run_id == '' && inputs.hosted_run_id == '' }}
+        shell: bash
+        run: echo "PROVIDER_RUN_CREATED_AFTER=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
+      - name: Dispatch manual provider runs
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.runner_run_id == '' && inputs.hosted_run_id == '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Keep this bootstrap colocated with ci-gate while the workflow family
+          # is parked in manual-only mode. If ci-gate becomes auto-triggered
+          # again or is restructured around reusable workflows, revisit rather
+          # than deleting this as "redundant".
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${{ github.repository }}/actions/workflows/ci-runner.yml/dispatches" \
+            -f ref='${{ github.ref_name }}'
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${{ github.repository }}/actions/workflows/ci-hosted.yml/dispatches" \
+            -f ref='${{ github.ref_name }}' \
+            -f inputs[mode]='nix'
 
       - name: Aggregate CI results
         run: node --experimental-strip-types .github/workflows/scripts/ci/aggregate-results.ts

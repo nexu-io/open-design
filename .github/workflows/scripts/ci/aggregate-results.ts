@@ -79,6 +79,7 @@ const hostedRunId = process.env.HOSTED_RUN_ID ?? "";
 const timeoutSeconds = Number(process.env.POLL_TIMEOUT_SECONDS ?? "3600");
 const pollIntervalSeconds = Number(process.env.POLL_INTERVAL_SECONDS ?? "20");
 const summaryPath = process.env.GITHUB_STEP_SUMMARY ?? "";
+const providerRunCreatedAfter = process.env.PROVIDER_RUN_CREATED_AFTER ?? "";
 
 if (!token || !repository) {
   throw new Error("GITHUB_TOKEN and GITHUB_REPOSITORY are required");
@@ -115,7 +116,12 @@ async function findRunByWorkflowName(workflowName: string): Promise<WorkflowRun 
   const payload = await github<{ workflow_runs: WorkflowRun[] }>(
     `/repos/${repository}/actions/runs?head_sha=${encodeURIComponent(targetSha)}&event=${encodeURIComponent(targetEvent)}&per_page=100`,
   );
-  const matches = sortNewest(payload.workflow_runs).filter((run) => run.name === workflowName);
+  const createdAfterMs = providerRunCreatedAfter ? Date.parse(providerRunCreatedAfter) : Number.NaN;
+  const matches = sortNewest(payload.workflow_runs).filter((run) => {
+    if (run.name !== workflowName) return false;
+    if (Number.isNaN(createdAfterMs)) return true;
+    return Date.parse(run.created_at) >= createdAfterMs;
+  });
   return matches[0] ?? null;
 }
 
