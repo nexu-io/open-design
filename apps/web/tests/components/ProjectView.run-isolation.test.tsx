@@ -31,7 +31,6 @@ const reattachDaemonRun = vi.fn();
 const fetchVelaLoginStatus = vi.fn();
 const launchAntigravityOauth = vi.fn();
 const streamViaDaemon = vi.fn();
-const streamByokViaDaemon = vi.fn();
 const streamMessage = vi.fn();
 const saveMessage = vi.fn();
 const createConversation = vi.fn();
@@ -62,7 +61,6 @@ vi.mock('../../src/providers/daemon', () => ({
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
   streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
-  streamByokViaDaemon: (...args: unknown[]) => streamByokViaDaemon(...args),
 }));
 
 vi.mock('../../src/providers/project-events', () => ({
@@ -1386,15 +1384,18 @@ describe('ProjectView conversation run isolation', () => {
   it('notifies when an API-mode chat completes without a daemon run status transition', async () => {
     listMessages.mockResolvedValue([]);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
-    // BYOK API-mode chats run through the registry path now; drive the same
-    // completion callbacks, with the run reaching 'succeeded' before onDone.
-    streamByokViaDaemon.mockImplementation(async (opts: any) => {
-      opts.onRunCreated?.('run-api');
-      opts.onRunStatus?.('running');
-      opts.handlers.onDelta('api response');
-      opts.onRunStatus?.('succeeded');
-      opts.handlers.onDone('api response');
-    });
+    streamMessage.mockImplementation(
+      async (
+        _config: unknown,
+        _systemPrompt: unknown,
+        _history: unknown,
+        _signal: unknown,
+        handlers: { onDelta: (delta: string) => void; onDone: () => void },
+      ) => {
+        handlers.onDelta('api response');
+        handlers.onDone();
+      },
+    );
 
     renderProjectView({
       ...config,
@@ -1408,7 +1409,7 @@ describe('ProjectView conversation run isolation', () => {
 
     fireEvent.click(screen.getByTestId('send-message'));
 
-    await waitFor(() => expect(streamByokViaDaemon).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(streamMessage).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(playSound).toHaveBeenCalledWith('success-sound'));
   });
 
