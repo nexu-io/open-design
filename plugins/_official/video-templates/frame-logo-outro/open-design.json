@@ -50,8 +50,9 @@
     "surface": "hyperframes",
     "engine": "hyperframes",
     "preview": {
-      "type": "image",
-      "poster": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-logo-outro/preview.png"
+      "type": "video",
+      "poster": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-logo-outro/preview.png",
+      "video": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-logo-outro/preview.mp4"
     },
     "useCase": {
       "query": {
