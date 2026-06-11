@@ -13,7 +13,7 @@
 # Config directories are preserved through Docker volumes so credentials
 # survive container restarts.
 # ---------------------------------------------------------------------------
-set -eo pipefail
+set -o pipefail
 
 CLI_DIR="/usr/local/lib/open-design-clis"
 NPM_GLOBAL_PREFIX="$CLI_DIR/npm"
@@ -59,7 +59,9 @@ install_npm_cli() {
 install_npm_cli "Claude Code" "@anthropic-ai/claude-code@latest"
 install_npm_cli "Codex CLI" "@openai/codex@latest"
 install_npm_cli "Gemini CLI" "@google/gemini-cli@latest"
-install_npm_cli "GitHub Copilot CLI" "@github/copilot-cli@latest"
+# @github/copilot-cli is not a public npm package. GitHub Copilot is accessed
+# via the gh CLI extension (`gh copilot`). Install gh first if needed.
+# install_npm_cli "GitHub Copilot CLI" "@github/copilot-cli@latest"
 install_npm_cli "Cursor Agent" "cursor-agent@latest"
 install_npm_cli "DeepSeek CLI" "deepseek-cli@latest"
 install_npm_cli "Qwen CLI" "qwen-cli@latest"
@@ -123,6 +125,7 @@ echo "--- Not auto-installable ---"
 echo "  ⊘ Antigravity (agy) — Google internal tool, manual install required"
 echo "  ⊘ OpenClaw — install from https://github.com/openclaw/openclaw"
 echo "  ⊘ Cline — VS Code extension only, no standalone CLI"
+echo "  ⊘ GitHub Copilot — use gh CLI extension: gh copilot"
 
 # ---- Link bin dirs onto system PATH ----
 echo ""

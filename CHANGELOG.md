@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Docker runtime image** now includes `python3`, `py3-pip`, `bash`, and `curl` for CLI installation support.
 - **Startup guard** now accepts `OD_BEHIND_PROXY=cloudflare` as an alternative to `OD_API_TOKEN` for non-loopback binds.
 
+### Fixed
+
+- **Docker `install-clis.sh` no longer aborts the build** when a CLI package is unavailable or missing from the npm registry. Failures are tracked and reported in the summary without stopping the image build.
+- **Removed `@github/copilot-cli` from Docker CLI install list.** The package does not exist on the public npm registry. GitHub Copilot is accessed via the `gh` CLI extension (`gh copilot`).
+
 ## [0.9.0] - 2026-05-29
 
 🎉 **310 PRs · 88 contributors · 7 days** — Meet the **install-and-create release**. No more API-key scavenger hunts. No more asking teammates to install three different CLIs before their first prompt. **Open Design AMR** is now built into the app: sign in once, pick a model, and start building. Around that zero-config first run, 0.9.0 brings a bigger agent bench, faster model picking, a more discoverable plugin marketplace, richer review workflows, smoother Studio tools, and easier installs across Windows, macOS, and Linux. 🚀
