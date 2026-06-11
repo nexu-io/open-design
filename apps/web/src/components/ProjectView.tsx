@@ -5548,7 +5548,6 @@ export function ProjectView({
       }}
       onOpenSettings={onOpenSettings}
       onRefreshAgents={onRefreshAgents}
-      onBack={onBack}
       placement="up"
     />
   );
