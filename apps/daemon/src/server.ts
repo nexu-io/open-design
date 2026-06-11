@@ -12172,14 +12172,14 @@ export async function startServer({
     // mcp section for this single invocation, which is exactly the kind
     // of surprise the previous silent-failure UX taught us to avoid.
     let opencodeConfigContent: string | null = null;
-    if (
-      def.externalMcpInjection === 'opencode-env-content' &&
-      enabledExternalMcp.length > 0
-    ) {
+    if (def.externalMcpInjection === 'opencode-env-content') {
       try {
         opencodeConfigContent = buildOpenCodeMcpConfigContent(
           enabledExternalMcp,
           oauthTokensForSpawn,
+          {
+            allowedDirectories: [effectiveCwd, ...extraAllowedDirs],
+          },
         );
       } catch (err) {
         console.warn(
@@ -13495,6 +13495,7 @@ export async function startServer({
         model: safeModel,
         imagePaths: def.supportsImagePaths ? amrStagedImages : [],
         mcpServers,
+        envFormat: def.acpMcpEnvFormat ?? 'array',
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
         send: (event, data) => {
           if (event === 'agent') {

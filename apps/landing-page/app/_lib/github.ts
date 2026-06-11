@@ -21,26 +21,6 @@ function formatStars(count: unknown): string | null {
   return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
 }
 
-// Parse a display version (e.g. "v0.9.0") from a GitHub /releases/latest object.
-// getLatestRelease() reads the raw release (it also needs the asset list for the
-// download matrix), so it parses tag_name/name directly rather than going
-// through the release-metadata endpoint used for the header/home version chips.
-function formatVersion(release: unknown): string | null {
-  if (!release || typeof release !== 'object') return null;
-  const record = release as { name?: unknown; tag_name?: unknown };
-  const fromName = (name: unknown) => {
-    if (typeof name !== 'string') return null;
-    const match = name.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
-    return match ? `v${match[1]}` : null;
-  };
-  const fromTag = (tag: unknown) => {
-    if (typeof tag !== 'string') return null;
-    const cleaned = tag.replace(/^open-design[-_]?v?/i, '').trim();
-    return cleaned ? `v${cleaned.replace(/^v/, '')}` : null;
-  };
-  return fromName(record.name) ?? fromTag(record.tag_name);
-}
-
 async function fetchJson(url: string, headers?: Record<string, string>): Promise<unknown> {
   const response = await fetch(url, {
     headers,
@@ -71,13 +51,13 @@ export function getGithubRepoMeta(): Promise<GithubRepoMeta> {
 }
 
 /* ------------------------------------------------------------------ *
- * Latest-release assets — powers the dedicated /download page.
+ * Stable release assets — powers the dedicated /download page.
  *
- * Build-time fetch of `releases/latest` resolved into a per-platform
- * matrix so the page renders complete, indexable download links without
- * client JS. The client-side enhancer (download-enhancer.astro) refetches
- * live and patches hrefs, so the page stays correct between rebuilds.
- * Mirrors the asset-name conventions used by header-enhancer.astro.
+ * Build-time fetch of the stable R2 metadata resolved into a per-platform
+ * matrix so the page renders complete, indexable download links without client
+ * JS. The client-side enhancer refetches `/release-metadata` live and patches
+ * hrefs, so the page stays correct between rebuilds without sending installer
+ * traffic through GitHub release asset URLs.
  * ------------------------------------------------------------------ */
 
 const REPO_RELEASES = 'https://github.com/nexu-io/open-design/releases';
@@ -117,8 +97,21 @@ export interface LatestRelease {
 
 interface RawAsset {
   name?: unknown;
-  browser_download_url?: unknown;
+  url?: unknown;
   size?: unknown;
+  sha256Url?: unknown;
+}
+
+interface ReleaseMetadata {
+  versionTag?: unknown;
+  generatedAt?: unknown;
+  publishedAt?: unknown;
+  platforms?: {
+    mac?: { artifacts?: Record<string, RawAsset | undefined> };
+    macIntel?: { artifacts?: Record<string, RawAsset | undefined> };
+    win?: { artifacts?: Record<string, RawAsset | undefined> };
+    linux?: { artifacts?: Record<string, RawAsset | undefined> };
+  };
 }
 
 const EMPTY_MATRIX: ReleaseMatrix = {
@@ -135,36 +128,35 @@ function cleanVersion(versionLabel: string): string {
   return versionLabel.replace(/^v/, '');
 }
 
-function buildMatrix(rawAssets: RawAsset[]): ReleaseMatrix {
-  const assets = rawAssets.filter(
-    (a): a is { name: string; browser_download_url: string; size?: unknown } =>
-      !!a && typeof a.name === 'string' && typeof a.browser_download_url === 'string',
-  );
+function toReleaseUrl(versionLabel: string, tag: unknown): string {
+  if (typeof tag === 'string' && tag.length > 0) {
+    return `${REPO_RELEASES}/tag/${tag}`;
+  }
+  return `${REPO_RELEASES}/tag/open-design-${versionLabel}`;
+}
 
-  const sha256For = (name: string): string | null => {
-    const sib = assets.find((a) => a.name === `${name}.sha256`);
-    return sib ? sib.browser_download_url : null;
-  };
-
-  const pick = (match: (name: string) => boolean): ReleaseAsset | null => {
-    const a = assets.find((x) => !x.name.endsWith('.sha256') && match(x.name));
+function pickArtifact(a: RawAsset | undefined): ReleaseAsset | null {
     if (!a) return null;
+    if (typeof a.name !== 'string' || typeof a.url !== 'string') return null;
     return {
       name: a.name,
-      url: a.browser_download_url,
+      url: a.url,
       size: typeof a.size === 'number' && Number.isFinite(a.size) ? a.size : 0,
-      sha256Url: sha256For(a.name),
+      sha256Url: typeof a.sha256Url === 'string' ? a.sha256Url : null,
     };
-  };
+}
+
+function buildMatrixFromMetadata(metadata: ReleaseMetadata): ReleaseMatrix {
+  const platforms = metadata.platforms ?? {};
 
   return {
-    macArm64Dmg: pick((n) => n.endsWith('mac-arm64.dmg')),
-    macArm64Zip: pick((n) => n.endsWith('mac-arm64.zip')),
-    macX64Dmg: pick((n) => n.endsWith('mac-x64.dmg')),
-    macX64Zip: pick((n) => n.endsWith('mac-x64.zip')),
-    winSetup: pick((n) => /win.*setup\.exe$/.test(n)),
-    winPortable: pick((n) => /win.*portable\.zip$/.test(n)),
-    linux: pick((n) => /\.appimage$/i.test(n)),
+    macArm64Dmg: pickArtifact(platforms.mac?.artifacts?.dmg),
+    macArm64Zip: pickArtifact(platforms.mac?.artifacts?.zip),
+    macX64Dmg: pickArtifact(platforms.macIntel?.artifacts?.dmg),
+    macX64Zip: pickArtifact(platforms.macIntel?.artifacts?.zip),
+    winSetup: pickArtifact(platforms.win?.artifacts?.installer),
+    winPortable: pickArtifact(platforms.win?.artifacts?.portableZip),
+    linux: pickArtifact(platforms.linux?.artifacts?.appImage),
   };
 }
 
@@ -172,31 +164,30 @@ let latestReleasePromise: Promise<LatestRelease> | null = null;
 
 export function getLatestRelease(): Promise<LatestRelease> {
   latestReleasePromise ??= (async () => {
-    let release: unknown = null;
+    let metadata: unknown = null;
     try {
-      release = await fetchJson(`${REPO_API}/releases/latest`);
+      metadata = await fetchJson(RELEASE_METADATA_UPSTREAM_URL, { Accept: 'application/json' });
     } catch {
-      release = null;
+      metadata = null;
     }
 
-    const rec = (release && typeof release === 'object' ? release : {}) as {
-      tag_name?: unknown;
-      html_url?: unknown;
-      published_at?: unknown;
-      assets?: unknown;
-    };
+    const rec = (metadata && typeof metadata === 'object' ? metadata : {}) as ReleaseMetadata;
 
-    const versionLabel = formatVersion(release) ?? FALLBACK_META.versionLabel;
-    const rawAssets = Array.isArray(rec.assets) ? (rec.assets as RawAsset[]) : [];
-    const matrix = release ? buildMatrix(rawAssets) : EMPTY_MATRIX;
-    const resolved = Boolean(release) && Object.values(matrix).some((a) => a !== null);
+    const versionLabel = formatStableReleaseVersion(metadata) ?? FALLBACK_META.versionLabel;
+    const matrix = metadata ? buildMatrixFromMetadata(rec) : EMPTY_MATRIX;
+    const resolved = Boolean(metadata) && Object.values(matrix).some((a) => a !== null);
 
     return {
       version: cleanVersion(versionLabel),
       versionLabel,
-      tagName: typeof rec.tag_name === 'string' ? rec.tag_name : null,
-      publishedAt: typeof rec.published_at === 'string' ? rec.published_at : null,
-      releaseUrl: typeof rec.html_url === 'string' ? rec.html_url : REPO_RELEASES,
+      tagName: typeof rec.versionTag === 'string' ? rec.versionTag : null,
+      publishedAt:
+        typeof rec.publishedAt === 'string'
+          ? rec.publishedAt
+          : typeof rec.generatedAt === 'string'
+            ? rec.generatedAt
+            : null,
+      releaseUrl: toReleaseUrl(versionLabel, rec.versionTag),
       matrix,
       resolved,
     };

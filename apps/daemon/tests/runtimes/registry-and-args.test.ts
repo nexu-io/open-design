@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, assert, chmodSync, codex, cursorAgent, detectAgents, grokBuild, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
+  AGENT_DEFS, amp, assert, chmodSync, codex, cursorAgent, detectAgents, grokBuild, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 import { codexNeedsDangerFullAccessSandbox } from '../../src/runtimes/defs/codex.js';
 import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
@@ -535,4 +535,29 @@ test('codex args pass valid extraAllowedDirs with repeatable --add-dir flags', (
     args.filter((arg, index) => arg === '--add-dir' || args[index - 1] === '--add-dir'),
     ['--add-dir', '/repo/skills', '--add-dir', '/tmp/codex/generated_images'],
   );
+});
+
+test('amp uses headless execute mode with the Claude-compatible stream parser', () => {
+  assert.equal(amp.streamFormat, 'claude-stream-json');
+  assert.equal(amp.promptViaStdin, true);
+  // Plain-text stdin (default): the daemon writes the composed prompt and
+  // closes stdin for a clean one-shot turn. We must NOT opt into
+  // stream-json input mode (that keeps stdin open for tool_result loops).
+  assert.notEqual(amp.promptInputFormat, 'stream-json');
+  assert.equal(amp.supportsCustomModel, false);
+
+  const base = amp.buildArgs('', [], [], {});
+  assert.deepEqual(base, ['-x', '--stream-json', '--dangerously-allow-all']);
+
+  // The synthetic 'default' model must not leak a flag.
+  const def = amp.buildArgs('', [], [], { model: 'default' });
+  assert.equal(def.includes('--mode'), false);
+
+  // A known mode maps onto Amp's `--mode`.
+  const smart = amp.buildArgs('', [], [], { model: 'smart' });
+  assert.deepEqual(smart, ['-x', '--stream-json', '--dangerously-allow-all', '--mode', 'smart']);
+
+  // An unknown model id is ignored rather than passed as a bogus mode.
+  const bogus = amp.buildArgs('', [], [], { model: 'gpt-5' });
+  assert.equal(bogus.includes('--mode'), false);
 });

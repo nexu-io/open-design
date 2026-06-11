@@ -205,6 +205,7 @@ const LOOPBACK_NO_PROXY_TOKENS = ['localhost', '127.0.0.1', '[::1]'] as const;
 // run, so 45 s leaves headroom without making a hung child invisible.
 // Override with OD_CONNECTION_TEST_AGENT_TIMEOUT_MS.
 const DEFAULT_AGENT_TIMEOUT_MS = 45_000;
+const AGENT_STDOUT_DRAIN_MS = 25;
 // Node's `setTimeout` silently clamps any delay above this to ~1 ms
 // (with a TimeoutOverflowWarning), so an override meant to *extend*
 // the budget — e.g. `OD_CONNECTION_TEST_AGENT_TIMEOUT_MS=3000000000` —
@@ -1593,6 +1594,34 @@ export function createAgentSink(): AgentSink {
   };
 }
 
+function extractOpenCodeTextFromRawStdout(stdout: string): string {
+  const text: string[] = [];
+  for (const line of stdout.split(/\r?\n/u)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        (parsed as { type?: unknown }).type === 'text'
+      ) {
+        const part = (parsed as { part?: unknown }).part;
+        if (
+          part &&
+          typeof part === 'object' &&
+          typeof (part as { text?: unknown }).text === 'string'
+        ) {
+          text.push((part as { text: string }).text);
+        }
+      }
+    } catch {
+      // Non-JSON stdout is handled by the normal diagnostics path.
+    }
+  }
+  return text.join('');
+}
+
 interface AgentSpawnHandle {
   child: ReturnType<typeof spawn>;
   acpSession?: {
@@ -1670,7 +1699,10 @@ function attachAgentStreamHandlers(
         send('agent', ev);
       },
     );
-    child.stdout?.on('data', (chunk: string) => handler.feed(chunk));
+    child.stdout?.on('data', (chunk: string) => {
+      appendRawStdout?.(chunk);
+      handler.feed(chunk);
+    });
     child.on('close', () => handler.flush());
   } else {
     child.stdout?.on('data', (chunk: string) => send('stdout', { chunk }));
@@ -1689,6 +1721,38 @@ function delay(ms: number): Promise<void> {
     const timer = setTimeout(resolve, ms);
     timer.unref?.();
   });
+}
+
+function runQuietCommand(command: string, args: string[], cwd: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      stdio: 'ignore',
+      shell: false,
+    });
+    child.once('error', reject);
+    child.once('close', (code, signal) => {
+      if (code === 0 && !signal) {
+        resolve();
+        return;
+      }
+      reject(new Error(`${command} ${args.join(' ')} exited with ${signal || code}`));
+    });
+  });
+}
+
+async function prepareOpenCodeConnectionTestCwd(tempDir: string): Promise<void> {
+  await fsp.writeFile(
+    path.join(tempDir, 'README.md'),
+    'Open Design OpenCode connection test.\n',
+    'utf8',
+  );
+  try {
+    await runQuietCommand('git', ['init'], tempDir);
+  } catch {
+    // OpenCode responds more reliably inside a git worktree, but a missing or
+    // misconfigured local git binary must not sink an otherwise healthy CLI.
+  }
 }
 
 async function testAgentConnectionInternal(
@@ -1880,6 +1944,9 @@ async function testAgentConnectionInternal(
   };
 
   try {
+    if (input.agentId === 'opencode') {
+      await prepareOpenCodeConnectionTestCwd(tempDir);
+    }
     let args: string[];
     try {
       promptFile = await preparePromptFileForAgent(def, SMOKE_PROMPT, 'connection-test');
@@ -1893,6 +1960,16 @@ async function testAgentConnectionInternal(
           ...(promptFile ? { promptFilePath: promptFile.path } : {}),
         },
       );
+      // Connection tests should validate the adapter's core CLI path, not
+      // fail on unrelated user-installed OpenCode plugins. `opencode run
+      // --pure` keeps the smoke test isolated while regular chat runs retain
+      // the user's full plugin environment.
+      if (input.agentId === 'opencode' && !args.includes('--pure')) {
+        args.push('--pure');
+      }
+      if (input.agentId === 'opencode' && !args.includes('--title')) {
+        args.push('--title', 'Connection test');
+      }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       // buildArgs runs *after* binary resolution but *before* spawn, so
@@ -2000,9 +2077,9 @@ async function testAgentConnectionInternal(
       sink.appendRawStdout,
     );
 
-    const resultFromChildExit = (
+    const resultFromChildExit = async (
       winner: AgentChildExit,
-    ): ConnectionTestResponse => {
+    ): Promise<ConnectionTestResponse> => {
       if (winner.kind === 'spawnError') {
         const latencyMs = Date.now() - start;
         const detail = redactSecrets(winner.error.message);
@@ -2031,6 +2108,9 @@ async function testAgentConnectionInternal(
         };
       }
 
+      // On Windows, short-lived JSON-stream CLIs can deliver the process
+      // close event before all stdout chunks have reached the parser.
+      await delay(AGENT_STDOUT_DRAIN_MS);
       const latencyMs = Date.now() - start;
       const buffered = sink.getText().trim();
       // ACP agents that don't shut down on stdin.end() are terminated after a
@@ -2067,6 +2147,15 @@ async function testAgentConnectionInternal(
       }
       const stderrTail = sink.getStderrTail().trim();
       const rawStdoutTail = sink.getRawStdoutTail().trim();
+      if (input.agentId === 'opencode' && exitedCleanly && rawStdoutTail) {
+        const recoveredText = extractOpenCodeTextFromRawStdout(rawStdoutTail).trim();
+        if (recoveredText) {
+          return resultFromAgentText(recoveredText, {
+            code: winner.code,
+            signal: winner.signal,
+          });
+        }
+      }
       const acpFatal = Boolean(acpSession?.hasFatalError?.());
       const rawDetail = [
         winner.code != null ? `exit ${winner.code}` : null,
@@ -2194,7 +2283,7 @@ async function testAgentConnectionInternal(
       if (completion.kind === 'timeout' || completion.kind === 'aborted') {
         return resultFromCancellation(completion.kind);
       }
-      return resultFromChildExit(completion);
+      return await resultFromChildExit(completion);
     }
     if (winner.kind === 'streamError') {
       return resultFromStreamError(winner.error);
@@ -2202,7 +2291,7 @@ async function testAgentConnectionInternal(
     if (winner.kind === 'timeout' || winner.kind === 'aborted') {
       return resultFromCancellation(winner.kind);
     }
-    return resultFromChildExit(winner);
+    return await resultFromChildExit(winner);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     // Outer catch — the failure may have happened at any phase between

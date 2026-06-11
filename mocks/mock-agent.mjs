@@ -68,7 +68,7 @@ async function main() {
   if (!opts.as) {
     process.stderr.write(
       'mock-agent: --as <agent> required\n' +
-      '  supported: opencode | claude | codex | gemini | cursor-agent |\n' +
+      '  supported: opencode | claude | amp | codex | gemini | cursor-agent |\n' +
       '             deepseek | qwen | grok | plain |\n' +
       '             devin | hermes | kilo | kimi | kiro | vibe   (ACP)\n' +
       '             vela                                          (AMR — vela CLI)\n',
@@ -120,7 +120,8 @@ async function main() {
   switch (opts.as) {
     case 'opencode':     await renderAsOpencode(events, renderOpts);    break;
     case 'codex':        await renderAsCodex(events, renderOpts);       break;
-    case 'claude':       await renderAsClaude(events, renderOpts);      break;
+    case 'claude':
+    case 'amp':          await renderAsClaude(events, renderOpts);      break;
     case 'gemini':       await renderAsGemini(events, renderOpts);      break;
     case 'cursor-agent': await renderAsCursorAgent(events, renderOpts); break;
     case 'deepseek':

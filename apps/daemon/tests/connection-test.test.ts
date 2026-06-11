@@ -2729,6 +2729,9 @@ process.stdin.on('end', () => {
               'json',
               '-m',
               'github-copilot/gpt-4o',
+              '--pure',
+              '--title',
+              'Connection test',
             ]),
           );
           await expect(fsp.readFile(stdinFile, 'utf8')).resolves.toBe('Reply with only: ok');
@@ -2736,6 +2739,49 @@ process.stdin.on('end', () => {
       );
     } finally {
       await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps OpenCode smoke tests green when git bootstrap is unavailable', async () => {
+    const gitDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-git-missing-'));
+    const oldPath = process.env.PATH;
+    try {
+      if (process.platform === 'win32') {
+        await fsp.writeFile(path.join(gitDir, 'git.cmd'), '@echo off\r\nexit /b 1\r\n');
+      } else {
+        const gitBin = path.join(gitDir, 'git');
+        await fsp.writeFile(gitBin, '#!/bin/sh\nexit 1\n');
+        await fsp.chmod(gitBin, 0o755);
+      }
+      process.env.PATH = `${gitDir}${path.delimiter}${oldPath ?? ''}`;
+
+      await withFakeOpenCode(
+        `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'OpenCode',
+            sample: 'ok',
+          });
+        },
+      );
+    } finally {
+      process.env.PATH = oldPath;
+      await fsp.rm(gitDir, { recursive: true, force: true });
     }
   });
 
