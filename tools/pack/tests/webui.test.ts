@@ -191,6 +191,9 @@ describe("stageWebuiLauncherResources", () => {
       expect(runDesktopExec(stageRoot, `file://localhost${desktopPath}`)).toBe(bundleDir);
       // URI authorities are case-insensitive, so mixed-case localhost is local too.
       expect(runDesktopExec(stageRoot, `file://LOCALHOST${desktopPath}`)).toBe(bundleDir);
+      // URI schemes are case-insensitive too, so an upper-case FILE scheme is valid.
+      expect(runDesktopExec(stageRoot, `FILE://LOCALHOST${desktopPath}`)).toBe(bundleDir);
+      expect(runDesktopExec(stageRoot, `FILE://${desktopPath}`)).toBe(bundleDir);
       // A foreign authority is a remote URI → must not launch locally.
       expect(runDesktopExec(stageRoot, `file://otherhost${desktopPath}`)).toBeNull();
 
