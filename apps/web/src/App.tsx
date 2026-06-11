@@ -1316,19 +1316,42 @@ function AppInner() {
       const fidelity = fidelityToTracking(input.metadata?.fidelity ?? null);
       const creationSource: 'blank' | 'template' | 'zip' | 'folder' =
         kind === 'template' ? 'template' : 'blank';
-      const result = await createProject({
-        name: input.name,
-        skillId: input.skillId,
-        designSystemId: input.designSystemId,
-        pendingPrompt: derivedPendingPrompt,
-        metadata: input.metadata,
-        ...(input.conversationMode ? { conversationMode: input.conversationMode } : {}),
-        ...(input.pluginId ? { pluginId: input.pluginId } : {}),
-        ...(input.appliedPluginSnapshotId
-          ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
-          : {}),
-        ...(input.pluginInputs ? { pluginInputs: input.pluginInputs } : {}),
-      });
+      let result;
+      try {
+        result = await createProject({
+          name: input.name,
+          skillId: input.skillId,
+          designSystemId: input.designSystemId,
+          pendingPrompt: derivedPendingPrompt,
+          metadata: input.metadata,
+          ...(input.conversationMode ? { conversationMode: input.conversationMode } : {}),
+          ...(input.pluginId ? { pluginId: input.pluginId } : {}),
+          ...(input.appliedPluginSnapshotId
+            ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
+            : {}),
+          ...(input.pluginInputs ? { pluginInputs: input.pluginInputs } : {}),
+        });
+      } catch (err) {
+        const errorCode =
+          err instanceof Error && err.message.trim()
+            ? err.message
+            : 'CREATE_REQUEST_FAILED';
+        trackProjectCreateResult(
+          analytics.track,
+          {
+            page_name: 'home',
+            area: 'new_project',
+            project_source: 'create_button',
+            project_id: null,
+            project_kind: projectKindToTracking(kind),
+            fidelity,
+            result: 'failed',
+            error_code: errorCode,
+          },
+          { requestId: input.requestId },
+        );
+        throw err;
+      }
       if (!result) {
         trackProjectCreateResult(
           analytics.track,
