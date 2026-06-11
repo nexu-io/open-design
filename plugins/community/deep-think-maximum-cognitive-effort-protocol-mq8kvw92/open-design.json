@@ -5,6 +5,13 @@
   "title": "/deep-think — Maximum Cognitive Effort Protocol",
   "version": "0.1.0",
   "description": "Comprehensive deep-thinking process. Activates maximum reasoning, skill retrieval, verification, and step-by-step execution.",
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
   "od": {
     "kind": "skill",
     "taskKind": "new-generation",

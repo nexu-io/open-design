@@ -1,6 +1,6 @@
 ---
 name: deep-think-maximum-cognitive-effort-protocol-mq8kvw92
-description: Comprehensive deep-thinking process. Activates maximum reasoning, skill retrieval, verification, and step-by-step execution.
+description: Use this plugin when the user wants a maximum-effort reasoning workflow for a complex, high-stakes, or ambiguous task.
 ---
 
 # /deep-think — Maximum Cognitive Effort Protocol
