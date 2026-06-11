@@ -2892,7 +2892,7 @@ export function formatAddressDisplayParts(url: string, title?: string): AddressD
   if (!cleanTitle) return { url };
   const fallback = labelFromUrl(url);
   if (cleanTitle === fallback || cleanTitle === url) return { url };
-  return { url, title: cleanTitle };
+  return { url: url.replace(/\/+$/, ''), title: cleanTitle };
 }
 
 export function formatAddressDisplay(url: string, title?: string): string {
