@@ -2504,6 +2504,7 @@ function MediaModelCards({
       providerId: string;
       providerLabel: string;
       status: 'configured' | 'integrated' | 'unsupported';
+      optInOnly: boolean;
       models: MediaModel[];
     }> = [];
     for (const model of models) {
@@ -2524,6 +2525,7 @@ function MediaModelCards({
             : provider?.integrated
               ? 'integrated'
               : 'unsupported',
+          optInOnly: provider?.optInOnly === true,
           models: [],
         };
         out.push(group);
@@ -2540,7 +2542,11 @@ function MediaModelCards({
     }
     return null;
   }, [groups, value]);
-  const firstAvailableModelId = groups[0]?.models[0]?.id ?? null;
+  // Auto-select the first ready model, but skip opt-in-only providers (e.g.
+  // codex-cli, which spends the operator's ChatGPT subscription). They stay
+  // pickable in the list yet never become a silent default.
+  const firstAvailableModelId =
+    groups.find((group) => !group.optInOnly)?.models[0]?.id ?? null;
 
   useEffect(() => {
     if (selected) return;

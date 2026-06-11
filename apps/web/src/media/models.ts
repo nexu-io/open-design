@@ -65,6 +65,14 @@ export interface MediaProvider {
   integrated: boolean;
   /** Whether the provider needs user-supplied credentials. */
   credentialsRequired?: boolean;
+  /**
+   * Whether the provider may only be chosen explicitly, never auto-selected
+   * as the picker's default. Set for providers that consume a metered,
+   * out-of-band resource (e.g. `codex-cli` spends the operator's ChatGPT
+   * subscription) so they show up in the list but never become a silent
+   * default just because no API-key provider is configured.
+   */
+  optInOnly?: boolean;
   /** Whether the provider should appear in Settings -> Media. */
   settingsVisible?: boolean;
   /** Default base URL the daemon hits when no override is configured. */
@@ -102,6 +110,9 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     hint: 'Local Codex CLI image_gen — uses ChatGPT subscription, no API key',
     integrated: true,
     credentialsRequired: false,
+    // Burns the operator's ChatGPT subscription, so it must be picked on
+    // purpose — never auto-selected just because no API-key provider is set up.
+    optInOnly: true,
     settingsVisible: false,
     docsUrl: 'https://developers.openai.com/codex/cli',
   },
