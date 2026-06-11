@@ -1,4 +1,15 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -82,6 +93,72 @@ describe("stageWebuiLauncherResources", () => {
     expect(mode(join(stageRoot, "open-design.sh"))).toBe("755");
 
     rmSync(stageRoot, { force: true, recursive: true });
+  });
+
+  // Per the Desktop Entry spec, %k is "the location of the desktop file as
+  // either a URI ... or a local filename or empty if no location is known".
+  // The Linux double-click Exec must therefore normalize %k before `cd`, or a
+  // compliant launcher that passes `file:///…/open-design-webui.desktop` (or an
+  // empty value) sends the shell to a bogus directory and never reaches
+  // `./open-design.sh start`. This pins that the staged Exec launches from the
+  // bundle directory for both a plain path and a file:// URI, and refuses to run
+  // from the wrong place when %k is empty.
+  describe("Linux .desktop Exec normalizes %k before launching", () => {
+    // Extracts the `sh -c '<body>'` script from the staged .desktop and runs it
+    // with %k replaced by `kValue`. The staged open-design.sh is swapped for a
+    // stub that records its working directory into `markerPath`, and SHELL is
+    // pointed at `true` so the trailing `exec $SHELL` exits instead of opening an
+    // interactive shell. Returns the recorded launch directory, or null if the
+    // launcher never reached open-design.sh.
+    function runDesktopExec(stageRoot: string, kValue: string): string | null {
+      const desktop = readFileSync(join(stageRoot, "open-design-webui.desktop"), "utf8");
+      const execLine = desktop.split(/\r?\n/).find((l) => l.startsWith("Exec="));
+      if (execLine == null) throw new Error("no Exec= line in .desktop");
+      const match = /^Exec=sh -c '(.*)'$/.exec(execLine);
+      if (match == null) throw new Error(`unexpected Exec shape: ${execLine}`);
+      const script = match[1].split("%k").join(kValue);
+
+      const markerPath = join(stageRoot, "launch-marker");
+      writeFileSync(
+        join(stageRoot, "open-design.sh"),
+        `#!/bin/sh\nprintf '%s' "$(pwd)" > "${markerPath}"\n`,
+        "utf8",
+      );
+      chmodSync(join(stageRoot, "open-design.sh"), 0o755);
+      rmSync(markerPath, { force: true });
+
+      // Run from an unrelated cwd so a missing/late `cd` cannot accidentally pass.
+      const elsewhere = mkdtempSync(join(tmpdir(), "od-webui-elsewhere-"));
+      try {
+        execFileSync("sh", ["-c", script], {
+          cwd: elsewhere,
+          env: { ...process.env, SHELL: "true" },
+          stdio: "ignore",
+        });
+      } catch {
+        // The launcher may exit non-zero on the empty/bogus path; the marker file
+        // is the source of truth for whether open-design.sh actually ran.
+      } finally {
+        rmSync(elsewhere, { force: true, recursive: true });
+      }
+      return existsSync(markerPath) ? readFileSync(markerPath, "utf8") : null;
+    }
+
+    it("launches from the bundle dir for a plain path and a file:// URI, and not when %k is empty", async () => {
+      const stageRoot = mkdtempSync(join(tmpdir(), "od-webui-desktop-k-"));
+      await stageWebuiLauncherResources(stageRoot, "linux");
+      const bundleDir = realpathSync(stageRoot);
+      const desktopPath = join(bundleDir, "open-design-webui.desktop");
+
+      // Plain local filename (well-behaved launcher).
+      expect(runDesktopExec(stageRoot, desktopPath)).toBe(bundleDir);
+      // file:// URI form (spec-compliant launcher) — the reproduced failure case.
+      expect(runDesktopExec(stageRoot, `file://${desktopPath}`)).toBe(bundleDir);
+      // Empty %k: must not silently launch from the wrong directory.
+      expect(runDesktopExec(stageRoot, "")).toBeNull();
+
+      rmSync(stageRoot, { force: true, recursive: true });
+    });
   });
 
   it("makes the macOS double-click .command entry executable", async () => {
