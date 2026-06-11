@@ -274,7 +274,11 @@ compdef _od od
 const FISH_SCRIPT = `# od fish completion
 # Install: od completion fish > ~/.config/fish/completions/od.fish
 function __od_complete
-    set -l tokens (commandline -opc)
+    # -xpc tokenizes the command line up to but EXCLUDING the token currently
+    # being typed, matching the resolver contract (words must not include the
+    # in-progress token). Using -opc would pass e.g. \`co\` as both a word and
+    # as --current, so \`od co<TAB>\` would treat \`co\` as an unknown command.
+    set -l tokens (commandline -xpc)
     set -l cur (commandline -ct)
     # Drop the leading 'od' from the token list.
     set -e tokens[1]

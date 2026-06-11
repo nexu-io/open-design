@@ -173,6 +173,27 @@ describe('generateCompletionScript', () => {
     expect(generateCompletionScript('zsh')).toContain('compdef _od od');
     expect(generateCompletionScript('fish')).toContain('complete -c od');
   });
+
+  it('uses the current-token-excluding form in the fish script', () => {
+    const fish = generateCompletionScript('fish');
+    // -xpc excludes the in-progress token (resolver contract); -opc would pass
+    // the token both as a word and as --current and break `od co<TAB>`.
+    expect(fish).toContain('commandline -xpc');
+    expect(fish).not.toContain('commandline -opc');
+  });
+});
+
+describe('computeCompletions — shell driver contract', () => {
+  // The generated scripts pass the typed words WITHOUT the in-progress token,
+  // and the partial token as `current`. This is exactly what fish sends after
+  // the `-xpc` fix, so `od co<TAB>` must resolve as words=[] current='co'.
+  it('completes a partial top-level command (the fish `od co<TAB>` path)', () => {
+    const out = computeCompletions({ words: [], current: 'co' });
+    expect(out).toContain('completion');
+    expect(out).toContain('config');
+    expect(out).toContain('conversation');
+    expect(out.every((c) => c.startsWith('co'))).toBe(true);
+  });
 });
 
 describe('COMMAND_SPEC integrity', () => {
