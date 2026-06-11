@@ -3,8 +3,8 @@ name: Docker image
 # Phase 5 / spec §15.5 — multi-arch image builds.
 #
 # Pushes to ghcr.io on:
-#   - main            → ghcr.io/<owner>/od:main-<timestamp> + :edge + :sha-<short>
-#   - tag (v*.*.*)    → ghcr.io/<owner>/od:<tag> + :latest + :sha-<short>
+#   - main            → ghcr.io/<owner>/open-design:latest + :sha-<short>
+#   - tag (v*.*.*)    → ghcr.io/<owner>/open-design:<tag> + :latest + :sha-<short>
 # Pull requests build without pushing so Dockerfile drift is caught before merge.
 
 on:
@@ -61,16 +61,15 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/od
-          # spec §15.1 tag scheme:
-          #   - main           → :edge + :sha-<short>
+          images: ghcr.io/${{ github.repository_owner }}/open-design
+          # Tag scheme:
+          #   - main           → :latest + :sha-<short>
           #   - vX.Y.Z         → :X.Y.Z + :latest
           #   - any branch     → :branch-<name>
           tags: |
             type=ref,event=branch,suffix=-{{date 'YYYYMMDD-HHmmss' tz='UTC'}}
             type=ref,event=tag
-            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
             type=sha,prefix=sha-,format=short
 
       - name: Build and push

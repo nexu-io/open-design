@@ -476,6 +476,7 @@ function injectPaletteBridge(
     var budget = { left: STYLE_RULE_LIMIT };
     for (var i=0; i<sheets.length; i++){
       var sheet = sheets[i];
+      if (!sheet) continue;
       var rules = null;
       try { rules = sheet.cssRules; } catch (_){ continue; }
       forEachStyleRule(rules, function(rule){
@@ -1119,7 +1120,7 @@ function meaningfulDomFallbackTarget(el) {
     );
   }
 
-  var text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+  var text = (el.textContent || '').replace(/[\t\n\r ]+/g, ' ').trim();
   if (!text) return false;
 
   if (/^(span|strong|em|b|i|small|code|mark)$/.test(tag)) return true;
@@ -1128,7 +1129,7 @@ function meaningfulDomFallbackTarget(el) {
   for (var child = el.firstElementChild;child;child = child.nextElementSibling) {
     var childTag = child.tagName ? child.tagName.toLowerCase() : '';
     if (/^(script|style|template|meta|link|title|noscript)$/.test(childTag)) continue;
-    if ((child.textContent || '').replace(/\s+/g, ' ').trim() || /^(img|video|canvas|svg|input|textarea|select)$/.test(childTag)) {
+    if ((child.textContent || '').replace(/[\t\n\r ]+/g, ' ').trim() || /^(img|video|canvas|svg|input|textarea|select)$/.test(childTag)) {
       meaningfulChildren++;
       if (meaningfulChildren > 1) return false;
     }
