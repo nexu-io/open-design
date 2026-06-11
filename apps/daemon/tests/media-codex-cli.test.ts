@@ -36,6 +36,8 @@ function done(out, code, err) {
 }
 if (mode === 'fail') {
   done('', 1, 'boom: codex blew up\\n');
+} else if (mode === 'quota') {
+  done('', 1, "stream error: You've hit your usage limit. Try again at 3pm.\\n");
 } else if (mode === 'unavailable') {
   done(line('agent_message', 'IMAGE_GEN_UNAVAILABLE'), 0);
 } else if (mode === 'nofile') {
@@ -50,6 +52,32 @@ if (mode === 'fail') {
 }
 `;
 
+// A signed-in ChatGPT subscription auth.json. The provider now pre-checks
+// $CODEX_HOME before spawning, so the spawn-path tests must look like a
+// properly logged-in user (fake token, never a real credential).
+const SUBSCRIPTION_AUTH = JSON.stringify({
+  auth_mode: 'chatgpt',
+  OPENAI_API_KEY: null,
+  tokens: {
+    access_token: 'eyJ.FAKE.subscription',
+    account_id: 'acct_fake',
+    id_token: 'id_fake',
+    refresh_token: 'rt_fake',
+  },
+  last_refresh: '2026-06-11T00:00:00Z',
+});
+const API_KEY_AUTH = JSON.stringify({
+  auth_mode: 'apikey',
+  OPENAI_API_KEY: 'sk-fake-not-real',
+});
+
+async function writeCodexHome(parent: string, name: string, auth: string): Promise<string> {
+  const home = path.join(parent, name);
+  await mkdir(home, { recursive: true });
+  await writeFile(path.join(home, 'auth.json'), auth);
+  return home;
+}
+
 describe('codex-cli image provider', () => {
   let root: string;
   let projectRoot: string;
@@ -57,6 +85,7 @@ describe('codex-cli image provider', () => {
   let codexBinPath: string;
   const originalAllowStubs = process.env.OD_MEDIA_ALLOW_STUBS;
   const originalCodexBin = process.env.CODEX_BIN;
+  const originalCodexHome = process.env.CODEX_HOME;
   const originalMode = process.env.FAKE_CODEX_MODE;
 
   beforeEach(async () => {
@@ -73,6 +102,9 @@ describe('codex-cli image provider', () => {
     // local renderer must never silently degrade to a placeholder image.
     process.env.OD_MEDIA_ALLOW_STUBS = '1';
     process.env.CODEX_BIN = codexBinPath;
+    // Default the spawn-path tests to a signed-in ChatGPT subscription so the
+    // new pre-spawn auth check passes; individual tests override CODEX_HOME.
+    process.env.CODEX_HOME = await writeCodexHome(root, 'codex-home', SUBSCRIPTION_AUTH);
   });
 
   afterEach(async () => {
@@ -82,6 +114,7 @@ describe('codex-cli image provider', () => {
     };
     restore('OD_MEDIA_ALLOW_STUBS', originalAllowStubs);
     restore('CODEX_BIN', originalCodexBin);
+    restore('CODEX_HOME', originalCodexHome);
     restore('FAKE_CODEX_MODE', originalMode);
     await rm(root, { recursive: true, force: true });
   });
@@ -156,5 +189,27 @@ describe('codex-cli image provider', () => {
       if (savedPath == null) delete process.env.PATH;
       else process.env.PATH = savedPath;
     }
+  });
+
+  it('fails fast with switch-to-subscription guidance under API-key auth', async () => {
+    // FAKE_CODEX_MODE=success would return a real image if codex ran — so a
+    // rejection here proves the pre-spawn auth gate fired before any turn.
+    process.env.FAKE_CODEX_MODE = 'success';
+    process.env.CODEX_HOME = await writeCodexHome(root, 'apikey-home', API_KEY_AUTH);
+    await expect(generate()).rejects.toThrow(/API key[\s\S]*codex login|codex login[\s\S]*ChatGPT/i);
+  });
+
+  it('fails fast when Codex is not signed in', async () => {
+    process.env.FAKE_CODEX_MODE = 'success';
+    process.env.CODEX_HOME = path.join(root, 'no-such-codex-home');
+    await expect(generate()).rejects.toThrow(/not signed in[\s\S]*codex login/i);
+  });
+
+  it('classifies a ChatGPT usage-limit failure as quota (not a generic exit)', async () => {
+    process.env.FAKE_CODEX_MODE = 'quota';
+    // Assert on wording unique to the classifier — the generic "exited exit 1"
+    // message would already echo codex's "usage limit" stderr tail, so only a
+    // classifier-only phrase proves the quota branch actually ran.
+    await expect(generate()).rejects.toThrow(/resets on a rolling window/i);
   });
 });

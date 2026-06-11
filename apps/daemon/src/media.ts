@@ -84,6 +84,11 @@ import {
   codexNeedsDangerFullAccessSandbox,
 } from './runtimes/defs/codex.js';
 import { applyAgentLaunchEnv, resolveAgentLaunch } from './runtimes/launch.js';
+import {
+  codexImageAuthErrorMessage,
+  codexImageFailureMessage,
+  inspectCodexImageAuth,
+} from './codex-image-auth.js';
 
 const execFile = promisify(execFileCb);
 type ProviderConfig = { apiKey?: string; baseUrl?: string; model?: string };
@@ -3821,6 +3826,15 @@ async function renderCodexCliImage(ctx: MediaContext, onProgress?: ProgressFn): 
         'then this model generates images with no OPENAI_API_KEY.',
     );
   }
+  // Fail fast before spawning a multi-minute codex turn: image_gen only works
+  // on a ChatGPT-plan login. Detect API-key / programmatic / third-party /
+  // not-signed-in up front from $CODEX_HOME and return precise switch-to-
+  // subscription guidance, instead of letting the user wait out a whole turn
+  // for a vague "no image" error.
+  const authVerdict = await inspectCodexImageAuth(process.env);
+  if (!authVerdict.ok) {
+    throw new Error(codexImageAuthErrorMessage(authVerdict));
+  }
   const childEnv = applyAgentLaunchEnv(process.env, launch);
 
   // Render into a private temp workspace, not the project dir: the codex
@@ -3937,6 +3951,10 @@ function runCodexImageGen(
     let unavailable = false;
     let stderrTail = '';
     let stdoutBuf = '';
+    // Agent text kept (bounded) only to classify a non-zero exit into
+    // auth / quota / transient — a ChatGPT usage-limit message can land here
+    // rather than on stderr.
+    let agentTextTail = '';
 
     const finish = (fn: () => void): void => {
       if (settled) return;
@@ -3950,6 +3968,7 @@ function runCodexImageGen(
       if (!line) return;
       const text = extractCodexAgentText(line);
       if (text) {
+        agentTextTail = `${agentTextTail}\n${text}`.slice(-4000);
         // Anchor on a line that *is* the sentinel (the prompt asks codex to
         // "print exactly IMAGE_GEN_UNAVAILABLE"), so a message that merely
         // mentions the marker can't reject an otherwise-successful run.
@@ -4032,7 +4051,15 @@ function runCodexImageGen(
         }
         const reason = signal ? `signal ${signal}` : `exit ${code}`;
         const tail = stderrTail.trim().split('\n').slice(-12).join('\n');
-        reject(new Error(`codex image_gen exited ${reason}` + (tail ? `\n${tail}` : '')));
+        reject(
+          new Error(
+            codexImageFailureMessage({
+              reason,
+              tail,
+              output: `${stderrTail}\n${agentTextTail}`,
+            }),
+          ),
+        );
       });
     });
   });
