@@ -1,6 +1,8 @@
 <h1 align="center">Open Design: 오픈소스 Claude Design 대안</h1>
 
-> 🔥 **Open Design 0.9.0 출시: 설정 없이 바로 창작하세요.** [공식 Model Router](https://open-design.ai/amr)가 앱에 그대로 내장되어 있습니다 — 추가 설정도, 설치할 CLI도, 준비할 API 키도 필요 없습니다. 앱을 열고 로그인한 뒤 곧바로 디자인하고 창작하세요. [0.9.0 다운로드](https://github.com/nexu-io/open-design/releases) · [토론 참여하기](https://github.com/nexu-io/open-design/discussions/3524)
+> 🔥 **Open Design 0.10.0 출시: 올인원 Agentic 디자인 워크스페이스.** 디자인의 모든 과정이 이제 하나의 창 안에서 이루어집니다 — 막연한 아이디어에서 출발해 레퍼런스 발견, 소재 수집, 인터랙티브 편집, 코멘트 큐잉, 모션 다듬기, 그리고 에디터나 Code Agent로의 인계까지, 앱을 떠나지 않고 완성하세요. 여러 세션을 병렬로 실행하면, 더 이상 한 명의 어시스턴트가 아니라 당신을 위해 일하는 로컬 디자인 팀처럼 느껴집니다. [0.10.0 다운로드](https://github.com/nexu-io/open-design/releases) · [토론 참여하기](https://github.com/nexu-io/open-design/discussions/4153)
+>
+> ⚡ **Open Design AMR (Agentic Model Router) — 공식 모델 서비스.** 한 번의 충전으로 Open Design 안에서 GPT, Claude, Gemini, DeepSeek를 바로 사용하세요. 20+ 플래그십 모델, 무설정, 실제 토큰 사용량 기반 과금. [AMR 사용해 보기](https://open-design.ai/amr/)
 >
 > 🏅 **Open Design Fellow 프로그램이 지금 열렸습니다.** 디자인은 열려 있어야 한다고 믿으신다면 — Open Design Fellow가 되어 핵심 팀과 함께 제품을 빚어내고, 더 많은 사람이 디자인의 미래를 정의하는 일에 참여하도록 도와주세요. 자세히 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 및 [Discord](https://discord.gg/qhbcCH8Am4).
 
@@ -11,6 +13,7 @@
 <p align="center">
   <a href="https://open-design.ai/">웹사이트</a> ·
   <a href="https://open-design.ai/">다운로드</a> ·
+  <a href="https://open-design.ai/amr/">Model Router</a> ·
   <a href="https://discord.gg/qhbcCH8Am4">Discord</a> ·
   <a href="https://x.com/nexudotio">@nexudotio 팔로우</a>
 </p>
@@ -116,13 +119,13 @@ Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Hom
 | [Cursor](https://www.cursor.com/cli) | ✅ 지원됨 | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 지원됨 | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 지원됨 | `od mcp install copilot` |
-| Gemini CLI | ✅ 지원됨 | `od mcp install gemini` |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ 지원됨 | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ 지원됨 | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ 지원됨 | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ 지원됨 | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ 지원됨 | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ 지원됨 | `od mcp install trae` |
-| Kimi CLI | ✅ 지원됨 | `od mcp install kimi` |
+| [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ 지원됨 | `od mcp install kimi` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ 지원됨 | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ 지원됨 | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ 지원됨 | `od mcp install hermes` |
