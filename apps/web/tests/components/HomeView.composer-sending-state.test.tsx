@@ -23,10 +23,10 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-function stubPluginsFetch() {
+function stubPluginsFetch(plugins: unknown[] = []) {
   vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => {
     if (typeof url === 'string' && url === '/api/plugins') {
-      return new Response(JSON.stringify({ plugins: [] }), {
+      return new Response(JSON.stringify({ plugins }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -34,6 +34,26 @@ function stubPluginsFetch() {
     throw new Error(`unexpected fetch ${url}`);
   }));
 }
+
+const WEB_PROTOTYPE_PLUGIN = {
+  id: 'example-web-prototype',
+  title: 'Web Prototype',
+  version: '0.1.0',
+  trust: 'bundled' as const,
+  sourceKind: 'bundled' as const,
+  source: '/tmp/web-prototype',
+  capabilitiesGranted: ['prompt:inject'],
+  fsPath: '/tmp/web-prototype',
+  installedAt: 0,
+  updatedAt: 0,
+  manifest: {
+    name: 'example-web-prototype',
+    title: 'Web Prototype',
+    version: '0.1.0',
+    description: 'General-purpose desktop web prototype.',
+    od: { kind: 'scenario', taskKind: 'new-generation' },
+  },
+};
 
 function renderHome(onSubmit: (payload: unknown) => Promise<boolean> | void) {
   // Keep the first-run guide quiet so sheen classes never race the
@@ -110,5 +130,71 @@ describe('home composer sending state', () => {
     // The failure path must leave the composer retryable.
     fireEvent.click(submit);
     expect(onSubmit).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not spend the one-shot example-prompt marker on a failed create', async () => {
+    // The example-prompt override is a one-shot localStorage marker. A
+    // rejected create keeps the composer retryable, so the marker must not
+    // be consumed until the create is accepted — otherwise the retry drops
+    // examplePromptContext and the user loses the example flow they picked.
+    const onSubmit = vi
+      .fn<(payload: unknown) => Promise<boolean>>()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    writeHomeGuideStage('done');
+    // The prototype rail binds the example plugin, so its apply roundtrip
+    // must succeed for submit() to reach onSubmit.
+    vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/apply')) {
+        return new Response(JSON.stringify({ ok: true, appliedPlugin: { snapshotId: 'snap-1' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+    render(
+      <I18nProvider initial="en">
+        <HomeView
+          projects={[]}
+          onSubmit={onSubmit}
+          onOpenProject={() => undefined}
+          onViewAllProjects={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    // Seeding through a fallback prompt-example card is what arms the
+    // examplePromptContext marker.
+    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    const exampleCards = await screen.findAllByTestId('home-hero-prompt-example');
+    fireEvent.click(exampleCards[0]!);
+
+    const submit = (await screen.findByTestId('home-hero-submit')) as HTMLButtonElement;
+    await waitFor(() => expect(submit.disabled).toBe(false));
+
+    fireEvent.click(submit);
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect((onSubmit.mock.calls[0]![0] as { examplePromptContext?: unknown }).examplePromptContext).toBeTruthy();
+
+    // Create was rejected: the marker stays unspent so the retry resends it.
+    await waitFor(() => expect(submit.disabled).toBe(false));
+    expect(window.localStorage.getItem('od:example-prompt-used')).toBeNull();
+
+    fireEvent.click(submit);
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+    expect((onSubmit.mock.calls[1]![0] as { examplePromptContext?: unknown }).examplePromptContext).toBeTruthy();
+
+    // Only now — after an accepted create — is the one-shot marker spent.
+    await waitFor(() => {
+      expect(window.localStorage.getItem('od:example-prompt-used')).toBe('1');
+    });
   });
 });

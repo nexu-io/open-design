@@ -1546,6 +1546,14 @@ export function HomeView({
         sessionMode === 'design'
           ? submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
           : submittedActive?.record.id ?? null;
+      // The example-prompt override is a one-shot marker. Decide whether to
+      // send it now, but defer spending the marker until the create is
+      // accepted — a rejected attempt stays retryable and must resend it.
+      const examplePromptKey = 'od:example-prompt-used';
+      const examplePromptToSend =
+        examplePromptInfoRef.current != null && localStorage.getItem(examplePromptKey) == null
+          ? examplePromptInfoRef.current
+          : null;
       const accepted = await onSubmit({
         prompt: trimmed,
         pluginId: routedPluginId,
@@ -1565,18 +1573,14 @@ export function HomeView({
         ...(workingDir ? { workingDir } : {}),
         ...(workingDirToken ? { workingDirToken } : {}),
         conversationMode: sessionMode,
-        ...(() => {
-          if (!examplePromptInfoRef.current) return {};
-          const key = 'od:example-prompt-used';
-          if (localStorage.getItem(key)) return {};
-          localStorage.setItem(key, '1');
-          return { examplePromptContext: examplePromptInfoRef.current };
-        })(),
+        ...(examplePromptToSend ? { examplePromptContext: examplePromptToSend } : {}),
       });
       if (accepted === false) {
         setError('Failed to start the run. Make sure the daemon is reachable, then try again.');
         return;
       }
+      // Create accepted — now it is safe to spend the one-shot marker.
+      if (examplePromptToSend) localStorage.setItem(examplePromptKey, '1');
       // Only drop the staged contexts once the run actually started — a
       // rejected creation keeps them so the retry sends the same payload.
       setSelectedPluginContexts([]);
