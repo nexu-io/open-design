@@ -79,6 +79,10 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://github.com/Hmbown/CodeWhale',
     docsUrl: 'https://github.com/Hmbown/CodeWhale/blob/main/README.md',
   },
+  codebuddy: {
+    installUrl: 'https://www.codebuddy.cn',
+    docsUrl: 'https://www.codebuddy.cn/docs/workbuddy/Overview',
+  },
 };
 
 function sanitizeHttpsUrl(value: string | undefined): string | undefined {
