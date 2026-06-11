@@ -1465,10 +1465,17 @@ export function resolveStaticSpaFallbackPath(req, staticDir) {
   return indexPath;
 }
 
-export function registerStaticSpaFallback(app, staticDir) {
+export function registerStaticSpaFallback(
+  app,
+  staticDir,
+  accessTokenCookie?: string | null,
+) {
   app.get('/*splat', (req, res, next) => {
     const indexPath = resolveStaticSpaFallbackPath(req, staticDir);
     if (indexPath == null) return next();
+    if (accessTokenCookie) {
+      res.setHeader('Set-Cookie', accessTokenCookie);
+    }
     res.sendFile(indexPath);
   });
 }
@@ -3384,6 +3391,23 @@ function isLoopbackPeerAddress(address) {
   return false;
 }
 
+/**
+ * Parse a Cookie header string into a {name: value} map.
+ * Lightweight inline helper — no dependency on cookie-parser.
+ */
+export function parseCookies(cookieHeader: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!cookieHeader) return result;
+  for (const part of cookieHeader.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx < 0) continue;
+    const key = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    if (key) result[key] = decodeURIComponent(value);
+  }
+  return result;
+}
+
 const PROJECT_PREVIEW_SCOPE_TTL_MS = 60 * 60 * 1000;
 const PROJECT_PREVIEW_ASSET_PATH_RE = /^\/projects\/([^/]+)\/preview\/([^/]+)\/.+$/u;
 
@@ -4646,6 +4670,15 @@ export async function startServer({
   // the desktop / dev flow remains unchanged.
   const authMode: AuthMode = resolveAuthMode();
   const accessToken = (process.env.OD_ACCESS_TOKEN ?? process.env.OD_API_TOKEN ?? '').trim();
+
+  // Pre-compute the Set-Cookie header value for the token bridge.
+  // The cookie is injected on HTML responses so the browser auto-sends
+  // the token on every same-origin /api/* request. Only set when the
+  // daemon is in access-token mode (OD_ACCESS_TOKEN is configured).
+  const accessTokenCookie = accessToken
+    ? `od_access_token=${encodeURIComponent(accessToken)}; Path=/; SameSite=Lax`
+    : null;
+
   if (!isLoopbackHostname(host) && authMode === 'none') {
     throw new Error(
       `OD_BIND_HOST=${host} requires authentication. ` +
@@ -4726,6 +4759,16 @@ export async function startServer({
       // bearer; the loopback bypass exists for the localhost desktop
       // UI which has no proxy in the path.
       if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
+
+      // Cookie-based token bridge: the daemon sets od_access_token on the
+      // initial HTML response; the browser auto-sends it with every same-
+      // origin /api/* request. This avoids the 401 cascade in Docker and
+      // reverse-proxy deployments where the browser's remote address is
+      // not loopback.
+      const cookies = parseCookies(req.get('cookie') ?? '');
+      const cookieToken = cookies['od_access_token'];
+      if (cookieToken && cookieToken === accessToken) return next();
+
       const auth = req.get('authorization') ?? '';
       const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
       if (!match || match[1] !== accessToken) {
@@ -5221,7 +5264,13 @@ export async function startServer({
   });
 
   if (fs.existsSync(STATIC_DIR)) {
-    app.use(express.static(STATIC_DIR));
+    app.use(express.static(STATIC_DIR, {
+      setHeaders: (res, filePath) => {
+        if (accessTokenCookie && filePath.endsWith('index.html')) {
+          res.setHeader('Set-Cookie', accessTokenCookie);
+        }
+      },
+    }));
   }
 
   app.get('/api/health', async (_req, res) => {
@@ -15422,7 +15471,7 @@ export async function startServer({
     telemetry: { reportFinalizedMessage, reportFeedback },
   });
 
-  registerStaticSpaFallback(app, STATIC_DIR);
+  registerStaticSpaFallback(app, STATIC_DIR, accessTokenCookie);
 
   // Wait for `listen` to bind so callers always see the resolved URL —
   // critical when port=0 (ephemeral port) and when the embedding sidecar
