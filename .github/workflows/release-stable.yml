@@ -24,6 +24,11 @@ on:
         required: false
         type: boolean
         default: false
+      skip_nightly_gate:
+        description: "channel=stable only: skip the validated-nightly metadata gate (escape hatch when the gate blocks an otherwise-good release). Build still produces freshly signed artifacts."
+        required: false
+        type: boolean
+        default: false
       ref:
         description: "Optional git ref (branch/tag/SHA) to build. Empty builds the ref this workflow was dispatched on."
         required: false
@@ -48,6 +53,11 @@ on:
         default: ""
       dry_run:
         description: "Validate release inputs and read-only remote gates without building or publishing."
+        required: false
+        type: boolean
+        default: false
+      skip_nightly_gate:
+        description: "channel=stable only: skip the validated-nightly metadata gate."
         required: false
         type: boolean
         default: false
@@ -141,6 +151,7 @@ jobs:
       OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
       OPEN_DESIGN_STABLE_NIGHTLY_VERSION: ${{ inputs.nightly_version }}
       OPEN_DESIGN_STABLE_VERSION: ${{ inputs.release_version }}
+      OPEN_DESIGN_SKIP_STABLE_NIGHTLY_GATE: ${{ inputs.skip_nightly_gate }}
     outputs:
       base_version: ${{ steps.stable.outputs.base_version }}
       branch: ${{ steps.stable.outputs.branch }}
