@@ -136,6 +136,13 @@ describe('DesignsTab select mode', () => {
       expect(onRefresh).toHaveBeenCalledTimes(1);
     });
     expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 15000);
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+
     onRefresh.mockClear();
 
     await act(async () => {

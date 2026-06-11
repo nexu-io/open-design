@@ -305,12 +305,18 @@ export function DesignsTab({
 		[analytics.track, onRefresh, t],
 	);
 
+	const refreshProjectsListRef = useRef(refreshProjectsList);
 	useEffect(() => {
-		if (!isActive || !onRefresh) return;
+		refreshProjectsListRef.current = refreshProjectsList;
+	}, [refreshProjectsList]);
+
+	const hasProjectsRefresh = Boolean(onRefresh);
+	useEffect(() => {
+		if (!isActive || !hasProjectsRefresh) return;
 
 		const refreshIfVisible = () => {
 			if (document.visibilityState !== "visible") return;
-			void refreshProjectsList("auto");
+			void refreshProjectsListRef.current("auto");
 		};
 
 		refreshIfVisible();
@@ -322,7 +328,7 @@ export function DesignsTab({
 			window.removeEventListener("focus", refreshIfVisible);
 			document.removeEventListener("visibilitychange", refreshIfVisible);
 		};
-	}, [isActive, onRefresh, refreshProjectsList]);
+	}, [hasProjectsRefresh, isActive]);
 
 	const filtered = useMemo(() => {
 		const q = filter.trim().toLowerCase();
