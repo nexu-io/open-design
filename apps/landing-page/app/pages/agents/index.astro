@@ -34,18 +34,18 @@ const tiers = [
     agents: [
       { slug: 'claude-code', name: 'Claude Code',     vendor: 'Anthropic',     key: 'Anthropic API key (BYOK) or Claude subscription' },
       { slug: 'codex',       name: 'Codex',           vendor: 'OpenAI',        key: 'OpenAI API key (BYOK) or ChatGPT subscription' },
-      { slug: 'cursor',      name: 'Cursor Agent',    vendor: 'Cursor',        key: 'Cursor account (uses your provider keys)' },
+      { slug: 'cursor',      name: 'Cursor',    vendor: 'Cursor',        key: 'Cursor account (uses your provider keys)' },
       { slug: 'gemini',      name: 'Gemini CLI',      vendor: 'Google',        key: 'Google AI Studio key (BYOK)' },
       { slug: 'copilot',     name: 'GitHub Copilot CLI', vendor: 'GitHub',     key: 'GitHub Copilot subscription' },
       { slug: 'opencode',    name: 'OpenCode',        vendor: 'community',     key: 'Provider keys via OpenCode config (BYOK)' },
-      { slug: 'qwen',        name: 'Qwen',            vendor: 'Alibaba',       key: 'DashScope / Qwen API key (BYOK)' },
+      { slug: 'qwen',        name: 'Qwen Code',            vendor: 'Alibaba',       key: 'DashScope / Qwen API key (BYOK)' },
     ],
   },
   {
     label: page.tiers[1].label,
     blurb: page.tiers[1].blurb,
     agents: [
-      { slug: 'grok',   name: 'Grok',                 vendor: 'xAI',           key: 'xAI SuperGrok OAuth (`grok login --oauth`)' },
+      { slug: 'grok',   name: 'Grok CLI',                 vendor: 'xAI',           key: 'xAI SuperGrok OAuth (`grok login --oauth`)' },
       { slug: 'hermes', name: 'Hermes',               vendor: 'community',     key: 'xAI / OpenAI / Anthropic keys via `hermes auth add`' },
       { slug: 'kimi',   name: 'Kimi CLI',             vendor: 'Moonshot',      key: 'Moonshot API key (BYOK)' },
       { slug: 'devin',  name: 'Devin for Terminal',   vendor: 'Cognition',     key: 'Devin account' },
