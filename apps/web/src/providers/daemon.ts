@@ -47,6 +47,7 @@ function detectClientType(): 'desktop' | 'web' | 'unknown' {
   return 'unknown';
 }
 import { parseSseFrame } from './sse';
+import { summarizeArtifactsForTranscript } from '../artifacts/strip';
 import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observability/stuck-run';
 
 const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
@@ -174,6 +175,15 @@ export function sanitizePriorAssistantTurnForTranscript(content: string): string
       return match;
     },
   );
+  // Replace prior-turn `<artifact>` HTML with a one-line summary. The full
+  // artifact already lives in the project files; the agent reads/edits it from
+  // disk, never from this transcript copy. Re-sending the whole document each
+  // turn (truncated to 12K chars below, but still ~3K tokens) is pure waste —
+  // a summary keeps the metadata the agent needs (identifier/title/type) and
+  // points it at the on-disk file. Runs before truncateForTranscript so the
+  // summarized message no longer trips the 12K cap. Uses markdown-aware
+  // detection so a literal `<artifact>` recited in a code fence survives.
+  sanitized = summarizeArtifactsForTranscript(sanitized);
   return sanitized;
 }
 
