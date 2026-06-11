@@ -511,6 +511,9 @@ jobs:
         run: pnpm -r --filter '!@open-design/landing-page' --workspace-concurrency=1 --if-present run build
 
   validate:
+    # Legacy `ci` remains the current factual gate surface. Keep this job on
+    # `Validate workspace` until a later ruleset follow-up explicitly moves the
+    # required check over to `Validate workspace gate` from `ci-gate`.
     name: Validate workspace
     needs:
       - change_scopes
