@@ -1627,12 +1627,22 @@
   font-weight: 600;
   box-shadow: none;
 }
-/* The session-mode ("Design"/CLI) toggle and the agent avatar are authored in
-   their own components and default to 32px. The composer now mounts under
-   .chat-composer-fixed-layer (a body-level portal), so chat.css's .app-scoped
-   normalization never reaches them and they drift taller than the + and the
-   working-dir pill. Pin both to the same 28px control height here — this is the
-   last-loaded stylesheet, so it wins — so the toolbar reads as one row. */
+@container (max-width: 430px) {
+  .app .composer-row .composer-send,
+  .chat-composer-fixed-layer .composer-row .composer-send {
+    width: 32px;
+    min-width: 32px;
+    padding: 0;
+  }
+  .app .composer-row .composer-send > svg,
+  .chat-composer-fixed-layer .composer-row .composer-send > svg {
+    flex: 0 0 auto;
+  }
+}
+/* The session-mode ("Design") toggle and the agent avatar are authored in
+   their own components and default to 32px. The composer can mount under
+   .chat-composer-fixed-layer (a body-level portal), so pair the selectors and
+   keep them on the same 28px toolbar rhythm. */
 .app .composer-row .session-mode-toggle,
 .app .composer-row .session-mode-toggle__trigger,
 .app .composer-row .avatar-agent-trigger,
@@ -1642,6 +1652,28 @@
   height: 28px;
   min-height: 28px;
   box-sizing: border-box;
+}
+.app .composer-row .avatar-agent-trigger,
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger {
+  display: inline-flex;
+  width: auto;
+  min-width: 47px;
+  grid-template-columns: none;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 7px;
+}
+.app .composer-row .avatar-agent-trigger .agent-icon,
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger .agent-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+.app .composer-row .avatar-agent-trigger > :last-child,
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger > :last-child {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
 }
 .app .composer-send:disabled {
   background: var(--bg-subtle);

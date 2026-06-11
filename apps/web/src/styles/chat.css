@@ -934,8 +934,12 @@
   .composer-row .session-mode-toggle__popover { left: auto; right: 0; }
   .composer-row .composer-send {
     width: 32px;
+    min-width: 32px;
     padding: 0;
     gap: 0;
+  }
+  .composer-row .composer-send > svg {
+    flex: 0 0 auto;
   }
   .composer-row .composer-send span { display: none; }
 }
