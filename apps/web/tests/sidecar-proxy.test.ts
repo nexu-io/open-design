@@ -10,6 +10,7 @@ import {
   createStandaloneServerArgs,
   normalizeDaemonProxyOriginHeader,
   resolveDaemonProxyTarget,
+  resolveNextBundlerOptions,
   resolveStandaloneBackendOrigin,
   resolveStandaloneServerEntry,
 } from '../sidecar/server';
@@ -136,6 +137,36 @@ describe('standalone backend binding', () => {
     expect(env.PORT).toBe('5876');
     expect(env.NODE_ENV).toBe('production');
     expect(env.OD_STANDALONE_PARENT_PID).toBe('1234');
+  });
+});
+
+describe('resolveNextBundlerOptions', () => {
+  it('uses webpack for local dev by default to avoid stale Turbopack chunk graphs', () => {
+    const previous = process.env.OD_WEB_DEV_BUNDLER;
+    delete process.env.OD_WEB_DEV_BUNDLER;
+
+    try {
+      expect(resolveNextBundlerOptions(true)).toEqual({ webpack: true });
+    } finally {
+      if (previous == null) delete process.env.OD_WEB_DEV_BUNDLER;
+      else process.env.OD_WEB_DEV_BUNDLER = previous;
+    }
+  });
+
+  it('lets local developers explicitly opt back into Turbopack', () => {
+    const previous = process.env.OD_WEB_DEV_BUNDLER;
+    process.env.OD_WEB_DEV_BUNDLER = 'turbopack';
+
+    try {
+      expect(resolveNextBundlerOptions(true)).toEqual({ turbopack: true });
+    } finally {
+      if (previous == null) delete process.env.OD_WEB_DEV_BUNDLER;
+      else process.env.OD_WEB_DEV_BUNDLER = previous;
+    }
+  });
+
+  it('does not force a bundler for production mode', () => {
+    expect(resolveNextBundlerOptions(false)).toEqual({});
   });
 });
 
