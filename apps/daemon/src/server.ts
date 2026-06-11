@@ -34,6 +34,12 @@ import {
   PLUGIN_PREVIEWS_ROUTE,
 } from './plugin-preview-bakes.js';
 import { userFacingAgentLabel } from './user-facing-agent-label.js';
+import {
+  buildBrowserUseRunState,
+  collectBrowserUseDiscoveryFacts,
+  isBrowserUseRequested,
+  renderBrowserUseUnavailablePrompt,
+} from './browser-use-diagnostics.js';
 
 export { resolveProjectRoot };
 import { createCommandInvocation } from '@open-design/platform';
@@ -11320,6 +11326,17 @@ export async function startServer({
     ) {
       return design.runs.fail(run, 'BAD_REQUEST', 'message required');
     }
+    const browserUseRunState = buildBrowserUseRunState({
+      requested: isBrowserUseRequested(message, currentPrompt, systemPrompt),
+      agentId: def.id,
+    });
+    if (browserUseRunState) {
+      run.browserUse = browserUseRunState;
+      design.runs.emit(run, 'diagnostic', {
+        type: 'browser_use_unavailable',
+        ...browserUseRunState,
+      });
+    }
     if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
     const runId = run.id;
 
@@ -11690,9 +11707,10 @@ export async function startServer({
       agentResumeCtx.storedStablePromptHash,
       currentStableHash,
     );
+    const browserUsePromptGuard = renderBrowserUseUnavailablePrompt(run.browserUse ?? null);
     const clientInstructionParts = includeStableInstructions
-      ? [researchCommandContract, runContextPrompt, systemPrompt]
-      : [researchCommandContract, runContextPrompt];
+      ? [researchCommandContract, runContextPrompt, browserUsePromptGuard, systemPrompt]
+      : [researchCommandContract, runContextPrompt, browserUsePromptGuard];
     const clientInstructionPrompt = clientInstructionParts
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
@@ -11755,6 +11773,7 @@ export async function startServer({
         { kind: 'runtimeToolPrompt', content: runtimeToolPrompt },
         { kind: 'researchCommandContract', content: researchCommandContract },
         { kind: 'runContextPrompt', content: runContextPrompt },
+        { kind: 'browserUsePromptGuard', content: browserUsePromptGuard },
         { kind: 'clientSystemPrompt', content: clientInstructionPrompt },
         { kind: 'echoGuard', content: ECHO_GUARD },
         { kind: 'userRequest', content: userRequestPrompt },
@@ -12724,11 +12743,20 @@ export async function startServer({
       ));
       return design.runs.finish(run, 'failed', 1, null);
     }
+    const browserUseRuntimeEnv = run.browserUse
+      ? {
+          OD_BROWSER_USE_REQUESTED: run.browserUse.requested ? '1' : '0',
+          OD_BROWSER_USE_AVAILABLE: run.browserUse.available ? '1' : '0',
+          ...(run.browserUse.reason ? { OD_BROWSER_USE_UNAVAILABLE_REASON: run.browserUse.reason } : {}),
+          OD_BROWSER_USE_REGISTRY_PATH: run.browserUse.diagnostics?.registryPath ?? '',
+        }
+      : {};
     const agentSpawnEnv = spawnEnvForAgent(
       def.id,
       {
         ...createAgentRuntimeEnv(process.env, daemonUrl, toolTokenGrant),
         ...(def.env || {}),
+        ...browserUseRuntimeEnv,
       },
       configuredAgentEnv,
       undefined,
