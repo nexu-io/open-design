@@ -70,6 +70,7 @@ export function minimalAgentDef(
   };
 }
 
+export const amp = requireAgent('amp');
 export const codex = requireAgent('codex');
 export const hermes = requireAgent('hermes');
 export const kimi = requireAgent('kimi');
