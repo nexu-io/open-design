@@ -11,6 +11,7 @@ import { parseDesignSystemRenameArgs } from './design-system-rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
+import { diffLine } from './diff-line.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 import {
@@ -5669,17 +5670,6 @@ function diffLineBody(oldLines, newLines) {
   return out;
 }
 
-function diffLine(prefix, line) {
-  const value = String(line);
-  if (value.endsWith('\r\n')) return `${prefix}${renderDiffLineContent(value.slice(0, -1))}`;
-  if (value.endsWith('\n')) return `${prefix}${renderDiffLineContent(value.slice(0, -1))}`;
-  if (value.endsWith('\r')) return `${prefix}${renderDiffLineContent(value)}`;
-  return `${prefix}${renderDiffLineContent(value)}\n\\ No newline at end of file`;
-}
-
-function renderDiffLineContent(value) {
-  return String(value).replace(/\r/g, '\\r');
-}
 
 // `od templates …` is the headless face of NewProjectPanel /
 // ExamplesTab — same /api/templates store, same DTO shapes. External
