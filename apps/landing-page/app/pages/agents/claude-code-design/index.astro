@@ -45,7 +45,7 @@ const jsonLd = [
     '@type': 'BreadcrumbList',
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Open Design', item: homeUrl },
-      { '@type': 'ListItem', position: 2, name: 'Agents', item: agentsHubUrl },
+      { '@type': 'ListItem', position: 2, name: copy.agents.breadcrumb, item: agentsHubUrl },
       { '@type': 'ListItem', position: 3, name: page.breadcrumb, item: pageUrl },
     ],
   },
@@ -69,11 +69,11 @@ const jsonLd = [
 ];
 ---
 
-<Layout title={page.title} description={page.description} active="home" jsonLd={jsonLd}>
+<Layout title={page.title} description={page.description} active="agent" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
     <a href={href('/')}>Open Design</a>
     <span>/</span>
-    <a href={href('/agents/')}>Agents</a>
+    <a href={href('/agents/')}>{copy.agents.breadcrumb}</a>
     <span>/</span>
     <span aria-current="page">{page.breadcrumb}</span>
   </nav>
@@ -181,7 +181,7 @@ const jsonLd = [
           </ol>
         </section>
 
-        <section class="info-cta" aria-label="Open Design call to action">
+        <section class="info-cta" aria-label={rich.ctaTitle}>
           <div>
             <h2>{rich.ctaTitle}</h2>
             <p>{rich.ctaBody}</p>
@@ -279,7 +279,7 @@ const jsonLd = [
           </ol>
         </section>
 
-        <section class="info-cta" aria-label="Open Design call to action">
+        <section class="info-cta" aria-label={page.ctaTitle}>
           <div>
             <h2>{page.ctaTitle}</h2>
             <p>{page.ctaBody}</p>

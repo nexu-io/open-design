@@ -327,9 +327,26 @@ export function Header({
                 </li>
                 {[
                   { route: 'codex-design', name: 'Codex' },
-                  { route: 'cursor-design', name: 'Cursor' },
+                  { route: 'cursor-design', name: 'Cursor Agent' },
                   { route: 'claude-code-design', name: 'Claude Code' },
                   { route: 'opencode-design', name: 'OpenCode' },
+                  { route: 'gemini-design', name: 'Gemini CLI' },
+                  { route: 'copilot-design', name: 'GitHub Copilot CLI' },
+                  { route: 'qwen-design', name: 'Qwen Code' },
+                  { route: 'grok-design', name: 'Grok Build' },
+                  { route: 'kimi-design', name: 'Kimi CLI' },
+                  { route: 'deepseek-design', name: 'DeepSeek TUI' },
+                  { route: 'trae-cli-design', name: 'Trae CLI' },
+                  { route: 'aider-design', name: 'Aider' },
+                  { route: 'antigravity-design', name: 'Antigravity' },
+                  { route: 'reasonix-design', name: 'DeepSeek Reasonix' },
+                  { route: 'hermes-design', name: 'Hermes' },
+                  { route: 'devin-design', name: 'Devin for Terminal' },
+                  { route: 'pi-design', name: 'Pi' },
+                  { route: 'kiro-design', name: 'Kiro CLI' },
+                  { route: 'kilo-design', name: 'Kilo' },
+                  { route: 'vibe-design', name: 'Mistral Vibe CLI' },
+                  { route: 'qoder-design', name: 'Qoder CLI' },
                 ].map((agentItem) => (
                   <li role='none' key={agentItem.route}>
                     <a role='menuitem' href={href(`/agents/${agentItem.route}/`)}>
