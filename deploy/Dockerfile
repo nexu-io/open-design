@@ -78,10 +78,11 @@ COPY craft ./craft
 COPY prompt-templates ./prompt-templates
 COPY assets ./assets
 COPY plugins/_official ./plugins/_official
+COPY deploy/scripts/install-clis.sh ./deploy/scripts/install-clis.sh
 
 FROM ${RUNTIME_IMAGE}
 
-RUN apk add --no-cache tini poppler-utils && \
+RUN apk add --no-cache tini poppler-utils curl bash python3 py3-pip && \
     addgroup -S -g 1001 open-design && \
     adduser -S -D -H -u 1001 -G open-design open-design
 
@@ -101,13 +102,52 @@ COPY --from=build --chown=open-design:open-design /app/assets/community-pets ./a
 # via the same registry path third-party plugins use.
 COPY --from=build --chown=open-design:open-design /app/plugins/_official ./plugins/_official
 
+# ---- Install coding-agent CLIs ----
+# Each CLI is installed without authentication. Users must exec into the
+# container to run each CLI's auth/login flow (e.g. `claude`, `codex auth`,
+# `gemini auth login`, etc.). Config directories are preserved through
+# Docker volumes so credentials survive container restarts.
+COPY --from=build --chown=root:root /app/deploy/scripts/install-clis.sh /tmp/install-clis.sh
+RUN chmod +x /tmp/install-clis.sh && \
+    /tmp/install-clis.sh && \
+    rm /tmp/install-clis.sh
+
+# ---- Persistent CLI config directories ----
+# These directories hold credentials, settings, and auth state for each
+# coding-agent CLI. Mount them as Docker volumes so auth survives restarts.
+RUN mkdir -p \
+    /home/open-design/.claude \
+    /home/open-design/.codex \
+    /home/open-design/.config/gemini \
+    /home/open-design/.config/devin \
+    /home/open-design/.copilot \
+    /home/open-design/.cursor \
+    /home/open-design/.opencode \
+    /home/open-design/.openclaw \
+    /home/open-design/.deepseek \
+    /home/open-design/.qoder \
+    /home/open-design/.pi/agent \
+    /home/open-design/.config/kiro \
+    /home/open-design/.config/kilo \
+    /home/open-design/.vibe \
+    /home/open-design/.trae \
+    /home/open-design/.kimi \
+    /home/open-design/.qwen \
+    /home/open-design/.aider \
+    /home/open-design/.grok \
+    /home/open-design/.reasonix \
+    /home/open-design/.hermes
+
 RUN mkdir -p /app/.od && \
-    chown -R open-design:open-design /app
+    chown -R open-design:open-design /app && \
+    chown -R open-design:open-design /home/open-design
 
 ENV NODE_ENV=production
 ENV NODE_OPTIONS=--max-old-space-size=192
 ENV OD_BIND_HOST=0.0.0.0
 ENV OD_PORT=7456
+# Ensure CLI install prefix is on PATH for the open-design user
+ENV PATH=/usr/local/lib/open-design-clis/npm/bin:/usr/local/lib/open-design-clis/pip/bin:${PATH}
 
 EXPOSE 7456
 

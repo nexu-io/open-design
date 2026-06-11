@@ -33,6 +33,12 @@ import {
   PLUGIN_PREVIEWS_ROUTE,
 } from './plugin-preview-bakes.js';
 import { userFacingAgentLabel } from './user-facing-agent-label.js';
+import {
+  createCloudflareAccessMiddleware,
+  resolveAuthMode,
+  resolveCloudflareAccessConfig,
+  type AuthMode,
+} from './cf-access-middleware.js';
 
 export { resolveProjectRoot };
 import { createCommandInvocation } from '@open-design/platform';
@@ -2452,7 +2458,7 @@ const PLUGIN_CONTEXT_SKIP_FILES = new Set([
 
 function normalizePluginShareAction(input) {
   const value = typeof input === 'string' ? input.trim() : '';
-  return Object.prototype.hasOwnProperty.call(PLUGIN_SHARE_ACTION_PLUGIN_IDS, value)
+  return  Object.hasOwn(PLUGIN_SHARE_ACTION_PLUGIN_IDS, value)
     ? value
     : null;
 }
@@ -4624,22 +4630,29 @@ export async function startServer({
 
   // Plan §3.K1 / spec §15.7 — bound-API-token guard.
   //
-  // The daemon refuses to bind to a public interface unless an
-  // OD_API_TOKEN is set. This is the spec §16 Phase 5 safety floor:
-  // a hosted operator can no longer accidentally publish an unsecured
-  // daemon by setting OD_BIND_HOST=0.0.0.0 without a token.
+  // The daemon refuses to bind to a public interface unless
+  // OD_API_TOKEN or OD_BEHIND_PROXY=cloudflare is configured.
+  // This is the spec §16 Phase 5 safety floor: a hosted operator can
+  // no longer accidentally publish an unsecured daemon by setting
+  // OD_BIND_HOST=0.0.0.0 without authentication.
+  //
+  // Two auth modes:
+  //   1. OD_BEHIND_PROXY=cloudflare → Cloudflare Access JWT validation
+  //      (requires OD_CF_ACCESS_TEAM_DOMAIN + OD_CF_ACCESS_AUD).
+  //   2. OD_API_TOKEN → bearer-token middleware (existing).
   //
   // Loopback hosts (127.0.0.1 / ::1 / localhost) are always allowed —
-  // the desktop / dev flow remains unchanged. Setting OD_API_TOKEN is
-  // purely additive: when present, every /api/* request must carry a
-  // matching `Authorization: Bearer <token>` header (loopback origins
-  // are exempted so the desktop UI keeps working).
+  // the desktop / dev flow remains unchanged.
+  const authMode: AuthMode = resolveAuthMode();
   const apiToken = (process.env.OD_API_TOKEN ?? '').trim();
-  if (!isLoopbackHostname(host) && apiToken.length === 0) {
+  if (!isLoopbackHostname(host) && authMode === 'none') {
     throw new Error(
-      `OD_BIND_HOST=${host} requires OD_API_TOKEN to be set. ` +
-      `Generate one with \`openssl rand -hex 32\` and re-launch. ` +
-      `(Loopback hosts 127.0.0.1 / ::1 / localhost do not need a token.)`,
+      `OD_BIND_HOST=${host} requires OD_API_TOKEN to be set, ` +
+      `or OD_BEHIND_PROXY=cloudflare with OD_CF_ACCESS_TEAM_DOMAIN ` +
+      `and OD_CF_ACCESS_AUD configured. ` +
+      `Generate a token with \`openssl rand -hex 32\` or configure ` +
+      `Cloudflare Access. ` +
+      `(Loopback hosts 127.0.0.1 / ::1 / localhost do not need auth.)`,
     );
   }
 
@@ -4648,18 +4661,35 @@ export async function startServer({
   app.use(express.json({ limit: '4mb' }));
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
-  // Plan §3.K1 — bearer-token middleware.
+  // =========================================================================
+  // Authentication middleware
   //
-  // Active only when OD_API_TOKEN is set. Loopback origins skip the
-  // check (the desktop UI / local CLI never carry a bearer); every
-  // other request must present `Authorization: Bearer <token>` with a
-  // value matching `OD_API_TOKEN`. Health / readiness / version remain
-  // open so monitoring probes don't need the token. Server-minted
-  // project preview asset scopes are also accepted for GETs so sandboxed
-  // browser iframes can load HTML/CSS/JS without privileged headers.
-  // Rich daemon status stays authenticated because it includes local
-  // runtime paths.
-  if (apiToken.length > 0) {
+  // Two mutually exclusive modes are supported:
+  //
+  //   cf-access:       Cloudflare Access JWT validation (OD_BEHIND_PROXY=cloudflare).
+  //                    Validates Cf-Access-Jwt-Assertion against CF's public JWKS,
+  //                    checks audience, issuer, and expiry.
+  //
+  //   bearer-token:    Simple OD_API_TOKEN (Authorization: Bearer <token>).
+  //                    Loopback origins are exempt so the desktop UI keeps working.
+  //
+  // Health / readiness / version remain open so monitoring probes don't need
+  // auth. Server-minted project preview asset scopes are also accepted for
+  // GETs so sandboxed browser iframes can load HTML/CSS/JS without
+  // privileged headers.
+  // =========================================================================
+
+  if (authMode === 'cf-access') {
+    const cfConfig = resolveCloudflareAccessConfig();
+    if (cfConfig) {
+      console.log(
+        `[cf-access] Cloudflare Access JWT validation ENABLED ` +
+        `(team=${cfConfig.teamDomain}, aud=${cfConfig.aud})`,
+      );
+      app.use('/api', createCloudflareAccessMiddleware(cfConfig));
+    }
+  } else if (authMode === 'bearer-token') {
+    console.log('[auth] Bearer-token middleware ENABLED (OD_API_TOKEN)');
     const openProbePaths = new Set([
       '/health',
       '/api/health',
@@ -6336,7 +6366,7 @@ export async function startServer({
     const { title, seedFromConversationId, forkAfterMessageId } = req.body || {};
     const now = Date.now();
     const hasExplicitSessionMode = Boolean(
-      req.body && Object.prototype.hasOwnProperty.call(req.body, 'sessionMode'),
+      req.body && Object.hasOwn(req.body, 'sessionMode'),
     );
     const requestedForkMessageId =
       typeof forkAfterMessageId === 'string' && forkAfterMessageId
@@ -8766,7 +8796,7 @@ export async function startServer({
     try {
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       const explicitSnapshotId = typeof body.snapshotId === 'string' ? body.snapshotId : '';
-      let snapshotId = explicitSnapshotId;
+      const snapshotId = explicitSnapshotId;
       if (!snapshotId) {
         // Phase 2A keeps `runs` in-memory; the caller must pass `snapshotId`
         // (e.g. the value persisted on the client after the original apply).
@@ -8981,7 +9011,6 @@ export async function startServer({
               .type('text/html')
               .send(rewriteSkillAssetUrls(html, skill.id));
           } catch {
-            continue;
           }
         }
       }

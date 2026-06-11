@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Cloudflare Access JWT validation** via `OD_BEHIND_PROXY=cloudflare`. When enabled, every `/api/*` request must carry a valid `Cf-Access-Jwt-Assertion` header. The JWT is validated against Cloudflare's public JWKS endpoint with key rotation support, full claim validation (alg, exp, nbf, iat, type, aud, iss, identity_nonce), and stale-cache fallback on JWKS fetch failure.
+- **Pre-installed coding-agent CLIs in Docker.** The runtime image now ships 22 coding-agent CLIs (Claude Code, Codex, Gemini, Cursor, Copilot, DeepSeek, Qwen, Qoder, OpenCode, Trae, Kimi, Pi, Vibe, Hermes, Grok, Kiro, Kilo, Reasonix, Aider, Devin) installed under `/usr/local/lib/open-design-clis/`. Each CLI is installed without authentication — users exec into the container to run auth flows.
+- **Persistent CLI config volumes in Docker Compose.** 21 named volumes preserve CLI credentials across container restarts, one per supported coding-agent CLI.
+- **`OD_CF_ACCESS_TEAM_DOMAIN` and `OD_CF_ACCESS_AUD`** environment variables for Cloudflare Access configuration.
+- **`OD_CF_ACCESS_UNSAFE_DOMAIN=1`** to bypass Cloudflare domain validation in development.
+
+### Changed
+
+- **`OD_API_TOKEN` is no longer required** when `OD_BEHIND_PROXY=cloudflare` is configured with valid Cloudflare Access settings. The two auth modes are mutually exclusive.
+- **Docker runtime image** now includes `python3`, `py3-pip`, `bash`, and `curl` for CLI installation support.
+- **Startup guard** now accepts `OD_BEHIND_PROXY=cloudflare` as an alternative to `OD_API_TOKEN` for non-loopback binds.
+
 ## [0.9.0] - 2026-05-29
 
 🎉 **310 PRs · 88 contributors · 7 days** — Meet the **install-and-create release**. No more API-key scavenger hunts. No more asking teammates to install three different CLIs before their first prompt. **Open Design AMR** is now built into the app: sign in once, pick a model, and start building. Around that zero-config first run, 0.9.0 brings a bigger agent bench, faster model picking, a more discoverable plugin marketplace, richer review workflows, smoother Studio tools, and easier installs across Windows, macOS, and Linux. 🚀
