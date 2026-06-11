@@ -79,20 +79,24 @@ export const COMMAND_SPEC: Record<string, CommandSpec> = {
   share: { subcommands: ['url'] },
   project: {
     subcommands: [
-      'create', 'delete', 'editors', 'import', 'import-folder', 'info',
-      'list', 'open-in',
+      'create', 'delete', 'editors', 'handoff', 'import', 'import-folder',
+      'info', 'list', 'open-in',
     ],
   },
+  // runAutomation dispatches the routine lifecycle verbs plus the
+  // ingest/proposal(s)/source(s)/template(s) families.
   automation: {
     subcommands: [
-      'ingest', 'proposal', 'proposals', 'source', 'sources', 'template',
-      'templates',
+      'create', 'crystallize-run', 'delete', 'get', 'ingest', 'list', 'pause',
+      'proposal', 'proposals', 'resume', 'run', 'runs', 'source', 'sources',
+      'template', 'templates', 'update',
     ],
   },
   automations: {
     subcommands: [
-      'ingest', 'proposal', 'proposals', 'source', 'sources', 'template',
-      'templates',
+      'create', 'crystallize-run', 'delete', 'get', 'ingest', 'list', 'pause',
+      'proposal', 'proposals', 'resume', 'run', 'runs', 'source', 'sources',
+      'template', 'templates', 'update',
     ],
   },
   memory: { subcommands: ['tree'] },
@@ -103,16 +107,20 @@ export const COMMAND_SPEC: Record<string, CommandSpec> = {
     subcommands: ['db', 'info', 'list', 'new', 'start', 'status', 'stop'],
   },
   chat: { subcommands: ['new'] },
-  daemon: { subcommands: ['db', 'start', 'status', 'stop', 'vacuum', 'verify'] },
+  // runDaemon dispatches start/status/stop/db only. `vacuum`/`verify` live
+  // under `od daemon db`, not at the top level, so they are NOT listed here.
+  daemon: { subcommands: ['db', 'start', 'status', 'stop'] },
   atoms: { subcommands: ['info', 'list', 'show'] },
-  skills: { subcommands: [] },
+  // skills/craft go through runLibraryList, which accepts list/show.
+  skills: { subcommands: ['list', 'show'] },
   'design-systems': {
+    // Explicit verbs plus the runLibraryList fallback (list/show).
     subcommands: [
       'rename', 'import-local', 'import-github', 'import-shadcn',
-      'rebuild-token-contract',
+      'rebuild-token-contract', 'list', 'show',
     ],
   },
-  craft: { subcommands: [] },
+  craft: { subcommands: ['list', 'show'] },
   diagnostics: { subcommands: [] },
   status: { subcommands: [] },
   version: { subcommands: [] },

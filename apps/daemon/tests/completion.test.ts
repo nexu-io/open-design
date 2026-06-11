@@ -210,7 +210,8 @@ describe('COMMAND_SPEC integrity', () => {
 const KNOWN_SUBCOMMANDS: Record<string, string[]> = {
   config: ['get', 'set', 'list', 'unset'],
   ui: ['list', 'show', 'respond', 'revoke', 'prefill'],
-  daemon: ['db', 'start', 'status', 'stop', 'vacuum', 'verify'],
+  // Only top-level daemon verbs; vacuum/verify live under `daemon db`.
+  daemon: ['db', 'start', 'status', 'stop'],
   atoms: ['info', 'list', 'show'],
   chat: ['new'],
   memory: ['tree'],
@@ -218,10 +219,33 @@ const KNOWN_SUBCOMMANDS: Record<string, string[]> = {
   files: ['delete', 'diff', 'list', 'read', 'upload', 'write'],
   templates: ['delete', 'list', 'save'],
   conversation: ['db', 'info', 'list', 'new', 'start', 'status', 'stop'],
-  project: ['create', 'delete', 'editors', 'import', 'import-folder', 'info', 'list', 'open-in'],
-  'design-systems': [
-    'rename', 'import-local', 'import-github', 'import-shadcn', 'rebuild-token-contract',
+  project: [
+    'create', 'delete', 'editors', 'handoff', 'import', 'import-folder',
+    'info', 'list', 'open-in',
   ],
+  automation: [
+    'create', 'crystallize-run', 'delete', 'get', 'ingest', 'list', 'pause',
+    'proposal', 'proposals', 'resume', 'run', 'runs', 'source', 'sources',
+    'template', 'templates', 'update',
+  ],
+  automations: [
+    'create', 'crystallize-run', 'delete', 'get', 'ingest', 'list', 'pause',
+    'proposal', 'proposals', 'resume', 'run', 'runs', 'source', 'sources',
+    'template', 'templates', 'update',
+  ],
+  skills: ['list', 'show'],
+  craft: ['list', 'show'],
+  'design-systems': [
+    'rename', 'import-local', 'import-github', 'import-shadcn',
+    'rebuild-token-contract', 'list', 'show',
+  ],
+};
+
+// Verbs that must NOT be advertised as top-level completions because they are
+// nested under another subcommand — suggesting them yields `od <verb>` calls
+// that would fail (e.g. `od daemon verify`, which is really `od daemon db verify`).
+const FORBIDDEN_TOP_LEVEL: Record<string, string[]> = {
+  daemon: ['vacuum', 'verify'],
 };
 
 describe('COMMAND_SPEC covers known cli.ts subcommands', () => {
@@ -241,6 +265,18 @@ describe('COMMAND_SPEC covers known cli.ts subcommands', () => {
       for (const sub of expected) {
         expect(out, `\`od ${command} <TAB>\` should offer ${sub}`).toContain(sub);
       }
+    });
+  }
+});
+
+describe('COMMAND_SPEC does not advertise nested verbs as top-level', () => {
+  for (const [command, forbidden] of Object.entries(FORBIDDEN_TOP_LEVEL)) {
+    it(`does not offer nested verbs for \`od ${command}\``, () => {
+      const out = computeCompletions({ words: [command], current: '' });
+      const leaked = forbidden.filter((verb) => out.includes(verb));
+      expect(leaked, `od ${command} must not suggest nested verbs: ${leaked.join(', ')}`).toEqual(
+        [],
+      );
     });
   }
 });
