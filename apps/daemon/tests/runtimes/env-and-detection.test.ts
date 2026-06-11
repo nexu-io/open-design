@@ -460,6 +460,7 @@ test('detectAgents includes sanitized install and docs metadata from split runti
       const agents = await detectAgents();
       const qoder = agents.find((agent) => agent.id === 'qoder');
       const deepseek = agents.find((agent) => agent.id === 'deepseek');
+      const kimi = agents.find((agent) => agent.id === 'kimi');
 
       assert.ok(qoder);
       assert.equal(qoder.available, false);
@@ -469,6 +470,11 @@ test('detectAgents includes sanitized install and docs metadata from split runti
       assert.equal(
         deepseek.docsUrl,
         'https://github.com/Hmbown/CodeWhale/blob/main/README.md',
+      );
+      assert.ok(kimi);
+      assert.equal(
+        kimi.docsUrl,
+        'https://www.kimi.com/code/docs/en/kimi-cli/guides/getting-started.html?aff=open-design',
       );
     });
   } finally {
