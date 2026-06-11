@@ -30,7 +30,8 @@
  * the Anthropic path sends as `system`.
  */
 import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
-import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
+import { DISCOVERY_AND_PHILOSOPHY, renderSharedFramesBlock } from './discovery.js';
+import { renderDirectionSpecBlock } from './directions.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { renderMediaGenerationContract } from './media-contract.js';
 import { IMAGE_MODELS } from '../media-models.js';
@@ -590,6 +591,30 @@ export function composeSystemPrompt({
 
   if (!isMediaSurfaceEarly) {
     parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
+    // Direction library is only useful when the agent must pick a visual
+    // direction itself. When an active design system is present it is the
+    // visual direction (see ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE
+    // below), so the ~6.7KB direction-card catalogue would just be dead
+    // weight the model is told to ignore. Gate it on the composer-visible
+    // active-DS signal (stable for the whole session, so the stable-prompt
+    // fingerprint stays cacheable).
+    if (!activeDesignSystemBody) {
+      parts.push(renderDirectionSpecBlock(), '\n\n---\n\n');
+    }
+    // Shared device-frame catalogue only applies to multi-device /
+    // multi-target projects (same product across desktop+tablet+phone, or
+    // multiple app screens side-by-side). A single-surface prototype never
+    // uses it. Gate on the composer-visible platform signal (set at project
+    // creation, stable for the session → fingerprint stays cacheable). The
+    // per-platform contracts themselves stay in DISCOVERY_AND_PHILOSOPHY so
+    // a single-platform prototype keeps the contract for its own platform.
+    const isMultiTargetProject =
+      metadata?.platform === 'responsive' ||
+      metadata?.platformTargets?.includes('responsive') ||
+      (metadata?.platformTargets?.length ?? 0) > 1;
+    if (isMultiTargetProject) {
+      parts.push(renderSharedFramesBlock(), '\n\n---\n\n');
+    }
   }
 
   parts.push(
@@ -1042,7 +1067,7 @@ function renderMetadataBlock(
   }
   if (metadata.platform === 'responsive' || metadata.platformTargets?.includes('responsive')) {
     lines.push(
-      '- **responsive web contract**: `responsive` means one web product experience that adapts across modern browser/device ranges, not only legacy desktop/tablet/mobile buckets. It is not an iOS app, Android app, or native tablet app target. Show responsive behavior through real product layout changes; do not render viewport labels as user-facing product content. Cover 2025–2026 breakpoints: mobile compact 360px, mobile standard 390–430px, foldable/small tablet 600–744px, tablet portrait 768–834px, tablet landscape/large tablet 1024–1180px, laptop 1280–1366px, desktop 1440–1536px, and wide 1920px. Use fluid `clamp()` scales, container queries where useful, and explicit layout changes at semantic thresholds. Verify no horizontal scroll at 360px, 390px, 430px, 768px, 820px, 1024px, 1366px, 1440px, and 1920px unless the brief explicitly asks for a pan/board canvas.',
+      '- **responsive web contract**: `responsive` means one web product experience that adapts across modern browser/device ranges, not only legacy desktop/tablet/mobile buckets. It is not an iOS app, Android app, or native tablet app target. Show responsive behavior through real product layout changes; do not render viewport labels as user-facing product content. Cover 2025–2026 breakpoints: mobile compact 360px, mobile standard 390–430px, foldable/small tablet 600–744px, tablet portrait 768–834px, tablet landscape/large tablet 1024–1180px, laptop 1280–1366px, desktop 1440–1536px, and wide 1920px. Use fluid `clamp()` scales, container queries where useful, and explicit layout changes at semantic thresholds. Verify no horizontal scroll at 360px, 390px, 430px, 600px, 768px, 820px, 1024px, 1366px, 1440px, and 1920px unless the brief explicitly asks for a pan/board canvas.',
     );
   }
   if ((metadata.platformTargets?.length ?? 0) > 1) {
