@@ -64,6 +64,19 @@ describe('CLI-driven agents', () => {
       'open-design', SPEC.command, ...SPEC.args,
     ]);
   });
+
+  it('kimi carries the runtime fallback binary from the agent definition', () => {
+    const plan = planAgentInstall('kimi', SPEC, ctx());
+    expect(plan.kind).toBe('cli');
+    if (plan.kind !== 'cli') throw new Error('expected cli');
+    expect(plan.bin).toBe('kimi');
+    expect(plan.fallbackBins).toEqual(['kimi-code']);
+    expect(plan.addArgv).toEqual([
+      'mcp', 'add', '--transport', 'stdio',
+      '--env', 'OD_DATA_DIR=/home/u/.open-design',
+      'open-design', '--', SPEC.command, ...SPEC.args,
+    ]);
+  });
 });
 
 describe('JSON-config agents', () => {

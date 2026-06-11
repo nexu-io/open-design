@@ -20,6 +20,8 @@ import {
   applyJsonInstall,
   removeJsonInstall,
 } from './mcp-agent-install.js';
+import { getAgentDef } from './runtimes/registry.js';
+import { resolveAgentExecutable } from './runtimes/executables.js';
 
 const argv = process.argv.slice(2);
 
@@ -1068,21 +1070,24 @@ async function runMcpInstall(args) {
 
   if (plan.kind === 'cli') {
     const argv = uninstall ? plan.removeArgv : plan.addArgv;
+    const runtimeDef = getAgentDef(plan.slug);
+    const resolvedBin = runtimeDef ? resolveAgentExecutable(runtimeDef) : null;
+    const bin = resolvedBin || plan.bin;
     if (dryRun) {
       emitInstallResult(useJson, {
         ok: true,
         agent: slug,
         kind: 'cli',
-        command: `${plan.bin} ${argv.join(' ')}`,
-        message: `would run: ${plan.bin} ${argv.join(' ')}`,
+        command: `${bin} ${argv.join(' ')}`,
+        message: `would run: ${bin} ${argv.join(' ')}`,
       });
       return;
     }
     const { spawn } = await import('node:child_process');
     const code = await new Promise((resolve) => {
-      const child = spawn(plan.bin, argv, { stdio: 'inherit' });
+      const child = spawn(bin, argv, { stdio: 'inherit' });
       child.on('error', (err) => {
-        console.error(`✗ failed to run ${plan.bin}: ${err.message}`);
+        console.error(`✗ failed to run ${bin}: ${err.message}`);
         resolve(127);
       });
       child.on('exit', (c) => resolve(c ?? 0));
@@ -1092,7 +1097,7 @@ async function runMcpInstall(args) {
         ok: false,
         agent: slug,
         kind: 'cli',
-        message: `${plan.bin} exited with code ${code}`,
+        message: `${bin} exited with code ${code}`,
       });
       process.exit(code || 1);
     }

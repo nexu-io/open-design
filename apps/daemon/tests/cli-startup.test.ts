@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -37,6 +37,59 @@ describe('CLI startup boundaries', () => {
     expect(output).not.toContain('before initialization');
     expect(output).not.toContain('CONFIG_STRING_FLAGS');
     expect(output).not.toContain('DIAGNOSTICS_STRING_FLAGS');
+  });
+
+  it('uses the kimi-code fallback binary for od mcp install kimi', async () => {
+    if (process.platform === 'win32') return;
+
+    const root = await mkdtemp(join(tmpdir(), 'od-cli-kimi-mcp-'));
+    const binDir = join(root, 'bin');
+    const argvPath = join(root, 'kimi-code-argv.txt');
+    await mkdir(binDir);
+    const kimiCodePath = join(binDir, 'kimi-code');
+    await writeFile(
+      kimiCodePath,
+      `#!/bin/sh\nprintf '%s\\n' "$0" "$@" > ${JSON.stringify(argvPath)}\nexit 0\n`,
+      'utf8',
+    );
+    await chmod(kimiCodePath, 0o755);
+
+    try {
+      const result = await execFileAsync(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          cliEntry,
+          'mcp',
+          'install',
+          'kimi',
+          '--json',
+          '--daemon-url',
+          'http://127.0.0.1:9',
+        ],
+        {
+          cwd: daemonRoot,
+          env: {
+            ...process.env,
+            OD_AGENT_HOME: root,
+            PATH: binDir,
+          },
+        },
+      );
+
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        ok: true,
+        agent: 'kimi',
+        kind: 'cli',
+      });
+      const argv = (await readFile(argvPath, 'utf8')).trim().split('\n');
+      expect(argv[0]).toBe(kimiCodePath);
+      expect(argv.slice(1, 5)).toEqual(['mcp', 'add', '--transport', 'stdio']);
+      expect(argv).toContain('open-design');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('keeps od daemon start alive until SIGTERM and reports the actual listening port', async () => {

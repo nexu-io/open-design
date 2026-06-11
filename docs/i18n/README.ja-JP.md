@@ -1,6 +1,8 @@
 <h1 align="center">Open Design: オープンソースの Claude Design 代替ツール</h1>
 
-> 🔥 **Open Design 0.9.0 が登場——セットアップなしで創作を。** [公式 Model Router](https://open-design.ai/amr) がアプリに直接組み込まれました。追加設定も、インストールする CLI も、用意する API キーも不要。アプリを開いてサインインするだけで、すぐにデザインと創作を始められます。[0.9.0 をダウンロード](https://github.com/nexu-io/open-design/releases) · [ディスカッションに参加](https://github.com/nexu-io/open-design/discussions/3524)
+> 🔥 **Open Design 0.10.0 が登場——オールインワンの Agentic デザインワークスペース。** デザインの全工程が、ひとつのウィンドウに。曖昧なアイデアから、リファレンス探し、素材集め、インタラクティブな編集、コメントのキュー投入、モーションの仕上げ、そしてエディタや Code Agent への受け渡しまで——アプリを離れることなく完結します。複数セッションの並行実行で、それはもはや一人のアシスタントではなく、あなたのために働くローカルなデザインチームです。[0.10.0 をダウンロード](https://github.com/nexu-io/open-design/releases) · [ディスカッションに参加](https://github.com/nexu-io/open-design/discussions/4153)
+>
+> ⚡ **Open Design AMR（Agentic Model Router）——公式モデルサービス。** 一度のチャージで、Open Design の中で GPT、Claude、Gemini、DeepSeek をそのまま利用可能。20+ のフラッグシップモデル、設定ゼロ、実トークン使用量ベースの課金。[AMR を試す](https://open-design.ai/amr/)
 >
 > 🏅 **Open Design Fellow プログラムの募集を開始しました。** あなたもデザインはオープンであるべきだと信じるなら——Open Design Fellow となり、コアチームとともにプロダクトを形づくり、より多くの人がデザインの未来を定義することに参加できるよう手助けしてください。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/qhbcCH8Am4)。
 
@@ -11,6 +13,7 @@
 <p align="center">
   <a href="https://open-design.ai/">ウェブサイト</a> ·
   <a href="https://open-design.ai/">ダウンロード</a> ·
+  <a href="https://open-design.ai/amr/">Model Router</a> ·
   <a href="https://discord.gg/qhbcCH8Am4">Discord</a> ·
   <a href="https://x.com/nexudotio">@nexudotio をフォロー</a>
 </p>
@@ -116,7 +119,7 @@ Open Design が何であり、何ができるのかを手早く見ていきま�
 | [Cursor](https://www.cursor.com/cli) | ✅ 対応済み | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 対応済み | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 対応済み | `od mcp install copilot` |
-| Gemini CLI | ✅ 対応済み | `od mcp install gemini` |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ 対応済み | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ 対応済み | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ 対応済み | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ 対応済み | `od mcp install antigravity` |

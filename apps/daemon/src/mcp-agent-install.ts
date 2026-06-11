@@ -28,6 +28,7 @@
 // performs the IO.
 
 import path from 'node:path';
+import { getAgentDef } from './runtimes/registry.js';
 
 export const AGENT_SLUGS = [
   'claude',
@@ -74,6 +75,8 @@ export interface CliInstallPlan {
   kind: 'cli';
   slug: AgentSlug;
   bin: string;
+  /** Additional binary names to try when `bin` is not on PATH. */
+  fallbackBins?: string[];
   addArgv: string[];
   removeArgv: string[];
   /** Argv that exits 0 iff the server is already registered. */
@@ -187,11 +190,13 @@ export function planAgentInstall(
         removeArgv: ['mcp', 'remove', serverName],
         getArgv: ['mcp', 'list'],
       };
-    case 'kimi':
+    case 'kimi': {
+      const def = getAgentDef('kimi');
       return {
         kind: 'cli',
         slug,
-        bin: 'kimi',
+        bin: def?.bin ?? 'kimi',
+        fallbackBins: def?.fallbackBins,
         addArgv: [
           'mcp', 'add', '--transport', 'stdio',
           ...envFlags(spec.env, '--env'),
@@ -200,6 +205,7 @@ export function planAgentInstall(
         removeArgv: ['mcp', 'remove', serverName],
         getArgv: ['mcp', 'get', serverName],
       };
+    }
 
     // ----- JSON config-file agents (safe deep-merge) -----
     case 'cursor':

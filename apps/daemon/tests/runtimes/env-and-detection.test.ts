@@ -499,7 +499,7 @@ test('detectAgents includes sanitized install and docs metadata from split runti
       assert.ok(kimi);
       assert.equal(
         kimi.docsUrl,
-        'https://www.kimi.com/code/docs/en/kimi-cli/guides/getting-started.html?aff=open-design',
+        'https://www.kimi.com/code/docs/en/kimi-cli/guides/getting-started.html',
       );
     });
   } finally {
