@@ -29,6 +29,7 @@ import type { AudioKind, MediaAspect } from '../types';
  */
 export type MediaProviderId =
   | 'openai'
+  | 'codex-cli'
   | 'volcengine'
   | 'grok'
   | 'hyperframes'
@@ -90,6 +91,19 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     integrated: true,
     defaultBaseUrl: 'https://api.openai.com/v1',
     docsUrl: 'https://platform.openai.com/api-keys',
+  },
+  {
+    // Local Codex CLI built-in image_gen — drives the operator's own
+    // already-signed-in Codex CLI (ChatGPT subscription), so it needs no
+    // OPENAI_API_KEY. Like `hyperframes`, it's a local renderer: no
+    // settings card, no stored credentials.
+    id: 'codex-cli',
+    label: 'Codex CLI',
+    hint: 'Local Codex CLI image_gen — uses ChatGPT subscription, no API key',
+    integrated: true,
+    credentialsRequired: false,
+    settingsVisible: false,
+    docsUrl: 'https://developers.openai.com/codex/cli',
   },
   {
     id: 'volcengine',
@@ -359,6 +373,19 @@ export const IMAGE_MODELS: MediaModel[] = [
     label: 'dall-e-2',
     hint: 'OpenAI · legacy',
     provider: 'openai',
+    caps: ['t2i'],
+  },
+
+  // Codex CLI — no-API-key path to ChatGPT-grade image generation. The
+  // daemon spawns a headless `codex exec` turn and lets the operator's
+  // signed-in Codex CLI run its built-in image_gen tool. Works for ANY
+  // coding agent (Claude Code, Gemini, …), not just when Codex is the
+  // chat agent.
+  {
+    id: 'codex-image-gen',
+    label: 'codex-image-gen',
+    hint: 'Codex CLI · built-in image_gen · ChatGPT subscription, no API key',
+    provider: 'codex-cli',
     caps: ['t2i'],
   },
 
