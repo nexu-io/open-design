@@ -159,6 +159,23 @@ describe("stageWebuiLauncherResources", () => {
 
       rmSync(stageRoot, { force: true, recursive: true });
     });
+
+    it("percent-decodes a file:// URI so bundle dirs with spaces still launch", async () => {
+      // A compliant launcher passes %k as a percent-encoded URI, so a bundle in
+      // `/…/space bundle/` arrives as `file:///…/space%20bundle/…`. The Exec must
+      // URI-decode before `cd`, or the staged double-click launcher fails for any
+      // extract path containing spaces or other escaped characters.
+      const parent = mkdtempSync(join(tmpdir(), "od-webui-desktop-enc-"));
+      const stageRoot = join(parent, "space bundle");
+      mkdirSync(stageRoot);
+      await stageWebuiLauncherResources(stageRoot, "linux");
+      const bundleDir = realpathSync(stageRoot);
+      const encodedUri = `file://${join(bundleDir, "open-design-webui.desktop").split(" ").join("%20")}`;
+
+      expect(runDesktopExec(stageRoot, encodedUri)).toBe(bundleDir);
+
+      rmSync(parent, { force: true, recursive: true });
+    });
   });
 
   it("makes the macOS double-click .command entry executable", async () => {
