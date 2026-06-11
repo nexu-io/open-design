@@ -176,6 +176,24 @@ describe("stageWebuiLauncherResources", () => {
 
       rmSync(parent, { force: true, recursive: true });
     });
+
+    it("accepts a localhost file:// authority and rejects any other host", async () => {
+      // RFC 8089: `file:///path` (empty authority) and `file://localhost/path`
+      // both name the local machine, so a compliant launcher may pass either.
+      // Any other authority is a remote host and must not be treated as a local
+      // path.
+      const stageRoot = mkdtempSync(join(tmpdir(), "od-webui-desktop-auth-"));
+      await stageWebuiLauncherResources(stageRoot, "linux");
+      const bundleDir = realpathSync(stageRoot);
+      const desktopPath = join(bundleDir, "open-design-webui.desktop");
+
+      // localhost authority → still launches from the bundle dir.
+      expect(runDesktopExec(stageRoot, `file://localhost${desktopPath}`)).toBe(bundleDir);
+      // A foreign authority is a remote URI → must not launch locally.
+      expect(runDesktopExec(stageRoot, `file://otherhost${desktopPath}`)).toBeNull();
+
+      rmSync(stageRoot, { force: true, recursive: true });
+    });
   });
 
   it("makes the macOS double-click .command entry executable", async () => {
