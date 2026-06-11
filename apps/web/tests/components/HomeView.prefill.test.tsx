@@ -8,8 +8,11 @@ import {
   createPluginAuthoringHandoff,
   createPluginUseHandoff,
   PLUGIN_AUTHORING_DEFAULT_GOAL,
+  PLUGIN_AUTHORING_DEFAULT_GOAL_ZH_CN,
   PLUGIN_AUTHORING_PROMPT,
 } from '../../src/components/home-hero/plugin-authoring';
+import { I18nProvider, useI18n } from '../../src/i18n';
+import type { Locale } from '../../src/i18n';
 // HomeHero's `home-hero-input` is now the project composer's Lexical
 // contenteditable, not a <textarea>. These helpers drive/read it through the
 // live editor instead of synthetic `fireEvent.change` / `.value` (which are
@@ -1767,6 +1770,91 @@ describe('HomeView prompt handoff', () => {
     })));
   });
 
+  it('keeps the seeded zh-CN authoring template when the locale changes before binding (regression #4152)', async () => {
+    // nettee's locale-drift race: the create-plugin prompt is seeded under
+    // zh-CN, the app language flips to English *before* od-plugin-authoring
+    // finishes binding, and the bind must still carry the zh-CN template that
+    // produced the prompt — not recompute it from the now-English live locale.
+    // We park the bind by deferring the plugins fetch: the handoff effect seeds
+    // the composer immediately (it ignores pluginsLoading), while the bind
+    // effect stays gated on `pluginsLoading` until the plugins arrive.
+    let resolvePlugins: (response: Response) => void = () => undefined;
+    const pluginsResponse = new Promise<Response>((resolve) => {
+      resolvePlugins = resolve;
+    });
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return pluginsResponse;
+      }
+      if (typeof url === 'string' && url.includes('/apply')) {
+        return new Response(JSON.stringify(AUTHORING_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    render(
+      <I18nProvider initial="zh-CN">
+        <CaptureLocale />
+        <HomeView
+          projects={[]}
+          promptHandoff={createPluginAuthoringHandoff(1, undefined, 'zh-CN')}
+          onSubmit={onSubmit}
+          onOpenProject={() => undefined}
+          onViewAllProjects={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    // The handoff seeds the Chinese authoring prompt while the bind is still
+    // parked on the pending plugins fetch.
+    await waitFor(() => {
+      expect(homeHeroPromptText()).toContain('为以下目标创建一个 Open Design 插件');
+    });
+
+    // The language flips mid-flight, before the bind runs.
+    act(() => {
+      setLocaleExternal('en');
+    });
+
+    // Plugins arrive → the bind effect finally fires. Pre-fix it recomputes the
+    // template from the now-English live locale and binds the wrong one.
+    resolvePlugins(new Response(
+      JSON.stringify({ plugins: [AUTHORING_PLUGIN, WEB_PROTOTYPE_PLUGIN] }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    ));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/od-plugin-authoring/apply',
+      expect.anything(),
+    ));
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-plugin')).toBeTruthy();
+    });
+
+    // Editing the goal only re-binds into the submit payload if the bound
+    // template still matches the Chinese prompt it seeded. An English template
+    // can't extract a goal out of Chinese prose, so a drifted bind silently
+    // drops the edit and submits the stale default goal instead.
+    const rewrittenGoal = '把内部研究笔记整理成一个可复用的知识工作流';
+    await setPromptAndSettle(
+      homeHeroPromptText().replace(PLUGIN_AUTHORING_DEFAULT_GOAL_ZH_CN, rewrittenGoal),
+    );
+    await waitFor(() => {
+      expect(homeHeroPromptText()).toContain(rewrittenGoal);
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'od-plugin-authoring',
+      pluginInputs: { pluginGoal: rewrittenGoal },
+    })));
+  });
+
   it('does not submit the create-plugin prompt before the authoring scenario is applied', async () => {
     let resolveApply: (response: Response) => void = () => undefined;
     const applyResponse = new Promise<Response>((resolve) => {
@@ -1844,6 +1932,15 @@ async function setPromptAndSettle(value: string): Promise<void> {
   await act(async () => {
     await Promise.resolve();
   });
+}
+
+// Grabs the live `setLocale` from context so a test can flip the app language
+// at an exact point in a flow (mirrors a user toggling the language switcher).
+let setLocaleExternal: (next: Locale) => void = () => undefined;
+function CaptureLocale() {
+  const { setLocale } = useI18n();
+  setLocaleExternal = setLocale;
+  return null;
 }
 
 async function clearActiveTypeChip() {

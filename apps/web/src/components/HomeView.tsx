@@ -76,6 +76,7 @@ import {
   buildPluginAuthoringInputs,
   buildPluginAuthoringPromptForInputs,
   PLUGIN_AUTHORING_PROMPT,
+  PLUGIN_AUTHORING_PROMPT_TEMPLATE,
   selectPluginAuthoringTemplate,
   type HomePromptHandoff,
 } from './home-hero/plugin-authoring';
@@ -256,6 +257,15 @@ export function HomeView({
   const [pendingAuthoringPrompt, setPendingAuthoringPrompt] = useState(PLUGIN_AUTHORING_PROMPT);
   const [pendingAuthoringInputs, setPendingAuthoringInputs] = useState<Record<string, unknown>>(
     () => buildPluginAuthoringInputs(undefined),
+  );
+  // The template that produced `pendingAuthoringPrompt` / `pendingAuthoringInputs`.
+  // Carried through state so the bind effect re-renders the inline form from the
+  // same locale that seeded the prompt, instead of recomputing from the live
+  // `locale` — otherwise switching the app language between seeding and binding
+  // would flip the composer back (see updateActiveInputs, which renders from
+  // `active.queryTemplate`).
+  const [pendingAuthoringTemplate, setPendingAuthoringTemplate] = useState(
+    PLUGIN_AUTHORING_PROMPT_TEMPLATE,
   );
   const [pendingPluginUseHandoff, setPendingPluginUseHandoff] =
     useState<PendingPluginUseHandoff | null>(null);
@@ -534,6 +544,7 @@ export function HomeView({
     setPromptEditedByUser(false);
     setPendingAuthoringPrompt(promptHandoff.prompt);
     setPendingAuthoringInputs(promptHandoff.inputs);
+    setPendingAuthoringTemplate(promptHandoff.queryTemplate);
     setPendingAuthoringChipId('create-plugin');
     setPendingChipId('create-plugin');
     scrollHomeToTop();
@@ -1271,6 +1282,7 @@ export function HomeView({
   function queuePluginAuthoring(chipId: string | null, goal?: string) {
     const nextInputs = buildPluginAuthoringInputs(goal, locale);
     const nextPrompt = buildPluginAuthoringPromptForInputs(nextInputs, locale);
+    const nextTemplate = selectPluginAuthoringTemplate(locale);
     runWithReplacementConfirmation('Plugin authoring', nextPrompt, async () => {
       setActive(null);
       setActiveSkill(null);
@@ -1281,6 +1293,7 @@ export function HomeView({
       setPromptEditedByUser(false);
       setPendingAuthoringPrompt(nextPrompt);
       setPendingAuthoringInputs(nextInputs);
+      setPendingAuthoringTemplate(nextTemplate);
       setPendingAuthoringChipId(chipId ?? 'create-plugin');
       setPendingChipId(chipId ?? 'create-plugin');
       focusPromptAtEnd();
@@ -1308,10 +1321,10 @@ export function HomeView({
       projectKind: 'other',
       chipId: pendingAuthoringChipId,
       inputs: authoringRecord ? pendingAuthoringInputs : AUTHORING_DEFAULT_SCENARIO_INPUTS,
-      ...(authoringRecord ? { queryTemplate: selectPluginAuthoringTemplate(locale) } : {}),
+      ...(authoringRecord ? { queryTemplate: pendingAuthoringTemplate } : {}),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingAuthoringChipId, pendingAuthoringPrompt, pendingAuthoringInputs, pluginsLoading, plugins]);
+  }, [pendingAuthoringChipId, pendingAuthoringPrompt, pendingAuthoringInputs, pendingAuthoringTemplate, pluginsLoading, plugins]);
 
   // Stage B of plugin-driven-flow-plan: the chip rail dispatcher.
   // Pure UI-state mapping — the heavy lifting is delegated back to
