@@ -507,9 +507,9 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
         'You have the install path. Star the repo, grab the desktop build, or join Discord if anything breaks on first run.',
     },
     agents: {
-      title: 'Open Design agents — 17 BYOK adapters',
+      title: 'Open Design agents — {count} BYOK adapters',
       description:
-        'Open Design ships 17 BYOK adapters out of the box. Drive design from the same agent you use for code — no separate vendor login.',
+        'Open Design ships {count} BYOK adapters out of the box. Drive design from the same agent you use for code — no separate vendor login.',
       breadcrumb: 'Agents',
       label: 'Adapters · Nº 04',
       heading: (count) => `${count} BYOK agents, one skill protocol.`,
@@ -2631,8 +2631,8 @@ INFO_PAGE_COPY.zh = {
   },
   agents: {
     ...INFO_PAGE_COPY.en!.agents,
-    title: 'Open Design Agent —— 17 个 BYOK 适配器',
-    description: 'Open Design 内置 17 个 BYOK 适配器。直接用你写代码时已经在用的 Agent 来驱动设计，无需额外厂商登录。',
+    title: 'Open Design Agent —— {count} 个 BYOK 适配器',
+    description: 'Open Design 内置 {count} 个 BYOK 适配器。直接用你写代码时已经在用的 Agent 来驱动设计，无需额外厂商登录。',
     breadcrumb: 'Agent',
     label: '适配器 · Nº 04',
     heading: (count) => `${count} 个 BYOK Agent，一套 Skill 协议。`,
@@ -3106,8 +3106,8 @@ INFO_PAGE_COPY['zh-tw'] = {
   },
   agents: {
     ...INFO_PAGE_COPY.zh!.agents,
-    title: 'Open Design Agent —— 17 個 BYOK adapter',
-    description: 'Open Design 內建 17 個 BYOK adapter。直接用你寫程式時已經在用的 Agent 來驅動設計，無需額外供應商登入。',
+    title: 'Open Design Agent —— {count} 個 BYOK adapter',
+    description: 'Open Design 內建 {count} 個 BYOK adapter。直接用你寫程式時已經在用的 Agent 來驅動設計，無需額外供應商登入。',
     breadcrumb: 'Agent',
     heading: (count) => `${count} 個 BYOK Agent，一套 Skill 協議。`,
     lead: (count) =>

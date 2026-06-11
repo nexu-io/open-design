@@ -22,10 +22,8 @@ const copy = getInfoPageCopy(locale);
 const page = copy.agents;
 const common = copy.common;
 
-const title = page.title;
-const description = page.description;
 
-// 17 first-party adapters live in `apps/daemon/src/runtimes/defs/`. Keep
+// First-party adapters live in `apps/daemon/src/runtimes/defs/`. Keep
 // this list in lockstep with that directory; opendesigner.io advertises
 // "16 out of the box" — Open Design ships one more, and the names below
 // match the canonical `name:` field on each `RuntimeAgentDef`.
@@ -72,6 +70,10 @@ const tiers = [
 ];
 
 const allAgents = tiers.flatMap((t) => t.agents);
+// Derive the count in the title/description from the rendered list so the
+// metadata can never drift from how many agents the hub actually shows.
+const title = page.title.replace('{count}', String(allAgents.length));
+const description = page.description.replace('{count}', String(allAgents.length));
 
 // Agents with a dedicated detail page, mapped slug -> route segment.
 // The route can differ from the slug (e.g. `codex` -> `codex-design`)
@@ -115,7 +117,6 @@ const localizedCredentialLabels: Partial<Record<LandingLocaleCode, Record<string
     kimi: 'Moonshot API key（BYOK）',
     devin: 'Devin 账号',
     deepseek: 'DeepSeek API key（BYOK）',
-    pi: 'Pi 账号（交互式登录）',
     vibe: 'Mistral API key（BYOK）',
     kiro: 'AWS 凭据（BYOK）',
     kilo: '通过 Kilo 配置接入模型凭据（BYOK）',
@@ -134,7 +135,6 @@ const localizedCredentialLabels: Partial<Record<LandingLocaleCode, Record<string
     kimi: 'Moonshot API key（BYOK）',
     devin: 'Devin 帳號',
     deepseek: 'DeepSeek API key（BYOK）',
-    pi: 'Pi 帳號（互動式登入）',
     vibe: 'Mistral API key（BYOK）',
     kiro: 'AWS 憑據（BYOK）',
     kilo: '透過 Kilo 設定接入模型憑據（BYOK）',
@@ -153,7 +153,6 @@ const localizedCredentialLabels: Partial<Record<LandingLocaleCode, Record<string
     kimi: 'Moonshot API key (BYOK)',
     devin: 'Обліковий запис Devin',
     deepseek: 'DeepSeek API key (BYOK)',
-    pi: 'Обліковий запис Pi з інтерактивною авторизацією',
     vibe: 'Mistral API key (BYOK)',
     kiro: 'AWS credentials (BYOK)',
     kilo: 'Ключі моделей через конфігурацію Kilo (BYOK)',
@@ -163,7 +162,13 @@ const localizedCredentialLabels: Partial<Record<LandingLocaleCode, Record<string
 
 const credentialLabel = (agent: (typeof allAgents)[number]) => {
   if (locale === DEFAULT_LOCALE) return agent.key;
-  return localizedCredentialLabels[locale]?.[agent.slug] ?? `${common.byok} · ${agent.vendor}`;
+  // Prefer the localized agent guide's credential so new agents and the Pi
+  // fix stay localized without maintaining a parallel per-slug map.
+  return (
+    localizedCredentialLabels[locale]?.[agent.slug] ??
+    copy.agentGuides?.[agent.slug]?.credential ??
+    `${common.byok} · ${agent.vendor}`
+  );
 };
 
 // JSON-LD URLs must match the locale-specific canonical the Layout emits, so
