@@ -24,6 +24,7 @@ import {
   fetchProjectFileText,
   fetchProjectFolders,
   projectFileUrl,
+  projectRawUrl,
   createProjectFolder,
   deleteProjectFolder,
   renameProjectFile,
@@ -35,6 +36,7 @@ import {
 import { deriveFileOps, type FileOpEntry } from '../runtime/file-ops';
 import { latestTodosFromEvents, type TodoItem } from '../runtime/todos';
 import { deliverableSlideNavForActiveFile, isSlideNavDeliverableNow } from '../runtime/slide-nav';
+import { buildSrcdoc } from '../runtime/srcdoc';
 import {
   type AgentEvent,
   type AgentInfo,
@@ -3732,10 +3734,130 @@ function DesignSystemInlinePreview({
   file: ProjectFile;
 }) {
   const url = projectFileUrl(projectId, file.name);
+  const [srcDoc, setSrcDoc] = useState<string | null>(null);
+  const [srcDocReady, setSrcDocReady] = useState(false);
+
+  useEffect(() => {
+    setSrcDoc(null);
+    setSrcDocReady(false);
+    if (file.kind !== 'html') return undefined;
+    let cancelled = false;
+    void fetchProjectFileText(projectId, file.name, {
+      cache: 'no-store',
+      cacheBustKey: Math.round(file.mtime),
+    }).then(async (html) => {
+      if (cancelled) return;
+      if (!html) {
+        setSrcDocReady(true);
+        return;
+      }
+      const inlinedHtml = await inlineDesignSystemPreviewRelativeAssets(html, projectId, file.name);
+      if (cancelled) return;
+      setSrcDoc(buildSrcdoc(inlinedHtml, {
+        baseHref: projectRawUrl(projectId, baseDirForDesignSystemPreviewFile(file.name)),
+      }));
+      setSrcDocReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [file.kind, file.mtime, file.name, projectId]);
+
   if (file.kind === 'html') {
-    return <iframe title={file.name} src={url} sandbox="allow-scripts" />;
+    return (
+      <iframe
+        title={file.name}
+        src={srcDocReady && srcDoc ? undefined : url}
+        srcDoc={srcDoc ?? undefined}
+        sandbox="allow-scripts allow-downloads"
+      />
+    );
   }
   return <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />;
+}
+
+async function inlineDesignSystemPreviewRelativeAssets(
+  html: string,
+  projectId: string,
+  ownerFileName: string,
+): Promise<string> {
+  const replacements: Array<Promise<{ from: string; to: string } | null>> = [];
+  const links = html.match(/<link\b[^>]*>/gi) ?? [];
+  for (const tag of links) {
+    const rel = readDesignSystemPreviewHtmlAttr(tag, 'rel');
+    const href = readDesignSystemPreviewHtmlAttr(tag, 'href');
+    if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
+    replacements.push(fetchDesignSystemPreviewRelativeText(projectId, ownerFileName, href).then((css) =>
+      css == null
+        ? null
+        : {
+            from: tag,
+            to: `<style data-od-inline-asset="${escapeDesignSystemPreviewAttr(href)}">\n${css.replace(/<\/style/gi, '<\\/style')}\n</style>`,
+          },
+    ));
+  }
+
+  const scripts = html.match(/<script\b[^>]*\bsrc\s*=\s*["'][^"']+["'][^>]*>\s*<\/script>/gi) ?? [];
+  for (const tag of scripts) {
+    const src = readDesignSystemPreviewHtmlAttr(tag, 'src');
+    if (!src) continue;
+    replacements.push(fetchDesignSystemPreviewRelativeText(projectId, ownerFileName, src).then((js) => {
+      if (js == null) return null;
+      const open = tag.match(/^<script\b[^>]*>/i)?.[0] ?? '<script>';
+      const attrs = open
+        .replace(/^<script/i, '')
+        .replace(/>$/i, '')
+        .replace(/\ssrc\s*=\s*(['"])[\s\S]*?\1/i, '');
+      return {
+        from: tag,
+        to: `<script${attrs} data-od-inline-asset="${escapeDesignSystemPreviewAttr(src)}">\n${js.replace(/<\/script/gi, '<\\/script')}\n</script>`,
+      };
+    }));
+  }
+
+  const resolved = (await Promise.all(replacements)).filter(
+    (replacement): replacement is { from: string; to: string } => replacement !== null,
+  );
+  return resolved.reduce((next, replacement) => next.replace(replacement.from, () => replacement.to), html);
+}
+
+async function fetchDesignSystemPreviewRelativeText(
+  projectId: string,
+  ownerFileName: string,
+  assetRef: string,
+): Promise<string | null> {
+  const filePath = resolveDesignSystemPreviewRelativePath(ownerFileName, assetRef);
+  if (!filePath) return null;
+  return fetchProjectFileText(projectId, filePath, { cache: 'no-store' });
+}
+
+function resolveDesignSystemPreviewRelativePath(ownerFileName: string, assetRef: string): string | null {
+  if (/^(?:https?:|data:|blob:|mailto:|tel:|#|\/)/i.test(assetRef)) return null;
+  try {
+    const url = new URL(assetRef, `https://od.local/${baseDirForDesignSystemPreviewFile(ownerFileName)}`);
+    if (url.origin !== 'https://od.local') return null;
+    return decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+  } catch {
+    return null;
+  }
+}
+
+function baseDirForDesignSystemPreviewFile(name: string): string {
+  const index = name.lastIndexOf('/');
+  return index >= 0 ? name.slice(0, index + 1) : '';
+}
+
+function readDesignSystemPreviewHtmlAttr(tag: string, name: string): string | null {
+  const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*(['"])([\\s\\S]*?)\\1`, 'i'));
+  return match?.[2] ?? null;
+}
+
+function escapeDesignSystemPreviewAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 

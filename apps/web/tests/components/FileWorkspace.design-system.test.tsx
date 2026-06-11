@@ -197,6 +197,76 @@ describe('FileWorkspace design-system project surface', () => {
     expect(titles.filter((title) => title === 'Text Highlighting')).toHaveLength(1);
   });
 
+  it('inlines local React design-system preview files before sandboxing', async () => {
+    registryMocks.fetchProjectFileText.mockImplementation((_projectId: string, name: string) => {
+      if (name === '_ds_manifest.json') {
+        return Promise.resolve(JSON.stringify({
+          cards: [
+            {
+              path: 'ui_kits/website/index.html',
+              group: 'UI Kit — Website',
+              name: 'Website — Home (UI Kit)',
+              subtitle: 'Full Passive Book page',
+            },
+          ],
+        }));
+      }
+      if (name === 'ui_kits/website/index.html') {
+        return Promise.resolve(`
+          <!doctype html>
+          <html>
+            <head>
+              <link rel="stylesheet" href="../../colors_and_type.css">
+            </head>
+            <body>
+              <div id="root"></div>
+              <script type="text/babel" src="Widget.jsx"></script>
+              <script type="text/babel">ReactDOM.createRoot(document.getElementById("root")).render(<Widget />);</script>
+            </body>
+          </html>
+        `);
+      }
+      if (name === 'ui_kits/website/Widget.jsx') {
+        return Promise.resolve('function Widget(){ return <strong>Passive Book loaded</strong>; }');
+      }
+      if (name === 'colors_and_type.css') {
+        return Promise.resolve(':root { --pb-green: #00d07e; }');
+      }
+      return Promise.resolve(null);
+    });
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('_ds_manifest.json'),
+          workspaceFile('colors_and_type.css'),
+          workspaceFile('ui_kits/website/index.html'),
+          workspaceFile('ui_kits/website/Widget.jsx'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const iframe = container.querySelector<HTMLIFrameElement>('.ds-project-review-item iframe');
+    expect(iframe?.getAttribute('srcdoc')).toContain('function Widget()');
+    expect(iframe?.getAttribute('srcdoc')).toContain('data-od-inline-asset="Widget.jsx"');
+    expect(iframe?.getAttribute('srcdoc')).toContain('data-od-inline-asset="../../colors_and_type.css"');
+    expect(iframe?.getAttribute('srcdoc')).not.toContain('src="Widget.jsx"');
+  });
+
   it('keeps project-backed design systems inside the normal workspace tabs with inline preview cards', () => {
     const markup = renderToStaticMarkup(
       <FileWorkspace
