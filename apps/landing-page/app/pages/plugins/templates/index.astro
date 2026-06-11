@@ -309,6 +309,9 @@ const jsonLd = [
         // fired late on a scroll-and-hover sequence.
         const startPlayback = () => {
           hydrate(v);
+          // Restart from the top so every hover plays the full animation
+          // from frame 0 rather than resuming wherever the last loop paused.
+          try { v.currentTime = 0; } catch { /* not seekable yet — plays from current */ }
           v.play().catch(() => {/* user-gesture / autoplay-policy fallback: card stays on poster */});
         };
         const stopPlayback = () => {

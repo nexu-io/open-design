@@ -545,7 +545,8 @@ Plugin registry endpoint: `GET /api/plugins`. Directory overview → [`plugins/R
    └──────────────────────────────────────────────────────────────────┘
 ```
 
-| Layer | Stack ||---|---|
+| Layer | Stack |
+|---|---|
 | Frontend | Next.js 16 App Router + React 18 + TypeScript |
 | Daemon | Node 24 · Express · SSE streaming · `better-sqlite3` |
 | Storage | Files at `.od/projects/<id>/` + SQLite at `.od/app.sqlite` + `media-config.json` (gitignored, auto-created). `OD_DATA_DIR` relocates everything. |

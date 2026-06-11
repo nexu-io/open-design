@@ -10,12 +10,6 @@ function promptArgvBudgetMessage(
       'Reduce the selected skills/design-system context or conversation length, or use DeepSeek through an API/provider model connection for large contexts. Pick a stdin-capable adapter when the prompt must include large local context.'
     );
   }
-  if (def.id === 'grok-build') {
-    return (
-      `${def.name} requires the prompt as the value of -p / --single (xAI CLI 0.1.212+ no longer reads piped stdin), and this run's composed prompt exceeds the safe size (${bytes} > ${def.maxPromptArgBytes} bytes). ` +
-      'Reduce the selected skills/design-system context or conversation length, or pick an adapter with stdin support (e.g. claude, codex, hermes) when the prompt must include large local context.'
-    );
-  }
   return (
     `${def.name} requires the prompt as a command-line argument and this run's composed prompt exceeds the safe size (${bytes} > ${def.maxPromptArgBytes} bytes). ` +
     'Reduce the selected skills/design-system context, shorten the conversation, or pick an adapter with stdin support.'

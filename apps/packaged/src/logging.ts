@@ -269,9 +269,9 @@ export function attachPackagedDesktopProcessLogging(options: {
   // hidden as a log line. See `createFatalUnhandledRejectionHandler`.
   process.on("unhandledRejection", createFatalUnhandledRejectionHandler(logger));
   process.on("beforeExit", (code) => {
-    logger.warn("packaged desktop beforeExit", { code });
+    logger.info("packaged desktop beforeExit", { code });
   });
   process.on("exit", (code) => {
-    logger.warn("packaged desktop exit", { code });
+    logger.info("packaged desktop exit", { code });
   });
 }

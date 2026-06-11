@@ -199,21 +199,21 @@ describe('prompt telemetry builder', () => {
   it('preserves semantic slash-prefixed prompt tokens', () => {
     const telemetry = buildPromptStackTelemetry({
       composedPrompt:
-        'POST /api/runs/:id/tool-result, match /foo/bar, cwd /app/project',
+        'POST /api/runs/:id/cancel, match /foo/bar, cwd /app/project',
       sections: [
         {
           kind: 'daemonSystemPrompt',
           content:
-            'POST /api/runs/:id/tool-result, match /foo/bar, cwd /app/project',
+            'POST /api/runs/:id/cancel, match /foo/bar, cwd /app/project',
         },
       ],
     });
 
     expect(telemetry.sections[0]!.redactedContent).toBe(
-      `POST /api/runs/:id/tool-result, match /foo/bar, cwd ${PROMPT_STACK_PATH_MARKER}`,
+      `POST /api/runs/:id/cancel, match /foo/bar, cwd ${PROMPT_STACK_PATH_MARKER}`,
     );
     expect(telemetry.sections[0]!.redactedContent).toContain(
-      '/api/runs/:id/tool-result',
+      '/api/runs/:id/cancel',
     );
     expect(telemetry.sections[0]!.redactedContent).toContain('/foo/bar');
     expect(telemetry.sections[0]!.redactedContent).not.toContain('/app/project');
@@ -355,16 +355,16 @@ describe('prompt telemetry builder', () => {
       ],
     });
 
-    expect(telemetry.redactedContentBytes).toBe(96 * 1024);
+    expect(telemetry.redactedContentBytes).toBe(512 * 1024);
     expect(telemetry.sections.find((s) => s.kind === 'formOverride')?.redactedContent)
-      .toHaveLength(16 * 1024);
+      .toHaveLength(64 * 1024);
     expect(
       telemetry.sections.find((s) => s.kind === 'daemonSystemPrompt')?.redactedContent,
-    ).toHaveLength(32 * 1024);
+    ).toHaveLength(120 * 1024);
     expect(telemetry.sections.find((s) => s.kind === 'clientSystemPrompt')?.redactedContent)
-      .toHaveLength(16 * 1024);
+      .toHaveLength(64 * 1024);
     expect(telemetry.sections.find((s) => s.kind === 'skillPrompt')?.redactedContent)
-      .toHaveLength(16 * 1024);
+      .toHaveLength(64 * 1024);
     const userRequest = telemetry.sections.find((s) => s.kind === 'userRequest')!;
     expect(userRequest.redactedContent).toBeUndefined();
     expect(userRequest.truncationReason).toBe('total_budget_exceeded');
@@ -395,19 +395,19 @@ describe('prompt telemetry builder', () => {
     expect(metadataOnlySection.redactedContent).toBeUndefined();
     expect(metadataOnlySection.fingerprint).toMatch(/^sha256:/);
     expect(telemetry.sections.find((s) => s.kind === 'skillPrompt')?.redactedContent)
-      .toHaveLength(16 * 1024);
+      .toHaveLength(64 * 1024);
     expect(
       telemetry.sections.find((s) => s.kind === 'designSystemPrompt')?.redactedContent,
-    ).toHaveLength(16 * 1024);
+    ).toHaveLength(64 * 1024);
     expect(
       telemetry.sections.find((s) => s.kind === 'pluginStagePrompt')?.redactedContent,
-    ).toHaveLength(16 * 1024);
+    ).toHaveLength(64 * 1024);
     expect(
       telemetry.sections.find((s) => s.kind === 'runContextPrompt')?.redactedContent,
-    ).toHaveLength(16 * 1024);
+    ).toHaveLength(64 * 1024);
     expect(telemetry.sections.find((s) => s.kind === 'echoGuard')?.redactedContent)
-      .toHaveLength(16 * 1024);
-    expect(telemetry.redactedContentBytes).toBe(80 * 1024);
+      .toHaveLength(64 * 1024);
+    expect(telemetry.redactedContentBytes).toBe(320 * 1024);
   });
 
   it('removes redactedContent when content consent is unavailable', () => {

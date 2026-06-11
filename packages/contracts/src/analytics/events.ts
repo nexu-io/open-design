@@ -22,9 +22,11 @@ export type AnalyticsEventName =
   // Project lifecycle
   | 'project_create_result'
   | 'plugin_replacement_result'
+  | 'plugin_import_result'
   // Run lifecycle (daemon authoritative)
   | 'run_created'
   | 'run_finished'
+  | 'langfuse_report_result'
   | 'run_retry_attempted'
   | 'run_retry_finished'
   // Packaged updater lifecycle
@@ -97,6 +99,14 @@ export type TrackingProjectKind =
   | 'template'
   | 'image'
   | 'video'
+  // `hyperframes` is a `video` project rendered by the local HyperFrames
+  // HTML→MP4 engine (`videoModel === 'hyperframes-html'`). The product
+  // routes it as its own task type (a peer of Video, with its own Home
+  // chip), and its cost/latency/success profile differs sharply from AI
+  // video providers, so it is surfaced as a first-class project_kind
+  // rather than collapsed into generic `video`. `model_id` still carries
+  // `hyperframes-html` as a secondary anchor.
+  | 'hyperframes'
   | 'audio'
   // `design_system` covers DS-as-project runs (creation + regeneration).
   // The dashboard reads it on run_created / run_finished to split the
@@ -239,6 +249,7 @@ export type TrackingRunFailureDetail =
   | 'cli_version_incompatible'
   | 'prompt_too_large'
   | 'upstream_5xx'
+  | 'upstream_client_error'
   | 'stream_disconnected'
   | 'network_error'
   | 'provider_high_demand'
@@ -247,15 +258,21 @@ export type TrackingRunFailureDetail =
   | 'timeout'
   | 'empty_output'
   | 'tool_error'
+  | 'plugin_artifact_missing'
   | 'cli_not_installed'
+  | 'agent_config_invalid'
   | 'spawn_failed'
   | 'spawn_enoexec'
   | 'spawn_ebadf'
   | 'spawn_eperm'
   | 'stdin_write_eof'
   | 'agent_protocol_error'
+  | 'fabricated_role_marker'
   | 'permission_request_not_found'
   | 'qoder_stop_sequence'
+  | 'signal_killed'
+  | 'process_crashed'
+  | 'interrupted'
   | 'exit_code'
   | 'terminated_unknown'
   | 'execution_failed'
@@ -279,6 +296,7 @@ export type TrackingRunFailureUserAction =
   | 'switch_model'
   | 'reduce_context'
   | 'install_cli'
+  | 'fix_config'
   | 'none';
 export type TrackingRunRetryStrategy = 'same_run_transient';
 export type TrackingRunRetryFinalResult =
@@ -309,6 +327,15 @@ export type TrackingStderrLineCountBucket =
   | '6_20'
   | '21_100'
   | 'gt_100';
+export type TrackingRunCloseReason =
+  | 'exit_0'
+  | 'exit_nonzero'
+  | 'signal'
+  | 'cancel_requested'
+  | 'stream_error'
+  | 'fatal_rpc_error'
+  | 'empty_output'
+  | 'unknown';
 export type TrackingLangfuseDeliveryStatus =
   | 'not_expected'
   | 'queued'
@@ -325,6 +352,14 @@ export type TrackingLangfuseDropReason =
   | 'langfuse_4xx'
   | 'langfuse_5xx'
   | 'network_error';
+export type TrackingLangfuseReportResult =
+  | 'accepted'
+  | 'failed'
+  | 'skipped';
+export type TrackingLangfuseReportSkipReason =
+  | 'run_not_found'
+  | 'duplicate_run'
+  | 'not_expected';
 
 export type TrackingFeedbackRating = 'positive' | 'negative';
 // Click events emit `none` when the user clears a previously-set rating, so
@@ -401,9 +436,9 @@ export type TrackingChatPanelPageViewSource =
 // --- Onboarding page_view (welcome flow) ---
 //
 // CSV row "Onboarding / page_view". Fires once per step exposure inside the
-// welcome flow. The current first-run flow is Connect → About you; the
-// design-system and generation literals remain in the contract for historical
-// rows and a future reintroduction. Each step's `step_index` / `step_name`
+// welcome flow. The current first-run flow is Connect → About you →
+// Newsletter; the design-system and generation literals remain in the
+// contract for historical rows and a future reintroduction. Each step's `step_index` / `step_name`
 // must match the enum pairs below. `onboarding_session_id` is generated once
 // per session so dashboards can stitch the funnel.
 export type TrackingOnboardingArea =
@@ -839,6 +874,9 @@ export type TrackingDesignSystemApplyTargetKind =
   | 'slide_deck'
   | 'image'
   | 'video'
+  // HyperFrames projects can be a DS-apply target too; keep this in lockstep
+  // with `TrackingProjectKind` so the picker reports them distinctly.
+  | 'hyperframes'
   | 'audio'
   | 'live_artifact'
   | 'unknown';
@@ -1013,20 +1051,55 @@ export interface ExecutionSettingsPopoverClickProps {
     | 'mode_local_cli'
     | 'mode_byok'
     | 'agent_card'
+    // BYOK provider protocol tab inside the popover (Anthropic / OpenAI /
+    // Azure / Google / AIHubMix). Mirrors Settings'
+    // `byok_provider_option` so mode-switch funnels line up.
+    | 'byok_provider_tab'
     | 'model_dropdown'
     | 'open_execution_settings';
+  // `agent_card`: which CLI agent row was picked, normalized via
+  // `agentIdToTracking` (never the raw kebab-case daemon id).
+  cli_provider_id?: TrackingCliProviderId;
+  // `byok_provider_tab` / BYOK `model_dropdown`: the protocol tab, mapped via
+  // `byokProtocolToTracking`; omitted when the protocol is outside the v2
+  // catalogue (e.g. aihubmix) so an unmapped value never ships.
+  provider_id?: TrackingByokProviderId;
+  // `model_dropdown`: the picked model id (`modelIdForTracking`).
+  model_id?: string;
+  // `model_dropdown`: which mode's dropdown was used.
+  execution_mode?: TrackingExecutionMode;
 }
 
+// Items inside the header gear settings popover (EntrySettingsMenu): the
+// interface-language select, the appearance (system/light/dark) radio row,
+// the "Share Open Design" social grid, the Discord / follow-on-X links and
+// the Settings → details entry. The same popover is mounted both on the home
+// header and the in-project artifact header, hence the two-value page_name.
 export interface SettingsPopoverClickProps {
-  page_name: 'home';
+  page_name: 'home' | 'artifact';
   area: 'settings_popover';
   element:
-    | 'follow_x'
-    | 'join_discord'
-    | 'language'
+    | 'language_select'
     | 'appearance'
-    | 'use_everywhere'
-    | 'settings';
+    | 'share_channel'
+    | 'join_discord'
+    | 'follow_x'
+    | 'open_settings';
+  // element=language_select → snake_cased locale (e.g. en, zh_cn, pt_br);
+  // element=appearance → system | light | dark.
+  value?: string;
+  // element=share_channel only — which social network was clicked.
+  channel?:
+    | 'x'
+    | 'linkedin'
+    | 'facebook'
+    | 'reddit'
+    | 'telegram'
+    | 'whatsapp'
+    | 'weibo'
+    | 'line'
+    | 'instagram'
+    | 'xiaohongshu';
 }
 
 export interface HomeChatComposerClickProps {
@@ -1040,9 +1113,46 @@ export interface HomeChatComposerClickProps {
     // Paperclip icon opening the file picker. Mirrors the chat_panel
     // composer's `element: 'attachment'` so the same dashboard counts
     // "user opened the file picker" across both surfaces.
-    | 'attachment';
-  // For plugin / action chips, the specific id (e.g. `prototype`, `from_figma`).
+    | 'attachment'
+    // Local-storage / working-dir picker under the home composer; `task_chip`
+    // is the task-type rail (原型 / 幻灯片 / HyperFrames / 视频 / …).
+    | 'working_dir'
+    | 'working_dir_clear'
+    // The × on the active plugin chip above the composer (mirrors
+    // `working_dir_clear`): removes the bound plugin, whether it was attached
+    // from a Community card or an example-prompt preset. `chip_id` is the
+    // plugin id.
+    | 'plugin_chip_clear'
+    // Re-selecting a previously used folder from the working-dir picker's
+    // "Recent folders" submenu.
+    | 'working_dir_recent'
+    | 'task_chip'
+    // Sub-category filter pill under the task rail (全部 / Landing / Brand /
+    // Dashboards / …). `subcategory` carries the picked slug; '全部' sends
+    // `subcategory: 'all'`. `chip_id` is the parent task type.
+    | 'subcategory_chip'
+    // An example-prompt card below the rail ("示例提示词"). `chip_id` is the
+    // task type; for plugin-preset cards `plugin_id` / `plugin_type` identify
+    // the preset. The raw prompt text is never sent (free text / PII rule).
+    | 'example_prompt'
+    // The "+" menu on the home composer (same control as the in-project
+    // composer's `plus_*` events): opening it, inserting a
+    // connector/plugin/mcp mention (`resource_kind` + `resource_id`), or
+    // jumping to the add-resource surface (`resource_kind`).
+    | 'plus_menu_open'
+    | 'plus_pick'
+    | 'plus_add';
+  // For `plus_pick` / `plus_add`: which kind of resource (and its id on pick).
+  resource_kind?: 'connector' | 'plugin' | 'mcp';
+  resource_id?: string;
+  // For plugin / action / task chips, the specific id (e.g. `prototype`,
+  // `from_figma`, `hyperframes`).
   chip_id?: string;
+  // For `subcategory_chip`: the picked sub-category slug ('all' on 全部).
+  subcategory?: string;
+  // For `example_prompt` cards backed by a plugin preset: which preset.
+  plugin_id?: string;
+  plugin_type?: string;
 }
 
 export interface UpdateIndicatorClickProps {
@@ -1178,9 +1288,30 @@ export interface AutomationsClickProps {
     | 'history'
     | 'cancel'
     | 'create'
-    | 'save';
+    | 'save'
+    | 'crystallize'
+    | 'proposal_apply'
+    | 'proposal_reject';
   type_id?: 'orbit' | 'routines' | 'schedules' | 'live_artifacts';
-  filter_id?: 'all' | 'scheduled' | 'running' | 'done';
+  // filter_id mirrors the template category tabs actually rendered in the
+  // Automations tab; the legacy run-status values stay for forward-compat.
+  filter_id?:
+    | 'all'
+    | 'scheduled'
+    | 'running'
+    | 'done'
+    | 'orbit'
+    | 'live-artifact'
+    | 'routine'
+    | 'memory'
+    | 'design-system'
+    | 'skills'
+    | 'connectors'
+    | 'compression'
+    | 'release'
+    | 'quality';
+  // Kind of the template whose card was clicked (element=type_card).
+  template_kind?: 'orbit' | 'live-artifact' | 'routine';
 }
 
 // PLUGINS
@@ -1190,7 +1321,6 @@ export interface PluginsTopClickProps {
   element:
     | 'create_plugin'
     | 'import_plugin'
-    | 'agent_context'
     | 'installed_tab'
     | 'available_tab'
     | 'sources_tab'
@@ -1240,6 +1370,21 @@ export interface PluginsSourcesTabClickProps {
   plugin_type?: string;
 }
 
+// The plugin import modal's three intake paths (the source tabs):
+// github = the "From GitHub" source-string flow, zip / folder = archive or
+// directory upload. ImportKind in PluginsView.tsx uses the same literals.
+export type TrackingPluginImportSource = 'github' | 'zip' | 'folder';
+
+// "Import a plugin" modal opened from the Plugins page header.
+export interface PluginImportModalClickProps {
+  page_name: 'plugins';
+  area: 'import_modal';
+  element: 'source_tab' | 'import' | 'cancel';
+  // For `source_tab` the tab being selected; for `import` the active intake
+  // path the import runs through. Omitted for `cancel`.
+  import_source?: TrackingPluginImportSource;
+}
+
 export interface PluginDetailClickProps {
   page_name: 'plugins';
   area: 'plugin_detail';
@@ -1252,6 +1397,64 @@ export interface PluginLoopClickProps {
   area: 'plugin_loop';
   element: 'clear_active' | 'submit' | 'card_details' | 'card_use';
   plugin_id?: string;
+}
+
+// COMMUNITY — the home "Community" gallery: a wall of live example.html
+// preview tiles (PluginsHomeSection cardLayout="gallery"). `card` opens
+// the plugin detail modal (tile body click or keyboard); `card_open_external`
+// is the ↗ that opens the real example page in a new tab, bypassing the
+// modal — a strong "go straight to the finished thing" intent signal.
+export interface CommunityGalleryClickProps {
+  page_name: 'home';
+  area: 'community_gallery';
+  // `use_plugin` is the user actually applying a community plugin into the
+  // composer (from the gallery card's Use button or its detail modal), as
+  // opposed to just opening the card. `action` distinguishes a plain apply
+  // from use-with-query.
+  element: 'card' | 'card_open_external' | 'use_plugin';
+  plugin_id?: string;
+  plugin_type?: string;
+  action?: 'use' | 'use_with_query';
+}
+
+// HOME — clicks inside the plugin detail modal opened from the Community
+// gallery (the surface PluginDetailModalSurfaceViewProps measures).
+// `use_plugin` is the primary CTA face (action 'use'); `use_plugin_dropdown`
+// is the split-menu "Replicate this content" variant (action 'use-with-query');
+// `close` covers the close button, Esc and the backdrop. plugin_id /
+// plugin_type mirror CommunityGalleryClickProps so the gallery → modal → use
+// funnel joins on the same keys.
+export interface PluginDetailModalClickProps {
+  page_name: 'home';
+  area: 'plugin_detail_modal';
+  element: 'use_plugin' | 'use_plugin_dropdown' | 'close';
+  plugin_id?: string;
+  plugin_type?: string;
+}
+
+// HOME — the merged Share popover inside the plugin detail modal
+// (PreviewModal chrome). Element values mirror design_systems'
+// templates_modal_share_popover vocabulary: social intents, copy actions,
+// then file exports.
+export interface PluginDetailModalSharePopoverClickProps {
+  page_name: 'home';
+  area: 'plugin_detail_share_popover';
+  element:
+    | 'x'
+    | 'reddit'
+    | 'facebook'
+    | 'linkedin'
+    | 'instagram'
+    | 'xiaohongshu'
+    | 'copy_link'
+    | 'copy_share_text'
+    | 'pdf'
+    | 'zip'
+    | 'html'
+    | 'image'
+    | 'open_in_new_tab';
+  plugin_id?: string;
+  plugin_type?: string;
 }
 
 // DESIGN SYSTEMS
@@ -1294,6 +1497,26 @@ export interface DesignSystemsTemplatesModalSharePopoverClickProps {
   templates_type?: string;
 }
 
+// Form-level intent clicks on the standalone /design-systems/create
+// setup form ("Generate from your material"). The embedded onboarding
+// variant is excluded — EntryShell/onboarding owns its own
+// area=design_system clicks (same gating as the DS create page_view
+// and the DS file_upload_result).
+export interface DesignSystemsCreateClickProps {
+  page_name: 'design_systems';
+  area: 'design_system_create';
+  element:
+    | 'github_repo_add'
+    | 'show_access_methods'
+    | 'browse_folder'
+    | 'upload_fig'
+    | 'add_assets'
+    | 'continue_to_generation'
+    | 'back';
+  // State *after* the toggle; only sent with element=show_access_methods.
+  methods_expanded?: boolean;
+}
+
 // INTEGRATIONS
 export interface IntegrationsTabClickProps {
   page_name: 'integrations';
@@ -1301,10 +1524,24 @@ export interface IntegrationsTabClickProps {
   element: 'mcp' | 'connectors' | 'skills' | 'use_everywhere';
 }
 
+// Shared element vocabulary for the External MCP panel. McpClientSection
+// renders on two surfaces (Settings -> External MCP, Integrations -> MCP
+// tab); both click payloads draw from this enum so funnels line up.
+export type TrackingExternalMcpElement =
+  | 'add_server'
+  | 'pick_template'
+  | 'pick_blank'
+  | 'remove_server'
+  | 'saved';
+
 export interface IntegrationsMcpTabClickProps {
   page_name: 'integrations';
   area: 'mcp_tab';
-  element: 'add_server' | 'saved';
+  element: TrackingExternalMcpElement;
+  // Catalog template id (hyphens mapped to underscores). Set for
+  // `pick_template`, and for `remove_server` when the removed row came
+  // from a template. Omitted for blank/custom rows.
+  template_id?: string;
 }
 
 export interface IntegrationsConnectorsTabClickProps {
@@ -1356,17 +1593,134 @@ export interface ChatPanelClickProps {
     | 'resources_popover_trigger';
 }
 
-// Next-step action affordance shown under the last assistant message after a
-// previewable artifact is produced. `next_step_exposed` fires once when the
-// affordance becomes visible so the funnel can divide clicks by exposure;
-// the action elements drive the "second-turn rate" / "share rate" acceptance
-// metrics. `chip_id` carries the recommended-chip identity (e.g.
-// `polish_visual`, `second_version`) for the `chip` element.
+// Composer mode the user sends prompts in. `ask` is the lighter Q&A mode
+// (the wire / DB value is `chat`; the UI labels it "Ask"); `design` is the
+// full design-agent run. Map the wire `chat` → `ask` at every emit site via
+// `sessionModeToTracking` so analytics speaks the product's language.
+export type TrackingSessionMode = 'ask' | 'design';
+
+// Toggling the ask/design switch in the chat composer.
+export interface ComposerSessionModeClickProps {
+  // The composer renders on both the home hero and the in-project chat panel;
+  // the toggle is the same control on both surfaces.
+  page_name: 'home' | 'chat_panel';
+  area: 'chat_composer';
+  element: 'session_mode_toggle';
+  mode_before: TrackingSessionMode;
+  mode_after: TrackingSessionMode;
+  project_id?: string;
+}
+
+// The "设计百宝箱" (Design toolbox) flyout inside the composer's "+" menu.
+// `design_toolbox_open` fires when the panel is opened; `..._action` when a
+// predefined follow-up action is picked (`toolbox_action_id`); `..._resource`
+// when a skill / plugin / mcp / connector / file is inserted
+// (`resource_kind` + `resource_id`).
+export interface DesignToolboxClickProps {
+  page_name: 'chat_panel';
+  area: 'chat_composer';
+  element:
+    | 'design_toolbox_open'
+    | 'design_toolbox_action'
+    | 'design_toolbox_resource';
+  toolbox_action_id?: string;
+  resource_kind?:
+    | 'skill'
+    | 'plugin'
+    | 'mcp'
+    | 'mcp-template'
+    | 'connector'
+    | 'file';
+  resource_id?: string;
+  project_id?: string;
+}
+
+// The rest of the in-project composer bottom bar (not the mode toggle or the
+// design toolbox, which have their own events above):
+//   - `plus_menu_open` / `plus_pick` / `plus_add`: the "+" menu — opening it,
+//     inserting a connector/plugin/mcp mention (`resource_kind` + `resource_id`),
+//     or jumping to the add-resource surface (`resource_kind`).
+//   - `design_system_switch`: picked a design system from the composer
+//     (`design_system_id`).
+//   - `working_dir_switch`: changed the project's local-storage working dir.
+//   - `agent_selector_open` / `agent_select` / `agent_model_select`: the CLI/
+//     agent/model dropdown (`agent_id` / `model_id`).
+//   - `context_remove`: removed a staged context chip (`resource_kind` +
+//     `resource_id`).
+export interface ComposerBarClickProps {
+  page_name: 'chat_panel';
+  area: 'chat_composer';
+  element:
+    | 'plus_menu_open'
+    | 'plus_pick'
+    | 'plus_add'
+    | 'design_system_switch'
+    | 'working_dir_switch'
+    | 'agent_selector_open'
+    | 'agent_select'
+    | 'agent_model_select'
+    | 'context_remove';
+  resource_kind?:
+    | 'connector'
+    | 'plugin'
+    | 'mcp'
+    | 'skill'
+    | 'workspace'
+    | 'attachment';
+  resource_id?: string;
+  agent_id?: string;
+  model_id?: string;
+  design_system_id?: string;
+  project_id?: string;
+}
+
+// Next-step action affordance shown under the last successful assistant
+// message. `next_step_exposed` fires once when the affordance becomes visible
+// so the funnel can divide clicks by exposure; the action elements drive the
+// "second-turn rate" / "share rate" acceptance metrics. The featured
+// design-toolbox rows (`toolbox_action`, with `chip_id` carrying the action id)
+// and `toolbox_more` replaced the former recommended chips as the card's
+// primary iteration entry. `chip` remains for back-compat on legacy events.
 export interface NextStepActionClickProps {
   page_name: 'chat_panel';
   area: 'next_step';
-  element: 'next_step_exposed' | 'share' | 'chip';
+  element:
+    | 'next_step_exposed'
+    | 'share'
+    | 'chip'
+    | 'toolbox_action'
+    | 'toolbox_more'
+    | 'share_to_open_design';
   chip_id?: string;
+}
+
+// Studio Questions tab discovery form (the agent-emitted <question-form>
+// rendered in the right-hand panel before generation starts). The form body
+// is model-generated JSON, so chips are question options, not fixed UI:
+//   - `task_type_chip`: a pick on the `taskType` radio (Prototype / Live
+//     artifact / Slide deck / Image / Video / HyperFrames / Audio / Other).
+//   - `brand_bg_chip`: a pick on the `brand` radio (pick_direction /
+//     brand_spec / reference_match).
+//   - `skip`: the Skip button or the auto-continue countdown elapsing
+//     (`skip_source` says which). The countdown honours any picks the user
+//     made, so skip also carries the counts.
+//   - `submit`: the Continue CTA (or the form's own submit).
+// `chip_id` / `form_id` are normalized via `questionsFormTrackingId`
+// ("Live artifact" → "live_artifact"; non-latin localized labels → "unknown").
+export interface QuestionsFormClickProps {
+  page_name: 'chat_panel';
+  area: 'questions_form';
+  element: 'task_type_chip' | 'brand_bg_chip' | 'skip' | 'submit';
+  // task_type_chip / brand_bg_chip only: the picked option value, snake_case.
+  chip_id?: string;
+  // skip only: user pressed the button vs the countdown elapsed.
+  skip_source?: 'button' | 'countdown';
+  // skip / submit: questions carrying a non-empty answer vs left blank.
+  answered_count?: number;
+  skipped_count?: number;
+  // 'task_type' (single-shot default-router brief) | 'discovery' | other.
+  form_id?: string;
+  project_id: string;
 }
 
 // Hosted-AMR nudge shown under a non-AMR agent's model/auth/quota failure.
@@ -1388,6 +1742,27 @@ export interface AmrEntryClickProps {
   entry_occurred_at: string;
 }
 
+// Terminal outcome of one AMR (vela) sign-in attempt, fired exactly once
+// per attempt when the login poll loop settles. This is the main-app-side
+// completion signal that pairs with the amr_entry click: dashboards count
+// AMR-authorized users from this event without joining the separate AMR
+// PostHog project. `result` semantics:
+//   success   — poll observed loggedIn=true within the budget
+//   failed    — `vela login` failed to spawn or exited before sign-in
+//   cancelled — the user clicked Cancel (or backed out mid-start)
+//   timeout   — the 5-minute poll budget elapsed
+export interface AmrAuthResultProps {
+  page_name: TrackingPageName;
+  area: 'amr_auth';
+  result: 'success' | 'failed' | 'cancelled' | 'timeout';
+  error_code?: string;
+  duration_ms: number;
+  // Attribution carried over from the amr_entry click that started this
+  // attempt; absent when login was started without a recorded entry.
+  entry_id?: string;
+  source_detail?: TrackingAmrEntrySource;
+}
+
 export interface ChatPanelResourcesPopoverClickProps {
   page_name: 'chat_panel';
   area: 'resources_popover';
@@ -1402,6 +1777,19 @@ export interface ChatPanelResourcesPopoverClickProps {
     | 'search_input'
     | 'template_card'
     | 'customize_in_settings';
+}
+
+// Actions on the queued-send strip ("N queued · to send") that sits above
+// the chat composer while a run is in flight: re-open a queued prompt in the
+// composer (`edit`), promote it to send immediately (`send_now`), or drop it
+// from the queue (`delete`). `queue_length` is the queue size at click time,
+// before the action applies.
+export interface ChatPanelMessageQueueClickProps {
+  page_name: 'chat_panel';
+  area: 'message_queue';
+  element: 'edit' | 'send_now' | 'delete';
+  project_id: string;
+  queue_length: number;
 }
 
 // FILE MANAGER
@@ -1421,6 +1809,58 @@ export interface FileManagerClickProps {
     | 'per_page_dropdown';
 }
 
+// The workspace tab strip's "+" launcher — a command-palette popover for
+// opening tabs. `open` fires when the menu is opened; `filter` when a file-kind
+// chip is picked (`kind_filter`); `create` when a "New …" action runs
+// (`action_id` = new-terminal | new-browser | …); `open_file` when a project
+// file is opened as a tab (`file_kind`); `open_tab` when an already-open tab is
+// focused (`tab_kind` = browser | terminal | design-files | …).
+export interface TabLauncherClickProps {
+  page_name: 'file_manager';
+  area: 'tab_launcher';
+  element: 'open' | 'filter' | 'create' | 'open_file' | 'open_tab';
+  action_id?: string;
+  kind_filter?: string;
+  file_kind?: string;
+  tab_kind?: string;
+  project_id?: string;
+}
+
+// REFERENCE BOARD — the Design browser's blank-tab start page: a curated
+// catalogue of reference sites with category filter chips, a search box,
+// and per-site Open buttons. `category_id` mirrors `REFERENCE_GROUPS[].id`
+// in DesignBrowserPanel plus the synthetic `all` chip; `site_id` is the
+// site hostname slugged to snake_case with the TLD dropped
+// (`dribbble.com` → `dribbble`, `land-book.com` → `land_book`,
+// `fonts.google.com` → `fonts_google`).
+export type TrackingReferenceBoardCategory =
+  | 'all'
+  | 'inspiration'
+  | 'interfaces'
+  | 'motion'
+  | 'color'
+  | 'type'
+  | 'icons'
+  | 'illustration'
+  | 'photography'
+  | '3d'
+  | 'mockups'
+  | 'systems'
+  | 'components'
+  | 'guidelines'
+  | 'tools';
+
+export interface ReferenceBoardClickProps {
+  page_name: 'file_manager';
+  area: 'reference_board';
+  element: 'category_chip' | 'open_site' | 'search_input';
+  // Sent with element=category_chip.
+  category_id?: TrackingReferenceBoardCategory;
+  // Sent with element=open_site: the hostname slug (see above).
+  site_id?: string;
+  project_id?: string;
+}
+
 // ARTIFACT
 export interface ArtifactToolbarClickProps {
   page_name: 'artifact';
@@ -1438,6 +1878,30 @@ export interface ArtifactToolbarClickProps {
     | 'zoom_out'
     | 'zoom_level_dropdown'
     | 'zoom_in';
+  artifact_id?: string;
+  artifact_kind?: TrackingArtifactKind;
+}
+
+// The Draw (mark-pen) annotation overlay's floating toolbar inside the
+// artifact preview. `rect` / `pen` switch the mark tool (the component's
+// internal MarkTool value 'box' maps to `rect`); `undo` / `redo` cover both
+// the toolbar buttons and the Cmd/Ctrl+Z(+Shift) shortcuts; `attach_image`
+// opens the image picker; `annotation_submit` fires once per submit with
+// `submit_action` distinguishing add-to-input (`draft`) / queue / send —
+// including the Enter key in the note input; `exit` is the toolbar close
+// button.
+export interface DrawToolbarClickProps {
+  page_name: 'artifact';
+  area: 'draw_toolbar';
+  element:
+    | 'rect'
+    | 'pen'
+    | 'undo'
+    | 'redo'
+    | 'attach_image'
+    | 'annotation_submit'
+    | 'exit';
+  submit_action?: 'draft' | 'queue' | 'send';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
 }
@@ -1468,8 +1932,84 @@ export interface ArtifactHeaderClickProps {
     | 'back'
     | 'edit'
     | 'present_dropdown'
+    // `download_dropdown` distinguishes the Download split button from the
+    // Share button; before, both reported `share_dropdown` and were
+    // indistinguishable in the funnel.
+    | 'download_dropdown'
     | 'share_dropdown'
     | 'settings';
+  artifact_id?: string;
+  artifact_kind?: TrackingArtifactKind;
+}
+
+// Canonical, bounded set of hand-off `target_id` values: the editor /
+// file-manager ids (mirrors `HostEditorId` in `../api/host-tools`) plus the
+// tracked code-agent CLI ids. Single source of truth for both the type and
+// the runtime allow-list in `handoffTargetIdToTracking`. Keep in sync with
+// `HostEditorId` and `HandoffButton`'s CLI_ORDER; unknown runtime ids
+// normalize to `'other'` so the schema never leaks an editor label, binary
+// name, or other free-form / PII value.
+export const TRACKING_HANDOFF_TARGET_IDS = [
+  // editors / file managers (HostEditorId)
+  'cursor', 'vscode', 'windsurf', 'zed', 'qoder', 'antigravity', 'webstorm',
+  'idea', 'xcode', 'finder', 'explorer', 'file-manager', 'terminal', 'warp',
+  // code-agent CLIs (HandoffButton CLI_ORDER; qoder / antigravity already above)
+  'amr', 'claude', 'codex', 'opencode', 'cursor-agent', 'gemini', 'qwen',
+  'copilot', 'grok-build', 'deepseek', 'kimi', 'hermes', 'devin', 'kiro',
+  'kilo', 'vibe', 'aider', 'trae-cli', 'pi', 'reasonix',
+] as const;
+
+export type TrackingHandoffTargetId =
+  | (typeof TRACKING_HANDOFF_TARGET_IDS)[number]
+  | 'other';
+
+// Normalize a runtime editor / CLI id to the bounded tracking enum. Unknown
+// ids (e.g. a CLI the daemon adds later) collapse to `'other'` rather than
+// shipping a free-form value, keeping the no-PII guarantee enforced in code.
+export function handoffTargetIdToTracking(
+  id: string | null | undefined,
+): TrackingHandoffTargetId {
+  return (TRACKING_HANDOFF_TARGET_IDS as readonly string[]).includes(id ?? '')
+    ? (id as TrackingHandoffTargetId)
+    : 'other';
+}
+
+// Hand-off button in the workspace header (open the project folder in a local
+// editor, or copy a hand-off prompt for a code-agent CLI). Lives under
+// `page_name=artifact` / `area=handoff` so it sits next to the other header
+// actions (present/share/download/settings) in the funnel.
+export interface HandoffClickProps {
+  page_name: 'artifact';
+  area: 'handoff';
+  element:
+    // Primary split button — launches the preferred editor, or toggles the
+    // picker when there is no preferred target yet.
+    | 'trigger'
+    // Caret next to the primary button — toggles the picker menu.
+    | 'caret'
+    // Switch between the Editor and CLI tabs inside the picker.
+    | 'tab'
+    // Choose a target framework chip for the CLI hand-off prompt.
+    | 'framework'
+    // Copy the absolute project path.
+    | 'copy_path'
+    // Launch a specific editor target (or the Finder/Explorer fallback).
+    | 'open_editor'
+    // Copy the hand-off prompt for a specific CLI agent.
+    | 'copy_cli_prompt'
+    // Open the Open Design AMR website link.
+    | 'amr_website';
+  // Bounded enum id of the editor / CLI target, present for `open_editor`,
+  // `copy_cli_prompt`, and for `trigger` when it directly launches the
+  // preferred editor. Normalized via `handoffTargetIdToTracking` so it is
+  // never a free path or display name (`'other'` for unknown ids).
+  target_id?: TrackingHandoffTargetId;
+  // Whether the chosen editor / CLI target was detected as installed.
+  target_available?: boolean;
+  // Which hand-off tab the click relates to (tab switches and CLI copies).
+  handoff_tab?: 'editor' | 'cli';
+  // Selected framework id for CLI prompt copies / framework chip selection.
+  framework?: 'react' | 'vue' | 'svelte' | 'solid' | 'next' | 'vanilla';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
 }
@@ -1548,6 +2088,7 @@ export type TrackingSettingsArea =
   | 'memory'
   | 'media_providers'
   | 'skills'
+  | 'design_review'
   | 'external_mcp'
   | 'connectors'
   | 'orbit'
@@ -1678,11 +2219,29 @@ export interface SettingsPrivacyClickProps {
   element:
     | 'anonymous_metrics'
     | 'conversation_and_tool_content'
-    | 'project_artifacts_manifest'
     | 'delete_my_data';
   anonymous_metrics_status?: 'on' | 'off';
   conversation_and_tool_content_status?: 'on' | 'off';
-  project_artifacts_manifest_status?: 'on' | 'off';
+}
+
+export interface SettingsDesignReviewClickProps {
+  page_name: TrackingSettingsPage;
+  area: 'design_review';
+  element: 'enable_toggle';
+  status_before: 'on' | 'off';
+  status_after: 'on' | 'off';
+  // True when Settings was opened from /projects/:id so the toggle also
+  // persisted to the project's metadata (the daemon-side rollout gate),
+  // not just localStorage.
+  has_active_project: boolean;
+}
+
+export interface SettingsExternalMcpClickProps {
+  page_name: TrackingSettingsPage;
+  area: 'external_mcp';
+  element: TrackingExternalMcpElement;
+  // Same semantics as IntegrationsMcpTabClickProps.template_id.
+  template_id?: string;
 }
 
 // Discriminated union of every supported ui_click payload.
@@ -1710,27 +2269,41 @@ export type UiClickProps =
   | PluginsTemplatesDropdownClickProps
   | PluginsAvailableTabClickProps
   | PluginsSourcesTabClickProps
+  | PluginImportModalClickProps
   | PluginDetailClickProps
   | PluginLoopClickProps
+  | CommunityGalleryClickProps
+  | PluginDetailModalClickProps
+  | PluginDetailModalSharePopoverClickProps
   | DesignSystemsTopClickProps
   | DesignSystemsTemplateCardClickProps
   | DesignSystemsTemplatesModalClickProps
   | DesignSystemsTemplatesModalSharePopoverClickProps
+  | DesignSystemsCreateClickProps
   | IntegrationsTabClickProps
   | IntegrationsMcpTabClickProps
   | IntegrationsConnectorsTabClickProps
   | IntegrationsSkillsTabClickProps
   | IntegrationsUseEverywhereTabClickProps
   | ChatPanelClickProps
+  | ComposerSessionModeClickProps
+  | DesignToolboxClickProps
+  | ComposerBarClickProps
   | NextStepActionClickProps
+  | QuestionsFormClickProps
   | RunFailedToastClickProps
   | AmrEntryClickProps
   | ChatPanelResourcesPopoverClickProps
+  | ChatPanelMessageQueueClickProps
   | FileManagerClickProps
+  | TabLauncherClickProps
+  | ReferenceBoardClickProps
   | ArtifactToolbarClickProps
+  | DrawToolbarClickProps
   | TweaksPopoverClickProps
   | CommentPopoverClickProps
   | ArtifactHeaderClickProps
+  | HandoffClickProps
   | PresentPopoverClickProps
   | ShareOptionPopoverClickProps
   | AssistantFeedbackButtonClickProps
@@ -1747,6 +2320,8 @@ export type UiClickProps =
   | SettingsNotificationsClickProps
   | SettingsPetsClickProps
   | SettingsPrivacyClickProps
+  | SettingsDesignReviewClickProps
+  | SettingsExternalMcpClickProps
   | OnboardingClickProps;
 
 // ---- surface_view --------------------------------------------------------
@@ -1754,6 +2329,14 @@ export type UiClickProps =
 export interface HelpPopoverSurfaceViewProps {
   page_name: 'home';
   area: 'help_resources_popover';
+}
+
+// Impression of the header gear settings popover. Mirrors
+// HelpPopoverSurfaceViewProps: fires once each time the popover opens so the
+// share / language / appearance funnels have a denominator.
+export interface SettingsPopoverSurfaceViewProps {
+  page_name: 'home' | 'artifact';
+  area: 'settings_popover';
 }
 
 export interface NewProjectModalSurfaceViewProps {
@@ -1765,6 +2348,24 @@ export interface NewProjectModalSurfaceViewProps {
 export interface PluginReplacementModalSurfaceViewProps {
   page_name: 'home';
   area: 'plugin_replacement_modal';
+}
+
+// Impression of the plugin detail modal opened from the home Community
+// gallery. Fires once per open so the gallery → detail funnel has a
+// denominator (card clicks) and a numerator (modal exposures).
+export interface PluginDetailModalSurfaceViewProps {
+  page_name: 'home';
+  area: 'plugin_detail_modal';
+  plugin_id?: string;
+  plugin_type?: string;
+}
+
+// Impression of the "Import a plugin" modal on the Plugins page. Fires once
+// per open so the import funnel has a denominator for source_tab / import
+// clicks and plugin_import_result.
+export interface PluginImportModalSurfaceViewProps {
+  page_name: 'plugins';
+  area: 'import_modal';
 }
 
 export interface DesignSystemsTemplatesModalSurfaceViewProps {
@@ -1802,6 +2403,25 @@ export interface AssistantFeedbackReasonPanelSurfaceViewProps {
   rating: 'positive' | 'negative';
 }
 
+// Exposure of the Questions tab discovery form — fires once per form
+// occurrence when a parseable form first becomes visible (the tab is
+// conditionally mounted, so emit sites dedupe by the occurrence key).
+// Denominator for the questions_form click events above.
+export interface QuestionsFormSurfaceViewProps {
+  page_name: 'chat_panel';
+  area: 'questions_form';
+  project_id: string;
+  form_id?: string;
+}
+
+// Impression of the Reference Board: fires once each time a blank Browser
+// tab renders the start page, so chip/site clicks have a denominator.
+export interface ReferenceBoardSurfaceViewProps {
+  page_name: 'file_manager';
+  area: 'reference_board';
+  project_id?: string;
+}
+
 // Packaged updater UI surfaces. The download pipeline is intentionally
 // silent; these fire only when a verified update is installable and when the
 // user opens the final confirmation prompt.
@@ -1822,11 +2442,16 @@ export interface UpdatePromptSurfaceViewProps {
 export type SurfaceViewProps =
   | RunFailedToastSurfaceViewProps
   | HelpPopoverSurfaceViewProps
+  | SettingsPopoverSurfaceViewProps
   | NewProjectModalSurfaceViewProps
   | PluginReplacementModalSurfaceViewProps
+  | PluginDetailModalSurfaceViewProps
+  | PluginImportModalSurfaceViewProps
   | DesignSystemsTemplatesModalSurfaceViewProps
   | AssistantFeedbackReasonPanelSurfaceViewProps
+  | QuestionsFormSurfaceViewProps
   | UpdateIndicatorSurfaceViewProps
+  | ReferenceBoardSurfaceViewProps
   | UpdatePromptSurfaceViewProps;
 
 // ---- Result events -------------------------------------------------------
@@ -1847,6 +2472,11 @@ export interface ProjectCreateResultProps {
   reference_template?: string;
   model_id?: string;
   aspect?: string;
+  // The scenario plugin the send was routed through (when any), so a
+  // successful/failed create can be attributed to a specific plugin —
+  // e.g. an example-prompt preset or a community plugin the user applied.
+  plugin_id?: string;
+  plugin_type?: string;
   result: TrackingResult;
   error_code?: string;
 }
@@ -1856,6 +2486,18 @@ export interface PluginReplacementResultProps {
   area: 'plugin_replacement';
   plugin_before: string;
   plugin_after: string;
+  result: TrackingResult;
+  error_code?: string;
+}
+
+// Outcome of an actual import attempt from the plugin import modal. Fires
+// once per executed import (after the install/upload promise settles), not
+// for clicks that no-op. `error_code` carries the backend failure message —
+// the install pipeline has no structured codes (see PluginInstallOutcome).
+export interface PluginImportResultProps {
+  page_name: 'plugins';
+  area: 'import_modal';
+  import_source: TrackingPluginImportSource;
   result: TrackingResult;
   error_code?: string;
 }
@@ -1925,6 +2567,18 @@ export interface RunCreatedProps {
   agent_provider_id: TrackingCliProviderId;
   skill_id: string | null;
   mcp_id: string | null;
+  // Composer mode the prompt was sent in. `ask` is the lighter Q&A mode
+  // (wire value `chat`); `design` is the full design-agent run. Optional so
+  // DS-generation runs (which have no user-facing mode) can omit it.
+  session_mode?: TrackingSessionMode;
+  // The plugin actively bound to this run (the applied plugin snapshot), or
+  // null when the user ran with no active plugin.
+  plugin_id?: string | null;
+  // Per-turn capability context: the MCP servers and skills actually enabled
+  // for this send. Multi-valued, so recorded as arrays alongside the legacy
+  // singular `mcp_id` / `skill_id` (which stay for back-compat).
+  mcp_ids?: string[];
+  skill_ids?: string[];
   token_count_source: TrackingTokenCountSource;
 }
 
@@ -1944,8 +2598,16 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   diagnostic_source?: TrackingRunDiagnosticSource;
   stderr_present?: boolean;
   stderr_line_count_bucket?: TrackingStderrLineCountBucket;
+  stdout_present?: boolean;
+  stdout_line_count_bucket?: TrackingStderrLineCountBucket;
+  rpc_close_reason?: TrackingRunCloseReason;
+  first_token_seen?: boolean;
+  user_visible_output_seen?: boolean;
+  tool_call_seen?: boolean;
+  artifact_write_seen?: boolean;
+  live_artifact_seen?: boolean;
   artifact_count: number;
-  // True when the run raised an AskUserQuestion clarification card. Such runs
+  // True when the run raised a `<question-form>` clarification. Such runs
   // are intent-clarification turns (the agent stops to ask the user a question)
   // and therefore inherently produce no artifact, so the dashboard can exclude
   // them from the "run finished -> has artifact" funnel instead of counting
@@ -1982,6 +2644,26 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   retry_attempt_count?: number;
   retry_final_result?: TrackingRunRetryFinalResult;
   retry_suppressed_reason?: TrackingRunRetrySuppressedReason;
+}
+
+export interface LangfuseReportResultProps {
+  page_name: 'chat_panel' | 'design_system_project';
+  area: 'chat_panel' | 'design_system_generation';
+  project_id: string | null;
+  conversation_id: string | null;
+  run_id: string;
+  langfuse_trace_id: string;
+  langfuse_expected: boolean;
+  langfuse_delivery_status: TrackingLangfuseDeliveryStatus;
+  langfuse_drop_reason?: TrackingLangfuseDropReason;
+  langfuse_report_result: TrackingLangfuseReportResult;
+  langfuse_report_trigger: 'final_message' | 'terminal_fallback';
+  langfuse_report_skip_reason?: TrackingLangfuseReportSkipReason;
+  report_duration_ms?: number;
+  result?: TrackingRunResult;
+  error_code?: string;
+  agent_provider_id?: TrackingCliProviderId;
+  model_id?: string;
 }
 
 export interface RunRetryBaseProps {
@@ -2249,8 +2931,10 @@ export type AnalyticsEventPayload =
   | { event: 'surface_view'; props: SurfaceViewProps }
   | { event: 'project_create_result'; props: ProjectCreateResultProps }
   | { event: 'plugin_replacement_result'; props: PluginReplacementResultProps }
+  | { event: 'plugin_import_result'; props: PluginImportResultProps }
   | { event: 'run_created'; props: RunCreatedProps }
   | { event: 'run_finished'; props: RunFinishedProps }
+  | { event: 'langfuse_report_result'; props: LangfuseReportResultProps }
   | { event: 'run_retry_attempted'; props: RunRetryAttemptedProps }
   | { event: 'run_retry_finished'; props: RunRetryFinishedProps }
   | { event: 'update_install_result'; props: UpdateInstallResultProps }
@@ -2279,6 +2963,7 @@ export type AnalyticsEventPayload =
       props: SettingsByokModelsFetchResultProps;
     }
   | { event: 'settings_connector_auth_result'; props: SettingsConnectorAuthResultProps }
+  | { event: 'amr_auth_result'; props: AmrAuthResultProps }
   | { event: 'onboarding_runtime_scan_result'; props: OnboardingRuntimeScanResultProps }
   | { event: 'onboarding_complete_result'; props: OnboardingCompleteResultProps }
   | {
@@ -2292,10 +2977,28 @@ export type AnalyticsEventPayload =
 
 // ---- Enum mapping helpers (code ↔ CSV wire format) -----------------------
 
+// Map the wire `ChatSessionMode` ('design' | 'chat') to the analytics enum.
+// The composer's "Ask" mode is `chat` on the wire; analytics uses `ask` so
+// the dashboards read in the product's own language. Anything that isn't a
+// recognized design mode buckets into `ask` (the lighter default).
+export function sessionModeToTracking(
+  mode: string | null | undefined,
+): TrackingSessionMode {
+  return mode === 'design' ? 'design' : 'ask';
+}
+
 // Code `ProjectKind` from packages/contracts/src/api/projects.ts:
 //   'prototype' | 'deck' | 'template' | 'other' | 'image' | 'video' | 'audio'
+// Discriminates HyperFrames from generic AI video. A HyperFrames project is
+// stored as `kind: 'video'` with `metadata.videoModel === 'hyperframes-html'`
+// (the local HTML→MP4 renderer); callers pass that videoModel through so the
+// analytics layer can split it out into its own `project_kind`. See the
+// `'hyperframes'` member docblock on `TrackingProjectKind`.
+const HYPERFRAMES_VIDEO_MODEL = 'hyperframes-html';
+
 export function projectKindToTracking(
   kind: string | null | undefined,
+  videoModel?: string | null,
 ): TrackingProjectKind | null {
   switch (kind) {
     case 'prototype':
@@ -2309,7 +3012,9 @@ export function projectKindToTracking(
     case 'image':
       return 'image';
     case 'video':
-      return 'video';
+      // HyperFrames rides on the `video` kind; the local-render engine is the
+      // only thing that distinguishes it, so route on videoModel here.
+      return videoModel === HYPERFRAMES_VIDEO_MODEL ? 'hyperframes' : 'video';
     case 'audio':
       return 'audio';
     case 'live-artifact':
@@ -2478,6 +3183,7 @@ export function settingsSectionToTracking(
     case 'connectors':
       return 'connectors';
     case 'mcpClient':
+      return 'external_mcp';
     case 'mcp_server':
       return 'mcp_server';
     case 'orbit':
@@ -2486,6 +3192,8 @@ export function settingsSectionToTracking(
       return 'skills';
     case 'designSystems':
       return 'design_systems';
+    case 'critiqueTheater':
+      return 'design_review';
     case 'projectLocations':
       return 'project_locations';
     case 'memory':
@@ -2572,6 +3280,9 @@ export interface DeriveConfigureGlobalsInput {
   // Whether a BYOK key/url has been saved (web client only — daemon
   // can leave this undefined).
   byokConfigured?: boolean;
+  // Whether the user has completed AMR (vela) sign-in. AMR ships with the
+  // app, so authorization — not installation — is its "configured" signal.
+  amrAuthorized?: boolean;
 }
 
 export function deriveConfigureGlobals(
@@ -2582,24 +3293,34 @@ export function deriveConfigureGlobals(
   configure_availability: TrackingConfigureAvailability;
 } {
   const agents = input.agents ?? [];
-  const hasAvailableCli = agents.some((a) => a.available === true);
+  // The AMR runtime is bundled with the app, so its agent row must not
+  // count as a user-configured local CLI: with it included every install
+  // reports 'local_cli' and the 'amr'/'none' buckets can never appear.
+  // AMR's configured signal is `amrAuthorized` (sign-in), not detection.
+  const cliAgents = agents.filter((a) => a.id !== 'amr');
+  const hasAvailableCli = cliAgents.some((a) => a.available === true);
   const selectedAgent = input.agentId
     ? agents.find((a) => a.id === input.agentId)
     : undefined;
   const selectedAgentAvailable = selectedAgent?.available === true;
   const byokConfigured = input.byokConfigured === true;
+  const amrAuthorized = input.amrAuthorized === true;
 
+  // 'api' mode means BYOK is the active execution path, so treat it as a
+  // configured BYOK signal even when the caller cannot see the saved key
+  // (the daemon never can). 'daemon' mode used to hardcode 'local_cli',
+  // which made 'none' unreachable on desktop; the type now follows what
+  // is actually configured, with mode only steering availability below.
+  const byokSignal = byokConfigured || input.mode === 'api';
   let configureType: TrackingConfigureType;
-  if (input.mode === 'daemon') {
-    configureType = byokConfigured ? 'both' : 'local_cli';
-  } else if (input.mode === 'api') {
-    configureType = hasAvailableCli ? 'both' : 'byok';
-  } else if (hasAvailableCli && byokConfigured) {
+  if (hasAvailableCli && byokSignal) {
     configureType = 'both';
   } else if (hasAvailableCli) {
     configureType = 'local_cli';
-  } else if (byokConfigured) {
+  } else if (byokSignal) {
     configureType = 'byok';
+  } else if (amrAuthorized) {
+    configureType = 'amr';
   } else {
     configureType = 'none';
   }
@@ -2611,7 +3332,7 @@ export function deriveConfigureGlobals(
       : 'unavailable';
   } else if (input.mode === 'api') {
     configureAvailability = byokConfigured ? 'available' : 'unavailable';
-  } else if (hasAvailableCli || byokConfigured) {
+  } else if (hasAvailableCli || byokConfigured || amrAuthorized) {
     configureAvailability = 'available';
   } else {
     configureAvailability = 'unknown';
@@ -2692,6 +3413,21 @@ export function designSystemModuleSlug(
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '') || 'unknown'
   );
+}
+
+// Normalizes a question-form option value or form id into a snake_case
+// tracking token: "Live artifact" → "live_artifact", "HyperFrames" →
+// "hyperframes", "task-type" → "task_type". Values that slug to nothing
+// (e.g. fully localized non-latin labels) collapse to 'unknown'.
+export function questionsFormTrackingId(
+  raw: string | null | undefined,
+): string {
+  const slug = (raw ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+  return slug || 'unknown';
 }
 
 // Maps a DESIGN.md section slug to one of the six review module

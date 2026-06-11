@@ -117,8 +117,8 @@
   margin-bottom: -1px;
   border-radius: 8px 8px 0 0;
   cursor: pointer;
-  transition: color 120ms ease, background-color 120ms ease,
-    border-color 120ms ease;
+  transition: color 120ms var(--ease-out), background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out);
 }
 .use-everywhere-modal__tab:hover {
   color: var(--text);
@@ -221,10 +221,10 @@
   background: var(--bg);
   color: var(--text-muted);
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 11px;
   cursor: pointer;
-  transition: color 120ms ease, border-color 120ms ease;
+  transition: color 120ms var(--ease-out), border-color 120ms var(--ease-out);
 }
 .use-everywhere-snippet__copy:hover {
   color: var(--accent);
@@ -284,8 +284,8 @@
   padding: 8px 14px;
   border-radius: var(--radius-sm, 6px);
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease,
-    border-color 120ms ease;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out);
 }
 .use-everywhere-modal__secondary {
   background: transparent;
@@ -317,7 +317,7 @@
   height: 32px;
   padding: 0 12px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text);
   font-size: 12px;
@@ -325,8 +325,8 @@
   line-height: 1;
   cursor: pointer;
   box-shadow: var(--shadow-xs);
-  transition: background-color 120ms ease, border-color 120ms ease,
-    color 120ms ease;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
 }
 .use-everywhere-chip:hover {
   background: var(--bg-subtle);

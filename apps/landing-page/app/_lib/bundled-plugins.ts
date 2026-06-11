@@ -63,6 +63,18 @@ export const BUNDLED_BUCKETS = [
 
 export type BundledBucket = (typeof BUNDLED_BUCKETS)[number];
 
+// Manifest ids hidden from the public template/plugin library views. These
+// `examples/` entries are "how to drive the HyperFrames feature" onboarding
+// scenarios, not visual templates — they carry the `hyperframes` slug so they
+// land in the HyperFrames artifact bucket and show up cover-less next to the
+// real video-templates. They stay bundled for the daemon; we just keep them
+// out of the marketing catalog. Detail pages (getDetailPlugins) still include
+// them so any existing links resolve.
+const HIDDEN_PUBLIC_LIBRARY_IDS: ReadonlySet<string> = new Set([
+  'example-hyperframes',
+  'example-video-hyperframes',
+]);
+
 // Detail pages cover every locally-shipped plugin: the `_official` buckets
 // above PLUS the `community/` source folders. `community` is not a `_official`
 // bucket (no tier subdir), so it gets its own label/source handling.
@@ -389,6 +401,8 @@ export function getBundledPlugins(): ReadonlyArray<BundledPluginRecord> {
       // out. Mirror that filter here so our public-library counts
       // match what users see in the picker.
       if (record.kind === 'atom') continue;
+      // Onboarding/scenario examples that aren't visual templates.
+      if (HIDDEN_PUBLIC_LIBRARY_IDS.has(record.manifestId)) continue;
       out.push(record);
     }
   }

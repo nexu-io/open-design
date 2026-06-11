@@ -54,34 +54,16 @@ const SUBCATEGORY_ICONS: Record<string, IconName> = {
 };
 const DEFAULT_SUBCATEGORY_ICON: IconName = 'blocks';
 
-// Home-rail display order overrides. Slugs listed here float to the front (in
-// this order); everything else keeps the Community facet order behind them.
-// Kept local so it doesn't perturb the Community section's ordering.
-const SUBCATEGORY_PRIORITY: Partial<Record<SubChipParentId, readonly string[]>> = {
-  prototype: ['landing-marketing'],
-};
-
-function orderSubcategories(
-  parent: SubChipParentId,
-  options: readonly FacetOption[],
-): FacetOption[] {
-  const priority = SUBCATEGORY_PRIORITY[parent];
-  if (!priority || priority.length === 0) return [...options];
-  const rank = (slug: string) => {
-    const index = priority.indexOf(slug);
-    return index === -1 ? priority.length : index;
-  };
-  return [...options].sort((a, b) => rank(a.slug) - rank(b.slug));
-}
-
 export function isSubChipParent(chipId: string | null): chipId is SubChipParentId {
   return chipId === 'prototype' || chipId === 'deck';
 }
 
 // Sub-types for a first-level chip, drawn from the Community facet catalog so
-// the labels match exactly. Only sub-categories that actually have installed
-// plugins (count > 0) are surfaced, preserving the facet display order.
-// Returns [] for chips without a second-level rail.
+// the labels, set, AND order match the Community section exactly. The display
+// order is whatever `SUBCATEGORIES` (in `plugins-home/facets.ts`) declares for
+// the parent — there is no Home-only reordering, so the two surfaces stay in
+// lockstep. Only sub-categories that actually have installed plugins
+// (count > 0) are surfaced. Returns [] for chips without a second-level rail.
 export function subChipsForChip(
   chipId: string | null,
   plugins: InstalledPluginRecord[],
@@ -89,7 +71,8 @@ export function subChipsForChip(
   if (!isSubChipParent(chipId)) return [];
   const catalog = buildSubcategoryCatalog(plugins);
   const options: FacetOption[] = catalog[chipId] ?? [];
-  return orderSubcategories(chipId, options.filter((option) => option.count > 0))
+  return options
+    .filter((option) => option.count > 0)
     .map((option) => ({
       slug: option.slug,
       label: option.label,

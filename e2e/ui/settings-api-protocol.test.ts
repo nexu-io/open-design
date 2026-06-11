@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
+import { openSettingsDialog } from '../lib/playwright/amr.js';
+import { routeAgents } from '../lib/playwright/mock-factory.js';
 
 const STORAGE_KEY = 'open-design:config';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
-const SETTINGS_MENU_LABEL = /Settings|设置|設定/i;
 const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 const MODEL_POPOVER_SELECTOR = '.model-select-searchable__popover';
 
@@ -18,28 +19,13 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
   await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
 }
 
 async function openSettingsDialogFromEntry(page: Page) {
-  await waitForLoadingToClear(page);
-  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).first().click();
-  const dialog = page.getByRole('dialog');
-  const menu = page.getByRole('menu');
-  await expect
-    .poll(async () => {
-      if (await dialog.isVisible().catch(() => false)) return 'dialog';
-      if (await menu.isVisible().catch(() => false)) return 'menu';
-      return 'pending';
-    })
-    .not.toBe('pending');
-  if (await menu.isVisible().catch(() => false)) {
-    await menu.getByRole('menuitem', { name: SETTINGS_MENU_LABEL }).click();
-  }
-  await expect(dialog).toBeVisible();
-  return dialog;
+  return openSettingsDialog(page);
 }
 
 async function openExecutionSettings(
@@ -117,9 +103,7 @@ async function openExecutionSettingsWithAgents(
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({ json: { agents } });
-  });
+  await routeAgents(page, agents);
 
   await gotoEntryHome(page);
   await openSettingsDialogFromEntry(page);
@@ -195,7 +179,7 @@ test('[P1] legacy custom provider preserves custom baseUrl and model when switch
   await expect(customModelInput).toHaveValue('my-custom-model');
 });
 
-test('[P0] BYOK quick fill provider updates fields and saved settings persist after closing and reopening', async ({ page }) => {
+test('[P0] @critical BYOK quick fill provider updates fields and saved settings persist after closing and reopening', async ({ page }) => {
   await openExecutionSettings(page, {
     mode: 'api',
     apiKey: '',
@@ -375,7 +359,7 @@ test('[P0] BYOK auto-loads provider models and reuses cached results for the sam
 });
 
 
-test('[P0] BYOK fetched models are searchable inside the Settings model dropdown', async ({ page }) => {
+test('[P0] @critical BYOK fetched models are searchable inside the Settings model dropdown', async ({ page }) => {
   const providerModelRequests: Array<Record<string, unknown>> = [];
   await page.route('**/api/provider/models', async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
@@ -436,7 +420,8 @@ test('[P0] BYOK fetched models are searchable inside the Settings model dropdown
   await expect(popover.getByRole('option', { name: 'BB Nightly Model (bb-nightly-model)' })).toHaveCount(0);
 });
 
-test('[P0] saving Local CLI updates the entry status pill with the selected agent', async ({ page }) => {
+test('[P0] @critical saving Local CLI updates the entry status pill with the selected agent', async ({ page }) => {
+  test.setTimeout(60_000);
   await openExecutionSettingsWithAgents(
     page,
     {
@@ -478,7 +463,9 @@ test('[P0] saving Local CLI updates the entry status pill with the selected agen
   const dialog = page.getByRole('dialog');
 
   await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
-  await dialog.getByRole('button', { name: /Codex CLI/i }).click();
+  const codexAgent = dialog.getByTestId('settings-agent-select-codex');
+  await expect(codexAgent).toBeVisible();
+  await codexAgent.click();
   await expect.poll(async () => readSavedConfig(page)).toMatchObject({
     mode: 'daemon',
     agentId: 'codex',

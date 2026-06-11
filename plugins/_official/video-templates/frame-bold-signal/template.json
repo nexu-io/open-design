@@ -1,0 +1,53 @@
+{
+  "id": "frame-bold-signal",
+  "surface": "hyperframes",
+  "title": "Bold Signal Frame",
+  "summary": "Bold colored card on a dark gradient — big section number, nav breadcrumb, orange card sliding in, title rising.",
+  "category": "Presentation",
+  "tags": [
+    "bold",
+    "card",
+    "dark",
+    "orange",
+    "section",
+    "signal",
+    "high-impact"
+  ],
+  "engine": "hyperframes",
+  "engineVersion": "^0.4.0",
+  "sourceEntry": "source/index.html",
+  "aspect": "16:9",
+  "fps": 60,
+  "durationSec": 15,
+  "formats": [
+    "mp4",
+    "webm"
+  ],
+  "bestFor": [
+    "Section / chapter divider",
+    "Bold launch statement",
+    "High-impact title card"
+  ],
+  "source": {
+    "repo": "nexu-io/html-video",
+    "path": "templates/frame-bold-signal",
+    "license": "Apache-2.0",
+    "author": "nexu-io",
+    "url": "https://github.com/zarazhangrui/frontend-slides"
+  },
+  "provenance": {
+    "origin": {
+      "name": "none (original preset by the L2 skill author)",
+      "kind": "none",
+      "reference": "No specific real-world studio; the 'Bold Signal' look is an original preset composed by the frontend-slides author"
+    },
+    "via_skill": {
+      "name": "frontend-slides",
+      "author": "Zara Zhang",
+      "url": "https://github.com/zarazhangrui/frontend-slides",
+      "license": "MIT",
+      "source_file": "STYLE_PRESETS.md (preset \"Bold Signal\")"
+    },
+    "transformation": "Static slide preset → animated hyperframes timeline (section number rolls in, nav breadcrumb fades, #FF5722 focal card slides in from the right, title rises) built as original CSS keyframes. Original sample data. No upstream source code copied verbatim.\n"
+  }
+}

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AutomationEvolutionProposal,
   AutomationEvolutionProposalListResponse,
+  AutomationsClickProps,
   AutomationTemplate as ContractAutomationTemplate,
   AutomationTemplateListResponse,
   ConnectorDetail,
@@ -368,6 +369,23 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
     pageViewFiredRef.fired = true;
     trackPageView(analytics.track, { page_name: 'automations' });
   }, [analytics.track, pageViewFiredRef]);
+  // P2 ui_click page_name=automations. Fire on every actionable click inside
+  // the tab before running the handler, so navigations that unmount the view
+  // still report.
+  const fireClick = useCallback(
+    (
+      element: AutomationsClickProps['element'],
+      extra?: Pick<AutomationsClickProps, 'type_id' | 'filter_id' | 'template_kind'>,
+    ) => {
+      trackAutomationsClick(analytics.track, {
+        page_name: 'automations',
+        area: 'automations',
+        element,
+        ...extra,
+      });
+    },
+    [analytics.track],
+  );
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -595,7 +613,10 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
           <button
             type="button"
             className="automations-view__new"
-            onClick={() => setModal({ kind: 'create' })}
+            onClick={() => {
+              fireClick('new_automation');
+              setModal({ kind: 'create' });
+            }}
             data-testid="automations-new"
           >
             <Icon name="plus" size={14} />
@@ -619,7 +640,10 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
           <button
             type="button"
             className="automation-empty"
-            onClick={() => setModal({ kind: 'create' })}
+            onClick={() => {
+              fireClick('new_automation');
+              setModal({ kind: 'create' });
+            }}
           >
             <span className="automation-empty__icon">
               <Icon name="plus" size={16} />
@@ -672,14 +696,15 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
                           <button
                             type="button"
                             className="automation-inline-link"
-                            onClick={() =>
+                            onClick={() => {
+                              fireClick('open_artifact');
                               navigate({
                                 kind: 'project',
                                 projectId: r.lastRun!.projectId,
                                 conversationId: r.lastRun!.conversationId,
                                 fileName: null,
-                              })
-                            }
+                              });
+                            }}
                           >
                             {t('automations.openResult')}
                           </button>
@@ -691,7 +716,10 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
                     <button
                       type="button"
                       className="automation-row__btn"
-                      onClick={() => runNow(r.id)}
+                      onClick={() => {
+                        fireClick('run_now');
+                        runNow(r.id);
+                      }}
                       disabled={isBusy}
                       title={t('automations.runNowTitle')}
                     >
@@ -702,6 +730,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
                       type="button"
                       className="automation-row__btn"
                       onClick={() => {
+                        fireClick('history');
                         setExpandedId(isExpanded ? null : r.id);
                         if (!isExpanded) setHistoryTick((tick) => tick + 1);
                       }}
@@ -713,7 +742,10 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
                     <button
                       type="button"
                       className="automation-row__btn"
-                      onClick={() => setModal({ kind: 'edit', routine: r })}
+                      onClick={() => {
+                        fireClick('edit');
+                        setModal({ kind: 'edit', routine: r });
+                      }}
                       disabled={isBusy}
                     >
                       <Icon name="edit" size={12} />
@@ -722,7 +754,10 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
                     <button
                       type="button"
                       className="automation-row__btn"
-                      onClick={() => togglePaused(r)}
+                      onClick={() => {
+                        fireClick(r.enabled ? 'pause' : 'resume');
+                        togglePaused(r);
+                      }}
                       disabled={isBusy}
                     >
                       {r.enabled ? t('automations.pause') : t('automations.resume')}
@@ -730,7 +765,10 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
                     <button
                       type="button"
                       className="automation-row__btn automation-row__btn--danger"
-                      onClick={() => remove(r.id)}
+                      onClick={() => {
+                        fireClick('delete');
+                        remove(r.id);
+                      }}
                       disabled={isBusy}
                       aria-label={t('automations.deleteAria')}
                       title={t('automations.deleteTitle')}
@@ -744,6 +782,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
                       refreshKey={historyTick}
                       crystallizingRunId={crystallizingRunId}
                       onCrystallizeRun={crystallizeRun}
+                      onFireClick={fireClick}
                       t={t}
                     />
                   ) : null}
@@ -798,7 +837,10 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
                     <button
                       type="button"
                       className="automation-row__btn"
-                      onClick={() => reviewProposal(proposal.id, 'apply')}
+                      onClick={() => {
+                        fireClick('proposal_apply');
+                        reviewProposal(proposal.id, 'apply');
+                      }}
                       disabled={isBusy}
                     >
                       <Icon name="check" size={12} />
@@ -807,7 +849,10 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
                     <button
                       type="button"
                       className="automation-row__btn automation-row__btn--danger"
-                      onClick={() => reviewProposal(proposal.id, 'reject')}
+                      onClick={() => {
+                        fireClick('proposal_reject');
+                        reviewProposal(proposal.id, 'reject');
+                      }}
                       disabled={isBusy}
                     >
                       {t('automations.reject')}
@@ -847,7 +892,10 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
                 role="tab"
                 aria-selected={isActive}
                 className={`automations-template-tab${isActive ? ' is-active' : ''}`}
-                onClick={() => setTemplateFilter(filter.id)}
+                onClick={() => {
+                  fireClick('filter_tab', { filter_id: filter.id });
+                  setTemplateFilter(filter.id);
+                }}
               >
                 <span className="automations-template-tab__label">{filter.label}</span>
                 <span className="automations-template-tab__count">{count}</span>
@@ -873,7 +921,10 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
               key={template.id}
               type="button"
               className={`automation-template-card is-${template.kind}`}
-              onClick={() => setModal({ kind: 'create', template })}
+              onClick={() => {
+                fireClick('type_card', { template_kind: template.kind });
+                setModal({ kind: 'create', template });
+              }}
             >
               <span className="automation-template-card__icon" aria-hidden="true">
                 <Icon name={template.icon} size={16} />
@@ -939,12 +990,14 @@ function AutomationRunHistory({
   refreshKey,
   crystallizingRunId,
   onCrystallizeRun,
+  onFireClick,
   t,
 }: {
   routineId: string;
   refreshKey: number;
   crystallizingRunId: string | null;
   onCrystallizeRun: (routineId: string, runId: string) => void;
+  onFireClick: (element: AutomationsClickProps['element']) => void;
   t: TranslateFn;
 }) {
   const [runs, setRuns] = useState<RoutineRun[] | null>(null);
@@ -1005,7 +1058,10 @@ function AutomationRunHistory({
                 <button
                   type="button"
                   className="automation-history__open"
-                  onClick={() => onCrystallizeRun(routineId, run.id)}
+                  onClick={() => {
+                    onFireClick('crystallize');
+                    onCrystallizeRun(routineId, run.id);
+                  }}
                   disabled={crystallizingRunId === run.id}
                   title={t('automations.crystallizeTitle')}
                 >
@@ -1016,14 +1072,15 @@ function AutomationRunHistory({
               <button
                 type="button"
                 className="automation-history__open"
-                onClick={() =>
+                onClick={() => {
+                  onFireClick('view_progress');
                   navigate({
                     kind: 'project',
                     projectId: run.projectId,
                     conversationId: run.conversationId,
                     fileName: null,
-                  })
-                }
+                  });
+                }}
               >
                 {t('automations.openConversation')}
                 <Icon name="chevron-right" size={12} />

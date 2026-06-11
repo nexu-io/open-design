@@ -109,6 +109,7 @@ export type ToolPackConfig = {
    * Required for upload to be attempted; missing → strip-only path.
    */
   posthogCliProjectId?: string;
+  updateMetadataUrl?: string;
   /**
    * PostHog **management** host used by `@posthog/cli sourcemap upload`. This
    * is the regional app host (e.g. `https://us.posthog.com`) — distinct from
@@ -264,6 +265,22 @@ function resolveToolPackTelemetryRelayUrl(value: string | undefined): string | u
   return normalized.replace(/\/+$/, "");
 }
 
+function resolveToolPackUpdateMetadataUrl(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error(`OD_UPDATE_METADATA_URL must be an absolute URL: ${value}`);
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(`OD_UPDATE_METADATA_URL must use http(s): ${value}`);
+  }
+  return normalized;
+}
+
 function resolveElectronVersion(workspaceRoot: string): string {
   const require = createRequire(join(workspaceRoot, "apps/desktop/package.json"));
   const desktopPackage = require(join(workspaceRoot, "apps/desktop/package.json")) as {
@@ -338,6 +355,7 @@ export function resolveToolPackConfig(
     signed: options.signed === true,
     amrProfile: resolveToolPackAmrProfile(process.env.OPEN_DESIGN_AMR_PROFILE),
     telemetryRelayUrl: resolveToolPackTelemetryRelayUrl(process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL),
+    updateMetadataUrl: resolveToolPackUpdateMetadataUrl(process.env.OD_UPDATE_METADATA_URL),
     posthogKey: resolveToolPackPosthogKey(process.env.POSTHOG_KEY),
     posthogHost: resolveToolPackPosthogHost(process.env.POSTHOG_HOST),
     posthogCliApiKey: resolveToolPackPosthogCliApiKey(

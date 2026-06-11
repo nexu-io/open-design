@@ -24,7 +24,7 @@
   color: var(--text-muted);
   cursor: pointer;
   border-radius: 50%;
-  transition: color 120ms ease, background 120ms ease;
+  transition: color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
 .memory-info-btn:hover {
   color: var(--text);
@@ -36,8 +36,8 @@
   color: var(--success-fg, #16a34a);
   background: var(--success-bg, #dcfce7);
   padding: 1px 6px;
-  border-radius: 999px;
-  animation: memory-badge-in 160ms ease;
+  border-radius: var(--radius-pill);
+  animation: memory-badge-in 160ms var(--ease-out);
   white-space: nowrap;
 }
 @keyframes memory-badge-in {
@@ -109,7 +109,7 @@
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1;
-  transition: transform 120ms ease, color 120ms ease;
+  transition: transform 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 
 .library-group[open] > .memory-details-summary::before {
@@ -124,7 +124,7 @@
 .memory-details-summary:focus-visible {
   outline: 2px solid var(--accent, #00946f);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .memory-details-title {
@@ -135,7 +135,7 @@
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.2px;
@@ -208,7 +208,7 @@
   align-self: flex-end;
   margin: 4px 0 8px;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(34, 139, 90, 0.12);
   color: var(--text-success, #1f7a4d);
   border: 1px solid rgba(34, 139, 90, 0.32);
@@ -224,7 +224,7 @@
   gap: 4px;
   padding: 5px 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   font-size: 12px;
@@ -301,7 +301,7 @@
   margin: -2px 0 10px;
   padding: 5px 8px;
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 12px;
@@ -326,7 +326,7 @@
   padding: 12px;
   margin: 0 0 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-primary);
 }
 
@@ -341,7 +341,7 @@
   width: fit-content;
   min-height: 30px;
   padding: 2px;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 
 .library-install-form .library-import-source-control {
@@ -356,7 +356,7 @@
 .library-install-form .library-import-mode-control button {
   min-height: 24px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 0 10px;
   background: transparent;
   color: var(--text-secondary);
@@ -434,7 +434,7 @@
   min-height: 30px;
   padding: 4px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-panel);
   color: var(--text-primary);
   font-size: 13px;
@@ -453,7 +453,7 @@
 .library-install-submit {
   padding: 5px 14px;
   border: 1px solid var(--accent);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--accent);
   color: #fff;
   font-size: 12px;
@@ -533,7 +533,7 @@
   display: inline-block;
   font-size: 10px;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--bg-tertiary);
   color: var(--text-muted);
   text-transform: uppercase;
@@ -552,7 +552,7 @@
   width: 24px;
   height: 24px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -686,7 +686,7 @@
   justify-content: center;
   padding: 0;
   border: 1px solid color-mix(in srgb, #2563eb 55%, transparent);
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: var(--bg-panel);
   color: #2563eb;
   cursor: pointer;
@@ -727,7 +727,7 @@
   display: flex; align-items: center;
   background: var(--manual-edit-field-bg);
   border: 1px solid var(--manual-edit-field-border);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   height: 26px; padding: 0 4px;
   color: var(--manual-edit-field-text);
   font-size: 10px; min-width: 0;
@@ -792,7 +792,7 @@
 .cc-color-popover {
   position: absolute; top: calc(100% + 6px); left: 0; z-index: 100;
   background: var(--bg-panel); border: 1px solid var(--manual-edit-field-border);
-  border-radius: 6px; padding: 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  border-radius: var(--radius-sm); padding: 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.12);
   display: flex; flex-direction: column; gap: 8px;
   width: min(168px, calc(100vw - 32px));
   max-width: calc(100vw - 32px);
@@ -803,12 +803,12 @@
 }
 .cc-color-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
 .cc-color-tile {
-  width: 100%; aspect-ratio: 1; border-radius: 4px; padding: 0;
+  width: 100%; aspect-ratio: 1; border-radius: var(--radius-xs); padding: 0;
   border: 1px solid color-mix(in srgb, var(--text) 18%, transparent); cursor: pointer;
 }
 .cc-color-native {
   width: 100%; height: 22px; border: 1px solid var(--manual-edit-field-border);
-  border-radius: 4px; padding: 0; background: var(--manual-edit-field-bg);
+  border-radius: var(--radius-xs); padding: 0; background: var(--manual-edit-field-bg);
 }
 
 .cc-quad { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
@@ -823,7 +823,7 @@
 .cc-quad-cell {
   display: flex; align-items: center;
   background: var(--manual-edit-field-bg);
-  border: 1px solid var(--manual-edit-field-border); border-radius: 4px;
+  border: 1px solid var(--manual-edit-field-border); border-radius: var(--radius-xs);
   color: var(--manual-edit-field-text);
   padding: 0 6px; height: 26px; font-size: 12px; gap: 2px;
 }
@@ -870,7 +870,7 @@
 .manual-edit-modal,
 .manual-edit-changes {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-panel);
 }
 
@@ -915,7 +915,7 @@
   padding: 9px 10px;
   text-align: left;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: var(--bg-panel);
 }
 
@@ -971,7 +971,7 @@
   height: auto;
   max-height: 100%;
   padding-bottom: 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
 }
 .manual-edit-scroll {
@@ -1021,7 +1021,7 @@
   width: 30px;
   height: 30px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 0;
   background: transparent;
   color: var(--text);
@@ -1042,7 +1042,7 @@
   min-width: 62px;
   height: 30px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   padding: 0 14px;
   color: var(--text);
   background: var(--bg-panel);
@@ -1088,7 +1088,7 @@
 .manual-edit-floating .manual-edit-titlebar-close {
   width: 28px;
   height: 28px;
-  border-radius: 7px;
+  border-radius: var(--radius);
 }
 
 .manual-edit-titlebar {
@@ -1120,7 +1120,7 @@
   width: 22px;
   height: 24px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 0;
   background: transparent;
   color: var(--text-muted);
@@ -1154,7 +1154,7 @@
   justify-content: center;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
   color: var(--text);
   box-shadow: var(--shadow-xs);
@@ -1196,7 +1196,7 @@
   flex: 0 0 auto;
   padding: 4px 8px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
   font-size: 11px;
   font-style: normal;
@@ -1216,7 +1216,7 @@
   margin: 12px 12px 10px;
   padding: 10px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: var(--bg);
 }
 
@@ -1252,7 +1252,7 @@
 .manual-edit-tabs button {
   flex: 0 0 auto;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 6px 9px;
   color: var(--text-muted);
   background: var(--bg);
@@ -1291,7 +1291,7 @@
 .manual-edit-field select {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 8px 9px;
   color: var(--text);
   background: var(--bg-panel);
@@ -1339,7 +1339,7 @@
   margin: 0 12px 10px;
   padding: 8px 10px;
   border: 1px solid var(--red-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--red);
   background: var(--red-bg);
   font-size: 12px;
@@ -1362,7 +1362,7 @@
   gap: 6px;
   padding: 9px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: var(--bg);
 }
 

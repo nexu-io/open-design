@@ -67,8 +67,27 @@ const authorUrl = plugin.authorUrl
   ? (ORG_TO_REPO[plugin.authorUrl.replace(/\/$/, '')] ?? plugin.authorUrl)
   : undefined;
 
-const title = `${pluginTitle} · Open Design plugin`;
+// SEO: lead the title/description with the artifact type + brand keywords so
+// each plugin detail page ranks for "<type> template", "HyperFrames template",
+// "Open Design", and "open source Claude Design alternative".
+const seoTypeLabel =
+  plugin.surface === 'hyperframes'
+    ? 'HyperFrames video template'
+    : plugin.mode === 'image'
+      ? 'image template'
+      : plugin.mode === 'video'
+        ? 'video template'
+        : plugin.mode === 'deck'
+          ? 'slide template'
+          : plugin.mode === 'prototype'
+            ? 'prototype template'
+            : 'design template';
+const title = `${pluginTitle} — ${seoTypeLabel} · Open Design`;
+// Visible lead stays fully localized; the keyword-rich English suffix is
+// applied only to the <meta description> / JSON-LD so non-English detail
+// pages don't render mixed-language body copy.
 const description = pluginDescription;
+const seoDescription = `${pluginDescription} A bundled ${seoTypeLabel} for Open Design — the open-source Claude Design alternative; runs locally with your own keys.`;
 
 /*
  * Share-dialog copy. The English template stays as a fallback inside
@@ -95,7 +114,7 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'SoftwareSourceCode',
     name: pluginTitle,
-    description,
+    description: seoDescription,
     codeRepository: plugin.sourceUrl,
     programmingLanguage: 'JSON',
     keywords: plugin.tags.join(', '),
@@ -104,7 +123,7 @@ const jsonLd = [
 ];
 ---
 
-<Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
+<Layout title={title} description={seoDescription} active="plugins" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={pcopy.breadcrumbLabel}>
     <a href={href('/')}>Open Design</a>
     <span>/</span>
@@ -121,7 +140,7 @@ const jsonLd = [
       <h1 class="display">{pluginTitle}<span class="dot">.</span></h1>
       <p class="lead">{description}</p>
       <div class="detail-actions">
-        <a class="btn btn-primary" href="https://github.com/nexu-io/open-design/releases" target="_blank" rel="noopener">
+        <a class="btn btn-primary" href={href('/download/')}>
           {pcopy.detailUseCta}
         </a>
         <a class="btn btn-ghost" href={plugin.sourceUrl} target="_blank" rel="noopener">

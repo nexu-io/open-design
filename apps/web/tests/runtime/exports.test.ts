@@ -10,6 +10,7 @@ import {
   exportAsImage,
   exportAsMd,
   exportAsPdf,
+  exportProjectAsHtml,
   exportProjectAsPdf,
   openSandboxedPreviewInNewTab,
   prepareImageExportTarget,
@@ -237,6 +238,76 @@ describe('exportProjectAsPdf', () => {
   });
 });
 
+describe('exportProjectAsHtml', () => {
+  let capturedBlob: Blob | undefined;
+  let capturedFilename: string | undefined;
+
+  beforeEach(() => {
+    capturedBlob = undefined;
+    capturedFilename = undefined;
+    vi.stubGlobal('URL', {
+      createObjectURL: (blob: Blob) => {
+        capturedBlob = blob;
+        return 'blob:test';
+      },
+      revokeObjectURL: () => {},
+    });
+    vi.stubGlobal('document', {
+      createElement: () => {
+        const anchor = { href: '', click: () => {} } as { href: string; download?: string; click: () => void };
+        Object.defineProperty(anchor, 'download', {
+          set(value: string) {
+            capturedFilename = value;
+          },
+          get() {
+            return capturedFilename ?? '';
+          },
+        });
+        return anchor;
+      },
+      body: { appendChild: () => {}, removeChild: () => {} },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('downloads daemon-inlined project HTML instead of the raw source body', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<!doctype html><p>inlined</p>', {
+      headers: { 'content-type': 'text/html' },
+      status: 200,
+    })));
+
+    await exportProjectAsHtml({
+      projectId: 'proj 1',
+      filePath: 'screens/main page.html',
+      fallbackHtml: '<script type="module" src="/src/main.tsx"></script>',
+      fallbackTitle: 'Main Page',
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/screens/main%20page.html?inline=1');
+    expect(capturedFilename).toBe('Main-Page.html');
+    expect(await capturedBlob!.text()).toBe('<!doctype html><p>inlined</p>');
+  });
+
+  it('falls back to the source HTML export when the daemon inline endpoint fails', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 500 })));
+
+    await exportProjectAsHtml({
+      projectId: 'proj-1',
+      filePath: 'index.html',
+      fallbackHtml: '<main>fallback</main>',
+      fallbackTitle: 'Fallback',
+    });
+
+    expect(capturedFilename).toBe('Fallback.html');
+    expect(await capturedBlob!.text()).toContain('<main>fallback</main>');
+  });
+});
+
 // `exportAsMd` is a pass-through (the file body is the artifact source
 // verbatim, only the extension and Content-Type flip). Tests exercise it
 // end-to-end by stubbing the few DOM globals `triggerDownload` touches —
@@ -326,6 +397,10 @@ describe('sandboxed preview Blob exports', () => {
       revokeObjectURL: vi.fn(),
     });
     vi.stubGlobal('window', {
+      location: {
+        href: 'https://open-design.test/plugins/example',
+        origin: 'https://open-design.test',
+      },
       open: (_url: string, _target: string, features?: string) => {
         openCalls.push([_url, _target]);
         openedFeatures = features;
@@ -350,6 +425,14 @@ describe('sandboxed preview Blob exports', () => {
     expect(wrapper).not.toContain('allow-same-origin');
     expect(wrapper).toContain('&lt;script&gt;window.parent.localStorage.clear()&lt;/script&gt;');
     expect(wrapper).not.toContain('<script>window.parent.localStorage.clear()</script>');
+  });
+
+  it('anchors new-tab srcdoc previews to the current origin when no explicit base is provided', async () => {
+    openSandboxedPreviewInNewTab('<img src="/api/plugins/example/assets/hero.png"><img src="assets/card.png">', 'Plugin preview');
+
+    expect(capturedBlob).toBeDefined();
+    const wrapper = await capturedBlob!.text();
+    expect(wrapper).toContain('&lt;base href=&quot;https://open-design.test/&quot;&gt;');
   });
 
   it('passes srcdoc options through the sandboxed new-tab wrapper', async () => {

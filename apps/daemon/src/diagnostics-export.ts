@@ -1,11 +1,12 @@
 import { homedir, userInfo } from 'node:os';
-import { readdir, stat } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 
 import type { RequestHandler } from 'express';
 
 import {
+  buildAgentCliLogSources,
   buildDiagnosticsZip,
+  buildRunEventLogSources,
   DIAGNOSTICS_CONTENT_TYPE,
   DIAGNOSTICS_FILENAME_PREFIX,
   diagnosticsFileName,
@@ -24,6 +25,56 @@ import {
 } from '@open-design/sidecar';
 
 import { readCurrentAppVersionInfo } from './app-version.js';
+import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
+import { spawnEnvForAgent } from './agents.js';
+
+interface ResolvedAgentHomes {
+  amrOpenCodeHome: string | null;
+  claudeConfigDir: string | null;
+  codexHome: string | null;
+  openCodeXdgDataHome: string | null;
+}
+
+// Resolve each agent CLI's effective home (OPENCODE_TEST_HOME / CLAUDE_CONFIG_DIR
+// / CODEX_HOME) exactly as a real run would, by running the live
+// `spawnEnvForAgent` resolver over the user's app-config overrides. This makes
+// the diagnostics sweep honor `agentCliEnv.<agent>.*` relocations instead of
+// only looking under the hardcoded defaults, and cannot drift from the spawn
+// path. Returns nulls on any failure; the collector then falls back to defaults.
+async function resolveAgentHomes(dataDir: string | null | undefined): Promise<ResolvedAgentHomes> {
+  const empty: ResolvedAgentHomes = {
+    amrOpenCodeHome: null,
+    claudeConfigDir: null,
+    codexHome: null,
+    openCodeXdgDataHome: null,
+  };
+  if (!dataDir) return empty;
+  try {
+    const appConfig = await readAppConfig(dataDir);
+    const envFor = (agentId: string) =>
+      spawnEnvForAgent(
+        agentId,
+        { ...process.env, OD_DATA_DIR: dataDir },
+        agentCliEnvForAgent(appConfig.agentCliEnv, agentId),
+      );
+    const clean = (value: string | undefined): string | null => {
+      const trimmed = value?.trim();
+      return trimmed && trimmed.length > 0 ? trimmed : null;
+    };
+    return {
+      amrOpenCodeHome: clean(envFor('amr').OPENCODE_TEST_HOME),
+      claudeConfigDir: clean(envFor('claude').CLAUDE_CONFIG_DIR),
+      codexHome: clean(envFor('codex').CODEX_HOME),
+      // OpenCode resolves its data/log dir from XDG_DATA_HOME; sandbox mode
+      // rewrites that (sandbox-mode.ts), so read the EFFECTIVE value from the
+      // opencode spawn env rather than the host's, or the sweep misses the
+      // logs in a sandboxed runtime.
+      openCodeXdgDataHome: clean(envFor('opencode').XDG_DATA_HOME),
+    };
+  } catch {
+    return empty;
+  }
+}
 
 export interface DiagnosticsHandlerOptions {
   /** Sidecar runtime context, present when daemon is launched via tools-dev or packaged sidecar. */
@@ -32,11 +83,11 @@ export interface DiagnosticsHandlerOptions {
   projectRoot: string;
   /** Directory containing per-run event logs at <runsDir>/<runId>/events.jsonl. */
   runsDir?: string | null;
+  /** Open Design data dir (OD_DATA_DIR), used to locate the AMR OpenCode home. */
+  dataDir?: string | null;
 }
 
 const TAIL_BYTES_PER_LOG = 4 * 1024 * 1024;
-const TAIL_BYTES_PER_RUN_EVENT_LOG = 2 * 1024 * 1024;
-const MAX_RUN_EVENT_LOGS = 20;
 
 function safeUsername(): string | undefined {
   try {
@@ -93,48 +144,25 @@ function buildSidecarLogSources(runtime: SidecarRuntimeContext<SidecarStamp> | n
   return sources;
 }
 
-async function buildRunEventLogSources(runsDir: string | null | undefined): Promise<LogSource[]> {
-  if (!runsDir) return [];
-  let entries;
-  try {
-    entries = await readdir(runsDir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-
-  const candidates: Array<{ runId: string; absolutePath: string; mtimeMs: number }> = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    if (!/^[A-Za-z0-9._-]+$/u.test(entry.name)) continue;
-    const absolutePath = join(runsDir, entry.name, 'events.jsonl');
-    try {
-      const info = await stat(absolutePath);
-      if (!info.isFile()) continue;
-      candidates.push({ runId: entry.name, absolutePath, mtimeMs: info.mtimeMs });
-    } catch {
-      continue;
-    }
-  }
-
-  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
-  return candidates.slice(0, MAX_RUN_EVENT_LOGS).map(({ runId, absolutePath }) => ({
-    name: `runs/${runId}/events.jsonl`,
-    absolutePath,
-    kind: 'text',
-    tailBytes: TAIL_BYTES_PER_RUN_EVENT_LOG,
-  }));
-}
-
 export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOptions): RequestHandler {
   return async (_req, res) => {
     try {
       const versionInfo = await readCurrentAppVersionInfo().catch(() => null);
+      const home = homedir();
+      const agentHomes = await resolveAgentHomes(options.dataDir);
       const sources = [
         ...buildSidecarLogSources(options.runtime),
         ...(await buildRunEventLogSources(options.runsDir)),
+        ...(await buildAgentCliLogSources({
+          homeDir: home,
+          dataDir: options.dataDir ?? null,
+          amrOpenCodeHome: agentHomes.amrOpenCodeHome,
+          claudeConfigDir: agentHomes.claudeConfigDir,
+          codexHome: agentHomes.codexHome,
+          xdgDataHome: agentHomes.openCodeXdgDataHome ?? process.env.XDG_DATA_HOME ?? null,
+        })),
       ];
       const username = safeUsername();
-      const home = homedir();
 
       const result = await buildDiagnosticsZip({
         context: {

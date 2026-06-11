@@ -8,6 +8,7 @@ import { LAUNCHER_SCHEMA_VERSION } from "@open-design/launcher-proto";
 import { describe, expect, it } from "vitest";
 
 import type { ToolPackConfig, ToolPackPlatform } from "../src/config.js";
+import { ToolPackCache } from "../src/cache.js";
 import { resolveMacInstallIdentity } from "../src/mac/identity.js";
 import {
   buildMacLauncherPayloadManifest,
@@ -166,6 +167,25 @@ async function writeFakeWinUnpackedApp(root: string, namespace: string, version:
     }, null, 2)}\n`,
     "utf8",
   );
+  await mkdir(join(paths.unpackedRoot, "resources", "app"), { recursive: true });
+  await writeFile(
+    join(paths.unpackedRoot, "resources", "app", "package.json"),
+    `${JSON.stringify({ name: "open-design-packaged-app", version })}\n`,
+    "utf8",
+  );
+  await mkdir(join(paths.packagedConfigPath, ".."), { recursive: true });
+  await writeFile(
+    paths.packagedConfigPath,
+    `${JSON.stringify({
+      appVersion: version,
+      daemonSidecarEntryRelative: "open-design/prebundled/daemon/daemon-sidecar.mjs",
+      namespace,
+      nodeCommandRelative: "open-design/bin/node",
+      webOutputMode: "standalone",
+      webSidecarEntryRelative: "open-design/prebundled/web/web-sidecar.mjs",
+    }, null, 2)}\n`,
+    "utf8",
+  );
   return {
     builtApp: {
       appBuilderOutputRoot: paths.appBuilderOutputRoot,
@@ -280,6 +300,53 @@ describe("tools-pack launcher payload archives", () => {
       expect(manifest.version).toBe(version);
       await expectPathExists(join(extractRoot, "payload", "Open Design.exe"));
       await expectPathExists(join(extractRoot, "payload", "resources", "open-design-config.json"));
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it.skipIf(process.platform !== "win32")("reuses the Windows payload base archive while overlaying beta metadata", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-tools-pack-win-payload-cache-"));
+    try {
+      const namespace = "release-beta-win";
+      const initialVersion = "0.9.0-beta.0";
+      const { builtApp, paths } = await writeFakeWinUnpackedApp(root, namespace, initialVersion);
+      const cache = new ToolPackCache(join(root, "cache"));
+
+      for (const version of ["0.9.0-beta.1", "0.9.0-beta.2"]) {
+        const config = makeConfig(root, "win", namespace, version);
+        await writeFile(
+          paths.packagedConfigPath,
+          `${JSON.stringify({
+            appVersion: version,
+            daemonSidecarEntryRelative: "open-design/prebundled/daemon/daemon-sidecar.mjs",
+            namespace,
+            nodeCommandRelative: "open-design/bin/node",
+            webOutputMode: "standalone",
+            webSidecarEntryRelative: "open-design/prebundled/web/web-sidecar.mjs",
+          }, null, 2)}\n`,
+          "utf8",
+        );
+        await buildWinLauncherPayloadArchive(config, paths, builtApp, cache);
+      }
+
+      const payloadCacheEntries = cache.report().entries.filter((entry) => entry.nodeId === "win.launcher-payload-base");
+      expect(payloadCacheEntries.map((entry) => entry.status)).toEqual(["miss", "hit"]);
+
+      const extractRoot = join(root, "extracted");
+      await mkdir(extractRoot, { recursive: true });
+      await execFileAsync(winResources.sevenZipExe, ["x", paths.launcherPayloadPath, `-o${extractRoot}`, "-y"]);
+
+      const manifest = JSON.parse(await readFile(join(extractRoot, "manifest.json"), "utf8")) as { version: string };
+      const config = JSON.parse(
+        await readFile(join(extractRoot, "payload", "resources", "open-design-config.json"), "utf8"),
+      ) as { appVersion: string };
+      const packageJson = JSON.parse(
+        await readFile(join(extractRoot, "payload", "resources", "app", "package.json"), "utf8"),
+      ) as { version: string };
+      expect(manifest.version).toBe("0.9.0-beta.2");
+      expect(config.appVersion).toBe("0.9.0-beta.2");
+      expect(packageJson.version).toBe("0.9.0-beta.2");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

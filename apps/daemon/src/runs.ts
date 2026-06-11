@@ -49,6 +49,10 @@ export function createChatRunService({
       assistantMessageId: typeof meta.assistantMessageId === 'string' && meta.assistantMessageId ? meta.assistantMessageId : null,
       clientRequestId: typeof meta.clientRequestId === 'string' && meta.clientRequestId ? meta.clientRequestId : null,
       agentId: typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null,
+      projectMetadata:
+        meta.projectMetadata && typeof meta.projectMetadata === 'object' && !Array.isArray(meta.projectMetadata)
+          ? meta.projectMetadata
+          : null,
       // Plan §3.A1 / spec §11.5. The applied plugin snapshot id pins
       // every prompt fragment and tool gate to a frozen view so replay
       // is byte-equal across plugin upgrades. Runs are in-memory in
@@ -152,6 +156,7 @@ export function createChatRunService({
     signal: run.signal,
     error: run.error ?? null,
     errorCode: run.errorCode ?? null,
+    resumable: run.resumable ?? false,
     eventsLogPath: run.eventsLogPath ?? null,
     mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
     toolBundle: summarizeRunToolBundle(run.toolBundle),
@@ -163,7 +168,7 @@ export function createChatRunService({
     run.exitCode = code;
     run.signal = signal;
     run.updatedAt = Date.now();
-    emit(run, 'end', { code, signal, status });
+    emit(run, 'end', { code, signal, status, resumable: run.resumable ?? false });
     for (const sse of run.clients) sse.end();
     run.clients.clear();
     for (const waiter of run.waiters) waiter(statusBody(run));

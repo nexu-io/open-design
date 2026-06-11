@@ -430,6 +430,44 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(body.error?.message).toMatch(/skipDiscoveryBrief/i);
   });
 
+  it('rejects invalid metadata.linkedDirs on POST /api/projects', async () => {
+    const projectId = `proj-bad-linked-${Date.now()}`;
+    const resp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Bad linked dir',
+        metadata: { kind: 'prototype', linkedDirs: ['/no/such/folder/here'] },
+      }),
+    });
+    expect(resp.status).toBe(400);
+    const body = (await resp.json()) as { error?: { code?: string } };
+    expect(body.error?.code).toBe('INVALID_LINKED_DIR');
+    // The project must not have been created.
+    const detail = await fetch(`${baseUrl}/api/projects/${projectId}`);
+    expect(detail.status).toBe(404);
+  });
+
+  it('accepts an existing metadata.linkedDirs on POST /api/projects', async () => {
+    const dir = makeFolder();
+    const projectId = `proj-good-linked-${Date.now()}`;
+    const resp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Good linked dir',
+        metadata: { kind: 'prototype', linkedDirs: [dir] },
+      }),
+    });
+    expect(resp.status).toBe(200);
+    const detail = await fetch(`${baseUrl}/api/projects/${projectId}`);
+    expect(detail.status).toBe(200);
+    const body = (await detail.json()) as { project?: { metadata?: { linkedDirs?: string[] } } };
+    expect(body.project?.metadata?.linkedDirs?.length).toBe(1);
+  });
+
   it('returns 404 with PROJECT_NOT_FOUND for unknown ids', async () => {
     const resp = await fetch(`${baseUrl}/api/projects/does-not-exist-${Date.now()}`);
     expect(resp.status).toBe(404);
