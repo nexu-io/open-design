@@ -2109,7 +2109,11 @@ function DesignSystemPicker({
   }
 
   return (
-    <div className="newproj-section ds-picker" data-testid="design-system-picker" ref={wrapRef}>
+    <div
+      className={`newproj-section ds-picker${open ? ' open' : ''}`}
+      data-testid="design-system-picker"
+      ref={wrapRef}
+    >
       <label className="newproj-label">{t('newproj.designSystem')}</label>
       <button
         type="button"
