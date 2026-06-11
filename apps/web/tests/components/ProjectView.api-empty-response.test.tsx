@@ -5,7 +5,8 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView } from '../../src/components/ProjectView';
-import { streamByokViaDaemon } from '../../src/providers/daemon';
+import { streamMessage } from '../../src/providers/anthropic';
+import type { StreamHandlers } from '../../src/providers/anthropic';
 import {
   fetchProjectFilePreview,
   fetchProjectFileText,
@@ -37,13 +38,16 @@ vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
 }));
 
+vi.mock('../../src/providers/anthropic', () => ({
+  streamMessage: vi.fn(),
+}));
+
 vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: vi.fn(),
   listActiveChatRuns: vi.fn().mockResolvedValue([]),
   listProjectRuns: vi.fn().mockResolvedValue([]),
   reattachDaemonRun: vi.fn(),
   streamViaDaemon: vi.fn(),
-  streamByokViaDaemon: vi.fn(),
 }));
 
 vi.mock('../../src/providers/project-events', () => ({
@@ -178,35 +182,7 @@ vi.mock('../../src/components/ChatPane', () => ({
   },
 }));
 
-const mockedStreamByokViaDaemon = vi.mocked(streamByokViaDaemon);
-// BYOK API-mode chats now flow through the run registry (streamByokViaDaemon)
-// instead of the old in-browser streamMessage. Tests drive the same handler
-// callbacks (onDelta/onDone/onError) plus the run-id pin, so this helper
-// adapts the old (history, system, handlers) driving style to the new opts.
-function mockByokStream(
-  drive: (ctx: {
-    history: ChatMessage[];
-    system: string;
-    handlers: { onDelta: (t: string) => void; onAgentEvent: (e: AgentEvent) => void; onDone: (t?: string) => void; onError: (e: Error) => void };
-  }) => void | Promise<void>,
-) {
-  mockedStreamByokViaDaemon.mockImplementation(async (opts: any) => {
-    opts.onRunCreated?.('run-test');
-    opts.onRunStatus?.('running');
-    // Mirror the real run lifecycle: the daemon run reaches 'succeeded' just
-    // before onDone fires. Wrapping onDone keeps that order so success rows
-    // land on 'succeeded' while the empty-response handler (which runs inside
-    // onDone) can still override to 'failed' last.
-    const handlers = {
-      ...opts.handlers,
-      onDone: (full?: string) => {
-        opts.onRunStatus?.('succeeded');
-        opts.handlers.onDone(full);
-      },
-    };
-    await drive({ history: opts.history, system: opts.systemPrompt, handlers });
-  });
-}
+const mockedStreamMessage = vi.mocked(streamMessage);
 const mockedFetchProjectFilePreview = vi.mocked(fetchProjectFilePreview);
 const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
 const mockedFetchProjectFiles = vi.mocked(fetchProjectFiles);
@@ -271,7 +247,7 @@ describe('ProjectView API empty response handling', () => {
   beforeEach(() => {
     chatPaneMockState.attachments = [];
     chatPaneMockState.commentAttachments = [];
-    mockedStreamByokViaDaemon.mockReset();
+    mockedStreamMessage.mockReset();
     mockedFetchProjectFilePreview.mockReset();
     mockedFetchProjectFileText.mockReset();
     mockedFetchProjectFiles.mockReset();
@@ -299,7 +275,13 @@ describe('ProjectView API empty response handling', () => {
   });
 
   it('marks an empty API completion as a soft no-output state instead of succeeded', async () => {
-    mockByokStream(({ handlers }) => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
       handlers.onDone('');
     });
     renderProjectView();
@@ -330,16 +312,17 @@ describe('ProjectView API empty response handling', () => {
   });
 
   it('retries a failed API turn without appending a duplicate user message', async () => {
-    // API-mode (BYOK) chats flow through streamByokViaDaemon, so drive the
-    // retry through it: the first turn errors, the retry must re-send with the
-    // same single user-message history (no duplicate) — the #2491 invariant.
     let callCount = 0;
-    mockedStreamByokViaDaemon.mockImplementation(async (opts: any) => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
       callCount += 1;
-      opts.onRunCreated?.('run-test');
-      opts.onRunStatus?.('running');
       if (callCount === 1) {
-        opts.handlers.onError(new Error('model crashed'));
+        handlers.onError(new Error('model crashed'));
       }
     });
     renderProjectView();
@@ -349,8 +332,8 @@ describe('ProjectView API empty response handling', () => {
     await waitFor(() => expect(screen.getByText('model crashed')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: 'retry' }));
 
-    await waitFor(() => expect(mockedStreamByokViaDaemon).toHaveBeenCalledTimes(2));
-    const retryHistory = mockedStreamByokViaDaemon.mock.calls[1]![0].history as ChatMessage[];
+    await waitFor(() => expect(mockedStreamMessage).toHaveBeenCalledTimes(2));
+    const retryHistory = mockedStreamMessage.mock.calls[1]![2] as ChatMessage[];
     expect(retryHistory.map((message) => `${message.role}:${message.content}`)).toEqual([
       'user:Create a login page',
     ]);
@@ -387,7 +370,13 @@ describe('ProjectView API empty response handling', () => {
         source: 'saved-comment',
       },
     ];
-    mockByokStream(({ handlers }) => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
       handlers.onDone('');
     });
     renderProjectView();
@@ -411,7 +400,13 @@ describe('ProjectView API empty response handling', () => {
   });
 
   it('keeps normal API text completions on the succeeded path', async () => {
-    mockByokStream(({ handlers }) => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
       handlers.onDelta('hello');
       handlers.onDone('hello');
     });
@@ -452,7 +447,13 @@ describe('ProjectView API empty response handling', () => {
     } as never);
 
     let capturedHistory: ChatMessage[] = [];
-    mockByokStream(({ history, handlers }) => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
       capturedHistory = history;
       handlers.onDelta('hello');
       handlers.onDone('hello');
@@ -476,7 +477,13 @@ describe('ProjectView API empty response handling', () => {
 
   it('does not include saved project instructions in the BYOK system prompt', async () => {
     let capturedSystemPrompt = '';
-    mockByokStream(({ system, handlers }) => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
       capturedSystemPrompt = system;
       handlers.onDelta('ok');
       handlers.onDone('ok');
@@ -505,7 +512,13 @@ describe('ProjectView API empty response handling', () => {
   });
 
   it('plays the success sound for API completions that become succeeded after starting without runStatus', async () => {
-    mockByokStream(({ handlers }) => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
       handlers.onDelta('hello');
       handlers.onDone('hello');
     });
@@ -524,7 +537,13 @@ describe('ProjectView API empty response handling', () => {
       '<artifact identifier="landing-page" type="text/html" title="Landing Page">' +
       '<!doctype html><html><head><title>Landing</title></head><body><main><h1>Landing page</h1><p>Generated design artifact with enough structure to persist.</p></main></body></html>' +
       '</artifact>';
-    mockByokStream(({ handlers }) => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
       handlers.onDelta(artifact);
       handlers.onDone('');
     });
@@ -554,7 +573,13 @@ describe('ProjectView API empty response handling', () => {
       '<artifact identifier="worker-edition-v2" type="text/html" title="合同审查报告">' +
       '见 worker-edition-v2.html' +
       '</artifact>';
-    mockByokStream(({ handlers }) => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
       handlers.onDelta(artifact);
       handlers.onDone('');
     });
@@ -597,7 +622,13 @@ describe('ProjectView API empty response handling', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     let capturedSystemPrompt = '';
-    mockByokStream(({ system, handlers }) => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
       capturedSystemPrompt = system;
       handlers.onDelta('hello');
       handlers.onDone('hello');
@@ -650,7 +681,13 @@ describe('ProjectView API empty response handling', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     let capturedSystemPrompt = '';
-    mockByokStream(({ system, handlers }) => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
       capturedSystemPrompt = system;
       handlers.onDelta('hello');
       handlers.onDone('hello');
