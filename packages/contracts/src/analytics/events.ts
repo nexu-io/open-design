@@ -2657,7 +2657,7 @@ export interface LangfuseReportResultProps {
   langfuse_delivery_status: TrackingLangfuseDeliveryStatus;
   langfuse_drop_reason?: TrackingLangfuseDropReason;
   langfuse_report_result: TrackingLangfuseReportResult;
-  langfuse_report_trigger: 'final_message';
+  langfuse_report_trigger: 'final_message' | 'terminal_fallback';
   langfuse_report_skip_reason?: TrackingLangfuseReportSkipReason;
   report_duration_ms?: number;
   result?: TrackingRunResult;

@@ -156,7 +156,7 @@ describe('analytics run_finished contract', () => {
         langfuse_delivery_status: 'failed',
         langfuse_drop_reason: 'network_error',
         langfuse_report_result: 'failed',
-        langfuse_report_trigger: 'final_message',
+        langfuse_report_trigger: 'terminal_fallback',
         report_duration_ms: 123,
         result: 'failed',
         error_code: 'AGENT_EXECUTION_FAILED',
