@@ -63,6 +63,32 @@ const TAB_SKILLS = [
   skillSummary('image-skill', 'Image Skill', 'image', 'image', ['image']),
 ];
 
+const COMPOSER_PLUS_PLUGIN = {
+  id: 'composer-context-plugin',
+  title: 'Composer Context Plugin',
+  version: '1.0.0',
+  trust: 'bundled',
+  sourceKind: 'bundled',
+  source: '/tmp/composer-context-plugin',
+  fsPath: '/tmp/composer-context-plugin',
+  capabilitiesGranted: ['prompt:inject'],
+  installedAt: 0,
+  updatedAt: 0,
+  manifest: {
+    name: 'composer-context-plugin',
+    title: 'Composer Context Plugin',
+    version: '1.0.0',
+    description: 'Project composer context picker fixture.',
+    od: {
+      kind: 'scenario',
+      taskKind: 'new-generation',
+      useCase: {
+        query: 'Use the composer context plugin.',
+      },
+    },
+  },
+};
+
 test.beforeEach(async ({ page }) => {
   let appConfig = {
     onboardingCompleted: true,
@@ -392,13 +418,76 @@ test('[P0] @critical project detail header design system switch carries into the
   expect(runRequestBodies[0]?.designSystemId).toBe('editorial-noir');
 });
 
-test('[P0] @critical project detail avatar menu lets the user switch Local CLI agents and models', async ({ page }) => {
-  test.setTimeout(60_000);
+test('[P1] project detail design system picker stays inside the composer controls', async ({ page }) => {
   await page.goto('/');
-  await createProject(page, 'Header agent switch');
+  await createProject(page, 'Composer design system position');
   await expectWorkspaceReady(page);
 
-  const { menu, claudeButton } = await openAvatarAgentMenu(page);
+  const composer = page.getByTestId('chat-composer');
+  await expect(composer.getByTestId('project-ds-picker-trigger')).toBeVisible();
+});
+
+test('[P1] project detail composer working directory picker opens without leaving chat', async ({ page }) => {
+  await page.goto('/');
+  await createProject(page, 'Composer working directory picker');
+  await expectWorkspaceReady(page);
+
+  const composer = page.getByTestId('chat-composer');
+  const trigger = composer.getByTestId('working-dir-trigger');
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+
+  await expect(composer.getByTestId('working-dir-panel')).toBeVisible();
+  await expect(composer.getByTestId('working-dir-pick')).toBeVisible();
+});
+
+test('[P1] project detail composer session mode switches between Design and Ask', async ({ page }) => {
+  await page.goto('/');
+  await createProject(page, 'Composer session mode switch');
+  await expectWorkspaceReady(page);
+
+  const composer = page.getByTestId('chat-composer');
+  const trigger = composer.getByTestId('session-mode-trigger');
+  await expect(trigger).toContainText(/Design/i);
+  await trigger.click();
+  await page.getByRole('menuitemradio', { name: /Ask mode/i }).click();
+  await expect(trigger).toContainText(/Ask/i);
+
+  await trigger.click();
+  await page.getByRole('menuitemradio', { name: /Design mode/i }).click();
+  await expect(trigger).toContainText(/Design/i);
+});
+
+test('[P1] project detail composer plus menu exposes attachment, connector, plugin, and MCP entries', async ({ page }) => {
+  await routeComposerPlusFixtures(page);
+  await page.goto('/');
+  await createProject(page, 'Composer plus context menu');
+  await expectWorkspaceReady(page);
+
+  const composer = page.getByTestId('chat-composer');
+  await composer.getByTestId('chat-plus-trigger').click();
+  await expect(page.getByTestId('composer-plus-attach')).toBeVisible();
+  await expect(page.getByTestId('composer-plus-connectors')).toBeVisible();
+  await expect(page.getByTestId('composer-plus-plugins')).toBeVisible();
+  await expect(page.getByTestId('composer-plus-mcp')).toBeVisible();
+
+  await page.getByTestId('composer-plus-connectors').click();
+  await expect(page.getByRole('menuitem', { name: /Figma Connector/i })).toBeVisible();
+
+  await page.getByTestId('composer-plus-plugins').click();
+  await expect(page.getByRole('menuitem', { name: /Composer Context Plugin/i })).toBeVisible();
+
+  await page.getByTestId('composer-plus-mcp').click();
+  await expect(page.getByRole('menuitem', { name: /Design Docs MCP/i })).toBeVisible();
+});
+
+test('[P0] @critical project detail composer agent menu lets the user switch Local CLI agents and models', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto('/');
+  await createProject(page, 'Composer agent switch');
+  await expectWorkspaceReady(page);
+
+  const { menu, claudeButton } = await openComposerAgentMenu(page);
   await expect(claudeButton).toBeVisible();
   await claudeButton.click();
 
@@ -411,7 +500,7 @@ test('[P0] @critical project detail avatar menu lets the user switch Local CLI a
   await expect(modelSelect).toContainText(/Sonnet/i);
 });
 
-test('[P0] project detail agent and model switches carry into the next daemon run request', async ({ page }) => {
+test('[P0] project detail composer agent and model switches carry into the next daemon run request', async ({ page }) => {
   test.setTimeout(60_000);
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await page.route('**/api/runs', async (route) => {
@@ -432,10 +521,10 @@ test('[P0] project detail agent and model switches carry into the next daemon ru
   });
 
   await page.goto('/');
-  await createProject(page, 'Header agent switch run context');
+  await createProject(page, 'Composer agent switch run context');
   await expectWorkspaceReady(page);
 
-  const { menu, claudeButton } = await openAvatarAgentMenu(page);
+  const { menu, claudeButton } = await openComposerAgentMenu(page);
   await claudeButton.click();
   const modelSelect = menu.locator('.avatar-model-section [role=\"combobox\"]').first();
   await modelSelect.click();
@@ -628,6 +717,111 @@ test('[P1] project detail workspace keeps design file tabs and preview controls 
 
   await viewModeTabs.getByRole('tab', { name: 'Preview' }).click();
   await expect(artifactPreview(page)).toBeVisible();
+});
+
+test('[P1] project detail assistant completion actions support copy, fork, and feedback', async ({ page }) => {
+  await page.addInitScript(() => {
+    const store: string[] = [];
+    Object.defineProperty(window, '__copiedTexts', {
+      value: store,
+      configurable: true,
+    });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: {
+        writeText(text: string) {
+          store.push(text);
+          return Promise.resolve();
+        },
+      },
+      configurable: true,
+    });
+  });
+
+  const { projectId, conversationId, assistantMessageId, assistantText } =
+    await seedProjectWithAssistantCompletion(page);
+
+  await page.goto(`/projects/${projectId}/conversations/${conversationId}`);
+  await expectWorkspaceReady(page);
+  await expect(page.getByText('Assistant completion actions fixture')).toBeVisible();
+
+  const copyButton = page.getByTestId('assistant-copy-markdown');
+  await expect(copyButton).toBeVisible();
+  await copyButton.click();
+  await expect(copyButton).toHaveAttribute('data-copied', 'true');
+  const copied = await page.evaluate(() => {
+    return (window as typeof window & { __copiedTexts?: string[] }).__copiedTexts ?? [];
+  });
+  expect(copied.at(-1)).toBe(assistantText);
+
+  const positive = page.getByTestId('assistant-feedback-positive');
+  const negative = page.getByTestId('assistant-feedback-negative');
+  await expect(positive).toBeVisible();
+  await expect(negative).toBeVisible();
+  await positive.click();
+  await expect(positive).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.assistant-feedback-reasons')).toBeVisible();
+  await negative.click();
+  await expect(negative).toHaveAttribute('aria-pressed', 'true');
+  await expect(positive).toHaveAttribute('aria-pressed', 'false');
+
+  const forkRequestPromise = page.waitForRequest((request) => {
+    return request.method() === 'POST'
+      && request.url().endsWith(`/api/projects/${projectId}/conversations`);
+  });
+  await page.getByTestId('assistant-fork-button').click();
+  const forkRequest = await forkRequestPromise;
+  const forkBody = forkRequest.postDataJSON() as {
+    forkAfterMessageId?: string;
+    seedFromConversationId?: string;
+    seedMessages?: Array<{ id?: string; role?: string }>;
+  };
+  expect(forkBody.seedFromConversationId).toBe(conversationId);
+  expect(forkBody.forkAfterMessageId).toBe(assistantMessageId);
+  expect(
+    forkBody.seedMessages?.some((message) => {
+      return message.id === assistantMessageId && message.role === 'assistant';
+    }),
+  ).toBe(true);
+  await expect
+    .poll(() => getProjectContextFromUrl(page).conversationId)
+    .not.toBe(conversationId);
+});
+
+test('[P1] project detail conversations menu supports new chat, search, counts, and run duration metadata', async ({ page }) => {
+  const { projectId, conversations } = await seedProjectConversationHistory(page);
+  await routeConversationHistoryFixtures(page, projectId, conversations);
+
+  await page.goto(`/projects/${projectId}/conversations/${conversations[0]!.id}`);
+  await expectWorkspaceReady(page);
+
+  await page.getByTestId('conversation-history-trigger').click();
+  const menu = page.getByTestId('conversation-history-menu');
+  await expect(menu).toBeVisible();
+  await expect(page.getByTestId('conversation-history-count')).toHaveText('3');
+
+  await expect(page.getByTestId(`conversation-select-${conversations[0]!.id}`)).toContainText('Runway final polish');
+  await expect(page.getByTestId(`conversation-meta-${conversations[0]!.id}`)).toHaveText('8 msg · 5m 42s');
+  await expect(page.getByTestId(`conversation-meta-${conversations[1]!.id}`)).toHaveText('6 msg · 19m 00s');
+  await expect(page.getByTestId(`conversation-meta-${conversations[2]!.id}`)).toContainText('6 msg ·');
+
+  await page.getByTestId('conversation-history-search').fill('font audit');
+  await expect(page.getByTestId('conversation-history-count')).toHaveText('1 / 3');
+  await expect(page.getByTestId(`conversation-item-${conversations[1]!.id}`)).toBeVisible();
+  await expect(page.getByTestId(`conversation-item-${conversations[0]!.id}`)).toHaveCount(0);
+
+  await page.getByTestId('conversation-history-search').fill('');
+  const newConversationRequestPromise = page.waitForRequest((request) => {
+    return request.method() === 'POST'
+      && request.url().endsWith(`/api/projects/${projectId}/conversations`);
+  });
+  await page.getByTestId('conversation-history-new').click();
+  await newConversationRequestPromise;
+  await expect(page.getByTestId('conversation-history-menu')).toHaveCount(0);
+
+  await page.getByTestId('conversation-history-trigger').click();
+  await expect(page.getByTestId('conversation-history-count')).toHaveText('4');
+  await expect(page.getByTestId('conversation-select-conv-new-history')).toContainText('Untitled');
+  await expect(page.getByTestId('conversation-meta-conv-new-history')).toHaveText('0 msg · now');
 });
 
 test('[P0] project detail share menu copies the current share link for uploaded html artifacts', async ({ page }) => {
@@ -844,6 +1038,8 @@ test('[P2] home designs view toggle switches between grid and kanban and persist
 });
 
 test('[P1] home designs search filters projects and recovers from no results', async ({ page }) => {
+  test.setTimeout(60_000);
+
   const stamp = Date.now();
   const alphaName = `Home search alpha ${stamp}`;
   const betaName = `Home search beta ${stamp}`;
@@ -1346,10 +1542,61 @@ async function createProject(
   page: Page,
   projectName: string,
 ) {
-  const response = await page.request.post('/api/projects', {
+  const response = await retryProjectCreate(page, projectName);
+  const body = (await response.json()) as {
+    project: { id: string };
+    conversationId: string;
+  };
+  await page.goto(`/projects/${body.project.id}/conversations/${body.conversationId}`);
+}
+
+async function retryProjectCreate(
+  page: Page,
+  projectName: string,
+) {
+  let lastError = '';
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await page.request.post('/api/projects', {
+        timeout: 15_000,
+        data: {
+          id: `project-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name: projectName,
+          skillId: null,
+          designSystemId: null,
+          metadata: {
+            kind: 'prototype',
+            nameSource: 'user',
+          },
+        },
+      });
+      if (response.ok()) return response;
+      lastError = await response.text();
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+
+    if (attempt < 3) {
+      await page.waitForTimeout(500 * attempt);
+    }
+  }
+
+  throw new Error(`create project "${projectName}" failed after retries: ${lastError}`);
+}
+
+async function seedProjectWithAssistantCompletion(
+  page: Page,
+): Promise<{
+  projectId: string;
+  conversationId: string;
+  assistantMessageId: string;
+  assistantText: string;
+}> {
+  const projectId = `assistant-actions-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const projectResponse = await page.request.post('/api/projects', {
     data: {
-      id: `project-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      name: projectName,
+      id: projectId,
+      name: 'Assistant Completion Actions',
       skillId: null,
       designSystemId: null,
       metadata: {
@@ -1358,12 +1605,198 @@ async function createProject(
       },
     },
   });
-  expect(response.ok(), await response.text()).toBeTruthy();
-  const body = (await response.json()) as {
-    project: { id: string };
-    conversationId: string;
+  expect(projectResponse.ok(), `create project: ${await projectResponse.text()}`).toBeTruthy();
+  const { conversationId } = (await projectResponse.json()) as { conversationId: string };
+
+  const fileResponse = await page.request.post(`/api/projects/${projectId}/files`, {
+    data: {
+      name: 'index.html',
+      content: '<!doctype html><html><body><main><h1>Assistant actions preview</h1></main></body></html>',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'index.html',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    },
+  });
+  expect(fileResponse.ok(), `seed index.html: ${await fileResponse.text()}`).toBeTruthy();
+
+  const createdAt = Date.now() - 2_000;
+  const userMessageId = `u-${projectId}`;
+  const userResponse = await page.request.put(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages/${userMessageId}`,
+    {
+      data: {
+        id: userMessageId,
+        role: 'user',
+        content: 'Create a tiny prototype.',
+        createdAt,
+      },
+    },
+  );
+  expect(userResponse.ok(), `seed user message: ${await userResponse.text()}`).toBeTruthy();
+
+  const assistantMessageId = `a-${projectId}`;
+  const assistantText = 'Assistant completion actions fixture.\n\nGenerated `index.html` for this turn.';
+  const assistantResponse = await page.request.put(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages/${assistantMessageId}`,
+    {
+      data: {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: assistantText,
+        runStatus: 'succeeded',
+        startedAt: createdAt + 500,
+        endedAt: createdAt + 1_500,
+        events: [
+          { kind: 'text', text: assistantText },
+        ],
+        createdAt: createdAt + 1_000,
+      },
+    },
+  );
+  expect(assistantResponse.ok(), `seed assistant message: ${await assistantResponse.text()}`).toBeTruthy();
+
+  return { projectId, conversationId, assistantMessageId, assistantText };
+}
+
+type ConversationHistoryFixture = {
+  id: string;
+  projectId: string;
+  title: string | null;
+  sessionMode: 'design' | 'ask';
+  messageCount: number;
+  createdAt: number;
+  updatedAt: number;
+  totalDurationMs?: number;
+  latestRun?: {
+    status: 'succeeded' | 'failed' | 'canceled';
+    durationMs?: number;
   };
-  await page.goto(`/projects/${body.project.id}/conversations/${body.conversationId}`);
+};
+
+async function seedProjectConversationHistory(
+  page: Page,
+): Promise<{
+  projectId: string;
+  conversations: ConversationHistoryFixture[];
+}> {
+  const projectId = `conversation-history-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const projectResponse = await page.request.post('/api/projects', {
+    data: {
+      id: projectId,
+      name: 'Conversation History Coverage',
+      skillId: null,
+      designSystemId: null,
+      metadata: {
+        kind: 'prototype',
+        nameSource: 'user',
+      },
+    },
+  });
+  expect(projectResponse.ok(), `create project: ${await projectResponse.text()}`).toBeTruthy();
+  const { conversationId } = (await projectResponse.json()) as { conversationId: string };
+
+  const now = Date.now();
+  return {
+    projectId,
+    conversations: [
+      {
+        id: conversationId,
+        projectId,
+        title: 'Runway final polish',
+        sessionMode: 'design',
+        messageCount: 8,
+        createdAt: now - 90 * 60_000,
+        updatedAt: now - 30_000,
+        totalDurationMs: 342_000,
+        latestRun: {
+          status: 'succeeded',
+          durationMs: 330_000,
+        },
+      },
+      {
+        id: 'conv-font-audit',
+        projectId,
+        title: 'Font audit and brand pass',
+        sessionMode: 'design',
+        messageCount: 6,
+        createdAt: now - 80 * 60_000,
+        updatedAt: now - 2 * 60_000,
+        latestRun: {
+          status: 'succeeded',
+          durationMs: 1_140_000,
+        },
+      },
+      {
+        id: 'conv-slide-review',
+        projectId,
+        title: 'Slide review baseline',
+        sessionMode: 'ask',
+        messageCount: 6,
+        createdAt: now - 70 * 60_000,
+        updatedAt: now - 7 * 60_000,
+      },
+    ],
+  };
+}
+
+async function routeConversationHistoryFixtures(
+  page: Page,
+  projectId: string,
+  initialConversations: ConversationHistoryFixture[],
+) {
+  const conversations = [...initialConversations];
+  await page.route(`**/api/projects/${projectId}/conversations`, async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { conversations } });
+      return;
+    }
+    if (route.request().method() === 'POST') {
+      const now = Date.now();
+      const fresh: ConversationHistoryFixture = {
+        id: 'conv-new-history',
+        projectId,
+        title: null,
+        sessionMode: 'design',
+        messageCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      };
+      conversations.unshift(fresh);
+      await route.fulfill({ json: { conversation: fresh } });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route(`**/api/projects/${projectId}/conversations/*/messages`, async (route) => {
+    if (route.request().method() === 'GET') {
+      const conversationId = conversationIdFromMessagesApiPath(route.request().url());
+      const conversation = conversations.find((item) => item.id === conversationId);
+      const count = conversation?.messageCount ?? 0;
+      await route.fulfill({
+        json: {
+          messages: Array.from({ length: count }, (_, index) => ({
+            id: `${conversationId}-m-${index}`,
+            role: index % 2 === 0 ? 'user' : 'assistant',
+            content: `Conversation ${conversationId} message ${index + 1}`,
+            createdAt: (conversation?.createdAt ?? Date.now()) + index,
+          })),
+        },
+      });
+      return;
+    }
+    await route.continue();
+  });
+}
+
+function conversationIdFromMessagesApiPath(url: string): string {
+  const pathname = new URL(url).pathname;
+  const match = pathname.match(/\/conversations\/([^/]+)\/messages$/);
+  return match ? decodeURIComponent(match[1]!) : '';
 }
 
 async function openNewProjectPanel(page: Page) {
@@ -1400,11 +1833,14 @@ async function openEntrySettingsDialog(page: Page, sectionName?: RegExp | string
   return settingsDialog;
 }
 
-async function openAvatarAgentMenu(page: Page): Promise<{
+async function openComposerAgentMenu(page: Page): Promise<{
   menu: Locator;
   claudeButton: Locator;
 }> {
-  const trigger = page.locator('.avatar-menu .avatar-agent-trigger');
+  const composer = page.getByTestId('chat-composer');
+  await expect(composer).toBeVisible();
+  const trigger = composer.locator('.avatar-menu .avatar-agent-trigger');
+  await expect(trigger).toBeVisible();
   await trigger.click();
   const menu = page.locator('.avatar-popover[role="dialog"]');
   await expect(menu).toBeVisible();
@@ -1424,6 +1860,56 @@ async function openAvatarAgentMenu(page: Page): Promise<{
   }
   await expect(claudeButton).toBeVisible({ timeout: 20_000 });
   return { menu, claudeButton };
+}
+
+async function routeComposerPlusFixtures(page: Page) {
+  await page.route('**/api/connectors', async (route) => {
+    await route.fulfill({
+      json: {
+        connectors: [
+          {
+            id: 'figma',
+            name: 'Figma Connector',
+            provider: 'Composio',
+            category: 'Design',
+            status: 'connected',
+            tools: [],
+          },
+        ],
+      },
+    });
+  });
+  await page.route('**/api/connectors/status', async (route) => {
+    await route.fulfill({
+      json: {
+        statuses: {
+          figma: { status: 'connected', accountLabel: 'Design Team' },
+        },
+      },
+    });
+  });
+  await page.route('**/api/connectors/discovery**', async (route) => {
+    await route.fulfill({ json: { connectors: [] } });
+  });
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({ json: { plugins: [COMPOSER_PLUS_PLUGIN] } });
+  });
+  await page.route('**/api/mcp/servers', async (route) => {
+    await route.fulfill({
+      json: {
+        servers: [
+          {
+            id: 'design-docs',
+            label: 'Design Docs MCP',
+            transport: 'stdio',
+            enabled: true,
+            command: 'npx',
+          },
+        ],
+        templates: [],
+      },
+    });
+  });
 }
 
 async function expectWorkspaceReady(page: Page) {
@@ -1606,9 +2092,11 @@ function isCreateProjectRequest(request: Request): boolean {
 
 function getProjectContextFromUrl(page: Page) {
   const url = new URL(page.url());
-  const [, projectId] = url.pathname.match(/\/projects\/([^/]+)/) ?? [];
+  const [, projectId, conversationId] = url.pathname.match(
+    /\/projects\/([^/]+)(?:\/conversations\/([^/]+))?/,
+  ) ?? [];
   if (!projectId) throw new Error(`unexpected project route: ${url.pathname}`);
-  return { projectId };
+  return { projectId, conversationId };
 }
 
 function getProjectIdFromApiPath(rawUrl: string) {

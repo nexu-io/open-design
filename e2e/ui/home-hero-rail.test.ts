@@ -353,6 +353,24 @@ test.beforeEach(async ({ page }) => {
       body: JSON.stringify({ plugins: HOME_PLUGINS }),
     });
   });
+  await page.route('**/api/mcp/servers', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        servers: [
+          {
+            id: 'docs',
+            label: 'Docs MCP',
+            transport: 'stdio',
+            enabled: true,
+            command: 'npx',
+          },
+        ],
+        templates: [],
+      }),
+    });
+  });
 
   await page.route('**/api/plugins/*/apply', async (route) => {
     const pluginId = route.request().url().split('/api/plugins/')[1]?.split('/apply')[0];
@@ -363,6 +381,56 @@ test.beforeEach(async ({ page }) => {
       body: JSON.stringify(body ?? { error: 'Unknown plugin apply route' }),
     });
   });
+});
+
+test('[P1] home left rail expands and collapses from the shell controls', async ({ page }) => {
+  await gotoEntryHome(page);
+
+  const shell = page.locator('.entry');
+  const rail = page.locator('.entry-nav-rail');
+  const expand = page.getByTestId('entry-rail-toggle');
+
+  await expect(shell).not.toHaveClass(/entry--rail-open/);
+  await expect(rail).toHaveAttribute('aria-hidden', 'true');
+  await expect(expand).toHaveAttribute('aria-expanded', 'false');
+
+  await expand.click();
+  await expect(shell).toHaveClass(/entry--rail-open/);
+  await expect(rail).not.toHaveAttribute('aria-hidden', 'true');
+  await expect(page.getByTestId('entry-nav-home')).toBeVisible();
+  await expect(page.getByTestId('entry-nav-projects')).toBeVisible();
+
+  await page.getByTestId('entry-nav-collapse').click();
+  await expect(shell).not.toHaveClass(/entry--rail-open/);
+  await expect(rail).toHaveAttribute('aria-hidden', 'true');
+  await expect(expand).toHaveAttribute('aria-expanded', 'false');
+});
+
+test('[P1] home composer plus menu exposes attachment, connector, plugin, and MCP entries', async ({ page }) => {
+  await gotoEntryHome(page);
+
+  const input = page.getByTestId('home-hero-input');
+
+  await page.getByTestId('home-hero-plus-trigger').click();
+  await expect(page.getByTestId('composer-plus-attach')).toBeVisible();
+  await expect(page.getByTestId('composer-plus-connectors')).toBeVisible();
+  await expect(page.getByTestId('composer-plus-plugins')).toBeVisible();
+  await expect(page.getByTestId('composer-plus-mcp')).toBeVisible();
+
+  await page.getByTestId('composer-plus-connectors').click();
+  await expect(page.getByText(/No connected connectors/i)).toBeVisible();
+
+  await page.getByTestId('composer-plus-plugins').click();
+  await page.getByRole('menuitem', { name: /Web Prototype/i }).click();
+  await expect(input).toContainText(/Web Prototype/i);
+
+  await page.getByTestId('home-hero-plus-trigger').click();
+  await page.getByTestId('composer-plus-mcp').click();
+  await page.getByRole('menuitem', { name: /Docs MCP/i }).click();
+  await expect(input).toContainText(/Docs MCP/i);
+
+  await page.getByTestId('home-hero-file-input').setInputFiles('../package.json');
+  await expect(page.getByTestId('home-hero-staged-files')).toContainText('package.json');
 });
 
 test('[P2] home hero rail shows the current creation chips and More shortcuts', async ({ page }) => {
@@ -471,6 +539,22 @@ test('[P1] home hero deck example preset updates the composer input', async ({ p
   await expect(input).toHaveText(
     'Create a pitch deck for decision makers about quarterly review with 10-15 pages. Speaker notes: include speaker notes. Use the active project design system.',
   );
+});
+
+test('[P1] home hero prompt example cards fill the composer for fallback modes', async ({ page }) => {
+  await gotoEntryHome(page);
+
+  const input = page.getByTestId('home-hero-input');
+  await page.getByTestId('home-hero-rail-audio').click();
+  await expect(page.getByTestId('home-hero-prompt-examples')).toBeVisible();
+  await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
+
+  const firstExample = page.getByTestId('home-hero-prompt-example').first();
+  const exampleText = (await firstExample.textContent())?.trim();
+  expect(exampleText).toBeTruthy();
+  await firstExample.click();
+
+  await expect(input).toHaveText(exampleText ?? '');
 });
 
 test('[P2] clearing the active hero chip restores the rail and clears preset chrome', async ({ page }) => {

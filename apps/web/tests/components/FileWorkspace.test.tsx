@@ -573,6 +573,26 @@ describe('FileWorkspace upload input', () => {
     );
   });
 
+  it('keeps the Design Files tab as the first workspace tab before opened files', () => {
+    const markup = renderToStaticMarkup(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('artifact.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['artifact.html'], active: 'artifact.html' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('class="ws-tabs-bar"');
+    expect(markup).toMatch(
+      /role="tablist"[\s\S]*data-testid="design-files-tab"[\s\S]*artifact\.html/,
+    );
+  });
+
   it('labels the same workspace control as chat restore while focused', () => {
     const markup = renderToStaticMarkup(
       <FileWorkspace

@@ -1732,9 +1732,11 @@ export function ChatPane({
                   {t('chat.conversationsHeading')}
                 </span>
                 <span className="chat-history-menu-count">
+                  <span data-testid="conversation-history-count">
                   {filteredConversations.length === conversations.length
                     ? compactCount(conversations.length)
                     : `${compactCount(filteredConversations.length)} / ${compactCount(conversations.length)}`}
+                  </span>
                 </span>
                 {onNewConversation ? (
                   <button
@@ -3190,7 +3192,10 @@ function ConversationRow({
       >
         {displayTitle}
       </button>
-      <span className="chat-conv-item-meta">
+      <span
+        className="chat-conv-item-meta"
+        data-testid={`conversation-meta-${conversation.id}`}
+      >
         {messageCount !== null ? `${compactCount(messageCount)} msg · ` : ''}
         {conversationMetaLabel(conversation, t)}
       </span>
