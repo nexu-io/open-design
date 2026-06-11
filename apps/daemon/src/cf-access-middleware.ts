@@ -1,25 +1,37 @@
 // Cloudflare Access JWT validation middleware for the Open Design daemon.
 //
 // Architecture:
-//   When OD_BEHIND_PROXY=cloudflare is set, every /api/* request must carry
-//   a valid Cf-Access-Jwt-Assertion header issued by the configured Cloudflare
+//   When OD_TRUSTED_PROXY=1 is set the daemon runs behind a trusted reverse
+//   proxy. If OD_CF_ACCESS_TEAM_DOMAIN and OD_CF_ACCESS_AUD are also
+//   configured, every /api/* request must carry a valid
+//   Cf-Access-Jwt-Assertion header issued by the configured Cloudflare
 //   Access application. The JWT is validated against Cloudflare's public JWKS
 //   endpoint.
 //
-//   Unlike the bearer-token middleware, Cloudflare mode does NOT exempt
+//   Unlike the access-token middleware, Cloudflare mode does NOT exempt
 //   loopback callers — in a hosted deployment, any process inside the
 //   container (including installed CLIs) must present a valid JWT. Only
-//   health/readiness/version probes are open.
+//   health/readiness/version/agents probes are open.
 //
-//   When OD_BEHIND_PROXY is NOT set, the existing OD_API_TOKEN bearer-token
-//   mechanism applies instead (see server.ts §3.K1).
+//   When OD_TRUSTED_PROXY=1 is set WITHOUT Cloudflare Access config, the
+//   daemon trusts the proxy without additional JWT validation. It is the
+//   operator's responsibility to ensure the reverse proxy is correctly
+//   configured.
+//
+//   When OD_TRUSTED_PROXY is NOT set, the OD_ACCESS_TOKEN access-token
+//   mechanism applies instead (see server.ts).
 //
 // Env vars:
-//   OD_BEHIND_PROXY            "cloudflare" → enable CF Access JWT validation
+//   OD_TRUSTED_PROXY           1 → trusted reverse proxy (no bearer token
+//                                   required; Cloudflare JWT optional)
 //   OD_CF_ACCESS_TEAM_DOMAIN   Your Cloudflare Access team domain
 //                              (e.g. "myteam.cloudflareaccess.com")
 //   OD_CF_ACCESS_AUD           The Application Audience (AUD) tag from your
 //                              Cloudflare Access application policy
+//
+// Deprecated env vars (still work, print warning):
+//   OD_BEHIND_PROXY=cloudflare → use OD_TRUSTED_PROXY=1 instead
+//   OD_API_TOKEN=<token>       → use OD_ACCESS_TOKEN=<token> instead
 
 import crypto from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
@@ -408,6 +420,7 @@ const PROBE_PATHS = new Set([
 	"/api/ready",
 	"/version",
 	"/api/version",
+	"/api/agents",
 ]);
 
 function isProbePath(path: string): boolean {
@@ -557,26 +570,43 @@ export function createCloudflareAccessMiddleware(
 // Auth mode resolution
 // ---------------------------------------------------------------------------
 
-export type AuthMode = "none" | "cf-access" | "bearer-token";
+export type AuthMode = "none" | "trusted-proxy" | "access-token";
 
 /**
  * Resolve the active authentication mode from environment variables.
  *
  * Priority:
- *   1. OD_BEHIND_PROXY=cloudflare → CF Access JWT (requires valid config)
- *   2. OD_API_TOKEN set → bearer token
- *   3. Neither → no authentication (development / loopback only)
+ *   1. OD_TRUSTED_PROXY=1 → trusted proxy (with optional Cloudflare JWT)
+ *   2. OD_BEHIND_PROXY=cloudflare (deprecated) → trusted proxy (strict CF check)
+ *   3. OD_ACCESS_TOKEN set → access token (formerly bearer token)
+ *   4. OD_API_TOKEN (deprecated) → access token
+ *   5. Neither → no authentication (development / loopback only)
+ *
+ * New vars win over deprecated vars when both are set.
  *
  * When OD_BEHIND_PROXY=cloudflare is set but CF config is incomplete,
- * this throws at startup instead of silently falling back. An incomplete
- * proxy configuration is a misconfiguration, not a fallback scenario.
+ * this throws at startup (preserving old strict behavior).
+ * When OD_TRUSTED_PROXY=1 is set without CF config, trusted-proxy mode
+ * is active with no additional JWT validation.
  */
 export function resolveAuthMode(
 	env: NodeJS.ProcessEnv = process.env,
 ): AuthMode {
-	const behindProxy = (env.OD_BEHIND_PROXY ?? "").trim().toLowerCase();
+	// 1. Check new OD_TRUSTED_PROXY (boolean flag)
+	const trustedProxyRaw = (env.OD_TRUSTED_PROXY ?? "").trim();
+	const isTrustedProxy = trustedProxyRaw === "1" || trustedProxyRaw === "true";
 
+	if (isTrustedProxy) {
+		return "trusted-proxy";
+	}
+
+	// 2. Check deprecated OD_BEHIND_PROXY (only "cloudflare" is valid)
+	const behindProxy = (env.OD_BEHIND_PROXY ?? "").trim().toLowerCase();
 	if (behindProxy === "cloudflare") {
+		console.warn(
+			"[auth] DEPRECATED: OD_BEHIND_PROXY is deprecated, use OD_TRUSTED_PROXY=1 instead",
+		);
+		// Preserve old strict behavior: require valid CF config
 		const cfConfig = resolveCloudflareAccessConfig(env);
 		if (!cfConfig) {
 			throw new Error(
@@ -584,13 +614,25 @@ export function resolveAuthMode(
 					`is incomplete or invalid. Set OD_CF_ACCESS_TEAM_DOMAIN (must end with ` +
 					`.cloudflareaccess.com) and OD_CF_ACCESS_AUD (from your Access ` +
 					`application policy). Use OD_CF_ACCESS_UNSAFE_DOMAIN=1 in development ` +
-					`to allow non-Cloudflare domains.`,
+					`to allow non-Cloudflare domains. ` +
+					`(Tip: switch to OD_TRUSTED_PROXY=1 for proxy trust without Cloudflare requirements.)`,
 			);
 		}
-		return "cf-access";
+		return "trusted-proxy";
 	}
 
+	// 3. Check new OD_ACCESS_TOKEN
+	const accessToken = (env.OD_ACCESS_TOKEN ?? "").trim();
+	if (accessToken.length > 0) return "access-token";
+
+	// 4. Check deprecated OD_API_TOKEN
 	const apiToken = (env.OD_API_TOKEN ?? "").trim();
-	if (apiToken.length > 0) return "bearer-token";
+	if (apiToken.length > 0) {
+		console.warn(
+			"[auth] DEPRECATED: OD_API_TOKEN is deprecated, use OD_ACCESS_TOKEN instead",
+		);
+		return "access-token";
+	}
+
 	return "none";
 }

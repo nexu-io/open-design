@@ -4631,28 +4631,26 @@ export async function startServer({
   // Plan §3.K1 / spec §15.7 — bound-API-token guard.
   //
   // The daemon refuses to bind to a public interface unless
-  // OD_API_TOKEN or OD_BEHIND_PROXY=cloudflare is configured.
+  // OD_ACCESS_TOKEN or OD_TRUSTED_PROXY=1 is configured.
   // This is the spec §16 Phase 5 safety floor: a hosted operator can
   // no longer accidentally publish an unsecured daemon by setting
   // OD_BIND_HOST=0.0.0.0 without authentication.
   //
   // Two auth modes:
-  //   1. OD_BEHIND_PROXY=cloudflare → Cloudflare Access JWT validation
-  //      (requires OD_CF_ACCESS_TEAM_DOMAIN + OD_CF_ACCESS_AUD).
-  //   2. OD_API_TOKEN → bearer-token middleware (existing).
+  //   1. OD_TRUSTED_PROXY=1 → trusted reverse proxy
+  //      (with optional Cloudflare Access JWT validation via
+  //       OD_CF_ACCESS_TEAM_DOMAIN + OD_CF_ACCESS_AUD).
+  //   2. OD_ACCESS_TOKEN → access-token middleware (existing).
   //
   // Loopback hosts (127.0.0.1 / ::1 / localhost) are always allowed —
   // the desktop / dev flow remains unchanged.
   const authMode: AuthMode = resolveAuthMode();
-  const apiToken = (process.env.OD_API_TOKEN ?? '').trim();
+  const accessToken = (process.env.OD_ACCESS_TOKEN ?? process.env.OD_API_TOKEN ?? '').trim();
   if (!isLoopbackHostname(host) && authMode === 'none') {
     throw new Error(
-      `OD_BIND_HOST=${host} requires OD_API_TOKEN to be set, ` +
-      `or OD_BEHIND_PROXY=cloudflare with OD_CF_ACCESS_TEAM_DOMAIN ` +
-      `and OD_CF_ACCESS_AUD configured. ` +
-      `Generate a token with \`openssl rand -hex 32\` or configure ` +
-      `Cloudflare Access. ` +
-      `(Loopback hosts 127.0.0.1 / ::1 / localhost do not need auth.)`,
+      `OD_BIND_HOST=${host} requires authentication. ` +
+      `Set OD_ACCESS_TOKEN=<token> (generate with \`openssl rand -hex 32\`) ` +
+      `or set OD_TRUSTED_PROXY=1 if the daemon is behind a trusted reverse proxy.`,
     );
   }
 
@@ -4666,20 +4664,24 @@ export async function startServer({
   //
   // Two mutually exclusive modes are supported:
   //
-  //   cf-access:       Cloudflare Access JWT validation (OD_BEHIND_PROXY=cloudflare).
-  //                    Validates Cf-Access-Jwt-Assertion against CF's public JWKS,
-  //                    checks audience, issuer, and expiry.
+  //   trusted-proxy:   OD_TRUSTED_PROXY=1. The daemon is behind a trusted
+  //                    reverse proxy. If OD_CF_ACCESS_* vars are also set,
+  //                    Cloudflare Access JWT validation is enabled.
+  //                    Otherwise, the proxy is trusted without additional
+  //                    validation (the operator is responsible for proxy
+  //                    configuration).
   //
-  //   bearer-token:    Simple OD_API_TOKEN (Authorization: Bearer <token>).
-  //                    Loopback origins are exempt so the desktop UI keeps working.
+  //   access-token:    OD_ACCESS_TOKEN (Authorization: Bearer <token>).
+  //                    Loopback origins are exempt so the desktop UI keeps
+  //                    working.
   //
-  // Health / readiness / version remain open so monitoring probes don't need
-  // auth. Server-minted project preview asset scopes are also accepted for
-  // GETs so sandboxed browser iframes can load HTML/CSS/JS without
-  // privileged headers.
+  // Health / readiness / version / agents remain open so monitoring probes
+  // don't need auth. Server-minted project preview asset scopes are also
+  // accepted for GETs so sandboxed browser iframes can load HTML/CSS/JS
+  // without privileged headers.
   // =========================================================================
 
-  if (authMode === 'cf-access') {
+  if (authMode === 'trusted-proxy') {
     const cfConfig = resolveCloudflareAccessConfig();
     if (cfConfig) {
       console.log(
@@ -4687,9 +4689,18 @@ export async function startServer({
         `(team=${cfConfig.teamDomain}, aud=${cfConfig.aud})`,
       );
       app.use('/api', createCloudflareAccessMiddleware(cfConfig));
+    } else {
+      console.log('[auth] Trusted-proxy mode ENABLED (no JWT validation configured)');
     }
-  } else if (authMode === 'bearer-token') {
-    console.log('[auth] Bearer-token middleware ENABLED (OD_API_TOKEN)');
+    // Warn if OD_ACCESS_TOKEN is also set — trusted-proxy takes precedence
+    if (accessToken.length > 0) {
+      console.warn(
+        '[auth] OD_ACCESS_TOKEN is set but OD_TRUSTED_PROXY=1 takes precedence; ' +
+        'OD_ACCESS_TOKEN is ignored.',
+      );
+    }
+  } else if (authMode === 'access-token') {
+    console.log('[auth] Access-token middleware ENABLED (OD_ACCESS_TOKEN)');
     const openProbePaths = new Set([
       '/health',
       '/api/health',
@@ -4697,6 +4708,7 @@ export async function startServer({
       '/api/ready',
       '/version',
       '/api/version',
+      '/api/agents',
     ]);
     app.use('/api', (req, res, next) => {
       if (openProbePaths.has(req.path)) return next();
@@ -4716,9 +4728,9 @@ export async function startServer({
       if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
       const auth = req.get('authorization') ?? '';
       const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
-      if (!match || match[1] !== apiToken) {
+      if (!match || match[1] !== accessToken) {
         return res.status(401).json({
-          error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
+          error: { code: 'ACCESS_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_ACCESS_TOKEN> required' },
         });
       }
       return next();

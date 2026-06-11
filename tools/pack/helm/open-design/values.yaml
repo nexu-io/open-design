@@ -48,9 +48,9 @@ env:
 # through their cloud's secret manager. This block is the schema the
 # templates will consume.
 secrets:
-  apiToken: ""           # OD_API_TOKEN
-  anthropicApiKey: ""    # ANTHROPIC_API_KEY
-  tavilyApiKey: ""       # TAVILY_API_KEY
+  accessToken: "" # OD_ACCESS_TOKEN
+  anthropicApiKey: "" # ANTHROPIC_API_KEY
+  tavilyApiKey: "" # TAVILY_API_KEY
 
 resources:
   limits:

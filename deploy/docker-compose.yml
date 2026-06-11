@@ -15,10 +15,11 @@ services:
       OD_ALLOWED_ORIGINS: ${OPEN_DESIGN_ALLOWED_ORIGINS:-}
       OD_PORT: 7456
       OD_WEB_PORT: ${OPEN_DESIGN_PORT:-7456}
-      OD_API_TOKEN: ${OD_API_TOKEN:-}
+      OD_ACCESS_TOKEN: ${OD_ACCESS_TOKEN:-}
       OD_CODEX_SANDBOX: ${OD_CODEX_SANDBOX:-}
-      # Cloudflare Access JWT validation (set OD_BEHIND_PROXY=cloudflare to enable)
-      OD_BEHIND_PROXY: ${OD_BEHIND_PROXY:-}
+      # Trusted reverse proxy (set OD_TRUSTED_PROXY=1 if the daemon is behind
+      # Cloudflare Access, nginx, or another trusted reverse proxy)
+      OD_TRUSTED_PROXY: ${OD_TRUSTED_PROXY:-}
       OD_CF_ACCESS_TEAM_DOMAIN: ${OD_CF_ACCESS_TEAM_DOMAIN:-}
       OD_CF_ACCESS_AUD: ${OD_CF_ACCESS_AUD:-}
     ports:

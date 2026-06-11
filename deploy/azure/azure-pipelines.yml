@@ -3,7 +3,7 @@ trigger: none
 parameters:
   - name: azureServiceConnection
     type: string
-    default: '<your-azure-service-connection>'
+    default: "<your-azure-service-connection>"
 
 variables:
   vmImageName: ubuntu-latest
@@ -31,8 +31,8 @@ steps:
       inlineScript: |
         set -euo pipefail
 
-        if [ -z "${OD_API_TOKEN:-}" ]; then
-          echo "Set OD_API_TOKEN as a secret pipeline variable before running this pipeline." >&2
+        if [ -z "${OD_ACCESS_TOKEN:-}" ]; then
+          echo "Set OD_ACCESS_TOKEN as a secret pipeline variable before running this pipeline." >&2
           exit 1
         fi
 
@@ -50,9 +50,9 @@ steps:
           --resource-group "$(resourceGroupName)" \
           --template-file "$(templateFile)" \
           --parameters \
-            odApiToken="$OD_API_TOKEN" \
+            odAccessToken="$OD_ACCESS_TOKEN" \
             image="$(openDesignImage)" \
             dnsNameLabel="$(dnsNameLabel)" \
             allowedOrigins="$(browserOrigin)"
     env:
-      OD_API_TOKEN: $(OD_API_TOKEN)
+      OD_ACCESS_TOKEN: $(OD_ACCESS_TOKEN)

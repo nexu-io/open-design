@@ -3,7 +3,7 @@
 # Brings up the Open Design daemon container alongside the persistent
 # volumes and the env vars hosted deployments need. Drop this file into
 # any directory and run `docker compose up -d` — the only required
-# customisation is the OD_API_TOKEN secret and the provider keys.
+# customisation is the OD_ACCESS_TOKEN secret and the provider keys.
 #
 # Build the image first (from the repo root):
 #
@@ -26,10 +26,11 @@ services:
     container_name: od
 
     # Spec §15.3 — every dimension the daemon respects in headless
-    # mode. OD_BIND_HOST=0.0.0.0 + OD_API_TOKEN is the canonical
+    # mode. OD_BIND_HOST=0.0.0.0 + OD_ACCESS_TOKEN is the canonical
     # hosted-mode tuple; remove these two if running on a private
     # docker network with an upstream reverse proxy that already
-    # gates access.
+    # gates access. Alternatively set OD_TRUSTED_PROXY=1 if the daemon
+    # is behind a trusted reverse proxy (Cloudflare Access, nginx, etc.).
     environment:
       OD_BIND_HOST: ${OD_BIND_HOST:-0.0.0.0}
       OD_PORT: ${OD_PORT:-7456}
@@ -37,8 +38,8 @@ services:
       OD_MEDIA_CONFIG_DIR: /data/config
       # Set to a generated random hex (`openssl rand -hex 32`) before
       # exposing to the public internet. Phase 5 wires the daemon to
-      # refuse OD_BIND_HOST=0.0.0.0 without OD_API_TOKEN.
-      OD_API_TOKEN: ${OD_API_TOKEN:-}
+      # refuse OD_BIND_HOST=0.0.0.0 without OD_ACCESS_TOKEN.
+      OD_ACCESS_TOKEN: ${OD_ACCESS_TOKEN:-}
       # Snapshot retention knobs (spec §11.4 PB2). Default ttl is 30
       # days; set to 0 to keep snapshots forever.
       OD_SNAPSHOT_UNREFERENCED_TTL_DAYS: ${OD_SNAPSHOT_UNREFERENCED_TTL_DAYS:-30}
@@ -62,7 +63,11 @@ services:
 
     healthcheck:
       # /api/daemon/status is the canonical lifecycle probe (Phase 1.5).
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${OD_PORT:-7456}/api/daemon/status >/dev/null 2>&1 || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:${OD_PORT:-7456}/api/daemon/status >/dev/null 2>&1 || exit 1",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
