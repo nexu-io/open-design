@@ -1534,6 +1534,17 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       reason: details.reason,
       exit_code: typeof details.exitCode === "number" ? details.exitCode : null,
     });
+    // A clean-exit is intentional teardown; a crash / OOM / OS kill of a
+    // backgrounded renderer leaves the window blank, so flag it for the poll
+    // loop to reload the app.
+    if (details.reason !== "clean-exit") markRendererFailed();
+  });
+  // A failed main-frame navigation parks the renderer on chrome-error:// (blank
+  // white) with no auto-retry. errorCode -3 (ABORTED) is a normal navigation
+  // cancel (a new load started), so ignore it and sub-frame failures; anything
+  // else means the load to the web server failed and needs a retry.
+  window.webContents.on("did-fail-load", (_event, errorCode, _description, _url, isMainFrame) => {
+    if (isMainFrame && errorCode !== -3) markRendererFailed();
   });
 
   const sendUpdaterStatus = (status = options.updater?.snapshot() ?? unavailableUpdaterStatus()) => {
@@ -1697,6 +1708,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   let pendingUrl: string | null = null;
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
+  // Set when the main-frame load fails (renderer parks on chrome-error://, blank
+  // white) or the renderer process is gone. The poll loop reloads the current URL
+  // to recover instead of leaving the window blank, e.g. after a long-minimized
+  // window is restored and its connection to the web server has dropped.
+  let rendererFailed = false;
 
   window.on("focus", () => showWindowButtons(window));
   window.on("blur", () => showWindowButtons(window));
@@ -1856,17 +1872,36 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     }, delayMs);
   };
 
+  // Flag the renderer as needing a reload and poll again promptly, rather than
+  // waiting up to RUNNING_POLL_MS. The next `tick` re-loads the current URL (see
+  // the `rendererFailed` branch) and clears the flag once the load succeeds. If
+  // the web server is still unreachable, discovery returns null and the loop
+  // naturally backs off to RUNNING_POLL_MS until it returns.
+  const markRendererFailed = () => {
+    if (stopped || window.isDestroyed()) return;
+    rendererFailed = true;
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    schedule(PENDING_POLL_MS);
+  };
+
   const tick = async () => {
     if (stopped || window.isDestroyed()) return;
 
     try {
       const url = await options.discoverUrl();
-      if (url != null && url !== currentUrl) {
+      // Reload when the discovered URL changes, OR when the renderer is in a
+      // failed/blank state (URL unchanged but the page died), so a window
+      // restored from the background recovers instead of staying blank.
+      if (url != null && (url !== currentUrl || rendererFailed)) {
         pendingUrl = url;
         // Load the web app into the still-hidden main window as soon as it is
         // discovered; it mounts behind the splash so the swap is instant.
         await window.loadURL(url);
         currentUrl = url;
+        rendererFailed = false;
         pendingUrl = null;
         const nextPetUrl = desktopPetUrl(url);
         if (!petWindow.isDestroyed() && nextPetUrl !== currentPetUrl) {
