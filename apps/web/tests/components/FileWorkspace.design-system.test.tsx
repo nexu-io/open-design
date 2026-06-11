@@ -230,7 +230,7 @@ describe('FileWorkspace design-system project surface', () => {
         return Promise.resolve('function Widget(){ return <strong>Passive Book loaded</strong>; }');
       }
       if (name === 'colors_and_type.css') {
-        return Promise.resolve(':root { --pb-green: #00d07e; }');
+        return Promise.resolve('@font-face { font-family: Passive; src: url("./fonts/brand.woff2"); } :root { --pb-green: #00d07e; }');
       }
       return Promise.resolve(null);
     });
@@ -264,6 +264,7 @@ describe('FileWorkspace design-system project surface', () => {
     expect(iframe?.getAttribute('srcdoc')).toContain('function Widget()');
     expect(iframe?.getAttribute('srcdoc')).toContain('data-od-inline-asset="Widget.jsx"');
     expect(iframe?.getAttribute('srcdoc')).toContain('data-od-inline-asset="../../colors_and_type.css"');
+    expect(iframe?.getAttribute('srcdoc')).toContain('url("/api/projects/ds-acme/raw/fonts/brand.woff2")');
     expect(iframe?.getAttribute('srcdoc')).not.toContain('src="Widget.jsx"');
   });
 

@@ -3793,12 +3793,14 @@ async function inlineDesignSystemPreviewRelativeAssets(
     const rel = readDesignSystemPreviewHtmlAttr(tag, 'rel');
     const href = readDesignSystemPreviewHtmlAttr(tag, 'href');
     if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
-    replacements.push(fetchDesignSystemPreviewRelativeText(projectId, ownerFileName, href).then((css) =>
+    const stylesheetPath = resolveDesignSystemPreviewRelativePath(ownerFileName, href);
+    if (!stylesheetPath) continue;
+    replacements.push(fetchProjectFileText(projectId, stylesheetPath, { cache: 'no-store' }).then((css) =>
       css == null
         ? null
         : {
             from: tag,
-            to: `<style data-od-inline-asset="${escapeDesignSystemPreviewAttr(href)}">\n${css.replace(/<\/style/gi, '<\\/style')}\n</style>`,
+            to: `<style data-od-inline-asset="${escapeDesignSystemPreviewAttr(href)}">\n${rewriteDesignSystemPreviewCssUrls(css, projectId, stylesheetPath).replace(/<\/style/gi, '<\\/style')}\n</style>`,
           },
     ));
   }
@@ -3848,6 +3850,15 @@ function resolveDesignSystemPreviewRelativePath(ownerFileName: string, assetRef:
   }
 }
 
+function rewriteDesignSystemPreviewCssUrls(css: string, projectId: string, stylesheetFileName: string): string {
+  return css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, _quote: string, rawRef: string) => {
+    const ref = rawRef.trim();
+    const filePath = resolveDesignSystemPreviewRelativePath(stylesheetFileName, ref);
+    if (!filePath) return match;
+    return `url("${escapeDesignSystemPreviewCssUrl(projectRawUrl(projectId, filePath))}")`;
+  });
+}
+
 function baseDirForDesignSystemPreviewFile(name: string): string {
   const index = name.lastIndexOf('/');
   return index >= 0 ? name.slice(0, index + 1) : '';
@@ -3864,6 +3875,10 @@ function escapeDesignSystemPreviewAttr(value: string): string {
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function escapeDesignSystemPreviewCssUrl(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\a ');
 }
 
 
