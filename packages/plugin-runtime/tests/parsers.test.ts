@@ -125,4 +125,26 @@ describe('parseFrontmatter', () => {
     const raw2 = '---\nname: foo\n---foo\nbody';
     expect(parseFrontmatter(raw2)).toEqual({ data: {}, body: raw2 });
   });
+
+  it('coerces plain numbers, booleans, and null', () => {
+    const { data } = parseFrontmatter('---\na: 42\nb: 3.14\nc: true\nd: null\n---\n');
+    expect(data['a']).toBe(42);
+    expect(data['b']).toBe(3.14);
+    expect(data['c']).toBe(true);
+    expect(data['d']).toBe(null);
+  });
+
+  // Per YAML 1.2, a leading-zero decimal like `01234` is a string (the zero
+  // is significant). Coercing it to 1234 would silently corrupt the value.
+  it('keeps leading-zero integers as strings', () => {
+    const { data } = parseFrontmatter('---\nzip: 01234\nid: 007\nzero: 0\n---\n');
+    expect(data['zip']).toBe('01234');
+    expect(data['id']).toBe('007');
+    expect(data['zero']).toBe(0);
+  });
+
+  it('does not treat a lone quote character as an empty quoted string', () => {
+    const { data } = parseFrontmatter('---\na: "\n---\n');
+    expect(data['a']).toBe('"');
+  });
 });

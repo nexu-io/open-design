@@ -186,13 +186,21 @@ function parseYamlSubset(src: string): FrontmatterObject {
 function coerce(raw: string | undefined): FrontmatterValue {
   if (raw === undefined) return '';
   const v = raw.trim();
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+  // Require at least two characters so a lone quote (`"`), whose first and
+  // last char are the same, isn't mistaken for an empty quoted string.
+  if (
+    v.length >= 2 &&
+    ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))
+  ) {
     return v.slice(1, -1);
   }
   if (v === 'true') return true;
   if (v === 'false') return false;
   if (v === 'null' || v === '~') return null;
-  if (/^-?\d+$/.test(v)) return Number(v);
-  if (/^-?\d*\.\d+$/.test(v)) return Number(v);
+  // Only coerce numbers without a redundant leading zero. Per YAML 1.2 a
+  // leading-zero decimal like `01234` is a string (the zero is significant —
+  // zip codes, zero-padded ids), so `\d+` would corrupt it into `1234`.
+  if (/^-?(?:0|[1-9]\d*)$/.test(v)) return Number(v);
+  if (/^-?(?:0|[1-9]\d*)?\.\d+$/.test(v)) return Number(v);
   return v;
 }
