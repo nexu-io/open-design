@@ -11,6 +11,7 @@ import { parseDesignSystemRenameArgs } from './design-system-rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
+import { buildSkillCatalogTree, parseSkillSummaries } from '@open-design/contracts';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 import {
@@ -239,6 +240,7 @@ const RECOVERABLE_EXIT_CODES = {
   'plugin-requires-daemon':   71,
   'snapshot-stale':           72,
   'genui-surface-awaiting':   73,
+  'daemon-protocol-error':    74,
   'desktop-auth-pending':     74,
   'desktop-import-token-rejected': 75,
 };
@@ -6359,7 +6361,60 @@ async function runLibraryList(name, args) {
   }
 }
 
-async function runSkills(args)        { return runLibraryList('skills', args); }
+async function runSkills(args) {
+  if (args[0] === 'tree') return runSkillsTree(args.slice(1));
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od skills list           List skills.
+  od skills show <id>      Print one skill.
+  od skills tree [--json]  Print skills grouped by mode and scenario.`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  return runLibraryList('skills', args);
+}
+
+async function runSkillsTree(args) {
+  if (args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od skills tree [--json]  Print skills grouped by mode and scenario.`);
+    process.exit(0);
+  }
+  const flags = parseFlags(args, { string: LIBRARY_STRING_FLAGS, boolean: LIBRARY_BOOLEAN_FLAGS });
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  const resp = await fetch(`${base}/api/skills`);
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json().catch(() => null);
+  let skills;
+  try {
+    skills = data && Array.isArray(data.skills) ? parseSkillSummaries(data.skills) : null;
+  } catch {
+    skills = null;
+  }
+  if (!skills) {
+    return exitWithStructuredError({
+      code: 'daemon-protocol-error',
+      message: 'Malformed /api/skills response: expected { skills: SkillSummary[] }',
+      data: { endpoint: '/api/skills' },
+    });
+  }
+  const tree = buildSkillCatalogTree(skills);
+  if (flags.json) return process.stdout.write(JSON.stringify(tree, null, 2) + '\n');
+  console.log(`Skills tree (${tree.total})`);
+  for (const mode of tree.modes) {
+    console.log(`${mode.label} (${mode.count})`);
+    for (const scenario of mode.scenarios) {
+      console.log(`  ${scenario.label} (${scenario.count})`);
+      for (const skill of scenario.skills) {
+        const metadata = [
+          skill.platform,
+          skill.previewType,
+          skill.designSystemRequired ? 'design system' : null,
+        ].filter(Boolean).join(' · ');
+        console.log(`    - ${skill.id}${metadata ? ` [${metadata}]` : ''}`);
+      }
+    }
+  }
+}
 async function runCraft(args)         { return runLibraryList('craft', args); }
 
 async function runDesignSystems(args) {

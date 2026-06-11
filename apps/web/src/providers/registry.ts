@@ -17,6 +17,7 @@ import type {
   SocialShareRequest,
   SocialShareResponse,
 } from '@open-design/contracts';
+import { parseSkillSummaries } from '@open-design/contracts';
 import type {
   AgentInfo,
   AppVersionInfo,
@@ -205,13 +206,21 @@ export async function fetchAgentsStream(args: {
   return collected;
 }
 
-export async function fetchSkills(): Promise<SkillSummary[]> {
+export async function fetchSkills(options?: { throwOnError?: boolean }): Promise<SkillSummary[]> {
   try {
     const resp = await fetch('/api/skills');
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as { skills: SkillSummary[] };
-    return json.skills ?? [];
-  } catch {
+    if (!resp.ok) {
+      if (options?.throwOnError) throw new Error(`skills ${resp.status}`);
+      return [];
+    }
+    const json = await resp.json() as { skills?: unknown };
+    if (!Array.isArray(json.skills)) {
+      if (options?.throwOnError) throw new Error('skills response malformed');
+      return [];
+    }
+    return parseSkillSummaries(json.skills);
+  } catch (err) {
+    if (options?.throwOnError) throw err;
     return [];
   }
 }
