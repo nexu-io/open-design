@@ -268,6 +268,21 @@ describe('inferPageSize', () => {
     expect(size.width).toBeCloseTo(1440 / 96);
     expect(size.height).toBeCloseTo(900 / 96);
   });
+
+  test('rejects a non-finite reported dimension so the finite half cannot leak through (#4067 follow-up)', async () => {
+    // `Infinity > 0` is true, so the original `typeof === 'number' && > 0` guard
+    // let `{ width: 756, height: Infinity }` slip past: inferPageSize() kept the
+    // 756px reported width and only dropped the non-finite height back to 900px,
+    // sizing the page to a Frankenstein 756x900 that can still clip. A non-finite
+    // dimension must reject the *whole* reported size so direct measurement of
+    // the wrapper viewport (1440 wide) is used instead.
+    const window = windowMeasuring({ width: 756, height: Infinity }, wrapperViewportDocument);
+
+    const size = await inferPageSize(window as Parameters<typeof inferPageSize>[0]);
+
+    expect(size.width).toBeCloseTo(1440 / 96);
+    expect(size.height).toBeCloseTo(900 / 96);
+  });
 });
 
 describe('pdfFilenameFromDocument', () => {

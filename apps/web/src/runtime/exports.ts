@@ -1078,7 +1078,7 @@ function injectParentPrintReadyCache(doc: string, nonce: string): string {
   // validated as positive finite numbers so a malformed message cannot poison
   // the page size; the nonce + source check keep untrusted frames from spoofing
   // either signal.
-  const script = `<script>window.__odPrintReady=false;window.__odPrintSize=null;window.addEventListener('message',function(e){if(e.data&&e.data.type==='OD_PRINT_READY'&&e.data.nonce==='${nonce}'&&(e.source===window||(window.frames&&e.source===window.frames[0]))){window.__odPrintReady=true;if(typeof e.data.width==='number'&&typeof e.data.height==='number'&&e.data.width>0&&e.data.height>0)window.__odPrintSize={width:e.data.width,height:e.data.height}}});<\/script>`;
+  const script = `<script>window.__odPrintReady=false;window.__odPrintSize=null;window.addEventListener('message',function(e){if(e.data&&e.data.type==='OD_PRINT_READY'&&e.data.nonce==='${nonce}'&&(e.source===window||(window.frames&&e.source===window.frames[0]))){window.__odPrintReady=true;if(Number.isFinite(e.data.width)&&Number.isFinite(e.data.height)&&e.data.width>0&&e.data.height>0)window.__odPrintSize={width:e.data.width,height:e.data.height}}});<\/script>`;
   if (/<head>/i.test(doc)) return doc.replace(/<head>/i, `<head>${script}`);
   return script + doc;
 }

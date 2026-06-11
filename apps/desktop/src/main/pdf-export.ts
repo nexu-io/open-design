@@ -379,7 +379,7 @@ export async function inferPageSize(window: BrowserWindow): Promise<PageSize> {
     // the artifact itself is the loaded document and no handshake runs.
     `(() => {
       const reported = window.__odPrintSize;
-      if (reported && typeof reported.width === 'number' && typeof reported.height === 'number'
+      if (reported && Number.isFinite(reported.width) && Number.isFinite(reported.height)
         && reported.width > 0 && reported.height > 0) {
         return { width: reported.width, height: reported.height };
       }

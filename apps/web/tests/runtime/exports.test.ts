@@ -636,10 +636,12 @@ describe('sandboxed preview Blob exports', () => {
     expect(htmlArg).toContain('height:h');
     // The parent wrapper caches the reported size for inferPageSize() to read,
     // validating it as a positive finite number so a malformed/oversized message
-    // cannot poison the page size.
+    // cannot poison the page size. The finite check matters: `Infinity > 0` is
+    // true, so a bare `typeof === 'number'` guard would cache a non-finite
+    // dimension and let it leak into the page size.
     expect(htmlArg).toContain('window.__odPrintSize');
-    expect(htmlArg).toContain('e.data.width');
-    expect(htmlArg).toContain('e.data.height');
+    expect(htmlArg).toContain('Number.isFinite(e.data.width)');
+    expect(htmlArg).toContain('Number.isFinite(e.data.height)');
   });
 
   it('injects the readiness cache for non-sandboxed desktop exports too', async () => {
