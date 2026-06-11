@@ -2,7 +2,7 @@ import type http from 'node:http';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   CLOUDFLARE_PAGES_PROVIDER_ID,
@@ -10,12 +10,175 @@ import {
   deployConfigPath,
   VERCEL_PROVIDER_ID,
   SAVED_CLOUDFLARE_TOKEN_MASK,
+  SAVED_TOKEN_MASK,
 } from '../src/deploy.js';
 import { ensureProject } from '../src/projects.js';
 import { startServer } from '../src/server.js';
 
+function testDataDir() {
+  const dataDir = process.env.OD_DATA_DIR;
+  if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+  return dataDir;
+}
+
+async function removeBaseDeployConfigs() {
+  const dataDir = testDataDir();
+  await rm(deployConfigPath(VERCEL_PROVIDER_ID, dataDir), { force: true });
+  await rm(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID, dataDir), { force: true });
+}
+
+async function closeServer(server: http.Server | undefined) {
+  if (!server) return;
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+}
+
+describe('deploy provider routes auth context', () => {
+  let server: http.Server | undefined;
+  let baseUrl: string;
+  let priorMultitenant: string | undefined;
+
+  beforeAll(async () => {
+    priorMultitenant = process.env.OD_MULTITENANT;
+    process.env.OD_MULTITENANT = '1';
+    await removeBaseDeployConfigs();
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+    };
+    baseUrl = started.url;
+    server = started.server;
+  });
+
+  afterAll(async () => {
+    await closeServer(server);
+    if (priorMultitenant === undefined) delete process.env.OD_MULTITENANT;
+    else process.env.OD_MULTITENANT = priorMultitenant;
+  });
+
+  const userHeaders = (email: string) => ({
+    'Content-Type': 'application/json',
+    'cf-access-authenticated-user-email': email,
+  });
+
+  it('scopes deploy config reads and writes to the authenticated owner', async () => {
+    const suffix = Date.now();
+    const aliceHeaders = userHeaders(`alice-deploy-${suffix}@example.com`);
+    const bobHeaders = userHeaders(`bob-deploy-${suffix}@example.com`);
+
+    const bobVercelSave = await fetch(`${baseUrl}/api/deploy/config`, {
+      method: 'PUT',
+      headers: bobHeaders,
+      body: JSON.stringify({
+        providerId: VERCEL_PROVIDER_ID,
+        token: 'bob-vercel-token-secret',
+        teamId: 'team_bob',
+        teamSlug: 'bob-team',
+      }),
+    });
+    expect(bobVercelSave.status).toBe(200);
+
+    const aliceEmptyVercel = await fetch(`${baseUrl}/api/deploy/config`, {
+      headers: aliceHeaders,
+    });
+    expect(aliceEmptyVercel.status).toBe(200);
+    expect(await aliceEmptyVercel.json()).toMatchObject({
+      providerId: VERCEL_PROVIDER_ID,
+      configured: false,
+      tokenMask: '',
+      teamId: '',
+      teamSlug: '',
+    });
+
+    const aliceVercelSave = await fetch(`${baseUrl}/api/deploy/config`, {
+      method: 'PUT',
+      headers: aliceHeaders,
+      body: JSON.stringify({
+        providerId: VERCEL_PROVIDER_ID,
+        token: 'alice-vercel-token-secret',
+        teamId: 'team_alice',
+        teamSlug: 'alice-team',
+      }),
+    });
+    expect(aliceVercelSave.status).toBe(200);
+
+    const bobVercel = await fetch(`${baseUrl}/api/deploy/config`, {
+      headers: bobHeaders,
+    });
+    expect(bobVercel.status).toBe(200);
+    expect(await bobVercel.json()).toMatchObject({
+      providerId: VERCEL_PROVIDER_ID,
+      configured: true,
+      tokenMask: SAVED_TOKEN_MASK,
+      teamId: 'team_bob',
+      teamSlug: 'bob-team',
+    });
+
+    const bobCloudflareSave = await fetch(`${baseUrl}/api/deploy/config`, {
+      method: 'PUT',
+      headers: bobHeaders,
+      body: JSON.stringify({
+        providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+        token: 'bob-cloudflare-token-secret',
+        accountId: 'account_bob',
+        cloudflarePages: {
+          lastZoneId: 'zone-bob',
+          lastZoneName: 'bob.example',
+          lastDomainPrefix: 'bob',
+        },
+      }),
+    });
+    expect(bobCloudflareSave.status).toBe(200);
+
+    const aliceEmptyCloudflare = await fetch(
+      `${baseUrl}/api/deploy/config?providerId=${CLOUDFLARE_PAGES_PROVIDER_ID}`,
+      { headers: aliceHeaders },
+    );
+    expect(aliceEmptyCloudflare.status).toBe(200);
+    expect(await aliceEmptyCloudflare.json()).toMatchObject({
+      providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+      configured: false,
+      tokenMask: '',
+      accountId: '',
+      projectName: '',
+    });
+
+    const aliceCloudflareSave = await fetch(`${baseUrl}/api/deploy/config`, {
+      method: 'PUT',
+      headers: aliceHeaders,
+      body: JSON.stringify({
+        providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+        token: 'alice-cloudflare-token-secret',
+        accountId: 'account_alice',
+        cloudflarePages: {
+          lastZoneId: 'zone-alice',
+          lastZoneName: 'alice.example',
+          lastDomainPrefix: 'alice',
+        },
+      }),
+    });
+    expect(aliceCloudflareSave.status).toBe(200);
+
+    const bobCloudflare = await fetch(
+      `${baseUrl}/api/deploy/config?providerId=${CLOUDFLARE_PAGES_PROVIDER_ID}`,
+      { headers: bobHeaders },
+    );
+    expect(bobCloudflare.status).toBe(200);
+    expect(await bobCloudflare.json()).toMatchObject({
+      providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+      configured: true,
+      tokenMask: SAVED_CLOUDFLARE_TOKEN_MASK,
+      accountId: 'account_bob',
+      cloudflarePages: {
+        lastZoneId: 'zone-bob',
+        lastZoneName: 'bob.example',
+        lastDomainPrefix: 'bob',
+      },
+    });
+  });
+});
+
 describe('deploy provider routes', () => {
-  let server: http.Server;
+  let server: http.Server | undefined;
   let baseUrl: string;
 
   beforeAll(async () => {
@@ -27,7 +190,9 @@ describe('deploy provider routes', () => {
     server = started.server;
   });
 
-  afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  afterAll(() => closeServer(server));
+
+  beforeEach(removeBaseDeployConfigs);
 
   const userHeaders = (email: string) => ({
     'Content-Type': 'application/json',
@@ -35,6 +200,7 @@ describe('deploy provider routes', () => {
   });
 
   it('dispatches deploy config reads and writes by providerId', async () => {
+    const dataDir = testDataDir();
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-config-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = stateRoot;
@@ -68,7 +234,7 @@ describe('deploy provider routes', () => {
         accountId: 'account_123',
         projectName: '',
       });
-      expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8'))).toEqual({
+      expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID, dataDir), 'utf8'))).toEqual({
         token: 'cloudflare-token-secret',
         accountId: 'account_123',
         projectName: '',
@@ -91,7 +257,7 @@ describe('deploy provider routes', () => {
         accountId: 'account_456',
         projectName: '',
       });
-      expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8'))).toEqual({
+      expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID, dataDir), 'utf8'))).toEqual({
         token: 'cloudflare-token-secret',
         accountId: 'account_456',
         projectName: '',

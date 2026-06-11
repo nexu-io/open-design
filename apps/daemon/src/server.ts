@@ -3238,10 +3238,10 @@ function publicDeployments(deployments) {
   return (deployments || []).map(publicDeployment);
 }
 
-async function checkCloudflarePagesDeploymentLinks(existing) {
+async function checkCloudflarePagesDeploymentLinks(existing, dataDir = RUNTIME_DATA_DIR) {
   const current = existing.cloudflarePages || {};
   const projectName = current.projectName || cloudflarePagesProjectNameFromDeployment(existing);
-  const config = await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID);
+  const config = await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID, dataDir);
   const pagesDevUrl = current.pagesDev?.url || existing.url;
   const pagesDevResult = await checkDeploymentUrl(pagesDevUrl);
   const pagesDev = {
@@ -6509,6 +6509,7 @@ export async function startServer({
   registerDeploymentCheckRoutes(app, {
     db,
     http: httpDeps,
+    paths: pathDeps,
     deploy: deployDeps,
     projectStore: projectStoreDeps,
   });

@@ -7,7 +7,7 @@ export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'pat
 export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
-  const { projectsDirFor } = ctx.paths;
+  const { projectsDirFor, runtimeDataDirFor } = ctx.paths;
   const { randomUUID } = ctx.ids;
   const { getProject } = ctx.projectStore;
   const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToVercel, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
@@ -24,8 +24,9 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       if (!isDeployProviderId(providerId)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
       }
+      const dataDir = runtimeDataDirFor(req);
       /** @type {import('@open-design/contracts').DeployConfigResponse} */
-      const body = publicDeployConfigForProvider(providerId, await readDeployConfig(providerId));
+      const body = publicDeployConfigForProvider(providerId, await readDeployConfig(providerId, dataDir));
       res.json(body);
     } catch (err: any) {
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
@@ -40,18 +41,20 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       if (!isDeployProviderId(providerId)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
       }
+      const dataDir = runtimeDataDirFor(req);
       /** @type {import('@open-design/contracts').DeployConfigResponse} */
-      const body = await writeDeployConfig(providerId, input);
+      const body = await writeDeployConfig(providerId, input, dataDir);
       res.json(body);
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
 
-  app.get('/api/deploy/cloudflare-pages/zones', async (_req, res) => {
+  app.get('/api/deploy/cloudflare-pages/zones', async (req, res) => {
     try {
+      const dataDir = runtimeDataDirFor(req);
       /** @type {import('@open-design/contracts').CloudflarePagesZonesResponse} */
-      const body = await listCloudflarePagesZones(await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID));
+      const body = await listCloudflarePagesZones(await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID, dataDir));
       res.json(body);
     } catch (err: any) {
       const status = err instanceof DeployError ? err.status : 400;
@@ -96,6 +99,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
       const prior = getDeployment(db, req.params.id, fileName, providerId);
+      const dataDir = runtimeDataDirFor(req);
       const files = await buildDeployFileSet(
         projectsDirFor(req),
         req.params.id,
@@ -109,7 +113,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
         ? await deployToCloudflarePages({
             config: {
-              ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
+              ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID, dataDir),
               projectName: cloudflarePagesProjectName,
             },
             files,
@@ -118,7 +122,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
             priorMetadata: prior?.providerMetadata,
           })
         : await deployToVercel({
-            config: await readDeployConfig(VERCEL_PROVIDER_ID),
+            config: await readDeployConfig(VERCEL_PROVIDER_ID, dataDir),
             files,
             projectId: req.params.id,
           });
@@ -207,11 +211,12 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
 
 }
 
-export interface RegisterDeploymentCheckRoutesDeps extends RouteDeps<'db' | 'http' | 'deploy' | 'projectStore'> {}
+export interface RegisterDeploymentCheckRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'deploy' | 'projectStore'> {}
 
 export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploymentCheckRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
+  const { runtimeDataDirFor } = ctx.paths;
   const { getProject } = ctx.projectStore;
   const { getDeploymentById, CLOUDFLARE_PAGES_PROVIDER_ID, cloudflarePagesProjectNameFromDeployment, checkCloudflarePagesDeploymentLinks, checkDeploymentUrl, upsertDeployment, publicDeployment } = ctx.deploy;
 
@@ -240,7 +245,7 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
             ? cloudflarePagesProjectNameFromDeployment(existing)
             : '';
         if (existing.providerId === CLOUDFLARE_PAGES_PROVIDER_ID && existing.cloudflarePages?.pagesDev?.url) {
-          const checked = await checkCloudflarePagesDeploymentLinks(existing);
+          const checked = await checkCloudflarePagesDeploymentLinks(existing, runtimeDataDirFor(req));
           const now = Date.now();
           /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
           const body = upsertDeployment(db, {

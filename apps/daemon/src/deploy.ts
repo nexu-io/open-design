@@ -73,14 +73,14 @@ export class DeployError extends Error {
   }
 }
 
-export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
-  const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
+export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_ID, dataDir?: string) {
+  const base = dataDir || process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
   return path.join(base, providerId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare-pages.json' : 'vercel.json');
 }
 
-export async function readVercelConfig(): Promise<DeployConfig> {
+export async function readVercelConfig(dataDir?: string): Promise<DeployConfig> {
   try {
-    const raw = await readFile(deployConfigPath(VERCEL_PROVIDER_ID), 'utf8');
+    const raw = await readFile(deployConfigPath(VERCEL_PROVIDER_ID, dataDir), 'utf8');
     const parsed = JSON.parse(raw);
     return {
       token: typeof parsed.token === 'string' ? parsed.token : '',
@@ -93,9 +93,9 @@ export async function readVercelConfig(): Promise<DeployConfig> {
   }
 }
 
-export async function readCloudflarePagesConfig(): Promise<DeployConfig> {
+export async function readCloudflarePagesConfig(dataDir?: string): Promise<DeployConfig> {
   try {
-    const raw = await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8');
+    const raw = await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID, dataDir), 'utf8');
     const parsed = JSON.parse(raw);
     return {
       token: typeof parsed.token === 'string' ? parsed.token : '',
@@ -109,8 +109,8 @@ export async function readCloudflarePagesConfig(): Promise<DeployConfig> {
   }
 }
 
-export async function writeVercelConfig(input: Partial<DeployConfig>) {
-  const current = await readVercelConfig();
+export async function writeVercelConfig(input: Partial<DeployConfig>, dataDir?: string) {
+  const current = await readVercelConfig(dataDir);
   const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
   const next = {
     token:
@@ -121,12 +121,12 @@ export async function writeVercelConfig(input: Partial<DeployConfig>) {
     teamSlug:
       typeof input?.teamSlug === 'string' ? input.teamSlug.trim() : current.teamSlug,
   };
-  await writeDeployConfigFile(deployConfigPath(VERCEL_PROVIDER_ID), next);
+  await writeDeployConfigFile(deployConfigPath(VERCEL_PROVIDER_ID, dataDir), next);
   return publicDeployConfig(next);
 }
 
-export async function writeCloudflarePagesConfig(input: Partial<DeployConfig>) {
-  const current = await readCloudflarePagesConfig();
+export async function writeCloudflarePagesConfig(input: Partial<DeployConfig>, dataDir?: string) {
+  const current = await readCloudflarePagesConfig(dataDir);
   const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
   const cloudflarePages = normalizeCloudflarePagesConfigHints(input?.cloudflarePages, current.cloudflarePages);
   const next: DeployConfig = {
@@ -144,7 +144,7 @@ export async function writeCloudflarePagesConfig(input: Partial<DeployConfig>) {
   if (Object.keys(cloudflarePages).length > 0) next.cloudflarePages = cloudflarePages;
   if (!next.token) throw new DeployError('Cloudflare API token is required.', 400);
   if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
-  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), next);
+  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID, dataDir), next);
   return publicCloudflarePagesConfig(next);
 }
 
@@ -185,14 +185,14 @@ export function publicCloudflarePagesConfig(config: Partial<DeployConfig>) {
   return body;
 }
 
-export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
-  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig();
-  return readVercelConfig();
+export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, dataDir?: string) {
+  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig(dataDir);
+  return readVercelConfig(dataDir);
 }
 
-export async function writeDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, input: Partial<DeployConfig> = {}) {
-  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input);
-  return writeVercelConfig(input);
+export async function writeDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, input: Partial<DeployConfig> = {}, dataDir?: string) {
+  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input, dataDir);
+  return writeVercelConfig(input, dataDir);
 }
 
 export function publicDeployConfigForProvider(providerId: DeployProviderId = VERCEL_PROVIDER_ID, config: Partial<DeployConfig> = {}) {
