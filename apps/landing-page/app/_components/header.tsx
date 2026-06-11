@@ -30,7 +30,10 @@ import {
 const REPO = 'https://github.com/nexu-io/open-design';
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
 const X_TWITTER = 'https://x.com/nexudotio';
-const AMR_URL = 'https://open-design.ai/amr/';
+// Canonical AMR destination. Exported so the homepage AMR band CTA
+// (app/page.tsx) links to the same URL the nav uses, without a second
+// hand-maintained copy of the literal.
+export const AMR_URL = 'https://open-design.ai/amr/';
 
 const ext = {
   target: '_blank',
@@ -299,10 +302,11 @@ export function Header({
               </ul>
             </li>
             {/*
-              Agent — for now this dropdown lists only AMR (the design Agent).
-              The 17 first-party coding-agent adapters and their per-agent
-              /agents/ hub anchors are intentionally held back for a later
-              pass; the trigger already links to the /agents/ hub.
+              Agent — AMR (the design Agent) heads the dropdown, followed by the
+              coding agents that have a dedicated long-form design page. Brand
+              names are locale-invariant, so they are listed here directly; the
+              routes stay in lockstep with DETAIL_ROUTES on the /agents/ hub. The
+              trigger still links to the /agents/ hub.
             */}
             <li className='has-dropdown'>
               <a
@@ -321,6 +325,35 @@ export function Header({
                     <span className='dropdown-blurb'>{productMenuCopy.amrBlurb}</span>
                   </a>
                 </li>
+                {[
+                  { route: 'codex-design', name: 'Codex' },
+                  { route: 'cursor-design', name: 'Cursor Agent' },
+                  { route: 'claude-code-design', name: 'Claude Code' },
+                  { route: 'opencode-design', name: 'OpenCode' },
+                  { route: 'gemini-design', name: 'Gemini CLI' },
+                  { route: 'copilot-design', name: 'GitHub Copilot CLI' },
+                  { route: 'qwen-design', name: 'Qwen Code' },
+                  { route: 'grok-design', name: 'Grok Build' },
+                  { route: 'kimi-design', name: 'Kimi CLI' },
+                  { route: 'deepseek-design', name: 'DeepSeek TUI' },
+                  { route: 'trae-cli-design', name: 'Trae CLI' },
+                  { route: 'aider-design', name: 'Aider' },
+                  { route: 'antigravity-design', name: 'Antigravity' },
+                  { route: 'reasonix-design', name: 'DeepSeek Reasonix' },
+                  { route: 'hermes-design', name: 'Hermes' },
+                  { route: 'devin-design', name: 'Devin for Terminal' },
+                  { route: 'pi-design', name: 'Pi' },
+                  { route: 'kiro-design', name: 'Kiro CLI' },
+                  { route: 'kilo-design', name: 'Kilo' },
+                  { route: 'vibe-design', name: 'Mistral Vibe CLI' },
+                  { route: 'qoder-design', name: 'Qoder CLI' },
+                ].map((agentItem) => (
+                  <li role='none' key={agentItem.route}>
+                    <a role='menuitem' href={href(`/agents/${agentItem.route}/`)}>
+                      <span className='dropdown-name'>{agentItem.name}</span>
+                    </a>
+                  </li>
+                ))}
               </ul>
             </li>
             {/*
@@ -420,6 +453,11 @@ export function Header({
                     className={linkClass('tutorials')}
                   >
                     <span className='dropdown-name'>{headerCopy.nav.tutorials}</span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a role='menuitem' href={href('/compare/')}>
+                    <span className='dropdown-name'>{headerCopy.nav.compare ?? 'Compare'}</span>
                   </a>
                 </li>
                 <li role='none'>
@@ -543,8 +581,14 @@ export function Header({
             data-download-cta
             data-download-page
           >
+            {/*
+              The CPU-arch chip (（Apple Silicon）/（Apple Intel）) is
+              intentionally NOT rendered in the nav CTA — at mid widths it
+              pushed the row over the available space and crowded the bar.
+              The arch suffix still appears on the homepage hero download
+              button (page.tsx) and the /download/ page, where there is room.
+            */}
             {headerCopy.download}
-            <span className='download-arch' data-download-arch hidden />
           </a>
           <details className='locale-switch nav-locale' data-locale-switch>
             <summary

@@ -19,6 +19,9 @@ interface Props {
   draftAnswers?: Record<string, string | string[]>;
   onReadyChange?: (ready: boolean) => void;
   onDraftChange?: (answers: Record<string, string | string[]>) => void;
+  // Fires on each real user interaction with a single question (locked forms
+  // never reach it). Lets the Questions tab host track chip picks.
+  onAnswerChange?: (questionId: string, value: string | string[]) => void;
   onSubmit?: (text: string, answers: Record<string, string | string[]>) => void;
 }
 
@@ -39,6 +42,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
     draftAnswers,
     onReadyChange,
     onDraftChange,
+    onAnswerChange,
     onSubmit,
   },
   ref,
@@ -78,6 +82,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
     const next = { ...answers, [id]: value };
     setAnswers(next);
     onDraftChange?.(next);
+    onAnswerChange?.(id, value);
   }
 
   function toggleCheckbox(id: string, option: string, maxSelections?: number) {

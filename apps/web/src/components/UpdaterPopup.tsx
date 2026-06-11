@@ -29,7 +29,17 @@ type Translator = (key: keyof Dict, vars?: Record<string, string | number>) => s
 
 function versionText(t: Translator, model: UpdaterModel): string {
   const version = model.availableVersion;
+  if (model.updateKind === 'payload') {
+    return version == null ? t('updater.payloadReadyGeneric') : t('updater.payloadReadyVersion', { version });
+  }
   return version == null ? t('updater.readyGeneric') : t('updater.readyVersion', { version });
+}
+
+function installActionText(t: Translator, model: UpdaterModel, installBusy: boolean): string {
+  if (model.updateKind === 'payload') {
+    return installBusy ? t('updater.installingRestart') : t('updater.installRestart');
+  }
+  return installBusy ? t('updater.opening') : t('updater.openInstaller');
 }
 
 function channelLabelFor(channel: string | null | undefined): string | null {
@@ -114,7 +124,7 @@ export function UpdaterPopup() {
   const installBusy = installState === 'opening' || installState === 'handoff';
   const canStartInstall = ready || installState === 'recoverable';
   const showControl = ready || installState !== 'idle';
-  const controlLabel = t('updater.openInstaller');
+  const controlLabel = model.updateKind === 'payload' ? t('updater.installRestart') : t('updater.openInstaller');
   const channelLabel = channelLabelFor(model.status?.channel);
   const analytics = useAnalytics();
   const appVersionBefore = useAppVersion();
@@ -320,7 +330,7 @@ export function UpdaterPopup() {
                   void installAndQuit();
                 }}
               >
-                {installBusy ? t('updater.opening') : t('updater.openInstaller')}
+                {installActionText(t, model, installBusy)}
               </button>
             </div>
           </motion.section>

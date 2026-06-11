@@ -9,8 +9,9 @@ const homeHeroCss = readFileSync(
 function cssDeclarations(selector: string): string {
   const blocks: string[] = [];
   const rulePattern = /([^{}]+)\{([^}]*)\}/g;
+  const cssWithoutComments = homeHeroCss.replace(/\/\*[\s\S]*?\*\//g, '');
   let match: RegExpExecArray | null;
-  while ((match = rulePattern.exec(homeHeroCss)) !== null) {
+  while ((match = rulePattern.exec(cssWithoutComments)) !== null) {
     const selectors = (match[1] ?? '').split(',').map((item) => item.trim());
     if (selectors.includes(selector)) blocks.push(match[2] ?? '');
   }
@@ -26,6 +27,20 @@ function ruleValue(block: string, property: string): string {
 }
 
 describe('HomeHero compact composer controls', () => {
+  it('keeps the floating @ picker shell stable while result tabs change', () => {
+    const floatingPicker = cssDeclarations(
+      '.caret-floating-layer .home-hero__plugin-picker--floating',
+    );
+    const picker = cssDeclarations('.home-hero__plugin-picker');
+    const results = cssDeclarations('.home-hero__plugin-picker-results');
+
+    expect(ruleValue(floatingPicker, 'height')).toBe('var(--cfl-max-h, 60vh)');
+    expect(ruleValue(floatingPicker, 'max-height')).toBe('var(--cfl-max-h, 60vh)');
+    expect(ruleValue(picker, 'overflow')).toBe('hidden');
+    expect(ruleValue(results, 'flex')).toBe('1 1 auto');
+    expect(ruleValue(results, 'overflow-y')).toBe('auto');
+  });
+
   it('keeps the session mode and execution buttons compact in the hero', () => {
     const modeTrigger = cssDeclarations(
       '.home-hero__foot-right .session-mode-toggle__trigger',

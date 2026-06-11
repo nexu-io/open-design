@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stellar Launch — Launchex Awards</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://db.onlinewebfonts.com/c/69f2576e7ca287875bf8d089130e292c?family=TT+Firs+Neue" rel="stylesheet">
+  <style>
+    :root {
+      --dark: #154359;
+      --teal: #066377;
+      --bg-light: #F0F0F0;
+      --bg-lighter: #F0F5F7;
+      --nom-stroke: rgba(6, 99, 119, 0.25);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      background: #ffffff;
+    }
+    .font-firs { font-family: 'TT Firs Neue', 'Inter', system-ui, sans-serif; }
+    .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+
+    a { color: inherit; text-decoration: none; }
+    img, video { display: block; }
+
+    /* ───── OUTER SHELL ───── */
+    .shell {
+      height: 100vh; background: #fff; padding: 12px;
+    }
+    .frame {
+      position: relative; width: 100%; height: 100%;
+      overflow: hidden; border-radius: 28px; background: #fff;
+    }
+    .scroll {
+      position: absolute; inset: 0;
+      overflow-y: auto; overflow-x: hidden;
+    }
+    @media (min-width: 640px) {
+      .shell { padding: 20px; }
+      .frame { border-radius: 36px; }
+    }
+
+    /* ───── SECTION 1: HERO ───── */
+    .hero {
+      position: relative; min-height: calc(100vh - 40px);
+      overflow: hidden; display: flex; flex-direction: column;
+    }
+    .hero-video {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; z-index: 0;
+    }
+    .hero-overlay {
+      position: absolute; inset: 0; z-index: 1;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.10), transparent 50%, rgba(0,0,0,0.20));
+    }
+    .hero-topbar {
+      position: relative; z-index: 20;
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 20px 16px 0;
+    }
+    .logo { display: flex; align-items: flex-start; gap: 8px; color: #fff; }
+    .logo svg { width: 20px; height: 20px; }
+    .logo-text-main { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; line-height: 1; }
+    .logo-text-sub { font-size: 10px; font-weight: 300; opacity: 0.9; margin-top: -2px; }
+    .cta {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--teal); color: #fff;
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 500;
+      padding: 12px 18px;
+      clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+      transition: filter 0.25s ease;
+    }
+    .cta:hover { filter: brightness(1.25); }
+    .cta svg { width: 14px; height: 14px; transition: transform 0.25s ease; }
+    .cta:hover svg { transform: translate(2px, -2px); }
+    .cta .cta-full { display: none; }
+    .cta .cta-short { display: inline; }
+
+    .hero-center {
+      position: relative; z-index: 10; flex: 1;
+      display: flex; flex-direction: column; align-items: center; text-align: center;
+      color: var(--dark); padding: 128px 16px 96px;
+    }
+    .eyebrow {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.3em; font-weight: 500;
+      margin-bottom: 24px; opacity: 0.9;
+    }
+    .hero-heading {
+      font-weight: 400; letter-spacing: -0.04em; line-height: 0.9;
+      font-size: 48px; text-transform: none;
+    }
+    .hero-sub {
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.22em; font-weight: 500;
+      max-width: 28rem; line-height: 1.8; opacity: 0.9; margin-top: 32px;
+    }
+
+    @media (min-width: 640px) {
+      .hero-topbar { padding: 32px 40px 0; }
+      .logo svg { width: 24px; height: 24px; }
+      .logo-text-main { font-size: 15px; }
+      .logo-text-sub { font-size: 11px; }
+      .cta { font-size: 11px; }
+      .cta .cta-full { display: inline; }
+      .cta .cta-short { display: none; }
+      .hero-center { padding-top: 160px; }
+      .eyebrow { font-size: 12px; }
+      .hero-heading { font-size: 76px; }
+      .hero-sub { font-size: 14px; }
+    }
+    @media (min-width: 1024px) { .hero-heading { font-size: 100px; } }
+    @media (min-width: 1280px) { .hero-heading { font-size: 120px; } }
+
+    /* ───── SECTION 2: SUBMISSIONS ───── */
+    .submissions {
+      position: relative; overflow: hidden;
+      background: var(--bg-light);
+      padding: 80px 24px;
+    }
+    .sub-grid {
+      max-width: 64rem; margin: 0 auto;
+      display: flex; flex-direction: column; gap: 40px;
+    }
+    .sub-center { order: 1; display: flex; flex-direction: column; align-items: center; text-align: center; }
+    .sub-left { order: 2; }
+    .sub-right { order: 3; }
+    .sub-kicker { font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--dark); }
+    .sub-title {
+      font-weight: 600; letter-spacing: -0.01em; text-transform: uppercase; color: var(--dark);
+      font-size: 44px; line-height: 1; margin-top: 4px;
+    }
+    .sub-video {
+      width: 220px; height: 220px; object-fit: cover; margin-top: 24px;
+    }
+    .nom-col { display: flex; flex-direction: column; gap: 16px; align-items: center; }
+
+    .nom-card {
+      position: relative; display: block;
+      width: 100%; max-width: 20em; height: 5em;
+      transition: transform 0.25s ease;
+    }
+    .nom-card:hover { transform: translateY(-2px); }
+    .nom-card svg.nom-border { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .nom-inner {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 0 12px; color: var(--dark);
+    }
+    .nom-title { font-size: 13px; font-weight: 600; }
+    .nom-sub { font-size: 12px; font-weight: 400; opacity: 0.8; }
+
+    .sub-fade {
+      pointer-events: none; position: absolute; bottom: 0; left: 0; width: 100%;
+      height: 160px; z-index: 10;
+      background: linear-gradient(to bottom, rgba(240,245,247,0) 0%, rgba(240,245,247,0.7) 60%, #F0F5F7 100%);
+    }
+
+    @media (min-width: 640px) {
+      .submissions { padding: 112px 40px; }
+      .sub-title { font-size: 54px; }
+      .sub-video { width: 380px; height: 380px; margin-top: 32px; }
+      .sub-fade { height: 224px; }
+    }
+    @media (min-width: 1024px) {
+      .sub-grid {
+        flex-direction: row; align-items: flex-start; gap: 48px;
+      }
+      .sub-left { order: 1; margin-top: 144px; flex: 1; }
+      .sub-center { order: 2; flex: 1; }
+      .sub-right { order: 3; margin-top: 144px; flex: 1; }
+      .sub-video { width: 460px; height: 460px; }
+    }
+
+    /* ───── SECTION 3: ABOUT ───── */
+    .about {
+      position: relative; overflow: hidden;
+      background: var(--bg-lighter);
+      padding: 80px 24px;
+    }
+    .about-inner { max-width: 80rem; margin: 0 auto; }
+    .about-top {
+      display: flex; flex-direction: column; gap: 24px; color: var(--dark);
+    }
+    .about-heading {
+      font-weight: 600; text-transform: uppercase; letter-spacing: -0.01em; line-height: 0.95;
+      font-size: 36px;
+    }
+    .about-right { max-width: 36rem; }
+    .about-right p { font-size: 17px; line-height: 1.5; color: var(--dark); }
+    .about-right p + p { margin-top: 16px; }
+    .about-link {
+      display: inline-flex; align-items: center; gap: 12px;
+      margin-top: 24px; font-size: 14px; font-weight: 500; color: var(--dark);
+    }
+    .about-arrow {
+      display: grid; place-items: center; width: 32px; height: 32px;
+      border: 1px solid var(--dark);
+      clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+      transition: transform 0.25s ease;
+    }
+    .about-link:hover .about-arrow { transform: translateY(-2px); }
+    .about-arrow svg { width: 14px; height: 14px; }
+
+    .stats {
+      display: grid; grid-template-columns: 1fr; gap: 20px; margin-top: 56px;
+    }
+    .stat-card {
+      position: relative; width: 100%; height: 280px;
+      background-color: rgba(255,255,255,0.8); padding: 1.5px;
+    }
+    .stat-img {
+      width: 100%; height: 100%; overflow: hidden;
+      background-size: cover; background-position: center;
+      mix-blend-mode: plus-darker;
+    }
+    .stat-overlay { position: absolute; }
+    .stat-value {
+      font-weight: 600; text-transform: uppercase; font-size: 36px;
+      background: linear-gradient(294deg, #185B7B 20%, #4BBDF0);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .stat-desc { font-size: 14px; line-height: 1.4; color: var(--dark); margin-top: 12px; max-width: 66%; }
+
+    .stat-1 {
+      clip-path: polygon(64px 0, calc(100% - 14px) 0, calc(100% - 4px) 4px, 100% 14px, 100% calc(100% - 14px), calc(100% - 4px) calc(100% - 4px), calc(100% - 14px) 100%, 14px 100%, 4px calc(100% - 4px), 0 calc(100% - 14px), 0 64px);
+    }
+    .stat-2 {
+      clip-path: polygon(0 14px, 4px 4px, 14px 0, calc(100% - 64px) 0, 100% 64px, 100% calc(100% - 14px), calc(100% - 4px) calc(100% - 4px), calc(100% - 14px) 100%, 64px 100%, 0 calc(100% - 64px));
+    }
+    .stat-3 {
+      clip-path: polygon(0 14px, 4px 4px, 14px 0, calc(100% - 64px) 0, 100% 64px, 100% calc(100% - 64px), calc(100% - 64px) 100%, 14px 100%, 4px calc(100% - 4px), 0 calc(100% - 14px));
+    }
+    .stat-overlay-1 { left: 24px; right: 24px; bottom: 24px; }
+    .stat-overlay-2 { left: 24px; bottom: 80px; }
+    .stat-overlay-3 { left: 24px; right: 112px; bottom: 24px; }
+
+    .about-fade {
+      pointer-events: none; position: absolute; bottom: 0; left: 0; width: 100%;
+      height: 160px; z-index: 10;
+      background: linear-gradient(to bottom, rgba(240,245,247,0) 0%, rgba(240,245,247,0.7) 60%, #F0F5F7 100%);
+    }
+
+    @media (min-width: 640px) {
+      .about { padding: 112px 40px; }
+      .about-heading { font-size: 48px; }
+      .about-right p { font-size: 18px; }
+      .stat-card { height: 340px; }
+      .stat-value { font-size: 52px; }
+      .about-fade { height: 224px; }
+    }
+    @media (min-width: 768px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (min-width: 1024px) {
+      .about-top { flex-direction: row; justify-content: space-between; }
+      .about-heading { font-size: 54px; }
+      .stats { grid-template-columns: repeat(3, 1fr); }
+      .stat-2-wrap { margin-top: 96px; }
+    }
+
+    /* ───── PERSISTENT OVERLAYS ───── */
+    .topnav {
+      display: none;
+      position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 40;
+      background: #fff; border-bottom-left-radius: 28px; border-bottom-right-radius: 28px;
+      padding: 16px 24px; gap: 24px; align-items: center;
+    }
+    .topnav a {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 500;
+      color: #262626; transition: color 0.2s ease;
+    }
+    .topnav a:hover { color: #737373; }
+    .topnav .corner { position: absolute; bottom: 0; width: 24px; height: 24px; background: #fff; }
+    .topnav .corner-left {
+      left: -24px;
+      -webkit-mask-image: radial-gradient(circle at 0 100%, transparent 24px, black 25px);
+      mask-image: radial-gradient(circle at 0 100%, transparent 24px, black 25px);
+    }
+    .topnav .corner-right {
+      right: -24px;
+      -webkit-mask-image: radial-gradient(circle at 100% 100%, transparent 24px, black 25px);
+      mask-image: radial-gradient(circle at 100% 100%, transparent 24px, black 25px);
+    }
+    @media (min-width: 768px) { .topnav { display: flex; } }
+    @media (min-width: 1024px) { .topnav { padding-left: 40px; padding-right: 40px; gap: 40px; } }
+
+    .page-indicator {
+      pointer-events: none; position: absolute; bottom: 16px; right: 16px; z-index: 40;
+      display: flex; align-items: center; gap: 12px;
+      color: rgba(255,255,255,0.8); font-size: 10px; font-weight: 500;
+      text-transform: uppercase; letter-spacing: 0.18em; mix-blend-mode: difference;
+    }
+    .page-indicator .line { width: 32px; height: 1px; background: rgba(255,255,255,0.4); }
+
+    .scroll-hint {
+      pointer-events: none; position: absolute; bottom: 16px; left: 16px; z-index: 40;
+      color: rgba(255,255,255,0.8); font-size: 10px; font-weight: 500;
+      text-transform: uppercase; letter-spacing: 0.18em; mix-blend-mode: difference;
+    }
+    @media (min-width: 640px) {
+      .page-indicator { bottom: 24px; right: 32px; }
+      .scroll-hint { bottom: 24px; left: 32px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="frame">
+      <div class="scroll no-scrollbar" id="scroller">
+
+        <!-- ───── SECTION 1: HERO ───── -->
+        <section class="hero">
+          <video class="hero-video" autoplay loop muted playsinline
+            src="https://plugin-assets.open-design.ai/plugins/stellar-launch/hf_20260511_151648_2bdfbd1c-6bde-4f5d-a967-f57cbced97f6-fb3729.mp4"></video>
+          <div class="hero-overlay"></div>
+
+          <div class="hero-topbar">
+            <div class="logo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"/>
+                <path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/>
+              </svg>
+              <div>
+                <div class="logo-text-main">launchex</div>
+                <div class="logo-text-sub">awards</div>
+              </div>
+            </div>
+            <a class="cta" href="#">
+              <span class="cta-full">Send in your entry form</span>
+              <span class="cta-short">Enter</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 17L17 7"/><path d="M7 7h10v10"/>
+              </svg>
+            </a>
+          </div>
+
+          <div class="hero-center">
+            <div class="eyebrow">Prize for ventures</div>
+            <h1 class="hero-heading font-firs">launchex<br/>prizes</h1>
+            <p class="hero-sub">Bridging visions with reality, helping ventures soar up to the stars</p>
+          </div>
+        </section>
+
+        <!-- ───── SECTION 2: SUBMISSIONS ───── -->
+        <section class="submissions">
+          <div class="sub-grid">
+
+            <div class="sub-left">
+              <div class="nom-col">
+                <a class="nom-card" href="#">
+                  <svg class="nom-border" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <polygon points="14,0 100,0 100,86 86,100 0,100 0,14" fill="none" stroke="rgba(6,99,119,0.25)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+                  </svg>
+                  <div class="nom-inner"><span class="nom-title">Lead</span><span class="nom-sub">AI venture for commerce</span></div>
+                </a>
+                <a class="nom-card" href="#">
+                  <svg class="nom-border" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <polygon points="14,0 100,0 100,86 86,100 0,100 0,14" fill="none" stroke="rgba(6,99,119,0.25)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+                  </svg>
+                  <div class="nom-inner"><span class="nom-title">Emerging innovations</span><span class="nom-sub">in food commerce</span></div>
+                </a>
+                <a class="nom-card" href="#">
+                  <svg class="nom-border" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <polygon points="14,0 100,0 100,86 86,100 0,100 0,14" fill="none" stroke="rgba(6,99,119,0.25)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+                  </svg>
+                  <div class="nom-inner"><span class="nom-title">The finest innovations</span><span class="nom-sub">for learners and young students</span></div>
+                </a>
+              </div>
+            </div>
+
+            <div class="sub-center">
+              <div class="sub-kicker">[submissions]</div>
+              <div class="sub-title font-firs">submissions</div>
+              <video class="sub-video" autoplay loop muted playsinline
+                src="https://plugin-assets.open-design.ai/plugins/stellar-launch/hf_20260514_154120_b89bfedd-530d-4ebb-9eb7-42eeafe08667-c6b971.mp4"></video>
+            </div>
+
+            <div class="sub-right">
+              <div class="nom-col">
+                <a class="nom-card" href="#">
+                  <svg class="nom-border" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <polygon points="14,0 100,0 100,86 86,100 0,100 0,14" fill="none" stroke="rgba(6,99,119,0.25)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+                  </svg>
+                  <div class="nom-inner"><span class="nom-title">Innovations for advanced</span><span class="nom-sub">career training</span></div>
+                </a>
+                <a class="nom-card" href="#">
+                  <svg class="nom-border" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <polygon points="14,0 100,0 100,86 86,100 0,100 0,14" fill="none" stroke="rgba(6,99,119,0.25)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+                  </svg>
+                  <div class="nom-inner"><span class="nom-title">The finest innovations</span><span class="nom-sub">in finance</span></div>
+                </a>
+                <a class="nom-card" href="#">
+                  <svg class="nom-border" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <polygon points="14,0 100,0 100,86 86,100 0,100 0,14" fill="none" stroke="rgba(6,99,119,0.25)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+                  </svg>
+                  <div class="nom-inner"><span class="nom-title">Categories</span><span class="nom-sub">coming soon</span></div>
+                </a>
+              </div>
+            </div>
+
+          </div>
+          <div class="sub-fade"></div>
+        </section>
+
+        <!-- ───── SECTION 3: ABOUT ───── -->
+        <section class="about">
+          <div class="about-inner">
+            <div class="about-top">
+              <h2 class="about-heading font-firs">About the<br/>founders</h2>
+              <div class="about-right">
+                <p>Launchex.Hub is a platform that is part of a portfolio of companies Launchex, for sourcing and showcasing groundbreaking innovations.</p>
+                <p>Launchex.Hub's mission is to offer every local-language innovator the chance to reshape our world with their pioneering creation.</p>
+                <a class="about-link" href="https://base.launchex.vc/">
+                  <span>Launchex.Hub website</span>
+                  <span class="about-arrow">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M7 17L17 7"/><path d="M7 7h10v10"/>
+                    </svg>
+                  </span>
+                </a>
+              </div>
+            </div>
+
+            <div class="stats">
+              <div class="stat-card stat-1">
+                <div class="stat-img" style="background-image:url('https://plugin-assets.open-design.ai/plugins/stellar-launch/hf_20260514_154203_6c6f94dc-a07e-4ba5-8688-106f01ccd2c8-158c74.webp&w=1280&q=85')"></div>
+                <div class="stat-overlay stat-overlay-1">
+                  <div class="stat-value font-firs">7+ years</div>
+                  <div class="stat-desc">Launchex has served the market, guiding ventures and their journeys</div>
+                </div>
+              </div>
+              <div class="stat-2-wrap">
+                <div class="stat-card stat-2">
+                  <div class="stat-img" style="background-image:url('https://plugin-assets.open-design.ai/plugins/stellar-launch/hf_20260514_154151_45c62c60-3bcc-4f21-8f9d-03722ebb5df8-71cb96.webp&w=1280&q=85')"></div>
+                  <div class="stat-overlay stat-overlay-2">
+                    <div class="stat-value font-firs">15000+</div>
+                    <div class="stat-desc">innovation ventures moved through the Launchex pipeline</div>
+                  </div>
+                </div>
+              </div>
+              <div class="stat-card stat-3">
+                <div class="stat-img" style="background-image:url('https://plugin-assets.open-design.ai/plugins/stellar-launch/hf_20260514_152238_24ec8db4-d728-4739-bb30-e985533e9637-8b9102.webp&w=1280&q=85')"></div>
+                <div class="stat-overlay stat-overlay-3">
+                  <div class="stat-value font-firs">120+</div>
+                  <div class="stat-desc">accelerator sessions delivered by Launchex across Eastern Europe</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="about-fade"></div>
+        </section>
+
+      </div>
+
+      <!-- ───── PERSISTENT OVERLAYS ───── -->
+      <nav class="topnav">
+        <span class="corner corner-left"></span>
+        <a href="#">About</a>
+        <a href="#">Submissions</a>
+        <a href="#">Venue</a>
+        <a href="#">Judges</a>
+        <a href="#">Connect</a>
+        <span class="corner corner-right"></span>
+      </nav>
+
+      <div class="page-indicator">
+        <span id="pi-current">01</span>
+        <span class="line"></span>
+        <span>05</span>
+      </div>
+
+      <div class="scroll-hint">Scroll to discover</div>
+    </div>
+  </div>
+
+  <script>
+    // Page indicator reacts to scroll position across the 3 sections (mapped to 01..05).
+    (function () {
+      var scroller = document.getElementById('scroller');
+      var current = document.getElementById('pi-current');
+      if (!scroller || !current) return;
+      function update() {
+        var max = scroller.scrollHeight - scroller.clientHeight;
+        var ratio = max > 0 ? scroller.scrollTop / max : 0;
+        var n = Math.min(5, Math.max(1, Math.round(ratio * 4) + 1));
+        current.textContent = ('0' + n).slice(-2);
+      }
+      scroller.addEventListener('scroll', update, { passive: true });
+      update();
+    })();
+  </script>
+</body>
+</html>

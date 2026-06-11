@@ -79,7 +79,12 @@ const featuredSet = new Set(
 );
 
 const totalCount = items.length;
-const title = `${categoryCopy.label} templates · Open Source Claude Design alternative`;
+// HyperFrames is a high-intent long-tail: people search "hyperframes template"
+// and "hyperframes skill" specifically, so give that page a keyword-led title
+// instead of the generic "<Label> templates · …" pattern.
+const title = categorySlug === 'hyperframes'
+  ? 'HyperFrames templates & skills · agent-built motion video · Open Design'
+  : `${categoryCopy.label} templates · Open Source Claude Design alternative`;
 const description = categoryCopy.description;
 
 const jsonLd = {
@@ -311,6 +316,9 @@ const jsonLd = {
           lazyObs.observe(v);
           const startPlayback = () => {
             hydrate(v);
+            // Restart from the top so every hover plays the full animation
+            // from frame 0 rather than resuming wherever the last loop paused.
+            try { v.currentTime = 0; } catch { /* not seekable yet — plays from current */ }
             v.play().catch(() => {});
           };
           const stopPlayback = () => {

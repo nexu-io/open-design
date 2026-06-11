@@ -88,6 +88,9 @@ describe('plugins/_official/scenarios roster', () => {
     const manifestPath = path.join(scenariosRoot, 'od-default', 'open-design.json');
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
     expect(manifest.od.hidden).toBe(true);
+    expect(manifest.od.context?.craft).toEqual(
+      expect.arrayContaining(['typography', 'color', 'anti-ai-slop']),
+    );
     expect(manifest.od.pipeline.stages[0].id).toBe('task-type');
     expect(manifest.od.genui.surfaces).toEqual(
       expect.arrayContaining([
@@ -97,6 +100,14 @@ describe('plugins/_official/scenarios roster', () => {
           trigger: expect.objectContaining({ stageId: 'task-type' }),
         }),
       ]),
+    );
+  });
+
+  it('od-new-generation declares the default craft rails for anti-slop HTML output', async () => {
+    const manifestPath = path.join(scenariosRoot, 'od-new-generation', 'open-design.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    expect(manifest.od.context?.craft).toEqual(
+      expect.arrayContaining(['typography', 'color', 'anti-ai-slop']),
     );
   });
 });

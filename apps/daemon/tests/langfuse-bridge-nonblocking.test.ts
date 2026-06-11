@@ -95,7 +95,10 @@ describe('langfuse-bridge non-blocking behavior', () => {
         run: makeRun() as any,
         fetchImpl: vi.fn() as any,
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted',
+    });
 
     expect(reportRunCompletedMock).toHaveBeenCalledTimes(1);
     expect(warnSpy).toHaveBeenCalledWith(
@@ -118,7 +121,11 @@ describe('langfuse-bridge non-blocking behavior', () => {
         run: makeRun() as any,
         fetchImpl: vi.fn() as any,
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'network_error',
+    });
 
     expect(warnSpy).toHaveBeenCalledWith(
       '[langfuse-bridge] report failed:',

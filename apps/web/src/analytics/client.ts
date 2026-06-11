@@ -89,6 +89,39 @@ export function setConfigureGlobals(next: AnalyticsConfigureGlobals): void {
   }
 }
 
+// AMR account id, registered as the `user_id` public param once sign-in
+// state is known. This is the only cross-project join key between the main
+// app's PostHog project and the AMR project (whose events carry the same
+// id as `app_user_id`), so it must survive reset()/identify() flows the
+// same way the configure globals do.
+let registeredUserId: string | null = null;
+
+// Called from the AnalyticsProvider when the AMR login status resolves
+// (boot fetch or a login/logout mid-session). Passing null unregisters the
+// param so events after a logout stop carrying a stale account id.
+export function setAnalyticsUserId(userId: string | null): void {
+  if (registeredUserId === userId) return;
+  registeredUserId = userId;
+  if (lastRegisterPayload) {
+    if (userId) {
+      lastRegisterPayload = { ...lastRegisterPayload, user_id: userId };
+    } else {
+      const { user_id: _dropped, ...rest } = lastRegisterPayload;
+      lastRegisterPayload = rest;
+    }
+  }
+  if (!client) return;
+  try {
+    if (userId) {
+      client.register({ user_id: userId });
+    } else {
+      client.unregister('user_id');
+    }
+  } catch {
+    // best-effort — capture should never throw out of this path.
+  }
+}
+
 // Fetches `/api/analytics/config` once and wires up the exception-tracking
 // module's context — independent of consent state. The error tracker
 // installs its `window.error` / `unhandledrejection` listeners at module
@@ -115,6 +148,7 @@ export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<v
         clearExceptionTrackingContext();
         return;
       }
+      const telemetryEnv = cfg.env || 'unknown';
       const distinctId =
         (typeof cfg.installationId === 'string' && cfg.installationId) ||
         context.anonymousId;
@@ -124,6 +158,7 @@ export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<v
         distinctId,
         appVersion: context.appVersion,
         sessionId: context.sessionId,
+        telemetryEnv,
       });
     } catch {
       // Network failure / endpoint unavailable — leave the buffer in
@@ -151,6 +186,7 @@ export async function getAnalyticsClient(
       if (!res.ok) return null;
       const cfg = (await res.json()) as AnalyticsConfigResponse;
       if (!cfg.enabled || !cfg.key || !cfg.host) return null;
+      const telemetryEnv = cfg.env || 'unknown';
       const distinctId =
         (typeof cfg.installationId === 'string' && cfg.installationId) ||
         context.anonymousId;
@@ -252,6 +288,7 @@ export async function getAnalyticsClient(
         loaded: (instance) => {
           lastRegisterPayload = {
             event_schema_version: EVENT_SCHEMA_VERSION,
+            env: telemetryEnv,
             ui_version: context.appVersion,
             app_version: context.appVersion,
             client_type: context.clientType,
@@ -261,6 +298,9 @@ export async function getAnalyticsClient(
             // installationId / local-UUID fallback.
             device_id: distinctId,
             ...(configureGlobals as unknown as Record<string, unknown>),
+            // AMR sign-in can resolve before consent-gated init finishes;
+            // fold the already-known account id into the first register.
+            ...(registeredUserId ? { user_id: registeredUserId } : {}),
           };
           instance.register(lastRegisterPayload);
           // Re-bridge the error-tracking context once posthog-js is fully
@@ -274,6 +314,7 @@ export async function getAnalyticsClient(
             distinctId,
             appVersion: context.appVersion,
             sessionId: context.sessionId,
+            telemetryEnv,
           });
         },
       });

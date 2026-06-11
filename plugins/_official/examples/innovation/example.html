@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Innovation — Asme</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ease: cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+      background: #000;
+      color: #fff;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    .serif { font-family: 'Instrument Serif', serif; }
+    .serif-i { font-family: 'Instrument Serif', serif; font-style: italic; }
+    img, video { display: block; }
+    button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+    input { font: inherit; border: none; outline: none; background: none; color: inherit; }
+    a { color: inherit; text-decoration: none; }
+
+    /* ───── LIQUID GLASS ───── */
+    .liquid-glass {
+      background: rgba(255, 255, 255, 0.01);
+      background-blend-mode: luminosity;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      border: none;
+      box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+      position: relative;
+      overflow: hidden;
+    }
+    .liquid-glass::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      padding: 1.4px;
+      background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.45) 0%,
+        rgba(255, 255, 255, 0.15) 20%,
+        rgba(255, 255, 255, 0) 40%,
+        rgba(255, 255, 255, 0) 60%,
+        rgba(255, 255, 255, 0.15) 80%,
+        rgba(255, 255, 255, 0.45) 100%
+      );
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    .wrap { max-width: 1152px; margin: 0 auto; }
+    .px { padding-left: 24px; padding-right: 24px; }
+
+    /* ───── REVEAL (IntersectionObserver → framer-motion whileInView) ───── */
+    .reveal { opacity: 0; transform: translateY(40px); transition: opacity 0.8s var(--ease), transform 0.8s var(--ease); }
+    .reveal.in { opacity: 1; transform: none; }
+    .reveal-sm { opacity: 0; transform: translateY(20px); transition: opacity 0.6s var(--ease), transform 0.6s var(--ease); }
+    .reveal-sm.in { opacity: 1; transform: none; }
+    .reveal-l { opacity: 0; transform: translateX(-40px); transition: opacity 0.8s var(--ease), transform 0.8s var(--ease); }
+    .reveal-l.in { opacity: 1; transform: none; }
+    .reveal-r { opacity: 0; transform: translateX(40px); transition: opacity 0.8s var(--ease), transform 0.8s var(--ease); }
+    .reveal-r.in { opacity: 1; transform: none; }
+    .reveal-up { opacity: 0; transform: translateY(60px); transition: opacity 0.9s var(--ease), transform 0.9s var(--ease); }
+    .reveal-up.in { opacity: 1; transform: none; }
+
+    /* ───── SECTION 1 — HERO ───── */
+    .hero { min-height: 100vh; position: relative; overflow: hidden; display: flex; flex-direction: column; }
+    #hero-video {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; object-position: bottom; opacity: 0; z-index: 0;
+    }
+    .nav { position: relative; z-index: 20; padding: 24px; }
+    .nav-pill {
+      max-width: 1024px; margin: 0 auto; border-radius: 9999px;
+      padding: 12px 24px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-left { display: flex; align-items: center; }
+    .brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1.125rem; }
+    .nav-links { display: flex; align-items: center; gap: 32px; margin-left: 32px; }
+    .nav-links a { color: rgba(255,255,255,0.8); font-size: 0.875rem; font-weight: 500; transition: color 0.2s var(--ease); }
+    .nav-links a:hover { color: #fff; }
+    .nav-right { display: flex; align-items: center; gap: 16px; }
+    .signup { color: #fff; font-size: 0.875rem; font-weight: 500; }
+    .login { border-radius: 9999px; padding: 8px 24px; font-size: 0.875rem; font-weight: 500; }
+
+    .hero-body {
+      position: relative; z-index: 10; flex: 1;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 48px 24px; text-align: center; transform: translateY(-20%);
+    }
+    .hero-h1 {
+      font-size: clamp(3.5rem, 11vw, 8rem); line-height: 1; letter-spacing: -0.02em;
+      white-space: nowrap; margin-bottom: 32px;
+    }
+    .email-row { max-width: 36rem; width: 100%; }
+    .email-pill { border-radius: 9999px; padding: 8px 8px 8px 24px; display: flex; align-items: center; gap: 12px; }
+    .email-pill input { flex: 1; color: #fff; }
+    .email-pill input::placeholder { color: rgba(255,255,255,0.4); }
+    .email-submit { background: #fff; color: #000; border-radius: 9999px; padding: 12px; display: grid; place-items: center; transition: transform 0.2s var(--ease); }
+    .email-submit:hover { transform: scale(1.05); }
+    .hero-sub { color: #fff; font-size: 0.875rem; line-height: 1.625; padding: 16px 16px 0; max-width: 36rem; }
+    .manifesto { margin-top: 24px; border-radius: 9999px; padding: 12px 32px; font-size: 0.875rem; font-weight: 500; transition: background 0.2s var(--ease); }
+    .manifesto:hover { background: rgba(255,255,255,0.05); }
+
+    .socials { position: relative; z-index: 10; display: flex; justify-content: center; gap: 16px; padding-bottom: 48px; }
+    .social-btn {
+      border-radius: 9999px; padding: 16px; color: rgba(255,255,255,0.8);
+      display: grid; place-items: center; transition: color 0.3s var(--ease), background 0.3s var(--ease);
+    }
+    .social-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
+
+    /* ───── SECTION 2 — ABOUT ───── */
+    .about { position: relative; padding: 128px 24px 40px; overflow: hidden; }
+    .about-grad { position: absolute; inset: 0; background: radial-gradient(ellipse at top, rgba(255,255,255,0.03) 0%, transparent 70%); pointer-events: none; }
+    .about-inner { position: relative; max-width: 1152px; margin: 0 auto; }
+    .eyebrow { color: rgba(255,255,255,0.4); font-size: 0.875rem; letter-spacing: 0.15em; text-transform: uppercase; }
+    .about-h2 { font-size: clamp(2.25rem, 7vw, 4.5rem); line-height: 1.1; letter-spacing: -0.02em; margin-top: 24px; }
+
+    /* ───── SECTION 3 — FEATURED VIDEO ───── */
+    .featured { padding: 24px 24px 80px; overflow: hidden; }
+    .featured-inner { max-width: 1152px; margin: 0 auto; }
+    .video-frame { position: relative; border-radius: 24px; overflow: hidden; aspect-ratio: 16 / 9; }
+    .video-frame video { width: 100%; height: 100%; object-fit: cover; }
+    .video-grad-t { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.6), transparent 50%, transparent); pointer-events: none; }
+    .featured-overlay {
+      position: absolute; bottom: 0; left: 0; right: 0; padding: 24px;
+      display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;
+    }
+    .approach-card { border-radius: 16px; padding: 24px; max-width: 28rem; }
+    .approach-label { color: rgba(255,255,255,0.5); font-size: 0.75rem; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 12px; }
+    .approach-body { color: #fff; font-size: 0.875rem; line-height: 1.625; }
+    .explore-btn { border-radius: 9999px; padding: 12px 32px; font-size: 0.875rem; font-weight: 500; white-space: nowrap; transition: transform 0.2s var(--ease); }
+    .explore-btn:hover { transform: scale(1.05); }
+    .explore-btn:active { transform: scale(0.95); }
+
+    /* ───── SECTION 4 — PHILOSOPHY ───── */
+    .philo { padding: 112px 24px; overflow: hidden; }
+    .philo-inner { max-width: 1152px; margin: 0 auto; }
+    .philo-h2 { font-size: clamp(3rem, 9vw, 6rem); letter-spacing: -0.02em; margin-bottom: 64px; line-height: 1; }
+    .philo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+    .philo-video { border-radius: 24px; overflow: hidden; aspect-ratio: 4 / 3; }
+    .philo-video video { width: 100%; height: 100%; object-fit: cover; }
+    .philo-blocks { display: flex; flex-direction: column; justify-content: center; }
+    .philo-label { color: rgba(255,255,255,0.4); font-size: 0.75rem; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 16px; }
+    .philo-text { color: rgba(255,255,255,0.7); font-size: 1.125rem; line-height: 1.625; }
+    .divider { width: 100%; height: 1px; background: rgba(255,255,255,0.1); margin: 32px 0; }
+
+    /* ───── SECTION 5 — SERVICES ───── */
+    .services { position: relative; padding: 112px 24px; overflow: hidden; }
+    .services-grad { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(255,255,255,0.02) 0%, transparent 60%); pointer-events: none; }
+    .services-inner { position: relative; max-width: 1152px; margin: 0 auto; }
+    .services-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 48px; }
+    .services-h2 { font-size: clamp(1.875rem, 5vw, 3rem); letter-spacing: -0.02em; }
+    .services-label { color: rgba(255,255,255,0.4); font-size: 0.875rem; }
+    .services-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+    .scard { border-radius: 24px; overflow: hidden; }
+    .scard-media { position: relative; aspect-ratio: 16 / 9; overflow: hidden; }
+    .scard-media video { width: 100%; height: 100%; object-fit: cover; transition: transform 0.7s var(--ease); }
+    .scard:hover .scard-media video { transform: scale(1.05); }
+    .scard-grad { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.4), transparent); pointer-events: none; }
+    .scard-body { padding: 32px; }
+    .scard-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .scard-tag { color: rgba(255,255,255,0.4); font-size: 0.75rem; letter-spacing: 0.15em; text-transform: uppercase; }
+    .scard-arrow { border-radius: 9999px; padding: 8px; display: grid; place-items: center; }
+    .scard-title { font-size: clamp(1.25rem, 3vw, 1.5rem); letter-spacing: -0.02em; margin-bottom: 12px; }
+    .scard-desc { color: rgba(255,255,255,0.5); font-size: 0.875rem; line-height: 1.625; }
+
+    /* ───── RESPONSIVE ───── */
+    @media (max-width: 900px) {
+      .nav-links { display: none; }
+      .hero-h1 { white-space: normal; }
+      .philo-grid { grid-template-columns: 1fr; gap: 32px; }
+      .services-grid { grid-template-columns: 1fr; gap: 24px; }
+      .featured-overlay { flex-direction: column; align-items: stretch; }
+      .services-label { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ════════ SECTION 1 — HERO ════════ -->
+  <section class="hero">
+    <video id="hero-video" muted playsinline preload="auto"
+      src="https://plugin-assets.open-design.ai/plugins/innovation/hf_20260405_074625_a81f018a-956b-43fb-9aee-4d1508e30e6a-6993b9.mp4"></video>
+
+    <nav class="nav">
+      <div class="nav-pill liquid-glass">
+        <div class="nav-left">
+          <div class="brand">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            <span>Asme</span>
+          </div>
+          <div class="nav-links">
+            <a href="#">Features</a>
+            <a href="#">Pricing</a>
+            <a href="#">About</a>
+          </div>
+        </div>
+        <div class="nav-right">
+          <button class="signup">Sign Up</button>
+          <button class="login liquid-glass">Login</button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="hero-body">
+      <h1 class="hero-h1 serif">Know it then <em class="serif-i">all</em>.</h1>
+      <div class="email-row">
+        <div class="email-pill liquid-glass">
+          <input type="email" placeholder="Enter your email" />
+          <button class="email-submit" aria-label="Submit">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+        </div>
+      </div>
+      <p class="hero-sub">Stay updated with the latest news and insights. Subscribe to our newsletter today and never miss out on exciting updates.</p>
+      <button class="manifesto liquid-glass">Read our manifesto</button>
+    </div>
+
+    <div class="socials">
+      <button class="social-btn liquid-glass" aria-label="Instagram">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+      </button>
+      <button class="social-btn liquid-glass" aria-label="Twitter">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/></svg>
+      </button>
+      <button class="social-btn liquid-glass" aria-label="Website">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      </button>
+    </div>
+  </section>
+
+  <!-- ════════ SECTION 2 — ABOUT ════════ -->
+  <section class="about">
+    <div class="about-grad"></div>
+    <div class="about-inner">
+      <p class="eyebrow reveal-sm">About Us</p>
+      <h2 class="about-h2 reveal">
+        Pioneering <span class="serif-i" style="color:rgba(255,255,255,0.6)">ideas</span> for
+        <br class="hide-mobile" />
+        <span class="serif-i" style="color:rgba(255,255,255,0.6)">minds that create, build, and inspire.</span>
+      </h2>
+    </div>
+  </section>
+
+  <!-- ════════ SECTION 3 — FEATURED VIDEO ════════ -->
+  <section class="featured">
+    <div class="featured-inner">
+      <div class="video-frame reveal-up">
+        <video muted autoplay loop playsinline preload="auto"
+          src="https://plugin-assets.open-design.ai/plugins/innovation/hf_20260402_054547_9875cfc5-155a-4229-8ec8-b7ba7125cbf8-eee511.mp4"></video>
+        <div class="video-grad-t"></div>
+        <div class="featured-overlay">
+          <div class="approach-card liquid-glass">
+            <p class="approach-label">Our Approach</p>
+            <p class="approach-body">We believe in the power of curiosity-driven exploration. Every project starts with a question, and every answer opens a new door to innovation.</p>
+          </div>
+          <button class="explore-btn liquid-glass">Explore more</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ SECTION 4 — PHILOSOPHY ════════ -->
+  <section class="philo">
+    <div class="philo-inner">
+      <h2 class="philo-h2 serif reveal">Innovation <span class="serif-i" style="color:rgba(255,255,255,0.4)">x</span> Vision</h2>
+      <div class="philo-grid">
+        <div class="philo-video reveal-l">
+          <video muted autoplay loop playsinline preload="auto"
+            src="https://plugin-assets.open-design.ai/plugins/liquid-glass-agency/hf_20260307_083826_e938b29f-a43a-41ec-a153-3d4730578ab8-b7258e.mp4"></video>
+        </div>
+        <div class="philo-blocks reveal-r">
+          <div>
+            <p class="philo-label">Choose your space</p>
+            <p class="philo-text">Every meaningful breakthrough begins at the intersection of disciplined strategy and remarkable creative vision. We operate at that crossroads, turning bold thinking into tangible outcomes that move people and reshape industries.</p>
+          </div>
+          <div class="divider"></div>
+          <div>
+            <p class="philo-label">Shape the future</p>
+            <p class="philo-text">We believe that the best work emerges when curiosity meets conviction. Our process is designed to uncover hidden opportunities and translate them into experiences that resonate long after the first impression.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ SECTION 5 — SERVICES ════════ -->
+  <section class="services">
+    <div class="services-grad"></div>
+    <div class="services-inner">
+      <div class="services-head reveal">
+        <h2 class="services-h2">What we do</h2>
+        <span class="services-label">Our services</span>
+      </div>
+      <div class="services-grid">
+        <div class="scard liquid-glass reveal-up" data-delay="0">
+          <div class="scard-media">
+            <video muted autoplay loop playsinline preload="auto"
+              src="https://plugin-assets.open-design.ai/plugins/innovation/hf_20260314_131748_f2ca2a28-fed7-44c8-b9a9-bd9acdd5ec31-b2a357.mp4"></video>
+            <div class="scard-grad"></div>
+          </div>
+          <div class="scard-body">
+            <div class="scard-top">
+              <span class="scard-tag">Strategy</span>
+              <span class="scard-arrow liquid-glass">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+              </span>
+            </div>
+            <h3 class="scard-title serif">Research &amp; Insight</h3>
+            <p class="scard-desc">We dig deep into data, culture, and human behavior to surface the insights that drive meaningful, lasting change.</p>
+          </div>
+        </div>
+        <div class="scard liquid-glass reveal-up" data-delay="150">
+          <div class="scard-media">
+            <video muted autoplay loop playsinline preload="auto"
+              src="https://plugin-assets.open-design.ai/plugins/innovation/hf_20260324_151826_c7218672-6e92-402c-9e45-f1e0f454bdc4-c2f128.mp4"></video>
+            <div class="scard-grad"></div>
+          </div>
+          <div class="scard-body">
+            <div class="scard-top">
+              <span class="scard-tag">Craft</span>
+              <span class="scard-arrow liquid-glass">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+              </span>
+            </div>
+            <h3 class="scard-title serif">Design &amp; Execution</h3>
+            <p class="scard-desc">From concept to launch, we obsess over every detail to deliver experiences that feel effortless and look extraordinary.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // ── HERO VIDEO: seamless crossfade-to-black loop (vanilla, no CSS transition) ──
+    (function () {
+      var v = document.getElementById('hero-video');
+      if (!v) return;
+      var FADE = 500;
+      var raf = null;
+
+      function animateOpacity(from, to, dur) {
+        if (raf) cancelAnimationFrame(raf);
+        var start = performance.now();
+        function step(now) {
+          var t = Math.min((now - start) / dur, 1);
+          v.style.opacity = (from + (to - from) * t).toFixed(3);
+          if (t < 1) raf = requestAnimationFrame(step);
+        }
+        raf = requestAnimationFrame(step);
+      }
+
+      v.addEventListener('canplay', function () {
+        var p = v.play();
+        if (p && p.catch) p.catch(function () {});
+        animateOpacity(0, 1, FADE);
+      });
+
+      v.addEventListener('timeupdate', function () {
+        if (!isNaN(v.duration) && v.duration - v.currentTime <= 0.55) {
+          animateOpacity(parseFloat(v.style.opacity) || 1, 0, FADE);
+        }
+      });
+
+      v.addEventListener('ended', function () {
+        v.style.opacity = '0';
+        setTimeout(function () {
+          v.currentTime = 0;
+          var p = v.play();
+          if (p && p.catch) p.catch(function () {});
+          animateOpacity(0, 1, FADE);
+        }, 100);
+      });
+
+      // kick off in case canplay already fired
+      if (v.readyState >= 3) {
+        var p = v.play();
+        if (p && p.catch) p.catch(function () {});
+        animateOpacity(0, 1, FADE);
+      }
+    })();
+
+    // ── REVEAL on scroll (framer-motion whileInView → IntersectionObserver) ──
+    (function () {
+      var items = document.querySelectorAll('.reveal, .reveal-sm, .reveal-l, .reveal-r, .reveal-up');
+      if (!('IntersectionObserver' in window)) {
+        items.forEach(function (el) { el.classList.add('in'); });
+        return;
+      }
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) {
+            var d = parseInt(e.target.getAttribute('data-delay') || '0', 10);
+            setTimeout(function () { e.target.classList.add('in'); }, d);
+            io.unobserve(e.target);
+          }
+        });
+      }, { rootMargin: '-100px 0px', threshold: 0.1 });
+      items.forEach(function (el) { io.observe(el); });
+    })();
+  </script>
+</body>
+</html>

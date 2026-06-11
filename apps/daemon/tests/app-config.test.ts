@@ -25,7 +25,6 @@ import { isLocalSameOrigin } from '../src/origin-validation.js';
 const DEFAULT_TELEMETRY = {
   metrics: true,
   content: true,
-  artifactManifest: false,
 } as const;
 
 describe('app-config', () => {
@@ -803,6 +802,60 @@ describe('app-config projectLocations', () => {
     expect(ids).not.toContain('default');
     expect(ids).not.toContain('bad-relative');
     expect(ids).not.toContain('no-path');
+  });
+});
+
+describe('app-config recentLinkedDirs', () => {
+  let dataDir: string;
+
+  beforeEach(async () => {
+    dataDir = await mkdtemp(path.join(tmpdir(), 'od-recentdirs-'));
+  });
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it('persists a clean list of working directories', async () => {
+    const cfg = await writeAppConfig(dataDir, {
+      recentLinkedDirs: ['/home/a/project', '/home/b/site'],
+    });
+    expect(cfg.recentLinkedDirs).toEqual(['/home/a/project', '/home/b/site']);
+    expect((await readAppConfig(dataDir)).recentLinkedDirs).toEqual([
+      '/home/a/project',
+      '/home/b/site',
+    ]);
+  });
+
+  it('trims, drops empty entries, and de-dupes preserving order', async () => {
+    const cfg = await writeAppConfig(dataDir, {
+      recentLinkedDirs: ['  /home/a  ', '', '/home/a', '   ', '/home/b'],
+    });
+    expect(cfg.recentLinkedDirs).toEqual(['/home/a', '/home/b']);
+  });
+
+  it('caps the list at RECENT_LINKED_DIRS_MAX entries', async () => {
+    const many = Array.from({ length: 25 }, (_, i) => `/home/dir${i}`);
+    const cfg = await writeAppConfig(dataDir, { recentLinkedDirs: many });
+    expect(cfg.recentLinkedDirs).toEqual(many.slice(0, 5));
+  });
+
+  it('ignores a non-array value without touching other prefs', async () => {
+    await writeAppConfig(dataDir, { onboardingCompleted: true });
+    const cfg = await writeAppConfig(dataDir, {
+      recentLinkedDirs: 'not-an-array' as unknown as string[],
+    });
+    expect(cfg.recentLinkedDirs).toBeUndefined();
+    expect(cfg.onboardingCompleted).toBe(true);
+  });
+
+  it('updates recentLinkedDirs without clobbering unrelated prefs', async () => {
+    await writeAppConfig(dataDir, { skillId: 'keep-me' });
+    const cfg = await writeAppConfig(dataDir, {
+      recentLinkedDirs: ['/home/a'],
+    });
+    expect(cfg.recentLinkedDirs).toEqual(['/home/a']);
+    expect(cfg.skillId).toBe('keep-me');
   });
 });
 

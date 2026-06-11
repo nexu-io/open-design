@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { questionsFormTrackingId } from '@open-design/contracts/analytics';
 import { useT } from '../i18n';
+import { useAnalytics } from '../analytics/provider';
+import { trackQuestionsFormClick, trackQuestionsFormSurfaceView } from '../analytics/events';
 import type { QuestionForm } from '../artifacts/question-form';
 import { QuestionFormView, type QuestionFormHandle } from './QuestionForm';
 
@@ -18,6 +21,11 @@ const REVEAL_INTERVAL_MS = 280;
 // animates while the same form never re-animates.
 const revealedOccurrences = new Set<string>();
 
+// Form occurrences whose surface_view already fired. Same remount caveat as
+// `revealedOccurrences`: the tab unmounts/remounts mid-stream, so dedupe the
+// exposure by the stable per-occurrence key instead of component lifetime.
+const viewedFormOccurrences = new Set<string>();
+
 // Once the form is actionable, the user has this long before we auto-continue
 // for them — submitting whatever they picked (unanswered questions count as
 // skipped) so generation never stalls waiting on a reply.
@@ -27,6 +35,10 @@ const QUESTION_FORM_DRAFT_STORAGE_PREFIX = 'open-design:question-form-draft:';
 type QuestionFormAnswers = Record<string, string | string[]>;
 
 interface Props {
+  // Owning project, carried on every questions_form event. The Questions tab
+  // host (FileWorkspace) always supplies it; it is optional only so bare
+  // unit-test renders stay valid — tracking is skipped when absent.
+  projectId?: string;
   form: QuestionForm | null;
   // Stable id for this form occurrence. Lets the reveal survive a remount
   // (see `revealedOccurrences`) without re-animating.
@@ -45,6 +57,7 @@ interface Props {
 }
 
 export function QuestionsPanel({
+  projectId,
   form,
   formKey = null,
   interactive,
@@ -54,7 +67,12 @@ export function QuestionsPanel({
   onSubmit,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
   const formRef = useRef<QuestionFormHandle>(null);
+  // What drove the next submit: the Continue CTA, the Skip button, or the
+  // auto-continue countdown. Read (and reset) inside submitAndClearDraft so
+  // the single submit chokepoint can label the click event.
+  const submitSourceRef = useRef<'continue' | 'skip_button' | 'countdown'>('continue');
   const [ready, setReady] = useState(false);
   const [draftAnswers, setDraftAnswers] = useState<QuestionFormAnswers | undefined>(() =>
     readQuestionFormDraft(formKey),
@@ -62,6 +80,21 @@ export function QuestionsPanel({
 
   const total = form?.questions.length ?? 0;
   const answered = submittedAnswers !== undefined;
+
+  // Exposure of the active (unanswered) form — once per occurrence, surviving
+  // the tab's unmount/remount cycle via the module-level set.
+  useEffect(() => {
+    if (!form || answered || !projectId) return;
+    const key = formKey ?? `${projectId}:${form.id}`;
+    if (viewedFormOccurrences.has(key)) return;
+    viewedFormOccurrences.add(key);
+    trackQuestionsFormSurfaceView(analytics.track, {
+      page_name: 'chat_panel',
+      area: 'questions_form',
+      project_id: projectId,
+      form_id: questionsFormTrackingId(form.id),
+    });
+  }, [form, answered, formKey, projectId, analytics.track]);
 
   useEffect(() => {
     setDraftAnswers(readQuestionFormDraft(formKey));
@@ -79,13 +112,64 @@ export function QuestionsPanel({
     [formKey],
   );
 
+  // Tracks taskType/brand chip picks. Other questions (text, checkbox, …)
+  // intentionally don't emit a click.
+  const handleAnswerChange = useCallback(
+    (questionId: string, value: string | string[]) => {
+      if (!form || !projectId || typeof value !== 'string' || value.length === 0) return;
+      const element =
+        questionId === 'taskType'
+          ? ('task_type_chip' as const)
+          : questionId === 'brand'
+            ? ('brand_bg_chip' as const)
+            : null;
+      if (!element) return;
+      trackQuestionsFormClick(analytics.track, {
+        page_name: 'chat_panel',
+        area: 'questions_form',
+        element,
+        chip_id: questionsFormTrackingId(value),
+        form_id: questionsFormTrackingId(form.id),
+        project_id: projectId,
+      });
+    },
+    [analytics.track, form, projectId],
+  );
+
+  // The single submit chokepoint — Continue, Skip and the countdown all land
+  // here, so the submit/skip click is reported exactly once.
   const submitAndClearDraft = useCallback(
-    (text: string) => {
+    (text: string, answers: QuestionFormAnswers) => {
+      const source = submitSourceRef.current;
+      submitSourceRef.current = 'continue';
+      if (form && projectId) {
+        const total = form.questions.length;
+        const answeredCount = form.questions.filter((q) => {
+          const v = answers[q.id];
+          return Array.isArray(v) ? v.length > 0 : typeof v === 'string' && v.trim().length > 0;
+        }).length;
+        trackQuestionsFormClick(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'questions_form',
+          ...(source === 'continue'
+            ? { element: 'submit' as const }
+            : {
+                element: 'skip' as const,
+                skip_source: (source === 'countdown' ? 'countdown' : 'button') as
+                  | 'button'
+                  | 'countdown',
+              }),
+          answered_count: answeredCount,
+          skipped_count: total - answeredCount,
+          form_id: questionsFormTrackingId(form.id),
+          project_id: projectId,
+        });
+      }
       clearQuestionFormDraft(formKey);
       setDraftAnswers(undefined);
       onSubmit(text);
     },
-    [formKey, onSubmit],
+    [analytics.track, form, formKey, onSubmit, projectId],
   );
   // If this occurrence already finished its reveal in a prior mount, show it in
   // full immediately rather than replaying the animation on remount.
@@ -152,6 +236,9 @@ export function QuestionsPanel({
   useEffect(() => {
     if (canSubmit && remaining <= 0 && !autoFiredRef.current) {
       autoFiredRef.current = true;
+      // Either branch reports as skip_source=countdown; answered_count tells
+      // apart a countdown submit that carried picks from a pure skip.
+      submitSourceRef.current = 'countdown';
       // Honour the user's picks when the form is submittable; otherwise fall
       // back to skipping so a stray selection-cap can't stall generation.
       if (ready) formRef.current?.submit();
@@ -175,7 +262,8 @@ export function QuestionsPanel({
               hideInternalSubmit
               onReadyChange={setReady}
               onDraftChange={updateDraftAnswers}
-              onSubmit={(text) => submitAndClearDraft(text)}
+              onAnswerChange={handleAnswerChange}
+              onSubmit={(text, answers) => submitAndClearDraft(text, answers)}
             />
             {building ? (
               <div className="questions-panel-typing" aria-hidden>
@@ -201,7 +289,10 @@ export function QuestionsPanel({
           type="button"
           className="questions-skip"
           disabled={!canSkip}
-          onClick={() => formRef.current?.skipAll()}
+          onClick={() => {
+            submitSourceRef.current = 'skip_button';
+            formRef.current?.skipAll();
+          }}
         >
           {t('questions.skipAll')}
           {canSkip ? <span className="questions-skip-timer">{countdown}</span> : null}
@@ -210,7 +301,10 @@ export function QuestionsPanel({
           type="button"
           className="questions-continue"
           disabled={!canContinue}
-          onClick={() => formRef.current?.submit()}
+          onClick={() => {
+            submitSourceRef.current = 'continue';
+            formRef.current?.submit();
+          }}
         >
           {t('questions.continue')}
         </button>

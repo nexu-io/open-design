@@ -14,17 +14,22 @@ import {
   fetchPluginPreviewHtml,
   type SkillExampleResult,
 } from '../../providers/registry';
-import { PreviewModal } from '../PreviewModal';
-import { buildPluginShareUrl, PluginShareMenu } from './PluginShareMenu';
+import { PreviewModal, type PreviewSharePopoverItem } from '../PreviewModal';
+import { buildPluginShareUrl } from './PluginShareMenu';
 import { PluginMetaSections } from './PluginMetaSections';
+import { buildPluginUseMenu, pluginUsePrimaryAction } from './pluginUseMenu';
+import type { PluginUseAction } from '../plugins-home/useActions';
 
 interface Props {
   record: InstalledPluginRecord;
   /** When set, fetch this specific example stem; otherwise hit /preview. */
   exampleStem?: string | null;
   onClose: () => void;
-  onUse: (record: InstalledPluginRecord) => void;
+  onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
   isApplying?: boolean;
+  hideUseAction?: boolean;
+  // Analytics — forwarded to PreviewModal's share popover.
+  onSharePopoverItemClick?: (item: PreviewSharePopoverItem) => void;
 }
 
 export function PluginExampleDetail({
@@ -33,6 +38,8 @@ export function PluginExampleDetail({
   onClose,
   onUse,
   isApplying,
+  hideUseAction,
+  onSharePopoverItemClick,
 }: Props) {
   const { t, locale } = useI18n();
   const localizedTitle = localizePluginTitle(locale, record);
@@ -117,13 +124,15 @@ export function PluginExampleDetail({
       sidebar={{
         // Surface every plugin-common manifest field — workflow, context
         // bundles, connectors, file paths, source provenance — alongside
-        // the rendered HTML preview, so the example modal carries the
-        // same inspector depth the scenario fallback already shows.
-        // Default open so users see the metadata without an extra click;
-        // the iframe stage scales down to fit and Fullscreen still gives
-        // them an immersive view when needed.
+        // the rendered HTML preview. Designers are the primary audience
+        // here, so the sidebar starts COLLAPSED — the preview is the
+        // hero and gets the full stage by default — and when opened it
+        // shows a designer-first slice (author + example query) with the
+        // developer manifest detail tucked behind a "Developer details"
+        // disclosure (variant="minimal"). Fullscreen still gives an
+        // immersive view when needed.
         label: 'Plugin info',
-        defaultOpen: true,
+        defaultOpen: false,
         contentKey: record.id,
         content: (
           <div className="plugin-info-pane">
@@ -132,18 +141,23 @@ export function PluginExampleDetail({
               omit={{ description: true }}
               compact
               heading="Plugin info"
+              variant="minimal"
             />
           </div>
         ),
       }}
-      primaryAction={{
-        label: 'Use plugin',
-        onClick: () => onUse(record),
-        busy: !!isApplying,
-        busyLabel: 'Applying…',
-        testId: `plugin-details-use-${record.id}`,
-      }}
-      headerExtras={<PluginShareMenu record={record} variant="inline" />}
+      primaryAction={hideUseAction
+        ? undefined
+        : {
+            label: pluginUsePrimaryAction(record, t).label,
+            onClick: () => onUse(record, pluginUsePrimaryAction(record, t).action),
+            busy: !!isApplying,
+            busyLabel: 'Applying…',
+            testId: `plugin-details-use-${record.id}`,
+            menu: buildPluginUseMenu(record, onUse, t),
+          }}
+      hideSidebarToggle
+      onSharePopoverItemClick={onSharePopoverItemClick}
     />
   );
 }

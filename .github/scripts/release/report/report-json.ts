@@ -62,6 +62,7 @@ function pickBuildArtifacts(build: JsonRecord | null): JsonRecord {
     "installerPath",
     "latestYmlPath",
     "outputRoot",
+    "payloadPath",
     "portableZipPath",
     "zipPath",
   ];

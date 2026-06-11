@@ -93,7 +93,6 @@
       "--motion-base",
       "--motion-fast",
       "--muted",
-      "--primary",
       "--radius-md",
       "--radius-pill",
       "--radius-sm",
@@ -133,9 +132,7 @@
       "--text-2xl",
       "--warn"
     ],
-    "undeclaredReferenced": [
-      "--primary"
-    ]
+    "undeclaredReferenced": []
   },
   "selectors": [
     ".body-muted",
