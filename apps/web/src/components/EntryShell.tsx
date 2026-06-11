@@ -58,7 +58,7 @@ import type {
   TrackingCliProviderId,
 } from '@open-design/contracts/analytics';
 import { agentIdToTracking } from '@open-design/contracts/analytics';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import { navigate, useRoute } from '../router';
 import type {
   AgentInfo,
@@ -447,7 +447,7 @@ export function EntryShell({
   onOpenSettings,
   onCompleteOnboarding,
 }: Props) {
-  const t = useT();
+  const { t, locale } = useI18n();
   const discordPresence = useDiscordPresence();
   // Each entry sub-view (home / projects / design-systems) is its own
   // URL now, so the browser back/forward buttons work and a deep link
@@ -507,7 +507,7 @@ export function EntryShell({
 
   function startPluginAuthoring(goal?: string) {
     setHomePromptHandoff(
-      createPluginAuthoringHandoff(Date.now(), goal),
+      createPluginAuthoringHandoff(Date.now(), goal, locale),
     );
     changeView('home');
   }

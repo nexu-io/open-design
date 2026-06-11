@@ -2,13 +2,17 @@ import { describe, expect, it } from 'vitest';
 
 import {
   PLUGIN_AUTHORING_DEFAULT_GOAL,
+  PLUGIN_AUTHORING_DEFAULT_GOAL_ZH_CN,
   PLUGIN_AUTHORING_GOAL_INPUT,
   PLUGIN_AUTHORING_PROMPT,
   PLUGIN_AUTHORING_PROMPT_TEMPLATE,
+  PLUGIN_AUTHORING_PROMPT_TEMPLATE_ZH_CN,
   buildPluginAuthoringPrompt,
   buildPluginAuthoringInputs,
   buildPluginAuthoringPromptForInputs,
   createPluginAuthoringHandoff,
+  normalizePluginAuthoringLocale,
+  selectPluginAuthoringTemplate,
 } from '../../../src/components/home-hero/plugin-authoring';
 
 // The Home "Create plugin" chip sends this prompt as the project's first
@@ -131,6 +135,131 @@ describe('createPluginAuthoringHandoff', () => {
     // The handoff must carry the latest template so HomeView's
     // replacement-confirmation logic (`queueAuthoringChipId === 'create-plugin'`)
     // sends the rewritten copy and not a cached older string.
+    expect(handoff.queryTemplate).toBe(PLUGIN_AUTHORING_PROMPT_TEMPLATE);
+  });
+});
+
+// Issue #4058: a Chinese UI starts the Create-plugin flow localized (the chip
+// label/hint are zh-CN) but then snapped back to the English prompt template.
+// These tests lock the locale routing and guarantee the zh-CN prompt keeps
+// every guardrail the English one encodes.
+
+describe('normalizePluginAuthoringLocale', () => {
+  it('routes Simplified Chinese variants to zh-CN', () => {
+    expect(normalizePluginAuthoringLocale('zh-CN')).toBe('zh-CN');
+    expect(normalizePluginAuthoringLocale('zh')).toBe('zh-CN');
+    expect(normalizePluginAuthoringLocale('zh-Hans')).toBe('zh-CN');
+    expect(normalizePluginAuthoringLocale('ZH-cn')).toBe('zh-CN');
+  });
+
+  it('falls back to English for Traditional Chinese and non-Chinese locales', () => {
+    // No Traditional template yet — better honest English than wrong-script Chinese.
+    expect(normalizePluginAuthoringLocale('zh-TW')).toBe('en');
+    expect(normalizePluginAuthoringLocale('zh-HK')).toBe('en');
+    expect(normalizePluginAuthoringLocale('zh-Hant')).toBe('en');
+    expect(normalizePluginAuthoringLocale('en')).toBe('en');
+    expect(normalizePluginAuthoringLocale('fr')).toBe('en');
+    expect(normalizePluginAuthoringLocale(undefined)).toBe('en');
+    expect(normalizePluginAuthoringLocale(null)).toBe('en');
+    expect(normalizePluginAuthoringLocale('')).toBe('en');
+  });
+});
+
+describe('selectPluginAuthoringTemplate', () => {
+  it('returns the zh-CN template only for Simplified Chinese', () => {
+    expect(selectPluginAuthoringTemplate('zh-CN')).toBe(PLUGIN_AUTHORING_PROMPT_TEMPLATE_ZH_CN);
+    expect(selectPluginAuthoringTemplate('zh')).toBe(PLUGIN_AUTHORING_PROMPT_TEMPLATE_ZH_CN);
+    expect(selectPluginAuthoringTemplate('en')).toBe(PLUGIN_AUTHORING_PROMPT_TEMPLATE);
+    expect(selectPluginAuthoringTemplate('zh-TW')).toBe(PLUGIN_AUTHORING_PROMPT_TEMPLATE);
+    expect(selectPluginAuthoringTemplate(undefined)).toBe(PLUGIN_AUTHORING_PROMPT_TEMPLATE);
+  });
+});
+
+describe('PLUGIN_AUTHORING_PROMPT_TEMPLATE_ZH_CN', () => {
+  it('is actually Simplified Chinese and keeps the interpolating goal placeholder', () => {
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE_ZH_CN).toContain(`{{${PLUGIN_AUTHORING_GOAL_INPUT}}}`);
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE_ZH_CN).toContain('创建一个 Open Design 插件');
+    const prompt = buildPluginAuthoringPrompt('一个 SaaS 路演稿工作流', 'zh-CN');
+    expect(prompt).toContain('一个 SaaS 路演稿工作流');
+    expect(prompt).not.toContain(`{{${PLUGIN_AUTHORING_GOAL_INPUT}}}`);
+  });
+
+  it('preserves every literal the agent must reproduce verbatim', () => {
+    // Code tokens, file paths, JSON keys, command lines, banned placeholder
+    // owners, the issue ref, and the hardcoded-English button labels must all
+    // survive translation — the prose around them is the only thing localized.
+    const literals = [
+      'docs/plugins-spec.md',
+      'generated-plugin',
+      'SKILL.md',
+      'open-design.json',
+      'plugin.repo',
+      'specVersion',
+      'gh --version',
+      'gh auth status',
+      'gh api user --jq .login',
+      'gh auth refresh -h github.com -s repo,workflow',
+      'gh auth login -h github.com -s repo,workflow',
+      'od plugin publish-repo generated-plugin --owner <github-login-or-org>',
+      'open-design-user',
+      '<vendor>',
+      'example-user',
+      'your-org',
+      'your-username',
+      'od plugin validate',
+      'od plugin pack',
+      'od plugin install --source',
+      'od plugin publish --to open-design',
+      'gh repo create',
+      'git push',
+      'Add to My plugins',
+      'Publish repo',
+      'Open Design PR',
+      'nexu-io/open-design',
+      '#2332',
+      'node -e',
+      'cat generated-plugin/open-design.json',
+      'gh ... --jq',
+    ];
+    for (const literal of literals) {
+      expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE_ZH_CN, `missing literal: ${literal}`).toContain(literal);
+    }
+  });
+
+  it('localizes the default goal so a goal-less Chinese chip click stays Chinese', () => {
+    expect(buildPluginAuthoringInputs(undefined, 'zh-CN')[PLUGIN_AUTHORING_GOAL_INPUT]).toBe(
+      PLUGIN_AUTHORING_DEFAULT_GOAL_ZH_CN,
+    );
+    expect(buildPluginAuthoringPrompt(undefined, 'zh-CN')).toContain(PLUGIN_AUTHORING_DEFAULT_GOAL_ZH_CN);
+    // English path is unchanged.
+    expect(buildPluginAuthoringInputs(undefined)[PLUGIN_AUTHORING_GOAL_INPUT]).toBe(
+      PLUGIN_AUTHORING_DEFAULT_GOAL,
+    );
+  });
+
+  it('round-trips a goal through the inputs helper under zh-CN', () => {
+    const inputs = buildPluginAuthoringInputs('从一段简报生成大纲', 'zh-CN');
+    expect(inputs[PLUGIN_AUTHORING_GOAL_INPUT]).toBe('从一段简报生成大纲');
+    const prompt = buildPluginAuthoringPromptForInputs(inputs, 'zh-CN');
+    expect(prompt).toContain('从一段简报生成大纲');
+    expect(prompt).toContain('创建一个 Open Design 插件');
+  });
+});
+
+describe('createPluginAuthoringHandoff under zh-CN', () => {
+  it('carries the zh-CN template and a Chinese prompt', () => {
+    const handoff = createPluginAuthoringHandoff(7, '一个幻灯片大纲工作流', 'zh-CN');
+    expect(handoff.source).toBe('plugin-authoring');
+    if (handoff.source !== 'plugin-authoring') return;
+    expect(handoff.goal).toBe('一个幻灯片大纲工作流');
+    expect(handoff.prompt).toContain('一个幻灯片大纲工作流');
+    expect(handoff.prompt).toContain('创建一个 Open Design 插件');
+    expect(handoff.queryTemplate).toBe(PLUGIN_AUTHORING_PROMPT_TEMPLATE_ZH_CN);
+  });
+
+  it('still defaults to the English template when no locale is passed', () => {
+    const handoff = createPluginAuthoringHandoff(8, 'a slide outline workflow');
+    if (handoff.source !== 'plugin-authoring') return;
     expect(handoff.queryTemplate).toBe(PLUGIN_AUTHORING_PROMPT_TEMPLATE);
   });
 });

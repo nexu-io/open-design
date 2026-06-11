@@ -76,7 +76,7 @@ import {
   buildPluginAuthoringInputs,
   buildPluginAuthoringPromptForInputs,
   PLUGIN_AUTHORING_PROMPT,
-  PLUGIN_AUTHORING_PROMPT_TEMPLATE,
+  selectPluginAuthoringTemplate,
   type HomePromptHandoff,
 } from './home-hero/plugin-authoring';
 import { PluginDetailsModal } from './PluginDetailsModal';
@@ -1269,8 +1269,8 @@ export function HomeView({
   }
 
   function queuePluginAuthoring(chipId: string | null, goal?: string) {
-    const nextInputs = buildPluginAuthoringInputs(goal);
-    const nextPrompt = buildPluginAuthoringPromptForInputs(nextInputs);
+    const nextInputs = buildPluginAuthoringInputs(goal, locale);
+    const nextPrompt = buildPluginAuthoringPromptForInputs(nextInputs, locale);
     runWithReplacementConfirmation('Plugin authoring', nextPrompt, async () => {
       setActive(null);
       setActiveSkill(null);
@@ -1308,7 +1308,7 @@ export function HomeView({
       projectKind: 'other',
       chipId: pendingAuthoringChipId,
       inputs: authoringRecord ? pendingAuthoringInputs : AUTHORING_DEFAULT_SCENARIO_INPUTS,
-      ...(authoringRecord ? { queryTemplate: PLUGIN_AUTHORING_PROMPT_TEMPLATE } : {}),
+      ...(authoringRecord ? { queryTemplate: selectPluginAuthoringTemplate(locale) } : {}),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAuthoringChipId, pendingAuthoringPrompt, pendingAuthoringInputs, pluginsLoading, plugins]);
