@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -19,6 +19,9 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 const OUT = join(process.cwd(), 'od-codex-image.png');
 const mode = process.env.FAKE_CODEX_MODE || 'success';
+// Record argv so tests can assert which flags the provider forwarded.
+const argvOut = process.env.FAKE_CODEX_ARGV_OUT;
+if (argvOut) { try { writeFileSync(argvOut, JSON.stringify(process.argv.slice(2))); } catch {} }
 // Drain stdin so the parent's stdin.end(prompt) never EPIPEs.
 try { process.stdin.resume(); process.stdin.on('data', () => {}); } catch {}
 function line(itemType, text) {
@@ -87,6 +90,8 @@ describe('codex-cli image provider', () => {
   const originalCodexBin = process.env.CODEX_BIN;
   const originalCodexHome = process.env.CODEX_HOME;
   const originalMode = process.env.FAKE_CODEX_MODE;
+  const originalDisablePlugins = process.env.OD_CODEX_DISABLE_PLUGINS;
+  const originalArgvOut = process.env.FAKE_CODEX_ARGV_OUT;
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-codex-cli-media-'));
@@ -116,6 +121,8 @@ describe('codex-cli image provider', () => {
     restore('CODEX_BIN', originalCodexBin);
     restore('CODEX_HOME', originalCodexHome);
     restore('FAKE_CODEX_MODE', originalMode);
+    restore('OD_CODEX_DISABLE_PLUGINS', originalDisablePlugins);
+    restore('FAKE_CODEX_ARGV_OUT', originalArgvOut);
     await rm(root, { recursive: true, force: true });
   });
 
@@ -211,5 +218,33 @@ describe('codex-cli image provider', () => {
     // message would already echo codex's "usage limit" stderr tail, so only a
     // classifier-only phrase proves the quota branch actually ran.
     await expect(generate()).rejects.toThrow(/resets on a rolling window/i);
+  });
+
+  it('forwards --disable plugins when OD_CODEX_DISABLE_PLUGINS=1', async () => {
+    // The daemon's normal Codex launch path (codexAgentDef.buildArgs) appends
+    // `--disable plugins` when an operator globally disables Codex plugins.
+    // This image-gen turn handles user prompt input, so it must honor the same
+    // opt-out instead of silently running plugins after they were disabled.
+    process.env.FAKE_CODEX_MODE = 'success';
+    process.env.OD_CODEX_DISABLE_PLUGINS = '1';
+    const argvOut = path.join(root, 'codex-argv-disabled.json');
+    process.env.FAKE_CODEX_ARGV_OUT = argvOut;
+    await generate();
+    const argv: string[] = JSON.parse(await readFile(argvOut, 'utf8'));
+    // Must be a contiguous `--disable plugins` pair — Codex reads the value as
+    // the next token (mirrors codexAgentDef.buildArgs).
+    const i = argv.indexOf('--disable');
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(argv[i + 1]).toBe('plugins');
+  });
+
+  it('does not forward --disable plugins when OD_CODEX_DISABLE_PLUGINS is unset', async () => {
+    process.env.FAKE_CODEX_MODE = 'success';
+    delete process.env.OD_CODEX_DISABLE_PLUGINS;
+    const argvOut = path.join(root, 'codex-argv-default.json');
+    process.env.FAKE_CODEX_ARGV_OUT = argvOut;
+    await generate();
+    const argv: string[] = JSON.parse(await readFile(argvOut, 'utf8'));
+    expect(argv).not.toContain('--disable');
   });
 });

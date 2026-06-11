@@ -3930,8 +3930,15 @@ function runCodexImageGen(
       'exec', '--json', '--skip-git-repo-check',
       ...sandboxArgs,
       '-c', 'default_permissions=":workspace"',
-      '-C', cwd,
     ];
+    // Mirror codexAgentDef.buildArgs: when an operator globally disables Codex
+    // plugins (OD_CODEX_DISABLE_PLUGINS=1), this image-gen turn must honor it
+    // too — it handles user prompt input, so it cannot keep plugins enabled
+    // after an explicit opt-out.
+    if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
+      args.push('--disable', 'plugins');
+    }
+    args.push('-C', cwd);
 
     const child = spawn(codexBin, args, {
       cwd,
