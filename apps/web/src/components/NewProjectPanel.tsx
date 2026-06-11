@@ -1170,7 +1170,7 @@ function PlatformPicker({
 
   return (
     <div
-      className="newproj-section ds-picker platform-picker"
+      className={`newproj-section ds-picker platform-picker${open ? ' open' : ''}`}
       ref={wrapRef}
     >
       <label className="newproj-label">Target platforms</label>
@@ -2109,7 +2109,7 @@ function DesignSystemPicker({
   }
 
   return (
-    <div className="newproj-section ds-picker" data-testid="design-system-picker" ref={wrapRef}>
+    <div className={`newproj-section ds-picker${open ? ' open' : ''}`} data-testid="design-system-picker" ref={wrapRef}>
       <label className="newproj-label">{t('newproj.designSystem')}</label>
       <button
         type="button"
