@@ -1614,6 +1614,55 @@ describe('POST /api/test/connection provider mode', () => {
     );
   });
 
+  it('reports a helpful base URL error when Google Gemini is tested against Anthropic', async () => {
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'google',
+        baseUrl: 'https://api.anthropic.com',
+        apiKey: 'goog-key',
+        model: 'gemini-2.0-flash',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('invalid_base_url');
+    expect(String(body.detail ?? '')).toContain('generativelanguage.googleapis.com');
+  });
+
+  it('maps Google API key failures on HTTP 400 to auth_failed', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse(
+        {
+          error: {
+            code: 400,
+            message: 'API key not valid. Please pass a valid API key.',
+            status: 'INVALID_ARGUMENT',
+          },
+        },
+        { status: 400 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'google',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        apiKey: 'AQ.TestKeyForUnitTests01234567890123456789012',
+        model: 'gemini-2.0-flash',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('auth_failed');
+  });
+
   it('normalizes Gemini model ids and base URLs in the provider smoke test', async () => {
     const fetchMock = passThroughOrUpstream(() =>
       jsonResponse({

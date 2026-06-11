@@ -708,6 +708,31 @@ function isLikelyModelErrorText(text: string): boolean {
   );
 }
 
+function isLikelyAuthErrorText(text: string): boolean {
+  return /(?:api[_ -]?key|x-goog-api-key|unauthorized|unauthenticated|permission denied|invalid credentials|authentication credentials|access denied|invalid key)/i.test(
+    text,
+  );
+}
+
+const GOOGLE_GEMINI_DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com';
+
+function normalizeProviderTestInput(
+  input: ProviderConnectionInput,
+): ProviderConnectionInput {
+  const baseUrl = String(input.baseUrl ?? '').trim();
+  if (input.protocol === 'google' && !baseUrl) {
+    return { ...input, baseUrl: GOOGLE_GEMINI_DEFAULT_BASE_URL };
+  }
+  return input;
+}
+
+function googleBaseUrlMismatchDetail(hostname: string): string | null {
+  if (hostname === 'api.anthropic.com' || hostname === 'api.openai.com') {
+    return `Base URL points to ${hostname}. For Google Gemini use ${GOOGLE_GEMINI_DEFAULT_BASE_URL}.`;
+  }
+  return null;
+}
+
 function smokeFailureDetail(sample: string): string {
   return sample
     ? `Expected smoke test reply "ok"; got "${sample}"`
@@ -782,8 +807,12 @@ function inspectProviderCompletion(
 }
 
 function statusToKind(status: number, detailText = ''): ConnectionTestKind {
-  if (status === 401) return 'auth_failed';
-  if (status === 403) return 'forbidden';
+  if (status === 401 || (status === 400 && isLikelyAuthErrorText(detailText))) {
+    return 'auth_failed';
+  }
+  if (status === 403) {
+    return isLikelyAuthErrorText(detailText) ? 'auth_failed' : 'forbidden';
+  }
   if (status === 404) {
     return isLikelyModelErrorText(detailText)
       ? 'not_found_model'
@@ -1126,8 +1155,9 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
       };
     }
     case 'google': {
+      const effectiveBaseUrl = baseUrl.trim() || GOOGLE_GEMINI_DEFAULT_BASE_URL;
       return {
-        url: googleGenerateContentUrl(baseUrl, model),
+        url: googleGenerateContentUrl(effectiveBaseUrl, model),
         headers: {
           'content-type': 'application/json',
           'x-goog-api-key': apiKey,
@@ -1198,7 +1228,8 @@ export async function testProviderConnection(
 ): Promise<ConnectionTestResponse> {
   const start = Date.now();
   const model = String(input.model ?? '');
-  const validated = await validateBaseUrlResolved(input.baseUrl);
+  const normalizedInput = normalizeProviderTestInput(input);
+  const validated = await validateBaseUrlResolved(normalizedInput.baseUrl);
   if (validated.error || !validated.parsed) {
     const kind: ConnectionTestKind = validated.forbidden ? 'forbidden' : 'invalid_base_url';
     return {
@@ -1210,9 +1241,24 @@ export async function testProviderConnection(
     };
   }
 
+  if (normalizedInput.protocol === 'google') {
+    const mismatch = googleBaseUrlMismatchDetail(
+      validated.parsed.hostname.toLowerCase(),
+    );
+    if (mismatch) {
+      return {
+        ok: false,
+        kind: 'invalid_base_url',
+        latencyMs: Date.now() - start,
+        model,
+        detail: mismatch,
+      };
+    }
+  }
+
   let call: ProviderCallShape;
   try {
-    call = buildProviderCall(input);
+    call = buildProviderCall(normalizedInput);
   } catch (err) {
     return {
       ok: false,
@@ -1238,7 +1284,7 @@ export async function testProviderConnection(
   try {
     proxyDispatcher = proxyDispatcherRequestInit();
     const modelError = await validateLocalOpenAiModel(
-      input,
+      normalizedInput,
       validated.parsed,
       controller.signal,
       start,
@@ -1247,7 +1293,7 @@ export async function testProviderConnection(
     if (modelError) return modelError;
 
     const senseAudioNonChatResult = await validateSenseAudioNonChatModel(
-      input,
+      normalizedInput,
       controller.signal,
       start,
       proxyDispatcher.requestInit,
@@ -1370,17 +1416,22 @@ export async function testProviderConnection(
         };
       }
       if (!rawSample && !completion.valid) {
+        const providerError = extractProviderErrorDetail(data, rawText);
         const detail = redactSecrets(
-          extractProviderErrorDetail(data, rawText) ||
-            smokeFailureDetail(rawSample),
+          providerError || smokeFailureDetail(rawSample),
           [input.apiKey],
         );
+        const kind: ConnectionTestKind = isLikelyAuthErrorText(providerError)
+          ? 'auth_failed'
+          : isLikelyModelErrorText(providerError)
+            ? 'not_found_model'
+            : 'unknown';
         console.warn(
           `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (unexpected_sample)${detail ? ` ${detail}` : ''}`,
         );
         return {
           ok: false,
-          kind: 'unknown',
+          kind,
           latencyMs,
           model,
           status: response.status,

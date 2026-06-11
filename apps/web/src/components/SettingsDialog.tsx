@@ -2633,7 +2633,12 @@ export function SettingsDialog({
   const baseUrlErrorMessage = baseUrlInvalid
     ? t('settings.baseUrlInvalid')
     : providerTestBaseUrlInvalid || byokFirstPartyBaseUrl?.hostTypo
-      ? t('settings.testInvalidBaseUrl')
+      ? (
+        providerTestState.status === 'done' &&
+        providerTestState.result.detail?.trim()
+          ? providerTestState.result.detail.trim()
+          : t('settings.testInvalidBaseUrl')
+      )
       : null;
   const suggestedApiModelIds = useMemo(
     () => Array.from(new Set(
