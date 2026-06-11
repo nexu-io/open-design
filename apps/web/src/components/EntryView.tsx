@@ -54,6 +54,9 @@ interface Props {
   promptTemplates: PromptTemplateSummary[];
   defaultDesignSystemId: string | null;
   agents: AgentInfo[];
+  // Forwarded to EntryShell → OnboardingView so the AMR cloud card can show a
+  // detecting/skeleton state while the cold-start agent stream is in flight.
+  agentsLoading?: boolean;
   // Execution / model-switching context forwarded to the EntryShell so the
   // sticky top-bar can expose the active CLI/BYOK + model and persist
   // changes through the same channels as the project view.
@@ -222,6 +225,7 @@ export function EntryView({
   promptTemplates,
   defaultDesignSystemId,
   agents,
+  agentsLoading,
   config,
   providerModelsCache,
   onProviderModelsCacheChange,
@@ -343,6 +347,7 @@ export function EntryView({
       providerModelsCache={providerModelsCache}
       onProviderModelsCacheChange={onProviderModelsCacheChange}
       agents={agents}
+      {...(agentsLoading !== undefined ? { agentsLoading } : {})}
       daemonLive={daemonLive}
       onModeChange={onModeChange}
       onAgentChange={onAgentChange}

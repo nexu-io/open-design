@@ -37,6 +37,7 @@ jobs:
       tools_dev_tests_required: ${{ steps.detect.outputs.tools_dev_tests_required }}
       tools_pack_tests_required: ${{ steps.detect.outputs.tools_pack_tests_required }}
       nix_validation_required: ${{ steps.detect.outputs.nix_validation_required }}
+      ui_p0_pr_required: ${{ steps.detect.outputs.ui_p0_pr_required }}
       workspace_validation_required: ${{ steps.detect.outputs.workspace_validation_required }}
 
     steps:
@@ -52,6 +53,7 @@ jobs:
           tools_dev_tests_required=false
           tools_pack_tests_required=false
           nix_validation_required=false
+          ui_p0_pr_required=false
           workspace_validation_required=false
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             gh api --paginate \
@@ -80,6 +82,9 @@ jobs:
                 tools_dev_tests_required=true
                 tools_pack_tests_required=true
               fi
+              if [[ "$file" == "apps/web/"* || "$file" == "apps/daemon/"* || "$file" == "packages/components/"* || "$file" == "packages/contracts/"* || "$file" == "packages/host/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* || "$file" == "e2e/ui/"* || "$file" == "e2e/lib/"* || "$file" == "e2e/resources/"* || "$file" == "e2e/scripts/"* || "$file" == "e2e/package.json" || "$file" == "e2e/playwright.config.ts" || "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/actions/setup-playwright/"* || "$file" == ".github/actions/setup-workspace/"* || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/ui-extended-main.yml" || "$file" == ".github/workflows/ui-p0-pr.yml" ]]; then
+                ui_p0_pr_required=true
+              fi
               # Keep this filter in sync with flake.nix daemonWorkspacePaths / webWorkspacePaths.
               if [[ "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == "flake.nix" || "$file" == "flake.lock" || "$file" == "nix/"* || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/nix-check.yml" || "$file" == ".github/workflows/nix-hash-autofix.yml" || "$file" == "apps/daemon/"* || "$file" == "apps/web/"* || "$file" == "packages/components/"* || "$file" == "packages/contracts/"* || "$file" == "packages/registry-protocol/"* || "$file" == "packages/agui-adapter/"* || "$file" == "packages/plugin-runtime/"* || "$file" == "packages/sidecar-proto/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/platform/"* || "$file" == "packages/diagnostics/"* || "$file" == "packages/host/"* || "$file" == "assets/"* || "$file" == "plugins/"* || "$file" == "skills/"* || "$file" == "design-systems/"* || "$file" == "design-templates/"* || "$file" == "craft/"* || "$file" == "prompt-templates/"* || "$file" == "scripts/update-nix-pnpm-deps-hash.ts" ]]; then
                 nix_validation_required=true
@@ -98,6 +103,7 @@ jobs:
                 && [ "$tools_dev_tests_required" = "true" ] \
                 && [ "$tools_pack_tests_required" = "true" ] \
                 && [ "$nix_validation_required" = "true" ] \
+                && [ "$ui_p0_pr_required" = "true" ] \
                 && [ "$workspace_validation_required" = "true" ]; then
                 break
               fi
@@ -131,6 +137,7 @@ jobs:
             echo "tools_dev_tests_required=$tools_dev_tests_required"
             echo "tools_pack_tests_required=$tools_pack_tests_required"
             echo "nix_validation_required=$nix_validation_required"
+            echo "ui_p0_pr_required=$ui_p0_pr_required"
             echo "workspace_validation_required=$workspace_validation_required"
           } >> "$GITHUB_OUTPUT"
 
@@ -511,6 +518,9 @@ jobs:
         run: pnpm -r --filter '!@open-design/landing-page' --workspace-concurrency=1 --if-present run build
 
   validate:
+    # Legacy `ci` remains the current factual gate surface. Keep this job on
+    # `Validate workspace` until a later ruleset follow-up explicitly moves the
+    # required check over to `Validate workspace gate` from `ci-gate`.
     name: Validate workspace
     needs:
       - change_scopes

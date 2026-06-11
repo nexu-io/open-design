@@ -73,7 +73,7 @@ export function HomeTemplatesReveal({ enabled, children }: Props) {
         className="home-templates-reveal__body"
         aria-hidden={!revealed}
       >
-        {children}
+        <div className="home-templates-reveal__inner">{children}</div>
       </div>
 
       {revealed ? (

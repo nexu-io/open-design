@@ -1,4 +1,4 @@
-import { execFile, execFileSync, spawn, type ChildProcess, type StdioOptions } from "node:child_process";
+import { execFile, execFileSync, spawn, type ChildProcess, type SpawnOptions, type StdioOptions } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { copyFile, mkdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -1059,4 +1059,82 @@ function parseVersionLikeDirName(name: string): SemverParts | null {
   const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(name);
   if (!match) return null;
   return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+export type BrowserOpenInvocation = {
+  command: string;
+  args: string[];
+  options: SpawnOptions;
+};
+
+type OpenBrowserDeps = {
+  platform?: NodeJS.Platform;
+  spawn?: (command: string, args: string[], options: SpawnOptions) => ChildProcess;
+  warn?: (message: string) => void;
+  env?: NodeJS.ProcessEnv;
+};
+
+function quoteBrowserWindowsArg(value: string, { force = false }: { force?: boolean } = {}): string {
+  if (value.length === 0) return '""';
+  if (!force && !/[\s"&<>|^%]/.test(value)) return value;
+  const escaped = value.replace(/"/g, '""').replace(/%/g, '"^%"');
+  return `"${escaped}"`;
+}
+
+// Builds the OS-native command that opens `url` in the user's default browser.
+// Lives here next to spawnBackgroundProcess because it is the same class of
+// generic OS process primitive: a detached spawn whose Windows form must route
+// through cmd.exe with verbatim argv quoting.
+export function createBrowserOpenInvocation(
+  platform: NodeJS.Platform,
+  url: string,
+  env: NodeJS.ProcessEnv = process.env,
+): BrowserOpenInvocation {
+  if (platform === "win32") {
+    const comspec = env.ComSpec || env.COMSPEC || "cmd.exe";
+    // `start` is a cmd.exe builtin on Windows, not a real executable. The empty
+    // title argument keeps cmd from treating the URL itself as the window title.
+    // Node's default Windows argv quoting uses backslash escapes that cmd.exe
+    // does not understand, so the inner command must be wrapped for `/s /c` and
+    // passed verbatim, matching the cmd.exe shim shape used elsewhere here.
+    const inner = [
+      "start",
+      quoteBrowserWindowsArg(""),
+      quoteBrowserWindowsArg(url, { force: true }),
+    ].join(" ");
+    return {
+      command: comspec,
+      args: ["/d", "/s", "/c", `"${inner}"`],
+      options: { detached: true, stdio: "ignore", windowsHide: true, windowsVerbatimArguments: true },
+    };
+  }
+
+  return {
+    command: platform === "darwin" ? "open" : "xdg-open",
+    args: [url],
+    options: { detached: true, stdio: "ignore" },
+  };
+}
+
+export function openBrowser(url: string, deps: OpenBrowserDeps = {}): ChildProcess | null {
+  const platform = deps.platform ?? process.platform;
+  const spawnFn = deps.spawn ?? spawn;
+  const warn = deps.warn ?? ((message: string) => console.warn(message));
+  const invocation = createBrowserOpenInvocation(platform, url, deps.env);
+
+  try {
+    const child = spawnFn(invocation.command, invocation.args, invocation.options);
+    // Browser opening is best-effort. A missing opener must not crash the caller
+    // after the server has already started and printed its URL.
+    child.on("error", (error) => {
+      const detail = error instanceof Error ? error.message : String(error);
+      warn(`[od] failed to open browser: ${detail}`);
+    });
+    child.unref();
+    return child;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    warn(`[od] failed to open browser: ${detail}`);
+    return null;
+  }
 }

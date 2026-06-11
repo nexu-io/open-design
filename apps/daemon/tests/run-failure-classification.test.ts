@@ -289,6 +289,101 @@ describe('classifyRunFailure', () => {
     });
   });
 
+  it('promotes AMR exit 130 connection resets into upstream stream disconnects', () => {
+    expect(
+      classify(
+        'AGENT_EXIT_130',
+        'json-rpc id 4: Connection reset by server',
+      ),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'stream_disconnected',
+      failure_stage: 'first_token_wait',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+
+  it('promotes opencode API 4xx session errors out of process-exit fallback', () => {
+    expect(
+      classify(
+        'AGENT_EXIT_130',
+        'json-rpc id 4: opencode event stream: opencode session error: {"sessionID":"ses_16a081173ffeQy9mUJTmYowj5p","error":{"name":"APIError","data":{"message":"Not Found","statusCode":404,"isRetryable":false,"responseBody":"<html><head><title>404 Not Found</title></head>"}}}',
+      ),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_client_error',
+      failure_stage: 'first_token_wait',
+      retryable: false,
+      user_action: 'none',
+    });
+
+    expect(
+      classify(
+        'AGENT_EXIT_130',
+        'json-rpc id 4: opencode event stream: opencode session error: {"error":{"name":"APIError","data":{"message":"Bad Request","statusCode":400,"isRetryable":false,"responseBody":"<html><head><title>400 Bad Request</title></head>"}}}',
+      ),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_client_error',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('uses structured opencode API error data when raw error text is sparse', () => {
+    expect(
+      classifyRunFailure({
+        result: 'failed',
+        status: {
+          status: 'failed',
+          error: null,
+          errorCode: 'AGENT_EXIT_130',
+          exitCode: 130,
+          signal: null,
+        },
+        errorCode: 'AGENT_EXIT_130',
+        agentId: 'opencode',
+        events: [
+          {
+            event: 'error',
+            data: {
+              error: {
+                name: 'APIError',
+                data: {
+                  message: 'Not Found',
+                  statusCode: 404,
+                  isRetryable: false,
+                },
+              },
+            },
+          },
+        ],
+      }),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_client_error',
+      failure_stage: 'first_token_wait',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('maps AMR model catalog outages to provider routing failures', () => {
+    expect(
+      classify(
+        'AGENT_EXIT_130',
+        'json-rpc id 2: AMR model catalog is unavailable.',
+      ),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'provider_routing_error',
+      failure_stage: 'first_token_wait',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+
   it('maps AMR insufficient balance to recharge guidance', () => {
     expect(
       classify('AMR_INSUFFICIENT_BALANCE', 'insufficient wallet balance'),
@@ -418,6 +513,51 @@ describe('classifyRunFailure', () => {
       failure_stage: 'tool_execution',
       retryable: true,
       user_action: 'retry',
+    });
+  });
+
+  it('maps invalid agent config to fix-config guidance', () => {
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'Error loading config.toml: unknown variant `priority`, expected `fast` or `flex`\nin `service_tier`',
+      ),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'agent_config_invalid',
+      failure_stage: 'session_init',
+      retryable: false,
+      user_action: 'fix_config',
+    });
+  });
+
+  it('maps fabricated role marker termination to a retryable protocol guard detail', () => {
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'Run terminated: model emitted fabricated role marker (`## user`). No further tokens or tool calls accepted from this turn.',
+      ),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'fabricated_role_marker',
+      failure_stage: 'child_close',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+
+  it('maps missing generated plugin artifacts to artifact-write tool failures', () => {
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'Plugin authoring ended before generating the required generated-plugin artifacts.',
+      ),
+    ).toMatchObject({
+      failure_category: 'tool_error',
+      failure_detail: 'plugin_artifact_missing',
+      failure_stage: 'artifact_write',
+      retryable: false,
+      user_action: 'none',
     });
   });
 

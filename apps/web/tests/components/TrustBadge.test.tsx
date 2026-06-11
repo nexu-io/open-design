@@ -10,7 +10,9 @@ describe('TrustBadge', () => {
     expect(html).toContain('Official');
     expect(html).toContain('plugin-trust-badge--official');
     expect(html).toContain('data-trust-tier="official"');
-    expect(html).toContain('Open Design official');
+    // Tooltip / screen-reader text is the localized tier label, not a
+    // hard-coded English description (would leak English on other locales).
+    expect(html).toContain('aria-label="Official"');
   });
 
   it('uses one visual API for marketplace trust tiers', () => {
@@ -25,8 +27,8 @@ describe('TrustBadge', () => {
     expect(html).toContain('plugin-trust-badge--official');
     expect(html).toContain('plugin-trust-badge--trusted');
     expect(html).toContain('plugin-trust-badge--restricted');
-    expect(html).toContain('Community trusted');
-    expect(html).toContain('Restricted source');
+    expect(html).toContain('Trusted');
+    expect(html).toContain('Restricted');
   });
 
   it('allows contextual text while preserving the trust tier styling', () => {
@@ -36,6 +38,7 @@ describe('TrustBadge', () => {
 
     expect(html).toContain('Action plugin');
     expect(html).toContain('plugin-trust-badge--official');
-    expect(html).toContain('aria-label="Open Design official: Action plugin"');
+    // Custom label keeps the localized tier prefix for assistive tech.
+    expect(html).toContain('aria-label="Official: Action plugin"');
   });
 });

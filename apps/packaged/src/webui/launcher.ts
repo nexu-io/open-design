@@ -19,8 +19,7 @@ import {
   requestJsonIpc,
   resolveAppIpcPath,
 } from "@open-design/sidecar";
-import { isProcessAlive, spawnBackgroundProcess } from "@open-design/platform";
-import { openBrowser } from "@open-design/daemon/browser-open";
+import { isProcessAlive, openBrowser, spawnBackgroundProcess } from "@open-design/platform";
 
 import type { PackagedConfig } from "../config.js";
 import { writePackagedDesktopIdentity, writePackagedWebIdentity } from "../identity.js";

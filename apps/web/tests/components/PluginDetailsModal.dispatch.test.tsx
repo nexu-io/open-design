@@ -225,6 +225,33 @@ describe('PluginDetailsModal dispatch', () => {
     expect(html).toContain('plugin-details-use-outside-chat');
     expect(html).toContain('Use plugin');
   });
+
+  it('offers the use/use-with-query split menu in the scenario fallback when the plugin has a query', () => {
+    // Regression (#3997 review): a text/scenario plugin with `od.useCase.query`
+    // must still offer "Use plugin only" vs "Replicate this content", same as the
+    // html/design/media variants — not a single plain `use` button.
+    const html = render(
+      make({
+        id: 'scenario-query',
+        title: 'Scenario With Query',
+        mode: 'prototype',
+        query: 'Draft a {{topic}} brief.',
+      }),
+    );
+    expect(html).toContain('data-detail-variant="scenario"');
+    expect(html).toContain('plugin-details-use-scenario-query');
+    // The caret that opens the use-with-query menu only exists in the split form.
+    expect(html).toContain('plugin-details-use-scenario-query-menu');
+  });
+
+  it('keeps a single use button in the scenario fallback when there is no query', () => {
+    const html = render(
+      make({ id: 'scenario-noquery', title: 'No Query', mode: 'prototype' }),
+    );
+    expect(html).toContain('data-detail-variant="scenario"');
+    expect(html).toContain('plugin-details-use-scenario-noquery');
+    expect(html).not.toContain('plugin-details-use-scenario-noquery-menu');
+  });
 });
 
 describe('PluginDetailsModal common metadata coverage', () => {

@@ -19,6 +19,7 @@ import {
 } from './plugins/index.js';
 import { connectorService } from './connectors/service.js';
 import type { RouteDeps } from './server-context.js';
+import { readAnalyticsContext } from './analytics.js';
 import { listSkills } from './skills.js';
 import { isSafeId } from './projects.js';
 import {
@@ -1084,6 +1085,18 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             'fromTrustedPicker can only be set via POST /api/import/folder',
           );
         }
+        // Reject invalid linked working directories up front (consistent with
+        // PATCH /api/projects/:id) instead of silently dropping them. The
+        // caller promises the agent `--add-dir` access to this folder; if the
+        // path is deleted/inaccessible/a system dir, fail loudly so the client
+        // can surface it rather than creating a project + auto-running a turn
+        // whose linked-dir access never materialises.
+        if (Array.isArray(metadata.linkedDirs)) {
+          const validated = validateLinkedDirs(metadata.linkedDirs);
+          if (validated.error) {
+            return sendApiError(res, 400, 'INVALID_LINKED_DIR', validated.error);
+          }
+        }
       }
       if (customInstructions !== undefined
           && typeof customInstructions !== 'string'
@@ -1614,7 +1627,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     });
     // Bump the parent project's updatedAt so the project list re-orders.
     updateProject(db, req.params.id, {});
-    ctx.telemetry?.reportFinalizedMessage(saved, m);
+    ctx.telemetry?.reportFinalizedMessage(saved, m, {
+      analyticsContext: readAnalyticsContext(req),
+      projectId: req.params.id,
+      conversationId: req.params.cid,
+    });
     res.json({ message: saved });
   });
 

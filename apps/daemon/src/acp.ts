@@ -1,6 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { Writable } from 'node:stream';
 import path from 'node:path';
+import {
+  createDsmlArtifactTextSuppressor,
+  type ArtifactTextSuppressor,
+} from './artifact-text-suppression.js';
 
 const ACP_PROTOCOL_VERSION = 1;
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -17,6 +21,13 @@ const MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 // `OD_ACP_STAGE_TIMEOUT_MS=0` would call `setTimeout(..., 0)` and fail every
 // ACP session on the next tick instead of disabling the watchdog.
 const DEFAULT_STAGE_TIMEOUT_MS = 600_000;
+const ACP_ARTIFACT_OPEN_PATTERN = String.raw`<\s*(?:\|?\s*DSML[\s,]+artifact\b|artifact\b)`;
+const ACP_GENERATED_FILE_PREFIX_PATTERN =
+  String.raw`(?:here\s+is|here'?s)\s+the\s+generated\s+file\s*:?\s*(?:\r?\n|\s)*`;
+const ACP_ARTIFACT_ECHO_START_RE = new RegExp(
+  String.raw`^\s*(?:${ACP_ARTIFACT_OPEN_PATTERN}|${ACP_GENERATED_FILE_PREFIX_PATTERN}${ACP_ARTIFACT_OPEN_PATTERN})`,
+  'i',
+);
 
 type JsonRpcId = string | number;
 type JsonObject = Record<string, unknown>;
@@ -322,6 +333,42 @@ function currentModelFromSessionResult(result: JsonObject): string | null {
   return typeof models?.currentModelId === 'string' && models.currentModelId.trim()
     ? models.currentModelId.trim()
     : null;
+}
+
+function acpUpdateStatus(update: JsonObject): string {
+  return typeof update.status === 'string'
+    ? update.status.trim().toLowerCase().replace(/[\s_-]+/g, '')
+    : '';
+}
+
+function isAcpCompletedStatus(update: JsonObject): boolean {
+  const status = acpUpdateStatus(update);
+  return status === 'completed' || status === 'complete' || status === 'succeeded' || status === 'success';
+}
+
+function isAcpTerminalFailureStatus(update: JsonObject): boolean {
+  const status = acpUpdateStatus(update);
+  return status === 'failed' || status === 'failure' || status === 'error' || status === 'cancelled' || status === 'canceled';
+}
+
+function acpToolCallId(update: JsonObject): string | null {
+  return typeof update.toolCallId === 'string' && update.toolCallId.trim()
+    ? update.toolCallId.trim()
+    : null;
+}
+
+function isAcpArtifactWriteLabel(update: JsonObject): boolean {
+  const label = [
+    typeof update.title === 'string' ? update.title : '',
+    typeof update.name === 'string' ? update.name : '',
+  ].join(' ');
+  return /\b(?:edit|write|create|update|save|patch|replace)\b/i.test(label);
+}
+
+function isAcpArtifactWriteUpdate(update: JsonObject, writeToolCallIds: Set<string>): boolean {
+  if (!isAcpCompletedStatus(update)) return false;
+  const toolCallId = acpToolCallId(update);
+  return isAcpArtifactWriteLabel(update) || (toolCallId ? writeToolCallIds.has(toolCallId) : false);
 }
 
 export function createJsonLineStream(onMessage: (message: unknown, rawLine: string) => void) {
@@ -730,12 +777,18 @@ export function attachAcpSession({
   let emittedThinkingStart = false;
   let emittedFirstTokenStatus = false;
   let emittedTextChunk = false;
+  let emittedVisibleTextChunk = false;
   let emittedToolCall = false;
   let emittedTextBuffer = '';
   let finished = false;
   let fatal = false;
   let aborted = false;
   let stageTimer: TimerHandle | null = null;
+  let dsmlArtifactSuppressor: ArtifactTextSuppressor | null = null;
+  let dsmlArtifactSuppressorToolCallId: string | null = null;
+  let dsmlArtifactSuppressorArmedAfterText = false;
+  let dsmlArtifactSuppressorSawIncrementalProse = false;
+  const acpArtifactWriteToolCallIds = new Set<string>();
 
   const stageWatchdogDisabled = stageTimeoutMs <= 0;
   const resetStageTimer = (label: string) => {
@@ -844,6 +897,33 @@ export function attachAcpSession({
     nextId += 1;
   };
 
+  const finishCleanPrompt = (usageSource?: unknown) => {
+    if (finished) return;
+    const flushedText = dsmlArtifactSuppressor?.flush() ?? '';
+    if (flushedText) {
+      emittedVisibleTextChunk = true;
+      send('agent', { type: 'text_delta', delta: flushedText });
+    }
+    const usage = formatUsage(usageSource);
+    if (usage) {
+      send('agent', {
+        type: 'usage',
+        usage,
+        durationMs: Date.now() - runStartedAt,
+      });
+    }
+    finished = true;
+    clearStageTimer();
+    stdin.end();
+    // Some ACP agents keep the child process alive after stdin closes,
+    // waiting for another prompt. Each Open Design run owns one process per
+    // turn, so close it once this prompt is cleanly complete.
+    const cleanExitTimer = setTimeout(() => {
+      if (!child.killed) child.kill('SIGTERM');
+    }, 500);
+    child.once('close', () => clearTimeout(cleanExitTimer));
+  };
+
   const replyPermission = (raw: JsonObject) => {
     const params = asObject(raw.params);
     const optionId = choosePermissionOutcome(params?.options);
@@ -869,7 +949,7 @@ export function attachAcpSession({
   };
 
   const parser = createJsonLineStream((raw, rawLine) => {
-    if (aborted) return;
+    if (aborted || finished) return;
     resetStageTimer('response');
     const obj = asObject(raw);
     if (!obj) return;
@@ -936,7 +1016,8 @@ export function attachAcpSession({
       if (update.sessionUpdate === 'agent_message_chunk') {
         const text = asObject(update.content)?.text;
         if (typeof text === 'string' && text.length > 0) {
-          const delta = text.startsWith(emittedTextBuffer)
+          const isCumulativeSnapshot = text.startsWith(emittedTextBuffer);
+          const delta = isCumulativeSnapshot
             ? text.slice(emittedTextBuffer.length)
             : text;
           if (delta.length > 0) {
@@ -950,7 +1031,49 @@ export function attachAcpSession({
                 ttftMs: Date.now() - runStartedAt,
               });
             }
-            send('agent', { type: 'text_delta', delta });
+            if (dsmlArtifactSuppressor) {
+              const wasSuppressingArtifact = dsmlArtifactSuppressor.isSuppressing();
+              const hadPendingArtifactCandidate = dsmlArtifactSuppressor.hasPendingCandidate();
+              const strippedDelta = dsmlArtifactSuppressor.strip(delta);
+              const hasOpenArtifactCandidate =
+                dsmlArtifactSuppressor.isSuppressing() || dsmlArtifactSuppressor.hasPendingCandidate();
+              const consumedArtifactText = wasSuppressingArtifact || strippedDelta !== delta;
+              const shouldPreserveIncrementalProse =
+                !isCumulativeSnapshot &&
+                !wasSuppressingArtifact &&
+                !hadPendingArtifactCandidate &&
+                !hasOpenArtifactCandidate &&
+                (
+                  strippedDelta === delta ||
+                  (
+                    !dsmlArtifactSuppressorArmedAfterText &&
+                    dsmlArtifactSuppressorSawIncrementalProse &&
+                    !ACP_ARTIFACT_ECHO_START_RE.test(delta)
+                  )
+                );
+              const outputDelta = shouldPreserveIncrementalProse ? delta : strippedDelta;
+              if (outputDelta) {
+                emittedVisibleTextChunk = true;
+                send('agent', { type: 'text_delta', delta: outputDelta });
+              }
+              if (
+                strippedDelta === delta &&
+                !wasSuppressingArtifact &&
+                !hadPendingArtifactCandidate &&
+                !hasOpenArtifactCandidate
+              ) {
+                dsmlArtifactSuppressorSawIncrementalProse = true;
+              }
+              if (consumedArtifactText && !hasOpenArtifactCandidate) {
+                dsmlArtifactSuppressor = null;
+                dsmlArtifactSuppressorToolCallId = null;
+                dsmlArtifactSuppressorArmedAfterText = false;
+                dsmlArtifactSuppressorSawIncrementalProse = false;
+              }
+            } else {
+              emittedVisibleTextChunk = true;
+              send('agent', { type: 'text_delta', delta });
+            }
           }
         }
         return;
@@ -963,6 +1086,27 @@ export function attachAcpSession({
         // when the model emits no closing assistant text. Track it so the prompt-complete
         // handler does not misreport such a turn as "no output / model unavailable".
         emittedToolCall = true;
+        const toolCallId = acpToolCallId(update);
+        if (toolCallId && isAcpArtifactWriteLabel(update)) {
+          acpArtifactWriteToolCallIds.add(toolCallId);
+        }
+        if (isAcpArtifactWriteUpdate(update, acpArtifactWriteToolCallIds)) {
+          dsmlArtifactSuppressor = createDsmlArtifactTextSuppressor();
+          dsmlArtifactSuppressorToolCallId = toolCallId;
+          dsmlArtifactSuppressorArmedAfterText = emittedTextBuffer.length > 0;
+          dsmlArtifactSuppressorSawIncrementalProse = false;
+          if (toolCallId) acpArtifactWriteToolCallIds.delete(toolCallId);
+        } else if (toolCallId && isAcpTerminalFailureStatus(update)) {
+          const ownsPendingWriteSuppression = toolCallId === dsmlArtifactSuppressorToolCallId;
+          const ownsPendingWriteCall = acpArtifactWriteToolCallIds.has(toolCallId);
+          acpArtifactWriteToolCallIds.delete(toolCallId);
+          if (ownsPendingWriteSuppression || ownsPendingWriteCall) {
+            dsmlArtifactSuppressor = null;
+            dsmlArtifactSuppressorToolCallId = null;
+            dsmlArtifactSuppressorArmedAfterText = false;
+            dsmlArtifactSuppressorSawIncrementalProse = false;
+          }
+        }
         return;
       }
       return;
@@ -1023,30 +1167,7 @@ export function attachAcpSession({
         );
         return;
       }
-      const usage = formatUsage(result.usage);
-      if (usage) {
-        send('agent', {
-          type: 'usage',
-          usage,
-          durationMs: Date.now() - runStartedAt,
-        });
-      }
-      finished = true;
-      clearStageTimer();
-      stdin.end();
-      // Some ACP agents (e.g. Devin for Terminal) keep the child process
-      // alive after stdin closes, waiting for the next prompt. Each Open
-      // Design run spawns its own agent process per turn, so the child must
-      // terminate for `child.on('close')` to fire and the chat run to
-      // finalize — otherwise the chat stays stuck in the "working" state.
-      // Give the child a short grace period to exit on its own first; if it
-      // doesn't, SIGTERM forces it. This mirrors the pattern in
-      // detectAcpModels() which already kills the child after a clean
-      // model-discovery probe completes (see line ~270 in this file).
-      const cleanExitTimer = setTimeout(() => {
-        if (!child.killed) child.kill('SIGTERM');
-      }, 500);
-      child.once('close', () => clearTimeout(cleanExitTimer));
+      finishCleanPrompt(result.usage);
       return;
     }
     if (sessionId && model && model !== 'default' && obj.id === expectedId) {

@@ -4,138 +4,57 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Shared CI script mode to run on GitHub-hosted runners
+        description: Hosted CI mode
         required: true
         type: choice
-        default: all
+        default: nix
         options:
-          - all
-          - probe
-          - setup
-          - core
-          - policy
-          - unit
-          - typecheck
-          - daemon
-          - web
-          - build
-          - browser
+          - nix
+          - full
 
 permissions:
   contents: read
 
-env:
-  COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-  COREPACK_HOME: /home/runner/.cache/open-design-ci/corepack
-  OD_CI_ALLOW_DOCKER: "1"
-  OD_CI_DAEMON_MAX_WORKERS: "4"
-  OD_CI_INSTALL_TIMEOUT_SECONDS: "1500"
-  OD_CI_LANE: hosted
-  OD_CI_PNPM_FETCH_RETRIES: "6"
-  OD_CI_PNPM_FETCH_RETRY_MAXTIMEOUT: "120000"
-  OD_CI_PNPM_FETCH_RETRY_MINTIMEOUT: "20000"
-  OD_CI_PNPM_INSTALL_FLAGS: "--frozen-lockfile --prefer-offline --network-concurrency=8"
-  OD_CI_PNPM_NETWORK_TIMEOUT: "180000"
-  OD_CI_PNPM_STORE_DIR: /home/runner/.cache/open-design-ci/pnpm-store
-  OD_CI_PLAYWRIGHT_INSTALL_FLAGS: "--with-deps chromium"
-  OD_CI_STEP_TIMEOUT_SECONDS: "600"
+concurrency:
+  group: ci-hosted-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'nix' }}
+  cancel-in-progress: true
 
 jobs:
-  plan:
-    name: Hosted CI plan
+  hosted:
+    name: Hosted CI
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      modes: ${{ steps.plan.outputs.modes }}
-    steps:
-      - name: Select hosted CI modes
-        id: plan
-        env:
-          MODE: ${{ inputs.mode }}
-        run: |
-          set -euo pipefail
-          case "$MODE" in
-            all)
-              modes='["core","typecheck","daemon","web","build","browser"]'
-              ;;
-            probe | setup | core | policy | unit | typecheck | daemon | web | build | browser)
-              modes="$(jq -nc --arg mode "$MODE" '[$mode]')"
-              ;;
-            *)
-              echo "Unsupported mode: $MODE" >&2
-              exit 2
-              ;;
-          esac
-          echo "modes=$modes" >> "$GITHUB_OUTPUT"
-          echo "$modes" | jq .
-
-  checks:
-    name: Hosted CI ${{ matrix.mode }}
-    needs:
-      - plan
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        mode: ${{ fromJSON(needs.plan.outputs.modes) }}
+    timeout-minutes: 120
+    env:
+      CI_GATE_HOSTED_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'nix' }}
+      CI_GATE_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      CI_GATE_PLAYWRIGHT_INSTALL_FLAGS: --with-deps chromium
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      COREPACK_HOME: /home/runner/.cache/open-design-ci/corepack
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
       - name: Setup Node
-        uses: actions/setup-node@v6.4.0
+        uses: actions/setup-node@v6
         with:
           node-version: 24
 
-      - name: Prepare package manager
-        run: |
-          set -euo pipefail
-          node --version
-          package_manager="$(node -p "require('./package.json').packageManager")"
-          corepack enable
-          corepack prepare "$package_manager" --activate
-          pnpm --version
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
 
-      - name: Run CI script
-        env:
-          MATRIX_MODE: ${{ matrix.mode }}
-        run: |
-          set -euo pipefail
-          script_mode="$MATRIX_MODE"
-          if [ "$script_mode" = "daemon" ]; then
-            script_mode="daemon-parallel"
-          fi
-          .github/workflows/scripts/ci.sh "$script_mode"
+      - name: Run hosted CI protocol
+        run: .github/workflows/scripts/ci-gate.sh --provider hosted --mode "$CI_GATE_HOSTED_MODE" --results-path .od/ci-gate/ci-results.json
 
-      - name: Upload CI manifest
-        if: always()
+      - name: Upload hosted CI results
+        if: ${{ always() }}
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
-          name: ci-hosted-${{ matrix.mode }}-${{ github.run_id }}
-          path: .od/ci/*-manifest.json
-          if-no-files-found: warn
+          name: ci-results-hosted
+          path: .od/ci-gate/ci-results.json
+          if-no-files-found: error
           retention-days: 7
-
-  gate:
-    name: Hosted CI gate
-    needs:
-      - plan
-      - checks
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Check hosted CI jobs
-        env:
-          NEEDS_JSON: ${{ toJSON(needs) }}
-        run: |
-          set -euo pipefail
-          echo "$NEEDS_JSON" | jq .
-          failures="$(echo "$NEEDS_JSON" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key)=\(.value.result)"')"
-          if [ -n "$failures" ]; then
-            echo "Hosted CI failed:"
-            echo "$failures"
-            exit 1
-          fi

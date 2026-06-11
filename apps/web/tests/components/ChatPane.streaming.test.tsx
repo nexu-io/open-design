@@ -52,16 +52,35 @@ vi.mock('../../src/components/AssistantMessage', () => ({
     isLast,
     onShareToOpenDesign,
     shareToOpenDesignBusy,
+    showConversationTodoCard,
+    conversationTodoInput,
   }: {
     streaming: boolean;
     message: ChatMessage;
     isLast?: boolean;
     onShareToOpenDesign?: () => void;
     shareToOpenDesignBusy?: boolean;
+    showConversationTodoCard?: boolean;
+    conversationTodoInput?: {
+      todos?: Array<{ content: string; status?: string }>;
+      plan?: Array<{ content?: string; step?: string; status?: string }>;
+    } | null;
   }) => (
     <>
       <output data-testid={`assistant-streaming-${message.id}`}>{streaming ? 'streaming' : 'idle'}</output>
       <output data-testid={`assistant-last-${message.id}`}>{isLast ? 'last' : 'not-last'}</output>
+      {showConversationTodoCard && conversationTodoInput ? (
+        <div className="op-card op-todo">
+          {(conversationTodoInput.todos ?? conversationTodoInput.plan ?? []).map((todo, index) => {
+            const content = 'content' in todo ? todo.content : todo.step;
+            return (
+              <div key={`${content}-${index}`} className={`todo-${todo.status ?? 'pending'}`}>
+                <span className="todo-text">{content}</span>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       {onShareToOpenDesign ? (
         <button
           type="button"
@@ -716,7 +735,7 @@ Expected output:
     expect(spacer!.style.height).toBe('0px');
   });
 
-  it('renders a stopped pinned todo after a terminal run without a final TodoWrite', () => {
+  it('passes a stopped inline todo after a terminal run without a final TodoWrite', () => {
     const messages: ChatMessage[] = [
       {
         id: 'assistant-1',
@@ -764,10 +783,10 @@ Expected output:
       />,
     );
 
-    expect(screen.getByText('0/2')).toBeTruthy();
-    expect(container.querySelector('.todo-stopped')?.textContent).toContain('Build prototype');
-    expect(container.querySelector('.todo-in_progress')).toBeNull();
-    expect(container.querySelector('.op-todo-current')).toBeNull();
+    expect(container.querySelectorAll('.chat-log .op-card.op-todo')).toHaveLength(1);
+    expect(container.querySelector('.todo-stopped .todo-text')?.textContent).toBe('Build prototype');
+    expect(container.querySelector('.todo-pending .todo-text')?.textContent).toBe('Run QA');
+    expect(container.querySelector('.chat-pinned-todo')).toBeNull();
   });
   it('shows several queued prompts above the composer with compact controls', () => {
     const onRemoveQueuedSend = vi.fn();

@@ -373,6 +373,9 @@ async function runDesignFilesUploadFlow(page: Page) {
   const preview = page.getByTestId('design-file-preview');
   await expect(preview).toBeVisible();
   await expect(preview.getByText(/moodboard\.png/i)).toBeVisible();
+  await expect(preview.getByText(/Image/i)).toBeVisible();
+  await expect(preview.getByText(/1 KB|1024 B|67 B|68 B/i)).toBeVisible();
+  await expect(preview.getByRole('link', { name: /Download/i })).toHaveAttribute('download', /moodboard\.png$/);
 
   await preview.getByRole('button', { name: 'Open' }).click();
   await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();

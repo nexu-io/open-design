@@ -18,6 +18,7 @@ import {
   trackSettingsByokFieldClick,
   trackSettingsByokProviderOptionClick,
   trackSettingsConnectorAuthResult,
+  trackSettingsDesignReviewClick,
   trackSettingsLanguageClick,
   trackSettingsLocalCliClick,
   trackSettingsExecutionModeTabClick,
@@ -4424,7 +4425,7 @@ export function SettingsDialog({
           ) : null}
           {activeSection === 'integrations' ? <IntegrationsSection /> : null}
 
-          {activeSection === 'mcpClient' ? <McpClientSection /> : null}
+          {activeSection === 'mcpClient' ? <McpClientSection surface="settings" /> : null}
 
           {activeSection === 'composio' ? (
             <ConnectorSection
@@ -7165,6 +7166,7 @@ function AppearanceSection({
  */
 function CritiqueTheaterSection() {
   const { t } = useI18n();
+  const analytics = useAnalytics();
   const enabled = useCritiqueTheaterEnabled();
   const route = useRoute();
   const activeProjectId = route.kind === 'project' ? route.projectId : null;
@@ -7183,6 +7185,14 @@ function CritiqueTheaterSection() {
             checked={enabled}
             onChange={(e) => {
               const next = e.target.checked;
+              trackSettingsDesignReviewClick(analytics.track, {
+                page_name: 'settings',
+                area: 'design_review',
+                element: 'enable_toggle',
+                status_before: enabled ? 'on' : 'off',
+                status_after: next ? 'on' : 'off',
+                has_active_project: activeProjectId !== null,
+              });
               if (activeProjectId !== null) {
                 void setCritiqueTheaterEnabled(next, { projectId: activeProjectId });
               } else {

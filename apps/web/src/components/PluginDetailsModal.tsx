@@ -25,13 +25,19 @@ import { PluginScenarioDetail } from './plugin-details/PluginScenarioDetail';
 import { PluginExampleDetail } from './plugin-details/PluginExampleDetail';
 import { PluginDesignSystemDetail } from './plugin-details/PluginDesignSystemDetail';
 import { PluginMediaDetail } from './plugin-details/PluginMediaDetail';
+import type { PluginUseAction } from './plugins-home/useActions';
+import type { PreviewSharePopoverItem } from './PreviewModal';
 
 interface Props {
   record: InstalledPluginRecord;
   onClose: () => void;
-  onUse: (record: InstalledPluginRecord) => void;
+  onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
   isApplying?: boolean;
   hideUseAction?: boolean;
+  // Analytics — fires when the user picks an item inside the PreviewModal
+  // share popover (media / html / design variants only; the scenario
+  // fallback has no share popover).
+  onSharePopoverItemClick?: (item: PreviewSharePopoverItem) => void;
 }
 
 export function PluginDetailsModal({
@@ -40,6 +46,7 @@ export function PluginDetailsModal({
   onUse,
   isApplying,
   hideUseAction,
+  onSharePopoverItemClick,
 }: Props) {
   const preview = inferPluginPreview(record);
   let detail: JSX.Element;
@@ -52,6 +59,7 @@ export function PluginDetailsModal({
         onUse={onUse}
         isApplying={isApplying}
         hideUseAction={hideUseAction}
+        onSharePopoverItemClick={onSharePopoverItemClick}
       />
     );
   } else if (preview.kind === 'html') {
@@ -65,6 +73,7 @@ export function PluginDetailsModal({
         onUse={onUse}
         isApplying={isApplying}
         hideUseAction={hideUseAction}
+        onSharePopoverItemClick={onSharePopoverItemClick}
       />
     );
   } else if (preview.kind === 'design') {
@@ -75,6 +84,7 @@ export function PluginDetailsModal({
         onUse={onUse}
         isApplying={isApplying}
         hideUseAction={hideUseAction}
+        onSharePopoverItemClick={onSharePopoverItemClick}
       />
     );
   } else {

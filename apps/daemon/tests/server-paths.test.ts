@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   resolveBundledNodeAppResourcesPath,
   resolveDaemonCliPath,
+  resolveDaemonPluginPreviewsDir,
   resolveDaemonResourceRoot,
   resolveProjectRoot,
 } from '../src/server.js';
@@ -124,5 +125,46 @@ describe('resolveBundledNodeAppResourcesPath', () => {
 
   it('returns null for a dev/monorepo project root (no node_modules basename)', () => {
     expect(resolveBundledNodeAppResourcesPath(path.resolve('/repo'))).toBeNull();
+  });
+});
+
+describe('resolveDaemonPluginPreviewsDir', () => {
+  it('resolves under the resource root in the packaged layout', () => {
+    // Packaged: the prebundled daemon's PROJECT_ROOT is Resources/app (no data/),
+    // but the bundled manifest lives under OD_RESOURCE_ROOT (Resources/open-design).
+    const resourceRoot = '/Applications/Open Design.app/Contents/Resources/open-design';
+    const projectRoot = '/Applications/Open Design.app/Contents/Resources/app';
+
+    expect(
+      resolveDaemonPluginPreviewsDir({ env: {}, resourceRoot, projectRoot }),
+    ).toBe(path.join(resourceRoot, 'data', 'plugin-previews'));
+  });
+
+  it('falls back to the project root in the dev layout (no resource root)', () => {
+    const projectRoot = path.resolve(import.meta.dirname, '../../..');
+
+    expect(
+      resolveDaemonPluginPreviewsDir({ env: {}, resourceRoot: undefined, projectRoot }),
+    ).toBe(path.join(projectRoot, 'data', 'plugin-previews'));
+  });
+
+  it('honors an OD_PLUGIN_PREVIEWS_DIR override from the injected env', () => {
+    const projectRoot = '/repo';
+
+    // Absolute override passes through; a relative one resolves against projectRoot.
+    expect(
+      resolveDaemonPluginPreviewsDir({
+        env: { OD_PLUGIN_PREVIEWS_DIR: '/abs/previews' },
+        resourceRoot: '/res/open-design',
+        projectRoot,
+      }),
+    ).toBe('/abs/previews');
+    expect(
+      resolveDaemonPluginPreviewsDir({
+        env: { OD_PLUGIN_PREVIEWS_DIR: 'rel/previews' },
+        resourceRoot: '/res/open-design',
+        projectRoot,
+      }),
+    ).toBe(path.join(projectRoot, 'rel', 'previews'));
   });
 });

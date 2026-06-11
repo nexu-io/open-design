@@ -17,7 +17,10 @@ import {
   insertSkillPluginCandidate,
   listSkillPluginCandidates,
 } from '../src/plugins/skill-candidates.js';
-import { upsertSkillPluginCandidateAssistantMessage } from '../src/server.js';
+import {
+  detectSkillPluginCandidateOnRunSuccess,
+  upsertSkillPluginCandidateAssistantMessage,
+} from '../src/server.js';
 
 let tmpDir: string;
 let projectRoot: string;
@@ -277,5 +280,90 @@ describe('skill plugin candidates', () => {
       message.events?.some((event: { kind?: string }) => event.kind === 'plugin_candidate'),
     )).toHaveLength(1);
     expect(listSkillPluginCandidates(db, 'proj_1')[0]?.assistantMessageId).toBe(firstCardId);
+    expect(listMessages(db, 'conv_1').map((message) => message.id)).toEqual([
+      'assistant_1',
+      'assistant_2',
+      firstCardId,
+    ]);
+  });
+
+  it('defers the CTA when the matching run only asks a question form', async () => {
+    const db = openDatabase(tmpDir, { dataDir: path.join(tmpDir, 'data') });
+    insertProject(db, {
+      id: 'proj_1',
+      name: 'Candidate project',
+      skillId: null,
+      designSystemId: null,
+      pendingPrompt: null,
+      metadata: { kind: 'prototype' },
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    insertConversation(db, {
+      id: 'conv_1',
+      projectId: 'proj_1',
+      title: 'Candidate conversation',
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    upsertMessage(db, 'conv_1', {
+      id: 'assistant_question',
+      role: 'assistant',
+      content: [
+        'I need one detail first.',
+        '<question-form id="task-type" title="Choose task type">',
+        '{"questions":[{"id":"kind","type":"single-choice","label":"What?","options":["Slide deck"]}]}',
+        '</question-form>',
+      ].join('\n'),
+      createdAt: 1,
+      endedAt: 1,
+    });
+
+    const runs = { wait: async () => ({ status: 'succeeded' }) };
+    detectSkillPluginCandidateOnRunSuccess(db, runs, {
+      id: 'run_question',
+      projectId: 'proj_1',
+      conversationId: 'conv_1',
+      assistantMessageId: 'assistant_question',
+      agentId: 'agent_1',
+    }, {
+      message: 'Use https://github.com/foo/bar/blob/main/SKILL.md for this run.',
+    }, projectRoot);
+    await flushSkillCandidateHook();
+
+    const deferred = listSkillPluginCandidates(db, 'proj_1')[0];
+    expect(deferred?.assistantMessageId).toBeNull();
+    expect(listMessages(db, 'conv_1').map((message) => message.id)).toEqual(['assistant_question']);
+
+    upsertMessage(db, 'conv_1', {
+      id: 'assistant_final',
+      role: 'assistant',
+      content: 'Done. Created the deck.',
+      createdAt: 2,
+      endedAt: 2,
+    });
+    detectSkillPluginCandidateOnRunSuccess(db, runs, {
+      id: 'run_final',
+      projectId: 'proj_1',
+      conversationId: 'conv_1',
+      assistantMessageId: 'assistant_final',
+      agentId: 'agent_1',
+    }, {
+      message: '[form answers -- task-type]\n- What?: Slide deck',
+    }, projectRoot);
+    await flushSkillCandidateHook();
+
+    const shown = listSkillPluginCandidates(db, 'proj_1')[0];
+    expect(shown?.assistantMessageId).toBeTruthy();
+    expect(listMessages(db, 'conv_1').map((message) => message.id)).toEqual([
+      'assistant_question',
+      'assistant_final',
+      shown?.assistantMessageId,
+    ]);
   });
 });
+
+async function flushSkillCandidateHook() {
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}

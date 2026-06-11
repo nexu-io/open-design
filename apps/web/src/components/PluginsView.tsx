@@ -9,6 +9,9 @@ import {
 import { useAnalytics } from '../analytics/provider';
 import {
   trackPageView,
+  trackPluginImportModalClick,
+  trackPluginImportModalSurfaceView,
+  trackPluginImportResult,
   trackPluginsAvailableTabClick,
   trackPluginsInstalledTabClick,
   trackPluginsSourcesTabClick,
@@ -1515,22 +1518,58 @@ function PluginImportModal({
   onUploadZip: (file: File) => Promise<PluginInstallOutcome>;
   onUploadFolder: (files: File[]) => Promise<PluginInstallOutcome>;
 }) {
+  const analytics = useAnalytics();
+  const importModalViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (importModalViewFiredRef.current) return;
+    importModalViewFiredRef.current = true;
+    trackPluginImportModalSurfaceView(analytics.track, {
+      page_name: 'plugins',
+      area: 'import_modal',
+    });
+  }, [analytics.track]);
   const [kind, setKind] = useState<ImportKind>('github');
   const [source, setSource] = useState('');
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [folderFiles, setFolderFiles] = useState<File[]>([]);
   const [working, setWorking] = useState(false);
 
+  function selectKind(next: ImportKind) {
+    trackPluginImportModalClick(analytics.track, {
+      page_name: 'plugins',
+      area: 'import_modal',
+      element: 'source_tab',
+      import_source: next,
+    });
+    setKind(next);
+  }
+
   async function runImport() {
+    trackPluginImportModalClick(analytics.track, {
+      page_name: 'plugins',
+      area: 'import_modal',
+      element: 'import',
+      import_source: kind,
+    });
     setWorking(true);
     try {
+      let outcome: PluginInstallOutcome | null = null;
       if (kind === 'github') {
         const trimmed = source.trim();
-        if (trimmed) await onInstallSource(trimmed);
+        if (trimmed) outcome = await onInstallSource(trimmed);
       } else if (kind === 'zip' && zipFile) {
-        await onUploadZip(zipFile);
+        outcome = await onUploadZip(zipFile);
       } else if (kind === 'folder' && folderFiles.length > 0) {
-        await onUploadFolder(folderFiles);
+        outcome = await onUploadFolder(folderFiles);
+      }
+      if (outcome) {
+        trackPluginImportResult(analytics.track, {
+          page_name: 'plugins',
+          area: 'import_modal',
+          import_source: kind,
+          result: outcome.ok ? 'success' : 'failed',
+          ...(outcome.ok ? {} : { error_code: outcome.message ?? 'unknown' }),
+        });
       }
     } finally {
       setWorking(false);
@@ -1572,21 +1611,21 @@ function PluginImportModal({
             icon="github"
             title="From GitHub"
             body="Install github:owner/repo paths."
-            onClick={() => setKind('github')}
+            onClick={() => selectKind('github')}
           />
           <ImportChoice
             active={kind === 'zip'}
             icon="upload"
             title="Upload zip"
             body="Upload a plugin archive."
-            onClick={() => setKind('zip')}
+            onClick={() => selectKind('zip')}
           />
           <ImportChoice
             active={kind === 'folder'}
             icon="folder"
             title="Upload folder"
             body="Upload a plugin directory."
-            onClick={() => setKind('folder')}
+            onClick={() => selectKind('folder')}
           />
         </nav>
 
@@ -1658,7 +1697,14 @@ function PluginImportModal({
           <button
             type="button"
             className="plugins-view__secondary"
-            onClick={onClose}
+            onClick={() => {
+              trackPluginImportModalClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'import_modal',
+                element: 'cancel',
+              });
+              onClose();
+            }}
           >
             Cancel
           </button>
