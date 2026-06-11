@@ -1,0 +1,19 @@
+{
+  "candidateId": "c6c16ba5-8d23-4dae-9f94-1e98378c9b2e",
+  "projectId": "00954beb-2239-4a06-866a-45fe210e255b",
+  "runId": "15275a5a-a13e-4d29-a93c-6afa2c55b853",
+  "conversationId": "7e193827-0adb-497e-8cd0-a8c93a61cc43",
+  "provenance": {
+    "summary": "Detected from docs/ui-design-anbefalinger-2026.md after a successful run.",
+    "detectedAt": 1781219606713
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "docs/ui-design-anbefalinger-2026.md",
+      "label": "docs/ui-design-anbefalinger-2026.md",
+      "size": 7363,
+      "copied": true
+    }
+  ]
+}

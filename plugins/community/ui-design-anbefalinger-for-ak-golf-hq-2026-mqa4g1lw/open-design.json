@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "ui-design-anbefalinger-for-ak-golf-hq-2026-mqa4g1lw",
+  "title": "UI Design Anbefalinger for AK Golf HQ (2026)",
+  "version": "0.1.0",
+  "description": "> Basert på web-research og ui-ux-pro-max skill. Oppdatert juni 2026.",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
