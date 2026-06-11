@@ -22,6 +22,7 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const allowedE2eScripts = new Set([
   "e2e/scripts/playwright.ts",
   "e2e/scripts/release-smoke.ts",
+  "e2e/scripts/ui-p0-shards.ts",
   "e2e/scripts/visual-report.ts",
 ]);
 
