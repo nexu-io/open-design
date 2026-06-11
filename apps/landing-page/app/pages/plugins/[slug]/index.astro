@@ -83,7 +83,11 @@ const seoTypeLabel =
             ? 'prototype template'
             : 'design template';
 const title = `${pluginTitle} — ${seoTypeLabel} · Open Design`;
-const description = `${pluginDescription} A bundled ${seoTypeLabel} for Open Design — the open-source Claude Design alternative; runs locally with your own keys.`;
+// Visible lead stays fully localized; the keyword-rich English suffix is
+// applied only to the <meta description> / JSON-LD so non-English detail
+// pages don't render mixed-language body copy.
+const description = pluginDescription;
+const seoDescription = `${pluginDescription} A bundled ${seoTypeLabel} for Open Design — the open-source Claude Design alternative; runs locally with your own keys.`;
 
 /*
  * Share-dialog copy. The English template stays as a fallback inside
@@ -110,7 +114,7 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'SoftwareSourceCode',
     name: pluginTitle,
-    description,
+    description: seoDescription,
     codeRepository: plugin.sourceUrl,
     programmingLanguage: 'JSON',
     keywords: plugin.tags.join(', '),
@@ -119,7 +123,7 @@ const jsonLd = [
 ];
 ---
 
-<Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
+<Layout title={title} description={seoDescription} active="plugins" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={pcopy.breadcrumbLabel}>
     <a href={href('/')}>Open Design</a>
     <span>/</span>
