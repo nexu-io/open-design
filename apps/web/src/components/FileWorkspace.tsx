@@ -2994,8 +2994,10 @@ function inferDesignSystemReviewCategory(
 }
 
 function designSystemReviewSubtitle(title: string, category: DesignSystemReviewCategory, name = ''): string {
-  const text = `${title} ${normalizeDesignSystemPath(name)}`.toLowerCase();
-  if (text.includes('ui_kits/') || text.includes('ui-kit')) return 'Applied UI kit example';
+  const path = normalizeDesignSystemPath(name);
+  const titleText = title.toLowerCase();
+  const text = `${title} ${path}`.toLowerCase();
+  if (isDesignSystemUiKitEntryPage(path)) return 'Applied UI kit example';
   if (text.includes('typography')) return 'Text hierarchy and styles';
   if (text.includes('type-')) return 'Typography scale and font guidance';
   if (text.includes('font')) return 'Font family specimens';
@@ -3005,7 +3007,7 @@ function designSystemReviewSubtitle(title: string, category: DesignSystemReviewC
   if (text.includes('spacing') || text.includes('radius') || text.includes('radii') || text.includes('shadow')) return 'Spacing scale and border radius tokens';
   if (text.includes('favicon')) return 'Brand app icon and favicon';
   if (text.includes('logo') || text.includes('brand')) return 'Brand logo marks';
-  if (text.includes('interface') || text.includes('ui')) return 'Interface and component patterns';
+  if (titleText.includes('interface') || titleText.includes('ui')) return 'Interface and component patterns';
   switch (category) {
     case 'Type':
       return 'Typography scale and font guidance';
@@ -3018,6 +3020,10 @@ function designSystemReviewSubtitle(title: string, category: DesignSystemReviewC
     case 'Components':
       return 'Reusable product interface examples';
   }
+}
+
+function isDesignSystemUiKitEntryPage(path: string): boolean {
+  return isDesignSystemUiKitFile(path) && /\.html?$/iu.test(path);
 }
 
 function parseDesignSystemCardManifest(text: string | null): DesignSystemCardManifestMap {
