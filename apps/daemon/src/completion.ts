@@ -46,6 +46,12 @@ export interface CommandSpec {
 // handlers all parse these). Offered after `--` on any command.
 export const GLOBAL_FLAGS = ['--help', '--json', '--daemon-url'] as const;
 
+// Global flags that consume the following token as their value (so it must not
+// be mistaken for a command/subcommand during completion). `--help`/`--json`
+// are booleans and take no value. Mirrors the CLI router, which skips the
+// value token for string flags like `--daemon-url <url>`.
+const VALUE_FLAGS = new Set(['--daemon-url']);
+
 // Top-level commands and their known subcommands. Kept in sync with the
 // SUBCOMMAND_MAP in cli.ts; aliases (e.g. `automations`) are included so a
 // user who types either gets completion.
@@ -161,7 +167,7 @@ function collectCandidates(words: string[], current: string): string[] {
 
   // Only the command path matters for positional completion; ignore any flags
   // the user already typed (e.g. `od --json <TAB>` still completes commands).
-  const positionals = words.filter((w) => !w.startsWith('-'));
+  const positionals = collectPositionals(words);
 
   // 2. No command yet -> top-level commands.
   if (positionals.length === 0) {
@@ -184,6 +190,31 @@ function collectCandidates(words: string[], current: string): string[] {
 
   // 4. Deeper paths -> global flags only.
   return [...GLOBAL_FLAGS];
+}
+
+/**
+ * Extract the positional command path from already-typed words, skipping flags
+ * and — crucially — the value token consumed by a value-taking flag. Without
+ * this, `--daemon-url http://host` would leave `http://host` as a fake first
+ * positional and suppress top-level command completion. `--daemon-url=<url>` is
+ * a single token and is dropped by the leading-dash check.
+ */
+function collectPositionals(words: string[]): string[] {
+  const positionals: string[] = [];
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i] ?? '';
+    if (word.startsWith('-')) {
+      // `--flag value` form: consume the next token as the flag's value so it
+      // is not treated as a positional. The `--flag=value` form carries its
+      // value inline, so nothing extra is consumed.
+      if (VALUE_FLAGS.has(word) && i + 1 < words.length) {
+        i++;
+      }
+      continue;
+    }
+    positionals.push(word);
+  }
+  return positionals;
 }
 
 /**

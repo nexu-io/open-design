@@ -106,6 +106,43 @@ describe('computeCompletions — flags', () => {
     const out = computeCompletions({ words: ['--json'], current: '' });
     expect(out).toEqual(topLevelCommands());
   });
+
+  it('does not treat a value-flag value as a command', () => {
+    // `od --daemon-url http://localhost:7456 <TAB>` -> the URL is the flag's
+    // value, not a command, so top-level commands should still be offered.
+    const out = computeCompletions({
+      words: ['--daemon-url', 'http://localhost:7456'],
+      current: '',
+    });
+    expect(out).toEqual(topLevelCommands());
+  });
+
+  it('does not treat a value-flag value as a subcommand', () => {
+    // `od config --daemon-url http://localhost:7456 <TAB>` should still offer
+    // config's subcommands, not collapse to global flags.
+    const out = computeCompletions({
+      words: ['config', '--daemon-url', 'http://localhost:7456'],
+      current: '',
+    });
+    expect(out).toContain('get');
+    expect(out).toContain('set');
+  });
+
+  it('handles the --daemon-url=<url> inline form', () => {
+    const out = computeCompletions({
+      words: ['--daemon-url=http://localhost:7456'],
+      current: '',
+    });
+    expect(out).toEqual(topLevelCommands());
+  });
+
+  it('still completes a subcommand prefix after a value flag', () => {
+    const out = computeCompletions({
+      words: ['config', '--daemon-url', 'http://localhost:7456'],
+      current: 'g',
+    });
+    expect(out).toEqual(['get']);
+  });
 });
 
 describe('computeCompletions — determinism', () => {
