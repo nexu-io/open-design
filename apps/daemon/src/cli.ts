@@ -11,6 +11,12 @@ import { parseDesignSystemRenameArgs } from './design-system-rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
+import {
+  SUPPORTED_SHELLS,
+  isSupportedShell,
+  computeCompletions,
+  generateCompletionScript,
+} from './completion.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 import {
@@ -279,6 +285,7 @@ const SUBCOMMAND_MAP = {
   version: runVersion,
   doctor: runDoctor,
   config: runConfig,
+  completion: runCompletion,
 };
 
 if (argv[0] === 'mcp' && argv[1] === 'live-artifacts') {
@@ -6921,6 +6928,62 @@ Common options:
       console.error(`unknown subcommand: od config ${sub}`);
       process.exit(2);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od completion <bash|zsh|fish>
+//
+// Prints a shell completion script to stdout. The emitted script calls back
+// into `od completion __complete` on every <TAB>, so completions are derived
+// from the live CLI rather than a second hard-coded list in the shell.
+//
+// `od completion __complete --current <partial> -- <words...>` is the hidden
+// runtime resolver the scripts invoke; it prints one candidate per line and
+// is pure/synchronous so it works with no daemon running.
+// ---------------------------------------------------------------------------
+
+function runCompletion(args) {
+  const first = args[0];
+
+  if (!first || first === 'help' || first === '--help' || first === '-h') {
+    console.log(`Usage:
+  od completion <shell>     Print a completion script for the given shell.
+                            Supported shells: ${SUPPORTED_SHELLS.join(', ')}.
+
+Install:
+  bash    od completion bash >> ~/.bashrc
+  zsh     od completion zsh  > "\${fpath[1]}/_od"
+  fish    od completion fish > ~/.config/fish/completions/od.fish
+
+Then restart your shell (or source the file) and press <TAB> after \`od\`.`);
+    // Bare `od completion` is a usage error (exit 2); explicit help is exit 0.
+    process.exit(first ? 0 : 2);
+  }
+
+  // Hidden resolver invoked by the generated scripts on every keystroke.
+  // Contract: `od completion __complete --current <cur> -- <word> <word> ...`.
+  // Everything after `--` is the already-typed argv (after `od`); --current is
+  // the partial token under the cursor. Prints one candidate per line.
+  if (first === '__complete') {
+    const rest = args.slice(1);
+    const sep = rest.indexOf('--');
+    const flagPart = sep === -1 ? rest : rest.slice(0, sep);
+    const words = sep === -1 ? [] : rest.slice(sep + 1);
+    const curIdx = flagPart.indexOf('--current');
+    const current = curIdx !== -1 && flagPart[curIdx + 1] != null ? flagPart[curIdx + 1] : '';
+    const matches = computeCompletions({ words, current });
+    if (matches.length > 0) process.stdout.write(matches.join('\n') + '\n');
+    return;
+  }
+
+  if (!isSupportedShell(first)) {
+    console.error(
+      `unsupported shell: ${first}. Supported shells: ${SUPPORTED_SHELLS.join(', ')}.`,
+    );
+    process.exit(2);
+  }
+
+  process.stdout.write(generateCompletionScript(first));
 }
 
 // ---------------------------------------------------------------------------
