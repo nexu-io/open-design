@@ -1213,7 +1213,7 @@ function AppInner() {
 
   const refreshAgents = useCallback(
     async (options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] }) => {
-      if (options && Object.prototype.hasOwnProperty.call(options, 'agentCliEnv')) {
+      if (options && Object.hasOwn(options, 'agentCliEnv')) {
         const nextConfig = clearStaleAmrModelChoiceOnProfileChange(config, {
           ...config,
           agentCliEnv: options.agentCliEnv ?? {},
