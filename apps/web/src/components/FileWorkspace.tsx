@@ -192,7 +192,8 @@ interface Props {
   // preview surface can offer the same one-click fix (AMR authorize, terminal
   // sign-in) instead of a bare retry.
   onAuthorizeAndRetry?: (message: ChatMessage) => void;
-  onLaunchTerminalAuth?: (auth: AgentTerminalAuthMetadata) => Promise<void>;
+  onLaunchTerminalAuth?: () => void;
+  onLaunchAcpTerminalAuth?: (auth: AgentTerminalAuthMetadata) => Promise<void>;
   // Conversation id for the AMR promotion-card telemetry payload.
   conversationId?: string | null;
   // Project-level actions (settings, handoff, avatar menu) rendered at the
@@ -424,6 +425,7 @@ export function FileWorkspace({
   onWorkspaceContextsChange,
   messages = [],
   onLaunchTerminalAuth,
+  onLaunchAcpTerminalAuth,
   conversationId,
   headerActions,
   questionForm = null,
@@ -2220,7 +2222,7 @@ export function FileWorkspace({
             onNewConversation={onNewConversation}
             activeConversationChat={activeConversationChat}
             onRequestOpenFile={openFile}
-            onLaunchTerminalAuth={onLaunchTerminalAuth}
+            onLaunchTerminalAuth={onLaunchAcpTerminalAuth}
           />
         ) : isTerminalTabId(activeTab) ? (
           <TerminalViewer
