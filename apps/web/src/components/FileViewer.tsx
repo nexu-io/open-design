@@ -886,11 +886,12 @@ function previewScaleShellStyle(
   viewport: PreviewViewportId,
   previewScale: number,
 ): CSSProperties & Record<string, string | number> {
+  const scale = normalizedPreviewScale(previewScale);
   if (viewport === 'desktop') {
     return {
-      width: `${100 / previewScale}%`,
-      height: `${100 / previewScale}%`,
-      transform: `scale(${previewScale})`,
+      width: `${100 / scale}%`,
+      height: `${100 / scale}%`,
+      transform: `scale(${scale})`,
       transformOrigin: '0 0',
     };
   }
@@ -902,20 +903,70 @@ function previewScaleShellStyle(
   };
 }
 
+function normalizedPreviewScale(previewScale: number) {
+  return Number.isFinite(previewScale) && previewScale > 0 ? previewScale : 1;
+}
+
+function previewScaleScrollStyle(
+  viewport: PreviewViewportId,
+  previewScale: number,
+): CSSProperties | undefined {
+  if (viewport !== 'desktop') return undefined;
+  return { overflow: normalizedPreviewScale(previewScale) > 1 ? 'auto' : 'hidden' };
+}
+
+function previewScaleSizerStyle(
+  viewport: PreviewViewportId,
+  previewScale: number,
+  frozenWidth: number | null,
+): CSSProperties | undefined {
+  if (viewport !== 'desktop') return undefined;
+  const scale = normalizedPreviewScale(previewScale);
+  return {
+    position: 'relative',
+    width: frozenWidth ? `${frozenWidth * scale}px` : `${scale * 100}%`,
+    height: `${scale * 100}%`,
+  };
+}
+
 function manualEditPreviewShellStyle(
   viewport: PreviewViewportId,
   previewScale: number,
   frozenWidth: number | null,
 ): CSSProperties & Record<string, string | number> {
+  const scale = normalizedPreviewScale(previewScale);
   if (viewport === 'desktop' && frozenWidth) {
     return {
-      width: `${frozenWidth / previewScale}px`,
-      height: `${100 / previewScale}%`,
-      transform: `scale(${previewScale})`,
+      width: `${frozenWidth}px`,
+      height: `${100 / scale}%`,
+      transform: `scale(${scale})`,
       transformOrigin: '0 0',
     };
   }
   return previewScaleShellStyle(viewport, previewScale);
+}
+
+function PreviewScaleShell({
+  viewport,
+  previewScale,
+  frozenWidth = null,
+  children,
+}: {
+  viewport: PreviewViewportId;
+  previewScale: number;
+  frozenWidth?: number | null;
+  children: ReactNode;
+}) {
+  const shellStyle = frozenWidth === null
+    ? previewScaleShellStyle(viewport, previewScale)
+    : manualEditPreviewShellStyle(viewport, previewScale, frozenWidth);
+  const sizerStyle = previewScaleSizerStyle(viewport, previewScale, frozenWidth);
+  if (!sizerStyle) return <div style={shellStyle}>{children}</div>;
+  return (
+    <div style={sizerStyle}>
+      <div style={shellStyle}>{children}</div>
+    </div>
+  );
 }
 
 function deploymentTimestamp(deployment: WebDeploymentInfo): number {
@@ -1770,8 +1821,8 @@ export function LiveArtifactViewer({
           aria-hidden={mode === 'preview' ? undefined : true}
           style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
         >
-          <div className="preview-frame-clip">
-            <div style={previewScaleShellStyle(previewViewport, previewScale)}>
+          <div className="preview-frame-clip" style={previewScaleScrollStyle(previewViewport, previewScale)}>
+            <PreviewScaleShell viewport={previewViewport} previewScale={previewScale}>
               <PreviewDrawOverlay>
                 <iframe
                   ref={iframeRef}
@@ -1781,7 +1832,7 @@ export function LiveArtifactViewer({
                   src={previewUrl}
                 />
               </PreviewDrawOverlay>
-            </div>
+            </PreviewScaleShell>
           </div>
         </div>
         {mode !== 'preview' && loading ? (
@@ -10631,13 +10682,16 @@ function HtmlViewer({
               className={manualEditMode ? 'manual-edit-canvas' : 'comment-preview-canvas'}
               data-testid={manualEditMode ? undefined : 'comment-preview-canvas'}
             >
-              <div className={manualEditMode ? undefined : 'comment-frame-clip'} style={manualEditMode ? { height: '100%' } : undefined}>
-                <div
-                  style={
-                    manualEditMode
-                      ? manualEditPreviewShellStyle(previewViewport, previewScale, manualEditViewportWidth)
-                      : previewScaleShellStyle(previewViewport, previewScale)
-                  }
+              <div
+                className={manualEditMode ? undefined : 'comment-frame-clip'}
+                style={manualEditMode
+                  ? { height: '100%', ...previewScaleScrollStyle(previewViewport, previewScale) }
+                  : previewScaleScrollStyle(previewViewport, previewScale)}
+              >
+                <PreviewScaleShell
+                  viewport={previewViewport}
+                  previewScale={previewScale}
+                  frozenWidth={manualEditMode ? manualEditViewportWidth : null}
                 >
                   <PreviewDrawOverlay
                     active={drawOverlayOpen}
@@ -10766,7 +10820,7 @@ function HtmlViewer({
                       />
                     </div>
                   </PreviewDrawOverlay>
-                </div>
+                </PreviewScaleShell>
               </div>
               {boardMode ? (
                 <CommentPreviewOverlays

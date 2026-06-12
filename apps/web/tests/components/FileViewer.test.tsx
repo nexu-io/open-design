@@ -250,6 +250,49 @@ describe('FileViewer preview scale', () => {
     expect(effectivePreviewScale('desktop', 1.5, { width: 320, height: 480 })).toBe(1.5);
   });
 
+  it('keeps desktop deck zoom scrollable while preserving the iframe viewport size (#3177)', () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><section class="slide">One</section><section class="slide">Two</section></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByText('100%').closest('button')!);
+    fireEvent.click(screen.getByRole('menuitem', { name: '150%' }));
+
+    const clip = container.querySelector<HTMLElement>('.comment-frame-clip');
+    expect(clip).toBeTruthy();
+    expect(clip!.style.overflow).toBe('auto');
+
+    const scaleSizer = clip!.firstElementChild as HTMLElement | null;
+    expect(scaleSizer?.style.width).toBe('150%');
+    expect(scaleSizer?.style.height).toBe('150%');
+
+    const scaleShell = scaleSizer?.firstElementChild as HTMLElement | null;
+    expect(scaleShell?.style.width).toBe(`${100 / 1.5}%`);
+    expect(scaleShell?.style.height).toBe(`${100 / 1.5}%`);
+    expect(scaleShell?.style.transform).toBe('scale(1.5)');
+    expect(container.querySelector('.deck-nav')).toBeTruthy();
+    expect(clip!.contains(container.querySelector('.deck-nav'))).toBe(false);
+  });
+
   it('clamps mobile and tablet overlay scale to the iframe auto-fit scale', () => {
     expect(effectivePreviewScale('mobile', 1, { width: 390, height: 844 })).toBeLessThan(1);
     expect(effectivePreviewScale('tablet', 1.25, { width: 820, height: 700 })).toBeLessThan(1);
