@@ -105,21 +105,42 @@ export async function ensureProject(projectsRoot, projectId, metadata?) {
   return dir;
 }
 
+// Coalesce concurrent full walks of the same project directory. The file panel
+// polls GET /api/projects/:id/files and run prepare lists files too, so without
+// this an imported folder with a large tree could have several overlapping
+// recursive walks in flight at once — multiplying filesystem work and helping
+// exhaust the libuv threadpool. Keyed by the resolved project directory.
+const inFlightProjectWalks = new Map<string, Promise<any[]>>();
+
 export async function listFiles(projectsRoot, projectId, opts = {}) {
   const metadata = opts?.metadata;
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
-  const out = [];
-  // Skip generated dependency/build trees for all project roots. Standard OD
-  // projects can contain framework installs too; surfacing package HTML like
-  // node_modules/tslib/*.html as artifacts produces blank previews.
-  await collectFiles(dir, '', out, isIgnoredProjectDirName, dir);
-  // Newest first — matches the visual order users expect after generating.
-  out.sort((a, b) => b.mtime - a.mtime);
+  let walk = inFlightProjectWalks.get(dir);
+  if (!walk) {
+    walk = (async () => {
+      try {
+        const out = [];
+        // Skip generated dependency/build trees for all project roots. Standard
+        // OD projects can contain framework installs too; surfacing package HTML
+        // like node_modules/tslib/*.html as artifacts produces blank previews.
+        await collectFiles(dir, '', out, isIgnoredProjectDirName, dir);
+        // Newest first — matches the visual order users expect after generating.
+        out.sort((a, b) => b.mtime - a.mtime);
+        return out;
+      } finally {
+        inFlightProjectWalks.delete(dir);
+      }
+    })();
+    inFlightProjectWalks.set(dir, walk);
+  }
+  const out = await walk;
   const since = Number(opts.since);
   if (Number.isFinite(since) && since > 0) {
     return out.filter((f) => Number(f.mtime) > since);
   }
-  return out;
+  // Return a shallow copy so a caller can't mutate the snapshot shared with
+  // other coalesced callers.
+  return out.slice();
 }
 
 export async function listProjectFolders(projectsRoot, projectId, opts = {}) {
@@ -239,6 +260,10 @@ async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => 
     if (err && err.code === 'ENOENT') return;
     throw err;
   }
+  // Sidecar manifests (`<name>.artifact.json`) always live next to their file,
+  // so the directory listing already tells us whether one exists — no per-file
+  // probe read needed.
+  const entryNames = new Set(entries.map((e) => e.name));
   for (const e of entries) {
     if (e.name.startsWith('.')) continue;
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
@@ -251,7 +276,8 @@ async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => 
     if (!e.isFile()) continue;
     if (e.name.endsWith('.artifact.json')) continue;
     const st = await stat(full);
-    const manifest = await readManifestForPath(projectRoot, rel);
+    const manifestPresent = entryNames.has(`${e.name}.artifact.json`);
+    const manifest = await readManifestForPath(projectRoot, rel, manifestPresent);
     out.push({
       name: rel,
       path: rel,
@@ -907,18 +933,27 @@ export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, nam
   return validated.value;
 }
 
-async function readManifestForPath(projectDirPath, relPath) {
+async function readManifestForPath(projectDirPath, relPath, manifestPresent?) {
   if (containsIgnoredProjectDirSegment(relPath)) return null;
   const fullPath = path.join(projectDirPath, relPath);
   if (await isViteDevHtmlEntry(projectDirPath, relPath, fullPath)) return null;
-  const manifestPath = path.join(projectDirPath, artifactManifestNameFor(relPath));
-  try {
-    const raw = await readFile(manifestPath, 'utf8');
-    const parsed = parseManifest(raw);
-    if (parsed) return parsed;
-  } catch (err) {
-    if (!err || err.code !== 'ENOENT') {
-      // ignore malformed/invalid manifests and fallback to inference
+  // `manifestPresent === false` means the caller already saw, from the
+  // directory listing, that no `<name>.artifact.json` sibling exists — so skip
+  // the read entirely. Imported folders hold thousands of files and zero
+  // sidecars; without this hint collectFiles fired one failing ENOENT readFile
+  // per file, and the polled GET /api/projects/:id/files walk piled those onto
+  // the 4-thread libuv pool until it deadlocked every fs-backed API. See
+  // tests/project-files-manifest-fanout.test.ts.
+  if (manifestPresent !== false) {
+    const manifestPath = path.join(projectDirPath, artifactManifestNameFor(relPath));
+    try {
+      const raw = await readFile(manifestPath, 'utf8');
+      const parsed = parseManifest(raw);
+      if (parsed) return parsed;
+    } catch (err) {
+      if (!err || err.code !== 'ENOENT') {
+        // ignore malformed/invalid manifests and fallback to inference
+      }
     }
   }
   return inferLegacyManifest(relPath);
