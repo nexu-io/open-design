@@ -30,7 +30,8 @@
  * the Anthropic path sends as `system`.
  */
 import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
-import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
+import { DISCOVERY_AND_PHILOSOPHY, renderSharedFramesBlock } from './discovery.js';
+import { renderDirectionSpecBlock } from './directions.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { renderMediaGenerationContract } from './media-contract.js';
 import { IMAGE_MODELS } from '../media-models.js';
@@ -590,6 +591,30 @@ export function composeSystemPrompt({
 
   if (!isMediaSurfaceEarly) {
     parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
+    // Direction library is only useful when the agent must pick a visual
+    // direction itself. When an active design system is present it is the
+    // visual direction (see ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE
+    // below), so the ~6.7KB direction-card catalogue would just be dead
+    // weight the model is told to ignore. Gate it on the composer-visible
+    // active-DS signal (stable for the whole session, so the stable-prompt
+    // fingerprint stays cacheable).
+    if (!activeDesignSystemBody) {
+      parts.push(renderDirectionSpecBlock(), '\n\n---\n\n');
+    }
+    // Shared device-frame catalogue only applies to multi-device /
+    // multi-target projects (same product across desktop+tablet+phone, or
+    // multiple app screens side-by-side). A single-surface prototype never
+    // uses it. Gate on the composer-visible platform signal (set at project
+    // creation, stable for the session → fingerprint stays cacheable). The
+    // per-platform contracts themselves stay in DISCOVERY_AND_PHILOSOPHY so
+    // a single-platform prototype keeps the contract for its own platform.
+    const isMultiTargetProject =
+      metadata?.platform === 'responsive' ||
+      metadata?.platformTargets?.includes('responsive') ||
+      (metadata?.platformTargets?.length ?? 0) > 1;
+    if (isMultiTargetProject) {
+      parts.push(renderSharedFramesBlock(), '\n\n---\n\n');
+    }
   }
 
   parts.push(
