@@ -5051,7 +5051,7 @@ export async function startServer({
   // Routes that serve content to sandboxed iframes (Origin: null) for
   // read-only purposes.  All other /api routes reject Origin: null.
   const _NULL_ORIGIN_SAFE_GET_RE =
-    /^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$/;
+    /^\/api\/connectors\/composio\/config$|^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$/;
 
   // Reject cross-origin requests to API endpoints.
   // Health/version remain open for monitoring probes.
@@ -6748,6 +6748,11 @@ export async function startServer({
 
   app.get('/api/amr/models', async (_req, res) => {
     try {
+      const def = getAgentDef('amr');
+      if (!def) {
+        res.json({ models: [], preset: true, source: 'amr-unavailable' });
+        return;
+      }
       const probe = await resolveAmrModelProbe();
       const response = await amrModelLoadingCache.get(probe.cacheKey, {
         fetchPreset: () => fetchVelaPresetModels(probe.launchPath, probe.env),
@@ -6755,7 +6760,7 @@ export async function startServer({
       });
       res.json(response);
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      res.json({ models: [], preset: true, source: 'amr-error', error: err instanceof Error ? err.message : String(err) });
     }
   });
 
